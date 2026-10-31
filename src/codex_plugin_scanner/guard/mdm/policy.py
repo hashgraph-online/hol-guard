@@ -1,413 +1,219 @@
-"""Validated platform-managed policy loading and monotonic composition."""
+"""Platform-managed policy, loaded and parsed by the native runtime.
+
+Rust reads the machine authority (the administrator-owned profile, its cache or
+the Windows registry), parses the document strictly and writes the state back.
+This module only frames that request, keeps a stat-validated memo so an
+unchanged machine is not reread, and builds the contract dataclasses.
+"""
 
 from __future__ import annotations
 
-import base64
-import binascii
-import importlib
 import json
 import os
 import platform
-import plistlib
-import urllib.parse
+import threading
+import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, cast
 
 from .contracts import (
     MDM_POLICY_SCHEMA_VERSION,
-    InstallOwner,
     ManagedIntegrityTrust,
     ManagedNetworkPolicy,
     ManagedPolicy,
     ManagedPolicyState,
     ManagedUpdatePolicy,
-    ProxyMode,
     canonical_payload_hash,
     default_machine_paths,
 )
-from .managed_file_trust import posix_path_is_root_owned_and_restricted
 
-_MAX_POLICY_BYTES = 1024 * 1024
-_TOP_LEVEL_KEYS = {
-    "schemaVersion",
-    "settings",
-    "lockedSettings",
-    "requiredHarnesses",
-    "policyBundleKeyring",
-    "network",
-    "update",
-    "daemonStartup",
-    "integrityTrust",
-}
-_NETWORK_KEYS = {"proxyMode", "proxyUrl", "caBundlePath", "allowPublicRegistries"}
+MANAGED_POLICY_LOAD_COMMAND = "managed-policy-load"
+MANAGED_POLICY_LOAD_FEATURE = "native-managed-policy-load-v1"
+MANAGED_POLICY_LOAD_SCHEMA = "managed-policy-load.v1"
+_TIMEOUT_SECONDS = 10.0
+# A policy document is bounded at 1 MiB, so its parsed form fits well inside.
+_OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024
+_WINDOWS_POLICY_KEY = r"Software\Policies\HOL\Guard"
+_WINDOWS_POLICY_SOURCE = r"HKLM\Software\Policies\HOL\Guard"
+# A file modified this recently may still change within one timestamp tick, so
+# its state is neither stored nor reused.
+_RACY_WINDOW_NS = 2_000_000_000
+_MEMO_LIMIT = 8
+_MEMO: dict[tuple[object, ...], ManagedPolicyState] = {}
+_MEMO_LOCK = threading.Lock()
 
 
 class ManagedPolicyError(ValueError):
     """A managed policy failed strict validation."""
 
 
-def _expect_mapping(value: object, name: str) -> Mapping[str, object]:
-    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
-        raise ManagedPolicyError(f"{name} must be an object")
-    return cast(Mapping[str, object], value)
-
-
-def _optional_string(value: object, name: str) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ManagedPolicyError(f"{name} must be a non-empty string or null")
-    return value
-
-
-def _optional_https_url(value: object, name: str) -> str | None:
-    url = _optional_string(value, name)
-    if url is None:
-        return None
-    if url != url.strip() or any(character.isspace() for character in url):
-        raise ManagedPolicyError(f"{name} must be an absolute HTTPS URL")
-    try:
-        parsed = urllib.parse.urlsplit(url)
-        # Accessing port performs urllib's numeric/range validation.
-        _ = parsed.port
-    except ValueError as exc:
-        raise ManagedPolicyError(f"{name} must be an absolute HTTPS URL") from exc
-    if parsed.scheme.lower() != "https" or not parsed.netloc or parsed.hostname is None:
-        raise ManagedPolicyError(f"{name} must be an absolute HTTPS URL")
-    if parsed.username is not None or parsed.password is not None:
-        if name == "network.proxyUrl":
-            raise ManagedPolicyError("network proxy credentials are forbidden in managed policy")
-        raise ManagedPolicyError(f"{name} credentials are forbidden in managed policy")
-    if "?" in url or "#" in url:
-        raise ManagedPolicyError(f"{name} must not contain a query or fragment")
-    return url
-
-
-def _optional_proxy_url(value: object) -> str | None:
-    url = _optional_https_url(value, "network.proxyUrl")
-    if url is None:
-        return None
-    parsed = urllib.parse.urlsplit(url)
-    if parsed.path not in {"", "/"} or parsed.netloc.endswith(":") or parsed.port == 0:
-        raise ManagedPolicyError("network.proxyUrl must be an absolute HTTPS proxy origin")
-    return url
-
-
-def _validate_settings(value: object) -> dict[str, object]:
-    settings = dict(_expect_mapping(value, "settings"))
-    try:
-        json.dumps(settings, allow_nan=False)
-    except (TypeError, ValueError) as exc:
-        raise ManagedPolicyError("settings must contain only JSON values") from exc
-    return settings
-
-
-def _parse_integrity_trust(value: object) -> ManagedIntegrityTrust:
-    raw = _expect_mapping(value, "integrityTrust")
-    unknown = set(raw) - {"releasePublicKeys", "macosTeamId", "windowsSignerThumbprints"}
-    if unknown:
-        raise ManagedPolicyError(f"unknown integrityTrust keys: {', '.join(sorted(unknown))}")
-    keys_raw = _expect_mapping(raw.get("releasePublicKeys", {}), "integrityTrust.releasePublicKeys")
-    release_keys: dict[str, bytes] = {}
-    for key_id, encoded in keys_raw.items():
-        if not key_id or not isinstance(encoded, str):
-            raise ManagedPolicyError("release public keys must map non-empty ids to base64 strings")
-        try:
-            decoded = base64.b64decode(encoded, validate=True)
-        except (ValueError, binascii.Error) as exc:
-            raise ManagedPolicyError("release public key is not valid base64") from exc
-        if len(decoded) != 32:
-            raise ManagedPolicyError("release public keys must be 32-byte Ed25519 keys")
-        release_keys[key_id] = decoded
-    thumbprints_raw = raw.get("windowsSignerThumbprints", [])
-    if not isinstance(thumbprints_raw, list) or not all(isinstance(item, str) and item for item in thumbprints_raw):
-        raise ManagedPolicyError("integrityTrust.windowsSignerThumbprints must be an array of strings")
-    thumbprints_raw = cast(list[str], thumbprints_raw)
-    thumbprints = tuple(sorted({item.replace(" ", "").upper() for item in thumbprints_raw}))
-    if any(len(item) != 40 or any(character not in "0123456789ABCDEF" for character in item) for item in thumbprints):
-        raise ManagedPolicyError("Windows signer thumbprints must be SHA-1 certificate thumbprints")
-    # MDM machine-install pins only. Do not store Azure Artifact Signing leaves;
-    # those certificates rotate and are used by HOL Guard Desktop, not HOLGuardMachine.
-    return ManagedIntegrityTrust(
-        release_public_keys=release_keys,
-        macos_team_id=_optional_string(raw.get("macosTeamId"), "integrityTrust.macosTeamId"),
-        windows_signer_thumbprints=thumbprints,
-    )
-
-
-def _validate_policy_bundle_keyring(value: object) -> dict[str, object]:
-    trusted_keys = importlib.import_module("..policy_bundle_trusted_keys", __package__)
-    try:
-        keys = trusted_keys.load_policy_bundle_verification_keys(
-            value,
-            require_keyring_contract=True,
-        )
-    except trusted_keys.PolicyBundleNativeUnavailableError as exc:
-        raise ManagedPolicyError(
-            "policyBundleKeyring cannot be verified: native policy bundle authority is unavailable"
-        ) from exc
-    except ValueError as exc:
-        raise ManagedPolicyError("policyBundleKeyring is invalid") from exc
-    if not isinstance(value, dict):  # strict loader guarantees this; retained for type narrowing
-        raise ManagedPolicyError("policyBundleKeyring is invalid")
-    workspace_id = value.get("workspaceId")
-    if not isinstance(workspace_id, str) or not workspace_id.strip():
-        raise ManagedPolicyError("policyBundleKeyring is invalid")
-    return trusted_keys.policy_bundle_keyring_payload(keys, workspace_id=workspace_id.strip())
-
-
-def parse_managed_policy(payload: object) -> ManagedPolicy:
-    """Parse a policy object using the stable v1 contract."""
-
-    root = _expect_mapping(payload, "policy")
-    unknown = set(root) - _TOP_LEVEL_KEYS
-    if unknown:
-        raise ManagedPolicyError(f"unknown policy keys: {', '.join(sorted(unknown))}")
-    if root.get("schemaVersion") != MDM_POLICY_SCHEMA_VERSION:
-        raise ManagedPolicyError("unsupported managed policy schema")
-
-    settings = _validate_settings(root.get("settings", {}))
-    policy_bundle_keyring = (
-        _validate_policy_bundle_keyring(root["policyBundleKeyring"]) if "policyBundleKeyring" in root else None
-    )
-    locked_raw = root.get("lockedSettings", [])
-    if not isinstance(locked_raw, list) or not all(isinstance(item, str) and item for item in locked_raw):
-        raise ManagedPolicyError("lockedSettings must be an array of setting paths")
-    locked = frozenset(cast(list[str], locked_raw))
-    for setting_path in locked:
-        if _get_path(settings, setting_path) is _MISSING:
-            raise ManagedPolicyError(f"locked setting has no managed value: {setting_path}")
-
-    harnesses_raw = root.get("requiredHarnesses", [])
-    if not isinstance(harnesses_raw, list) or not all(isinstance(item, str) and item for item in harnesses_raw):
-        raise ManagedPolicyError("requiredHarnesses must be an array of names")
-
-    network_raw = _expect_mapping(root.get("network", {}), "network")
-    unknown_network = set(network_raw) - _NETWORK_KEYS
-    if unknown_network:
-        raise ManagedPolicyError(f"unknown network keys: {', '.join(sorted(unknown_network))}")
-    proxy_mode = network_raw.get("proxyMode", "system")
-    if not isinstance(proxy_mode, str) or proxy_mode not in {"system", "explicit", "none"}:
-        raise ManagedPolicyError("network.proxyMode is invalid")
-    proxy_mode = cast(ProxyMode, proxy_mode)
-    proxy_url = _optional_proxy_url(network_raw.get("proxyUrl"))
-    if proxy_mode == "explicit" and proxy_url is None:
-        raise ManagedPolicyError("network.proxyUrl is required for explicit proxy mode")
-    if proxy_mode != "explicit" and proxy_url is not None:
-        raise ManagedPolicyError("network.proxyUrl is only valid for explicit proxy mode")
-    ca_bundle_path = _optional_string(network_raw.get("caBundlePath"), "network.caBundlePath")
-    if ca_bundle_path is not None and not Path(ca_bundle_path).is_absolute():
-        raise ManagedPolicyError("network.caBundlePath must be absolute")
-    allow_registries = network_raw.get("allowPublicRegistries", True)
-    if not isinstance(allow_registries, bool):
-        raise ManagedPolicyError("network.allowPublicRegistries must be boolean")
-    network = ManagedNetworkPolicy(
-        proxy_mode=proxy_mode,
-        proxy_url=proxy_url,
-        ca_bundle_path=ca_bundle_path,
-        allow_public_registries=allow_registries,
-    )
-
-    update_raw = _expect_mapping(root.get("update", {}), "update")
-    owner = update_raw.get("owner", "user")
-    if owner not in {"user", "mdm"}:
-        raise ManagedPolicyError("update.owner is invalid")
-    owner = cast(InstallOwner, owner)
-    channel = update_raw.get("channel", "stable")
-    if not isinstance(channel, str) or not channel:
-        raise ManagedPolicyError("update.channel must be a non-empty string")
-    allow_downgrade = update_raw.get("allowDowngrade", False)
-    if not isinstance(allow_downgrade, bool):
-        raise ManagedPolicyError("update.allowDowngrade must be boolean")
-    update = ManagedUpdatePolicy(
-        owner=owner,
-        channel=channel,
-        minimum_version=_optional_string(update_raw.get("minimumVersion"), "update.minimumVersion"),
-        maximum_version=_optional_string(update_raw.get("maximumVersion"), "update.maximumVersion"),
-        allow_downgrade=allow_downgrade,
-        index_url=_optional_https_url(update_raw.get("indexUrl"), "update.indexUrl"),
-    )
-    daemon_startup = root.get("daemonStartup", "on-demand")
-    if daemon_startup not in {"on-demand", "login"}:
-        raise ManagedPolicyError("daemonStartup is invalid")
-    daemon_startup = cast(Literal["on-demand", "login"], daemon_startup)
-    integrity_trust = _parse_integrity_trust(root.get("integrityTrust", {}))
-
-    canonical = dict(root)
-    return ManagedPolicy(
-        schema_version=MDM_POLICY_SCHEMA_VERSION,
-        settings=settings,
-        locked_settings=locked,
-        policy_bundle_keyring=policy_bundle_keyring,
-        required_harnesses=tuple(sorted(set(cast(list[str], harnesses_raw)))),
-        network=network,
-        update=update,
-        integrity_trust=integrity_trust,
-        daemon_startup=daemon_startup,
-        content_hash=canonical_payload_hash(canonical),
-    )
-
-
-def _read_policy_file(path: Path) -> object:
-    size = path.stat().st_size
-    if size > _MAX_POLICY_BYTES:
-        raise ManagedPolicyError("managed policy exceeds size limit")
-    data = path.read_bytes()
-    if path.suffix.lower() == ".plist":
-        return plistlib.loads(data)
-    return json.loads(data)
-
-
-def _machine_policy_source_is_trusted(path: Path, system_name: str) -> bool:
-    """Require the native Unix policy and its path to remain machine-owned."""
-
-    if system_name == "Windows":
-        # Windows policy authority is read from HKLM. ProgramData cache paths
-        # are not authority until their owner and DACL can be verified through
-        # native security APIs; POSIX mode bits are not meaningful there.
-        return False
-    if not path.is_absolute():
-        return False
-    return posix_path_is_root_owned_and_restricted(path)
-
-
-def _read_windows_policy() -> tuple[object | None, str]:
-    try:
-        import winreg
-    except ImportError:
-        return None, r"HKLM\Software\Policies\HOL\Guard"
-    source = r"HKLM\Software\Policies\HOL\Guard"
-    try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Policies\HOL\Guard") as key:
-            payload, value_type = winreg.QueryValueEx(key, "PolicyJson")
-    except FileNotFoundError:
-        return None, source
-    if value_type not in {winreg.REG_SZ, winreg.REG_EXPAND_SZ} or not isinstance(payload, str):
-        raise ManagedPolicyError("PolicyJson registry value must be a string")
-    if len(payload.encode("utf-8")) > _MAX_POLICY_BYTES:
-        raise ManagedPolicyError("managed policy exceeds size limit")
-    return json.loads(payload), source
-
-
-def _cache_path(system_name: str) -> Path:
-    return default_machine_paths(system_name=system_name).state_root / "managed-policy-cache.json"
-
-
-def _administrator_context(system_name: str) -> bool:
-    if system_name != "Windows":
-        return os.geteuid() == 0
-    try:
-        import ctypes
-
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except (AttributeError, OSError):
-        return False
-
-
-def _write_policy_cache(payload: object, system_name: str) -> None:
-    if not _administrator_context(system_name) or not isinstance(payload, dict):
-        return
-    path = _cache_path(system_name)
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.chmod(0o600)
-    temporary.replace(path)
-
-
-def _cache_owner_is_trusted(path: Path, system_name: str) -> bool:
-    if system_name == "Windows":
-        return False
-    metadata = path.stat()
-    return metadata.st_uid == 0 and not metadata.st_mode & 0o022
-
-
-def _load_policy_cache(system_name: str) -> ManagedPolicyState | None:
-    path = _cache_path(system_name)
-    if not os.path.lexists(path):
-        return None
-    if system_name == "Windows":
-        # Never promote an unverifiable ProgramData file into policy-signing
-        # authority. Its presence still records a fail-closed managed state.
-        return ManagedPolicyState("tampered", str(path), reason_code="managed_policy_cache_tampered")
-    if not _machine_policy_source_is_trusted(path, system_name):
-        return ManagedPolicyState("tampered", str(path), reason_code="managed_policy_cache_tampered")
-    try:
-        metadata = path.stat()
-        if metadata.st_size > _MAX_POLICY_BYTES:
-            raise ManagedPolicyError("managed policy cache exceeds size limit")
-        if not _cache_owner_is_trusted(path, system_name):
-            return ManagedPolicyState("tampered", str(path), reason_code="managed_policy_cache_tampered")
-        policy = parse_managed_policy(json.loads(path.read_bytes()))
-        return ManagedPolicyState(
-            "active", str(path), policy=policy, reason_code="managed_policy_profile_removed_cached"
-        )
-    except (OSError, json.JSONDecodeError, ManagedPolicyError) as exc:
-        return ManagedPolicyState(
-            "invalid", str(path), reason_code="managed_policy_cache_invalid", detail=str(exc)[:256]
-        )
-
-
-def load_managed_policy(
-    *,
-    policy_path: Path | None = None,
-    system_name: str | None = None,
-    write_cache: bool = True,
-) -> ManagedPolicyState:
-    """Load machine authority only from an explicit test path or native machine source."""
-
-    resolved_system = system_name or platform.system()
-    source = str(policy_path) if policy_path is not None else ""
-    try:
-        if policy_path is not None:
-            if not policy_path.exists():
-                return ManagedPolicyState("absent", source, reason_code="managed_policy_absent")
-            payload = _read_policy_file(policy_path)
-        elif resolved_system == "Windows":
-            payload, source = _read_windows_policy()
-            if payload is None:
-                cached = _load_policy_cache(resolved_system)
-                return cached or ManagedPolicyState("absent", source, reason_code="managed_policy_absent")
-        else:
-            native_path = default_machine_paths(system_name=resolved_system).policy_path
-            if native_path is None:
-                return ManagedPolicyState("absent", "native", reason_code="managed_policy_absent")
-            source = str(native_path)
-            if not os.path.lexists(native_path):
-                cached = _load_policy_cache(resolved_system)
-                return cached or ManagedPolicyState("absent", source, reason_code="managed_policy_absent")
-            if not _machine_policy_source_is_trusted(native_path, resolved_system):
-                return ManagedPolicyState(
-                    "tampered",
-                    source,
-                    reason_code="managed_policy_source_tampered",
-                )
-            payload = _read_policy_file(native_path)
-        policy = parse_managed_policy(payload)
-        if policy_path is None and write_cache:
-            _write_policy_cache(payload, resolved_system)
-        return ManagedPolicyState("active", source, policy=policy)
-    except PermissionError:
-        return ManagedPolicyState("inaccessible", source, reason_code="managed_policy_inaccessible")
-    except (ManagedPolicyError, json.JSONDecodeError, plistlib.InvalidFileException, OSError) as exc:
-        return ManagedPolicyState("invalid", source, reason_code="managed_policy_invalid", detail=str(exc)[:256])
-
-
-class _Missing:
+class _NativeUnavailableError(Exception):
     pass
 
 
-_MISSING = _Missing()
+def _call_native(request: Mapping[str, object]) -> dict[str, Any]:
+    from ..native_runtime import _run_native_process, native_runtime_status
+
+    deadline = time.monotonic() + _TIMEOUT_SECONDS
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or MANAGED_POLICY_LOAD_FEATURE not in status.capabilities.features
+    ):
+        raise _NativeUnavailableError
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise _NativeUnavailableError
+    output = _run_native_process(
+        status.identity.path,
+        (MANAGED_POLICY_LOAD_COMMAND, "--stdin"),
+        input_text=json.dumps({"schema": MANAGED_POLICY_LOAD_SCHEMA, **request}, sort_keys=True),
+        timeout_seconds=remaining,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+    )
+    if output is None:
+        raise _NativeUnavailableError
+    try:
+        response = json.loads(output)
+    except ValueError as error:
+        raise _NativeUnavailableError from error
+    if not isinstance(response, dict):
+        raise _NativeUnavailableError
+    return cast("dict[str, Any]", response)
 
 
-def _get_path(payload: Mapping[str, object], path: str) -> object:
-    current: object = payload
-    for part in path.split("."):
-        if not isinstance(current, dict) or part not in current:
-            return _MISSING
-        current = current[part]
-    return current
+def _policy_from_native(raw: object) -> ManagedPolicy:
+    fields = cast("dict[str, Any]", raw)
+    trust = cast("dict[str, Any]", fields["integrity_trust"])
+    keys = cast("dict[str, str]", trust["release_public_keys"])
+    return ManagedPolicy(
+        schema_version=str(fields["schema_version"]),
+        settings=dict(fields["settings"]),
+        locked_settings=frozenset(fields["locked_settings"]),
+        required_harnesses=tuple(fields["required_harnesses"]),
+        network=ManagedNetworkPolicy(**fields["network"]),
+        update=ManagedUpdatePolicy(**fields["update"]),
+        integrity_trust=ManagedIntegrityTrust(
+            release_public_keys={key_id: bytes.fromhex(key) for key_id, key in keys.items()},
+            macos_team_id=trust["macos_team_id"],
+            windows_signer_thumbprints=tuple(trust["windows_signer_thumbprints"]),
+        ),
+        daemon_startup=fields["daemon_startup"],
+        content_hash=str(fields["content_hash"]),
+        policy_bundle_keyring=fields["policy_bundle_keyring"],
+    )
+
+
+def _state_from_native(raw: object) -> ManagedPolicyState:
+    fields = cast("dict[str, Any]", raw)
+    policy = fields["policy"]
+    return ManagedPolicyState(
+        fields["status"],
+        str(fields["source"]),
+        policy=_policy_from_native(policy) if policy is not None else None,
+        reason_code=fields["reason_code"],
+        detail=fields["detail"],
+    )
+
+
+def parse_managed_policy(payload: object) -> ManagedPolicy:
+    """Validate one managed policy document with the runtime's own parser."""
+
+    try:
+        response = _call_native({"op": "parse", "payload": payload})
+        if response.get("ok") is True:
+            return _policy_from_native(response["policy"])
+    except (_NativeUnavailableError, KeyError, TypeError, ValueError, AttributeError) as error:
+        raise ManagedPolicyError("managed policy parser unavailable") from error
+    rejected = response.get("rejected")
+    raise ManagedPolicyError(rejected if isinstance(rejected, str) and rejected else "managed policy is invalid")
+
+
+def _signature(path: Path) -> tuple[int, ...] | None:
+    try:
+        metadata = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return (-1,)
+    return (
+        metadata.st_mode,
+        metadata.st_uid,
+        metadata.st_ino,
+        metadata.st_dev,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _windows_policy_key_present() -> bool:
+    try:
+        import winreg
+    except ImportError:
+        return True
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _WINDOWS_POLICY_KEY):
+            return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
+def _load_native(request: Mapping[str, object], source: str) -> ManagedPolicyState:
+    try:
+        response = _call_native(request)
+        if response.get("ok") is True:
+            return _state_from_native(response["state"])
+    except (_NativeUnavailableError, KeyError, TypeError, ValueError, AttributeError):
+        pass
+    # Configured authority this process cannot read is never treated as none.
+    return ManagedPolicyState("inaccessible", source, reason_code="managed_policy_native_unavailable")
+
+
+def load_managed_policy(*, policy_path: Path | None = None, write_cache: bool = True) -> ManagedPolicyState:
+    """Load machine authority from an explicit file or the native machine source."""
+
+    if policy_path is not None:
+        return _load_native({"op": "load", "policy_path": str(policy_path), "write_cache": False}, str(policy_path))
+    system_name = platform.system()
+    paths = default_machine_paths(system_name=system_name)
+    cache_path = paths.state_root / "managed-policy-cache.json"
+    if system_name == "Windows":
+        # The registry has no cheap change signature, so a configured machine
+        # is reread every time; an unconfigured one never spawns the runtime.
+        if not _windows_policy_key_present() and not os.path.lexists(cache_path):
+            return ManagedPolicyState("absent", _WINDOWS_POLICY_SOURCE, reason_code="managed_policy_absent")
+        return _load_native({"op": "load", "write_cache": write_cache}, _WINDOWS_POLICY_SOURCE)
+    if paths.policy_path is None:
+        return ManagedPolicyState("absent", "native", reason_code="managed_policy_absent")
+    source = str(paths.policy_path)
+    signatures = (_signature(paths.policy_path), _signature(cache_path))
+    if signatures == (None, None):
+        return ManagedPolicyState("absent", source, reason_code="managed_policy_absent")
+    key = (source, write_cache, *signatures)
+    with _MEMO_LOCK:
+        cached = _MEMO.get(key)
+    if cached is not None:
+        return cached
+    state = _load_native({"op": "load", "write_cache": write_cache}, source)
+    racy_after = time.time_ns() - _RACY_WINDOW_NS
+    settled = all(
+        signature is None or (len(signature) > 1 and max(signature[-2:]) < racy_after) for signature in signatures
+    )
+    # Only a state read from files that have not moved since is reusable; a
+    # cache this load just wrote changes the signature and is reread once.
+    if settled and state.reason_code != "managed_policy_native_unavailable":
+        with _MEMO_LOCK:
+            _MEMO[key] = state
+            while len(_MEMO) > _MEMO_LIMIT:
+                del _MEMO[next(iter(_MEMO))]
+    return state
 
 
 def fail_closed_managed_policy() -> ManagedPolicy:
