@@ -7,7 +7,7 @@ use std::path::Path;
 use guard_command::dep_map::DepMap;
 use guard_command::js_semver::highest_js_version_for_selector;
 use guard_command::package_manifest_diff::{
-    installs_every_version, parse_manifest_dependencies_ordered,
+    installs_every_version, try_parse_manifest_dependencies_ordered,
 };
 use guard_command::workspace_inventory::{
     dependency_name, merge_inventory_item, python_strip, DirectDependencies, InventoryMap,
@@ -42,10 +42,16 @@ pub(crate) fn stripped_or_none(version: &str) -> Option<String> {
     (!stripped.is_empty()).then(|| stripped.to_owned())
 }
 
+/// A readable file's dependencies; empty when Guard could not parse it.
+struct Parsed {
+    dependencies: DepMap,
+    parsed: bool,
+}
+
 /// Dependency maps keyed by workspace-relative path, parsed at most once.
 pub(crate) struct DependencyReader<'a> {
     workspace: &'a Path,
-    cache: HashMap<String, Option<DepMap>>,
+    cache: HashMap<String, Option<Parsed>>,
 }
 
 impl<'a> DependencyReader<'a> {
@@ -56,21 +62,35 @@ impl<'a> DependencyReader<'a> {
         }
     }
 
-    /// `None` when the file cannot be read for audit; otherwise the parse.
-    pub(crate) fn dependencies(&mut self, path: &str) -> Option<&DepMap> {
+    fn read(&mut self, path: &str) -> Option<&Parsed> {
         let workspace = self.workspace;
         self.cache
             .entry(path.to_owned())
             .or_insert_with(|| {
                 let text = read_workspace_audit_text(workspace, path)?;
-                Some(parse_manifest_dependencies_ordered(
+                let dependencies = try_parse_manifest_dependencies_ordered(
                     path,
                     &text,
                     MANIFEST_BYTE_LIMIT,
                     MANIFEST_DEADLINE_MS,
-                ))
+                );
+                Some(Parsed {
+                    parsed: dependencies.is_some(),
+                    dependencies: dependencies.unwrap_or_default(),
+                })
             })
             .as_ref()
+    }
+
+    /// `None` when the file cannot be read for audit; otherwise the parse.
+    pub(crate) fn dependencies(&mut self, path: &str) -> Option<&DepMap> {
+        self.read(path).map(|parsed| &parsed.dependencies)
+    }
+
+    /// `None` when the file cannot be read for audit; otherwise whether Guard
+    /// could parse it. A file that parses and lists no dependencies is parsed.
+    pub(crate) fn parsed(&mut self, path: &str) -> Option<bool> {
+        self.read(path).map(|parsed| parsed.parsed)
     }
 }
 

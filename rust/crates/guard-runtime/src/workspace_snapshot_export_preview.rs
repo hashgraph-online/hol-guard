@@ -33,7 +33,7 @@ use guard_scanner::secret_detection::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 use super::secrets::{is_credential_store, MAX_PATH_BYTES};
 use super::{keyed_digest, SKIP_DIRS};
@@ -423,7 +423,7 @@ pub(super) fn redact(text: &str, path: &str, scanner: Scanner) -> Redaction {
 
 fn wipe(findings: &mut [SecretFinding]) {
     for finding in findings {
-        finding.candidate.zeroize();
+        finding.scrub_candidate();
     }
 }
 

@@ -204,6 +204,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::PROTECTION_HEALTH_REPORT_FEATURE,
     guard_contracts::EDGE_CONTAINMENT_REWRITE_FEATURE,
     guard_contracts::EDGE_CURSOR_PROBE_FEATURE,
+    guard_contracts::EDGE_CURSOR_NATIVE_SINK_FEATURE,
     guard_contracts::RESIDENT_HEALTH_FEATURE,
     guard_contracts::CONTENT_DECODE_FEATURE,
 ];

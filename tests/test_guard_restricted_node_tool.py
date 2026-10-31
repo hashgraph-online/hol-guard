@@ -6,15 +6,16 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_tool as tool
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
 # Which spellings name a tool, which modes only report and which arguments
 # write are all one reading in native authority, tested there
-# (`contained_node_tool_tests.rs`). These tests stand the sink on that answer
-# and cover what stays here: the manifest read, the entrypoint it resolves and
-# the plan it builds.
+# (`contained_node_tool_tests.rs`), and so is the whole plan outside Windows
+# (`node_tool_plan_tests.rs`). These tests stand the Windows sink on that
+# answer and cover what stays here: the manifest read and the route it asks.
 _REPORT = {"kind": "tool", "runtime_arguments": [], "expected_entry": None, "mode": "report"}
 _TSC = _REPORT | {"name": "tsc", "entries": ["typescript/bin/tsc"]}
 
@@ -66,7 +67,7 @@ def _script(task, body):
 def test_a_refused_route_is_not_a_protected_plan(monkeypatch, tmp_path):
     _routes(monkeypatch, RestrictedPytestError("node_tool_invalid_command", "The input has write or shell effects."))
     with pytest.raises(RestrictedPytestError, match="write or shell"):
-        tool.prepare_restricted_node_tool(["eslint", "--fix", "src"], workspace=tmp_path)
+        tool._prepare_windows_route(["eslint", "--fix", "src"], workspace=tmp_path, cwd=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -86,61 +87,7 @@ def test_a_reply_that_is_not_a_route_stops_the_run(monkeypatch, tmp_path, reply)
     """An answer the sink cannot read is unavailability, not a weaker plan."""
     _routes(monkeypatch, {"arguments": ["--noEmit"]} | reply)
     with pytest.raises(RestrictedPytestError, match="unavailable"):
-        tool.prepare_restricted_node_tool(["tsc", "--noEmit"], workspace=tmp_path)
-
-
-def test_bounded_heap_option_is_preserved_before_verified_entry(monkeypatch, tmp_path):
-    entry = tmp_path / "node_modules/typescript/bin/tsc"
-    entry.parent.mkdir(parents=True)
-    entry.write_text("// fixture compiler")
-    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
-    _routes(
-        monkeypatch,
-        _TSC
-        | {
-            "runtime_arguments": ["--max-old-space-size=12288"],
-            "arguments": ["--noEmit", "--incremental", "false"],
-            "expected_entry": str(entry),
-        },
-    )
-    plan = tool.prepare_restricted_node_tool(
-        ["node", "--max-old-space-size=12288", str(entry), "--noEmit", "--incremental", "false"],
-        workspace=tmp_path,
-    )
-    assert plan.profile_version == "node-tool-readonly-v1"
-    assert plan.command == (
-        "/usr/bin/node",
-        "--max-old-space-size=12288",
-        str(entry),
-        "--noEmit",
-        "--incremental",
-        "false",
-    )
-
-
-def test_the_routed_tool_runs_from_the_project_that_installed_it(monkeypatch, tmp_path):
-    """The route names the tool; the sink finds the copy this project installs."""
-    entry = tmp_path / "node_modules/typescript/bin/tsc"
-    entry.parent.mkdir(parents=True)
-    entry.write_text("// fixture compiler")
-    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
-    _routes(monkeypatch, _TSC | {"arguments": ["--noEmit", "--pretty", "false"]})
-    plan = tool.prepare_restricted_node_tool(
-        ["pnpm", "exec", "tsc", "--noEmit", "--pretty", "false"], workspace=tmp_path
-    )
-    assert plan.command == ("/usr/bin/node", str(entry), "--noEmit", "--pretty", "false")
-
-
-def test_a_tool_the_project_never_installed_downloads_nothing(monkeypatch, tmp_path):
-    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    _routes(monkeypatch, _TSC | {"arguments": ["--noEmit"]})
-    with pytest.raises(RestrictedPytestError, match="no replacement was downloaded"):
-        tool.prepare_restricted_node_tool(["tsc", "--noEmit"], workspace=tmp_path)
+        tool._prepare_windows_route(["tsc", "--noEmit"], workspace=tmp_path, cwd=tmp_path)
 
 
 def test_a_manifest_script_reaches_the_classifier_as_its_own_words(monkeypatch, tmp_path):
@@ -156,7 +103,7 @@ def test_a_manifest_script_reaches_the_classifier_as_its_own_words(monkeypatch, 
 
     _routes(monkeypatch, _script("lint", body))
     with pytest.raises(RestrictedPytestError, match="write or shell"):
-        tool.prepare_restricted_node_tool(["bun", "run", "lint"], workspace=tmp_path)
+        tool._prepare_windows_route(["bun", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
     assert seen == [["eslint", "src", "&&", "curl", "https://example.invalid"]]
 
 
@@ -182,7 +129,7 @@ def test_the_sink_routes_the_words_native_authority_read(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tool, "restricted_native", _native)
     with pytest.raises(RestrictedPytestError, match="write or shell"):
-        tool.prepare_restricted_node_tool(["npm", "run", "lint"], workspace=tmp_path)
+        tool._prepare_windows_route(["npm", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
     assert seen == [["eslint", ".\\src"]]
 
 
@@ -202,7 +149,7 @@ def test_a_script_the_sink_cannot_read_is_refused_before_it_is_routed(monkeypatc
 
     _routes(monkeypatch, _script("lint", body))
     with pytest.raises(RestrictedPytestError, match=message):
-        tool.prepare_restricted_node_tool(["bun", "run", "lint"], workspace=tmp_path)
+        tool._prepare_windows_route(["bun", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
 
 
 @pytest.mark.parametrize("denied", [False, True])
@@ -299,7 +246,7 @@ def test_lifecycle_actions_are_not_silently_skipped(monkeypatch, tmp_path, phase
 
     _routes(monkeypatch, _script("lint", body))
     with pytest.raises(RestrictedPytestError, match="lifecycle actions"):
-        tool.prepare_restricted_node_tool(["npm", "run", "lint"], workspace=tmp_path)
+        tool._prepare_windows_route(["npm", "run", "lint"], workspace=tmp_path, cwd=tmp_path)
 
 
 @pytest.mark.parametrize("name", ["src", ".git", ".env", "../outside", "."])
@@ -343,49 +290,11 @@ def test_existing_output_links_and_protected_files_are_rejected(tmp_path, kind):
     assert source.read_text() == "source"
 
 
-@pytest.mark.parametrize("spelling", ["node_modules/vite/bin/vite.js", "./node_modules/vite/bin/vite.js"])
-def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tmp_path, spelling):
-    project = tmp_path / "project"
-    entry = project / "node_modules/vite/bin/vite.js"
-    entry.parent.mkdir(parents=True)
-    entry.write_text("// fixture bundler")
-    elsewhere = tmp_path / "elsewhere"
-    (elsewhere / "node_modules/vite/bin").mkdir(parents=True)
-    (elsewhere / "node_modules/vite/bin/vite.js").write_text("// other bundler")
-    monkeypatch.chdir(elsewhere)
-    base = SimpleNamespace(workspace=project, cwd=project, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
-    _routes(
-        monkeypatch,
-        _REPORT
-        | {
-            "name": "vite",
-            "entries": ["vite/bin/vite.js"],
-            "arguments": ["build"],
-            "expected_entry": spelling,
-            "mode": "build",
-        },
-        build_output=project / "dist",
-    )
-    plan = tool.prepare_restricted_node_tool(["node", spelling, "build"], workspace=project)
-    assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build")
-    assert plan.output_roots == (project / "dist", project / "node_modules/.vite-temp")
-
-
-def test_the_nearest_installed_prettier_wins_over_a_hoisted_one(tmp_path):
-    """A package that pins its own major runs its own copy, not the root's."""
-    hoisted = tmp_path / "node_modules/prettier/bin/prettier.cjs"
-    hoisted.parent.mkdir(parents=True)
-    hoisted.write_text("// formatter 3")
-    app = tmp_path / "packages/app"
-    local = app / "node_modules/prettier/bin-prettier.js"
-    local.parent.mkdir(parents=True)
-    local.write_text("// formatter 2")
-    entries = ("prettier/bin/prettier.cjs", "prettier/bin-prettier.js")
-    modules, relative = tool._tool_entry(entries, app, tmp_path)
-    assert (modules, relative) == (app / "node_modules", "prettier/bin-prettier.js")
-    assert tool._tool_entry(entries, tmp_path, tmp_path) == (
-        tmp_path / "node_modules",
-        "prettier/bin/prettier.cjs",
-    )
+def test_a_missing_local_tool_keeps_its_own_refusal(monkeypatch):
+    message = "The local lint/typecheck tool is unavailable; no replacement was downloaded."
+    reply = {"reason_code": "node_tool_dependency_unavailable", "message": message}
+    monkeypatch.setattr(transport, "_call", lambda *args, **kwargs: reply)
+    with pytest.raises(RestrictedPytestError) as refused:
+        transport._request("prepare_node_tool", {}, dict)
+    assert refused.value.reason_code == "node_tool_dependency_unavailable"
+    assert str(refused.value) == message

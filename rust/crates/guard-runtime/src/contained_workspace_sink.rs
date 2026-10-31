@@ -22,6 +22,8 @@ use serde_json::{json, Map, Value};
 
 #[path = "contained_workspace_sink_denial.rs"]
 mod denial;
+#[path = "contained_esbuild_image.rs"]
+mod esbuild_image;
 #[path = "contained_workspace_sink_grant.rs"]
 mod grant;
 #[cfg(any(target_os = "linux", all(unix, test)))]
@@ -33,19 +35,25 @@ mod paths;
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
 mod process;
+#[path = "contained_readonly_sink.rs"]
+mod readonly;
 #[path = "contained_workspace_sink_launch.rs"]
 mod runner;
 #[path = "contained_workspace_sink_request.rs"]
 mod snapshot;
 #[path = "contained_workspace_sink_split.rs"]
 mod split;
+#[path = "contained_vitest_sink.rs"]
+mod vitest;
 
 use paths::{expand_user, py_normal, search_path, wire_path};
-use plan_check::{plan_paths, validated_plan};
+use plan_check::{plan_paths, sibling_root, validated_plan};
 use runner::{bootstrap_init, Launch, PrivateRoot};
 use snapshot::read_request;
 
+pub(crate) use plan_check::entered_sibling;
 pub(crate) use process::launch;
+pub(crate) use readonly::readonly_shape;
 pub(crate) use split::host_split;
 use split::publishes;
 #[cfg(test)]
@@ -228,10 +236,15 @@ fn sink(arguments: &Arguments, signals: &process::Signals) -> Outcome<i32> {
     let receipt = authority
         .authorize(&payload)
         .ok_or_else(Failure::unauthorized)?;
+    if let Some(route) = readonly::readonly_route(&receipt) {
+        return readonly::run(&payload, &workspace, &authority, route, signals);
+    }
     if !receipt_matches(&receipt) || host_split(receipt.get("reason")) {
         return Err(Failure::unauthorized());
     }
-    run_workspace_contained(&payload, &workspace, &authority, &receipt, signals)
+    let root = sibling_root(&payload, &authority.workspace, &arguments.home);
+    let root = root.unwrap_or(workspace);
+    run_workspace_contained(&payload, &root, &authority, &receipt, signals)
 }
 
 fn path_text(path: &Path) -> Outcome<String> {
@@ -297,18 +310,16 @@ fn run_workspace_contained(
         .and_then(|input| input.get("command"))
         .and_then(Value::as_str)
         .ok_or_else(|| Failure::invalid("Invalid workspace sandbox request."))?;
+    // The session workspace, or the sibling repository the call is anchored
+    // in; authority is still asked from the session workspace.
+    let root = path_text(workspace)?;
     let home = wire_path(&authority.arguments.home);
     let git_environment: Map<String, Value> = environment()
         .into_iter()
         .filter(|(name, _)| name.starts_with("GIT_CONFIG") || name == "XDG_CONFIG_HOME")
         .map(|(name, value)| (name, Value::String(value)))
         .collect();
-    let store = grant::request(
-        &authority.arguments.guard_home,
-        &home,
-        &authority.workspace,
-        command,
-    )?;
+    let store = grant::request(&authority.arguments.guard_home, &home, &root, command)?;
     // The Git steps after the checks run on the host, so no grant widens them.
     let publish = publishes(first_receipt.get("reason"));
     let decided = if publish {
@@ -318,8 +329,8 @@ fn run_workspace_contained(
     };
     let mut input = json!({
         "text": command,
-        "workspace": authority.workspace,
-        "cwd": authority.workspace,
+        "workspace": root,
+        "cwd": root,
         "platform": HOST_PLATFORM,
         "home": home,
         "git_environment": git_environment,
@@ -333,13 +344,7 @@ fn run_workspace_contained(
         None => None,
     };
     let plan = native("prepare_workspace_contained", input)?;
-    let plan = validated_plan(
-        plan,
-        command,
-        &authority.workspace,
-        publish,
-        expected.as_ref(),
-    )?;
+    let plan = validated_plan(plan, command, &root, publish, expected.as_ref())?;
     // A second receipt taken after planning must still bind the same evidence.
     let second = authority
         .authorize(payload)
@@ -371,7 +376,7 @@ fn run_workspace_contained(
     let launch = Launch {
         plan: &plan,
         workspace,
-        workspace_text: &authority.workspace,
+        workspace_text: &root,
         home: &home,
         private: &private,
         exec_roots: &exec_roots,

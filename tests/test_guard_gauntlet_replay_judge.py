@@ -16,7 +16,7 @@ from ci.gauntlet.interruptions import (
 )
 from ci.gauntlet.qualify import retryable, summarize_attempt
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
-from tests.gauntlet_replay import ReplayCase, expand, judge
+from tests.gauntlet_replay import REPLAYED, ReplayCase, expand, judge
 
 
 def _case(expect: str, harness: str = "claude-code", contained_ok: bool = False) -> ReplayCase:
@@ -277,7 +277,7 @@ def test_a_setup_case_is_replayed_as_setup() -> None:
 
 def test_expansion_covers_pi_and_every_harness() -> None:
     cases = expand()
-    assert {c.harness for c in cases} == {"codex", "zcode", "claude-code", "omp", "pi", "cursor", "muse"}
+    assert {c.harness for c in cases} == set(REPLAYED)
     ids = {c.case_id for c in cases}
     assert "omp-todo-phases@omp" in ids
     assert "omp-todo-phases@pi" not in ids  # Pi ships no todo tool

@@ -52,9 +52,13 @@ inputs:
     required: false
     default: "true"
   publish_hint:
-    description: "Add a short HOL Plugins listing link to the concise job summary and the pull request comment of public github.com repositories"
+    description: "Add a short HOL Plugins listing link and a directory pre-flight link to the concise job summary, and the listing link to the pull request comment, of public github.com repositories"
     required: false
     default: "true"
+  report_to_hol:
+    description: "Send the scan summary (score, grade, finding counts, scanner version, commit and run; never code or finding text) to HOL Plugins so listings built from this public repository show it as checked in CI. Needs `permissions: id-token: write`. Never fails the job."
+    required: false
+    default: "false"
   registry_payload_output:
     description: "Write a machine-readable plugin ecosystem payload JSON file for registry or awesome-list automation"
     required: false
@@ -311,6 +315,7 @@ runs:
         UPLOAD_SARIF: ${{ inputs.upload_sarif }}
         WRITE_STEP_SUMMARY: ${{ inputs.write_step_summary == 'true' && inputs.format != 'markdown' }}
         PUBLISH_HINT: ${{ inputs.publish_hint }}
+        REPORT_TO_HOL: ${{ inputs.report_to_hol }}
         REGISTRY_PAYLOAD_OUTPUT: ${{ inputs.registry_payload_output }}
         MIN_SCORE: ${{ inputs.min_score }}
         FAIL_ON: ${{ inputs.fail_on_severity }}

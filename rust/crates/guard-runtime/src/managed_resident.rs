@@ -492,3 +492,7 @@ mod tests;
 #[cfg(test)]
 #[path = "managed_resident_client_timeout_tests.rs"]
 mod client_timeout_tests;
+
+#[cfg(test)]
+#[path = "managed_resident_identity_tests.rs"]
+mod identity_tests;

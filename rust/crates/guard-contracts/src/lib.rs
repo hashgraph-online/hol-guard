@@ -407,6 +407,10 @@ pub struct GuardHookEnvelopeV2 {
 pub struct GuardHookContainmentSinkV1 {
     /// The argv prefix that starts Guard's CLI; the sink command follows it.
     pub sink_command: Vec<String>,
+    /// The daemon admits the runtime's own sink command on Cursor's
+    /// `beforeShellExecution`, so the probe answer may route there.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub native_sink: bool,
 }
 
 /// Where the daemon's custom extension rules live and what a command's

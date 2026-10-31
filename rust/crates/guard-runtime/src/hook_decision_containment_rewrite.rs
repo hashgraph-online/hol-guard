@@ -12,6 +12,11 @@
 //! The sink rechecks native authority before it runs anything. A call whose
 //! snapshot cannot be written or whose command cannot be quoted keeps its
 //! receipt, so nothing here allows a call the sink would not run.
+//!
+//! The edge holds the receipt's `reason` too, so a Claude Code or ZCode call
+//! it rewrites runs in the runtime's own sink when that sink reproduces it,
+//! as the resident's direct answer already does. Cursor keeps Guard's sink:
+//! its `beforeShellExecution` admits that argv alone.
 
 use guard_contracts::{ContainmentRewriteInputsV1, ContainmentRewriteV1, ContainmentSinkInputsV1};
 use serde_json::{json, Map, Value};
@@ -19,6 +24,7 @@ use sha2::{Digest, Sha256};
 
 use crate::codex_hook_bridge::contain::{discard, resolved_workspace, write_snapshot};
 use crate::hook_decision_containment_route::containment_sink;
+use crate::hook_direct::contained::{unprojected_sink_command, NativeSink};
 
 const REQUEST_SCHEMA: &str = "guard-contained-test-request.v1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
@@ -27,12 +33,28 @@ const ROUTED_REASON: &str = "native_contained_execution_routed";
 /// harness runs it in a POSIX shell.
 const BRIDGE_HARNESS: &str = "codex";
 
+/// What lets a rewrite run the runtime's own sink: the receipt's `reason`,
+/// which names a chain whose host step that sink does not run, and the sink.
+pub(crate) struct Native<'a> {
+    pub(crate) reason: &'a Value,
+    pub(crate) sink: NativeSink,
+}
+
 pub(crate) fn containment_rewrite(
     inputs: &ContainmentRewriteInputsV1,
 ) -> Result<ContainmentRewriteV1, String> {
+    containment_rewrite_with(inputs, None)
+}
+
+/// `containment_rewrite`, running a call the runtime's own sink reproduces
+/// there when `native` is given.
+pub(crate) fn containment_rewrite_with(
+    inputs: &ContainmentRewriteInputsV1,
+    native: Option<Native<'_>>,
+) -> Result<ContainmentRewriteV1, String> {
     let sink = containment_sink(&sink_inputs(inputs))?;
     let response = match sink.profile {
-        Some(_) => rewrite(inputs),
+        Some(_) => rewrite(inputs, native),
         None => None,
     };
     Ok(ContainmentRewriteV1 {
@@ -64,7 +86,7 @@ fn sink_inputs(inputs: &ContainmentRewriteInputsV1) -> ContainmentSinkInputsV1 {
 
 /// The allow that runs the call in the sink, with its snapshot written, or
 /// `None` with nothing left behind.
-fn rewrite(inputs: &ContainmentRewriteInputsV1) -> Option<Value> {
+fn rewrite(inputs: &ContainmentRewriteInputsV1, native: Option<Native<'_>>) -> Option<Value> {
     let original = inputs.tool_input.as_object()?;
     if inputs.sink_command.is_empty() {
         return None;
@@ -92,11 +114,21 @@ fn rewrite(inputs: &ContainmentRewriteInputsV1) -> Option<Value> {
         return None;
     };
     let digest = hex::encode(Sha256::digest(&serialized));
-    let mut command = inputs.sink_command.clone();
+    let native = native.and_then(|native| {
+        let answer = json!({
+            "reason_code": inputs.reason_code,
+            "required_execution_profile": inputs.required_execution_profile,
+            "reason": native.reason,
+        });
+        unprojected_sink_command(&answer, original, &workspace, &inputs.home, native.sink)
+    });
+    let mut command = native.unwrap_or_else(|| {
+        let mut command = inputs.sink_command.clone();
+        command.extend(["guard", "execute-contained-test"].map(str::to_owned));
+        command
+    });
     command.extend(
         [
-            "guard",
-            "execute-contained-test",
             "--harness",
             &inputs.harness,
             "--guard-home",

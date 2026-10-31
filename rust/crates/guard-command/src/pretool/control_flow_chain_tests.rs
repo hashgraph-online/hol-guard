@@ -66,3 +66,38 @@ fn other_lists_are_not_spliced() {
         assert_eq!(spliced(command), None, "{command}");
     }
 }
+
+/// A negated item inside a spliced conditional loses the `!` only while the
+/// list that follows it inside the construct runs either way. The construct's
+/// last item keeps its `!`, because the text after the conditional reads the
+/// outcome the construct returns.
+#[test]
+fn a_negated_item_keeps_the_negation_the_surrounding_list_reads() {
+    for (command, expected) in [
+        (
+            "echo a && if ! npm test; then echo fail; fi",
+            "echo a && npm test; echo fail",
+        ),
+        (
+            "if ! pytest -q; then echo fail; fi && echo b",
+            "pytest -q; echo fail && echo b",
+        ),
+        (
+            "if [ -f a ]; then ! npm test; fi && echo b",
+            "[ -f a ]; ! npm test && echo b",
+        ),
+    ] {
+        assert_eq!(spliced(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+/// A negated `cd` still changes the directory when it succeeds, and `then`
+/// runs when it does not. Splicing that into the surrounding list would check
+/// the later command in the wrong directory.
+#[test]
+fn a_negated_directory_change_is_not_spliced() {
+    assert_eq!(
+        spliced("git status --short && if ! cd src; then touch ../escape.txt; fi"),
+        None
+    );
+}

@@ -17,10 +17,11 @@ The Kit runs inside the HOL Guard native runtime. It reads only the folder you n
 | `hol-guard plugin init [path] [--name NAME]` | In a plugin repository, writes `hol.json`. In a new folder (empty, or holding only a README, a LICENSE or dotfiles) with `--name`, scaffolds a minimal Claude Code plugin with one skill. Never overwrites a file. | 0, or 2 could not run |
 | `hol-guard plugin install <owner/plugin> [--apply]` | Installs a HOL listing with Claude Code's and Codex's own CLIs after checking HOL's scan result; `uninstall` removes it. See [Install a plugin from HOL](plugin-install.md). | 0 done, 1 failed, 2 to 6 see the guide |
 | `hol-guard plugin stats <owner/plugin>` | For a HOL listing you own, prints its views, unique visitors and install clicks for the last 28 days and last week's attested installs by runtime. Reads a stats key from `HOL_API_KEY`; create one under Stats in your terminal in the HOL plugin workspace. The key can only read listings its account owns, and HOL withholds any install count under its minimum. | 0, or 2 could not run |
+| `hol-guard plugin verify <owner/plugin>` | Compares the commit Claude Code recorded for your install of a HOL listing with the commits HOL recorded for that version, and prints any integrity notes HOL has for it. A difference is a warning: Guard changes nothing and the command still exits 0. See [Install a plugin from HOL](plugin-install.md#check-an-installed-plugin). | 0 checked, 2 could not run, 3 not installed or not listed, 6 HOL unreachable |
 
 Every command accepts `--json` for the full machine-readable result.
 
-Two commands use the network. `install` downloads the listing's install spec from HOL unless you pass `--spec-file`, and sends nothing about you or your machine. `stats` sends one request to HOL with the key. Keep the key in a secret store or CI secret, not in a script or shell history.
+Three commands use the network. `install` downloads the listing's install spec from HOL unless you pass `--spec-file`, and sends nothing about you or your machine. `verify` downloads the same spec and the listing's public integrity record, and sends only the slug. `stats` sends one request to HOL with the key. Keep the key in a secret store or CI secret, not in a script or shell history.
 
 ## Sources the Kit reads
 

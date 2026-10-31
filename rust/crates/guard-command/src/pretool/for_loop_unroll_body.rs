@@ -568,7 +568,16 @@ pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
     // the `[` test it asks, of less: inside `[[ ]]` the shell splits no word
     // and expands no glob. An unclosed `[[` is some other shape and keeps the
     // construct on the unmodeled path with every other keyword.
-    for stage in item.split('|') {
+    for (index, stage) in item.split('|').enumerate() {
+        // A `!` in front of a pipeline inverts the exit status it reports and
+        // runs nothing of its own, so the command word this check reads is
+        // the word written after it. The shell accepts that `!` only where
+        // the pipeline starts, so no later stage carries one.
+        let stage = if index == 0 {
+            negation_tail(stage)
+        } else {
+            stage
+        };
         let first = stage.split_whitespace().next()?;
         let bare = first.trim_start_matches(|c: char| c.is_ascii_digit());
         let bracket_test = first == "[[" && stage.trim_end().ends_with("]]");
@@ -582,6 +591,18 @@ pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
         }
     }
     Some(item.replace(MARKER, word))
+}
+
+/// The pipeline without the `!` that inverts its exit status, where one is
+/// written as a word of its own. A `!` joined to what follows it is an
+/// ordinary word, and a bare `!` starts no pipeline, so neither is read as a
+/// negation.
+fn negation_tail(stage: &str) -> &str {
+    stage
+        .trim_start()
+        .strip_prefix('!')
+        .filter(|rest| rest.starts_with([' ', '\t']))
+        .unwrap_or(stage)
 }
 
 /// The redirect text after `done`, restricted to plain redirections.

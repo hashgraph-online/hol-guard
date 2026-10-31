@@ -218,6 +218,11 @@ pub(crate) fn command_shape(
     // How far under the workspace root each segment's shell stands, so a
     // relative path may spend that many parent steps and stay inside.
     let below = cwd::depths(model, workspace);
+    // A chain that enters a directory, works and climbs back spends a parent
+    // step no single operand can be read as staying inside. The walk reads
+    // the whole chain, so where it proves every move lands in the workspace,
+    // an operand it accounted for is as bounded as one that never climbed.
+    let walked_inside = cwd::moves_stay_inside(model, workspace);
     for (index, segment) in model.segments.iter().enumerate() {
         // A bare private assignment starts no program.
         if segment.executable.is_none() && cd::assigns_private(model, segment) {
@@ -261,7 +266,8 @@ pub(crate) fn command_shape(
             )
             || (matches!(name, "cd" | "pushd")
                 && !matches!(segment.arguments.as_slice(),
-                    [target] if cd::bounded(target, workspace, temp_fixed)))
+                    [target] if cd::bounded(target, workspace, temp_fixed)
+                        || (walked_inside && cd::walked(target))))
         {
             return None;
         }

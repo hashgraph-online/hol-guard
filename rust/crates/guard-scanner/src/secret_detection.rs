@@ -22,14 +22,39 @@ use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::LazyLock;
+use zeroize::{Zeroize, Zeroizing};
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// How the scan tells two candidates apart without keeping either one.
+///
+/// Deduplication only ever asks whether it has seen these exact bytes before,
+/// and a digest answers that. Keying on the candidate itself would put a second
+/// copy of every secret in a set that lives as long as the scan does.
+pub(crate) type CandidateDigest = [u8; 32];
+
+pub(crate) fn candidate_digest(candidate: &str) -> CandidateDigest {
+    let mut digest = [0u8; 32];
+    digest.copy_from_slice(&Sha256::digest(candidate.as_bytes()));
+    digest
+}
 
 const DETECTOR_VERSION: &str = "guard-secrets-v1";
 const GENERIC_CANDIDATE_POLICY_VERSION: &str = "credential-expression-filter-v2";
 
 /// `max_findings` default mirroring `scan_secret_text(..., max_findings=200)`.
 pub const DEFAULT_MAX_FINDINGS: usize = 200;
+
+/// Most findings the detector will return from a single text.
+///
+/// This sits one above `repository_scanner::MAX_FINDINGS_CEILING`, the most a
+/// caller's own `max_findings` can be. A scanner that has filled its budget
+/// cannot tell a file that ended exactly on the cap from one that held more, so
+/// it asks for one finding past its budget and reads the extra as the cut. A
+/// caller sitting on the ceiling has to be able to ask for that one too, which
+/// is what the headroom here is for; clamping it away is what let a repository
+/// scanned at the ceiling report complete coverage over a file that was cut.
+pub const MAX_FINDINGS_PER_TEXT: usize = 10_001;
 
 // Python `re` flag integers captured verbatim for `detector_version` parity:
 // plain `re.compile` on a `str` pattern reports UNICODE(32); MULTILINE adds 8;
@@ -562,7 +587,13 @@ const GENERIC_RULE_META: RuleMeta = RuleMeta {
 
 /// One detected secret. `candidate` is excluded from `Debug` and `PartialEq`,
 /// mirroring `field(repr=False, compare=False)` on the Python dataclass so the
-/// raw secret can never leak through formatting or equality.
+/// raw secret can never leak through formatting or equality, and it is
+/// overwritten when the finding is dropped so it does not sit in a freed
+/// allocation for the rest of the process. The detector keeps no second copy of
+/// those bytes that outlives the scan: deduplication keys on a digest, the
+/// fingerprint hashes the field in place, and the line and context strings the
+/// matching path builds are zeroized when they go out of scope. The text handed
+/// to the scan is the caller's own allocation and stays the caller's to manage.
 #[derive(Clone)]
 pub struct SecretFinding {
     pub rule_id: &'static str,
@@ -617,29 +648,66 @@ impl PartialEq for SecretFinding {
     }
 }
 
-/// Raised when a fingerprint is requested without a key, mirroring the Python
-/// `ValueError("secret fingerprint key must not be empty")`.
+/// Raised when a finding cannot be fingerprinted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EmptyFingerprintKeyError;
+pub enum FingerprintError {
+    /// No key was supplied, mirroring the Python
+    /// `ValueError("secret fingerprint key must not be empty")`.
+    EmptyKey,
+    /// The candidate was already scrubbed. Hashing what is left would bind the
+    /// identity to the rule alone, so every scrubbed finding of one rule would
+    /// answer to the same fingerprint.
+    CandidateScrubbed,
+}
 
-impl fmt::Display for EmptyFingerprintKeyError {
+impl fmt::Display for FingerprintError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("secret fingerprint key must not be empty")
+        match self {
+            Self::EmptyKey => formatter.write_str("secret fingerprint key must not be empty"),
+            Self::CandidateScrubbed => formatter
+                .write_str("secret fingerprint is unavailable once the candidate is scrubbed"),
+        }
     }
 }
 
-impl Error for EmptyFingerprintKeyError {}
+impl Error for FingerprintError {}
+
+impl Drop for SecretFinding {
+    fn drop(&mut self) {
+        self.scrub_candidate();
+    }
+}
 
 impl SecretFinding {
     /// Tenant/caller-scoped HMAC of the finding, never exposing candidate bytes.
-    pub fn fingerprint(&self, key: &[u8]) -> Result<String, EmptyFingerprintKeyError> {
+    pub fn fingerprint(&self, key: &[u8]) -> Result<String, FingerprintError> {
         if key.is_empty() {
-            return Err(EmptyFingerprintKeyError);
+            return Err(FingerprintError::EmptyKey);
         }
-        let material = format!("{}\u{0}{}", self.rule_id, self.candidate);
+        // A detected candidate is never empty, so an empty one here means the
+        // caller already scrubbed it. Refuse rather than return the identity of
+        // the rule wearing this finding's name.
+        if self.candidate.is_empty() {
+            return Err(FingerprintError::CandidateScrubbed);
+        }
+        // Fed in three pieces rather than joined into one string: the bytes
+        // the HMAC sees are the same, and the candidate is never copied into a
+        // temporary that outlives this call unscrubbed.
         let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts keys of any length");
-        mac.update(material.as_bytes());
+        mac.update(self.rule_id.as_bytes());
+        mac.update(&[0]);
+        mac.update(self.candidate.as_bytes());
         Ok(hex::encode(mac.finalize().into_bytes()))
+    }
+
+    /// Overwrite the raw secret in place.
+    ///
+    /// `Drop` runs this, so a finding that goes out of scope leaves nothing
+    /// behind in the allocation it frees. A caller that holds a finding past
+    /// the point where it still needs the raw bytes — to report the family and
+    /// the line, say — can run it early and keep the rest of the finding.
+    pub fn scrub_candidate(&mut self) {
+        self.candidate.zeroize();
     }
 
     /// Public, non-sensitive payload. Field order matches the Python dict
@@ -647,7 +715,7 @@ impl SecretFinding {
     pub fn to_public_dict(
         &self,
         fingerprint_key: Option<&[u8]>,
-    ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    ) -> Result<PublicFinding, FingerprintError> {
         let fingerprint = match fingerprint_key {
             Some(key) => Some(self.fingerprint(key)?),
             None => None,
@@ -713,7 +781,7 @@ impl SecretScanSummary {
     pub fn to_public_dict(
         &self,
         fingerprint_key: Option<&[u8]>,
-    ) -> Result<PublicScanSummary<'_>, EmptyFingerprintKeyError> {
+    ) -> Result<PublicScanSummary<'_>, FingerprintError> {
         let mut findings = Vec::with_capacity(self.findings.len());
         for finding in &self.findings {
             findings.push(finding.to_public_dict(fingerprint_key)?);
@@ -1230,7 +1298,7 @@ fn python_splitlines(text: &str) -> Vec<&str> {
 
 /// Python `_surrounding_context`: the three lines on each side of the match
 /// line (counted by `\n`, sliced from `splitlines()`), capped at 4096 chars.
-fn surrounding_context(text: &str, match_start: usize) -> String {
+fn surrounding_context(text: &str, match_start: usize) -> Zeroizing<String> {
     let lines = python_splitlines(text);
     let line_index = text.as_bytes()[..match_start]
         .iter()
@@ -1238,13 +1306,13 @@ fn surrounding_context(text: &str, match_start: usize) -> String {
         .count();
     let start = line_index.saturating_sub(3);
     let end = (line_index + 4).min(lines.len());
-    let joined = if start < end {
+    let joined = Zeroizing::new(if start < end {
         lines[start..end].join("\n")
     } else {
         String::new()
-    };
+    });
     match joined.char_indices().nth(4096) {
-        Some((index, _)) => joined[..index].to_string(),
+        Some((index, _)) => Zeroizing::new(joined.as_str()[..index].to_string()),
         None => joined,
     }
 }
@@ -1323,12 +1391,22 @@ fn line_number(text: &str, match_start: usize) -> usize {
     text[..match_start].bytes().filter(|b| *b == b'\n').count() + 1
 }
 
-fn line_text(text: &str, match_start: usize) -> String {
+fn line_text(text: &str, match_start: usize) -> Zeroizing<String> {
     let start = text[..match_start].rfind('\n').map_or(0, |index| index + 1);
     let end = text[match_start..]
         .find('\n')
         .map_or(text.len(), |index| match_start + index);
-    text[start..end].chars().take(1024).collect()
+    // Collecting the characters would grow the string from a quarter-length
+    // guess, and every grow frees a buffer still holding the head of the line,
+    // which is where a secret usually sits. Finding the cut first and copying
+    // the slice once allocates exactly what the line needs, so the only buffer
+    // that ever held the text is the one `Zeroizing` wipes.
+    let line = &text[start..end];
+    let cut = line
+        .char_indices()
+        .nth(1024)
+        .map_or(line.len(), |(index, _)| index);
+    Zeroizing::new(line[..cut].to_string())
 }
 
 #[allow(clippy::too_many_arguments)] // Mirrors the Python keyword arguments verbatim.
@@ -1351,10 +1429,10 @@ fn finding_from_match(
                 return None;
             }
         }
-    } else if obvious_sample(candidate, &line_text, path) {
+    } else if obvious_sample(candidate, line_text.as_str(), path) {
         return None;
     }
-    let (score, reasons) = context_score(candidate, path, &line_text, rule.strong_format);
+    let (score, reasons) = context_score(candidate, path, line_text.as_str(), rule.strong_format);
     let minimum_score = if rule.strong_format { 0.56 } else { 0.64 };
     if score < minimum_score {
         return None;
@@ -1401,9 +1479,9 @@ pub fn scan_secret_text(
             findings: Vec::new(),
         };
     }
-    let bounded_max = max_findings.clamp(1, 10_000);
+    let bounded_max = max_findings.clamp(1, MAX_FINDINGS_PER_TEXT);
     let mut findings: Vec<SecretFinding> = Vec::new();
-    let mut seen: HashSet<(&'static str, usize, String)> = HashSet::new();
+    let mut seen: HashSet<(&'static str, usize, CandidateDigest)> = HashSet::new();
 
     for rule in SECRET_RULES.iter() {
         for captures in rule.pattern.captures_iter(text) {
@@ -1428,7 +1506,11 @@ pub fn scan_secret_text(
                 Some(rule),
             );
             let Some(finding) = finding else { continue };
-            if !seen.insert((finding.rule_id, finding.line, finding.candidate.clone())) {
+            if !seen.insert((
+                finding.rule_id,
+                finding.line,
+                candidate_digest(&finding.candidate),
+            )) {
                 continue;
             }
             findings.push(finding);
@@ -1444,9 +1526,9 @@ pub fn scan_secret_text(
 
     // Generic assignments are intentionally evaluated after provider formats so
     // the structured detector wins when both identify the same token.
-    let provider_candidates: HashSet<String> = findings
+    let provider_candidates: HashSet<CandidateDigest> = findings
         .iter()
-        .map(|finding| finding.candidate.clone())
+        .map(|finding| candidate_digest(&finding.candidate))
         .collect();
     for captures in ASSIGNMENT.captures_iter(text) {
         let candidate = captures
@@ -1455,7 +1537,7 @@ pub fn scan_secret_text(
             .or_else(|| captures.name("secret_uq"))
             .map(|m| m.as_str());
         let Some(candidate) = candidate else { continue };
-        if provider_candidates.contains(candidate) {
+        if provider_candidates.contains(&candidate_digest(candidate)) {
             continue;
         }
         let name = captures.name("name").map(|m| m.as_str()).unwrap_or("");
@@ -1485,7 +1567,11 @@ pub fn scan_secret_text(
             None,
         );
         let Some(finding) = finding else { continue };
-        if !seen.insert((finding.rule_id, finding.line, finding.candidate.clone())) {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
             continue;
         }
         findings.push(finding);
@@ -1504,6 +1590,14 @@ pub fn scan_secret_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use guard_alloc_probe::CountingAllocator;
+
+    // Installed for this crate's unit tests so a copy that silently grows is
+    // visible as an extra allocation call rather than something a reader has
+    // to take on trust.
+    #[global_allocator]
+    static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator;
 
     // Built in parts so a literal JWT never appears in source.
     fn jwt_fixture() -> String {
@@ -1701,7 +1795,7 @@ mod tests {
         // An explicitly empty key is an error, mirroring the Python ValueError.
         assert_eq!(
             summary.findings[0].fingerprint(b""),
-            Err(EmptyFingerprintKeyError)
+            Err(FingerprintError::EmptyKey)
         );
         assert!(summary.to_public_dict(Some(b"")).is_err());
     }
@@ -1871,5 +1965,108 @@ mod tests {
         assert_eq!(summary.findings.len(), 2);
         assert_eq!(summary.findings[0].line, 1);
         assert_eq!(summary.findings[1].line, 2);
+    }
+
+    #[test]
+    fn scrubbing_a_finding_keeps_everything_but_the_secret() {
+        let summary = scan_secret_text(
+            &fixture_text(),
+            "config/prod.env",
+            "working_tree",
+            None,
+            200,
+        );
+        let mut finding = summary.findings.into_iter().next().expect("a finding");
+        let rule_id = finding.rule_id;
+        let line = finding.line;
+        assert!(!finding.candidate.is_empty());
+
+        finding.scrub_candidate();
+
+        assert!(finding.candidate.is_empty());
+        assert_eq!(finding.rule_id, rule_id);
+        assert_eq!(finding.line, line);
+        assert_eq!(finding.path, "config/prod.env");
+        // The rest of the finding survives, but its identity does not: a
+        // fingerprint taken now would name the rule, not the secret.
+        assert_eq!(
+            finding.fingerprint(b"tenant-key"),
+            Err(FingerprintError::CandidateScrubbed)
+        );
+        assert_eq!(
+            finding.to_public_dict(Some(b"tenant-key")).err(),
+            Some(FingerprintError::CandidateScrubbed)
+        );
+        // Without a key the public payload carries no fingerprint, so it is
+        // still the honest way to report a scrubbed finding.
+        assert!(finding.to_public_dict(None).is_ok());
+    }
+
+    #[test]
+    fn feeding_the_fingerprint_in_pieces_matches_the_joined_form() {
+        let summary = scan_secret_text(
+            &fixture_text(),
+            "config/prod.env",
+            "working_tree",
+            None,
+            200,
+        );
+        let finding = summary.findings.first().expect("a finding");
+        let key = b"fingerprint-key";
+
+        // What the finding used to build and hash in one allocation.
+        let mut joined = HmacSha256::new_from_slice(key).expect("HMAC accepts this key");
+        joined.update(format!("{}\u{0}{}", finding.rule_id, finding.candidate).as_bytes());
+
+        assert_eq!(
+            finding.fingerprint(key).expect("the key is not empty"),
+            hex::encode(joined.finalize().into_bytes())
+        );
+    }
+
+    #[test]
+    fn a_matched_line_reaches_the_zeroizing_buffer_in_one_copy() {
+        // Collecting characters starts from a guess of about a quarter of the
+        // line's bytes and grows from there, and every grow frees a buffer that
+        // still holds the head of the line, which is where the secret sits. The
+        // allocator is the only honest witness to that, so measure it: one call
+        // is the copy, and anything more is a freed buffer nobody wiped.
+        let line = format!("API_KEY=sk_live_{}", "e\u{301}".repeat(400));
+        let text = format!("harmless line\n{line}\ntrailing line");
+        let match_start = text.find("sk_live_").expect("the fixture carries the line");
+
+        let (copied, measured) = guard_alloc_probe::measure(|| line_text(&text, match_start));
+
+        assert_eq!(copied.as_str(), line);
+        assert_eq!(
+            measured.alloc_calls, 1,
+            "the line was copied through more than one buffer"
+        );
+    }
+
+    #[test]
+    fn a_long_line_is_cut_on_a_character_boundary() {
+        let line = format!("API_KEY=sk_live_{}", "e\u{301}".repeat(2000));
+        let text = format!("harmless line\n{line}\n");
+        let match_start = text.find("sk_live_").expect("the fixture carries the line");
+
+        let copied = line_text(&text, match_start);
+
+        // The cut counts characters, so a multi-byte character is never halved
+        // and the kept text is still a prefix of the line it came from.
+        assert_eq!(copied.chars().count(), 1024);
+        assert!(line.starts_with(copied.as_str()));
+    }
+
+    #[test]
+    fn the_dedup_digest_tells_candidates_apart() {
+        assert_eq!(
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345")
+        );
+        assert_ne!(
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012346")
+        );
     }
 }

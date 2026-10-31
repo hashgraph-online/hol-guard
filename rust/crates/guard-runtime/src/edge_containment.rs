@@ -21,8 +21,9 @@
 use guard_contracts::{ContainmentRewriteInputsV1, GuardHookEdgeResultV2, GuardHookEnvelopeV2};
 use serde_json::{json, Map, Value};
 
-use crate::hook_decision_containment_rewrite::containment_rewrite;
+use crate::hook_decision_containment_rewrite::{containment_rewrite_with, Native};
 use crate::hook_decision_containment_route::host_platform;
+use crate::hook_direct::contained::NativeSink;
 
 /// `containment_rewrite` when `harness_response` runs the call in the sink.
 pub(super) const ROUTED: &str = "routed";
@@ -61,6 +62,7 @@ pub(super) fn attach(envelope: &GuardHookEnvelopeV2, edge: &mut GuardHookEdgeRes
         &edge.result,
         custom_block,
         &mut edge.harness_response,
+        crate::hook_direct::contained::native_sink,
     )
     .map(str::to_owned);
 }
@@ -69,6 +71,7 @@ pub(super) fn attach(envelope: &GuardHookEnvelopeV2, edge: &mut GuardHookEdgeRes
 /// `harness_response` with the routed allow when the sink takes the call.
 /// `None` when the daemon sent no sink argv, the call is not routed to the
 /// sink, a custom block or a review answers it first, or the rewrite fails.
+/// A call `native` reproduces runs in the runtime's own sink.
 fn rewrite(
     envelope: &GuardHookEnvelopeV2,
     harness: &str,
@@ -76,6 +79,7 @@ fn rewrite(
     result: &Value,
     custom_block: bool,
     harness_response: &mut Option<Value>,
+    native: NativeSink,
 ) -> Option<&'static str> {
     let sink = envelope.containment_sink.as_ref()?;
     let minimum_action = result.get("minimum_action").and_then(Value::as_str);
@@ -89,7 +93,16 @@ fn rewrite(
     let rendered = harness_response.as_ref()?.as_object()?;
     let payload = envelope.raw_payload.as_object()?;
     let inputs = inputs(envelope, harness, payload, rendered, &sink.sink_command);
-    match containment_rewrite(&inputs).ok()?.response {
+    // Cursor's shell check admits the runtime's sink only for a probe its
+    // own scope routes, so any other Cursor call keeps Guard's sink.
+    let native = rendered
+        .get("reason")
+        .filter(|_| harness != CURSOR)
+        .map(|reason| Native {
+            reason,
+            sink: native,
+        });
+    match containment_rewrite_with(&inputs, native).ok()?.response {
         Some(routed) => {
             *harness_response = Some(routed);
             Some(ROUTED)
@@ -125,6 +138,7 @@ fn cursor_probe(
         &reviewed,
         &envelope.source,
         &sink.sink_command,
+        sink.native_sink,
         envelope.recording_only,
     )?;
     let routed = response.get("reason_code").and_then(Value::as_str) == Some(ROUTED_REASON);

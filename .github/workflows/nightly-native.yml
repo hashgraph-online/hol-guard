@@ -293,6 +293,13 @@ jobs:
           ulimit -n 128
           uv run --no-sync pytest -q tests/test_daemon_bounded_http.py --tb=short
 
+      - name: Replay the transport chaos gate at full volume
+        env:
+          HOL_GUARD_DAEMON_CHAOS: full
+        run: |
+          ulimit -n 256
+          uv run --no-sync pytest -q tests/test_guard_daemon_chaos_gate.py --tb=short
+
   native-platform:
     name: Native workspace and hook client (${{ matrix.os }})
     strategy:

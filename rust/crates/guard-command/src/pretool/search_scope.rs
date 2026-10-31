@@ -65,8 +65,9 @@ pub(super) fn claude_grep_directory_scope_proven(
 /// True when a Grok `Grep` directory search cannot reach a sensitive file.
 /// Grok's search includes hidden files and searches a gitignored file its
 /// `glob` matches, so neither the glob nor any ignore file narrows the walk:
-/// any sensitive file below the directory fails the proof. A single-file
-/// target returns false so the file-read proof decides.
+/// any sensitive file below the directory fails the proof unless the search
+/// pattern provably cannot match it. A single-file target returns false so
+/// the file-read proof decides.
 pub(super) fn grok_grep_directory_scope_proven(
     payload: &Value,
     home_dir: Option<&str>,
@@ -87,10 +88,16 @@ pub(super) fn grok_grep_directory_scope_proven(
             && glob.as_bytes().get(1) != Some(&b':')
             && !glob.split(['/', '\\']).any(|part| part == "..")
     };
+    // A plain pattern that no reachable sensitive file contains cannot print
+    // a line from one, so those files need not hold the search.
+    let clearance = input
+        .get("pattern")
+        .and_then(Value::as_str)
+        .and_then(PatternClearance::new);
     input
         .get("glob")
         .is_none_or(|glob| glob.as_str().is_some_and(contained))
-        && content_search_scope_proven(target, home_dir, cwd)
+        && content_search_scope_proven(target, home_dir, cwd, clearance.as_ref())
 }
 
 /// Shell `rg` with `-g` inclusions the name screen cannot clear, such as
@@ -181,15 +188,20 @@ pub(super) fn claude_glob_scope_proven(
 /// trees (`~/.agent/skills`, `~/.agent/artifacts`) the per-file rules that
 /// deny direct reads do not apply to a directory walk, so the walk must reach
 /// only documents a direct read would allow.
+///
+/// A plain-text `clearance` pattern lets the search through when every
+/// sensitive file in reach is one the pattern cannot match: the host prints
+/// only matching lines, so such a file adds nothing to its output.
 pub(super) fn content_search_scope_proven(
     target: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
+    clearance: Option<&PatternClearance>,
 ) -> bool {
     unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
         (!super::read_paths::inside_agent_state_tree(&root, home_dir)
             || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
-            && unfiltered_walk_proven(&root, home_dir)
+            && unfiltered_walk_cleared(&root, clearance, home_dir)
     })
 }
 

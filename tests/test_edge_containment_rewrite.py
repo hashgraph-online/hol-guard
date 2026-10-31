@@ -95,7 +95,7 @@ def test_the_decoder_refuses_a_rewrite_mark_off_a_sink_route(fields: dict[str, o
     assert _decode_edge(_edge(**fields)) is None
 
 
-def _status(tmp_path: Path, *, advertised: bool) -> NativeRuntimeStatus:
+def _status(tmp_path: Path, *, advertised: bool, native_sink: bool = False) -> NativeRuntimeStatus:
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
     identity = NativeRuntimeIdentity(
@@ -118,6 +118,7 @@ def _status(tmp_path: Path, *, advertised: bool) -> NativeRuntimeStatus:
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
             *([CONTAINMENT_REWRITE_FEATURE] if advertised else []),
+            *(["edge-cursor-native-sink-v1"] if native_sink else []),
         ),
     )
     return NativeRuntimeStatus(
@@ -179,6 +180,42 @@ def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_a_resident_can_
         # An older resident would refuse the field, and without a workspace
         # there is no snapshot to write.
         assert sink is None
+
+
+@pytest.mark.parametrize(
+    ("harness", "advertised", "sent"),
+    (("cursor", True, True), ("cursor", False, False), ("claude", True, False)),
+)
+def test_only_a_cursor_envelope_a_resident_reads_offers_the_runtime_sink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, advertised: bool, sent: bool
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return json.dumps(_edge(event_name="PreToolUse"), separators=(",", ":")).encode()
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    review_raw_hook_native(
+        payload=dict(_PAYLOAD),
+        harness=harness,
+        event="PreToolUse",
+        guard_home=tmp_path,
+        home_dir=tmp_path,
+        cwd=tmp_path,
+        source_ref_external_allowed=False,
+        observe_mode=False,
+        deadline=None,
+        policy_snapshot={"generation": 1},
+        runtime_status=_status(tmp_path, advertised=True, native_sink=advertised),
+        containment_sink=True,
+    )
+    encoded = captured["payload"]
+    assert isinstance(encoded, bytes)
+    sink = json.loads(encoded)["containment_sink"]
+    # An older resident would refuse the field; the daemon admits the
+    # runtime's sink only on Cursor's `beforeShellExecution`.
+    assert sink.get("native_sink") is (True if sent else None)
 
 
 @pytest.fixture(autouse=True)

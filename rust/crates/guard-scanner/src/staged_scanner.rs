@@ -16,9 +16,10 @@ use crate::git_read::run_git_os;
 use crate::git_read::{run_git, GIT_TIMEOUT_SECONDS};
 use crate::repository_scanner::{
     bounded_positive, expand_tilde, scan_blob, RepositorySecretScanResult, DEFAULT_MAX_FILES,
-    DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_FINDINGS, DEFAULT_MAX_TOTAL_BYTES,
+    DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_FINDINGS, DEFAULT_MAX_TOTAL_BYTES, MAX_FINDINGS_CEILING,
 };
 use crate::secret_detection::SecretFinding;
+use crate::secret_detection::{candidate_digest, CandidateDigest};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 
@@ -196,15 +197,17 @@ fn failed_result(error: &str) -> RepositorySecretScanResult {
 
 /// Dedup/ordering block shared by all staged findings: keyed on
 /// `(path, line, candidate)` with the higher `confidence_score` winning, then
-/// sorted by `(path, line, rule_id)` and capped at `max_findings`. Returns the
-/// ordered findings plus whether the cap dropped entries.
+/// sorted by `(path, line, rule_id)` and capped at `max_findings`. The
+/// candidate enters the key as a digest: the map only ever asks whether two
+/// findings carry the same bytes, and a key made of the bytes themselves would
+/// hold a second copy of every secret for as long as the scan runs.
 fn dedup_findings(findings: Vec<SecretFinding>, max_findings: usize) -> (Vec<SecretFinding>, bool) {
-    let mut deduped: HashMap<(String, usize, String), SecretFinding> = HashMap::new();
+    let mut deduped: HashMap<(String, usize, CandidateDigest), SecretFinding> = HashMap::new();
     for finding in findings {
         let key = (
             finding.path.clone(),
             finding.line,
-            finding.candidate.clone(),
+            candidate_digest(&finding.candidate),
         );
         match deduped.entry(key) {
             Entry::Occupied(mut slot) => {
@@ -274,7 +277,11 @@ pub fn scan_staged_secrets(
         DEFAULT_MAX_TOTAL_BYTES,
         4 * 1024 * 1024 * 1024,
     );
-    let max_findings = bounded_positive(options.max_findings, DEFAULT_MAX_FINDINGS, 10_000);
+    let max_findings = bounded_positive(
+        options.max_findings,
+        DEFAULT_MAX_FINDINGS,
+        MAX_FINDINGS_CEILING,
+    );
 
     let mut findings: Vec<SecretFinding> = Vec::new();
     let mut errors: Vec<String> = Vec::new();

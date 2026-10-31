@@ -353,6 +353,13 @@ fn code_loading_settings_are_named_for_the_block_reason() {
         ("REPORT_DIR=out CC=./x npm run build", Some("CC")),
         ("cd app && PYTHONPATH=. python x.py", Some("PYTHONPATH")),
         ("REPORT_DIR=out node x.mjs", None),
+        // A setting the projection removes stopped nothing, so the reason
+        // skips it and names the one that did.
+        ("NODE_OPTIONS=--max-old-space-size=4096 npm test", None),
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 NODE_PATH=/ws node x.mjs",
+            Some("NODE_PATH"),
+        ),
         ("echo NODE_PATH=/ws | cat", None),
         ("node x.mjs NODE_PATH=/ws", None),
         ("NODE-PATH=/ws node x.mjs", None),
@@ -452,6 +459,50 @@ fn an_exec_the_projection_cannot_read_past_leaves_the_command_alone() {
         // launcher stands in front of it, so reading past `exec` reaches the
         // same refusal the bare spelling reaches.
         "exec env -u PATH npm test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_heap_or_diagnostic_node_options_prefix_is_projected_away() {
+    // The runtime already reads an inherited `NODE_OPTIONS` holding only
+    // these flags as inert. Written in front of the command it is the same
+    // setting and loads the same nothing, so the projection removes it and
+    // the ordinary proofs judge the test run itself.
+    for (command, expected) in [
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 npm test",
+            "npm test",
+        ),
+        (
+            "NODE_OPTIONS=--no-warnings npx vitest run",
+            "npx vitest run",
+        ),
+        (
+            "NODE_OPTIONS=--stack-trace-limit=50 node scripts/report.mjs",
+            "node scripts/report.mjs",
+        ),
+        (
+            "env NODE_OPTIONS=--max-semi-space-size=64 npm test",
+            "npm test",
+        ),
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 LC_ALL=C npm test",
+            "npm test",
+        ),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+    // Anything that can load code, open a port or name a file keeps the
+    // command unprojected, so it still fails closed.
+    for command in [
+        "NODE_OPTIONS=--require=./hook.js npm test",
+        "NODE_OPTIONS=--import=./hook.mjs npm test",
+        "NODE_OPTIONS=--inspect npm test",
+        "NODE_OPTIONS=--experimental-loader npm test",
+        "NODE_OPTIONS= npm test",
+        "NODE_OPTIONS=--max-old-space-size=4096:--require=./hook.js npm test",
     ] {
         assert_eq!(project(command), None, "{command}");
     }

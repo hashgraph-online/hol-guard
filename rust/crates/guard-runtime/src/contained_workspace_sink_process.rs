@@ -47,7 +47,7 @@ const PROCESS_LIMIT_SCRIPT: &str = concat!(
 #[derive(Default)]
 struct Running {
     child: Option<i32>,
-    scratch: Option<PathBuf>,
+    scratch: Vec<PathBuf>,
     overlay: Option<PathBuf>,
 }
 
@@ -82,7 +82,7 @@ impl Signals {
     /// Remove `scratch` should a signal end the sink between commands.
     pub(super) fn clean_up(&self, scratch: PathBuf) {
         if let Ok(mut running) = self.running.lock() {
-            running.scratch = Some(scratch);
+            running.scratch.push(scratch);
         }
     }
 
@@ -124,7 +124,7 @@ fn forward(running: &Mutex<Running>, signal: Signal) {
             }
         }
         None => {
-            if let Some(scratch) = &running.scratch {
+            for scratch in &running.scratch {
                 let _ = std::fs::remove_dir_all(scratch);
             }
             if let Some(overlay) = &running.overlay {
@@ -133,6 +133,17 @@ fn forward(running: &Mutex<Running>, signal: Signal) {
             std::process::exit(128 + signal as i32);
         }
     }
+}
+
+/// The note a failed run's output earns.
+pub(super) enum Notes<'a> {
+    /// The workspace sandbox's notes, read from the output; the callback
+    /// hears of a blocked connection to this machine.
+    Workspace(&'a dyn Fn()),
+    /// A fixed note for output that names a denied write.
+    ReadOnly(&'static str),
+    /// No note.
+    Silent,
 }
 
 /// Run `backend` (the `sandbox-exec` argv) in its own session under the
@@ -144,7 +155,7 @@ pub(super) fn run_backend(
     scratch: &Path,
     signals: &Signals,
     timeout_seconds: u64,
-    on_loopback_denied: &dyn Fn(),
+    notes: Notes<'_>,
 ) -> Outcome<i32> {
     let deadline = std::time::Instant::now() + CEILING_BUDGET;
     let ceiling = envelope(crate::restricted_process_ceiling::evaluate(deadline))?
@@ -177,10 +188,18 @@ pub(super) fn run_backend(
     }
     let code = status.map_or(1, exit_code);
     let outputs = [stdout_text.as_slice(), stderr_text.as_slice()];
-    let note = (code != 0).then(|| denial_note(&outputs)).flatten();
-    if note.is_some() && loopback_denied(&outputs) {
-        on_loopback_denied();
-    }
+    let note = match notes {
+        _ if code == 0 => None,
+        Notes::Workspace(on_loopback_denied) => {
+            let note = denial_note(&outputs);
+            if note.is_some() && loopback_denied(&outputs) {
+                on_loopback_denied();
+            }
+            note
+        }
+        Notes::ReadOnly(note) => super::readonly::names_denied_write(&outputs).then_some(note),
+        Notes::Silent => None,
+    };
     if let Some(note) = note {
         let mut stderr = std::io::stderr().lock();
         let _ = writeln!(stderr, "\n[HOL Guard] {note}");

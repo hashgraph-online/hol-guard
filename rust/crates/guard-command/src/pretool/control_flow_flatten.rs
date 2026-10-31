@@ -66,6 +66,77 @@ fn flatten_conditional(rest: &str) -> Option<String> {
     assemble(&parts, after)
 }
 
+/// Renders as `; ` and marks the last item of an `if` or `elif` test.
+/// `then` reads that item's outcome, so a negated state change keeps its `!`.
+pub(super) const TEST_OUTCOME: &str = ";\u{1} ";
+
+/// Commands whose success changes what a later command in the same shell sees.
+pub(super) const STATE_CHANGING: &[&str] = &[
+    "cd",
+    "pushd",
+    "popd",
+    "export",
+    "unset",
+    "set",
+    "shopt",
+    "setopt",
+    "unsetopt",
+    "source",
+    ".",
+    "alias",
+    "unalias",
+    "umask",
+    "eval",
+    "exec",
+    "read",
+    "mapfile",
+    "readarray",
+    "declare",
+    "typeset",
+    "local",
+    "readonly",
+    "trap",
+    "hash",
+    "builtin",
+    "command",
+    "enable",
+    "ulimit",
+    "getopts",
+    "let",
+    "shift",
+    "chdir",
+    "integer",
+    "float",
+    "private",
+    "autoload",
+    "unfunction",
+    "unhash",
+    "emulate",
+    "zmodload",
+    "vared",
+    "disable",
+    "noglob",
+    "nocorrect",
+    "-",
+];
+
+/// The command word of one pipeline stage, reading through one leading `!`.
+pub(super) fn command_head(stage: &str) -> &str {
+    let mut words = stage.split_whitespace();
+    match words.next().unwrap_or_default() {
+        "!" => words.next().unwrap_or_default(),
+        word => word,
+    }
+}
+
+pub(super) fn rendered_separator(separator: &str) -> &str {
+    if separator == TEST_OUTCOME {
+        "; "
+    } else {
+        separator
+    }
+}
+
 /// The items of every list a conditional holds, in order, and the text after
 /// its `fi`. `rest` starts after the `if` keyword.
 pub(super) fn conditional_parts(rest: &str) -> Option<(Vec<(String, &'static str)>, &str)> {
@@ -73,7 +144,18 @@ pub(super) fn conditional_parts(rest: &str) -> Option<(Vec<(String, &'static str
     let mut rest = rest;
     loop {
         let (test, _, after_test) = body_items(rest, "", &["then"])?;
+        let from = parts.len();
         collect(&mut parts, test)?;
+        // `then` reads the last test item. Tag a plain `;` join so a negated
+        // `cd` (or another state change) keeps the `!`: the branch runs when
+        // that change failed, from the directory the shell was already in.
+        if parts.len() > from {
+            if let Some(last) = parts.last_mut() {
+                if last.1 == "; " {
+                    last.1 = TEST_OUTCOME;
+                }
+            }
+        }
         let (branch, closer, after_branch) = body_items(after_test, "", &["elif", "else", "fi"])?;
         collect(&mut parts, branch)?;
         match closer {
@@ -344,6 +426,12 @@ fn collect(
 /// Join the collected items, giving each one the redirection that followed
 /// the construct. The construct applied that redirection to every command it
 /// ran, so each flattened item carries it too.
+///
+/// A `!` in front of an item inverts that pipeline's exit status and runs
+/// nothing of its own, so the item stands for the same work without it. It is
+/// dropped only where nothing reads the outcome it inverts, which the item's
+/// own separator says: a `;` successor runs either way, while a `&&` or `||`
+/// successor runs on the opposite outcome once the `!` is gone and keeps it.
 fn assemble(parts: &[(String, &'static str)], tail: &str) -> Option<String> {
     let tail = redirect_tail(tail)?;
     if parts.is_empty() {
@@ -351,17 +439,68 @@ fn assemble(parts: &[(String, &'static str)], tail: &str) -> Option<String> {
     }
     let mut out = String::new();
     for (text, separator) in parts {
-        out.push_str(text);
+        out.push_str(&unnegated_part(text, separator));
         if !tail.is_empty() {
             out.push(' ');
             out.push_str(&tail);
         }
-        out.push_str(separator);
+        out.push_str(rendered_separator(separator));
         if out.len() > MAX_FLATTENED_BYTES {
             return None;
         }
     }
     Some(out.trim_end_matches([' ', ';']).to_owned())
+}
+
+/// The item the flat list runs, with a leading `!` dropped where the
+/// separator after it shows that nothing reads the outcome it inverts.
+///
+/// The last item of an `if` or `elif` test is the exception when that item
+/// changes shell state. `then` runs because the change failed, so the branch
+/// still sees the directory the shell was already in. Dropping the `!` would
+/// describe the branch as running after the change.
+pub(super) fn unnegated_part(text: &str, separator: &str) -> String {
+    if separator == TEST_OUTCOME {
+        if negated_state_change(text) {
+            return text.to_owned();
+        }
+        return super::list_wrapper::unnegated_item(text).unwrap_or_else(|| text.to_owned());
+    }
+    if separator != "; " {
+        return text.to_owned();
+    }
+    super::list_wrapper::unnegated_item(text).unwrap_or_else(|| text.to_owned())
+}
+
+/// A leading `!` in front of a command whose success changes later commands.
+///
+/// A head the shell rewrites before it runs (`\cd`, `'cd'`, `"cd"`, `$cd`)
+/// is the same kind of change: the word here is not the word that runs, so
+/// dropping the `!` would describe `then` as running after the change.
+fn negated_state_change(text: &str) -> bool {
+    let trimmed = text.trim();
+    let Some(rest) = trimmed.strip_prefix('!') else {
+        return false;
+    };
+    if !rest.starts_with([' ', '\t', '\n']) {
+        return false;
+    }
+    command_word_changes_shell_state(rest.trim())
+}
+
+/// Whether this stage's command word changes what a later command sees, or is
+/// written so the shell rewrites the word before its name is known.
+pub(super) fn command_word_changes_shell_state(stage: &str) -> bool {
+    let head = command_head(stage);
+    STATE_CHANGING.contains(&head)
+        || head.contains(['\'', '"', '\\', '$'])
+        || (head == "printf" && stage.split_whitespace().any(|word| word.starts_with("-v")))
+        || head.split_once('=').is_some_and(|(name, _)| {
+            !name.is_empty()
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        })
 }
 
 /// Consume `keyword` followed by whitespace.

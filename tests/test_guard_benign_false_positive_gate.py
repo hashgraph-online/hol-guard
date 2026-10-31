@@ -58,7 +58,7 @@ _SHELL_TOOL = {
 }
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
-_GREP_TOOL = {"claude-code": "Grep", "omp": "grep"}
+_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "Grep"}
 _WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write"}
 _FIXED_TOOLS = {
     "eval": "eval",
@@ -622,7 +622,7 @@ def test_pending_fix_entries_name_real_benign_cases() -> None:
 
 
 def test_every_harness_and_tool_family_is_exercised() -> None:
-    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp", "cursor", "muse"}
+    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp", "cursor", "muse", "grok"}
     omp_tools = {_tool_name(case) for case in _CASES if case.harness == "omp"}
     assert {"bash", "read", "glob", "grep", "eval", "task", "wait"} <= omp_tools
     assert sum(case.expect == "not_allow" for case in _CASES) >= 6

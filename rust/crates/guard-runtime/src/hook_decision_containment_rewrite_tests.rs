@@ -195,3 +195,44 @@ fn a_rewrite_with_unknown_inputs_is_refused() {
         assert!(reply["payload"].is_null(), "{reply}");
     }
 }
+
+#[test]
+fn cursor_runs_the_runtime_sink_its_shell_check_admits() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let mut inputs = rewrite_inputs(workspace.path(), "make build");
+    inputs["harness"] = json!("cursor");
+    inputs["bridge"] = json!(true);
+    let inputs: guard_contracts::ContainmentRewriteInputsV1 =
+        serde_json::from_value(inputs).expect("rewrite inputs");
+    let reason = json!("protected");
+    let runtime = |_: &Value, _: &serde_json::Map<String, Value>, _: &str, _: &str| {
+        Some("/opt/hol guard/runtime".to_owned())
+    };
+
+    let rewritten = super::containment_rewrite_with(
+        &inputs,
+        Some(super::Native {
+            reason: &reason,
+            sink: runtime,
+        }),
+    )
+    .expect("the rewrite answers");
+
+    // A Cursor scope that admits the runtime's own sink on
+    // `beforeShellExecution` routes the probe there, as Codex does.
+    let response = rewritten.response.expect("the call is routed");
+    let command = response["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .expect("command is text");
+    let argv = crate::mcp_proxy_shlex::split(command).expect("the sink command is quoted");
+    if cfg!(unix) {
+        assert_eq!(
+            argv[..2],
+            ["/opt/hol guard/runtime", "contained-workspace-sink"]
+        );
+    } else {
+        assert_eq!(argv[3..5], ["guard", "execute-contained-test"]);
+    }
+    assert_eq!(argument_after(&argv, "--harness"), "cursor");
+    discard(Path::new(argument_after(&argv, "--request-file")));
+}

@@ -30,6 +30,10 @@ pub const EDGE_CONTAINMENT_REWRITE_FEATURE: &str = "edge-containment-rewrite-v1"
 /// `containment_sink`.
 pub const EDGE_CURSOR_PROBE_FEATURE: &str = "edge-cursor-probe-v1";
 
+/// Advertised when that probe answer may route the call to the runtime's own
+/// sink, for an envelope whose `containment_sink` sets `native_sink`.
+pub const EDGE_CURSOR_NATIVE_SINK_FEATURE: &str = "edge-cursor-native-sink-v1";
+
 /// The native PreToolUse result a hook answers.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]

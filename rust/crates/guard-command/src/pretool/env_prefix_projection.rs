@@ -428,6 +428,15 @@ fn inert_assignment(name: &str, value: &str) -> bool {
     {
         return true;
     }
+    // The same `NODE_OPTIONS` the runtime already treats as inert when a
+    // developer's shell exports it: only flags that size the engine or change
+    // what it prints. Written in front of the command it is the same setting,
+    // so reading it differently would block `NODE_OPTIONS=--max-old-space-size=4096 npm test`
+    // while the identical inherited value passes. A preload, a loader or an
+    // inspector is not inert, and those keep failing closed below.
+    if upper == "NODE_OPTIONS" && guard_contracts::node_options_inert(value) {
+        return true;
+    }
     // Clearing a credential only removes authority from the command.
     if value.is_empty()
         && CREDENTIAL_MARKERS
@@ -585,46 +594,35 @@ fn code_loading_name(upper: &str) -> bool {
     crate::command_compatibility::code_or_redirect_environment_name(upper)
 }
 
-/// The first leading setting of any simple command that can load other code,
-/// as a shape-checked name a reason may echo.
+/// The first leading setting of any simple command that can load other code
+/// and whose value this module does not read as inert, as a shape-checked
+/// name a reason may echo. A setting the projection removes stopped nothing,
+/// so naming it would send the agent after the wrong word.
 pub(super) fn code_loading_setting(command: &str) -> Option<String> {
-    leading_setting(command, |upper| {
-        crate::command_compatibility::code_or_redirect_environment_name(upper)
+    leading_setting(command, |name, value| {
+        crate::command_compatibility::code_or_redirect_environment_name(&name.to_ascii_uppercase())
+            && !inert_assignment(name, value)
     })
 }
 
 /// The first leading setting of any simple command named for a credential
 /// (`API_KEY`, `GH_TOKEN`), as a shape-checked name a reason may echo.
 pub(super) fn credential_setting(command: &str) -> Option<String> {
-    leading_setting(
-        command,
-        crate::command_compatibility::credential_routing_environment_name,
-    )
+    leading_setting(command, |name, _| {
+        crate::command_compatibility::credential_routing_environment_name(
+            &name.to_ascii_uppercase(),
+        )
+    })
 }
 
-/// The heap size when the first code-loading setting is `NODE_OPTIONS` and it
-/// holds only `--max-old-space-size=<MiB>`. That option loads no code, and
-/// `node --max-old-space-size=<MiB> <script>` is a form the read-only sandbox
-/// accepts, so a reason may point the agent to it.
-pub(super) fn node_heap_only_setting(command: &str) -> Option<String> {
-    let (name, value) = leading_assignment(command, |upper| {
-        crate::command_compatibility::code_or_redirect_environment_name(upper)
-    })?;
-    let size = value.strip_prefix("--max-old-space-size=")?;
-    (name.eq_ignore_ascii_case("NODE_OPTIONS")
-        && (1..=6).contains(&size.len())
-        && size.bytes().all(|byte| byte.is_ascii_digit())
-        && size
-            .parse::<u32>()
-            .is_ok_and(|mib| (16..=131072).contains(&mib)))
-    .then(|| size.to_owned())
-}
-
-fn leading_setting(command: &str, matches: impl Fn(&str) -> bool) -> Option<String> {
+fn leading_setting(command: &str, matches: impl Fn(&str, &str) -> bool) -> Option<String> {
     leading_assignment(command, matches).map(|(name, _)| name)
 }
 
-fn leading_assignment(command: &str, matches: impl Fn(&str) -> bool) -> Option<(String, String)> {
+fn leading_assignment(
+    command: &str,
+    matches: impl Fn(&str, &str) -> bool,
+) -> Option<(String, String)> {
     if command.len() > MAX_PROJECTED_CHARS {
         return None;
     }
@@ -652,10 +650,7 @@ fn leading_assignment(command: &str, matches: impl Fn(&str) -> bool) -> Option<(
             in_prefix = false;
             continue;
         };
-        if name.len() <= MAX_SETTING_CHARS
-            && assignment_name_shape(name)
-            && matches(&name.to_ascii_uppercase())
-        {
+        if name.len() <= MAX_SETTING_CHARS && assignment_name_shape(name) && matches(name, value) {
             return Some((name.to_owned(), value.to_owned()));
         }
     }
