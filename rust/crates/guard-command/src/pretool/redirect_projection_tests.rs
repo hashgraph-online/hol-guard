@@ -457,3 +457,31 @@ fn a_control_flow_construct_still_reviews_the_file_it_writes() {
         assert_eq!(evaluate(command).minimum_action, "review", "{command}");
     }
 }
+
+#[test]
+fn a_redirect_with_no_command_is_read_as_the_write_it_performs() {
+    // The shell opens the file and runs nothing. Removing the redirect leaves
+    // no text to parse, so the projection stands its no-op in and the write
+    // keeps the review it earns wherever a command is spelled in front of it.
+    for command in ["> notes.txt", ">> listing.txt", "2> build/errors.log"] {
+        let projection = project(command, context()).expect(command);
+        assert_eq!(projection.command, NO_OP, "{command}");
+        assert!(projection.writes_file, "{command}");
+        assert!(projection.bounded_writes, "{command}");
+        let result = evaluate(command);
+        assert_eq!(
+            result.reason_code, "native_command_redirect_write_review",
+            "{command}"
+        );
+        assert_eq!(
+            result.reason_code,
+            evaluate(&format!("true {command}")).reason_code,
+            "{command}"
+        );
+    }
+    // The target check still decides the write: a file in the home directory
+    // is no more writable without a command in front of the redirect.
+    let outside = project(&format!("> {HOME}/.bashrc"), context()).expect("home target");
+    assert_eq!(outside.command, NO_OP);
+    assert!(!outside.bounded_writes);
+}
