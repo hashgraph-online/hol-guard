@@ -12,6 +12,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 
@@ -85,6 +86,8 @@ _VERSION_PATTERNS = {
     "alpha": re.compile(r"3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)a[1-9][0-9]*"),
 }
 _PUBLICATION_JOBS = {"stable": "Publish main release to PyPI", "alpha": "Publish alpha to PyPI"}
+_PULL_REQUEST_ALPHA_JOB = "Authorize pull request alpha"
+_NATIVE_MANIFEST = "codex_plugin_scanner/_native/runtime-manifest.json"
 
 
 def _alpha_source_is_in_run(repo: str, source_sha: str, head_sha: str) -> bool:
@@ -103,7 +106,42 @@ def _alpha_source_is_in_run(repo: str, source_sha: str, head_sha: str) -> bool:
     )
 
 
-def publication_ready(repo: str, run_id: str, source_sha: str, channel: str = "stable") -> bool:
+def _attempt_conclusions(repo: str, run_id: str, job: str) -> list[str]:
+    return subprocess.check_output(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            # Publish jobs run only on attempt 1; a later rerun of an unrelated
+            # failed job reports them as skipped in the latest attempt.
+            f"repos/{repo}/actions/runs/{run_id}/attempts/1/jobs?per_page=100",
+            "--jq",
+            f'.jobs[] | select(.name == "{job}") | .conclusion',
+        ],
+        text=True,
+        timeout=20,
+    ).splitlines()
+
+
+def _pull_request_alpha_built(repo: str, run_id: str, source_sha: str, wheel: Path | None) -> bool:
+    """A pull request alpha publishes an admin-authorized head that main never contains.
+
+    authorize_macos_core_source.sh has already bound the wheel to this run's provenance, so the
+    run must have authorized a pull request alpha and sealed the dispatched source into the wheel.
+    """
+    if wheel is None or _attempt_conclusions(repo, run_id, _PULL_REQUEST_ALPHA_JOB) != ["success"]:
+        return False
+    with zipfile.ZipFile(wheel) as archive:
+        info = archive.getinfo(_NATIVE_MANIFEST)
+        if info.file_size > 64 * 1024:
+            raise ValueError("native wheel manifest is too large")
+        manifest = json.loads(archive.read(info))
+    return isinstance(manifest, dict) and manifest.get("source_sha") == source_sha
+
+
+def publication_ready(
+    repo: str, run_id: str, source_sha: str, channel: str = "stable", *, wheel: Path | None = None
+) -> bool:
     if channel not in _PUBLICATION_JOBS:
         raise ValueError("invalid release channel")
     if not re.fullmatch(r"[1-9][0-9]*", run_id) or not re.fullmatch(r"[0-9a-f]{40}", source_sha):
@@ -116,22 +154,12 @@ def publication_ready(repo: str, run_id: str, source_sha: str, channel: str = "s
     if channel == "stable":
         if result["head_sha"] != source_sha:
             raise ValueError("publication run is not the authorized release dispatch")
-    elif result["head_branch"] != "main" or not _alpha_source_is_in_run(repo, source_sha, result["head_sha"]):
+    elif result["head_branch"] != "main" or not (
+        _alpha_source_is_in_run(repo, source_sha, result["head_sha"])
+        or _pull_request_alpha_built(repo, run_id, source_sha, wheel)
+    ):
         raise ValueError("alpha publication run is not an authorized main dispatch of the alpha source")
-    conclusions = subprocess.check_output(
-        [
-            "gh",
-            "api",
-            "--paginate",
-            # Publish jobs run only on attempt 1; a later rerun of an unrelated
-            # failed job reports them as skipped in the latest attempt.
-            f"repos/{repo}/actions/runs/{run_id}/attempts/1/jobs?per_page=100",
-            "--jq",
-            f'.jobs[] | select(.name == "{_PUBLICATION_JOBS[channel]}") | .conclusion',
-        ],
-        text=True,
-        timeout=20,
-    ).splitlines()
+    conclusions = _attempt_conclusions(repo, run_id, _PUBLICATION_JOBS[channel])
     if conclusions == ["success"]:
         return True
     if channel == "stable" and not conclusions and result["conclusion"] == "success":
@@ -246,7 +274,7 @@ def wait(
         try:
             if run_id:
                 ready = publication_ready(
-                    os.environ["GITHUB_REPOSITORY"], run_id, os.environ["PUBLICATION_SOURCE_SHA"], channel
+                    os.environ["GITHUB_REPOSITORY"], run_id, os.environ["PUBLICATION_SOURCE_SHA"], channel, wheel=wheel
                 )
             elif channel == "alpha":
                 raise ValueError("alpha publication requires the publishing run identity")
