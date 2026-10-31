@@ -2179,20 +2179,6 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py",
-   "source_sha256": "d584623615ba075ac4ab57cc81f9db42a8c4448638308935dff08e5172484317",
-   "forbidden_symbols": [
-    "_SHELL_FUNCTION_DEFINITION",
-    "_SHELL_ALIAS_DEFINITION",
-    "_DEFERRED_GITHUB_EFFECT",
-    "parse_env_wrapper"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/shell_request_authority.rs",
-    "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
-   ]
-  },
-  {
    "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
    "source_sha256": "9f9c3aab117cce72e7cce4e7a062985ae77e22e4204d3ad843f02017b376a512",
    "forbidden_symbols": [
