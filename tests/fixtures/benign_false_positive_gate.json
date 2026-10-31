@@ -38730,8 +38730,8 @@
       "expect": "allow"
     },
     {
-      "id": "npm-help-verb-usage-text",
-      "fix_area": "package",
+      "id": "neg-npm-help-verb-usage-text",
+      "fix_area": "negative",
       "harnesses": [
         "claude-code",
         "codex",
@@ -38743,11 +38743,11 @@
         "command": "npm help install"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
     },
     {
-      "id": "pnpm-add-usage-text",
-      "fix_area": "package",
+      "id": "neg-pnpm-add-usage-text",
+      "fix_area": "negative",
       "harnesses": [
         "claude-code",
         "codex",
@@ -38759,7 +38759,7 @@
         "command": "pnpm add --help"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
     },
     {
       "id": "pip-install-usage-text",
@@ -38794,8 +38794,8 @@
       "expect": "allow"
     },
     {
-      "id": "cargo-add-usage-text",
-      "fix_area": "package",
+      "id": "neg-cargo-add-usage-text",
+      "fix_area": "negative",
       "harnesses": [
         "claude-code",
         "codex",
@@ -38807,7 +38807,7 @@
         "command": "cargo add --help"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
     },
     {
       "id": "uv-sync-usage-text",
@@ -38874,8 +38874,8 @@
       "expect": "allow"
     },
     {
-      "id": "go-help-verb-usage-text",
-      "fix_area": "package",
+      "id": "neg-go-help-verb-usage-text",
+      "fix_area": "negative",
       "harnesses": [
         "claude-code",
         "codex",
@@ -38887,7 +38887,23 @@
         "command": "go help build"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-brew-help-word-the-table-does-not-carry",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew help my-tap-command"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "neg-yarn-usage-text",

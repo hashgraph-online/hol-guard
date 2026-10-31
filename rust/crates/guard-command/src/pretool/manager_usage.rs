@@ -1,13 +1,13 @@
 //! A package manager printing its own usage text.
 //!
-//! `npm install --help`, `pip install --help`, `cargo add --help` and their
-//! neighbours never install anything. The manager's own argument parser sees
-//! the help flag, prints the text it carries for that subcommand and exits:
-//! no registry is contacted, no lockfile is read and no project script runs.
-//! Reading a manual page is the step before deciding whether to install, and
-//! sending it to review teaches nothing about the install that may follow.
+//! `npm install --help`, `pip install --help`, `brew install --help` and
+//! their neighbours never install anything. The manager's own argument parser
+//! sees the help flag, prints the text it carries for that subcommand and
+//! exits: no registry is contacted, no lockfile is read and no project script
+//! runs. Reading a manual page is the step before deciding whether to install,
+//! and sending it to review teaches nothing about the install that may follow.
 //!
-//! Three limits keep that reading narrow.
+//! Four limits keep that reading narrow.
 //!
 //! The subcommand has to be one the manager carries itself. `npm`, `pnpm`,
 //! `cargo` and `brew` all hand an unknown first word to something else -- a
@@ -21,11 +21,29 @@
 //! the subcommand directly keeps every operand -- a package, a script, a
 //! path -- out of this reading.
 //!
-//! Four managers are absent on purpose, because their help path loads code
-//! from the project before it can print anything: Yarn Berry resolves the
-//! plugins named in `.yarnrc.yml`, Poetry loads its entry-point plugins,
-//! Composer's plugin manager loads vendor PHP to discover commands, and
-//! Bundler shells out to `man`. Their usage pages keep their review.
+//! Managers are absent on purpose when their help path loads code from the
+//! project, or picks the binary to run, before it can print anything. Yarn
+//! Berry resolves the plugins named in `.yarnrc.yml`, Poetry loads its
+//! entry-point plugins, Composer's plugin manager loads vendor PHP to
+//! discover commands, and Bundler shells out to `man`. `pnpm` is selected by
+//! Corepack's `packageManager` field, `cargo` by a `rust-toolchain.toml`
+//! `path` entry and `go` by a `go.mod` `toolchain` line, each of which runs a
+//! workspace-supplied binary before the flag is read -- the same reason
+//! [`super::help_probes`] and [`super::version_probes`] refuse them. Their
+//! usage pages keep their review.
+//!
+//! The `help` verb is read only where it prints to stdout, and only for a
+//! subcommand the table already carries. npm's `help` opens its configured
+//! viewer -- `man` on Unix -- so npm answers only the flag. Every other
+//! manager's `help` takes at most one word, and that word must be a listed
+//! subcommand, because `brew help <tap-command>` and `gem help <plugin>` reach
+//! the same program the flag reading refuses.
+//!
+//! npm and pip read a configuration while they are still working out what to
+//! print, so this proof asks for the same files
+//! [`super::help_probes::configuration_inert`] reads: a project `.npmrc`
+//! `onload-script` runs during the help path, and a `pip.conf` `log` entry
+//! writes a file the command never named.
 
 /// The subcommands each manager answers itself.
 ///
@@ -92,39 +110,6 @@ const BUILTIN_SUBCOMMANDS: &[(&str, &[&str])] = &[
         ],
     ),
     (
-        "pnpm",
-        &[
-            "add",
-            "audit",
-            "bin",
-            "config",
-            "dedupe",
-            "doctor",
-            "env",
-            "fetch",
-            "import",
-            "install",
-            "licenses",
-            "link",
-            "list",
-            "ls",
-            "outdated",
-            "pack",
-            "patch",
-            "patch-commit",
-            "patch-remove",
-            "prune",
-            "publish",
-            "rebuild",
-            "remove",
-            "root",
-            "store",
-            "unlink",
-            "update",
-            "why",
-        ],
-    ),
-    (
         "pip",
         &[
             "cache",
@@ -141,40 +126,6 @@ const BUILTIN_SUBCOMMANDS: &[(&str, &[&str])] = &[
             "show",
             "uninstall",
             "wheel",
-        ],
-    ),
-    (
-        "cargo",
-        &[
-            "add",
-            "bench",
-            "build",
-            "check",
-            "clean",
-            "doc",
-            "fetch",
-            "fix",
-            "generate-lockfile",
-            "install",
-            "locate-project",
-            "login",
-            "logout",
-            "metadata",
-            "owner",
-            "package",
-            "pkgid",
-            "publish",
-            "remove",
-            "report",
-            "rustc",
-            "rustdoc",
-            "search",
-            "tree",
-            "uninstall",
-            "update",
-            "vendor",
-            "verify-project",
-            "yank",
         ],
     ),
     (
@@ -273,16 +224,13 @@ const BUILTIN_SUBCOMMANDS: &[(&str, &[&str])] = &[
             "upgrade",
         ],
     ),
-    // `go build -h` and its neighbours route through the toolchain's own flag
-    // set, and `go generate` runs whatever the source directs. Only the text
-    // verb is read here.
-    ("go", &[]),
 ];
 
 pub(super) fn safe_manager_segment(
     executable: &str,
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
 ) -> bool {
     let Some(subcommands) = manager_subcommands(executable) else {
         return false;
@@ -294,6 +242,7 @@ pub(super) fn safe_manager_segment(
             .iter()
             .any(|argument| argument.contains(['$', '`', '\n', '\r']))
         && usage_only(
+            executable,
             subcommands,
             &segment
                 .arguments
@@ -301,6 +250,7 @@ pub(super) fn safe_manager_segment(
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
         )
+        && super::help_probes::configuration_inert(executable, context)
 }
 
 /// The subcommand table for a manager, under the spellings its own installer
@@ -319,7 +269,12 @@ fn manager_subcommands(executable: &str) -> Option<&'static [&'static str]> {
 
 /// `<manager> --help`, `<manager> help [subcommand]`, or a subcommand the
 /// manager carries followed directly by a help flag.
-fn usage_only(subcommands: &[&str], words: &[&str]) -> bool {
+///
+/// The word after `help` is read against the same table, because an unknown
+/// name is not the manager's to answer: `brew help <word>` loads a tap's
+/// command and `cargo help <word>` runs a `cargo-<word>` binary. Only one
+/// such word is accepted, since no manager here documents a second level.
+fn usage_only(executable: &str, subcommands: &[&str], words: &[&str]) -> bool {
     let Some((first, rest)) = words.split_first() else {
         return false;
     };
@@ -327,17 +282,20 @@ fn usage_only(subcommands: &[&str], words: &[&str]) -> bool {
         return rest.is_empty();
     }
     if *first == "help" {
-        return rest.len() <= 2 && rest.iter().all(|word| plain_subcommand(word));
+        return help_verb_prints_usage(executable)
+            && rest.len() <= 1
+            && rest.iter().all(|word| subcommands.contains(word));
     }
     subcommands.contains(first) && matches!(rest, [flag] if matches!(*flag, "--help" | "-h"))
 }
 
-/// A word that can only name a subcommand: no option, no path, no package
-/// reference and no version specifier.
-fn plain_subcommand(word: &str) -> bool {
-    !word.is_empty()
-        && !word.starts_with('-')
-        && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+/// Whether this manager's `help` verb writes the page itself.
+///
+/// npm's opens the viewer named by its `viewer` setting, which is `man` on
+/// Unix, so the page comes from a program the command never names. Only its
+/// `--help` flag prints to stdout.
+fn help_verb_prints_usage(executable: &str) -> bool {
+    executable != "npm"
 }
 
 #[cfg(test)]
