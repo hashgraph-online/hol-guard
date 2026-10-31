@@ -15,17 +15,10 @@ import os
 import sqlite3
 from collections.abc import Iterable, Mapping
 
-# The resident accepts the review facts below in its direct-lane binding.
-DIRECT_HOOK_REVIEW_FACTS_FEATURE = "hook-direct-review-facts-v1"
-
 # Mirrors the resident limits in guard-policy-snapshot's direct_lane module.
 _MAX_REVIEW_FACT_BYTES = 256
 _MAX_PATH_BYTES = 4096
 _BLOCKED_REQUEST_MODES = frozenset({"ask", "safe-alternative"})
-
-
-def review_facts_bound(features: Iterable[str]) -> bool:
-    return DIRECT_HOOK_REVIEW_FACTS_FEATURE in set(features)
 
 
 def _text_fact(value: object, limit: int) -> str | None:
@@ -135,16 +128,13 @@ def with_review_facts(
     binding: Mapping[str, object] | None,
     *,
     store: object,
-    features: Iterable[str],
     blocked_request_mode: str | None,
 ) -> dict[str, object] | None:
-    """Add the review facts, for a resident that accepts them."""
+    """Add the review facts."""
 
     if binding is None:
         return None
     bound = dict(binding)
-    if not review_facts_bound(features):
-        return bound
     facts = {
         "blocked_request_mode": blocked_request_mode if blocked_request_mode in _BLOCKED_REQUEST_MODES else None,
         "approval_center_origin": approval_center_origin(store),
