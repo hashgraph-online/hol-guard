@@ -29,7 +29,6 @@ _LOCATION_STATES = frozenset({"present", "missing", "unknown"})
 _LAUNCH_STATES = frozenset({"resolved", "unresolved"})
 _INSTANCE_STATES = frozenset({"running", "exited", "unknown"})
 _INSTANCE_TEXT_KEYS = ("instance_id", "boot_identity", "start_identity", "artifact_id")
-_NATIVE_UNAVAILABLE = "runtime_identity_native_unavailable"
 _KNOWN_INSTANCE_INVALID = "runtime_identity_probe_known_instance_invalid"
 _ARTIFACT_TEXT_KEYS = ("artifact_id", "family", "os", "arch", "identity_assurance")
 
@@ -42,7 +41,7 @@ class RuntimeProbe:
     # One row per launch spec sent, in order; empty for a path-only probe.
     launches: tuple[dict[str, object], ...] = ()
     candidate_limit_reached: bool = False
-    # ``None`` when instances were not asked for or the native runtime predates them.
+    # ``None`` when instances were not asked for.
     instances: tuple[dict[str, object], ...] | None = None
     unbound_processes: int = 0
     instance_limit_reached: bool = False
@@ -81,10 +80,7 @@ def probe_runtime_launches(
         if error.code == _KNOWN_INSTANCE_INVALID and known:
             # A damaged record costs what it carried, not the scan.
             return _probe(RUNTIME_PROBE_INSTANCES_FEATURE, {**request, "instances": True, "known_instances": []})
-        if error.code != _NATIVE_UNAVAILABLE:
-            raise
-    # An older native runtime describes the files without their processes.
-    return _probe(RUNTIME_PROBE_LAUNCH_FEATURE, request)
+        raise
 
 
 def _probe(feature: str, request: dict[str, object]) -> RuntimeProbe:
