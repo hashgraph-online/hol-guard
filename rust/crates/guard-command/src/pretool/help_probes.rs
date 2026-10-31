@@ -21,6 +21,13 @@
 //! each manager admits only verbs that are its own built-ins and that name no
 //! program to run.
 //!
+//! A manager that documents a second level is read a level deeper, with the
+//! second word judged against the first: `uv tool install --help` and `npm
+//! cache clean --help` print the page the manager carries for that pair.
+//! Reading the pair rather than two independent words is what keeps `uv tool
+//! run --help` out, since `run` is carried by no parent, and it also keeps
+//! out pairs the manager never documents and would answer with a usage error.
+//!
 //! Deliberately absent:
 //! - `uvx`: it is `uv tool run`, so its first word is a package to fetch and
 //!   execute. `uvx build --help` runs `build` from the index.
@@ -84,6 +91,7 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
         "uv" => matches!(
             verb,
             "add"
+                | "auth"
                 | "build"
                 | "cache"
                 | "export"
@@ -94,7 +102,9 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
                 | "publish"
                 | "python"
                 | "remove"
+                | "self"
                 | "sync"
+                | "tool"
                 | "tree"
                 | "uninstall"
                 | "venv"
@@ -123,12 +133,16 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
         // `exec`, and `run` is `run-script`.
         "npm" => matches!(
             verb,
-            "add"
+            "access"
+                | "add"
                 | "audit"
+                | "cache"
                 | "ci"
                 | "clean-install"
+                | "config"
                 | "ddp"
                 | "dedupe"
+                | "dist-tag"
                 | "explain"
                 | "i"
                 | "ic"
@@ -141,14 +155,19 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
                 | "ll"
                 | "ln"
                 | "ls"
+                | "org"
                 | "outdated"
+                | "owner"
                 | "pkg"
+                | "profile"
                 | "prune"
                 | "publish"
                 | "r"
                 | "remove"
                 | "rm"
                 | "show"
+                | "team"
+                | "token"
                 | "un"
                 | "uninstall"
                 | "unlink"
@@ -178,6 +197,64 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
     }
 }
 
+/// A verb carried by one of the manager's own verbs, where the pair names no
+/// program to run.
+///
+/// `uv tool install --help` and `npm cache clean --help` print the page the
+/// manager carries for that pair, the same way the first level does. The
+/// table is written parent by parent rather than as one flat list because the
+/// depth is where the difference lives: `uv tool run` and `uv run` both hand
+/// the tail to a program the line names, so `run` appears under no parent,
+/// while `install` is harmless under `tool` and under `pip` alike.
+///
+/// A verb that opens an editor is absent for the same reason a verb that runs
+/// a package is: `npm config edit` and `pip config edit` both spawn the
+/// program `EDITOR` names, and the reading cannot tell the page from the
+/// editor that shares the name.
+fn usage_only_subverb(basename: &str, parent: &str, verb: &str) -> bool {
+    match (basename, parent) {
+        ("uv", "pip") => matches!(
+            verb,
+            "check"
+                | "compile"
+                | "freeze"
+                | "install"
+                | "list"
+                | "show"
+                | "sync"
+                | "tree"
+                | "uninstall"
+        ),
+        // `uv tool run` is `uvx`: the verb after it is a package to fetch and
+        // run, so it is absent here the way it is absent from the first level.
+        ("uv", "tool") => matches!(
+            verb,
+            "dir" | "install" | "list" | "uninstall" | "upgrade" | "update-shell"
+        ),
+        ("uv", "python") => matches!(
+            verb,
+            "dir" | "find" | "install" | "list" | "pin" | "uninstall" | "upgrade"
+        ),
+        ("uv", "cache") => matches!(verb, "clean" | "dir" | "prune"),
+        ("uv", "self") => matches!(verb, "update" | "version"),
+        ("uv", "auth") => matches!(verb, "login" | "logout" | "token"),
+        ("pip" | "pip3", "cache") => matches!(verb, "dir" | "info" | "list" | "purge" | "remove"),
+        ("pip" | "pip3", "config") => matches!(verb, "debug" | "get" | "list" | "set" | "unset"),
+        ("pip" | "pip3", "index") => verb == "versions",
+        ("npm", "access") => matches!(verb, "get" | "grant" | "list" | "ls" | "revoke" | "set"),
+        ("npm", "cache") => matches!(verb, "add" | "clean" | "ls" | "verify"),
+        ("npm", "config") => matches!(verb, "delete" | "fix" | "get" | "list" | "ls" | "set"),
+        ("npm", "dist-tag") => matches!(verb, "add" | "ls" | "rm"),
+        ("npm", "org") => matches!(verb, "ls" | "rm" | "set"),
+        ("npm", "owner") => matches!(verb, "add" | "ls" | "rm"),
+        ("npm", "pkg") => matches!(verb, "delete" | "fix" | "get" | "set"),
+        ("npm", "profile") => matches!(verb, "disable-2fa" | "enable-2fa" | "get" | "set"),
+        ("npm", "team") => matches!(verb, "add" | "create" | "destroy" | "ls" | "rm"),
+        ("npm", "token") => matches!(verb, "create" | "list" | "revoke"),
+        _ => false,
+    }
+}
+
 /// Whether this manager's startup reads a configuration the session could
 /// have pointed elsewhere. npm and pip both load their configuration before
 /// they print usage, so the probe asks for the whole proof the read listings
@@ -200,8 +277,15 @@ pub(super) fn configuration_inert(basename: &str, context: super::PathContext<'_
     }
 }
 
-/// A lone help flag, or one behind at most two of the manager's own
-/// usage-only verbs.
+/// A lone help flag, or one behind a usage-only verb of the manager's, or
+/// behind such a verb and one the parent carries.
+///
+/// The second word is read against the first rather than against the whole
+/// list, so `uv tool install --help` is admitted while `uv tool run --help`
+/// is not. A flat list would admit both, since `install` and `run` would each
+/// be judged on their own; it would also admit pairs no manager documents,
+/// such as `uv add sync --help`, which the manager answers with a usage error
+/// rather than a page.
 ///
 /// npm's and pip's admission also needs the files
 /// [`configuration_inert`] reads, which no unit context names a directory
@@ -216,9 +300,22 @@ pub(crate) fn safe_help_probe(
         return false;
     };
     help_flag(basename, flag)
-        && verbs.len() <= 2
-        && verbs.iter().all(|verb| usage_only_verb(basename, verb))
+        && usage_only_verbs(basename, verbs)
         && configuration_inert(basename, context)
+}
+
+/// The words between the executable and the help flag, read as a path through
+/// the manager's own verbs.
+fn usage_only_verbs(basename: &str, verbs: &[String]) -> bool {
+    match verbs {
+        [] => true,
+        [verb] => usage_only_verb(basename, verb),
+        [parent, verb] => {
+            usage_only_verb(basename, parent) && usage_only_subverb(basename, parent, verb)
+        }
+        // No manager here documents a third level.
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -289,6 +386,85 @@ mod tests {
             assert!(
                 safe_help_probe(tool, &args(&arguments), context()),
                 "{tool} {arguments:?}"
+            );
+        }
+    }
+
+    /// The pairs each manager documents, which a flat verb list reached only
+    /// where both words happened to sit in it.
+    #[test]
+    fn a_second_level_usage_page_is_admitted() {
+        for (tool, arguments) in [
+            ("uv", vec!["tool", "install", "--help"]),
+            ("uv", vec!["tool", "list", "--help"]),
+            ("uv", vec!["tool", "--help"]),
+            ("uv", vec!["python", "list", "-h"]),
+            ("uv", vec!["cache", "clean", "--help"]),
+            ("uv", vec!["self", "update", "--help"]),
+            ("uv", vec!["auth", "login", "--help"]),
+            ("uv", vec!["pip", "compile", "--help"]),
+            ("uv", vec!["pip", "list", "--help"]),
+        ] {
+            assert!(
+                safe_help_probe(tool, &args(&arguments), context()),
+                "{tool} {arguments:?}"
+            );
+        }
+    }
+
+    /// npm and pip read a configuration before they print, so the pair is
+    /// proved here against the verb tables and in the benign gate's fixture
+    /// home against the files.
+    #[test]
+    fn a_second_level_verb_is_carried_by_its_own_parent() {
+        for (tool, parent, verb) in [
+            ("npm", "cache", "clean"),
+            ("npm", "config", "get"),
+            ("npm", "access", "list"),
+            ("npm", "token", "list"),
+            ("npm", "dist-tag", "ls"),
+            ("pip", "cache", "dir"),
+            ("pip", "config", "get"),
+            ("pip3", "index", "versions"),
+        ] {
+            assert!(super::usage_only_verb(tool, parent), "{tool} {parent}");
+            assert!(
+                super::usage_only_subverb(tool, parent, verb),
+                "{tool} {parent} {verb}"
+            );
+        }
+    }
+
+    /// The second word is read against the first, so a pair the manager never
+    /// documents is refused even when both words are verbs of its own.
+    #[test]
+    fn a_pair_no_parent_carries_is_refused() {
+        for (tool, arguments) in [
+            ("uv", vec!["add", "sync", "--help"]),
+            ("uv", vec!["pip", "venv", "--help"]),
+            ("uv", vec!["cache", "install", "--help"]),
+            ("uv", vec!["tool", "pin", "--help"]),
+            ("uv", vec!["python", "clean", "--help"]),
+            ("deno", vec!["install", "add", "--help"]),
+            ("ruff", vec!["check", "format", "--help"]),
+            // Three levels are past anything these managers document.
+            ("uv", vec!["pip", "install", "list", "--help"]),
+        ] {
+            assert!(
+                !safe_help_probe(tool, &args(&arguments), context()),
+                "{tool} {arguments:?}"
+            );
+        }
+    }
+
+    /// A verb that opens `EDITOR` is absent from the second level for the
+    /// reason a verb that runs a package is absent from the first.
+    #[test]
+    fn a_second_level_verb_that_opens_an_editor_is_refused() {
+        for (tool, parent) in [("npm", "config"), ("pip", "config"), ("pip3", "config")] {
+            assert!(
+                !super::usage_only_subverb(tool, parent, "edit"),
+                "{tool} {parent} edit"
             );
         }
     }
