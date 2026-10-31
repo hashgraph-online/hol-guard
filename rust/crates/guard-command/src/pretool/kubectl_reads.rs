@@ -72,6 +72,94 @@ const TOP_RESOURCES: [&str; 6] = ["no", "node", "nodes", "po", "pod", "pods"];
 /// Formats that print only names or summary columns, never object data.
 const SUMMARY_FORMATS: [&str; 2] = ["name", "wide"];
 
+/// kubectl's own verbs. An unrecognised first word is handed to a
+/// `kubectl-<verb>` plugin from `PATH`, which would read the help flag itself
+/// instead of printing kubectl's text, so only these names reach
+/// [`usage_only`].
+const BUILTIN_VERBS: [&str; 44] = [
+    "annotate",
+    "api-resources",
+    "api-versions",
+    "apply",
+    "attach",
+    "auth",
+    "autoscale",
+    "certificate",
+    "cluster-info",
+    "completion",
+    "config",
+    "cordon",
+    "cp",
+    "create",
+    "debug",
+    "delete",
+    "describe",
+    "diff",
+    "drain",
+    "edit",
+    "events",
+    "exec",
+    "explain",
+    "expose",
+    "get",
+    "kustomize",
+    "label",
+    "logs",
+    "options",
+    "patch",
+    "plugin",
+    "port-forward",
+    "proxy",
+    "replace",
+    "rollout",
+    "run",
+    "scale",
+    "set",
+    "taint",
+    "top",
+    "uncordon",
+    "untaint",
+    "version",
+    "wait",
+];
+
+/// `kubectl <verb> --help` and `kubectl options`.
+///
+/// Cobra answers the help flag with that command's usage text and exits
+/// before kubectl builds a client, so the command reads no kubeconfig and
+/// contacts no API server whatever verb, resource or namespace stands in
+/// front of the flag. `options` prints the same global list with no verb at
+/// all. The flag has to be the last word, because anything behind it is an
+/// operand kubectl would act on.
+fn usage_only(arguments: &[String]) -> bool {
+    let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let [verb, rest @ ..] = words.as_slice() else {
+        return false;
+    };
+    if !BUILTIN_VERBS.contains(verb) {
+        return false;
+    }
+    if rest.is_empty() {
+        return *verb == "options";
+    }
+    let Some((flag, named)) = rest.split_last() else {
+        return false;
+    };
+    matches!(*flag, "--help" | "-h")
+        && named.len() <= 2
+        && named.iter().all(|word| plain_word(word))
+}
+
+/// A verb, resource or name, so it selects a usage page rather than naming a
+/// file, a server or a value.
+fn plain_word(word: &str) -> bool {
+    !word.is_empty()
+        && !word.starts_with('-')
+        && word.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '.' | '_' | '/')
+        })
+}
+
 pub(super) fn safe_kubectl_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
@@ -86,6 +174,9 @@ pub(super) fn safe_kubectl_segment(
         .any(|argument| argument.contains(['$', '`', '\n', '\r']))
     {
         return false;
+    }
+    if usage_only(arguments) {
+        return true;
     }
     let mut positionals = Vec::new();
     let mut output = None;

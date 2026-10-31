@@ -60,7 +60,9 @@ fn help_flag(basename: &str, flag: &str) -> bool {
     match basename {
         // `-h` is the help flag for all of these.
         "uv" | "pip" | "pip3" | "npm" | "deno" | "ruff" | "black" | "mypy" | "rg" | "fd" | "jq"
-        | "tsc" | "curl" | "wget" => matches!(flag, "--help" | "-h"),
+        | "tsc" | "wget" => matches!(flag, "--help" | "-h"),
+        // curl prints its bundled manual to stdout the same way.
+        "curl" => matches!(flag, "--help" | "-h" | "--manual" | "-M"),
         // These print usage and exit without opening a connection, copying a
         // file or signalling a process. Their `-h` means something else, or
         // means different things on different builds, so only the long
@@ -292,6 +294,8 @@ mod tests {
         for (tool, arguments) in [
             ("curl", vec!["--help"]),
             ("curl", vec!["-h"]),
+            ("curl", vec!["--manual"]),
+            ("curl", vec!["-M"]),
             ("wget", vec!["--help"]),
             ("wget", vec!["-h"]),
             ("ssh", vec!["--help"]),
