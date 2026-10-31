@@ -62,6 +62,10 @@ fn read_verbs_are_proven() {
         "kubectl logs -p web-0 -c app --limit-bytes 65536",
         "kubectl logs statefulset/db --all-containers --prefix",
         "kubectl logs -l app=web --max-log-requests 5 --tail=50",
+        "kubectl rollout status deployment/web",
+        "kubectl -n web rollout status deploy/web --timeout=5m",
+        "kubectl --context prod rollout history deploy/web",
+        "kubectl rollout history deploy/web --revision=3",
     ] {
         assert!(proven(command), "{command}");
     }
@@ -128,6 +132,12 @@ fn secrets_mutations_and_server_overrides_stay_reviewed() {
         "kubectl patch deploy web -p {}",
         "kubectl scale deploy web --replicas=0",
         "kubectl rollout restart deploy/web",
+        "kubectl rollout undo deploy/web",
+        "kubectl rollout undo deploy/web --to-revision=2",
+        "kubectl rollout pause deploy/web",
+        "kubectl rollout resume deploy/web",
+        "kubectl rollout status",
+        "kubectl rollout status deploy/web deploy/api",
         "kubectl label pod web-0 a=b",
         "kubectl annotate pod web-0 a=b",
         "kubectl drain node-1",

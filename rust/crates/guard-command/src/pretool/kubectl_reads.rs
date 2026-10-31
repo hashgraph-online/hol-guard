@@ -39,7 +39,7 @@ const FLAGS: [&str; 10] = [
 ];
 
 /// Options whose value only filters, sorts or bounds the printed state.
-const VALUE_OPTIONS: [&str; 13] = [
+const VALUE_OPTIONS: [&str; 15] = [
     "--api-group",
     "--api-version",
     "--chunk-size",
@@ -51,8 +51,10 @@ const VALUE_OPTIONS: [&str; 13] = [
     "-n",
     "--namespace",
     "--request-timeout",
+    "--revision",
     "--selector",
     "--sort-by",
+    "--timeout",
 ];
 
 /// Output formats printed to stdout. The `*-file` forms read a local file.
@@ -224,6 +226,13 @@ fn verb_safe(positionals: &[&str], output: Option<&str>) -> bool {
         "top" => matches!(rest, [resource, ..] if TOP_RESOURCES.contains(resource)),
         "api-resources" | "api-versions" | "cluster-info" | "version" => rest.is_empty(),
         "config" => matches!(rest, ["get-contexts" | "current-context", ..] if rest.len() <= 2),
+        // `kubectl rollout` groups a deployment's own writes with two reads of
+        // the rollout it already has. `status` waits for the rollout named on
+        // the command line and prints how far it got; `history` prints the
+        // revisions recorded for it. Neither names a revision to move to, so
+        // neither is a way to start, stop or undo a rollout -- `restart`,
+        // `undo`, `pause` and `resume` are, and they stay out.
+        "rollout" => matches!(rest, ["status" | "history", resource] if !resource.is_empty()),
         _ => false,
     }
 }
