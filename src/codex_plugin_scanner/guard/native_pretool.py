@@ -25,10 +25,6 @@ from .native_runtime_resilience import (
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
-_PRETOOL_PATH_CONTEXT_FEATURE = "pre-tool-path-context-v1"
-_PRETOOL_EXECUTION_ENVIRONMENT_FEATURE = "pre-tool-execution-environment-v1"
-_PRETOOL_EXTENSION_EVIDENCE_FEATURE = "pre-tool-extension-evidence-v1"
-_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PRETOOL_RESULT_KEYS = {
     "schema",
     "version",
@@ -230,8 +226,8 @@ def review_pre_tool_native(
     ``extension_evidence=True`` asks the resident to decide under the extension
     controls of the snapshot it admitted and to return the
     ``command_extensions`` evidence with the decision. A caller that resolves
-    the review against those controls needs it; a runtime without the feature
-    answers without evidence, and that caller fails closed.
+    the review against those controls needs it, and fails closed on a reply
+    that carries none.
     """
     status = native_runtime_status()
     if (
@@ -253,23 +249,19 @@ def review_pre_tool_native(
         "transport": "shell_string",
         "extraction_provenance": "guard-shell",
     }
-    # An older runtime ignores the two fields and answers as it does today.
-    if _PRETOOL_PATH_CONTEXT_FEATURE in status.capabilities.features:
-        if cwd is not None:
-            request["cwd"] = str(cwd)
-        if home_dir is not None:
-            request["home_dir"] = str(home_dir)
+    if cwd is not None:
+        request["cwd"] = str(cwd)
+    if home_dir is not None:
+        request["home_dir"] = str(home_dir)
     # Several rules answer for what the command inherits from the shell: a
     # RIPGREP_CONFIG_PATH that prepends options to rg, an npm or rustup
     # variable that moves what a tool loads, the HOME a tilde expands from.
     # The runtime cannot read any of it: the resident daemon is started with
     # its own sanitized environment. This process is the hook, running in the
     # agent's shell, so it is the one that can say.
-    if _PRETOOL_EXECUTION_ENVIRONMENT_FEATURE in status.capabilities.features and isinstance(
-        execution_environment, Mapping
-    ):
+    if isinstance(execution_environment, Mapping):
         request["execution_environment"] = dict(execution_environment)
-    if extension_evidence and _PRETOOL_EXTENSION_EVIDENCE_FEATURE in status.capabilities.features:
+    if extension_evidence:
         request["extension_evidence"] = True
     encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > _MAX_REQUEST_BYTES:
@@ -282,43 +274,42 @@ def review_pre_tool_native(
         if len(encoded) > _MAX_REQUEST_BYTES:
             return record_native_hook_result("native_fail_safe", None)
     environment = _isolated_environment()
-    if _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
-        resident = json.dumps(
-            {
-                "operation": "pre_tool_use",
-                "deadline_budget_ms": deadline_budget_ms,
-                "request": request,
-            },
-            separators=(",", ":"),
-            ensure_ascii=False,
-        ).encode("utf-8")
-        output = native_resident_client_request(
-            executable=status.identity.path,
-            guard_home=guard_home,
-            environment=environment,
-            payload=resident,
-            deadline_monotonic=deadline_monotonic,
+    resident = json.dumps(
+        {
+            "operation": "pre_tool_use",
+            "deadline_budget_ms": deadline_budget_ms,
+            "request": request,
+        },
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    output = native_resident_client_request(
+        executable=status.identity.path,
+        guard_home=guard_home,
+        environment=environment,
+        payload=resident,
+        deadline_monotonic=deadline_monotonic,
+    )
+    if output is not None:
+        try:
+            payload = json.loads(output)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            payload = None
+        if _native_error(payload) == "native_overloaded":
+            if record_health:
+                native_record_overload(status.identity.sha256, guard_home)
+            return record_native_hook_result("native_fail_safe", None)
+        decoded = _decode_pre_tool(payload, command=command)
+        if decoded is not None:
+            if record_health:
+                native_record_resident_success(status.identity.sha256, guard_home)
+            return record_native_hook_result("native_resident", decoded)
+    if record_health:
+        native_record_resident_failure(
+            status.identity.sha256,
+            guard_home,
+            reason="native_pre_tool_resident_unavailable",
         )
-        if output is not None:
-            try:
-                payload = json.loads(output)
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                payload = None
-            if _native_error(payload) == "native_overloaded":
-                if record_health:
-                    native_record_overload(status.identity.sha256, guard_home)
-                return record_native_hook_result("native_fail_safe", None)
-            decoded = _decode_pre_tool(payload, command=command)
-            if decoded is not None:
-                if record_health:
-                    native_record_resident_success(status.identity.sha256, guard_home)
-                return record_native_hook_result("native_resident", decoded)
-        if record_health:
-            native_record_resident_failure(
-                status.identity.sha256,
-                guard_home,
-                reason="native_pre_tool_resident_unavailable",
-            )
     return record_native_hook_result("native_fail_safe", None)
 
 
