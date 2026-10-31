@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_artifact_facts as bridge
-from codex_plugin_scanner.guard.cli import commands_support_runtime_artifact_policy as policy
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.native_hook_artifact_facts import HookArtifactFactsUnavailableError
+from tests import native_hook_artifact_facts_support as bridge
+from tests import runtime_artifact_policy_support as policy
+from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailableError
 
 
 class _Config:

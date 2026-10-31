@@ -14,9 +14,6 @@ from ..native_sensitive_request import native_sensitive_tool_action_request
 from .secret_file_request_services.benign_requests import (
     build_tool_action_request_artifact as build_tool_action_request_artifact,
 )
-from .secret_file_request_services.github_shell_capabilities import (
-    classify_github_shell_capabilities as classify_github_shell_capabilities,
-)
 from .secret_file_request_services.request_models import ToolActionRequestMatch as ToolActionRequestMatch
 
 if TYPE_CHECKING:
@@ -48,6 +45,5 @@ def extract_sensitive_tool_action_request(
 __all__ = [
     "ToolActionRequestMatch",
     "build_tool_action_request_artifact",
-    "classify_github_shell_capabilities",
     "extract_sensitive_tool_action_request",
 ]

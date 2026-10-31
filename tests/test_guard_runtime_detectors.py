@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish
-from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope, normalize_codex_hook_payload
+from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope, normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.detectors import (
     DETECTOR_CATEGORY_TAGS,
     DetectorContext,
@@ -417,7 +417,9 @@ def test_default_secret_path_detector_flags_planned_direct_file_reads(tmp_path, 
 
 
 def test_default_secret_path_detector_flags_list_style_file_read_paths(tmp_path):
-    action = normalize_codex_hook_payload(
+    action = normalize_harness_payload(
+        "codex",
+        "",
         {
             "hook_event_name": "PreToolUse",
             "tool_name": "Read",
@@ -454,7 +456,9 @@ def test_default_secret_path_detector_flags_privacy_redacted_secret_paths(tmp_pa
 
 
 def test_default_secret_path_detector_flags_redacted_paths_with_secret_context(tmp_path):
-    action = normalize_codex_hook_payload(
+    action = normalize_harness_payload(
+        "codex",
+        "",
         {
             "hook_event_name": "PreToolUse",
             "tool_name": "Read",
@@ -474,7 +478,9 @@ def test_default_secret_path_detector_flags_redacted_paths_with_secret_context(t
 
 
 def test_default_secret_path_detector_flags_tilde_user_paths_with_secret_context(tmp_path):
-    action = normalize_codex_hook_payload(
+    action = normalize_harness_payload(
+        "codex",
+        "",
         {
             "hook_event_name": "PreToolUse",
             "tool_name": "Read",

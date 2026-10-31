@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import stat
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -18,7 +17,6 @@ from codex_plugin_scanner.guard.onefile_extraction import (
     ExtractionReclaimResult,
     is_onefile_extraction_dir,
     reclaim_orphaned_extraction_dirs,
-    record_extraction_owner,
 )
 
 _SENTINEL_PARTS = ("codex_plugin_scanner", "guard", "daemon", "static", "index.html")
@@ -89,48 +87,6 @@ def test_is_onefile_extraction_dir_rejects_symlink(tmp_path: Path) -> None:
     except OSError:
         pytest.skip("symlink creation unavailable")
     assert not is_onefile_extraction_dir(link, tmp_path)
-
-
-def test_record_extraction_owner_marks_real_extraction_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    extraction = _extraction_dir(tmp_path)
-
-    assert record_extraction_owner(meipass=str(extraction), temp_root=tmp_path)
-
-    marker = extraction / OWNER_MARKER_NAME
-    payload = json.loads(marker.read_text(encoding="utf-8"))
-    assert payload["schema"] == "guard.onefile-extraction-owner.v1"
-    assert payload["pid"] == os.getpid()
-    assert payload["parent_pid"] == os.getppid()
-    assert isinstance(payload["started_at"], str)
-    assert isinstance(payload["guard_version"], str) and payload["guard_version"]
-    assert str(tmp_path) not in marker.read_text(encoding="utf-8")
-    mode = stat.S_IMODE(marker.stat().st_mode)
-    if os.name != "nt":
-        assert mode == 0o600
-
-
-def test_record_extraction_owner_skips_onedir_and_non_frozen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    extraction = _extraction_dir(tmp_path)
-
-    monkeypatch.delattr(sys, "frozen", raising=False)
-    assert not record_extraction_owner(meipass=str(extraction), temp_root=tmp_path)
-
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    onedir = tmp_path / "hol-guard"
-    onedir.mkdir()
-    assert not record_extraction_owner(meipass=str(onedir), temp_root=tmp_path)
-    assert not record_extraction_owner(meipass=None, temp_root=tmp_path)
-    assert not record_extraction_owner(meipass="", temp_root=tmp_path)
-    outside_root = tmp_path / "other-root"
-    nested = _extraction_dir(outside_root)
-    assert not record_extraction_owner(meipass=str(nested), temp_root=tmp_path)
-    assert not (extraction / OWNER_MARKER_NAME).exists()
-
-
-def test_record_extraction_owner_never_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    assert not record_extraction_owner(meipass=str(tmp_path / "_MEImissing0"), temp_root=tmp_path)
 
 
 def test_reclaim_deletes_dead_owner_dir_and_counts_bytes(tmp_path: Path) -> None:
@@ -336,29 +292,6 @@ def test_is_onefile_extraction_dir_survives_resolve_errors(tmp_path: Path, monke
 
     monkeypatch.setattr(Path, "resolve", broken_resolve)
     assert not is_onefile_extraction_dir(extraction, tmp_path)
-
-
-def test_record_extraction_owner_reports_unknown_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.delattr("codex_plugin_scanner.version.__version__")
-    extraction = _extraction_dir(tmp_path)
-
-    assert record_extraction_owner(meipass=str(extraction), temp_root=tmp_path)
-    payload = json.loads((extraction / OWNER_MARKER_NAME).read_text(encoding="utf-8"))
-    assert payload["guard_version"] == "unknown"
-
-
-def test_record_extraction_owner_returns_false_on_write_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    extraction = _extraction_dir(tmp_path)
-    monkeypatch.setattr(
-        onefile_extraction.json,
-        "dumps",
-        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("encode failed")),
-    )
-
-    assert not record_extraction_owner(meipass=str(extraction), temp_root=tmp_path)
-    assert not (extraction / OWNER_MARKER_NAME).exists()
 
 
 def test_pid_alive_with_real_processes() -> None:

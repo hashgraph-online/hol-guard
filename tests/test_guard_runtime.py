@@ -34,7 +34,6 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import runtime_policy_artifact_facts
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
@@ -94,6 +93,7 @@ from tests.policy_bundle_signing_helpers import (
     sign_policy_bundle,
 )
 from tests.policy_store_support import replace_remote_policies, resolve_policy
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action, runtime_policy_artifact_facts
 from tests.support.network import stub_authenticated_urlopen
 
 # A credential-shaped literal in source output, assembled so that repository
@@ -15093,10 +15093,7 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15123,10 +15120,7 @@ def test_guard_runtime_tool_action_policy_prefers_configured_risk_action_over_de
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15153,9 +15147,7 @@ def test_guard_runtime_tool_action_policy_includes_defaults_for_unconfigured_ris
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == "require-reapproval"
     )
 
@@ -15182,9 +15174,7 @@ def test_guard_runtime_tool_action_policy_does_not_let_warn_default_override_ris
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == "require-reapproval"
     )
 
@@ -15208,10 +15198,7 @@ def test_guard_runtime_artifact_policy_includes_stronger_global_default(tmp_path
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15234,10 +15221,7 @@ def test_guard_runtime_artifact_exact_allow_replaces_stricter_global_default(tmp
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "allow"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "allow"
     )
 
 
@@ -15266,10 +15250,7 @@ def test_guard_runtime_artifact_exact_allow_cannot_lower_independent_risk_block(
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15306,9 +15287,7 @@ def test_guard_runtime_artifact_policy_composes_exact_current_override(
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == expected_action
     )
 

@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     HOOK_SCRIPT_NAME,
     live_guard_cursor_hooks_intercept,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_cursor_hook_payload
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 _TOOL_INPUTS = {
     "Write": lambda path: {"file_path": path, "content": "x"},
@@ -35,7 +35,9 @@ def test_every_routed_tool_has_a_classified_input_shape() -> None:
 @pytest.mark.parametrize("tool_name", CURSOR_FILE_MUTATION_TOOLS)
 def test_routed_tool_normalizes_to_file_write_with_target(tool_name: str, tmp_path: Path) -> None:
     target = tmp_path / "workspace" / ".env"
-    envelope = normalize_cursor_hook_payload(
+    envelope = normalize_harness_payload(
+        "cursor",
+        "",
         {"hook_event_name": "preToolUse", "tool_name": tool_name, "tool_input": _TOOL_INPUTS[tool_name](str(target))},
         workspace=tmp_path / "workspace",
         home_dir=tmp_path / "home",

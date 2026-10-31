@@ -38,7 +38,6 @@ from .native_policy_snapshot_windows_atomic import (
     _windows_delete_file_handle,
     _windows_handle_value,
 )
-from .native_policy_snapshot_windows_support import _windows_write_chunks_and_flush
 
 
 def _snapshot_api() -> Any:
@@ -307,56 +306,6 @@ def _windows_apply_private_dacl(kernel32: Any, handle: Any, descriptor: Any, dac
     )
     if result != 0:
         raise NativePolicySnapshotError("native_policy_windows_acl_apply_failed")
-
-
-def _windows_write_private_bytes(path: Path, payload: bytes, *, maximum_bytes: int) -> None:
-    """Create, verify, and durably write bytes through one private handle."""
-
-    if not payload or len(payload) > maximum_bytes:
-        raise NativePolicySnapshotError("native_policy_windows_write_too_large")
-    api = _snapshot_api()
-    with api._windows_private_descriptor(False) as (_advapi32, descriptor, _dacl, owner_sid):
-        kernel32, handle, _information = api._windows_open_handle(
-            path,
-            directory=False,
-            create_new=True,
-            descriptor=descriptor,
-        )
-        try:
-            api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-            _windows_write_chunks_and_flush(kernel32, handle, payload)
-        finally:
-            api._windows_close_handle(kernel32, handle)
-
-
-def _windows_repair_private_file(path: Path) -> None:
-    """Repair a current-owner file DACL through the opened object handle."""
-
-    api = _snapshot_api()
-    with api._windows_private_descriptor(False) as (_advapi32, descriptor, dacl, owner_sid):
-        kernel32, handle, _information = api._windows_open_handle(
-            path,
-            directory=False,
-            repair=True,
-        )
-        try:
-            api._windows_verify_private_owner(handle, owner_sid=owner_sid)
-            api._windows_apply_private_dacl(kernel32, handle, descriptor, dacl, False)
-            api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-        finally:
-            api._windows_close_handle(kernel32, handle)
-
-
-def _windows_verify_private_file(path: Path) -> None:
-    """Verify a committed file through a handle opened without path trust."""
-
-    api = _snapshot_api()
-    kernel32, handle, _information = api._windows_open_handle(path, directory=False)
-    try:
-        owner_sid = api._windows_owner_sid()
-        api._windows_verify_private_dacl(handle, owner_sid=owner_sid, directory=False)
-    finally:
-        api._windows_close_handle(kernel32, handle)
 
 
 def _windows_open_private_fd(path: Path, *, maximum_bytes: int) -> int:

@@ -210,6 +210,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-printenv-piped-into-grep",
         "neg-git-grep-pattern-with-dotenv-path",
         "neg-ls-home-missing-key-in-hidden-directory",
+        # A cache verb, a key write, a host this machine does not own and a
+        # credential on the line: each keeps its review, and a contained run has
+        # no network for any of them, so no server is reached, nothing it holds
+        # is moved or named, and the credential is carried nowhere.
+        "neg-redis-cli-flushall",
+        "neg-redis-cli-set-key",
+        "neg-redis-cli-remote-ping",
+        "neg-redis-cli-credential-ping",
         # A file listing of a home service lane or credential store: a contained run has no
         # home access, so it prints no name the home keeps there.
         "neg-rg-content-search-service-lane",

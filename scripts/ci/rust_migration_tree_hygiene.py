@@ -34,13 +34,19 @@ RETIRED_PATHS = (
     "scripts/ci/sfrs_fs_vectors.py",
     "scripts/ci/sfrs_graph_cases.py",
     "scripts/record_claude_permission_text_vectors.py",
+    "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py",
     "tests/test_claude_permission_text_vectors.py",
+    "tests/test_native_shell_request_authority.py",
     # Retired Python-only command source converters and their orphaned tests.
     "scripts/command_source_backlog.py",
     "scripts/migrate_command_extension_sources.py",
     "tests/test_command_source_backlog.py",
     "tests/test_command_source_backlog_expansion_bounds.py",
     "tests/test_command_source_migration.py",
+    # Test-only native bridges that moved under tests/.
+    "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifact_policy.py",
+    "src/codex_plugin_scanner/guard/native_hook_artifact_facts.py",
     # Unreferenced Python helpers whose corresponding semantics now run in Rust.
     "src/codex_plugin_scanner/guard/runtime/command_candidate_common.py",
     "src/codex_plugin_scanner/guard/runtime/command_segment_parsing.py",

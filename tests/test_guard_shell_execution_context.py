@@ -11,7 +11,8 @@ from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_packa
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
 )
-from codex_plugin_scanner.guard.runtime.shell_execution_context import (
+from tests.live_hook_review_support import live_post_tool_flag
+from tests.request_context_support import (
     SHELL_CWD_AMBIGUOUS_STACK,
     SHELL_CWD_MISSING_DIRECTORY,
     SHELL_CWD_PATH_CHANGED,
@@ -24,7 +25,6 @@ from codex_plugin_scanner.guard.runtime.shell_execution_context import (
     SHELL_CWD_WORKSPACE_ESCAPE,
     model_shell_execution_context,
 )
-from tests.live_hook_review_support import live_post_tool_flag
 from tests.resident_probe_support import validate_shell_execution_segment
 
 _FLOW_OPERATORS = frozenset({"&&", "||", ";", "\n", "|", "|&", "&"})

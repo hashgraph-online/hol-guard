@@ -271,3 +271,81 @@ fn a_branch_flattens_a_subshell_group() {
         assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
     }
 }
+
+/// A wait for a service flattens to the question it asks and the pause it
+/// takes between asks, written with either keyword.
+#[test]
+fn a_wait_flattens_to_the_question_it_asks() {
+    for (command, expected) in [
+        (
+            "until pg_isready -h 127.0.0.1; do sleep 1; done",
+            "pg_isready -h 127.0.0.1; sleep 1",
+        ),
+        (
+            "until nc -z localhost 5432; do sleep 1; done",
+            "nc -z localhost 5432; sleep 1",
+        ),
+        (
+            "while ! nc -z localhost 5432; do sleep 1; done",
+            "nc -z localhost 5432; sleep 1",
+        ),
+        (
+            "until curl -sf http://127.0.0.1:3000/health; do sleep 0.5; done",
+            "curl -sf http://127.0.0.1:3000/health; sleep 0.5",
+        ),
+        (
+            "until redis-cli ping; do sleep 2; sleep 2; done",
+            "redis-cli ping; sleep 2; sleep 2",
+        ),
+        (
+            "while pgrep -f vitest; do sleep 1; done",
+            "pgrep -f vitest; sleep 1",
+        ),
+        (
+            "until nc -z localhost 5432; do sleep 30s; done",
+            "nc -z localhost 5432; sleep 30s",
+        ),
+        (
+            "until nc -z localhost 5432; do sleep 5m; done",
+            "nc -z localhost 5432; sleep 5m",
+        ),
+    ] {
+        assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+/// A wait whose body does more than pause, or whose test is a list, a
+/// redirection or an expansion, is a loop this reading does not describe.
+#[test]
+fn a_wait_that_builds_up_across_passes_keeps_its_review() {
+    for command in [
+        // The body writes, so the second pass leaves more than the first.
+        "until nc -z localhost 5432; do echo waiting >> wait.log; done",
+        "until nc -z localhost 5432; do sleep 1; date; done",
+        // A pause this reading cannot read as a pause.
+        "until nc -z localhost 5432; do sleep; done",
+        "until nc -z localhost 5432; do sleep 1 2; done",
+        "until nc -z localhost 5432; do sleep 30x; done",
+        "until nc -z localhost 5432; do sleep s; done",
+        "until nc -z localhost 5432; do sleep -f; done",
+        "until nc -z localhost 5432; do sleep 1.2.3; done",
+        // An empty body is a loop that asks without pausing.
+        "until nc -z localhost 5432; do done",
+        // The test is a list, so a later command runs on an earlier outcome.
+        "until nc -z localhost 5432 && redis-cli ping; do sleep 1; done",
+        "until cd build; ls; do sleep 1; done",
+        // The test opens a file the next pass would reach again.
+        "until nc -z localhost 5432 > wait.log; do sleep 1; done",
+        "until nc -z localhost 5432 2> wait.log; do sleep 1; done",
+        // A redirection after `done` is opened once and written through on
+        // every pass, and an input device need never end.
+        "until nc -z localhost 5432; do sleep 1; done > wait.log",
+        "until nc -z localhost 5432; do sleep 1; done >> wait.log",
+        "until nc -z localhost 5432; do sleep 1; done < /dev/stdin",
+        // An expansion need not name the same text on the next pass.
+        "until nc -z localhost $PORT; do sleep 1; done",
+        "until nc -z localhost `cat port`; do sleep 1; done",
+    ] {
+        assert_eq!(flatten(command), None, "{command}");
+    }
+}

@@ -20,13 +20,10 @@ import os
 import re
 import shutil
 import stat
-import sys
-import tempfile
 import time
 from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .onefile_open_paths import OpenPathScanner
@@ -58,55 +55,6 @@ def is_onefile_extraction_dir(path: Path, temp_root: Path) -> bool:
             return False
         return path.resolve(strict=True).parent == temp_root.resolve(strict=True)
     except OSError:
-        return False
-
-
-def _guard_version() -> str:
-    try:
-        from ..version import __version__
-
-        return __version__
-    except Exception:
-        return "unknown"
-
-
-def record_extraction_owner(*, meipass: str | None, temp_root: Path | None = None) -> bool:
-    """Stamp the current onefile extraction dir with its owning launch's pids.
-
-    Only acts when running frozen and ``meipass`` is an actual onefile
-    extraction dir under ``temp_root`` — in onedir mode ``sys._MEIPASS`` is the
-    bundle's own directory and is never marked. Never raises.
-    """
-
-    try:
-        if not getattr(sys, "frozen", False):
-            return False
-        if not isinstance(meipass, str) or not meipass:
-            return False
-        root = temp_root if temp_root is not None else Path(tempfile.gettempdir())
-        extraction_dir = Path(meipass)
-        if not is_onefile_extraction_dir(extraction_dir, root):
-            return False
-        payload = {
-            "schema": _OWNER_MARKER_SCHEMA,
-            "pid": os.getpid(),
-            "parent_pid": os.getppid(),
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "guard_version": _guard_version(),
-        }
-        encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-        marker = extraction_dir / OWNER_MARKER_NAME
-        descriptor, temp_name = tempfile.mkstemp(dir=extraction_dir, prefix=".owner-", suffix=".tmp")
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(encoded)
-            os.chmod(temp_name, 0o600)
-            os.replace(temp_name, marker)
-        finally:
-            with suppress(OSError):
-                os.unlink(temp_name)
-        return True
-    except Exception:
         return False
 
 
