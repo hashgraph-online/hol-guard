@@ -6,6 +6,19 @@ fn arguments(text: &str) -> Vec<String> {
     text.split_whitespace().map(str::to_owned).collect()
 }
 
+/// A context rooted at a home directory with the shell sitting in `cwd`.
+///
+/// Written as a function rather than a closure so both borrows share the
+/// returned context's lifetime; a closure infers one lifetime per parameter
+/// and cannot name the tie.
+fn context<'a>(home: &'a str, cwd: &'a str) -> super::super::PathContext<'a> {
+    super::super::PathContext {
+        home_dir: Some(home),
+        cwd: Some(cwd),
+        ..Default::default()
+    }
+}
+
 #[test]
 fn an_outdated_report_takes_display_flags_and_package_names() {
     for text in [
@@ -76,13 +89,6 @@ fn a_hook_module_above_the_working_directory_keeps_the_review() {
     let project = root.path().join("project");
     let nested = project.join("packages").join("api");
     std::fs::create_dir_all(&nested).expect("nested directories");
-    fn context<'a>(home: &'a str, cwd: &'a str) -> super::super::PathContext<'a> {
-        super::super::PathContext {
-            home_dir: Some(home),
-            cwd: Some(cwd),
-            ..Default::default()
-        }
-    }
     let home = root.path().to_str().expect("utf-8 root");
     let nested = nested.to_str().expect("utf-8 nested");
     let project_cwd = project.to_str().expect("utf-8 project");
@@ -112,11 +118,6 @@ fn either_spelling_of_the_hook_module_keeps_the_review() {
         std::fs::create_dir_all(&nested).expect("nested directories");
         let home = root.path().to_str().expect("utf-8 root").to_owned();
         let nested = nested.to_str().expect("utf-8 nested").to_owned();
-        let context = |home: &str, cwd: &str| super::super::PathContext {
-            home_dir: Some(home),
-            cwd: Some(cwd),
-            ..Default::default()
-        };
         assert!(hook_module_absent(context(&home, &nested)), "{name}");
         std::fs::write(
             root.path().join("project").join(name),
@@ -178,11 +179,6 @@ fn pnpms_own_settings_files_are_read_beside_npms() {
     std::fs::create_dir_all(&configuration).expect("configuration directory");
     let home = home.to_str().expect("utf-8 home").to_owned();
     let nested_text = nested.to_str().expect("utf-8 nested").to_owned();
-    let context = |home: &str, cwd: &str| super::super::PathContext {
-        home_dir: Some(home),
-        cwd: Some(cwd),
-        ..Default::default()
-    };
 
     assert!(settings_inert(context(&home, &nested_text)));
 
