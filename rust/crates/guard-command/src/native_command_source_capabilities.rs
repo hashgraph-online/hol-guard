@@ -48,6 +48,21 @@ const CAPABILITIES: &[(&str, &str, &str)] = &[
     ),
     (
         "command.git",
+        "command.git.notes",
+        "command.git.permission.notes",
+    ),
+    (
+        "command.git",
+        "command.git.replace",
+        "command.git.permission.replace",
+    ),
+    (
+        "command.git",
+        "command.git.maintenance",
+        "command.git.permission.maintenance",
+    ),
+    (
+        "command.git",
         "command.git.pull",
         "command.git.permission.pull",
     ),

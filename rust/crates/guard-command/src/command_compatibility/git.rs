@@ -16,6 +16,9 @@ const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
     ("worktree", "command.git.worktree"),
     ("bisect", "command.git.bisect"),
+    ("notes", "command.git.notes"),
+    ("replace", "command.git.replace"),
+    ("maintenance", "command.git.maintenance"),
     ("pull", "command.git.pull"),
     ("push", "command.git.push"),
     ("clone", "command.git.clone"),
@@ -91,10 +94,11 @@ fn bounded_inspection(arguments: &[String]) -> bool {
         // superproject's index names; the recursive walk and every other
         // submodule spelling move work and keep their attribution.
         || (command == "submodule" && crate::pretool::git_submodule_reads::read_form(rest))
-        // A bisect session's log and a note's listing print; every other
-        // spelling of either moves a ref, writes the notes ref or runs a
-        // program the text names, and keeps its attribution.
-        || (matches!(command.as_str(), "bisect" | "notes")
+        // A bisect session's log, a note's listing and a replacement listing
+        // print; every other spelling of the three moves a ref, writes the
+        // notes or replacement ref, or runs a program the text names, and
+        // keeps its attribution.
+        || (matches!(command.as_str(), "bisect" | "notes" | "replace")
             && crate::pretool::git_side_record_reads::read_form(command, rest))
 }
 
