@@ -151,10 +151,17 @@ def _signature(path: Path) -> tuple[int, ...] | None:
     )
 
 
+def _ancestor_signature(path: Path) -> tuple[int, ...] | None:
+    signature = _signature(path)
+    # Entries come and go in these directories, so only what the trust walk
+    # reads (mode, owner and identity) may move the memo, not size or times.
+    return signature[:4] if signature is not None else None
+
+
 def _ancestor_signatures(path: Path) -> tuple[tuple[int, ...] | None, ...]:
     # The native trust walk refuses a file below any group- or world-writable
     # or non-root directory, so a change to one of them has to miss the memo.
-    return tuple(_signature(parent) for parent in path.parents)
+    return tuple(_ancestor_signature(parent) for parent in path.parents)
 
 
 def _windows_policy_key_present() -> bool:

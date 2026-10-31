@@ -421,6 +421,11 @@ def test_memoized_machine_policy_is_reread_after_an_ancestor_directory_changes(
     load_managed_policy()
     assert len(loads) == 1
 
+    # Unrelated entries in an ancestor directory leave the memo alone.
+    (tmp_path / "health-lease-outbox.json").write_text("{}", encoding="utf-8")
+    load_managed_policy()
+    assert len(loads) == 1
+
     # The native trust walk refuses a policy below a group-writable directory.
     (tmp_path / "etc").chmod(0o775)
     load_managed_policy()
