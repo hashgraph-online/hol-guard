@@ -428,6 +428,11 @@ fn a_group_opening_or_closing_on_a_pipe_keeps_its_review() {
         "for p in a b; do (| echo \"$p\"); done",
         "for p in a b; do (echo \"$p\" |); done",
         "for p in a b; do (echo \"$p\" | | ls); done",
+        // `|||` is `||` followed by a pipeline that starts on `|`: a syntax
+        // error, not an alternative, so the two empty runs it leaves must
+        // not both be stepped over.
+        "for p in a b; do (echo \"$p\" ||| ls); done",
+        "for p in a b; do (echo \"$p\" |||| ls); done",
     ] {
         assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
     }

@@ -650,14 +650,19 @@ fn stages_are_plain(item: &str) -> bool {
     // character leaves an empty run between them where the shell has a list
     // separator rather than a pipeline stage. That gap carries no command
     // word of its own, and the two commands it separates are each checked as
-    // the stage before and after it, so an empty run between two other runs
-    // is stepped over. A leading or trailing empty run is some other shape --
-    // a pipeline that starts or ends on `|` -- and keeps the construct on the
+    // the stage before and after it, so a single empty run between two
+    // non-empty runs is stepped over. Anything else is some other shape --
+    // a pipeline that starts or ends on `|`, or a run of three or more `|`
+    // the shell reads as a syntax error -- and keeps the construct on the
     // unmodeled path.
     let stages: Vec<&str> = item.split('|').collect();
     for (index, stage) in stages.iter().copied().enumerate() {
         if stage.is_empty() {
-            if index > 0 && index + 1 < stages.len() {
+            if index > 0
+                && index + 1 < stages.len()
+                && !stages[index - 1].is_empty()
+                && !stages[index + 1].is_empty()
+            {
                 continue;
             }
             return false;
