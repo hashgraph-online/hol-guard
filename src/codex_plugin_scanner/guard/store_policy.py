@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -92,6 +93,8 @@ class PolicyLookupEvidence:
     integrity_key_id: str | None = None
     local_once_integrity_key_b64: str | None = None
     local_once_integrity_key_id: str | None = None
+    # Shipped only where the resident cannot derive them itself (off Unix).
+    policy_bundle_decision_identities: list[list[Any]] | None = None
     # The store-resident sources this evidence was gathered against, named
     # before it was derived. Only a lookup that may claim ships one.
     evidence_binding: dict[str, Any] | None = None
@@ -969,6 +972,8 @@ class StorePolicyMixin:
             "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
             "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
         }
+        if evidence.policy_bundle_decision_identities:
+            request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
         if portable_workspace is not None:
             request["portable_workspace"] = portable_workspace
             # Unset options are omitted, never sent as null: the resident
@@ -1160,9 +1165,20 @@ class StorePolicyMixin:
                 else None
             ),
             local_once_integrity_key_id=local_once_key_id,
+            policy_bundle_decision_identities=self._lookup_bundle_identities(current_time),
             evidence_binding=evidence_binding,
             has_saved_rows=has_saved_rows,
         )
+
+    def _lookup_bundle_identities(self, current_time: str) -> list[list[Any]] | None:
+        # The resident derives these from the store it reads, except off Unix,
+        # where it cannot read the host name a generic device label yields to.
+        if os.name != "nt":
+            return None
+        identities = self._cached_policy_bundle_decision_identities(
+            now=_parse_utc_timestamp(current_time).timestamp(),
+        )
+        return [list(identity) for identity in identities] or None
 
     def resolve_policy_decision(
         self,
