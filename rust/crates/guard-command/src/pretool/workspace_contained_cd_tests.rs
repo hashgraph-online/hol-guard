@@ -168,6 +168,10 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
         "cd app && ls 2>&1 | tail -5 && cd ..",
         "cd app && ls && cd ../web && ls",
         "cd app/src && ls && cd ../..",
+        // A `;` runs the climb whatever the work did. The only branch it
+        // leaves the workspace on is the one whose first `cd` failed, which
+        // never descended and runs nothing afterwards.
+        "cd app && ls; cd ..",
     ] {
         assert!(shaped(command, &ws), "{command}");
     }
@@ -187,9 +191,13 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
         // covers it. An `$OLDPWD` spelling is an expansion the walk never
         // reads, so it stays out.
         "cd app && ls && cd $OLDPWD".to_owned(),
-        // A `;` leaves the shell of a failed `cd` where it started, and the
-        // climb from there is a step out, so both readings have to stay in.
-        "cd app && ls; cd ..".to_owned(),
+        // A `;` resumes the branch whose `cd` failed as well, and a climb
+        // from there is a step out — but only a step, with nothing left to
+        // run from it.
+        // `a_climb_that_only_leaves_where_the_descent_failed_stays_contained`
+        // holds that reading, and keeps the spellings that do run something
+        // after the climb out.
+        "cd app && ls; cd ..; ls".to_owned(),
         "CDPATH=/ cd app && ls && cd ..".to_owned(),
     ] {
         assert!(!shaped(&command, &ws), "{command}");
