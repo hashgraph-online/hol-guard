@@ -703,6 +703,9 @@ def _cisco_mcp_scanner_runnable() -> bool:
         importlib_metadata.distribution("cisco-ai-mcp-scanner")
     except importlib_metadata.PackageNotFoundError:
         return False
+    except Exception:
+        # Any other lookup failure is the child's to report as a failed scan.
+        return True
     return True
 
 

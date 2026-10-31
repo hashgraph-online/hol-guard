@@ -176,6 +176,17 @@ def test_mcp_scanner_reports_a_missing_scanner_without_a_child(
     assert summary.message == message
 
 
+def test_a_metadata_lookup_failure_leaves_the_scan_to_the_child(monkeypatch) -> None:
+    """Only a missing distribution settles the scan in the parent; other errors must not escape."""
+
+    def broken(name: str) -> object:
+        raise OSError("metadata finder failed")
+
+    monkeypatch.setattr(cisco_mcp_scanner.importlib_metadata, "distribution", broken)
+
+    assert cisco_mcp_scanner._cisco_mcp_scanner_runnable() is True
+
+
 def test_packaged_guard_reports_the_mcp_scanner_unavailable_without_a_child(monkeypatch, tmp_path: Path) -> None:
     """A onefile Guard cannot run ``-c`` code; each child re-extracted the runtime only to fail."""
 
