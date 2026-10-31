@@ -43438,7 +43438,7 @@
       "expect": "allow"
     },
     {
-      "id": "neg-grep-include-json-glob-reaches-credential-store",
+      "id": "neg-grep-include-every-file-glob-over-checkout",
       "fix_area": "negative",
       "harnesses": [
         "codex",
@@ -43449,7 +43449,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "grep -rn TOKEN --include=\"*.md\" --include=\"*.json\" ${ORG}/service-api"
+        "command": "grep -rn TOKEN --include=\"*\" ${ORG}/service-api"
       },
       "cwd": "org_app",
       "expect": "not_allow"

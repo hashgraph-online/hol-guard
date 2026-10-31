@@ -361,7 +361,7 @@ fn an_include_narrows_the_recursive_walk_below_the_root() {
         // Every glob on the line opens files, including one the name screen
         // cleared on its own, so all of them decide the walk. `*.json` is a
         // glob that screen passes, and it still selects the credential store
-        // beside the Markdown.
+        // beside the Markdown, which no commit here records as ordinary.
         (
             "-rn KEY --include *.md --include *.json docs".to_owned(),
             false,

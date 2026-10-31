@@ -300,8 +300,12 @@ fn recursive_search_source_globs_are_not_mistaken_for_env_files() {
             // An include that does select a credential file keeps the review.
             ("grep -rl --include=.env.* ordinary secrets", false),
             ("grep -rl --include=*.env.* ordinary secrets", false),
-            // So does a tree holding one the glob happens to miss.
-            ("grep -rl --include=*.test.ts ordinary configured", false),
+            // A tree holding a credential file the glob misses does not: the
+            // walk below the root skips every file no include selects, so
+            // `configured/.env` is never opened.
+            ("grep -rl --include=*.test.ts ordinary configured", true),
+            // The same tree with no include keeps the review.
+            ("grep -rl ordinary configured", false),
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,
