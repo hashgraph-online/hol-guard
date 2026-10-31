@@ -390,6 +390,12 @@ pub struct GuardHookEnvelopeV2 {
     /// request identity.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub record_activity: bool,
+    /// With `record_receipt`, the daemon asks the edge to queue a
+    /// `PreToolUse` answer's command activity behind its receipt when the
+    /// daemon returns that answer as the edge rendered it. It never changes
+    /// the verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_pre_tool_activity: bool,
     /// The managed-policy view the daemon holds for a Pi or Oh My Pi
     /// `PostToolUse`: `managed_policy_status`, `managed_policy_hash`,
     /// `managed_locked_settings` and `managed_policy`, the shape the
@@ -499,9 +505,10 @@ pub struct GuardHookEdgeResultV2 {
     /// the daemon does not submit it again.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub receipt_recorded: bool,
-    /// The edge also queued the `PostToolUse` answer's command activity
-    /// behind `receipt`, as the envelope's `record_activity` asked, so the
-    /// daemon does not record it again.
+    /// The edge also queued the answer's command activity behind `receipt`,
+    /// as the envelope's `record_activity` (`PostToolUse`) or
+    /// `record_pre_tool_activity` (`PreToolUse`) asked, so the daemon does
+    /// not record it again.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub activity_recorded: bool,
     /// The retry binding and exact-action token of a reviewed `PreToolUse`,
