@@ -441,6 +441,21 @@ impl<'a> super::PathContext<'a> {
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
         };
+        // Cargo reads every `CARGO_*` variable as configuration, including
+        // the default registry, a named registry's index and the credential
+        // provider it starts for an index that asks for a token, and
+        // `CARGO_HOME` moves the configuration file those settings live in.
+        let cargo_config_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| cargo_selector(name))
+            }
+            None => !std::env::vars_os()
+                .any(|(name, value)| !value.is_empty() && cargo_selector(&name.to_string_lossy())),
+        };
         let npm_config_inert = match execution_environment {
             Some(environment) => {
                 environment.has_valid_shape()
@@ -537,6 +552,7 @@ impl<'a> super::PathContext<'a> {
             cwd,
             cdpath_unset,
             rustup_override_absent,
+            cargo_config_inert,
             npm_config_inert,
             pip_config_inert,
             shell_home_matches,
@@ -580,7 +596,26 @@ fn xdg_config_is_default(value: Option<&str>, home: Option<&str>) -> bool {
 }
 
 fn rustup_selector(name: &str) -> bool {
-    name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
+    name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN")
+        || name.eq_ignore_ascii_case("RUSTUP_HOME")
+        // A channel a toolchain file names is downloaded on first use, and
+        // these two name where from.
+        || name.eq_ignore_ascii_case("RUSTUP_DIST_SERVER")
+        || name.eq_ignore_ascii_case("RUSTUP_UPDATE_ROOT")
+}
+
+/// Cargo's own configuration surface, read before any command runs.
+///
+/// Every setting a `.cargo/config.toml` carries has a variable spelling, so
+/// `CARGO_REGISTRY_DEFAULT` picks the registry a query contacts,
+/// `CARGO_REGISTRIES_<NAME>_INDEX` names its index and
+/// `CARGO_REGISTRIES_<NAME>_CREDENTIAL_PROVIDER` names the program Cargo runs
+/// when that index asks for a token. `CARGO_HOME` moves the file all of them
+/// also live in. The whole prefix is read rather than a list of names,
+/// because a query that contacts the wrong endpoint is the same outcome
+/// however the setting was spelled.
+fn cargo_selector(name: &str) -> bool {
+    name.to_ascii_uppercase().starts_with("CARGO_")
 }
 
 /// npm reads every `npm_config_*` variable as configuration, including the

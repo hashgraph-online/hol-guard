@@ -139,6 +139,7 @@ fn action(layout: &Layout, home: &str, command: &str) -> String {
             cwd: Some(&cwd),
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             shell_home_matches: false,

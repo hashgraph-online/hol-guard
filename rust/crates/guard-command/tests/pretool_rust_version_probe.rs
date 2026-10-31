@@ -109,6 +109,36 @@ fn rust_version_queries_are_allowed_unless_a_toolchain_file_selects_a_binary() {
                 "{harness} {name}"
             );
         }
+        // Cargo reads every `CARGO_*` variable as configuration, so an
+        // inherited one can pick the registry `cargo search` contacts, the
+        // index behind it and the credential program started for it. The
+        // version banner contacts nothing, so it is unaffected.
+        if decide(harness, "cargo search serde", &home, &plain) == "allow" {
+            for name in [
+                "CARGO_REGISTRY_DEFAULT",
+                "CARGO_REGISTRIES_MIRROR_INDEX",
+                "CARGO_HOME",
+                "cargo_registry_default",
+                "RUSTUP_DIST_SERVER",
+            ] {
+                assert_ne!(
+                    decide_with(harness, &[name], "cargo search serde", &home, &plain),
+                    "allow",
+                    "{harness} {name}"
+                );
+            }
+            assert_eq!(
+                decide_with(
+                    harness,
+                    &["CARGO_REGISTRY_DEFAULT"],
+                    "cargo --version",
+                    &home,
+                    &plain
+                ),
+                "allow",
+                "{harness} version banner"
+            );
+        }
     }
 }
 
@@ -144,6 +174,7 @@ fn decide_with(
             cwd: cwd.to_str(),
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             shell_home_matches: false,

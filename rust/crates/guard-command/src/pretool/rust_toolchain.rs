@@ -11,7 +11,12 @@
 //! one names an official channel and nothing else that can select a binary.
 //! Any file that cannot be read or parsed, is a symlink, or is unusually large
 //! keeps the normal review path. So does an inherited `RUSTUP_TOOLCHAIN` or
-//! `RUSTUP_HOME`, which rustup reads before any toolchain file.
+//! `RUSTUP_HOME`, which rustup reads before any toolchain file, and
+//! `RUSTUP_DIST_SERVER` or `RUSTUP_UPDATE_ROOT`, which name where a channel
+//! the file selects but the host has not installed is downloaded from.
+//!
+//! A `cargo search` query also contacts a registry, so it carries a second
+//! proof of which one: see [`registry_is_official`].
 
 use std::fs;
 use std::io::ErrorKind;
@@ -20,6 +25,7 @@ use std::path::Path;
 const TOOLCHAIN_FILES: [&str; 2] = ["rust-toolchain", "rust-toolchain.toml"];
 const MAX_TOOLCHAIN_FILE_BYTES: u64 = 4096;
 const TOOLCHAIN_KEYS: [&str; 4] = ["channel", "components", "targets", "profile"];
+const MAX_CARGO_CONFIG_BYTES: u64 = 64 * 1024;
 
 pub(super) fn safe_version_probe(arguments: &[String], context: super::PathContext<'_>) -> bool {
     matches!(arguments, [flag] if matches!(flag.as_str(), "--version" | "-V"))
@@ -27,10 +33,17 @@ pub(super) fn safe_version_probe(arguments: &[String], context: super::PathConte
 }
 
 /// `cargo --version` or a `cargo search` query of the registry.
+///
+/// The query reads an endpoint, so it also needs proof of which endpoint.
+/// The version banner contacts nothing and keeps the toolchain proof alone.
 pub(super) fn safe_cargo_probe(arguments: &[String], context: super::PathContext<'_>) -> bool {
-    (registry_query(arguments)
-        || matches!(arguments, [flag] if matches!(flag.as_str(), "--version" | "-V")))
-        && proxy_selects_official_toolchain(context)
+    if !proxy_selects_official_toolchain(context) {
+        return false;
+    }
+    if matches!(arguments, [flag] if matches!(flag.as_str(), "--version" | "-V")) {
+        return true;
+    }
+    registry_query(arguments) && registry_is_official(context)
 }
 
 /// `cargo search <term>`, optionally bounded by `--limit`.
@@ -43,8 +56,8 @@ pub(super) fn safe_cargo_probe(arguments: &[String], context: super::PathContext
 ///
 /// A user alias cannot turn the word into another subcommand: Cargo ignores
 /// an `[alias]` entry that shadows a built-in command, and `search` is built
-/// in. The query carries no token either -- it is an unauthenticated endpoint
-/// -- so no `credential-provider` from a `.cargo/config.toml` is started.
+/// in. The endpoint the query contacts is proven separately, by
+/// [`registry_is_official`].
 ///
 /// Only `--limit` and plain search words are read. A `+toolchain` word makes
 /// the rustup proxy install a toolchain before the query, and every other
@@ -165,6 +178,95 @@ fn rustup_settings_only_official(home: &Path) -> bool {
         _ => false,
     };
     default_is_official && no_directory_overrides
+}
+
+/// Whether the registry a query contacts is still crates.io, and whether
+/// reaching it can start a program.
+///
+/// Cargo merges every `.cargo/config.toml` from the working directory up to
+/// the filesystem root with the one in `CARGO_HOME`, so the nearest file is
+/// not the whole answer -- each one is read. A `[source]` replacement or a
+/// `registry.default` entry sends `cargo search` somewhere else, and an index
+/// that answers `auth-required` makes Cargo fetch a token by running the
+/// `credential-provider` the same file names. That is a workspace file
+/// choosing a program to run, which is the outcome the package review exists
+/// to catch, so any of those tables keeps the review.
+///
+/// `[build]`, `[target]` and `[profile]` are read and left alone: a search
+/// compiles nothing, links nothing and starts no build program, so the
+/// settings they carry never reach a process. Refusing them would cost the
+/// reading in most real workspaces and buy nothing.
+fn registry_is_official(context: super::PathContext<'_>) -> bool {
+    if !context.cargo_config_inert {
+        return false;
+    }
+    let Some(cwd) = context.cwd.map(Path::new) else {
+        return false;
+    };
+    let Ok(physical) = fs::canonicalize(cwd) else {
+        return false;
+    };
+    // `CARGO_HOME` is unset -- the context flag proves that -- so Cargo's
+    // own configuration lives at its default place under the home directory.
+    let Some(home) = context.home_dir.map(Path::new) else {
+        return false;
+    };
+    if !home.is_absolute() {
+        return false;
+    }
+    cwd.ancestors()
+        .chain(physical.ancestors())
+        .chain(std::iter::once(home))
+        .all(cargo_config_inert)
+}
+
+/// The tables that can move the endpoint, name the index behind it, or pick
+/// the credential program Cargo starts for it.
+const REDIRECTING_TABLES: [&str; 6] = [
+    "registry",
+    "registries",
+    "source",
+    "http",
+    "net",
+    "credential-alias",
+];
+
+/// Whether this directory's `.cargo` configuration leaves the query alone.
+fn cargo_config_inert(directory: &Path) -> bool {
+    for name in ["config.toml", "config"] {
+        let path = directory.join(".cargo").join(name);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == ErrorKind::NotFound => continue,
+            Err(_) => return false,
+        };
+        if !metadata.is_file() || metadata.len() > MAX_CARGO_CONFIG_BYTES {
+            return false;
+        }
+        let Ok(contents) = fs::read_to_string(&path) else {
+            return false;
+        };
+        let Ok(table) = contents.parse::<toml::Table>() else {
+            return false;
+        };
+        if REDIRECTING_TABLES
+            .iter()
+            .any(|name| table.contains_key(*name))
+        {
+            return false;
+        }
+        // `[env]` sets variables for the processes Cargo starts, and the
+        // same names this proof screens in the inherited environment.
+        if table.contains_key("env") {
+            return false;
+        }
+        // An unstable table can turn on a feature whose behaviour this
+        // reading has not been written against.
+        if table.contains_key("unstable") {
+            return false;
+        }
+    }
+    true
 }
 
 fn ancestors_inert(cwd: &Path) -> bool {
@@ -310,7 +412,9 @@ fn digits(value: &str, length: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{inert_toolchain, registry_query, rustup_settings_only_official};
+    use super::{
+        cargo_config_inert, inert_toolchain, registry_query, rustup_settings_only_official,
+    };
     use std::path::Path;
 
     fn words(command: &str) -> Vec<String> {
@@ -396,6 +500,56 @@ mod tests {
         ] {
             assert!(!inert_toolchain(contents), "{contents}");
         }
+    }
+
+    #[test]
+    fn refuses_a_cargo_configuration_that_can_move_the_registry() {
+        let root = std::env::temp_dir().join(format!(
+            "guard-cargo-config-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos(),
+        ));
+        let directory = root.join(".cargo");
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("config.toml");
+        // A directory with no Cargo configuration at all leaves the query
+        // pointed at crates.io.
+        assert!(cargo_config_inert(Path::new(&root)));
+        for contents in [
+            "[profile.dev]\nopt-level = 1\n",
+            "[build]\ntarget-dir = \"out\"\nrustc-wrapper = \"sccache\"\n",
+            "[target.x86_64-unknown-linux-gnu]\nlinker = \"clang\"\n",
+            "[alias]\nb = \"build\"\n",
+            "[term]\nquiet = true\n",
+        ] {
+            std::fs::write(&path, contents).unwrap();
+            assert!(cargo_config_inert(Path::new(&root)), "{contents}");
+        }
+        for contents in [
+            "[registry]\ndefault = \"mirror\"\n",
+            "[registry]\nglobal-credential-providers = [\"./evil\"]\n",
+            "[registries.mirror]\nindex = \"sparse+https://example.invalid/\"\n",
+            "[source.crates-io]\nreplace-with = \"mirror\"\n",
+            "[http]\nproxy = \"http://example.invalid\"\n",
+            "[net]\noffline = false\n",
+            "[credential-alias]\nevil = [\"./evil\"]\n",
+            "[env]\nCARGO_REGISTRY_DEFAULT = \"mirror\"\n",
+            "[unstable]\ncredential-process = true\n",
+            // Unreadable configuration is not proof of anything.
+            "[registry\n",
+        ] {
+            std::fs::write(&path, contents).unwrap();
+            assert!(!cargo_config_inert(Path::new(&root)), "{contents}");
+        }
+        std::fs::remove_file(&path).unwrap();
+        // Cargo reads the extensionless spelling too.
+        std::fs::write(
+            directory.join("config"),
+            "[registry]\ndefault = \"mirror\"\n",
+        )
+        .unwrap();
+        assert!(!cargo_config_inert(Path::new(&root)));
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
