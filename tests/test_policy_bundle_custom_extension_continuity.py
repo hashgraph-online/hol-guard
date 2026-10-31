@@ -150,7 +150,13 @@ def test_sync_receipts_consumes_signed_custom_extension_continuity_in_production
     remote_policies_stored = summary["remote_policies_stored"]
     assert isinstance(remote_policies_stored, int) and remote_policies_stored >= 0
     assert grant is not None and grant["state"] == "blocked"
-    assert store.get_sync_payload("policy_bundle_ack") == {}
+    acknowledgement = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(acknowledgement, dict)
+    assert "deliveryId" not in acknowledgement
+    assert acknowledgement["contractVersion"] == bundle["contractVersion"]
+    assert acknowledgement["bundleHash"] == bundle["bundleHash"]
+    assert acknowledgement["sequence"] == 1
+    assert acknowledgement["status"] == "applied"
     assert store.read_local_cli_command_states(identity.cli_id) == {"deploy": "block"}
     state = store.get_sync_payload("custom_extension_continuity")
     assert isinstance(state, dict)

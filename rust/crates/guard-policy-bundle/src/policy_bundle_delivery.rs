@@ -27,6 +27,7 @@ const DELIVERY_KEYS: [&str; 14] = [
     "extensionProjectionDigest",
     "lastKnownGoodBundleHash",
 ];
+const GENERIC_IDENTITY_KEYS: [&str; 4] = ["workspaceId", "deviceId", "bundleVersion", "bundleHash"];
 const BAD: &str = "invalid_policy_bundle_delivery";
 const MISMATCH: &str = "policy_bundle_delivery_mismatch";
 
@@ -266,8 +267,13 @@ pub fn ack_payload(request: &AckRequest) -> Result<Obj, String> {
     {
         return legacy_ack(request);
     }
-    let (Some(delivery), Some(revision), Some(digest)) = (
-        request.delivery,
+    let Some(delivery) = request.delivery else {
+        if has_extension_semantics(request.bundle) {
+            return Ok(Obj::new());
+        }
+        return generic_ack(request);
+    };
+    let (Some(revision), Some(digest)) = (
         request.applied_revision.filter(|v| !v.is_null()),
         request.applied_digest.filter(|v| !v.is_null()),
     ) else {
@@ -280,10 +286,46 @@ pub fn ack_payload(request: &AckRequest) -> Result<Obj, String> {
             .ok_or("invalid_policy_bundle_acknowledgement")?;
         candidate.insert(field.to_owned(), value.clone());
     }
+    candidate.insert(
+        "appliedExtensionAuthorityRevision".to_owned(),
+        revision.clone(),
+    );
+    candidate.insert(
+        "appliedEffectiveProjectionDigest".to_owned(),
+        digest.clone(),
+    );
+    sequenced_ack(request, candidate, &DELIVERY_KEYS)
+}
+
+/// A v2 bundle without Extension semantics has no managed delivery. Its
+/// acknowledgement binds the device to the signed bundle alone, the shape
+/// Cloud accepts as the generic v2 acknowledgement.
+fn generic_ack(request: &AckRequest) -> Result<Obj, String> {
+    let mut candidate = Obj::new();
+    for field in GENERIC_IDENTITY_KEYS {
+        let value = if field == "deviceId" {
+            Value::String(request.device_id.to_owned())
+        } else {
+            request
+                .bundle
+                .get(field)
+                .cloned()
+                .ok_or("invalid_policy_bundle_acknowledgement")?
+        };
+        candidate.insert(field.to_owned(), value);
+    }
+    sequenced_ack(request, candidate, &GENERIC_IDENTITY_KEYS)
+}
+
+/// Continue the sequence of a previous acknowledgement for the same identity,
+/// or start one; an applied acknowledgement stays applied.
+fn sequenced_ack(request: &AckRequest, candidate: Obj, identity: &[&str]) -> Result<Obj, String> {
+    let generic = !candidate.contains_key("deliveryId");
     let matching = request.previous.filter(|previous| {
-        DELIVERY_KEYS
-            .iter()
-            .all(|field| py_eq_opt(previous.get(*field), candidate.get(*field)))
+        previous.contains_key("deliveryId") != generic
+            && identity
+                .iter()
+                .all(|field| py_eq_opt(previous.get(*field), candidate.get(*field)))
     });
     let previous_sequence = matching
         .and_then(|previous| previous.get("sequence"))
@@ -299,14 +341,6 @@ pub fn ack_payload(request: &AckRequest) -> Result<Obj, String> {
     let observed =
         normalized_observed_at(request.synced_at).ok_or("invalid_policy_bundle_acknowledgement")?;
     let mut ack = candidate;
-    ack.insert(
-        "appliedExtensionAuthorityRevision".to_owned(),
-        revision.clone(),
-    );
-    ack.insert(
-        "appliedEffectiveProjectionDigest".to_owned(),
-        digest.clone(),
-    );
     ack.insert(
         "contractVersion".to_owned(),
         Value::String(CONTRACT.to_owned()),
