@@ -665,7 +665,9 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
     let exec = "sed -i '' 's/1/2/e' src/a.ts";
     assert_ne!(reason(exec), "native_exact_safe_command", "{exec}");
     // A tracked or unknown tree may hold uncommitted work the sandbox would
-    // write back as deleted.
+    // write back as deleted. `truncate` rewrites one file in place the way
+    // `sed -i` above does, so it reaches the sandbox instead; see
+    // `truncating_a_workspace_file_runs_in_the_workspace_sandbox`.
     for command in [
         "rm -rf src",
         "rm -rf src 2>&1",
@@ -675,7 +677,6 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         "cd src && rm -rf .",
         "rm -rf $DIR",
         "shred -u src/a.ts",
-        "truncate -s 0 src/a.ts",
         "rm --no-preserve-root -rf dist",
         "GLOBIGNORE=x rm -rf dist",
         "sed --follow-symlinks -i 's/1/2/' src/a.ts",
