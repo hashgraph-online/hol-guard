@@ -63,18 +63,25 @@ pub(crate) fn encode(
             .filter(|_| envelope.record_activity && edge.event_name == "PostToolUse");
         edge.receipt_recorded = true;
         edge.activity_recorded = activity.is_some();
+        let mut activity_queued = true;
         let recorded = writer_op::record_edge_receipt(
             Path::new(&envelope.source.guard_home),
             &edge.receipt,
             || crate::encode_response(&edge),
             |writer| {
                 if let Some(payload) = activity {
-                    queue_post_tool_activity(writer, &edge.harness, payload);
+                    activity_queued = queue_post_tool_activity(writer, &edge.harness, payload);
                 }
             },
         );
         if let Some(encoded) = recorded {
-            return encoded;
+            if activity_queued || encoded.is_err() {
+                return encoded;
+            }
+            // The writer took the receipt but refused the activity, so the
+            // daemon submits the activity itself.
+            edge.activity_recorded = false;
+            return crate::encode_response(&edge);
         }
         edge.receipt_recorded = false;
         edge.activity_recorded = false;
@@ -146,11 +153,12 @@ fn submit_post_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value)
 
 /// Queue a post-tool call's Composio discovery, when it succeeded, and then
 /// its command activity, as the daemon's `_record_post_tool_activity` does.
+/// True when the writer took the activity.
 fn queue_post_tool_activity(
     writer: &RuntimeHookEvidenceWriter,
     harness: &str,
     payload: &serde_json::Map<String, Value>,
-) {
+) -> bool {
     let succeeded = post_succeeded(payload);
     let tool_name = payload.get("tool_name").and_then(Value::as_str);
     if let Some(tool_name) = tool_name.filter(|_| succeeded) {
@@ -165,7 +173,7 @@ fn queue_post_tool_activity(
         None,
         false,
         "not-applicable",
-    );
+    )
 }
 
 /// `hook_post_succeeded("PostToolUse", payload)`: only bounded failure

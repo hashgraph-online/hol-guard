@@ -188,6 +188,25 @@ fn a_post_tool_edge_that_asks_queues_its_activity_behind_the_receipt() {
 }
 
 #[test]
+fn a_post_tool_activity_the_writer_refuses_is_left_to_the_daemon() {
+    let home = store_home("edge-activity-refused");
+    start_writer(&home);
+    let (mut envelope, edge) = post_tool_answered(&home, true);
+    // A request id that is not an exact string fails correlation, so the
+    // writer takes the receipt and refuses the activity.
+    let payload = envelope.raw_payload.as_object_mut().unwrap();
+    for field in ["tool_use_id", "tool_call_id", "toolUseId", "generation_id"] {
+        payload.insert(field.to_owned(), json!(17));
+    }
+    let answer = encoded(&envelope, true, edge);
+    assert_eq!(answer["receipt_recorded"], json!(true));
+    assert!(answer.get("activity_recorded").is_none());
+    assert_eq!(receipts_accepted(&home), json!(1));
+    assert_eq!(activities_accepted(&home), json!(1));
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
+#[test]
 fn the_edge_leaves_the_activity_to_the_daemon_unless_it_can_record_it() {
     let home = store_home("edge-activity-unasked");
     start_writer(&home);
