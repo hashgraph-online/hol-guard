@@ -16,7 +16,7 @@
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews Unwreck CLI invocations that restore or delete project and snapshot state, persist snapshots, change agent hook configuration, or launch child processes. Read-only inspection commands and the installed hook callback are outside this extension's matchers.",
+          "description": "Reviews Unwreck CLI 0.1.0 invocations that restore or delete project and snapshot state, persist snapshots, change agent hook configuration, or launch child processes. Read-only inspection commands and the installed hook callback are outside this extension's matchers.",
           "ecosystem_ids": [
             "unwreck"
           ],
@@ -124,8 +124,9 @@
             "url": "https://github.com/ayushdoesdev/unwreck"
           },
           "reference_urls": [
-            "https://github.com/ayushdoesdev/unwreck",
-            "https://github.com/ayushdoesdev/unwreck/blob/main/README.md"
+            "https://github.com/ayushdoesdev/unwreck/tree/20a1910c33208ecfe8723e0e78ad96f734dcf219",
+            "https://github.com/ayushdoesdev/unwreck/blob/20a1910c33208ecfe8723e0e78ad96f734dcf219/code/crates/unwreck/src/main.rs",
+            "https://github.com/ayushdoesdev/unwreck/blob/20a1910c33208ecfe8723e0e78ad96f734dcf219/README.md"
           ],
           "required": false,
           "risk_classes": [
@@ -138,7 +139,7 @@
                 "Unwreck state and snapshot mutation command"
               ],
               "default_mode": "review",
-              "description": "Identifies Unwreck operations that restore or modify project files, persist or delete local snapshots, or open the interactive restore interface. Help and explicit dry-run commands narrow this rule.",
+              "description": "Identifies Unwreck 0.1.0 operations that restore or modify project files, persist or delete local snapshots, or open the interactive restore interface. Help and explicit dry-run commands narrow this rule.",
               "family": null,
               "matcher": {
                 "op": "any.v1",
@@ -330,7 +331,7 @@
                 "Unwreck agent hook configuration command"
               ],
               "default_mode": "review",
-              "description": "Identifies `unwreck hooks --write` and `unwreck hooks --remove`, which modify Claude Code, Codex, or Gemini CLI hook configuration. The dry-run option only previews the diff.",
+              "description": "Identifies `unwreck hooks --write` and `unwreck hooks --remove`, which modify Claude Code, Codex, or Gemini CLI configuration. The dry-run option only previews the diff.",
               "family": null,
               "matcher": {
                 "op": "any.v1",
@@ -862,8 +863,45 @@
       ]
     },
     {
-      "id": "restore-dry-run",
+      "id": "restore-only-paths",
+      "command": "unwreck restore --only src/main.rs 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "restore-force",
+      "command": "unwreck restore --force 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "restore-dry-run-before-id",
       "command": "unwreck restore --dry-run 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "restore-dry-run-after-id",
+      "command": "unwreck restore 42 --dry-run",
       "enabled_extensions": [
         "command.unwreck"
       ],
@@ -875,6 +913,19 @@
     {
       "id": "undo",
       "command": "unwreck undo",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "undo-force",
+      "command": "unwreck undo --force",
       "enabled_extensions": [
         "command.unwreck"
       ],
@@ -1010,6 +1061,17 @@
       "expected_effective_segments": []
     },
     {
+      "id": "hooks-dry-run-before-action",
+      "command": "unwreck hooks --dry-run --write --agent codex",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
       "id": "run-shell-command",
       "command": "unwreck run --quiet-ms 1500 -- rm -rf build/",
       "enabled_extensions": [
@@ -1049,6 +1111,17 @@
     {
       "id": "hooks-help",
       "command": "unwreck hooks --help",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.hook-config",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "hooks-write-help",
+      "command": "unwreck hooks --write --help",
       "enabled_extensions": [
         "command.unwreck"
       ],
@@ -1102,6 +1175,17 @@
       "expected_effective_segments": []
     },
     {
+      "id": "read-only-doctor",
+      "command": "unwreck doctor --json",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
       "id": "automatic-hook-callback",
       "command": "unwreck hook claude",
       "enabled_extensions": [
@@ -1109,6 +1193,87 @@
       ],
       "disabled_permissions": [],
       "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unknown-subcommand",
+      "command": "unwreck status",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "inactive-extension",
+      "command": "unwreck gc --keep 5",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "disabled-state-permission",
+      "command": "unwreck restore 42",
+      "enabled_extensions": [
+        "command.unwreck.permission.state-change"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "compound-state-command",
+      "command": "unwreck restore 42 && echo done",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "compound-second-segment",
+      "command": "echo before && unwreck gc --keep 5",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "exec-wrapper",
+      "command": "exec unwreck restore 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "xargs-wrapper",
+      "command": "xargs -n 1 unwreck gc --keep 10",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "block",
       "rule_id": "command.unwreck.state-change",
       "expected_effective_segments": []
     },
