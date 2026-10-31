@@ -9,6 +9,7 @@ use serde_json::{json, Map, Value};
 pub mod cli_documents;
 mod containment;
 pub mod hermes;
+pub mod muse;
 mod prompt_risk;
 
 use prompt_risk::PROMPT_RISK_CLASSES;

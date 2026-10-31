@@ -48,7 +48,7 @@ pub struct HookRenderRequestV1 {
     /// `pre_tool`, `pre_tool_review`, `recording_only_pre_tool`, `cli_response`,
     /// `cli_document`, `copilot_hook_response`, `claude_approval_copy`,
     /// `artifact_id`, `terminal_policy_action`, `cursor_after_shell_observed`,
-    /// `cursor_observer_event`, `hermes_bridge` or `cli_hook_emit`.
+    /// `cursor_observer_event`, `hermes_bridge`, `muse_bridge` or `cli_hook_emit`.
     pub kind: String,
     pub harness: String,
     /// The verdict to render; absent for `recording_only_pre_tool`.

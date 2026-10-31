@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
+from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters, muse_hook_render
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.muse import MuseHarnessAdapter
 from codex_plugin_scanner.guard.adapters.muse_config import MUSE_GUARD_EVENTS, is_guard_managed_hook_command
@@ -15,7 +16,6 @@ from codex_plugin_scanner.guard.adapters.muse_hook_render import (
     apply_muse_pretool_approval_wait,
     muse_bridge_response,
 )
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import fail_closed_response, unmanaged_passthrough
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 
 FIXTURES = Path(__file__).parent / "fixtures" / "muse"
@@ -350,98 +350,35 @@ class TestMuseInstallUninstall:
 
 
 class TestMuseHookRender:
-    def test_allow_is_empty_stdout(self) -> None:
-        # Muse rejects a bare permissionDecision allow; allow is silence.
-        assert muse_bridge_response({"policy_action": "allow"}, event_name="PreToolUse") == ("", "", 0)
+    """The document itself is the resident's; these pin what happens without it.
 
-    def test_block_is_json_deny_on_exit_zero(self) -> None:
-        stdout, _stderr, exit_code = muse_bridge_response(
-            {"policy_action": "block", "reason": "nope"}, event_name="PreToolUse"
+    Every shape the renderer produces is pinned in Rust
+    (``hook_responses::muse``). What stays here is the Python edge: a resident
+    that cannot answer, and a hook whose budget is already spent.
+    """
+
+    def test_fails_closed_without_a_resident(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(muse_hook_render, "native_muse_bridge", lambda *_args, **_kwargs: None)
+        assert muse_bridge_response(
+            {"policy_action": "allow", "reason": "ok"},
+            event_name="PreToolUse",
+            guard_home=tmp_path / "guard-home",
+        ) == ("", "HOL Guard blocked this action.", 2)
+
+    def test_render_stops_at_the_hook_deadline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from codex_plugin_scanner.guard import native_hook_render
+
+        def forbidden(**_kwargs: object) -> None:
+            raise AssertionError("an expired hook budget must not reach the resident")
+
+        monkeypatch.setattr(native_hook_render, "_resident_request", forbidden)
+        _stdout, _stderr, code = muse_bridge_response(
+            {"policy_action": "allow", "reason": "ok"},
+            event_name="PreToolUse",
+            guard_home=tmp_path / "guard-home",
+            deadline=time.monotonic() - 0.01,
         )
-        assert exit_code == 0
-        payload = json.loads(stdout)
-        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert payload["hookSpecificOutput"]["permissionDecisionReason"] == "nope"
-
-    def test_prompt_block_uses_decision_block(self) -> None:
-        stdout, _stderr, exit_code = muse_bridge_response(
-            {"policy_action": "review", "reason": "needs approval"}, event_name="UserPromptSubmit"
-        )
-        assert exit_code == 0
-        assert json.loads(stdout) == {"decision": "block", "reason": "needs approval"}
-
-    def test_permission_request_review_defers_to_muse_prompt(self) -> None:
-        assert muse_bridge_response({"policy_action": "review"}, event_name="PermissionRequest") == ("", "", 0)
-
-    def test_permission_request_block_denies(self) -> None:
-        stdout, _stderr, _exit_code = muse_bridge_response(
-            {"policy_action": "block", "reason": "never"}, event_name="PermissionRequest"
-        )
-        assert json.loads(stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-    def test_post_tool_use_adds_context_and_never_denies(self) -> None:
-        stdout, _stderr, exit_code = muse_bridge_response(
-            {"policy_action": "block", "reason": "output flagged"}, event_name="PostToolUse"
-        )
-        assert exit_code == 0
-        assert json.loads(stdout)["hookSpecificOutput"]["additionalContext"] == "output flagged"
-
-    def test_session_start_adds_guard_context(self) -> None:
-        stdout, _stderr, _exit_code = muse_bridge_response({"policy_action": "allow"}, event_name="SessionStart")
-        assert "HOL Guard" in json.loads(stdout)["hookSpecificOutput"]["additionalContext"]
-
-    def test_stop_uses_stop_event_name_and_never_denies(self) -> None:
-        stdout, _stderr, exit_code = muse_bridge_response(
-            {"policy_action": "block", "reason": "output flagged"}, event_name="Stop"
-        )
-        assert exit_code == 0
-        payload = json.loads(stdout)
-        # Muse rejects a hookSpecificOutput whose event name mismatches.
-        assert payload["hookSpecificOutput"]["hookEventName"] == "Stop"
-        assert "permissionDecision" not in payload["hookSpecificOutput"]
-
-    def test_fail_closed_permission_request_denies(self) -> None:
-        # The fail-closed PermissionRequest envelope carries its verdict under
-        # hookSpecificOutput.decision.behavior and names no policy_action.
-        stdout, _stderr, exit_code = muse_bridge_response(
-            fail_closed_response("muse", "PermissionRequest"), event_name="PermissionRequest"
-        )
-        assert exit_code == 0
-        assert json.loads(stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-    def test_fail_closed_pre_tool_denies(self) -> None:
-        stdout, _stderr, exit_code = muse_bridge_response(
-            fail_closed_response("muse", "PreToolUse"), event_name="PreToolUse"
-        )
-        assert exit_code == 0
-        assert json.loads(stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-    def test_fail_closed_prompt_blocks(self) -> None:
-        stdout, _stderr, exit_code = muse_bridge_response(
-            fail_closed_response("muse", "UserPromptSubmit"), event_name="UserPromptSubmit"
-        )
-        assert exit_code == 0
-        assert json.loads(stdout)["decision"] == "block"
-
-    def test_verdictless_answer_denies_a_deciding_event(self) -> None:
-        stdout, _stderr, exit_code = muse_bridge_response({"reason_code": "whatever"}, event_name="PreToolUse")
-        assert exit_code == 0
-        payload = json.loads(stdout)
-        assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert "could not read a verdict" in payload["hookSpecificOutput"]["permissionDecisionReason"]
-
-    def test_verdictless_answer_is_silence_on_an_observing_event(self) -> None:
-        assert muse_bridge_response({"reason_code": "whatever"}, event_name="PostToolUse") == ("", "", 0)
-
-    def test_unmanaged_passthrough_stays_silent(self) -> None:
-        # Guard does not manage this app; a continue reply must not deny the call.
-        assert muse_bridge_response(unmanaged_passthrough("muse"), event_name="PreToolUse") == ("", "", 0)
-
-    def test_unknown_policy_action_is_restrictive(self) -> None:
-        stdout, _stderr, _exit_code = muse_bridge_response(
-            {"policy_action": "tomorrow", "reason": "unreadable"}, event_name="PreToolUse"
-        )
-        assert json.loads(stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert code == 2
 
 
 class TestMuseApprovalResume:
@@ -470,8 +407,10 @@ class TestMuseApprovalResume:
             timeout_seconds=5,  # type: ignore[arg-type]
         )
         assert updated["policy_action"] == "allow"
-        # The resumed answer renders as silence: Muse runs the original call.
-        assert muse_bridge_response(updated, event_name="PreToolUse") == ("", "", 0)
+        # The resumed answer carries no verdict of its own: the resident
+        # renders it as silence, which is how Muse runs the original call.
+        assert updated["decision"] == "allow"
+        assert "permissionDecision" not in updated["hookSpecificOutput"]
 
     def test_approval_wait_denial_keeps_the_call_blocked(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
@@ -492,8 +431,7 @@ class TestMuseApprovalResume:
             timeout_seconds=5,  # type: ignore[arg-type]
         )
         assert updated["policy_action"] == "block"
-        stdout, _stderr, _exit_code = muse_bridge_response(updated, event_name="PreToolUse")
-        assert json.loads(stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert updated["decision"] == "deny"
 
     def test_approval_wait_pending_keeps_review(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
