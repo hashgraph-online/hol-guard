@@ -100,6 +100,16 @@ pub(super) fn policy_binding_valid(query: &NativeExactActionQueryV1) -> bool {
     policy_binding(harness, result, receipt.as_ref()) != NativePolicyBindingV1::Invalid
 }
 
+/// Whether a queued review's receipt holds the policy binding its verdict
+/// claims, as a `HookReview` query checks it.
+pub(crate) fn policy_binding_holds(
+    harness: &str,
+    result: &Map<String, Value>,
+    receipt: Option<&Map<String, Value>>,
+) -> bool {
+    policy_binding(harness, result, receipt) != NativePolicyBindingV1::Invalid
+}
+
 /// A verdict that claims no extension policy, on either the verdict or its
 /// receipt, binds none. One that does binds only through a receipt that
 /// records this very `PreToolUse` result and carries a well-formed command
