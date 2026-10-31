@@ -1596,18 +1596,28 @@ fn context_score(
     (score.clamp(0.0, 1.0), reasons)
 }
 
-/// Where every line of a scanned text begins, so a finding's line is found by
-/// search instead of by counting the newlines before it again.
+/// How many lines a scanned text holds before each block of it, so a
+/// finding's line is read from one count and a short scan instead of by
+/// counting the newlines before it again.
 ///
 /// A scan reports up to ten thousand findings, and counting from the start of
 /// the text for each one walks the whole prefix every time: a large file that
-/// leaks in many places reads its own bytes once per finding. The offsets are
-/// built on the first finding that survives the filters, so a text that yields
-/// none never pays for them, and a scan that stops at its bound has built them
-/// once.
+/// leaks in many places reads its own bytes once per finding. Holding the
+/// offset of every newline would answer that in a single search, but a
+/// newline-heavy text would then carry eight bytes of index for every byte of
+/// itself, and a repository scan admits files up to 32 MiB while a direct
+/// caller of `scan_secret_text` is bounded by nothing at all. One count per
+/// block is a five-hundredth of the text instead, and the newlines after the
+/// last boundary are counted over at most one block.
+///
+/// The counts are built on the first finding that survives the filters, so a
+/// text that yields none never pays for them, and a scan that stops at its
+/// bound has built them once.
+const LINE_INDEX_BLOCK: usize = 4096;
+
 #[derive(Default)]
 struct LineIndex {
-    newlines: OnceCell<Vec<usize>>,
+    blocks: OnceCell<Vec<usize>>,
 }
 
 impl LineIndex {
@@ -1615,11 +1625,28 @@ impl LineIndex {
     /// newline itself belongs to the line that newline ends, as counting the
     /// newlines strictly before it did.
     fn line_of(&self, text: &str, match_start: usize) -> usize {
-        let newlines = self
-            .newlines
-            .get_or_init(|| text.match_indices('\n').map(|(start, _)| start).collect());
-        newlines.partition_point(|start| *start < match_start) + 1
+        let blocks = self.blocks.get_or_init(|| {
+            let bytes = text.as_bytes();
+            // One more count than there are blocks, so the boundary at the
+            // very end of the text is a block start like any other and an
+            // offset standing on it has a count to read.
+            let mut counts = Vec::with_capacity(bytes.len() / LINE_INDEX_BLOCK + 2);
+            let mut counted = 0usize;
+            for block in bytes.chunks(LINE_INDEX_BLOCK) {
+                counts.push(counted);
+                counted += newlines(block);
+            }
+            counts.push(counted);
+            counts
+        });
+        let block = match_start / LINE_INDEX_BLOCK;
+        let boundary = block * LINE_INDEX_BLOCK;
+        blocks[block] + newlines(&text.as_bytes()[boundary..match_start]) + 1
     }
+}
+
+fn newlines(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|byte| **byte == b'\n').count()
 }
 
 fn line_text(text: &str, match_start: usize) -> Zeroizing<String> {
@@ -2252,6 +2279,27 @@ mod tests {
         for offset in 0..=text.len() {
             let counted = text[..offset].bytes().filter(|byte| *byte == b'\n').count() + 1;
             assert_eq!(index.line_of(text, offset), counted, "offset {offset}");
+        }
+    }
+
+    /// The block counts answer the same line as counting the newlines does
+    /// for a text long enough to hold several blocks, at the boundaries
+    /// themselves and on either side of them.
+    #[test]
+    fn the_line_index_crosses_block_boundaries() {
+        let text = "ab\n".repeat(LINE_INDEX_BLOCK);
+        let index = LineIndex::default();
+        let mut offsets = vec![0, 1, text.len()];
+        for block in 0..=text.len() / LINE_INDEX_BLOCK {
+            let boundary = block * LINE_INDEX_BLOCK;
+            offsets.extend([boundary.saturating_sub(1), boundary, boundary + 1]);
+        }
+        for offset in offsets {
+            if offset > text.len() {
+                continue;
+            }
+            let counted = text[..offset].bytes().filter(|byte| *byte == b'\n').count() + 1;
+            assert_eq!(index.line_of(&text, offset), counted, "offset {offset}");
         }
     }
 
