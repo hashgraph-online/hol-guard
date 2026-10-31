@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.adapters.zcode_config import (
     ZCODE_PRETOOL_MATCHERS,
     is_guard_managed_hook_command,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_zcode_hook_payload
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
 
 
@@ -66,7 +66,9 @@ class TestZCodeMcpToolCoverage:
         )
 
     def test_mcp_tool_payload_is_intercepted_as_pretooluse(self, tmp_path: Path) -> None:
-        envelope = normalize_zcode_hook_payload(
+        envelope = normalize_harness_payload(
+            "zcode",
+            "",
             _fixture("pretooluse_mcp.json"),
             workspace=tmp_path / "workspace",
             home_dir=tmp_path,

@@ -2067,20 +2067,6 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
-   "source_sha256": "2f692c209f962b918c70a38b30235a8284d2889daa4df07e885dc584754a114b",
-   "forbidden_symbols": [
-    "_SECRET_CONTENT_PATTERNS",
-    "_SAMPLE_SECRET_VALUE_PATTERN",
-    "_secret_content_match_is_sample",
-    "_extract_secret_assignment_value"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/content_sensitivity.rs",
-    "rust/crates/guard-runtime/src/content_sensitivity_op.rs"
-   ]
-  },
-  {
    "path": "src/codex_plugin_scanner/guard/continuation_payload.py",
    "source_sha256": "59edb10a1c1aa0fdc1f5a8e646a928a573e817ca457344a525ea3b0bfb755d5a",
    "forbidden_symbols": [
@@ -2149,33 +2135,6 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/cli_runtime_support_op.rs",
     "rust/crates/guard-runtime/src/cli_copilot_resolution.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
-   "source_sha256": "f6d0184abba2aae634007a8480cbfc4d30e2715c1bfb0c166e421d73d886f2cc",
-   "forbidden_symbols": [
-    "_READ_ONLY_SEARCH_FILE_INPUT_FLAGS",
-    "_GREP_SHORT_VALUE_FLAGS",
-    "_READ_ONLY_SEARCH_SHORT_VALUE_FLAGS"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/developer_inspection_authority.rs",
-    "rust/crates/guard-runtime/src/developer_inspection_authority_op.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py",
-   "source_sha256": "895e59d8fb5e9d1f275a2c4eb5ae27c4e61cc4662ac4645dba98bec79263bc1c",
-   "forbidden_symbols": [
-    "index_inspection_execution_context",
-    "model_shell_execution_context",
-    "_without_safe_inspection_redirections",
-    "_leading_literal_cd_workspace_root"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/developer_inspection_authority.rs",
-    "rust/crates/guard-runtime/src/developer_inspection_authority_op.rs"
    ]
   },
   {

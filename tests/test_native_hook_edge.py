@@ -615,48 +615,29 @@ def _sent_envelope(
     return json.loads(encoded)
 
 
-@pytest.mark.parametrize(
-    ("feature", "option"),
-    [("edge-local-cli-observation-v1", "observe_local_cli"), ("edge-receipt-record-v1", "record_receipt")],
-)
-@pytest.mark.parametrize(("advertised", "asked"), [(True, True), (True, False), (False, True)])
-def test_the_envelope_asks_for_an_edge_option_only_from_a_resident_that_supports_it(
+@pytest.mark.parametrize("option", ["observe_local_cli", "record_receipt"])
+@pytest.mark.parametrize("asked", [True, False])
+def test_the_envelope_asks_for_an_edge_option_only_when_the_caller_does(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    feature: str,
     option: str,
-    advertised: bool,
     asked: bool,
 ) -> None:
-    captured = _advertise(tmp_path, monkeypatch, *([feature] if advertised else []))
+    captured = _advertise(tmp_path, monkeypatch)
     sent = _sent_envelope(tmp_path, captured, **{option: asked})
-    # An older resident would refuse the field, so it is sent only when advertised.
-    assert sent.get(option) is ((advertised and asked) or None)
+    assert sent.get(option) is (asked or None)
 
 
-@pytest.mark.parametrize(
-    ("feature", "option"),
-    [
-        ("edge-activity-record-v1", "record_activity"),
-        ("edge-pre-tool-activity-record-v1", "record_pre_tool_activity"),
-    ],
-)
-@pytest.mark.parametrize(
-    ("receipt_feature", "activity_feature", "record_receipt", "asked"),
-    [(True, True, True, True), (True, True, False, False), (True, False, True, False), (False, True, True, False)],
-)
+@pytest.mark.parametrize("option", ["record_activity", "record_pre_tool_activity"])
+@pytest.mark.parametrize("record_receipt", [True, False])
 def test_the_envelope_asks_the_edge_for_the_activity_only_with_its_receipt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    feature: str,
     option: str,
-    receipt_feature: bool,
-    activity_feature: bool,
     record_receipt: bool,
-    asked: bool,
 ) -> None:
-    features = [name for name, on in (("edge-receipt-record-v1", receipt_feature), (feature, activity_feature)) if on]
-    captured = _advertise(tmp_path, monkeypatch, *features)
+    asked = record_receipt
+    captured = _advertise(tmp_path, monkeypatch)
     sent = _sent_envelope(tmp_path, captured, record_receipt=record_receipt)
     # The activity rides behind the receipt the resident queues, so a daemon
     # that records the receipt itself also records the activity.

@@ -78,7 +78,6 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     """Record one drained answer the way the daemon records its own."""
 
     from ..cli.commands_support_command_activity import hook_post_succeeded
-    from ..native_decision_receipt import validate_native_decision_receipt
     from .hook_managed_install_state import _hook_harness_is_unmanaged
     from .hook_worker_native import _record_native_pre_activity
     from .mcp_relay_evidence_drain import is_mcp_relay_evidence, record_mcp_relay_evidence
@@ -119,9 +118,7 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     # A hook the resident held through a policy update's fence reports its wait.
     record_direct_fence_wait(host.store, record.get("fence_wait_ms"))
     # Activity may cite only a receipt the store will accept, which the resident checks on its page.
-    checked = record.get("receipt_valid")
-    if not isinstance(checked, bool):  # An older resident's page carries no check.
-        checked = validate_native_decision_receipt(receipt, guard_home=host.guard_home) is not None
+    checked = record.get("receipt_valid") is True
     accepted = dict(receipt) if checked and isinstance(receipt, dict) else None
     if accepted is not None:
         submit = getattr(host.activity_writer, "submit_native_decision_receipt", None)

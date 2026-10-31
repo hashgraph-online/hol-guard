@@ -21,6 +21,7 @@ RETIRED_PATHS = (
     "scripts/ci/record_contained_unittest_parity.py",
     "scripts/ci/record_content_sensitivity_parity.py",
     "scripts/ci/record_continuation_authority_parity.py",
+    "scripts/ci/record_developer_inspection_parity.py",
     "scripts/ci/record_environment_secret_dump_vectors.py",
     "scripts/ci/record_hook_approval_context_vectors.py",
     "scripts/ci/record_hook_copilot_settle_vectors.py",
@@ -29,6 +30,9 @@ RETIRED_PATHS = (
     "scripts/ci/record_shell_helper_vectors.py",
     "scripts/ci/record_shell_request_authority_parity.py",
     "scripts/ci/record_skill_directory_portable_parity.py",
+    "scripts/ci/sfrs_developer_section.py",
+    "scripts/ci/sfrs_fs_vectors.py",
+    "scripts/ci/sfrs_graph_cases.py",
     "scripts/record_claude_permission_text_vectors.py",
     "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
     "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py",
@@ -44,6 +48,10 @@ RETIRED_PATHS = (
     "src/codex_plugin_scanner/guard/runtime/command_candidate_common.py",
     "src/codex_plugin_scanner/guard/runtime/command_segment_parsing.py",
     "src/codex_plugin_scanner/guard/runtime/restricted_credential_patterns.py",
+    "src/codex_plugin_scanner/guard/native_developer_inspection_authority.py",
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py",
+    "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
 )
 RETIRED_GITHUB_PREFIXES = ("rust-required-",)
 RETIRED_WORKFLOW_PREFIXES = ("tmp-",)

@@ -30,12 +30,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
-from codex_plugin_scanner.guard.runtime.secret_sensitivity import (
-    SecretContentMatch,
-    SecretPathMatch,
-    classify_secret_content,
-    classify_secret_path,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.artifact_risk_support import artifact_risk_signals, artifact_risk_signals_typed
 from tests.incident_context_support import build_incident_context
@@ -531,118 +525,6 @@ def test_incident_context_keeps_context_for_generic_config_file_names():
     )
 
     assert "workspace/global_tools/config.toml" in incident["trigger_summary"]
-
-
-def test_secret_file_path_classifier_stays_precise(tmp_path):
-    env_match = classify_secret_path(".env")
-    env_local_match = classify_secret_path("/workspace/.env.local")
-    aws_match = classify_secret_path("~/.aws/credentials", home_dir=tmp_path)
-
-    assert env_match is not None
-    assert env_match.path_class == "local .env file"
-    assert env_local_match is not None
-    assert env_local_match.path_class == "local .env file"
-    assert aws_match is not None
-    assert aws_match.path_class == "AWS shared credentials file"
-    assert aws_match.normalized_path.endswith(".aws/credentials")
-    assert classify_secret_path("README.md") is None
-    assert classify_secret_path(".envrc") is None
-
-
-@pytest.mark.parametrize(
-    ("path", "family"),
-    [
-        (".env", "local .env file"),
-        (".npmrc", "npm registry credentials"),
-        (".pypirc", "Python package credentials"),
-        ("~/.aws/" + "credentials", "AWS shared credentials file"),
-        ("~/.ssh/id_rsa", "SSH private key"),
-        ("~/.ssh/id_ed25519", "SSH private key"),
-        ("~/.gnupg/private-keys-v1.d/example.key", "GnuPG key material"),
-        ("~/.docker/" + "config.json", "Docker client config"),
-        ("~/.kube/config", "Kubernetes config"),
-        (".terraform.tfvars", "Terraform variable secrets"),
-    ],
-)
-def test_secret_sensitivity_module_classifies_planned_secret_path_families(tmp_path, path, family):
-    match = classify_secret_path(path, home_dir=tmp_path)
-
-    assert isinstance(match, SecretPathMatch)
-    assert match.family == family
-    assert match.path_class == family
-    assert match.path == match.normalized_path
-    assert match.sensitivity in {"high", "critical"}
-    assert match.reason
-
-
-@pytest.mark.parametrize(
-    ("path", "family"),
-    [
-        ("wallet.key", "wallet/private-key file"),
-        ("private-key.pem", "wallet/private-key file"),
-        ("operator-private-key.txt", "wallet/private-key file"),
-    ],
-)
-def test_secret_sensitivity_module_classifies_wallet_private_key_filenames(tmp_path, path, family):
-    match = classify_secret_path(path, home_dir=tmp_path)
-
-    assert isinstance(match, SecretPathMatch)
-    assert match.family == family
-    assert match.sensitivity == "critical"
-
-
-@pytest.mark.parametrize(
-    ("content", "family"),
-    [
-        ("//registry.npmjs.org/:_authToken=" + "n" * 36, "npm auth token"),
-        ('//registry.npmjs.org/:_authToken="' + "n" * 36 + '"', "npm auth token"),
-        ('MY_NPM_TOKEN="' + "n" * 36 + '"', "npm auth token"),
-        ("token=" + "ghp_" + "A" * 36, "GitHub token"),
-        ("token=" + "github_pat_" + "A" * 22 + "_" + "B" * 59, "GitHub token"),
-        ("aws_access_key_id=" + "AKIA" + "A" * 16, "AWS access key"),
-        ("OPENAI_API_KEY=" + "sk-" + "A" * 32, "OpenAI API key"),
-        ("OPENAI_API_KEY=sk-proj-" + "A" * 24 + "-test-" + "B" * 24, "OpenAI API key"),
-        ("ANTHROPIC_API_KEY=" + "sk-ant-api03-" + "A" * 60, "Anthropic API key"),
-        ("HEDERA_PRIVATE_KEY=" + "a" * 64, "Hedera private key"),
-        ('HEDERA_PRIVATE_KEY="' + "a" * 64 + '"', "Hedera private key"),
-        (("-----BEGIN " + "") + "PRIVATE KEY-----\nredacted\n-----END " + "PRIVATE KEY-----", "PEM private key"),
-        ("Authorization: Bearer " + "A" * 32, "generic bearer token"),
-        ("Authorization: Bearer " + "A" * 24 + "-test-" + "B" * 24, "generic bearer token"),
-        ('TOKEN="' + "A" * 24 + '"', "credential assignment"),
-        ("auth_token='" + "B" * 24 + "'", "credential assignment"),
-        ('{"password": "' + "C" * 24 + '"}', "credential assignment"),
-        ("MY_TOKEN=fixture-token", "credential assignment"),
-        ('MY_NPM_TOKEN="fixture-token"', "credential assignment"),
-        ('{"OPENAI_API_KEY": "fixture-key"}', "credential assignment"),
-    ],
-)
-def test_secret_content_classifier_detects_planned_secret_content(content, family):
-    matches = classify_secret_content(content)
-
-    assert any(isinstance(match, SecretContentMatch) and match.family == family for match in matches)
-
-
-def test_secret_content_classifier_does_not_upgrade_npm_token_prose():
-    matches = classify_secret_content("Docs say npm token: use an environment variable instead.")
-
-    assert not any(match.family == "npm auth token" for match in matches)
-
-
-@pytest.mark.parametrize(
-    "content",
-    [
-        "API_TOKEN=example-token",
-        "password=dummy-value",
-        "token=definitely-invalid",
-        "secret=fake-value",
-        "auth_token=canary-token",
-        "OPENAI_API_KEY=sk-test",
-        "https://api.example.test/health?token=definitely-invalid",
-        "Authorization: Bearer definitely-invalid",
-    ],
-)
-def test_secret_content_classifier_suppresses_sample_token_values(content):
-    assert classify_secret_content(content) == ()
 
 
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_null():

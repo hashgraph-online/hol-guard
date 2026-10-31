@@ -12,10 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
-from codex_plugin_scanner.guard.runtime.actions import (
-    normalize_harness_payload,
-    normalize_zcode_hook_payload,
-)
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 from .zcode_remediation_reference import (
     _AUTHORITY_BLOCK_REMEDIATION,
@@ -42,7 +39,9 @@ def _fixture(name: str) -> dict[str, object]:
 
 class TestZCodeHookPayload:
     def test_normalize_zcode_hook_payload_builds_shell_envelope(self, tmp_path: Path) -> None:
-        envelope = normalize_zcode_hook_payload(
+        envelope = normalize_harness_payload(
+            "zcode",
+            "",
             _fixture("pretooluse_bash.json"),
             workspace=tmp_path / "workspace",
             home_dir=tmp_path,

@@ -28,13 +28,6 @@ from pathlib import Path
 from typing import Literal
 
 WORKSPACE_SNAPSHOT_FEATURE = "workspace-snapshot-v1"
-WORKSPACE_SECRETS_FEATURE = "workspace-snapshot-secrets-v1"
-WORKSPACE_SKILLS_FEATURE = "workspace-snapshot-skills-v1"
-WORKSPACE_HOOKS_FEATURE = "workspace-snapshot-hooks-v1"
-WORKSPACE_PLUGINS_FEATURE = "workspace-snapshot-plugins-v1"
-WORKSPACE_WORKFLOWS_FEATURE = "workspace-snapshot-workflows-v1"
-WORKSPACE_EDITOR_TASKS_FEATURE = "workspace-snapshot-editor-tasks-v1"
-WORKSPACE_INSTRUCTIONS_FEATURE = "workspace-snapshot-instructions-v1"
 WORKSPACE_SNAPSHOT_COMMAND = "workspace-snapshot"
 WORKSPACE_SNAPSHOT_SCHEMA = "guard.workspace-snapshot.v1"
 
@@ -92,19 +85,9 @@ def workspace_snapshot(
 
     ``secret_key`` is the per-install secret that keys secret fingerprints. It
     goes to the native process on stdin only and is never part of a result.
-
-    A native runtime without the secret scan raises
-    ``workspace_snapshot_secrets_unavailable`` so the caller can fall back to a
-    plain snapshot and report the detector as not run. ``skills`` runs the
-    skill content rules; a runtime without them raises
-    ``workspace_snapshot_skills_unavailable`` the same way, and ``hooks``,
-    the project hook check, raises ``workspace_snapshot_hooks_unavailable``.
-    ``plugins``, the agent plugin check, raises
-    ``workspace_snapshot_plugins_unavailable``, ``workflows``, the workflow
-    check, ``workspace_snapshot_workflows_unavailable``, ``editor_tasks``, the
-    editor task check, ``workspace_snapshot_editor_tasks_unavailable``, and
-    ``instructions``, the agent instruction file check,
-    ``workspace_snapshot_instructions_unavailable``.
+    ``skills``, ``hooks``, ``plugins``, ``workflows``, ``editor_tasks`` and
+    ``instructions`` run the skill content rules and the project hook, agent
+    plugin, workflow, editor task and agent instruction file checks.
     """
 
     request: dict[str, object] = {"root": str(root), "mode": mode}
@@ -124,33 +107,14 @@ def workspace_snapshot(
         request["editor_tasks"] = True
     if instructions:
         request["instructions"] = True
-    reply = _native_request(
-        request,
-        needs_secrets=secrets,
-        needs_skills=skills,
-        needs_hooks=hooks,
-        needs_plugins=plugins,
-        needs_workflows=workflows,
-        needs_editor_tasks=editor_tasks,
-        needs_instructions=instructions,
-    )
+    reply = _native_request(request)
     if reply.get("ok") is not True:
         error = reply.get("error")
         raise WorkspaceSnapshotError(error if isinstance(error, str) and error else "workspace_snapshot_failed")
     return _parse_result(reply.get("result"))
 
 
-def _native_request(
-    request: dict[str, object],
-    *,
-    needs_secrets: bool = False,
-    needs_skills: bool = False,
-    needs_hooks: bool = False,
-    needs_plugins: bool = False,
-    needs_workflows: bool = False,
-    needs_editor_tasks: bool = False,
-    needs_instructions: bool = False,
-) -> dict[str, object]:
+def _native_request(request: dict[str, object]) -> dict[str, object]:
     import os
 
     from .codex_hook_launch_runtime import run_isolated_hook_process
@@ -165,20 +129,6 @@ def _native_request(
         or WORKSPACE_SNAPSHOT_FEATURE not in status.capabilities.features
     ):
         raise WorkspaceSnapshotError("workspace_snapshot_native_unavailable")
-    if needs_secrets and WORKSPACE_SECRETS_FEATURE not in status.capabilities.features:
-        raise WorkspaceSnapshotError("workspace_snapshot_secrets_unavailable")
-    if needs_skills and WORKSPACE_SKILLS_FEATURE not in status.capabilities.features:
-        raise WorkspaceSnapshotError("workspace_snapshot_skills_unavailable")
-    if needs_hooks and WORKSPACE_HOOKS_FEATURE not in status.capabilities.features:
-        raise WorkspaceSnapshotError("workspace_snapshot_hooks_unavailable")
-    if needs_plugins and WORKSPACE_PLUGINS_FEATURE not in status.capabilities.features:
-        raise WorkspaceSnapshotError("workspace_snapshot_plugins_unavailable")
-    if needs_workflows and WORKSPACE_WORKFLOWS_FEATURE not in status.capabilities.features:
-        raise WorkspaceSnapshotError("workspace_snapshot_workflows_unavailable")
-    if needs_editor_tasks and WORKSPACE_EDITOR_TASKS_FEATURE not in status.capabilities.features:
-        raise WorkspaceSnapshotError("workspace_snapshot_editor_tasks_unavailable")
-    if needs_instructions and WORKSPACE_INSTRUCTIONS_FEATURE not in status.capabilities.features:
-        raise WorkspaceSnapshotError("workspace_snapshot_instructions_unavailable")
     runtime = status.identity.path
     environment = {key: value for key in _CHILD_ENVIRONMENT_KEYS if (value := os.environ.get(key))}
     completed = run_isolated_hook_process(
@@ -260,14 +210,7 @@ def _is_digest(value: object) -> bool:
 
 
 __all__ = [
-    "WORKSPACE_EDITOR_TASKS_FEATURE",
-    "WORKSPACE_HOOKS_FEATURE",
-    "WORKSPACE_INSTRUCTIONS_FEATURE",
-    "WORKSPACE_PLUGINS_FEATURE",
-    "WORKSPACE_SECRETS_FEATURE",
-    "WORKSPACE_SKILLS_FEATURE",
     "WORKSPACE_SNAPSHOT_FEATURE",
-    "WORKSPACE_WORKFLOWS_FEATURE",
     "WorkspaceSnapshot",
     "WorkspaceSnapshotError",
     "workspace_snapshot",

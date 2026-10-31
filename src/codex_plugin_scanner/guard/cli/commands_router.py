@@ -63,6 +63,8 @@ _COMMON_HANDLERS = {
     "install": "_run_guard_install_command",
     "codex-mcp-proxy": "_run_guard_codex_mcp_proxy_command",
     "cursor-mcp-proxy": "_run_guard_cursor_mcp_proxy_command",
+    "cline-mcp-proxy": "_run_guard_cline_mcp_proxy_command",
+    "mcp-proxy": "_run_guard_cline_mcp_proxy_command",
     "opencode-mcp-proxy": "_run_guard_opencode_mcp_proxy_command",
     "copilot-mcp-proxy": "_run_guard_copilot_mcp_proxy_command",
     "hermes-mcp-proxy": "_run_guard_hermes_mcp_proxy_command",
