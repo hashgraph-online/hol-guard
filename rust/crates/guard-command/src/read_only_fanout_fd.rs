@@ -26,7 +26,9 @@
 //!   terminator, so fd appends the file name last and the command the proof
 //!   judges is the command that runs.
 
-use super::{child_listed, without_stderr_merge, MAX_ROOTS};
+use super::{
+    child_listed, child_reads_contents, source_extension, without_stderr_merge, MAX_ROOTS,
+};
 
 /// Options that take a value and cannot move the walk outside the roots.
 ///
@@ -171,6 +173,29 @@ pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
         },
         child,
     })
+}
+
+/// Whether the walk itself is bounded, leaving only the roots to place.
+///
+/// This is the part of the fan-out proof that reads from the line alone, and
+/// the parser asks the same question before it stops calling an `fd` exec a
+/// nested command executor: a shape that fails here has to stay uncertain,
+/// because nothing further along would look at it again.
+pub(crate) fn producer_shape_proven(exec: &FdExec<'_>) -> bool {
+    exec.shape.regular_files_only
+        && (!child_reads_contents(exec.child) || source_extensions_only(&exec.shape.extensions))
+}
+
+/// Whether every `--extension` value names a source file.
+///
+/// fd reads several `--extension` values as a union, so one credential
+/// extension beside a source one widens the walk back to the files a content
+/// reader may not have.
+fn source_extensions_only(extensions: &[&str]) -> bool {
+    !extensions.is_empty()
+        && extensions
+            .iter()
+            .all(|extension| source_extension(extension))
 }
 
 #[cfg(test)]

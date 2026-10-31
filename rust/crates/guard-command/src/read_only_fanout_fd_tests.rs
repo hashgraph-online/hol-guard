@@ -1,4 +1,4 @@
-use super::fd_exec;
+use super::{fd_exec, producer_shape_proven};
 
 fn arguments(text: &str) -> Vec<String> {
     text.split_whitespace().map(str::to_owned).collect()
@@ -119,4 +119,47 @@ fn more_roots_than_the_fan_out_bound_are_not_read() {
 #[test]
 fn a_trailing_stderr_merge_is_not_part_of_the_child() {
     assert_eq!(shape("-t f -e ts -x cat 2>&1").3, ["cat"]);
+}
+
+#[test]
+fn a_walk_the_shape_proof_refuses_stays_a_nested_command_executor() {
+    // The parser stops calling a proven `fd` exec a nested command executor so
+    // the fan-out proof can see it. Anything this function refuses never
+    // reaches that proof, so it has to keep the uncertain model instead.
+    for text in [
+        // No `--type f`, so the result may hold a symlink or a directory.
+        "-e ts -x cat",
+        "-e ts . app-portal -x cat",
+        // A type union wider than regular files.
+        "-t f -t l -e ts -x cat",
+        // A content reader with no extension bound, or one off the list.
+        "-t f -x cat",
+        "-t f -e env -x cat",
+        "-t f -e ts -e env -x cat",
+    ] {
+        let words = arguments(text);
+        let exec = fd_exec(&words).unwrap_or_else(|| panic!("{text}"));
+        assert!(!producer_shape_proven(&exec), "{text}");
+        assert!(
+            crate::parser_executables::is_nested_command_executor("fd", &words),
+            "{text}"
+        );
+    }
+
+    for text in [
+        "-t f -e ts -x cat",
+        "-t f -e md -e txt . docs -x head",
+        // `wc` and `stat` print counts and metadata, so they need no
+        // extension bound of their own.
+        "-t f -x wc -l",
+        "-t f -x stat",
+    ] {
+        let words = arguments(text);
+        let exec = fd_exec(&words).unwrap_or_else(|| panic!("{text}"));
+        assert!(producer_shape_proven(&exec), "{text}");
+        assert!(
+            !crate::parser_executables::is_nested_command_executor("fd", &words),
+            "{text}"
+        );
+    }
 }

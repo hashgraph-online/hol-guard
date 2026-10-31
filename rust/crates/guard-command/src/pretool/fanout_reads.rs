@@ -27,26 +27,11 @@
 use super::safe_reads::{bounded_read_target, verified_path_context};
 use super::segment_proof::exact_safe_segment_with_context;
 use super::PathContext;
-use crate::read_only_fanout::{self as fanout, FindShape};
+use crate::read_only_fanout::{self as fanout, source_extension, FindShape};
 use crate::{CanonicalCommandV1, CommandSegmentV1};
-
-/// Source and documentation extensions a content reader may fan out over.
-/// find's `*` also matches a leading dot, so a denylist of secret extensions
-/// would still reach `.env.local` through `*.local`; configuration formats
-/// such as JSON and YAML are left out because they often hold keys.
-const SOURCE_EXTENSIONS: [&str; 46] = [
-    "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "py", "pyi", "rs", "go", "java", "kt",
-    "kts", "scala", "c", "h", "cc", "cpp", "hpp", "cs", "rb", "php", "swift", "m", "dart", "lua",
-    "ex", "exs", "hs", "md", "mdx", "rst", "txt", "html", "htm", "css", "scss", "sass", "less",
-    "vue", "svelte", "sql", "graphql", "proto",
-];
 
 fn plain_extension_pattern(pattern: &str) -> bool {
     pattern.strip_prefix("*.").is_some_and(source_extension)
-}
-
-fn source_extension(extension: &str) -> bool {
-    SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
 }
 
 fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
@@ -198,31 +183,10 @@ pub(super) fn safe_fd_exec(
     plain(segment)
         && words_as_written(segment)
         && fanout::fd::fd_exec(&segment.arguments).is_some_and(|exec| {
-            fd_producer_allowed(&exec.shape, exec.child, context)
+            fanout::fd::producer_shape_proven(&exec)
+                && roots_contained(&exec.shape.roots, context)
                 && child_proven(model, segment, exec.child, context)
         })
-}
-
-/// Whether every `--extension` value names a source file.
-///
-/// fd reads several `--extension` values as a union, so one credential
-/// extension beside a source one widens the walk back to the files the
-/// content reader may not have.
-fn source_extensions_only(extensions: &[&str]) -> bool {
-    !extensions.is_empty()
-        && extensions
-            .iter()
-            .all(|extension| source_extension(extension))
-}
-
-fn fd_producer_allowed(
-    shape: &fanout::fd::FdShape<'_>,
-    child: &[String],
-    context: PathContext<'_>,
-) -> bool {
-    shape.regular_files_only
-        && (!fanout::child_reads_contents(child) || source_extensions_only(&shape.extensions))
-        && roots_contained(&shape.roots, context)
 }
 
 fn previous_find<'a>(
