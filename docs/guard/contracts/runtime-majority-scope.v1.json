@@ -645,7 +645,6 @@
           "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_prompts.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifact_policy.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifacts.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py",

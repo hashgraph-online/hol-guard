@@ -11,14 +11,14 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
-from ..action_lattice import normalize_guard_action
-from ..config import GuardConfig
-from ..harness_posture import harness_posture_override
-from ..models import GuardAction, GuardArtifact
-from ..native_hook_artifact_compose import native_hook_compose
-from ..native_hook_artifact_facts import native_hook_artifact_facts
-from ..protection_events import record_protection_event
-from .commands_support_runtime_resolution import _canonical_harness_name
+from codex_plugin_scanner.guard.action_lattice import normalize_guard_action
+from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _canonical_harness_name
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.harness_posture import harness_posture_override
+from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact
+from codex_plugin_scanner.guard.native_hook_artifact_compose import native_hook_compose
+from codex_plugin_scanner.guard.protection_events import record_protection_event
+from tests.native_hook_artifact_facts_support import native_hook_artifact_facts
 
 
 def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardAction | None:

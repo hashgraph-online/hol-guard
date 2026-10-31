@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_artifact_policy_action
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime import restricted_pytest as restricted_pytest_module
 from codex_plugin_scanner.guard.runtime.restricted_pytest import (
@@ -33,6 +32,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action
 
 
 def test_uncontained_pytest_is_repository_execution_requiring_sandbox(tmp_path: Path) -> None:
