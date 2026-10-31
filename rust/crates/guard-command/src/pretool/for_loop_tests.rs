@@ -448,6 +448,10 @@ fn a_quoted_pipe_in_a_body_word_is_not_a_pipeline_stage() {
             "for n in 1 2; do gh pr view \"$n\" --json a --jq '.a | select(.b==\"x\")'; done",
             "gh pr view \"1\" --json a --jq '.a | select(.b==\"x\")'; gh pr view \"2\" --json a --jq '.a | select(.b==\"x\")'",
         ),
+        (
+            "for n in 1 2; do jq \"[.[] | select(.a==\\\"x\\\")]\" \"$n.json\"; done",
+            "jq \"[.[] | select(.a==\\\"x\\\")]\" \"1.json\"; jq \"[.[] | select(.a==\\\"x\\\")]\" \"2.json\"",
+        ),
     ] {
         assert_eq!(
             super::for_loop_unroll::unroll(looped).as_deref(),
