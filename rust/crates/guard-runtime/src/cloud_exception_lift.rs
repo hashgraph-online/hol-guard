@@ -1,6 +1,5 @@
 //! An approved Guard Cloud exception lifts the signed bundle's own rules for the
-//! target it covers (`cloud_exception_lifting_policy_bundle`,
-//! `cloud_exceptions.py`).
+//! target it covers.
 //!
 //! The policy lookup asks once per probe, against the bundle stored in the
 //! same connection it reads rows from, and leaves the bundle's blocks and
@@ -73,8 +72,8 @@ struct Exception<'a> {
     raw: &'a Map<String, Value>,
 }
 
-/// `cloud_exception_lifting_policy_bundle`: whether an active exception covers
-/// the target. When an id repeats, the last entry wins.
+/// Whether an active exception covers the target. When an id repeats, the
+/// last entry wins, as Guard's own exception listing dedupes them.
 fn covered(bundle: &Map<String, Value>, target: &LiftTarget<'_>) -> bool {
     let Some(Value::Array(items)) = bundle.get("cloudExceptions") else {
         return false;
@@ -121,7 +120,9 @@ fn parse(raw: &Map<String, Value>) -> Option<Exception<'_>> {
     })
 }
 
-/// `_cloud_exception_matches`.
+/// Whether the exception names this harness and every target it names is the
+/// one asked about. The scope's own target must be named, and a Cloud workspace
+/// id must be the workspace that signed the bundle.
 fn matches(
     exception: &Exception<'_>,
     target: &LiftTarget<'_>,
@@ -138,7 +139,7 @@ fn matches(
     let mut publisher = non_empty(raw.get("publisher"));
     let working_directory = non_empty(raw.get("workingDirectory"));
     let workspace_id = non_empty(raw.get("workspaceId"));
-    // `_cloud_exception_legacy_scope_field`: an id of `artifact:<id>` or
+    // A legacy id of `artifact:<id>` or
     // `publisher:<name>` names its target.
     if let Some(value) = exception
         .id
