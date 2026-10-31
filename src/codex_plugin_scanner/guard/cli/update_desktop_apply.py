@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -27,6 +28,10 @@ from .update_desktop_core import (
 from .update_release_candidates import live_release_candidates
 
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
+# Guard Desktop's supervisor respawns a retired daemon on its own schedule,
+# which has been observed to take close to half a minute for a onefile Core.
+_DESKTOP_RESPAWN_WAIT_SECONDS = 60.0
+_DESKTOP_RESPAWN_POLL_SECONDS = 0.5
 _APPLY_FAILURE_FALLBACK = "HOL Guard could not apply the signed Core update. The installed version stays in place."
 _APPLY_FAILURE_MESSAGES = {
     "desktop_core_download_failed": (
@@ -243,17 +248,22 @@ def refresh_desktop_core_daemon(
 
     try:
         retire_all_guard_daemons_for_home(context.guard_home)
-        if not guard_daemon_retirement_is_complete(context.guard_home):
-            # The Guard Desktop supervisor can respawn a retired daemon faster
-            # than retirement completes. When the respawn already serves the
-            # applied version, keeping it is success instead of a failed update.
+        # The Guard Desktop supervisor can start its own respawn before
+        # retirement completes, and that respawn can take a while to answer.
+        # Wait for one of two outcomes: retirement completes and this process
+        # launches the daemon, or the respawn serves the applied version and
+        # is kept. Only when neither happens in time is the refresh a failure.
+        deadline = time.monotonic() + _DESKTOP_RESPAWN_WAIT_SECONDS
+        while not guard_daemon_retirement_is_complete(context.guard_home):
             retained = retained_desktop_owner_payload(
                 context.guard_home,
                 minimum_version=minimum_version,
             )
             if retained is not None:
                 return retained, retained_desktop_owner_note(retained.get("daemon_version"))
-            return None, "Could not stop the running Guard daemon before launching the updated Core."
+            if time.monotonic() >= deadline:
+                return None, "Could not stop the running Guard daemon before launching the updated Core."
+            time.sleep(_DESKTOP_RESPAWN_POLL_SECONDS)
         url = ensure_guard_daemon_after_update(
             context.guard_home,
             home_dir=context.home_dir,
