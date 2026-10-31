@@ -26,7 +26,10 @@
 //! reply tells the caller it is there.
 //!
 //! Only the options that pick the loopback endpoint are admitted, and each
-//! must carry its value on the line. A credential (`-a`, `--pass`, `--user`),
+//! must carry its value in the word after it, which is the only spelling
+//! redis-cli reads. It compares every option word whole, so `-p6379` and
+//! `-p=6379` name no port to it: both reach the unrecognised-option path and
+//! exit before a connection is opened. A credential (`-a`, `--pass`, `--user`),
 //! a connection URI (`-u`), a socket path (`-s`), a certificate (`--cacert`
 //! and its neighbours) and the repeating or scripting modes (`-r`, `-i`,
 //! `-x`, `--eval`, `--cluster`, `--pipe`, `--rdb`, `--scan`) are each a reason
@@ -44,25 +47,17 @@ pub(super) fn safe_liveness_probe(basename: &str, arguments: &[String]) -> bool 
     verb == "ping" && loopback_options(options)
 }
 
-/// The option words before the verb, read in pairs.
+/// The option words before the verb, each read with the word after it.
 fn loopback_options(words: &[String]) -> bool {
     let mut remaining = words;
     while let Some((option, rest)) = remaining.split_first() {
-        let (name, inline) = match option.split_once('=') {
-            Some((name, value)) => (name, Some(value)),
-            None => (option.as_str(), None),
-        };
-        if !matches!(name, "-h" | "-p" | "-n" | "-t") {
+        if !matches!(option.as_str(), "-h" | "-p" | "-n" | "-t") {
             return false;
         }
-        let (value, tail) = match inline {
-            Some(value) => (value, rest),
-            None => match rest.split_first() {
-                Some((value, tail)) => (value.as_str(), tail),
-                None => return false,
-            },
+        let Some((value, tail)) = rest.split_first() else {
+            return false;
         };
-        if !option_value_inert(name, value) {
+        if !option_value_inert(option, value) {
             return false;
         }
         remaining = tail;

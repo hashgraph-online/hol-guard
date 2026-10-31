@@ -9,13 +9,11 @@ fn a_loopback_ping_is_the_whole_reading() {
     for text in [
         "ping",
         "-p 6379 ping",
-        "-p6379 ping",
         "-h 127.0.0.1 ping",
         "-h localhost -p 6380 ping",
         "-h ::1 -p 6379 -n 3 ping",
         "-t 2 ping",
         "-t 0.5 ping",
-        "-h=127.0.0.1 -p=6379 ping",
     ] {
         assert!(safe_liveness_probe("redis-cli", &arguments(text)), "{text}");
     }
@@ -106,6 +104,24 @@ fn an_option_without_its_value_or_with_a_word_for_one_proves_nothing() {
         "redis-cli",
         &arguments("-h 127.0.0.1")
     ));
+}
+
+/// redis-cli compares each option word whole, so a value written onto its
+/// option names no endpoint: the word reaches the unrecognised-option path.
+#[test]
+fn a_value_written_onto_its_option_is_not_a_spelling_redis_cli_reads() {
+    for text in [
+        "-p6379 ping",
+        "-h127.0.0.1 ping",
+        "-p=6379 ping",
+        "-h=127.0.0.1 ping",
+        "-h=127.0.0.1 -p=6379 ping",
+    ] {
+        assert!(
+            !safe_liveness_probe("redis-cli", &arguments(text)),
+            "{text}"
+        );
+    }
 }
 
 #[test]

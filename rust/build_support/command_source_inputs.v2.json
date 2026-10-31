@@ -452,7 +452,6 @@
       "src/pretool/listing_reads.rs",
       "src/pretool/listing_temporary.rs",
       "src/pretool/liveness_probes.rs",
-      "src/pretool/liveness_probes_tests.rs",
       "src/pretool/lockfile_install.rs",
       "src/pretool/lockfile_install_scan.rs",
       "src/pretool/lookup_reads.rs",
