@@ -153,3 +153,21 @@ fn the_last_entry_for_an_exception_id_wins() {
     ));
     assert!(lifted(vec![expired, exception(json!({}))], &target));
 }
+
+#[test]
+fn only_a_validated_bundle_primes_the_exception_cache() {
+    let cache = guard_contracts::CloudExceptionBundle::default();
+    prime_exception_bundle(&cache, None);
+    assert!(
+        cache.get().is_none(),
+        "no bundle leaves the store read to the lookup"
+    );
+
+    let bundle = json!({"exceptions": []}).as_object().cloned();
+    prime_exception_bundle(&cache.clone(), bundle.clone());
+    assert_eq!(
+        cache.get(),
+        Some(&bundle),
+        "clones share one validated bundle"
+    );
+}

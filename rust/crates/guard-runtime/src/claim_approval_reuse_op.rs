@@ -17,7 +17,7 @@ use guard_policy_snapshot::digest_bytes;
 use serde_json::Value;
 use std::borrow::Cow;
 
-use crate::policy_bundle_store_identities::{lookup_bundle_identities, Identity};
+use crate::policy_bundle_store_identities::{lookup_bundle_authority, Identity};
 
 use super::context_digest_json::write_canonical_json_with_limit;
 
@@ -76,10 +76,8 @@ fn bundle_identities<'a>(
         return None;
     }
     let now = guard_contracts::canonical_utc_timestamp(&request.now)?;
-    lookup_bundle_identities(connection, &now)
-        .ok()
-        .flatten()
-        .map(Cow::Owned)
+    let (identities, _bundle) = lookup_bundle_authority(connection, &now).ok().flatten()?;
+    (!identities.is_empty()).then_some(Cow::Owned(identities))
 }
 
 fn evaluate(request: &ClaimApprovalReuseDecisionsRequestV1) -> Result<Value, String> {

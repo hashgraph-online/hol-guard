@@ -118,13 +118,13 @@ pub(crate) fn saved_at<'c>(
     // harness: with none of those, the identities change nothing here. They
     // are derived last, so a store the resident cannot verify never pays for
     // the bundle's signature and payload checks.
-    let bundle_identities = if shape.bundle_row_for(harness)? {
-        cached_bundle_authority(connection, &now)
-            .ok_or(SAVED_REMOTE)?
-            .0
+    let (bundle_identities, bundle) = if shape.bundle_row_for(harness)? {
+        cached_bundle_authority(connection, &now).ok_or(SAVED_REMOTE)?
     } else {
-        Vec::new()
+        (Vec::new(), None)
     };
+    let exception_bundle = guard_contracts::CloudExceptionBundle::default();
+    crate::cloud_exception_lift::prime_exception_bundle(&exception_bundle, bundle);
     Ok(Some(Saved {
         connection,
         store_path: Path::new(guard_home)
@@ -138,7 +138,7 @@ pub(crate) fn saved_at<'c>(
         key_b64: Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key)),
         key_id: key.key_id.clone(),
         bundle_identities,
-        exception_bundle: Default::default(),
+        exception_bundle,
     }))
 }
 

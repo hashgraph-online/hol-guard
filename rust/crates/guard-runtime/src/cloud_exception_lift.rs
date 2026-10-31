@@ -56,6 +56,19 @@ pub(crate) fn stored_exception_bundle(
     cached_bundle_authority(connection, now).and_then(|(_, bundle)| bundle)
 }
 
+/// Hands a lookup's exception cache the bundle its caller validated at the
+/// lookup's own time while deriving the bundle identities, so the lookup does
+/// not check the same signature again. Without one the cache still reads the
+/// store on first use.
+pub(crate) fn prime_exception_bundle(
+    cache: &guard_contracts::CloudExceptionBundle,
+    bundle: Option<Map<String, Value>>,
+) {
+    if let Some(bundle) = bundle {
+        let _ = cache.set(Some(bundle));
+    }
+}
+
 /// Whether an active exception in `bundle` covers `target`.
 pub(crate) fn cloud_exception_covers(
     bundle: Option<&Map<String, Value>>,
