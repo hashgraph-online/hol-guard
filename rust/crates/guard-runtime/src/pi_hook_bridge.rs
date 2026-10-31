@@ -37,7 +37,7 @@ use crate::codex_hook_bridge_direct::{
     direct_answer_reporting, parse_hook_query, DirectHarness, OMP, PI,
 };
 use crate::codex_hook_bridge_direct_resident::DirectMiss;
-use crate::hook_direct::contained::{native_sink, NativeSink};
+use crate::hook_direct::contained::{native_sink, unprojected_sink_command, NativeSink};
 
 pub(crate) const BRIDGE_COMMAND: &str = "pi-hook-bridge";
 pub(crate) const BRIDGE_FEATURE: &str = "pi-hook-bridge-v1";
@@ -136,8 +136,11 @@ pub(crate) fn reply(
 
 /// `answer` marked for the runtime's own sink when it is a sandbox
 /// requirement for a `bash` call whose shape `native` reproduces, from the
-/// workspace and home the extension named. Any other answer, or one the
-/// bridge cannot read, is relayed as sent.
+/// workspace and home the extension named. The shape is read as the Codex
+/// bridge reads it: a call with its own `cwd` argument as that directory's
+/// `cd` form, and a projected call (a virtualenv activation, a trailing
+/// group or a home-spelled launcher) as the text the verdict answered for.
+/// Any other answer, or one the bridge cannot read, is relayed as sent.
 fn marked(query: &str, data: &str, answer: String, native: NativeSink) -> String {
     let mark = || {
         let Value::Object(mut response) = serde_json::from_str(&answer).ok()? else {
@@ -159,7 +162,7 @@ fn marked(query: &str, data: &str, answer: String, native: NativeSink) -> String
             None => std::env::var("HOME").ok()?,
         };
         let reviewed = Value::Object(response.clone());
-        native(&reviewed, input, &workspace, &home)?;
+        unprojected_sink_command(&reviewed, input, &workspace, &home, native)?;
         response.insert(NATIVE_SINK_FIELD.to_owned(), Value::Bool(true));
         serde_json::to_string(&response).ok()
     };

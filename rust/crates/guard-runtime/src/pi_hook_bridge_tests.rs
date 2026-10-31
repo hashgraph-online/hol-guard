@@ -226,3 +226,42 @@ fn a_sandbox_requirement_the_runtime_sink_runs_is_marked_for_it() {
     );
     assert_eq!(marked(QUERY, call, "not json".to_owned(), runs), "not json");
 }
+
+#[test]
+fn an_oh_my_pi_directory_argument_is_judged_as_its_cd_form() {
+    let root = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
+    let workspace = std::fs::canonicalize(root.path()).unwrap();
+    std::fs::create_dir(workspace.join("sub")).unwrap();
+    let query = format!(
+        "guard-home=%2Ftmp%2Fg&workspace={}&home=%2Ftmp",
+        workspace.display()
+    );
+    let required = json!({
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": "workspace-contained-v1",
+    })
+    .to_string();
+    let call = json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "bash",
+        "tool_input": { "command": "pytest", "cwd": "sub" },
+    })
+    .to_string();
+    // The sink is asked about the `cd` form, never the argument itself.
+    let cd_form: NativeSink = |_, input, workspace, _| {
+        let expected = format!("cd {workspace}/sub && pytest");
+        (!input.contains_key("cwd") && input.get("command") == Some(&json!(expected)))
+            .then(|| "/opt/hol guard/runtime".to_owned())
+    };
+    let marked_answer: Value =
+        serde_json::from_str(&marked(&query, &call, required.clone(), cd_form)).unwrap();
+    assert_eq!(marked_answer[NATIVE_SINK_FIELD], json!(true));
+    // A directory the sink refuses keeps Guard's own sink.
+    let missing = call.replace("\"sub\"", "\"missing\"");
+    assert_eq!(
+        marked(&query, &missing, required.clone(), cd_form),
+        required
+    );
+}
