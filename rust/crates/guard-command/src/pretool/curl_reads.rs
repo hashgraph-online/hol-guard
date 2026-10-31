@@ -175,10 +175,13 @@ pub(crate) fn proven_read_segment(
 /// a projected file redirect of its body stays reviewed.
 pub(crate) fn proven_reason_code(model: &crate::CanonicalCommandV1) -> &'static str {
     let fetches = model.segments.iter().any(|segment| {
-        segment
-            .executable
-            .as_deref()
-            .is_some_and(|executable| super::executable_basename(executable) == "curl")
+        segment.executable.as_deref().is_some_and(|executable| {
+            // `http` and `xh` fetch over the same rules; see `super::http_reads`.
+            matches!(
+                super::executable_basename(executable),
+                "curl" | "http" | "xh"
+            )
+        })
     });
     if fetches {
         NETWORK_READ_REASON
@@ -187,7 +190,7 @@ pub(crate) fn proven_reason_code(model: &crate::CanonicalCommandV1) -> &'static 
     }
 }
 
-fn expands(argument: &str) -> bool {
+pub(in crate::pretool) fn expands(argument: &str) -> bool {
     argument.contains(['$', '`', '\n', '\r']) || argument.starts_with('@')
 }
 
@@ -284,7 +287,7 @@ fn long_value_safe(option: &str, value: &str, context: super::PathContext<'_>) -
     }
 }
 
-fn safe_header(value: &str) -> bool {
+pub(in crate::pretool) fn safe_header(value: &str) -> bool {
     let Some((name, _)) = value.split_once(':') else {
         return false;
     };
@@ -296,7 +299,7 @@ fn safe_header(value: &str) -> bool {
         && !CREDENTIAL_TERMS.iter().any(|term| name.contains(term))
 }
 
-fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
+pub(in crate::pretool) fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
     let Some(raw) = as_curl_reads_it(raw) else {
         return false;
     };

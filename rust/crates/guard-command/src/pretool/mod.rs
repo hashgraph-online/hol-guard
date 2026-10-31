@@ -52,6 +52,7 @@ mod digest_reads;
 pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
+pub(crate) mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
