@@ -1539,6 +1539,38 @@
    "body": "66d059ccc9a3"
   },
   {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "fn private_directory -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Creates the directory without a POSIX mode; Windows has no mode bits. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "3a2ba7a1a9d0"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "fn set_private_mode -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Leaves the file's ACL as inherited from the protected state root; Windows has no mode bits. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "c3b1ab2206f8"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "pub(super) fn open_without_following(path: &Path) -> io::Result<File>",
+   "verdict": "windows-equivalent",
+   "note": "Opens by path without `O_NOFOLLOW`. The caller already refused a tombstone whose `symlink_metadata` is not a regular file, and the tombstone root is inside the ACL-protected state root, so no other account can swap in a link between the check and the read. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "51989753051d"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "fn sync_directory -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Windows cannot open a directory for `fsync`, so this is a no-op, matching `durable_io.fsync_directory`. The file itself is flushed with `sync_all` before the rename. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "4792471c9913"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/request_context_op.rs",
    "item": "fn admit_owner(owner_uid: Option<u32>) -> Result<(), &'static str>",
    "verdict": "windows-equivalent",

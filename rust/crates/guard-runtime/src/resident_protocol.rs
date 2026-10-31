@@ -100,6 +100,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-policy-snapshot-materialize-v1".into(),
         "native-business-policy-retained-floor-v1".into(),
         "native-business-policy-document-compile-v1".into(),
+        "native-removal-evidence-v1".into(),
         "native-harness-coverage-v1".into(),
         "native-health-snapshot-binding-v1".into(),
         "native-supervisor-verdict-v1".into(),
