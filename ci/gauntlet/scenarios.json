@@ -1113,6 +1113,21 @@
       ]
     },
     {
+      "id": "omp-native-git-bisect-session",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want to find the commit that introduced a regression. Open a bisect session, show me the terms it is using and the session log, then close the session: run each listed command once, in order, from the project directory and tell me what each one printed.",
+      "commands": [
+        "git bisect start",
+        "git bisect terms",
+        "git bisect log",
+        "git bisect reset"
+      ]
+    },
+    {
       "id": "omp-native-git-staged-diff-pathspec",
       "expectation": "allow",
       "oracle": "native-tools",
