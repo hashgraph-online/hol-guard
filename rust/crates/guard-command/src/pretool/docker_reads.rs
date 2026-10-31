@@ -57,6 +57,16 @@
 //! there. A stats reading must say `--no-stream`, because the streaming form
 //! never returns, which is why `logs --follow` is out as well.
 //!
+//! `docker <subcommand> --help` and `docker help <subcommand>` print the
+//! usage page the client holds for that subcommand and exit. They contact no
+//! daemon, resolve no compose project and start nothing, which is why the
+//! text is the same whether or not a daemon is running. The subcommand has to
+//! be one the client itself carries: an unknown first word is handed to a
+//! `docker-<name>` plugin binary, which chooses for itself what `--help`
+//! does. Only plain words may stand in front of the flag, so an option that
+//! moves the client to another daemon or names a compose file keeps its
+//! review even when a help flag follows it.
+//!
 //! Still reviewed:
 //! - any option before the subcommand. `-H`/`--host`, `--context` and
 //!   `--config` move the client to another daemon or configuration, and
@@ -80,6 +90,72 @@
 
 #[path = "docker_logs.rs"]
 mod logs;
+
+/// The subcommands the client carries itself, with the plugins it ships.
+/// A word outside this list is a `docker-<name>` binary of someone else's,
+/// so its usage page is that program's to print.
+const BUILTIN_SUBCOMMANDS: [&str; 60] = [
+    "attach",
+    "build",
+    "builder",
+    "buildx",
+    "commit",
+    "compose",
+    "config",
+    "container",
+    "context",
+    "cp",
+    "create",
+    "diff",
+    "events",
+    "exec",
+    "export",
+    "history",
+    "image",
+    "images",
+    "import",
+    "info",
+    "init",
+    "inspect",
+    "kill",
+    "load",
+    "login",
+    "logout",
+    "logs",
+    "manifest",
+    "network",
+    "node",
+    "pause",
+    "plugin",
+    "port",
+    "ps",
+    "pull",
+    "push",
+    "rename",
+    "restart",
+    "rm",
+    "rmi",
+    "run",
+    "save",
+    "scout",
+    "search",
+    "secret",
+    "service",
+    "stack",
+    "start",
+    "stats",
+    "stop",
+    "swarm",
+    "system",
+    "tag",
+    "top",
+    "trust",
+    "unpause",
+    "update",
+    "version",
+    "volume",
+    "wait",
+];
 
 /// No-value options shared by the container, image, builder and project
 /// listings.
@@ -210,6 +286,10 @@ pub(super) fn safe_docker_arguments(arguments: &[String]) -> bool {
     ) {
         return true;
     }
+    // The usage page the client already holds for one of its own subcommands.
+    if usage_only(&words) {
+        return true;
+    }
     // One container's recorded output, bounded and not followed.
     if let ["logs", rest @ ..] | ["container", "logs", rest @ ..] = words.as_slice() {
         return logs::safe_container_logs(rest);
@@ -233,6 +313,36 @@ pub(super) fn safe_docker_arguments(arguments: &[String]) -> bool {
         _ => return super::docker_start::safe_start_arguments(&words),
     };
     listing_options_safe(listing, rest)
+}
+
+/// A request for a subcommand's usage page: `docker help [subcommand...]`, or
+/// a subcommand path that ends in a help flag. Everything in front of the
+/// flag has to be a plain word, so nothing selects a daemon, a configuration
+/// or a compose file on the way to the text.
+fn usage_only(words: &[&str]) -> bool {
+    let Some((first, rest)) = words.split_first() else {
+        return false;
+    };
+    if *first == "help" {
+        return rest.len() <= 2 && rest.iter().all(|word| plain_subcommand(word));
+    }
+    if !BUILTIN_SUBCOMMANDS.contains(first) {
+        return false;
+    }
+    let Some((flag, named)) = rest.split_last() else {
+        return false;
+    };
+    matches!(*flag, "--help" | "-h")
+        && named.len() <= 2
+        && named.iter().all(|word| plain_subcommand(word))
+}
+
+/// A word that can only name a subcommand: no option, no path and no
+/// character a reference or a template would carry.
+fn plain_subcommand(word: &str) -> bool {
+    !word.is_empty()
+        && !word.starts_with('-')
+        && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
 fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {

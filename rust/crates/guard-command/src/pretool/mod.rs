@@ -129,6 +129,7 @@ mod glob_words;
 mod guard_diagnostics;
 mod guard_names;
 mod help_probes;
+mod helm_usage;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
