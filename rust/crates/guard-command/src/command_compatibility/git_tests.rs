@@ -309,12 +309,75 @@ fn read_plumbing_answers_to_the_porcelain_owner_it_belongs_to() {
             "command.git.diff",
         ),
         ("git diff-tree -r --stat HEAD", "command.git.diff"),
-        ("git range-diff main...HEAD", "command.git.diff"),
         ("git cherry -v main", "command.git.log"),
     ] {
         let matches = observations(command).rule_matches;
         assert_eq!(matches.len(), 1, "{command}");
         assert_eq!(matches[0].rule_id, rule_id, "{command}");
         assert!(!matches[0].uncertainty, "{command}");
+    }
+}
+
+/// A bisect session moves `HEAD` across the history it is searching, so it
+/// has its own owner. Before it had one it fell to the blanket attribution
+/// every unnamed subcommand reaches, which reports each git rule as
+/// uncertain and leaves nothing an approval can settle.
+#[test]
+fn a_bisect_session_carries_its_own_rule() {
+    for command in [
+        "git bisect start",
+        "git bisect start HEAD HEAD~10",
+        "git bisect good",
+        "git bisect bad HEAD",
+        "git bisect skip",
+        "git bisect reset",
+        "git bisect terms",
+        "git bisect replay /tmp/session.log",
+        "git bisect run ./flaky.sh",
+    ] {
+        let result = observations(command);
+        assert_eq!(
+            result
+                .rule_matches
+                .iter()
+                .map(|item| item.rule_id)
+                .collect::<Vec<_>>(),
+            vec!["command.git.bisect"],
+            "{command}"
+        );
+        assert!(
+            result.rule_matches.iter().all(|item| !item.uncertainty),
+            "{command}"
+        );
+    }
+}
+
+/// `git bisect log` prints the session and writes nothing, and the read it
+/// is recognised by is read before any rule is attributed, so naming bisect
+/// does not take that silence away.
+#[test]
+fn printing_a_bisect_session_stays_silent() {
+    assert!(observations("git bisect log").rule_matches.is_empty());
+}
+
+/// Naming bisect narrows only bisect. A subcommand with no owner still
+/// reports every git rule as uncertain, which is what keeps an unmodelled
+/// spelling from passing as a modelled one.
+#[test]
+fn a_subcommand_without_an_owner_still_reaches_every_rule() {
+    for command in ["git notes add -m note", "git replace --list"] {
+        let result = observations(command);
+        assert!(result.rule_matches.len() > 1, "{command}");
+        assert!(
+            result.rule_matches.iter().all(|item| item.uncertainty),
+            "{command}"
+        );
+        assert!(
+            result
+                .rule_matches
+                .iter()
+                .any(|item| item.rule_id == "command.git.bisect"),
+            "{command}"
+        );
     }
 }

@@ -101,7 +101,7 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         .unwrap_or(arguments.len());
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
-                        "diff" | "diff-tree" | "log" | "range-diff" | "show" => !(active_options
+                        "diff" | "diff-tree" | "log" | "show" => !(active_options
                             .iter()
                             .any(|argument| argument == "--no-ext-diff")
                             && active_options

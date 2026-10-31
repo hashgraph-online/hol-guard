@@ -8,13 +8,14 @@ import platform
 import stat
 import subprocess
 from pathlib import Path
+from typing import cast
 
 from .acl import (
+    _native_answer,
+    _native_deadline,
     _PathSurface,
     _run_windows_acl_payload,
     _verify_macos_surface,
-    _windows_filesystem_chain,
-    _windows_result,
 )
 
 
@@ -51,24 +52,20 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
         surface = _PathSurface("managed-file", path, False, Path(path.anchor))
         return _verify_macos_surface(surface, expected_uid=0, cache={}).healthy
     if resolved_system == "Windows":
+        request: dict[str, object] = {"op": "windows-file-payload", "managed_file": str(path)}
+        deadline = _native_deadline()
+        answer = _native_answer(request, deadline=deadline)
+        payload = None if answer is None else answer.get("payload")
+        if not isinstance(payload, list):
+            return False
         try:
-            chain = _windows_filesystem_chain(str(path))
-            payload = [
-                {
-                    "name": f"managed-file-{index:03d}",
-                    "path": candidate,
-                    "kind": "filesystem",
-                    "expectedContainer": index < len(chain) - 1,
-                    "leaf": index == len(chain) - 1,
-                }
-                for index, candidate in enumerate(chain)
-            ]
-            raw = _run_windows_acl_payload(payload)
-            rows = raw if isinstance(raw, list) else [raw]
-            results = [_windows_result(row) for row in rows]
-            return len(results) == len(payload) and all(result.healthy for result in results)
+            rows = _run_windows_acl_payload(cast(list[dict[str, str | bool]], payload))
         except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError):
             return False
+        verdict = _native_answer(
+            {"op": "windows-file-verify", "managed_file": str(path), "rows": rows}, deadline=deadline
+        )
+        return verdict is not None and verdict.get("status") == "healthy"
     if os.name != "posix":
         return False
     return posix_path_is_root_owned_and_restricted(path)

@@ -1,29 +1,30 @@
-"""Fail-honest, read-only local integrity snapshot construction."""
+"""Fail-honest, read-only local integrity snapshot construction.
+
+Every probe runs here. The native runtime composes the snapshot from their
+results: the components, reason codes, assurance level and remediation class.
+"""
 
 from __future__ import annotations
 
 import hashlib
+import json
 import platform
 import shutil
+import time
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast, get_args
+from typing import cast
 
 from ...version import __version__
 from .acl import OwnershipAclVerification, verify_protected_ownership_and_acl
 from .continuity import ContinuityVerification, verify_installation_continuity
 from .contracts import (
     LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
-    AssuranceLevel,
-    IntegrityComponent,
-    IntegrityReasonCode,
-    IntegrityState,
     KeyProtectionStatus,
     LocalIntegritySnapshot,
     MachinePaths,
     ManagedPolicyState,
-    RemediationClass,
-    SnapshotComponents,
     SupervisorStatus,
     default_machine_paths,
 )
@@ -34,49 +35,16 @@ from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
 from .supervisor import machine_executable, verify_machine_supervisor
 
+INTEGRITY_SNAPSHOT_FEATURE = "native-integrity-snapshot-v1"
+INTEGRITY_SNAPSHOT_COMMAND = "integrity-snapshot"
+INTEGRITY_SNAPSHOT_SCHEMA = "integrity-snapshot.v1"
+_STATUS_TIMEOUT_SECONDS = 10.0
+_COMMAND_TIMEOUT_SECONDS = 30.0
+_OUTPUT_LIMIT_BYTES = 64 * 1024
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def _component(state: str, reason_code: str) -> IntegrityComponent:
-    normalized = (
-        state if state in {"healthy", "degraded", "absent", "tampered", "unsupported", "unknown"} else "unknown"
-    )
-    normalized_reason = reason_code if reason_code in get_args(IntegrityReasonCode) else "integrity_reason_unrecognized"
-    return IntegrityComponent(
-        cast(IntegrityState, normalized),
-        cast(IntegrityReasonCode, normalized_reason),
-    )
-
-
-def _assurance_level(*, update_owner: str) -> AssuranceLevel:
-    if update_owner == "mdm":
-        return "mdm-managed-unverified"
-    return "user-managed"
-
-
-def _remediation_class(assurance_level: AssuranceLevel, healthy: bool, states: list[str]) -> RemediationClass:
-    if healthy:
-        return "none"
-    if "tampered" in states:
-        return "administrator-action"
-    if assurance_level != "user-managed":
-        return "mdm-repair"
-    return "user-reinstall"
-
-
-def _trusted_product_version(
-    manifest: ManifestVerification,
-    native: NativeInstallVerification,
-) -> str:
-    """Return public installed-version metadata only after its verification boundary passes."""
-
-    if manifest.healthy and manifest.version is not None:
-        return manifest.version
-    if native.healthy and native.version is not None:
-        return native.version
-    return __version__
 
 
 def _bounded_file_hash(path: Path) -> str | None:
@@ -165,74 +133,62 @@ def _verify_continuity(paths: MachinePaths) -> ContinuityVerification:
         return ContinuityVerification("unknown", "installation_identity_probe_failed", "lease_continuity_probe_failed")
 
 
-def _daemon_component(supervisor: SupervisorStatus) -> IntegrityComponent:
-    state, reason = {
-        "supervisor_running": ("healthy", "daemon_running"),
-        "supervisor_absent": ("absent", "daemon_absent"),
-        "supervisor_stopped": ("degraded", "daemon_stopped"),
-        "supervisor_disabled": ("tampered", "daemon_disabled"),
-        "supervisor_registration_invalid": ("tampered", "daemon_registration_invalid"),
-        "supervisor_executable_mismatch": ("tampered", "daemon_registration_invalid"),
-        "supervisor_schedule_invalid": ("tampered", "daemon_registration_invalid"),
-        "supervisor_probe_failed": ("unknown", "daemon_probe_failed"),
-    }.get(supervisor.reason_code, ("unsupported", "daemon_verification_unavailable"))
-    return _component(state, reason)
-
-
-def _command_shadowing_component(paths: MachinePaths) -> IntegrityComponent:
+def _command_shadowing(paths: MachinePaths) -> dict[str, str]:
     try:
         resolved = shutil.which("hol-guard")
         if resolved is None:
-            return _component("healthy", "command_shadowing_absent")
+            return {"state": "healthy", "reason_code": "command_shadowing_absent"}
         command_path = Path(resolved).resolve(strict=True)
         expected_executable = machine_executable(paths, platform.system()).resolve(strict=False)
         if command_path == expected_executable:
-            return _component("healthy", "command_shadowing_trusted")
-        return _component("tampered", "command_shadowing_detected")
+            return {"state": "healthy", "reason_code": "command_shadowing_trusted"}
+        return {"state": "tampered", "reason_code": "command_shadowing_detected"}
     except (OSError, RuntimeError):
-        return _component("unknown", "command_shadowing_probe_failed")
+        return {"state": "unknown", "reason_code": "command_shadowing_probe_failed"}
 
 
-def _update_component(manifest: ManifestVerification) -> IntegrityComponent:
-    if manifest.healthy:
-        return _component("healthy", "update_version_allowed")
-    return _component(manifest.status, manifest.reason_code)
+def _native_snapshot(request: dict[str, object]) -> LocalIntegritySnapshot:
+    from ..native_runtime import _run_native_process, native_runtime_status
 
-
-def _continuity_components(result: ContinuityVerification) -> tuple[IntegrityComponent, IntegrityComponent]:
-    identity_state = {
-        "installation_identity_active": "healthy",
-        "installation_identity_absent": "absent",
-        "installation_identity_invalid": "tampered",
-        "installation_identity_acl_invalid": "tampered",
-        "installation_identity_key_mismatch": "tampered",
-    }.get(result.identity_reason_code, "unknown")
-    lease_state = {
-        "lease_continuity_active": "healthy",
-        "lease_continuity_uninitialized": "healthy",
-        "lease_continuity_absent": "absent",
-        "lease_continuity_invalid": "tampered",
-        "lease_continuity_monotonic_regression": "tampered",
-        "lease_continuity_sequence_exhausted": "degraded",
-        "lease_continuity_platform_unsupported": "unsupported",
-    }.get(result.lease_reason_code, "unknown")
-    return (
-        _component(identity_state, result.identity_reason_code),
-        _component(lease_state, result.lease_reason_code),
-    )
+    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
+    output = None
+    if (
+        status.available
+        and status.compatible
+        and status.identity is not None
+        and status.capabilities is not None
+        and INTEGRITY_SNAPSHOT_FEATURE in status.capabilities.features
+    ):
+        output = _run_native_process(
+            status.identity.path,
+            (INTEGRITY_SNAPSHOT_COMMAND, "--stdin"),
+            input_text=json.dumps({"schema": INTEGRITY_SNAPSHOT_SCHEMA, **request}, sort_keys=True),
+            timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+            output_limit=_OUTPUT_LIMIT_BYTES,
+        )
+    try:
+        snapshot = cast(object, json.loads(output)) if output is not None else None
+    except ValueError:
+        snapshot = None
+    if (
+        not isinstance(snapshot, dict)
+        or cast(dict[str, object], snapshot).get("schemaVersion") != LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION
+    ):
+        # Evidence nothing could compose is never reported as a snapshot.
+        raise OSError("integrity_snapshot_native_unavailable")
+    return cast(LocalIntegritySnapshot, cast(object, snapshot))
 
 
 def machine_integrity_snapshot() -> LocalIntegritySnapshot:
     """Return bounded machine evidence without trusting environment path overrides."""
 
     paths = default_machine_paths()
-    runtime_root = paths.runtime_root
     policy = _load_policy()
     minimum_version = policy.policy.update.minimum_version if policy.policy is not None else None
     live_policy = policy.policy if policy.reason_code != "managed_policy_profile_removed_cached" else None
     trust = live_policy.integrity_trust if live_policy is not None else None
     native = _verify_native(
-        runtime_root,
+        paths.runtime_root,
         macos_team_id=trust.macos_team_id if trust is not None else None,
         windows_signer_thumbprints=trust.windows_signer_thumbprints if trust is not None else (),
     )
@@ -242,123 +198,29 @@ def machine_integrity_snapshot() -> LocalIntegritySnapshot:
         minimum_version,
         trust.release_public_keys if trust is not None else {},
     )
-    update_owner = policy.policy.install_owner if policy.policy is not None else "user"
-    if policy.policy is None and policy.status in {"invalid", "inaccessible", "tampered"}:
-        update_owner = "mdm"
-    assurance_level = _assurance_level(update_owner=update_owner)
-    acl = _verify_ownership_acl(paths)
-    supervisor = _verify_supervisor(paths)
-    device_key = _verify_device_key(paths)
-    continuity = _verify_continuity(paths)
-
-    manifest_component = _component(manifest.status, manifest.reason_code)
-    native_component = _component(native.status, native.reason_code)
-    policy_state = "healthy" if policy.status == "active" else policy.status
-    if policy_state in {"invalid", "inaccessible"}:
-        policy_state = "degraded"
-    if policy.reason_code == "managed_policy_profile_removed_cached":
-        policy_state = "degraded"
-    policy_component = _component(
-        policy_state,
-        policy.reason_code or ("managed_policy_active" if policy.status == "active" else "managed_policy_absent"),
+    return _native_snapshot(
+        {
+            "generated_at": _now(),
+            "platform": platform.system().lower(),
+            "architecture": platform.machine().lower(),
+            "fallback_version": __version__,
+            "manifest_hash": _bounded_file_hash(paths.manifest_path),
+            "policy": {
+                "status": policy.status,
+                "reason_code": policy.reason_code,
+                "install_owner": policy.policy.install_owner if policy.policy is not None else None,
+                "content_hash": policy.policy.content_hash if policy.policy is not None else None,
+            },
+            "native": asdict(native),
+            "manifest": asdict(manifest),
+            "acl": asdict(_verify_ownership_acl(paths)),
+            "supervisor": asdict(_verify_supervisor(paths)),
+            "device_key": asdict(_verify_device_key(paths)),
+            "continuity": asdict(_verify_continuity(paths)),
+            "harness": asdict(verify_harness_coverage(paths, policy)),
+            "command_shadowing": _command_shadowing(paths),
+        }
     )
-    ownership_acl = _component(acl.status, acl.reason_code)
-    harness_verification = verify_harness_coverage(paths, policy)
-    harness_coverage = _component(harness_verification.state, harness_verification.reason_code)
-    installation_identity, lease_continuity = _continuity_components(continuity)
-    daemon = _daemon_component(supervisor)
-    command_shadowing = _command_shadowing_component(paths)
-    update = _update_component(manifest)
-
-    components: SnapshotComponents = {
-        "manifest": manifest_component.to_dict(),
-        "nativePackage": native_component.to_dict(),
-        "managedPolicy": policy_component.to_dict(),
-        "ownershipAndAcl": ownership_acl.to_dict(),
-        "supervisor": supervisor.to_dict(),
-        "deviceKey": device_key.to_dict(),
-        "harnessCoverage": harness_coverage.to_dict(),
-        "installationIdentity": installation_identity.to_dict(),
-        "leaseContinuity": lease_continuity.to_dict(),
-        "daemon": daemon.to_dict(),
-        "commandShadowing": command_shadowing.to_dict(),
-        "update": update.to_dict(),
-    }
-    states = [
-        manifest_component.state,
-        native_component.state,
-        policy_component.state,
-        ownership_acl.state,
-        supervisor.state,
-        device_key.state,
-        harness_coverage.state,
-        installation_identity.state,
-        lease_continuity.state,
-        daemon.state,
-        command_shadowing.state,
-        update.state,
-    ]
-    component_results = (
-        manifest_component,
-        native_component,
-        policy_component,
-        ownership_acl,
-        supervisor,
-        device_key,
-        harness_coverage,
-        installation_identity,
-        lease_continuity,
-        daemon,
-        command_shadowing,
-        update,
-    )
-    reason_codes = cast(
-        list[IntegrityReasonCode],
-        sorted({component.reason_code for component in component_results if not component.healthy}),
-    )
-    healthy = all(component.healthy for component in component_results)
-    return {
-        "schemaVersion": LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
-        "generatedAt": _now(),
-        "scope": "machine",
-        "healthy": healthy,
-        "assuranceLevel": assurance_level,
-        "installOwner": update_owner,
-        "platform": platform.system().lower(),
-        "architecture": platform.machine().lower(),
-        "identifiers": {
-            "workspaceId": None,
-            "deviceId": None,
-            "machineInstallationId": (
-                continuity.record.machine_installation_id if continuity.record is not None else None
-            ),
-            "installationGeneration": (
-                continuity.record.installation_generation if continuity.record is not None else None
-            ),
-        },
-        "product": {
-            "version": _trusted_product_version(manifest, native),
-            "buildId": manifest.build_id if manifest.healthy else None,
-            "sourceCommit": None,
-            "packageIdentity": native.package_identity,
-            "manifestHash": _bounded_file_hash(paths.manifest_path),
-            "policyHash": policy.policy.content_hash if policy.policy is not None else None,
-        },
-        "components": components,
-        "harnessCoverage": harness_verification.coverage,
-        "continuity": {
-            "monotonicUptimeSeconds": (
-                continuity.observation.monotonic_uptime_ns / 1_000_000_000
-                if continuity.observation is not None
-                else None
-            ),
-            "sequence": continuity.record.last_issued_sequence if continuity.record is not None else None,
-            "previousLeaseDigest": continuity.record.last_lease_digest if continuity.record is not None else None,
-            "bootSessionId": (continuity.observation.boot_session_id if continuity.observation is not None else None),
-        },
-        "reasonCodes": reason_codes,
-        "remediationClass": _remediation_class(assurance_level, healthy, states),
-    }
 
 
 __all__ = ["machine_integrity_snapshot"]

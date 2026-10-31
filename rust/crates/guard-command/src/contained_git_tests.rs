@@ -296,13 +296,16 @@ fn a_comparison_verb_that_prints_a_diff_carries_both_helper_screens() {
             ])
         ))
     );
-    assert_eq!(
-        read(&["git", "range-diff", "main...HEAD"]),
-        Some((
-            "range-diff".to_owned(),
-            vector(&["--no-ext-diff", "--no-textconv", "main...HEAD"])
-        ))
-    );
+}
+
+/// `git range-diff` is left out of this grammar on purpose. It reads
+/// `--no-ext-diff` and `--no-textconv` into its own option set and then runs
+/// a second `git log -p` that inherits neither, so the screens this module
+/// writes ahead of the caller would not reach the comparison that actually
+/// renders the patch.
+#[test]
+fn a_range_comparison_is_not_a_read_this_grammar_answers_for() {
+    assert_eq!(read(&["git", "range-diff", "main...HEAD"]), None);
 }
 
 #[test]
@@ -318,7 +321,7 @@ fn a_comparison_verb_that_defines_no_diff_option_carries_no_screen() {
 
 #[test]
 fn a_comparison_verb_is_refused_the_helpers_and_the_output_file() {
-    for verb in ["diff-tree", "range-diff"] {
+    for verb in ["diff-tree"] {
         assert_eq!(read(&["git", verb, "--ext-diff", "HEAD"]), None, "{verb}");
         assert_eq!(read(&["git", verb, "--textconv", "HEAD"]), None, "{verb}");
         assert_eq!(

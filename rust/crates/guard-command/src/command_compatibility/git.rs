@@ -15,6 +15,7 @@ pub(crate) use git_hooks_path::rooted_hooks_inert;
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
     ("worktree", "command.git.worktree"),
+    ("bisect", "command.git.bisect"),
     ("pull", "command.git.pull"),
     ("push", "command.git.push"),
     ("clone", "command.git.clone"),
@@ -241,11 +242,11 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "diff-tree" | "log" | "range-diff" | "cherry" | "show" | "blame"
-            | "describe" | "reflog" | "branch" | "hash-object" | "rev-parse" | "merge-base"
-            | "ls-files" | "remote" | "worktree" | "config" | "grep" | "ls-tree" | "cat-file"
-            | "show-ref" | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore"
-            | "count-objects" | "check-attr",
+            "status" | "diff" | "diff-tree" | "log" | "cherry" | "show" | "blame" | "describe"
+            | "reflog" | "branch" | "hash-object" | "rev-parse" | "merge-base" | "ls-files"
+            | "remote" | "worktree" | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref"
+            | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore" | "count-objects"
+            | "check-attr",
         ) => true,
         // A tag listing, a clean preview and a patch check only print, but the
         // same three subcommands also write a tag, remove a file and patch the
@@ -425,23 +426,23 @@ fn routed_with_route<'a>(
     Some((rest, route))
 }
 
-#[cfg(test)]
 /// The owner a read subcommand answers to when it has no declarative rule of
 /// its own.
 ///
-/// `diff-tree` and `range-diff` print the comparison `diff` owns, and `cherry`
-/// lists the commits `log` owns. Without this each would fall to the
-/// catch-all below, which leaves every git rule uncertain and sends an
-/// ordinary read to review; naming the owner instead keeps the permission a
-/// user disables working on the spelling they disabled it for.
+/// `diff-tree` prints the comparison `diff` owns and `cherry` lists the
+/// commits `log` owns. Without this each would fall to the catch-all below,
+/// which leaves every git rule uncertain and sends an ordinary read to
+/// review; naming the owner instead keeps the permission a user disables
+/// working on the spelling they disabled it for.
 fn read_owner(command: &str) -> &str {
     match command {
-        "diff-tree" | "range-diff" => "diff",
+        "diff-tree" => "diff",
         "cherry" => "log",
         other => other,
     }
 }
 
+#[cfg(test)]
 pub(super) fn observe_with_context(
     segment: &CommandSegmentV1,
     index: usize,

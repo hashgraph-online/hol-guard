@@ -17,11 +17,16 @@
 //! hands its note to a second Git for the same reason; `git notes list`
 //! prints the ref itself and stays.
 //! The comparison verbs read the same history `git log` does and write
-//! nothing of their own: `git diff-tree` and `git range-diff` print through
-//! the diff machinery, so they define its whole option set and are screened
-//! for it, and `git cherry` prints commit names through no helper at all and
-//! defines none of those options, so the screens are left off a verb that
-//! would refuse them. `git format-patch` is absent for the opposite reason:
+//! nothing of their own: `git diff-tree` prints through the diff machinery,
+//! so it defines its whole option set and is screened for it, and
+//! `git cherry` prints commit names through no helper at all and defines
+//! none of those options, so the screens are left off a verb that would
+//! refuse them. `git range-diff` is absent because the screens cannot reach
+//! what it runs: it parses `--no-ext-diff` and `--no-textconv` into its own
+//! option set and then starts a second `git log -p` that is given neither,
+//! so the pair this module writes ahead of the caller would leave that child
+//! free to run the program a `diff.<driver>.textconv` setting names.
+//! `git format-patch` is absent for the opposite reason:
 //! its ordinary form writes a numbered patch file for every commit it walks,
 //! and only `--stdout` prints.
 //! `git config` prints the settings themselves, among them the credential
@@ -63,7 +68,6 @@ const READ_ONLY_VERBS: &[&str] = &[
     "log",
     "ls-tree",
     "merge-base",
-    "range-diff",
     "rev-list",
     "shortlog",
     "show",
@@ -108,8 +112,9 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
         // `git reflog show` and `git stash list` are `git log` written another
         // way: both hand their words to the log walk, so both define the whole
         // log option set and are read for it here.
-        ("diff" | "diff-tree" | "log" | "range-diff" | "show" | "reflog", _)
-        | ("stash", "show" | "list") => &["--ext-diff", "--output", "--textconv"],
+        ("diff" | "diff-tree" | "log" | "show" | "reflog", _) | ("stash", "show" | "list") => {
+            &["--ext-diff", "--output", "--textconv"]
+        }
         ("blame", _) => &["--textconv"],
         ("grep", _) => &["--open-files-in-pager", "--textconv"],
         // `--filters` runs the repository's smudge filter over the blob it
@@ -125,7 +130,7 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
 /// abbreviation of `--textconv` where it has none.
 fn spelled_in_full(verb: &str) -> &'static [&'static str] {
     match verb {
-        "diff" | "diff-tree" | "log" | "range-diff" | "show" | "grep" => &["--text"],
+        "diff" | "diff-tree" | "log" | "show" | "grep" => &["--text"],
         _ => &[],
     }
 }
@@ -137,7 +142,7 @@ fn spelled_in_full(verb: &str) -> &'static [&'static str] {
 fn short_value_letters(verb: &str) -> &'static str {
     match verb {
         "grep" => "efmABCO",
-        "diff" | "diff-tree" | "log" | "range-diff" | "show" | "stash" | "reflog" => "USGlLnOBCM",
+        "diff" | "diff-tree" | "log" | "show" | "stash" | "reflog" => "USGlLnOBCM",
         "blame" => "LCMS",
         _ => "",
     }
@@ -150,7 +155,7 @@ fn disabled_helpers(verb: &str, subcommand: &str) -> &'static [&'static str] {
         // `stash show` prints a diff, and `stash list` and `reflog show` print
         // one for `-p`, so all three read the same two helpers the diff family
         // does. `reflog exists` answers about a ref and defines neither.
-        ("diff" | "diff-tree" | "log" | "range-diff" | "show", _)
+        ("diff" | "diff-tree" | "log" | "show", _)
         | ("stash", "show" | "list")
         | ("reflog", "" | "show") => &["--no-ext-diff", "--no-textconv"],
         ("blame" | "grep", _) => &["--no-textconv"],
