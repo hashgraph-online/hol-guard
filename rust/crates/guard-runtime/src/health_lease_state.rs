@@ -168,7 +168,7 @@ fn read_private(root: &Path, kind: Kind, owner_uid: u32) -> Result<Option<Vec<u8
         return Err(refused("permission", kind.acl_invalid()));
     }
     let mut payload = Vec::new();
-    file.by_ref()
+    Read::by_ref(&mut file)
         .take(kind.maximum() + 1)
         .read_to_end(&mut payload)
         .map_err(io_failed)?;
