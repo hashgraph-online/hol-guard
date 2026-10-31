@@ -54,7 +54,7 @@ fn the_request_is_written_as_python_wrote_it() {
     write_request(&fixture.home, &installs()).unwrap();
     let written = fs::read(fixture.request()).unwrap();
     let expected = concat!(
-        r#"{"installs":[{"active":true,"harness":"codex","manifest":{"note":"café"}}],"#,
+        r#"{"installs":[{"active":true,"harness":"codex","manifest":{"note":"caf\u00e9"}}],"#,
         r#""schemaVersion":"hol-guard-harness-coverage-request.v1"}"#,
         "\n"
     );
