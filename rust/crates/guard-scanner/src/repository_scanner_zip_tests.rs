@@ -87,10 +87,19 @@ fn zip_bytes(entries: &[Entry]) -> Vec<u8> {
     zip_bytes_with_comment(entries, b"")
 }
 
+fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
+    let named: Vec<usize> = (0..entries.len()).collect();
+    zip_bytes_naming(entries, &named, comment)
+}
+
 /// A zip written by hand, so a test can shape the container as well as the
 /// members. Writing one with a library would only exercise the shapes that
 /// library produces, and the shapes worth testing are the ones it never would.
-fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
+///
+/// `named` says which of the members the directory accounts for. Every member
+/// is written into the file either way, which is the point: an archive hiding
+/// one from a reader that trusts the directory still carries it.
+fn zip_bytes_naming(entries: &[Entry], named: &[usize], comment: &[u8]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let mut offsets: Vec<u32> = Vec::new();
     for entry in entries {
@@ -110,7 +119,7 @@ fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
         out.extend_from_slice(&entry.stored);
     }
     let directory_at = out.len() as u32;
-    for (entry, offset) in entries.iter().zip(&offsets) {
+    for (entry, offset) in named.iter().map(|&at| (&entries[at], offsets[at])) {
         out.extend_from_slice(&[0x50, 0x4b, 0x01, 0x02]);
         out.extend_from_slice(&20u16.to_le_bytes()); // version made by
         out.extend_from_slice(&20u16.to_le_bytes()); // version needed
@@ -127,11 +136,7 @@ fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
         out.extend_from_slice(&0u16.to_le_bytes()); // disk number
         out.extend_from_slice(&0u16.to_le_bytes()); // internal attributes
         out.extend_from_slice(&0u32.to_le_bytes()); // external attributes
-        let at = if entry.zip64_offset {
-            u32::MAX
-        } else {
-            *offset
-        };
+        let at = if entry.zip64_offset { u32::MAX } else { offset };
         out.extend_from_slice(&at.to_le_bytes());
         out.extend_from_slice(entry.name.as_bytes());
     }
@@ -139,8 +144,8 @@ fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
     out.extend_from_slice(&[0x50, 0x4b, 0x05, 0x06]);
     out.extend_from_slice(&0u16.to_le_bytes()); // this disk
     out.extend_from_slice(&0u16.to_le_bytes()); // disk the directory starts on
-    out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
-    out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+    out.extend_from_slice(&(named.len() as u16).to_le_bytes());
+    out.extend_from_slice(&(named.len() as u16).to_le_bytes());
     out.extend_from_slice(&directory_len.to_le_bytes());
     out.extend_from_slice(&directory_at.to_le_bytes());
     out.extend_from_slice(&(comment.len() as u16).to_le_bytes());
@@ -484,8 +489,10 @@ fn an_empty_zip_is_recognised_and_reports_nothing() {
 
 #[test]
 fn bytes_that_only_begin_like_a_zip_are_not_read_as_one() {
-    // Without a directory there is nothing to walk, and guessing at local
-    // headers is how a reader walks off the end of a truncated file.
+    // The local header the bytes open with is walked like any other, and what
+    // follows it describes no member a reader could recover: the codec is not
+    // one, and the lengths run past the end of what there is. Nothing is read
+    // and nothing is charged for.
     let archive = b"PK\x03\x04 and then nothing that follows the format";
     assert!(is_zip(archive));
     let (findings, scanned) = scan_members(
@@ -600,4 +607,113 @@ fn a_small_zip_cannot_spend_the_whole_scans_allowance() {
     let paths: Vec<&str> = findings.iter().map(|f| f.path.as_str()).collect();
     assert_eq!(paths, ["ratio.zip!/small.env"]);
     assert_eq!(scanned, member.len());
+}
+
+#[test]
+fn a_member_the_directory_leaves_out_is_still_read() {
+    // The cheapest way to keep a member from a reader that trusts the
+    // directory is not to forge anything: leave the member's record out. The
+    // data is still in the file, behind its own local header, and the
+    // extractor the archive is eventually opened with still finds it.
+    let named = credential_line();
+    let omitted = other_credential_line();
+    let archive = zip_bytes_naming(
+        &[
+            stored("named.env", named.as_bytes()),
+            stored("hidden.env", omitted.as_bytes()),
+        ],
+        &[0],
+        b"",
+    );
+    let (paths, scanned) = scan(&archive, "omitted.zip");
+    assert_eq!(paths, ["omitted.zip!/named.env", "omitted.zip!/hidden.env"]);
+    // The named member was reached twice and read once, so the second pass
+    // spends the budget only on what the first one missed.
+    assert_eq!(scanned, named.len() + omitted.len());
+}
+
+#[test]
+fn an_end_record_naming_a_shorter_directory_than_there_is_hides_nothing() {
+    // A record planted in the trailing comment may point at the real
+    // directory and name fewer of its bytes than it holds. It begins with a
+    // record like any directory does and every bound it is asked about holds,
+    // so the backwards search accepts it and the records behind the cut are
+    // never walked. The members those records named are read from their own
+    // local headers instead.
+    let first = credential_line();
+    let second = other_credential_line();
+    let entries = [
+        stored("one.env", first.as_bytes()),
+        stored("two.env", second.as_bytes()),
+    ];
+    // Where the directory begins, and how much of it the first record takes.
+    // A comment appended after the directory moves neither.
+    let directory_at: usize = entries
+        .iter()
+        .map(|entry| 30 + entry.name.len() + entry.stored.len())
+        .sum();
+    let first_record = 46 + entries[0].name.len();
+
+    let mut forged = Vec::new();
+    forged.extend_from_slice(b"PK\x05\x06");
+    forged.extend_from_slice(&0u16.to_le_bytes()); // this disk
+    forged.extend_from_slice(&0u16.to_le_bytes()); // disk the directory starts on
+    forged.extend_from_slice(&1u16.to_le_bytes()); // records on this disk
+    forged.extend_from_slice(&1u16.to_le_bytes()); // records in total
+    forged.extend_from_slice(&(first_record as u32).to_le_bytes());
+    forged.extend_from_slice(&(directory_at as u32).to_le_bytes());
+    forged.extend_from_slice(&0u16.to_le_bytes()); // comment length
+    assert_eq!(forged.len(), 22);
+
+    let archive = zip_bytes_with_comment(&entries, &forged);
+    // The forgery is the record the search accepts, so the case tests what it
+    // says it does rather than passing on the real directory behind it.
+    assert_eq!(
+        super::central_directory(&archive).unwrap().len(),
+        first_record
+    );
+
+    let (paths, _) = scan(&archive, "shortened.zip");
+    assert_eq!(paths, ["shortened.zip!/one.env", "shortened.zip!/two.env"]);
+}
+
+#[test]
+fn an_archive_whose_directory_is_gone_is_still_read() {
+    // A zip cut short, or one carved out of a larger file, has no end record
+    // and so no directory at all. That is a reason to read it with less to go
+    // on, not a reason to read nothing: the members are where they always
+    // were.
+    let member = credential_line();
+    let whole = zip_bytes(&[stored("prod.env", member.as_bytes())]);
+    let tail = 46 + "prod.env".len() + 22;
+    let headers = &whole[..whole.len() - tail];
+    assert!(super::central_directory(headers).is_none());
+
+    let (paths, scanned) = scan(headers, "headless.zip");
+    assert_eq!(paths, ["headless.zip!/prod.env"]);
+    assert_eq!(scanned, member.len());
+}
+
+#[test]
+fn a_member_whose_sizes_follow_its_data_is_left_to_the_directory() {
+    // A streaming writer leaves the sizes out of the local header and writes
+    // them after the data. There is nothing in the header to bound the read
+    // with, so the second pass passes it over; the directory knows the real
+    // sizes, so the member is read on the first pass like any other.
+    let member = credential_line();
+    let mut entry = stored("stream.env", member.as_bytes());
+    entry.flags = 1 << 3;
+    let archive = zip_bytes(&[entry]);
+    let (paths, scanned) = scan(&archive, "streamed.zip");
+    assert_eq!(paths, ["streamed.zip!/stream.env"]);
+    assert_eq!(scanned, member.len());
+
+    // Without the record that carries those sizes, there is no claim to read
+    // it under and it is left alone.
+    let mut hidden = stored("stream.env", member.as_bytes());
+    hidden.flags = 1 << 3;
+    let omitted = zip_bytes_naming(&[hidden], &[], b"");
+    let (paths, scanned) = scan(&omitted, "streamed.zip");
+    assert!(paths.is_empty());
+    assert_eq!(scanned, 0);
 }

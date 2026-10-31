@@ -8,15 +8,31 @@
 //! container is a directory of fixed-width records. Reading it here costs no
 //! new dependency and no `Cargo.lock` movement.
 //!
-//! The directory is read rather than the stream. A zip ends with a central
-//! directory naming every member, its sizes, its codec and where its data
-//! begins, and that record is the archive's own account of itself. Walking it
-//! means the sizes are known before a byte is inflated, so a member too large
-//! for the remaining budget is skipped without being decompressed first —
-//! which is the difference between bounding a zip bomb and surviving one. The
-//! local header at the named offset is read only for the two lengths that say
-//! where its data starts; its size fields are the ones a bomb lies in, and
-//! they are not used.
+//! The directory is read first. A zip ends with a central directory naming
+//! every member, its sizes, its codec and where its data begins, and that
+//! record is the archive's own account of itself. Walking it means the sizes
+//! are known before a byte is inflated, so a member too large for the
+//! remaining budget is skipped without being decompressed first — which is
+//! the difference between bounding a zip bomb and surviving one.
+//!
+//! The directory is not believed to be complete. It is an index, written
+//! separately from the data it indexes, and anyone who wants a member unread
+//! can leave its record out, name a shorter run of records from a forged end
+//! record planted in the trailing comment, or corrupt the directory
+//! altogether. None of that removes the member: its data is still in the file,
+//! behind its own local header, and a reader that wants it still gets it. So
+//! the local headers are walked afterwards and every member the directory did
+//! not account for is read from its own header. What the directory names is
+//! read on the directory's terms; what it omits is read anyway.
+//!
+//! A local header's sizes are the ones a bomb lies about, which is why the
+//! directory's are preferred where there are two. Where the local header is
+//! all there is, the lie cannot grow the read: a member is inflated under a
+//! bound of its claim plus one byte and refused unless it lands exactly on the
+//! claim, so a stream that produces more than its header promised yields
+//! nothing rather than more. A member whose header leaves its sizes for a
+//! descriptor after the data is skipped for the same reason — there is no
+//! claim to bound it with until the data has already been read.
 //!
 //! A member's checksum is read as the archive's own bookkeeping and is not
 //! made a condition of reading it. The checksum says whether the archive is
@@ -67,6 +83,10 @@ const METHOD_DEFLATE: u16 = 8;
 /// Bit 0 of a member's general-purpose flags: its data is encrypted.
 const FLAG_ENCRYPTED: u16 = 1;
 
+/// Bit 3 of those flags: the member's sizes are not in its local header but in
+/// a descriptor written after its data.
+const FLAG_STREAMED: u16 = 1 << 3;
+
 /// What a 32-bit size or offset field holds when the real value lives in a
 /// zip64 extra field instead.
 const ZIP64_SENTINEL: u32 = u32::MAX;
@@ -86,16 +106,6 @@ pub(super) fn scan_members(
     finding_budget: usize,
     caps: Caps,
 ) -> (Vec<SecretFinding>, usize) {
-    let mut findings: Vec<SecretFinding> = Vec::new();
-    let mut scanned = 0usize;
-    let Some(directory) = central_directory(data) else {
-        return (findings, scanned);
-    };
-    // A zip may name the same member twice as readily as a tar may, and the
-    // central directory is where it is cheapest to do so: a few dozen bytes
-    // per repetition, all pointing at one member's data. The findings are
-    // collapsed on the same key the tar walk uses.
-    let mut read: HashSet<(String, usize, CandidateDigest)> = HashSet::new();
     // A directory can name far more member bytes than the archive itself
     // holds: each record costs a few dozen bytes, and several records may name
     // one deflated run. Without a bound of its own, a few kilobytes of zip
@@ -107,55 +117,168 @@ pub(super) fn scan_members(
         .saturating_mul(super::MAX_EXPANSION_RATIO)
         .max(super::RATIO_FLOOR_BYTES)
         .min(caps.total);
-    let mut cursor = 0usize;
-    let mut seen = 0usize;
-    while seen < MAX_MEMBERS && findings.len() < finding_budget && scanned < total {
-        let Some(record) = CentralRecord::parse(directory, cursor) else {
-            break;
-        };
-        cursor = record.next;
-        seen += 1;
-        let Some(name) = record.name() else {
-            continue;
-        };
-        let room = (total - scanned) as u64;
-        if !record.is_readable_member() || record.uncompressed > caps.member.min(room) {
-            continue;
+    let mut walk = Walk {
+        data,
+        path,
+        source,
+        commit,
+        finding_budget,
+        member_cap: caps.member,
+        total,
+        findings: Vec::new(),
+        scanned: 0,
+        read: HashSet::new(),
+        taken: HashSet::new(),
+        seen: 0,
+    };
+    // An archive whose end record is missing or unreadable still has its
+    // members, so the absence of a directory is a reason to read less, not a
+    // reason to read nothing.
+    if let Some(directory) = central_directory(data) {
+        walk.directory_records(directory);
+    }
+    walk.local_headers();
+    (walk.findings, walk.scanned)
+}
+
+/// One pass over an archive, and what the passes share: the budget, the
+/// findings and what has already been read.
+struct Walk<'a> {
+    data: &'a [u8],
+    path: &'a str,
+    source: &'a str,
+    commit: Option<&'a str>,
+    finding_budget: usize,
+    member_cap: u64,
+    total: usize,
+    findings: Vec<SecretFinding>,
+    scanned: usize,
+    /// A zip may name the same member twice as readily as a tar may, and the
+    /// central directory is where it is cheapest to do so: a few dozen bytes
+    /// per repetition, all pointing at one member's data. The findings are
+    /// collapsed on the same key the tar walk uses.
+    read: HashSet<(String, usize, CandidateDigest)>,
+    /// The local headers whose data the directory pass already read, so the
+    /// second pass spends the budget only on what the first one missed.
+    taken: HashSet<usize>,
+    seen: usize,
+}
+
+impl Walk<'_> {
+    /// Whether there is budget left to read another member.
+    fn more(&self) -> bool {
+        self.seen < MAX_MEMBERS
+            && self.findings.len() < self.finding_budget
+            && self.scanned < self.total
+    }
+
+    /// The largest member this walk will still read.
+    fn room(&self) -> u64 {
+        self.member_cap.min((self.total - self.scanned) as u64)
+    }
+
+    /// Every member the archive's own account of itself names.
+    fn directory_records(&mut self, directory: &[u8]) {
+        let mut cursor = 0usize;
+        while self.more() {
+            let Some(record) = CentralRecord::parse(directory, cursor) else {
+                break;
+            };
+            cursor = record.next;
+            self.seen += 1;
+            let Some(member) = record.member(self.data) else {
+                continue;
+            };
+            self.take(&member);
         }
-        let Some(member) = record.read(data) else {
-            continue;
+    }
+
+    /// Every member whose data the directory did not account for, found
+    /// through the local header that owns it.
+    ///
+    /// The search is for the signature rather than a walk by arithmetic,
+    /// because the lengths that would carry a walk from one member to the next
+    /// are exactly what an archive hiding a member gets wrong. A member stored
+    /// verbatim may hold a local signature of its own - a zip inside a zip,
+    /// uncompressed - and the search finds that one too, which reads the inner
+    /// archive's members rather than missing them.
+    fn local_headers(&mut self) {
+        let mut at = 0usize;
+        while self.more() {
+            let Some(header) = find_local_header(self.data, at) else {
+                break;
+            };
+            at = header + LOCAL_SIGNATURE.len();
+            if self.taken.contains(&header) {
+                continue;
+            }
+            let Some(member) = local_member(self.data, header) else {
+                continue;
+            };
+            self.seen += 1;
+            self.take(&member);
+        }
+    }
+
+    /// Read one member and keep what it holds, on the budget's terms.
+    fn take(&mut self, member: &Member<'_>) {
+        let Some(name) = member.name() else {
+            return;
         };
-        scanned = scanned.saturating_add(member.len());
-        let member_path = member_path(path, &name);
-        let Some(text) = decode_text(&member_path, &member) else {
-            continue;
+        if !member.is_readable() || member.uncompressed > self.room() {
+            return;
+        }
+        let Some(bytes) = member.read(self.data) else {
+            return;
         };
-        let remaining = finding_budget.saturating_sub(findings.len());
-        let summary = scan_secret_text(text, &member_path, source, commit, remaining);
+        self.taken.insert(member.header_at);
+        self.scanned = self.scanned.saturating_add(bytes.len());
+        let member_path = member_path(self.path, &name);
+        let Some(text) = decode_text(&member_path, &bytes) else {
+            return;
+        };
+        let remaining = self.finding_budget.saturating_sub(self.findings.len());
+        let summary = scan_secret_text(text, &member_path, self.source, self.commit, remaining);
         for finding in summary.findings {
             let key = (
                 finding.path.clone(),
                 finding.line,
                 candidate_digest(&finding.candidate),
             );
-            if read.insert(key) {
-                findings.push(finding);
+            if self.read.insert(key) {
+                self.findings.push(finding);
             }
         }
     }
-    (findings, scanned)
+}
+
+/// Where the next local header begins at or after `from`.
+fn find_local_header(data: &[u8], from: usize) -> Option<usize> {
+    data.get(from..)?
+        .windows(LOCAL_SIGNATURE.len())
+        .position(|window| window == LOCAL_SIGNATURE)
+        .map(|offset| from + offset)
 }
 
 /// The central directory's bytes, located through the end-of-central-directory
 /// record at the tail of the archive.
 ///
-/// The record is found by searching backwards, which is what the format
-/// requires: its own position depends on the length of a comment that follows
-/// it. A candidate is accepted only when its stated comment length reaches
-/// exactly the end of the file, so a `PK\x05\x06` that happens to occur inside
-/// a member's compressed data is not mistaken for the record, and only when
-/// the directory it names is one, so a record forged inside the archive's own
-/// comment cannot stand in for the archive's account of itself.
+/// The record is found by searching backwards and the last candidate wins,
+/// which is what the format requires and what every extractor does: the
+/// record's own position depends on the length of a comment that follows it,
+/// so the only way to find it is from the end. A candidate is accepted only
+/// when its stated comment length reaches exactly the end of the file, so a
+/// `PK\x05\x06` that happens to occur inside a member's compressed data is not
+/// mistaken for the record, and only when the directory it names is one, so
+/// the cheapest forgery planted in the archive's own comment does not stand in
+/// for the archive's account of itself.
+///
+/// These are not the last line against a hidden member, and they are not meant
+/// to be. A directory that passes every check here can still leave a member
+/// out, and this returns nothing at all for an archive whose tail is damaged.
+/// Both cases are answered by the local-header pass rather than by a stricter
+/// rule here, because a rule strict enough to catch them would also refuse
+/// archives that real extractors read.
 fn central_directory(data: &[u8]) -> Option<&[u8]> {
     // An archive that holds anything begins with its first member's local
     // header. One that does not is the end record alone, and the empty
@@ -233,6 +356,81 @@ impl<'a> CentralRecord<'a> {
         })
     }
 
+    /// The member this record names, located through the local header at the
+    /// offset it gives.
+    ///
+    /// The sizes stay the directory's. Only the local header's two
+    /// variable-length fields are read, for where the data starts; its own
+    /// sizes are the ones a hostile archive disagrees with the directory
+    /// about, and a streamed member leaves them zero in any case.
+    fn member(&self, data: &'a [u8]) -> Option<Member<'a>> {
+        let header_at = self.local_offset as usize;
+        Some(Member {
+            flags: self.flags,
+            method: self.method,
+            compressed: self.compressed,
+            uncompressed: self.uncompressed,
+            name: self.name,
+            data_at: data_offset(data, header_at)?,
+            header_at,
+        })
+    }
+}
+
+/// A member's data and what the archive said about it, wherever the record
+/// that said so was read from.
+struct Member<'a> {
+    flags: u16,
+    method: u16,
+    compressed: u32,
+    uncompressed: u64,
+    name: &'a [u8],
+    /// Where the member's data begins in the archive.
+    data_at: usize,
+    /// Where the local header that owns that data begins.
+    header_at: usize,
+}
+
+/// The member a local header owns, read from that header alone.
+///
+/// A member whose header defers its sizes to a descriptor written after the
+/// data is not one: there is no claim to bound the read with until the data has
+/// already been read, which is the opposite of the order this walk needs. The
+/// directory knows that member's real sizes, so it is read on the first pass or
+/// not at all.
+fn local_member(data: &[u8], at: usize) -> Option<Member<'_>> {
+    if !data.get(at..)?.starts_with(LOCAL_SIGNATURE) {
+        return None;
+    }
+    if u16_at(data, at + 6)? & FLAG_STREAMED != 0 {
+        return None;
+    }
+    let name_len = u16_at(data, at + 26)? as usize;
+    let name_at = at.checked_add(LOCAL_FIXED)?;
+    Some(Member {
+        flags: u16_at(data, at + 6)?,
+        method: u16_at(data, at + 8)?,
+        compressed: u32_at(data, at + 18)?,
+        uncompressed: u32_at(data, at + 22)? as u64,
+        name: data.get(name_at..name_at.checked_add(name_len)?)?,
+        data_at: data_offset(data, at)?,
+        header_at: at,
+    })
+}
+
+/// Where the data owned by the local header at `at` begins.
+fn data_offset(data: &[u8], at: usize) -> Option<usize> {
+    if !data.get(at..)?.starts_with(LOCAL_SIGNATURE) {
+        return None;
+    }
+    let name_len = u16_at(data, at + 26)? as usize;
+    let extra_len = u16_at(data, at + 28)? as usize;
+    at.checked_add(LOCAL_FIXED)?
+        .checked_add(name_len)?
+        .checked_add(extra_len)
+}
+
+impl Member<'_> {
     /// The member's reported name, or nothing when it names a directory rather
     /// than a file.
     ///
@@ -249,24 +447,22 @@ impl<'a> CentralRecord<'a> {
     }
 
     /// Whether this member's bytes can be recovered at all.
-    fn is_readable_member(&self) -> bool {
+    fn is_readable(&self) -> bool {
         self.flags & FLAG_ENCRYPTED == 0
             && matches!(self.method, METHOD_STORED | METHOD_DEFLATE)
             && self.uncompressed != ZIP64_SENTINEL as u64
             && self.compressed != ZIP64_SENTINEL
-            && self.local_offset != ZIP64_SENTINEL
             && self.uncompressed != 0
     }
 
     /// The member's bytes, read from the archive.
     fn read(&self, data: &[u8]) -> Option<Vec<u8>> {
-        let start = self.data_offset(data)?;
-        let end = start.checked_add(self.compressed as usize)?;
-        let compressed = data.get(start..end)?;
+        let end = self.data_at.checked_add(self.compressed as usize)?;
+        let compressed = data.get(self.data_at..end)?;
         match self.method {
             METHOD_STORED => {
-                // A stored member is its own data, so the directory's two
-                // sizes have to agree; one that does not is malformed rather
+                // A stored member is its own data, so the two sizes claimed
+                // for it have to agree; one that does not is malformed rather
                 // than merely compressed oddly.
                 (compressed.len() as u64 == self.uncompressed).then(|| compressed.to_vec())
             }
@@ -274,31 +470,12 @@ impl<'a> CentralRecord<'a> {
         }
     }
 
-    /// Where this member's data begins, through its local header.
-    ///
-    /// Only the header's two variable-length fields are read. Its sizes are
-    /// the ones a hostile archive disagrees with the directory about, and a
-    /// streamed member leaves them zero in any case.
-    fn data_offset(&self, data: &[u8]) -> Option<usize> {
-        let header = self.local_offset as usize;
-        if !data.get(header..)?.starts_with(LOCAL_SIGNATURE) {
-            return None;
-        }
-        let name_len = u16_at(data, header + 26)? as usize;
-        let extra_len = u16_at(data, header + 28)? as usize;
-        header
-            .checked_add(LOCAL_FIXED)?
-            .checked_add(name_len)?
-            .checked_add(extra_len)
-    }
-
-    /// The member's deflated bytes, inflated under the size the directory
-    /// claimed for it.
+    /// The member's deflated bytes, inflated under the size claimed for it.
     ///
     /// The bound is one byte past that claim, so a stream that produces more
-    /// than the directory said it would is refused rather than truncated: the
-    /// two disagreeing is how a bomb gets past a check made on the directory
-    /// alone, and a member whose real size is unknown is not read.
+    /// than it was said to is refused rather than truncated: the two
+    /// disagreeing is how a bomb gets past a check made on a size field alone,
+    /// and a member whose real size is unknown is not read.
     fn inflate(&self, compressed: &[u8]) -> Option<Vec<u8>> {
         let mut inflated: Vec<u8> = Vec::new();
         flate2::read::DeflateDecoder::new(compressed)
