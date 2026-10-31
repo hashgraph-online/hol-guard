@@ -181,7 +181,11 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
         "cd app && ls && cd ../..".to_owned(),
         format!("cd app && ls && cd {outside}"),
         "cd app && ls && cd ../missing-name".to_owned(),
-        "cd app && ls && cd -".to_owned(),
+        // `cd -` is the one stand-in the walk follows, since it carries the
+        // directory each shell moved out of;
+        // `a_return_to_the_previous_directory_follows_the_move_the_walk_saw`
+        // covers it. An `$OLDPWD` spelling is an expansion the walk never
+        // reads, so it stays out.
         "cd app && ls && cd $OLDPWD".to_owned(),
         // A `;` leaves the shell of a failed `cd` where it started, and the
         // climb from there is a step out, so both readings have to stay in.
