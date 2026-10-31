@@ -632,6 +632,7 @@
       "src/prompt_analysis_merge.rs",
       "src/pytest_argv.rs",
       "src/read_only_fanout.rs",
+      "src/read_only_fanout_listing.rs",
       "src/redacted_command_tokens.rs",
       "src/restricted_command.rs",
       "src/restricted_pytest/authority.rs",

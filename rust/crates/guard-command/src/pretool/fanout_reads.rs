@@ -234,7 +234,10 @@ pub(super) fn safe_xargs(
 ///
 /// A child that reads file contents asks for the same extension bound a `find`
 /// producer asks for, through `-g` or `--include`, because a listing search
-/// walks every file under its root whatever its name.
+/// walks every file under its root whatever its name. Every glob on the line
+/// has to carry it: the search prints a file that matched any one of them, so
+/// a single `-g '*.env*'` beside `-g '*.ts'` widens the walk rather than
+/// narrowing it.
 pub(super) fn safe_listing_xargs(
     model: &CanonicalCommandV1,
     segment: &CommandSegmentV1,
@@ -247,7 +250,12 @@ pub(super) fn safe_listing_xargs(
     ) else {
         return false;
     };
-    let Some(shape) = fanout::listing_shape(&previous.arguments) else {
+    let Some(shape) = previous
+        .executable
+        .as_deref()
+        .map(crate::parser_executables::executable_basename)
+        .and_then(|tool| fanout::listing::shape(tool, &previous.arguments))
+    else {
         return false;
     };
     if !words_as_written(previous) {
@@ -257,10 +265,11 @@ pub(super) fn safe_listing_xargs(
         && shape.null_separated
         && (xargs.no_run_if_empty || fanout::bounded_without_operands(xargs.child))
         && (!fanout::child_reads_contents(xargs.child)
-            || shape
-                .patterns
-                .iter()
-                .any(|pattern| plain_extension_pattern(pattern)))
+            || (!shape.patterns.is_empty()
+                && shape
+                    .patterns
+                    .iter()
+                    .all(|pattern| plain_extension_pattern(pattern))))
         && roots_inside_workspace(&shape.roots, context)
         && child_proven(model, segment, xargs.child, context)
 }
@@ -274,7 +283,7 @@ fn previous_listing<'a>(
         .iter()
         .position(|candidate| candidate.span.start == segment.span.start)?;
     let previous = &model.segments[index.checked_sub(1)?];
-    fanout::xargs_follows_listing(
+    fanout::listing::xargs_follows(
         previous,
         segment.pipeline_index,
         &segment.execution_context,
