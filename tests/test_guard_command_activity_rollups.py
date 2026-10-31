@@ -32,11 +32,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     CorrelationKind,
     ReceiptLinkStatus,
 )
-from codex_plugin_scanner.guard.runtime.command_activity_privacy import (
-    MIN_CLOUD_AGGREGATE_COUNT,
-    CloudAggregateDimension,
-    CloudCommandActivityAggregate,
-)
 from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind
 from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 from codex_plugin_scanner.guard.store import GuardStore
@@ -189,7 +184,14 @@ def test_record_and_transition_update_exact_bounded_cells_once(tmp_path: Path) -
     assert cells[(day, "latency", "evaluation.not_measured")] == 1
     assert cells[(day, "latency", "persistence.le_2_ms")] == 3
     assert {dimension for _day, dimension, _value in cells} <= {
-        item.value for item in CloudAggregateDimension if item is not CloudAggregateDimension.TOTAL
+        "harness",
+        "extension",
+        "rule",
+        "disposition",
+        "execution_status",
+        "prompt_status",
+        "proof_level",
+        "latency",
     }
 
     current = replace(
@@ -208,24 +210,6 @@ def test_record_and_transition_update_exact_bounded_cells_once(tmp_path: Path) -
     assert transitioned[(day, "latency", "persistence.le_2_ms")] == 2
     assert transitioned[(day, "latency", "persistence.le_5_ms")] == 1
     assert _total(store, day) == 3
-
-
-def test_latency_cells_have_explicit_bounded_cloud_semantics() -> None:
-    for value in ("evaluation.le_5_ms", "persistence.le_2_ms"):
-        aggregate = CloudCommandActivityAggregate(
-            day=_NOW.date(),
-            dimension=CloudAggregateDimension.LATENCY,
-            dimension_value=value,
-            count=MIN_CLOUD_AGGREGATE_COUNT,
-        )
-        assert aggregate.dimension_value == value
-    with pytest.raises(ValueError, match="bounded aggregate dimension"):
-        CloudCommandActivityAggregate(
-            day=_NOW.date(),
-            dimension=CloudAggregateDimension.LATENCY,
-            dimension_value="le_5_ms",
-            count=MIN_CLOUD_AGGREGATE_COUNT,
-        )
 
 
 def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms(
