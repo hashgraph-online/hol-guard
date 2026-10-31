@@ -8,8 +8,9 @@
 //! Seatbelt on macOS, a bubblewrap overlay on Linux. It replaces
 //! `guard execute-contained-test` for that shape, step for step: every check
 //! that fails, fails closed with the reason that command printed, and nothing
-//! runs outside the sandbox except the `git init` a plan bootstraps and the
-//! Git steps that follow passing checks, once the resident proves them again.
+//! runs outside the sandbox except the `git init` a plan bootstraps, the
+//! Git steps that follow passing checks and a `git worktree add` that comes
+//! before them, each once the resident proves it again.
 //!
 //! Rust owns every verdict: the resident's receipt, the operations' plan.
 
@@ -57,6 +58,8 @@ mod snapshot;
 mod split;
 #[path = "contained_vitest_sink.rs"]
 mod vitest;
+#[path = "contained_workspace_sink_worktree.rs"]
+mod worktree;
 #[path = "contained_workspace_sink_wrapper.rs"]
 mod wrapper;
 
@@ -69,10 +72,9 @@ pub(crate) use directory::directory_change;
 pub(crate) use plan_check::entered_sibling;
 pub(crate) use process::launch;
 pub(crate) use readonly::readonly_shape;
-pub(crate) use split::host_split;
-use split::publishes;
 #[cfg(test)]
 pub(crate) use split::PUBLISH_REASON;
+use split::{host_split, publishes};
 
 pub(crate) const SINK_COMMAND: &str = "contained-workspace-sink";
 pub(crate) const LAUNCH_COMMAND: &str = "contained-workspace-launch";
@@ -324,6 +326,9 @@ fn run_workspace_contained(
         .and_then(|input| input.get("command"))
         .and_then(Value::as_str)
         .ok_or_else(|| Failure::invalid("Invalid workspace sandbox request."))?;
+    if host_split(first_receipt.get("reason")) {
+        return worktree::run(payload, workspace, authority, first_receipt, signals);
+    }
     // The session workspace, or the sibling repository the call is anchored
     // in; authority is still asked from the session workspace.
     let root = path_text(workspace)?;

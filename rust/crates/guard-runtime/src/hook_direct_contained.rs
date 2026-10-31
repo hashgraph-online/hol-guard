@@ -227,9 +227,9 @@ pub(crate) fn native_sink(
 }
 
 /// Whether the native sink reproduces this workspace sandbox: a workspace
-/// run, or checks followed by Git steps, but not a `git worktree add` chain,
-/// started in the workspace itself or below a sibling repository's root,
-/// with no home expansion or directory change the sink does not yet replay.
+/// run, checks followed by Git steps, or a `git worktree add` chain, started
+/// in the workspace itself or below a sibling repository's root, with no
+/// home expansion or directory change the sink does not yet replay.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn native_shape(
     response: &Value,
@@ -237,7 +237,7 @@ fn native_shape(
     workspace: &str,
     home: &str,
 ) -> bool {
-    use crate::contained_workspace_sink::{host_split, WORKSPACE_PROFILE, WORKSPACE_REASON};
+    use crate::contained_workspace_sink::{WORKSPACE_PROFILE, WORKSPACE_REASON};
     let text = |name: &str| response.get(name).and_then(Value::as_str);
     let Some(command) = original.get("command").and_then(Value::as_str) else {
         return false;
@@ -247,7 +247,6 @@ fn native_shape(
     }
     text("reason_code") == Some(WORKSPACE_REASON)
         && text("required_execution_profile") == Some(WORKSPACE_PROFILE)
-        && !host_split(response.get("reason"))
         && !original.contains_key("cwd")
         && (!command.trim_start().starts_with("cd")
             || leading_directory_change(command, workspace, home)

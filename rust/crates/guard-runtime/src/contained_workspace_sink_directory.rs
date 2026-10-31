@@ -42,7 +42,7 @@ pub(super) fn contained(
         .and_then(Value::as_object)
         .ok_or_else(rejected)?;
     let (directory, rest) = split(input, workspace, home).ok_or_else(rejected)?;
-    if workspace_sandbox(receipt) {
+    if receipt_matches(receipt) {
         // The `cd` form is judged from the session folder and can lose the
         // workspace sandbox native authority chose inside `cwd`. Only a
         // directory the sandbox may be rooted at is asked about: the
@@ -54,7 +54,7 @@ pub(super) fn contained(
             let mut rooted = payload.clone();
             rooted.insert("cwd".to_owned(), Value::String(path_text(&root)?));
             rooted.insert("tool_input".to_owned(), Value::Object(rest.clone()));
-            if let Some(first) = authority.authorize(&rooted).filter(workspace_sandbox) {
+            if let Some(first) = authority.authorize(&rooted).filter(receipt_matches) {
                 return wrapper::contained(&rooted, &root, authority, &first, signals);
             }
         }
@@ -77,10 +77,6 @@ pub(crate) fn directory_change(
 ) -> Option<Map<String, Value>> {
     let (directory, rest) = split(input, workspace, home)?;
     with_directory(directory.as_deref(), rest)
-}
-
-fn workspace_sandbox(receipt: &Map<String, Value>) -> bool {
-    receipt_matches(receipt) && !host_split(receipt.get("reason"))
 }
 
 /// The directory `input`'s `cwd` argument names, and the input without it.

@@ -357,9 +357,10 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         workspace,
         HOME
     ));
+    // It also creates a linked worktree before the checks chained to it.
     let mut worktree = denial.clone();
     worktree["reason"] = json!(guard_command::pretool::CONTAINED_WORKTREE_ADD_REASON);
-    assert!(!native_shape(
+    assert!(native_shape(
         &worktree,
         &input("git worktree add ../app-fix HEAD && cd ../app-fix && pytest"),
         workspace,
