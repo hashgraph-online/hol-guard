@@ -108,6 +108,7 @@ def test_skill_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp
 
 def test_mcp_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:
     (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "_cisco_mcp_scanner_runnable", lambda: True)
 
     monkeypatch.setattr(
         cisco_mcp_scanner,
@@ -123,6 +124,7 @@ def test_mcp_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tm
 
 def test_mcp_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp_path: Path) -> None:
     (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "_cisco_mcp_scanner_runnable", lambda: True)
     observed_timeouts: list[float] = []
 
     def fake_run(*_args: object, **kwargs: object) -> ScannerProcessResult:
@@ -135,3 +137,53 @@ def test_mcp_scanner_none_timeout_still_uses_isolated_default(monkeypatch, tmp_p
 
     assert summary.status is CiscoIntegrationStatus.TIMED_OUT
     assert observed_timeouts == [cisco_mcp_scanner.DEFAULT_CISCO_MCP_TIMEOUT_SECONDS]
+
+
+def _refuse_scanner_child(*_args: object, **_kwargs: object) -> ScannerProcessResult:
+    raise AssertionError("the scan started a child process it could not use")
+
+
+def test_mcp_scanner_skips_without_a_child_when_there_is_no_mcp_configuration(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cisco_mcp_scanner, "run_bounded_scanner_process", _refuse_scanner_child)
+
+    summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode="on")
+
+    assert summary.status is CiscoIntegrationStatus.SKIPPED
+    assert summary.message == "No MCP configuration found; Cisco MCP scan skipped."
+
+
+@pytest.mark.parametrize(
+    ("mode", "message"),
+    [
+        ("auto", "Cisco MCP scanner not installed; deep MCP scan skipped."),
+        ("on", "Cisco MCP scanner is required but not installed. Ensure package dependencies are installed."),
+    ],
+)
+def test_mcp_scanner_reports_a_missing_scanner_without_a_child(
+    monkeypatch, tmp_path: Path, mode: str, message: str
+) -> None:
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "run_bounded_scanner_process", _refuse_scanner_child)
+
+    def missing(name: str) -> object:
+        raise cisco_mcp_scanner.importlib_metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(cisco_mcp_scanner.importlib_metadata, "distribution", missing)
+
+    summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path, mode=mode)
+
+    assert summary.status is CiscoIntegrationStatus.UNAVAILABLE
+    assert summary.message == message
+
+
+def test_packaged_guard_reports_the_mcp_scanner_unavailable_without_a_child(monkeypatch, tmp_path: Path) -> None:
+    """A onefile Guard cannot run ``-c`` code; each child re-extracted the runtime only to fail."""
+
+    (tmp_path / ".mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(cisco_mcp_scanner, "run_bounded_scanner_process", _refuse_scanner_child)
+    monkeypatch.setattr(cisco_mcp_scanner.importlib_metadata, "distribution", lambda name: object())
+    monkeypatch.setattr(cisco_mcp_scanner.sys, "frozen", True, raising=False)
+
+    summary = cisco_mcp_scanner.run_cisco_mcp_scan(tmp_path)
+
+    assert summary.status is CiscoIntegrationStatus.UNAVAILABLE
