@@ -146,34 +146,42 @@ pub(super) fn stamp(metadata: &Metadata) -> Stamp {
 
 /// Every directory and file below `root`, depth first in name order, each
 /// file with its own digest. A link, a special file, or a tree past its
-/// bounds has no digest, and neither does an empty one.
+/// bounds has no digest, and neither does an empty one. Each directory must
+/// still be the one that was queued, before and after its entries are read,
+/// so a directory swapped for a link while queued is never followed.
 fn directory_digest(root: &Path) -> Option<String> {
     let mut entries: Vec<String> = Vec::new();
     let mut total_bytes = 0_u64;
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(directory) = pending.pop() {
+    let mut pending = vec![(root.to_path_buf(), fs::symlink_metadata(root).ok()?)];
+    while let Some((directory, queued)) = pending.pop() {
+        if !is_same_directory(&directory, &queued) {
+            return None;
+        }
         let mut names: Vec<OsString> = Vec::new();
         for entry in fs::read_dir(&directory).ok()? {
             names.push(entry.ok()?.file_name());
+        }
+        if !is_same_directory(&directory, &queued) {
+            return None;
         }
         if entries.len() + names.len() > MAX_DIRECTORY_ENTRIES {
             return None;
         }
         names.sort();
-        let mut directories: Vec<PathBuf> = Vec::new();
+        let mut directories: Vec<(PathBuf, Metadata)> = Vec::new();
         let mut files: Vec<(PathBuf, Metadata)> = Vec::new();
         for name in names {
             let candidate = directory.join(name);
             let metadata = fs::symlink_metadata(&candidate).ok()?;
             if metadata.is_dir() {
-                directories.push(candidate);
+                directories.push((candidate, metadata));
             } else if metadata.is_file() {
                 files.push((candidate, metadata));
             } else {
                 return None;
             }
         }
-        for candidate in &directories {
+        for (candidate, _) in &directories {
             entries.push(format!("d:{}", relative_text(candidate, root)?));
         }
         for (candidate, metadata) in &files {
@@ -193,6 +201,13 @@ fn directory_digest(root: &Path) -> Option<String> {
         return None;
     }
     Some(hex::encode(Sha256::digest(entries.join("\n").as_bytes())))
+}
+
+/// `path` is still a directory, not a link, with the identity and times it
+/// had when it was queued. A directory's size moves with its entries, which
+/// the digest covers.
+pub(super) fn is_same_directory(path: &Path, queued: &Metadata) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|now| now.is_dir() && stamp(&now).1 == stamp(queued).1)
 }
 
 /// `path` below `root`, spelled with this platform's separator.

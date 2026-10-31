@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use super::artifacts::{artifact_digest, managed_manifest_paths, resolve_lenient, Evidence};
+use super::artifacts::{
+    artifact_digest, is_same_directory, managed_manifest_paths, resolve_lenient, Evidence,
+};
 use super::{register, unregister, verify, Coverage, ErrorClass, REGISTRY_NAME};
 
 struct Fixture {
@@ -441,4 +443,26 @@ fn lenient_resolution_follows_links_and_keeps_the_missing_rest() {
         fixture.home.join("z")
     );
     assert!(resolve_lenient(&fixture.home.join("loop")).starts_with(&fixture.home));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_directory_swapped_for_a_link_while_queued_is_not_followed() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = setup();
+    let extension = fixture.home.join(".guard-extension");
+    let nested = extension.join("sub").join("deeper");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(nested.join("b.txt"), "b").unwrap();
+    let queued = fs::symlink_metadata(&nested).unwrap();
+    assert!(is_same_directory(&nested, &queued));
+
+    let identical = fixture.home.join("identical");
+    fs::create_dir_all(&identical).unwrap();
+    fs::write(identical.join("b.txt"), "b").unwrap();
+    fs::remove_dir_all(&nested).unwrap();
+    symlink(&identical, &nested).unwrap();
+    assert!(!is_same_directory(&nested, &queued));
+    assert_eq!(artifact_digest(&extension), None);
 }

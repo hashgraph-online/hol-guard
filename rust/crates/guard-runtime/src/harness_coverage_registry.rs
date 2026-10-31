@@ -25,13 +25,26 @@ pub(super) fn read_registry(
     owner_uid: u32,
 ) -> Result<Option<Map<String, Value>>, CoverageError> {
     let target = state_root.join(REGISTRY_NAME);
+    // Windows cannot open without following a reparse point, so a linked
+    // registry is refused here and the opened file must be the one checked.
+    let linked = match fs::symlink_metadata(&target) {
+        Ok(linked) => linked,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(os_error(error)),
+    };
+    if linked.file_type().is_symlink() {
+        return Err(os_error(io::Error::from(io::ErrorKind::InvalidInput)));
+    }
     let mut file = match open_without_following(&target) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(os_error(error)),
     };
     let metadata = file.metadata().map_err(os_error)?;
-    if !metadata.is_file() || metadata.len() > MAX_REGISTRY_BYTES {
+    if !metadata.is_file()
+        || metadata.len() > MAX_REGISTRY_BYTES
+        || stamp(&linked) != stamp(&metadata)
+    {
         return Err(value_error(REGISTRY_INVALID));
     }
     if !registry_acl_is_private(&metadata, owner_uid) {
@@ -116,14 +129,13 @@ fn harnesses_are_valid(harnesses: &[Value]) -> bool {
             && artifacts.len() <= MAX_ARTIFACTS_PER_HARNESS
             && artifacts
                 .iter()
-                .all(|artifact| artifact_fields(artifact).is_some())
+                .all(|artifact| artifact.as_object().and_then(artifact_fields).is_some())
     })
 }
 
 /// An artifact record's relative path, kind and recorded digest, or `None`
 /// when the record is malformed. A `null` digest is no digest.
-pub(super) fn artifact_fields(artifact: &Value) -> Option<(&str, &str, Option<&str>)> {
-    let artifact = artifact.as_object()?;
+pub(super) fn artifact_fields(artifact: &Map<String, Value>) -> Option<(&str, &str, Option<&str>)> {
     let path = artifact.get("path")?.as_str()?;
     let kind = artifact.get("kind")?.as_str()?;
     let recorded = artifact.get("sha256");

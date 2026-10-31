@@ -183,7 +183,7 @@ fn project(registry: &Map<String, Value>, required: &[String]) -> Verification {
 
 /// How one registered artifact stands now. Its record was validated when the
 /// registry was read.
-fn artifact_state(home: &Path, artifact: &Value) -> ArtifactState {
+fn artifact_state(home: &Path, artifact: &Map<String, Value>) -> ArtifactState {
     let Some((relative, kind, digest)) = artifact_fields(artifact) else {
         return ArtifactState::Missing;
     };
