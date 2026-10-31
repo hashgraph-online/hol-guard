@@ -36388,6 +36388,166 @@
       }
     },
     {
+      "id": "ref-name-branch-create-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git checkout -b fix/secret-scan-gate"
+      }
+    },
+    {
+      "id": "ref-name-branch-create-force-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git checkout -B fix/secret-scan-gate"
+      }
+    },
+    {
+      "id": "ref-name-branch-at-start-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git branch feat/secret-rotation"
+      }
+    },
+    {
+      "id": "ref-name-switch-create-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -c chore/api-key-refresh"
+      }
+    },
+    {
+      "id": "ref-name-log-remote-branch-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline origin/add-secret-blast-radius -5"
+      }
+    },
+    {
+      "id": "ref-name-push-refspec-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git push origin fix/secret-scan-gate"
+      }
+    },
+    {
+      "id": "ref-name-tag-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git tag v2-secret-audit"
+      }
+    },
+    {
+      "id": "ref-name-gh-run-list-branch-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh run list --branch add-secret-blast-radius"
+      }
+    },
+    {
+      "id": "ref-name-gh-pr-list-head-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --head fix/secrets-redaction"
+      }
+    },
+    {
+      "id": "ref-name-gh-run-list-branch-password-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh run list --branch feat/password-reset"
+      }
+    },
+    {
       "id": "npm-outdated",
       "fix_area": "package",
       "harnesses": [

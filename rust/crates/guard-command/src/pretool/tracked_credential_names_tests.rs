@@ -160,12 +160,16 @@ fn only_the_operand_occurrence_of_a_tracked_word_is_removed() {
     write_index(&project.join(".git"), &[CATALOG]);
     let word = CATALOG.to_owned();
     let text = format!("cat {CATALOG} > ../copy/{CATALOG}");
-    let rest = without_tracked_words(&text, [&word], cwd(&project), false).unwrap();
+    let rest =
+        without_tracked_words(&text, [&word], cwd(&project), false, &BTreeSet::new()).unwrap();
     assert!(rest.contains(&format!("../copy/{CATALOG}")), "{rest}");
     let quoted = format!("cat '{CATALOG}'");
-    let rest = without_tracked_words(&quoted, [&word], cwd(&project), false).unwrap();
+    let rest =
+        without_tracked_words(&quoted, [&word], cwd(&project), false, &BTreeSet::new()).unwrap();
     assert!(!rest.contains(CATALOG), "{rest}");
-    assert!(without_tracked_words(&quoted, [&word], cwd(&project), true).is_none());
+    assert!(
+        without_tracked_words(&quoted, [&word], cwd(&project), true, &BTreeSet::new()).is_none()
+    );
 }
 
 #[test]
