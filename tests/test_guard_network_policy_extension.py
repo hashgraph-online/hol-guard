@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from codex_plugin_scanner.guard.policy_document import GuardPolicyDocument, policy_document_digest
-from codex_plugin_scanner.guard.runtime.network_policy_contract import NETWORK_POLICY_SCHEMA_VERSION
+from tests.network_policy_model import (
+    NETWORK_POLICY_SCHEMA_VERSION,
+)
 
 
 def _mapping(network_policy: object | None = None) -> dict[str, object]:

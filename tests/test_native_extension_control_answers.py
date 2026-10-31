@@ -26,6 +26,7 @@ from tests.native_extension_control_support import (
     make_layer,
     make_registry,
     resident_answers,
+    resolve_extension_controls,
     resolve_payload,
 )
 
@@ -38,7 +39,7 @@ def test_resolve_extension_controls_answers_one_item(monkeypatch: pytest.MonkeyP
         lambda request: bound_reply(request, resolve_payload([item_answer(blocked=True)])),
     )
 
-    answer = bridge.resolve_extension_controls(
+    answer = resolve_extension_controls(
         (make_layer(),),
         make_registry(),
         extension_ids=(EXTENSION,),

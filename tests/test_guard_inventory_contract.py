@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.inventory_contract import (
     GuardAgentInventorySnapshot,
     _artifacts_with_unique_ids,
     fingerprint_mapping,
-    fingerprint_path_tree,
     fingerprint_text,
     inventory_item_id,
     inventory_snapshot_from_detection,
@@ -52,7 +51,7 @@ def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) ->
                 item_kind="skill",
                 display_name="Danger skill",
                 description="Danger skill instructions for testing redaction.",
-                source_fingerprint=fingerprint_path_tree(skill_dir, home_dir=tmp_path / "home"),
+                source_fingerprint=fingerprint_text("skill-dir"),
                 content_hash=fingerprint_text((skill_dir / "SKILL.md").read_text()),
                 capability_categories=("reads_secrets", "network_egress"),
                 metadata={
@@ -172,19 +171,8 @@ def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) 
     assert redact_local_path(path_a, home_dir=tmp_path) == "{home}/skill-a/SKILL.md"
 
 
-def test_fingerprint_path_tree_skips_large_ignored_and_path_objects(tmp_path: Path) -> None:
+def test_inventory_snapshot_serializes_path_objects_without_local_paths(tmp_path: Path) -> None:
     root = tmp_path / "workspace"
-    (root / "node_modules" / "pkg").mkdir(parents=True)
-    (root / ".git" / "objects").mkdir(parents=True)
-    (root / "safe").mkdir(parents=True)
-    (root / "safe" / "config.json").write_text('{"ok": true}\n')
-    (root / "node_modules" / "pkg" / "ignored.json").write_text('{"ignored": true}\n')
-    (root / ".git" / "objects" / "ignored").write_text("ignored\n")
-
-    fingerprint = fingerprint_path_tree(root, home_dir=tmp_path)
-    (root / "node_modules" / "pkg" / "ignored.json").write_text('{"ignored": "changed"}\n')
-    (root / ".git" / "objects" / "ignored").write_text("changed\n")
-    fingerprint_after_ignored_changes = fingerprint_path_tree(root, home_dir=tmp_path)
     snapshot = GuardAgentInventorySnapshot(
         snapshot_id="snap-path-object",
         agent_id="agent",
@@ -196,7 +184,7 @@ def test_fingerprint_path_tree_skips_large_ignored_and_path_objects(tmp_path: Pa
                 item_kind="repository",
                 display_name="Repo",
                 description="Repository inventory item for path object serialization.",
-                source_fingerprint=fingerprint,
+                source_fingerprint=fingerprint_text("workspace"),
                 content_hash=fingerprint_text("repo"),
                 capability_categories=("reads_files",),
                 metadata={"pathObject": root / "safe" / "config.json"},
@@ -206,7 +194,6 @@ def test_fingerprint_path_tree_skips_large_ignored_and_path_objects(tmp_path: Pa
 
     encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
 
-    assert fingerprint_after_ignored_changes == fingerprint
     assert str(tmp_path) not in encoded
 
 

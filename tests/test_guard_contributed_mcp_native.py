@@ -12,13 +12,14 @@ import pytest
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import load_mcp_contribution_payloads, mcp_tool_state
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.temporary_mcp_approvals import temporary_mcp_grant_selector
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .mcp_case_batches import package_case_batches
+from .mcp_contribution_client import mcp_tool_state
 from .mcp_recorded_expectations import expected_decision, recorded
 from .test_guard_mcp_server_grants import _artifact, _AuthorityStore, _layer
 from .test_guard_temporary_mcp_approvals import _artifact as _browser_click_artifact

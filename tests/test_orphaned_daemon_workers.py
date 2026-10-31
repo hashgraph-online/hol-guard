@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.daemon.orphaned_daemon_workers import (
     orphaned_daemon_workers,
     parse_process_snapshot,
     terminate_orphaned_daemon_workers,
-    with_hook_worker_command_marker,
 )
 
 _CORE = "/opt/Application Support/hol-guard-desktop/core/versions/3.6.3/hol-guard"
@@ -202,12 +201,11 @@ def test_terminate_does_not_force_kill_after_the_start_token_changes(monkeypatch
 
 
 def test_marked_python_command_is_attributable() -> None:
-    command = with_hook_worker_command_marker(
-        ["/usr/bin/python3", "-c", "from multiprocessing.spawn import spawn_main", "--multiprocessing-fork"]
-    )
+    unmarked = "/usr/bin/python3 -c from multiprocessing.spawn import spawn_main --multiprocessing-fork"
+    marked = f"{unmarked} {HOOK_WORKER_COMMAND_MARKER}"
 
-    assert command[-1] == HOOK_WORKER_COMMAND_MARKER
-    assert with_hook_worker_command_marker(command) == command
+    assert [process.pid for process in orphaned_daemon_workers([ProcessSnapshot(50, 1, "S", marked)])] == [50]
+    assert orphaned_daemon_workers([ProcessSnapshot(50, 1, "S", unmarked)]) == []
 
 
 def test_reap_returns_when_the_start_deadline_has_passed(monkeypatch: pytest.MonkeyPatch) -> None:

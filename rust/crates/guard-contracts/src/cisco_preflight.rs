@@ -114,13 +114,17 @@ pub struct CiscoEvidenceQueryV1 {
     pub steps: Vec<CiscoStepV1>,
 }
 
-/// The configured action of each risk class, resolved by the caller from its
-/// config; the resident composes them. `null` means nothing is configured.
+/// The configuration the signals' risk classes are resolved under; the
+/// resident resolves each class and composes the result. The caller sends the
+/// configuration it loaded and resolves nothing itself.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CiscoPolicyQueryV1 {
     pub signal_sources: Vec<String>,
-    pub configured_actions: std::collections::BTreeMap<String, Option<String>>,
+    pub guard_config: crate::RiskActionConfigV1,
+    /// The harness whose per-harness risk actions and posture apply, if any.
+    #[serde(default)]
+    pub harness: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

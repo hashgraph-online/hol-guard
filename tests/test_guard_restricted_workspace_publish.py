@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
+from codex_plugin_scanner.guard.runtime.host_steps import outside_search_path
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
 from tests.test_guard_restricted_workspace import payload, plan, receipt
 
@@ -31,7 +32,7 @@ def _rust_concat(relative: str, name: str) -> str:
     ("relative", "name"),
     [
         ("guard-command/src/pretool/contained_publish.rs", "REASON_TEXT"),
-        ("guard-runtime/src/contained_workspace_sink.rs", "PUBLISH_REASON"),
+        ("guard-runtime/src/contained_workspace_sink_split.rs", "PUBLISH_REASON"),
     ],
 )
 def test_the_publish_reason_matches_rust_exactly(relative: str, name: str) -> None:
@@ -181,4 +182,4 @@ def test_git_steps_never_resolve_through_workspace_or_relative_path_entries(
 def test_outside_search_path_keeps_only_absolute_entries_outside_the_workspace(tmp_path: Path) -> None:
     inside = tmp_path / "node_modules" / ".bin"
     search_path = f"/usr/bin::.:bin:{tmp_path}:{inside}:{tmp_path}/../{tmp_path.name}/x:/bin"
-    assert workspace_sink._outside_search_path(search_path, tmp_path) == "/usr/bin:/bin"
+    assert outside_search_path(search_path, tmp_path) == "/usr/bin:/bin"

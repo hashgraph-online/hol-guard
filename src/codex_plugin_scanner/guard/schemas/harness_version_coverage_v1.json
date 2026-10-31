@@ -1,6 +1,6 @@
 {
   "schema_version": "hol-guard-harness-version-coverage.v1",
-  "revision": "2026-10-16.1",
+  "revision": "2026-10-30.1",
   "harnesses": [
     {
       "harness": "omp",
@@ -23,7 +23,26 @@
           "url": "https://github.com/can1357/oh-my-pi/releases"
         }
       ],
-      "records": []
+      "records": [
+        {
+          "harness_version": "18.11.3",
+          "guard_version": "3.59.0",
+          "platforms": [
+            "linux-x86_64"
+          ],
+          "transport": "managed_extension",
+          "events": [
+            "PreToolUse"
+          ],
+          "suite": {
+            "id": "pi-exact-continuation",
+            "result": "passed"
+          },
+          "evidence_level": "unit_test",
+          "evidence_reference": "https://github.com/hashgraph-online/hol-guard/actions/runs/41011436064",
+          "observed_at": "2026-10-30T13:54:53Z"
+        }
+      ]
     }
   ]
 }

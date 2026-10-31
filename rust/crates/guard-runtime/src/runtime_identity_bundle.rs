@@ -15,13 +15,14 @@
 //! one, the same limit package evaluation puts on such a bundle.
 
 use std::collections::BTreeSet;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use guard_command::supply_chain_bundle::{
     load_supply_chain_bundle_response, SupplyChainBundleError,
 };
 use guard_command::supply_chain_bundle_cache_trust::{
-    cached_supply_chain_bundle_valid_until, validate_cached_supply_chain_bundle,
-    CachedBundleRejection,
+    cached_supply_chain_bundle_key_valid_until, cached_supply_chain_bundle_valid_until,
+    validate_cached_supply_chain_bundle, CachedBundleRejection,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -127,6 +128,96 @@ pub(crate) fn bundle_advisories(
     let Some(input) = input else {
         return (Vec::new(), source("absent", None, None));
     };
+    evaluate(input, input.now, budget)
+}
+
+/// Launch admission keeps an expired bundle's rules for positive matches only:
+/// PRD retains stale affected verdicts while stale absence stays unknown. The
+/// bundle is re-checked as of its own expiry, so scope, payload hash,
+/// signature, key state and rollback are still enforced; only freshness is
+/// relaxed, and the report stays `stale` so callers never clear on it. A
+/// grace key that vouched for it must still be valid now; the report's
+/// `valid_until` is that key's expiry, or null when no grace key bounds it.
+/// Seconds since the Unix epoch, on every platform.
+pub(crate) fn now_seconds() -> f64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0.0, |elapsed| elapsed.as_secs_f64())
+}
+
+pub(crate) fn launch_bundle_advisories(input: Option<&CachedBundleInput>) -> LaunchAdvisories {
+    let budget = Budget {
+        artifacts: 1,
+        supplied: &[],
+    };
+    let (advisories, source) = bundle_advisories(input, &budget);
+    let current = LaunchAdvisories { advisories, source };
+    let (Some(input), Some("bundle_expired")) = (input, current.source["reason"].as_str()) else {
+        return current;
+    };
+    let Ok(typed) = load_supply_chain_bundle_response(&input.response) else {
+        return current;
+    };
+    let Ok(expired_at) = typed.bundle.expires_at_timestamp() else {
+        return current;
+    };
+    let key_until = cached_supply_chain_bundle_key_valid_until(&typed, input.sync_keyring.as_ref());
+    let now = input.now.unwrap_or_else(now_seconds);
+    if key_until.is_some_and(|until| now > until) {
+        return current;
+    }
+    let (advisories, mut source) = evaluate(input, Some(expired_at), &budget);
+    if source["state"] != "verified" {
+        return current;
+    }
+    source["state"] = json!("stale");
+    source["reason"] = json!("bundle_expired");
+    source["expired_at"] = json!(expired_at);
+    source["valid_until"] = json!(key_until);
+    LaunchAdvisories { advisories, source }
+}
+
+/// Bundle rules verified once and reused across launch checks.
+#[derive(Debug)]
+pub(crate) struct LaunchAdvisories {
+    pub(super) advisories: Vec<AdvisoryInput>,
+    pub(crate) source: Value,
+}
+
+#[cfg(test)]
+impl LaunchAdvisories {
+    /// Advisories in request form, as if taken from a bundle reported by
+    /// `source`.
+    pub(crate) fn for_tests(advisories: Value, source: Value) -> Self {
+        Self {
+            advisories: serde_json::from_value(advisories).expect("advisories"),
+            source,
+        }
+    }
+}
+
+impl CachedBundleInput {
+    pub(crate) fn new(
+        response: Value,
+        workspace_id: String,
+        sync_keyring: Option<Value>,
+        entitlement: Option<Value>,
+    ) -> Self {
+        Self {
+            response,
+            workspace_id,
+            sync_keyring,
+            entitlement,
+            now: None,
+        }
+    }
+}
+
+fn evaluate(
+    input: &CachedBundleInput,
+    now: Option<f64>,
+    budget: &Budget<'_>,
+) -> (Vec<AdvisoryInput>, Value) {
     let synced_version = match synced_bundle_version(input) {
         Ok(version) => version,
         Err(reason) => return (Vec::new(), source("invalid", Some(reason), None)),
@@ -143,7 +234,7 @@ pub(crate) fn bundle_advisories(
     let anchored = match validate_cached_supply_chain_bundle(
         &typed,
         &input.workspace_id,
-        input.now,
+        now,
         input.sync_keyring.as_ref(),
         synced_version.as_deref(),
     ) {

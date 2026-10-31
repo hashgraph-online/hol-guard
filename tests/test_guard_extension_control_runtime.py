@@ -26,10 +26,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     ExtensionControlRuntime,
     ExtensionControlRuntimeSnapshot,
     ExtensionControlSnapshotUnavailableError,
-    current_extension_control_binding_digest,
-    current_extension_control_snapshot,
-    extension_control_policy_version,
-    use_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -242,87 +238,12 @@ def test_snapshot_digest_is_independent_of_layer_and_control_order() -> None:
     assert first.effective_digest == second.effective_digest
 
 
-def test_active_snapshot_is_request_local_and_restored_after_evaluation() -> None:
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(_view(7))
-    inactive_digest = current_extension_control_binding_digest()
-
-    assert current_extension_control_snapshot() is None
-    with use_extension_control_snapshot(snapshot):
-        assert current_extension_control_snapshot() is snapshot
-        assert current_extension_control_binding_digest() == snapshot.effective_digest
-        assert extension_control_policy_version("policy.v1") == f"policy.v1@{snapshot.effective_digest}"
-
-    assert current_extension_control_snapshot() is None
-    assert current_extension_control_binding_digest() == inactive_digest
-
-
 def test_authority_health_maps_to_fail_closed_runtime_failure() -> None:
     unavailable = ExtensionControlRuntimeSnapshot.from_authority_view(_view(0, health=AuthorityHealth.UNENROLLED))
     tampered = ExtensionControlRuntimeSnapshot.from_authority_view(_view(1, health=AuthorityHealth.TAMPERED))
 
     assert unavailable.authority_failure is ResolverFailureCode.AUTHORITY_UNAVAILABLE
     assert tampered.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "echo MALICIOUS > dangerous-marker.json",
-        "echo MALICIOUS 2> dangerous-marker.json",
-        "echo MALICIOUS >| dangerous-marker.json",
-    ),
-)
-def test_unavailable_authority_cannot_relax_native_redirect_block(command: str) -> None:
-    from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
-    from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-    from codex_plugin_scanner.guard.runtime.native_command_evaluation import review_command_native
-    from tests.native_command_test_support import real_native_review_fixture
-
-    fixture = real_native_review_fixture(command, health=AuthorityHealth.UNENROLLED)
-    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
-    assert canonical is not None
-    assert fixture.payload["minimum_action"] == "block"
-    assert canonical.uncertainty_reason == "command_redirect_not_yet_supported"
-    assert fixture.payload["command_extensions"]["evaluation_error"] == "native_command_evaluation_failed"
-    assert fixture.payload["command_extensions"]["observations"] == []
-    snapshot = fixture.snapshot
-    with use_extension_control_snapshot(snapshot):
-        evaluation = evaluate_command(command, canonical_command=canonical, native_extension_evidence=fixture.payload)
-        # Valid, request-bound failure evidence remains an authoritative block
-        # even after host authority becomes unavailable. It supplies no match
-        # observations and cannot issue an execution proof.
-        assert evaluation.minimum_action == "block"
-        assert evaluation.decision_plane.action == "block"
-        assert evaluation.matches == ()
-        assert evaluation.decision_plane.proof_routes == frozenset()
-        assert any(reason.reason_code == "native.classification-block" for reason in evaluation.decision_plane.reasons)
-        assert review_command_native(command, guard_home=Path("unused-guard-home")) is None
-
-
-def test_unavailable_authority_blocks_otherwise_valid_native_destructive_evidence() -> None:
-    from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
-    from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-    from tests.native_command_test_support import real_native_review_fixture
-
-    command = "rm -rf ./build"
-    fixture = real_native_review_fixture(command, health=AuthorityHealth.UNENROLLED)
-    canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
-    assert canonical is not None
-    assert fixture.payload["command_extensions"]["evaluation_error"] is None
-    # Even otherwise matching native evidence cannot authorize an unhealthy
-    # control snapshot. This exercises the reducer's independent health floor.
-    snapshot = fixture.snapshot
-    with use_extension_control_snapshot(snapshot):
-        evaluation = evaluate_command(
-            command,
-            canonical_command=canonical,
-            native_extension_evidence=fixture.payload,
-        )
-
-    assert evaluation.decision_plane.action == "block"
-    assert any(
-        reason.reason_code == "control.resolver-failure" for reason in evaluation.decision_plane.controlling_reasons
-    )
 
 
 def _resident_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

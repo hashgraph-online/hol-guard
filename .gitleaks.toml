@@ -136,6 +136,15 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Recorded provider-catalog fingerprint in the MCP provider read parity vectors, a SHA-256 of the catalog rows rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/mcp_provider_read_vectors\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "Synthetic OAuth subject digest recorded in the guard-store parity vectors, not a credential"
 condition = "AND"
 regexTarget = "secret"
@@ -336,6 +345,16 @@ paths = [
 ]
 regexes = [
   '''^[\t\r\n ]*"(?:replayKey|replay_key)": "[0-9a-f]{64}",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic provider-shaped samples the new secret rules are tested against, each held in two pieces so no whole token appears in source"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/secret_detection\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*\("vault\-token", "hvs\.CAESIJq2VL8nP4wR7t", "Y1uI6oP3aS5dFgHj"\),[\t\r\n ]*$''',
+  '''^[\t\r\n ]*\("square\-access\-token", "sq0atp\-Qq2VL8nP4w", "R7tY1uI6oP3a"\),[\t\r\n ]*$''',
 ]
 
 [[rules]]

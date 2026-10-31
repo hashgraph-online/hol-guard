@@ -16,6 +16,16 @@ const PYTHON: &str = r"C:\Python\python.exe";
 const BOOTSTRAP: &str = r"import sys;sys.path.insert(0, 'C:\\Guard\\site-packages');from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))";
 const PYTHON_DENY: &str = r#"{"policy_action":"sandbox-required","decision":"deny","reason_code":"native_python_eval_readonly_containment_required","required_execution_profile":"python-eval-readonly-v1","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}"#;
 
+/// A host whose runtime runs no sink itself.
+fn no_native(
+    _: &serde_json::Value,
+    _: &serde_json::Map<String, serde_json::Value>,
+    _: &str,
+    _: &str,
+) -> Option<String> {
+    None
+}
+
 fn owned(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
@@ -207,6 +217,7 @@ fn a_contained_python_call_is_rewritten_to_a_sink_command_both_shells_run() {
         prefix: &installed,
         guard_home: r"C:\Users\a\.hol-guard",
         home: r"C:\Users\a",
+        native: no_native,
     };
     let deny = parse_mapping_lone_surrogates(PYTHON_DENY).unwrap().value;
     let routed = routed(&deny, &payload, false, &target).unwrap();
@@ -280,6 +291,7 @@ fn a_call_no_shell_can_quote_keeps_the_denial() {
         prefix: &installed,
         guard_home: r"C:\Users\a\.hol-guard",
         home: "C:\\Users\\a \"quoted\"",
+        native: no_native,
     };
     let deny = parse_mapping_lone_surrogates(PYTHON_DENY).unwrap().value;
     assert_eq!(routed(&deny, &payload, false, &target), None::<PyVal>);
@@ -331,4 +343,62 @@ fn only_day_old_plain_snapshots_are_reclaimed() {
     assert!(!stale.exists());
     assert!(fresh.join(REQUEST_FILE_NAME).exists());
     assert!(other.join(REQUEST_FILE_NAME).exists());
+}
+
+/// Removes a snapshot directory the test wrote under the real temporary
+/// directory, whatever the test left in it.
+struct Written(std::path::PathBuf);
+
+impl Drop for Written {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn snapshot() -> (std::path::PathBuf, Written) {
+    let request = write_snapshot(br#"{"schema":"x"}"#).unwrap();
+    let directory = Written(request.parent().unwrap().to_path_buf());
+    (request, directory)
+}
+
+#[test]
+fn a_snapshot_reads_back_only_from_directly_inside_the_temporary_directory() {
+    let (request, directory) = snapshot();
+    assert_eq!(
+        read_snapshot(&request).as_deref(),
+        Some(&br#"{"schema":"x"}"#[..])
+    );
+    let nested = directory
+        .0
+        .join(format!("{REQUEST_DIRECTORY_PREFIX}nested"));
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join(REQUEST_FILE_NAME), b"{}").unwrap();
+    assert_eq!(read_snapshot(&nested.join(REQUEST_FILE_NAME)), None);
+    let elsewhere = tempfile::tempdir().unwrap();
+    let outside = elsewhere
+        .path()
+        .join(format!("{REQUEST_DIRECTORY_PREFIX}outside"));
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join(REQUEST_FILE_NAME), b"{}").unwrap();
+    assert_eq!(read_snapshot(&outside.join(REQUEST_FILE_NAME)), None);
+}
+
+#[test]
+fn a_linked_snapshot_is_refused() {
+    let (request, directory) = snapshot();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let second = elsewhere.path().join("second-name");
+    std::fs::hard_link(&request, &second).unwrap();
+    assert_eq!(read_snapshot(&request), None);
+    std::fs::remove_file(&second).unwrap();
+    assert!(read_snapshot(&request).is_some());
+    let linked = directory.0.with_file_name(format!(
+        "{REQUEST_DIRECTORY_PREFIX}linked-{}",
+        std::process::id()
+    ));
+    let _linked = Written(linked.clone());
+    if std::os::windows::fs::symlink_dir(&directory.0, &linked).is_ok() {
+        assert_eq!(read_snapshot(&linked.join(REQUEST_FILE_NAME)), None);
+        let _ = std::fs::remove_dir(&linked);
+    }
 }

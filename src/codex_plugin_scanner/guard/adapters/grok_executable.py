@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from .base import HarnessContext
+from .base import HarnessContext, _which_from_user_directories
 
 _REGISTRATION_SCHEMA_VERSION = 1
 _REGISTRATION_FILE = "trusted-executable.json"
@@ -84,7 +84,7 @@ def resolve_trusted_grok_executable(context: HarnessContext) -> GrokExecutableRe
     if registered.error is not None:
         return registered
 
-    candidate = _which_grok()
+    candidate = _which_grok(context.home_dir)
     if candidate is None:
         return GrokExecutableResolution(None, "Grok executable was not found in a trusted installation location.")
     return _resolve_candidate(
@@ -168,9 +168,9 @@ def sanitized_grok_launch_environment(
     return environment
 
 
-def _which_grok() -> str | None:
+def _which_grok(home: Path) -> str | None:
     for name in grok_executable_names():
-        candidate = shutil.which(name)
+        candidate = shutil.which(name) or _which_from_user_directories(name, home)
         if candidate is not None:
             return candidate
     return None

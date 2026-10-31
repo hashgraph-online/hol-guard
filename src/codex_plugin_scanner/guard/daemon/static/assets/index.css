@@ -719,6 +719,10 @@
     grid-column: span 2 / span 2;
   }
 
+  .col-span-3 {
+    grid-column: span 3 / span 3;
+  }
+
   .col-span-full {
     grid-column: 1 / -1;
   }
@@ -1843,6 +1847,10 @@
 
   .cursor-pointer {
     cursor: pointer;
+  }
+
+  .cursor-wait {
+    cursor: wait;
   }
 
   .resize {
@@ -4105,6 +4113,10 @@
     }
   }
 
+  .bg-slate-950 {
+    background-color: var(--color-slate-950);
+  }
+
   .bg-slate-950\/45 {
     background-color: #02061873;
   }
@@ -5462,6 +5474,10 @@
 
   .text-slate-50 {
     color: var(--color-slate-50);
+  }
+
+  .text-slate-100 {
+    color: var(--color-slate-100);
   }
 
   .text-slate-200 {
@@ -7210,6 +7226,10 @@
     }
   }
 
+  .aria-\[invalid\=true\]\:border-red-600[aria-invalid="true"] {
+    border-color: var(--color-red-600);
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .motion-safe\:transition-\[height\] {
       transition-property: height;
@@ -7293,8 +7313,8 @@
       margin-top: calc(var(--spacing) * 2);
     }
 
-    .sm\:-ml-4 {
-      margin-left: calc(var(--spacing) * -4);
+    .sm\:ml-0 {
+      margin-left: 0;
     }
 
     .sm\:ml-auto {
@@ -7341,16 +7361,12 @@
       min-height: 0;
     }
 
-    .sm\:min-h-8 {
-      min-height: calc(var(--spacing) * 8);
-    }
-
     .sm\:min-h-9 {
       min-height: calc(var(--spacing) * 9);
     }
 
-    .sm\:w-48 {
-      width: calc(var(--spacing) * 48);
+    .sm\:w-56 {
+      width: calc(var(--spacing) * 56);
     }
 
     .sm\:w-auto {
@@ -7391,10 +7407,6 @@
 
     .sm\:min-w-\[200px\] {
       min-width: 200px;
-    }
-
-    .sm\:shrink-0 {
-      flex-shrink: 0;
     }
 
     .sm\:scroll-mt-4 {
@@ -7871,6 +7883,10 @@
 
     .md\:pl-0 {
       padding-left: 0;
+    }
+
+    .md\:text-right {
+      text-align: right;
     }
   }
 
@@ -8954,6 +8970,11 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   color: var(--extension-brand, var(--brand-blue));
   transition: transform .16s var(--ease-out-quart);
   box-shadow: 0 1px 2px #3f41740f;
+}
+
+.guard-extension-mark[data-kind="guard"] {
+  border-color: var(--brand-dark);
+  background: var(--brand-dark);
 }
 
 .guard-extension-mark[data-size="sm"] {

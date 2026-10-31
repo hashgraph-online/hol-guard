@@ -49,6 +49,11 @@ pub const PORTABLE_COMPOSITION_LOOKUP_FEATURE: &str =
 /// Largest canonical request serialization the op will accept.
 pub const POLICY_DECISION_LOOKUP_MAX_BYTES: usize = 512 * 1024;
 
+/// A lookup's validated policy bundle, read once on first use: `None` inside
+/// when the store has no bundle the resident can validate.
+pub type CloudExceptionBundle =
+    std::sync::Arc<std::sync::OnceLock<Option<serde_json::Map<String, Value>>>>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyDecisionLookupRequestV1 {
@@ -102,6 +107,18 @@ pub struct PolicyDecisionLookupRequestV1 {
     /// bundle source is unset → identity compare short-circuits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_bundle_decision_identities: Option<Vec<Vec<Value>>>,
+    /// The working directory a Cloud exception is matched against when it
+    /// differs from `workspace`. Portable composition probes the portable
+    /// alias of the same project, so the exception still names the local path.
+    /// Set only inside the resident; never on the wire.
+    #[serde(skip)]
+    pub exception_workspace: Option<String>,
+    /// The validated bundle this lookup matches Cloud exceptions against,
+    /// read from the store at most once and shared by every probe cloned from
+    /// the request, so grouped and portable probes pay for one signature check.
+    /// Set only inside the resident; never on the wire.
+    #[serde(skip)]
+    pub cloud_exception_bundle: CloudExceptionBundle,
     /// Non-consuming saved-decision read over several probe groups. Each group
     /// is one artifact hash and its candidate ids (direct, exact-command, then
     /// memory-pattern); the payload is the most restrictive group's decision.

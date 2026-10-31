@@ -67,6 +67,8 @@ pub enum HookAdapterQueryV1 {
     },
     /// Target paths named by an apply-patch tool input.
     ApplyPatchPaths { tool_input: Value },
+    /// The approval request a paused native `PreToolUse` review queues.
+    ReviewRequest(Box<ReviewRequestQueryV1>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -81,6 +83,32 @@ pub struct ActionEnvelopeQueryV1 {
     /// Caller `PATH`, bound into package-intent resolution.
     pub path_env: Option<String>,
     pub host: HookAdapterHostV1,
+}
+
+/// The facts outside the hook payload that a queued native review binds.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewRequestQueryV1 {
+    /// The `action_envelope` query for the reviewed `PreToolUse`.
+    pub envelope: ActionEnvelopeQueryV1,
+    /// The native edge result under review.
+    pub result: Value,
+    /// The pause's native decision receipt, as the hook received it.
+    pub native_receipt: Option<Value>,
+    pub request_id: String,
+    pub approval_center_url: String,
+    /// The `config_path` of a review with no workspace.
+    pub guard_home: String,
+    /// The retry binding the request's `artifact_hash` carries.
+    pub review_binding: Option<String>,
+    /// The exact-action Always token, when the action binds to one.
+    pub exact_token: Option<String>,
+    /// Why only a one-time approval is offered, when there is no token.
+    pub once_only_reason: Option<String>,
+    /// The connector-setup group the review joins.
+    pub queue_group_id: Option<String>,
+    /// The prepared native Bash review (`subject` and `review_lineage`).
+    pub bound_bash: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -207,27 +207,3 @@ def policy_bundle_downgrade_reference(
     if not isinstance(chosen, dict):
         raise _malformed()
     return chosen
-
-
-def policy_simulation(
-    receipts: Sequence[object],
-    decisions: Sequence[Mapping[str, object]],
-    *,
-    bundle_version: object,
-    bundle_hash: object,
-    now: str,
-) -> dict[str, object]:
-    """What a bundle's decisions would have done to the sampled receipts."""
-
-    return dict(
-        native_runner_authority(
-            "policy_simulation",
-            {
-                "receipts": list(receipts),
-                "decisions": [dict(decision) for decision in decisions],
-                "bundle_version": bundle_version,
-                "bundle_hash": bundle_hash,
-                "now": now,
-            },
-        )
-    )

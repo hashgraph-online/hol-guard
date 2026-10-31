@@ -26,6 +26,12 @@ assert.match(changed, /Current identity/);
 assert.match(changed, />bbbbbbbbbbbb</);
 assert.doesNotMatch(changed, /Set up with recommended/);
 
+// Allowed for an earlier version of the file: allow this version from the banner.
+const reallow = render({ match: "reallow" });
+assert.match(reallow, /Allow this version of lanectl/);
+assert.match(reallow, />Allow this version</);
+assert.doesNotMatch(reallow, /Set up with recommended/);
+
 // Already decided: no setup button.
 assert.doesNotMatch(render({ match: "decided" }), /Set up with recommended/);
 

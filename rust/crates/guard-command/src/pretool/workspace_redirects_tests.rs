@@ -18,6 +18,9 @@ fn literal_path_redirects_are_projected_away() {
         ("python3 app.py < input.txt", "python3 app.py"),
         ("python3 app.py 2>/dev/null", "python3 app.py"),
         ("python3 app.py >&2", "python3 app.py"),
+        ("python3 app.py &> out.txt", "python3 app.py"),
+        ("python3 app.py &>> log.txt", "python3 app.py"),
+        ("python3 app.py &> /dev/null", "python3 app.py"),
         ("python3 app.py>out.txt", "python3 app.py"),
         ("echo a > a.txt  &&  echo b", "echo a &&  echo b"),
         ("echo a\\ > a.txt\nrm -rf x", "echo a\\ \nrm -rf x"),
@@ -91,7 +94,6 @@ fn other_redirect_forms_are_not_projected() {
         "python3 app.py 3> out.txt",
         "python3 app.py 2>&3",
         "python3 app.py <&0",
-        "python3 app.py &> out.txt",
         "python3 app.py > ",
     ] {
         assert_eq!(project(raw), None, "{raw:?}");
@@ -246,4 +248,89 @@ fn relative_in_workspace_cd_keeps_the_workspace_sandbox() {
         assert!(core(raw), "{raw}");
         assert!(super::narrower_sink_runs(raw, context), "{raw}");
     }
+}
+
+#[test]
+fn a_backgrounded_command_projects_to_its_foreground_text() {
+    // The parser does not model a background job, so a projection that kept
+    // the trailing `&` was never exact and the workspace route refused it,
+    // although the same command without the redirect takes that route.
+    for (raw, projected) in [
+        ("npm run build > build.log &", "npm run build"),
+        ("npm run build >> build.log &", "npm run build"),
+        ("npm run build 2> err.log &", "npm run build"),
+        ("npm run build > build.log 2>&1 &", "npm run build"),
+        ("npm run dev > dev.log 2>&1   &", "npm run dev"),
+        ("pytest -q > p.log&", "pytest -q"),
+    ] {
+        assert_eq!(project(raw).as_deref(), Some(projected), "{raw}");
+    }
+}
+
+#[test]
+fn only_the_one_ampersand_that_ends_the_command_is_read_off() {
+    // A second `&` separates jobs or joins two commands, and dropping it would
+    // claim the shape of text the shell does not run that way.
+    for (raw, projected) in [
+        ("a > x.log & b > y.log &", "a & b &"),
+        (
+            "npm run build > build.log && echo done",
+            "npm run build && echo done",
+        ),
+        (
+            "npm run dev > dev.log & echo started",
+            "npm run dev & echo started",
+        ),
+    ] {
+        assert_eq!(project(raw).as_deref(), Some(projected), "{raw}");
+    }
+    // `&>` is the one-token redirect that sends both streams to the file,
+    // not a job separator, so it is read off like `> build.log 2>&1`.
+    assert_eq!(
+        project("npm run build &> build.log").as_deref(),
+        Some("npm run build")
+    );
+    // Nothing was projected away, so there is no projection to read.
+    assert_eq!(project("npm run build &"), None);
+    // A word after the target makes the two readings of `&>` name different
+    // work: `bash` passes it to the same program, POSIX `sh` backgrounds the
+    // first command and runs the word as a second one. The sandbox runs the
+    // raw bytes, so the projection refuses rather than model one of them.
+    assert_eq!(project("printf ok &> .tool-versions rm -rf src"), None);
+    assert_eq!(project("npm run build &> build.log tail -5"), None);
+    // A separator after the target leaves both readings naming the same
+    // write, so the ordinary spelling still projects.
+    for raw in [
+        "npm run build &> build.log; echo done",
+        "npm run build &> build.log | tail -5",
+        "npm run build &> build.log & echo started",
+    ] {
+        assert!(project(raw).is_some(), "{raw}");
+    }
+}
+
+#[test]
+fn an_escaped_ampersand_stays_in_the_projection() {
+    // `\&` passes a literal `&` and runs in the foreground, so the projection
+    // keeps it. Reading it off would claim the shape of text the sandbox never
+    // runs, and `contained_shape` recomputes this same projection, so nothing
+    // below would catch the difference.
+    for (raw, projected) in [
+        (r"echo foo\& > out.log", r"echo foo\&"),
+        (r"npm run build > build.log \&", r"npm run build \&"),
+        // The backslashes pair off, so this one really is a background job.
+        (r"npm run build > build.log \\&", r"npm run build \\"),
+    ] {
+        assert_eq!(project(raw).as_deref(), Some(projected), "{raw}");
+    }
+}
+
+#[test]
+fn a_backgrounded_redirect_keeps_the_shape_of_its_foreground_text() {
+    let workspace = fresh_workspace("background");
+    assert!(contained_shape("npm run build > build.log &", "npm run build", &workspace).is_some());
+    // The projection has to be the one the raw text yields.
+    assert!(
+        contained_shape("npm run build > build.log &", "npm run build &", &workspace).is_none()
+    );
 }

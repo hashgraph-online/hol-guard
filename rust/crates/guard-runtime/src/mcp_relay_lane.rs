@@ -9,13 +9,16 @@
 //! prepare the workspace through the hook readiness route and waits a short,
 //! bounded time. A daemon that is down gets one detached `guard daemon
 //! ensure`. A lane that is not ready only because the daemon has not
-//! prepared it yet (`warms_up`) keeps the session native: the first
+//! prepared it yet (`kickable`) keeps the session native: the first
 //! `tools/call` waits, within `WARM_UP_BUDGET`, for the daemon to bind it,
-//! and a call the lane still cannot decide is refused. Every other reason,
-//! including one this module does not know, hands the session to the Python
-//! proxy (`hands_off`): the relay execs the exact proxy argv it was given,
-//! with its environment unchanged (on Windows it runs the proxy as a child
-//! on the same stdio and returns its exit status).
+//! and a call the lane still cannot decide is refused. A session the relay
+//! cannot serve because of a feature it has not ported yet, or because the
+//! daemon runs a newer runtime, is handed to the Python proxy (`hands_off`):
+//! the relay execs the exact proxy argv it was given, with its environment
+//! unchanged (on Windows it runs the proxy as a child on the same stdio and
+//! returns its exit status). Every other reason, including one this module
+//! does not know, keeps the session native, and each call the lane cannot
+//! decide is refused rather than decided by the proxy.
 //!
 //! The readiness answer only steers which launcher runs. Each call is still
 //! admitted by the resident's `mcp_relay_decide`, which repeats every check
@@ -38,7 +41,6 @@ use crate::claude_hook_bridge_auth::{private_file_raw, LOOPBACK_HOSTS};
 use crate::claude_hook_bridge_http::{remaining, LoopbackConnection, MAX_DAEMON_RESPONSE_BYTES};
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
 use crate::mcp_relay_args::RelayArgs;
-use crate::mcp_relay_servers::SERVER_UNKNOWN;
 
 /// How long a session may wait for the lane before it is handed off.
 pub(crate) const STARTUP_BUDGET: Duration = Duration::from_millis(500);
@@ -73,9 +75,13 @@ pub(crate) enum Kick {
     DaemonUnreachable,
     /// The daemon answered that it will not prepare the workspace.
     Refused,
-    /// The daemon was not asked: the kick interval has not passed, or no
-    /// time was left before the deadline.
+    /// The daemon was not asked: the kick interval has not passed since it
+    /// refused or could not be reached, or no time was left before the
+    /// deadline.
     Skipped,
+    /// The daemon was not asked because it took a readiness request within
+    /// the kick interval; it may still be preparing the lane.
+    Pending,
 }
 
 /// Asks the daemon to bind the lane for the session's workspace.
@@ -95,26 +101,22 @@ pub(crate) fn kickable(code: &str) -> bool {
         )
 }
 
-/// The reasons a session stays native while its lane is not ready: the
-/// ones the daemon clears by preparing the workspace, a daemon that is still
-/// starting, and a server the resident has no catalog report of yet, which
-/// the session reports itself (`mcp_relay_servers.rs`).
-pub(crate) fn warms_up(code: &str) -> bool {
-    kickable(code) || matches!(code, DAEMON_UNREACHABLE | SERVER_UNKNOWN)
-}
-
-/// The reasons the native lane cannot serve a session however long it
-/// waits, so it runs as the Python proxy: features the relay has not ported
-/// (`mcp_relay_session_review_mode`, `mcp_relay_saved_remote_policy`,
-/// `mcp_relay_session_server_proxy_tools`, ...), a binding or store the
-/// resident cannot use as it is (`mcp_relay_evidence_undrained`,
-/// `mcp_relay_binding_incomplete`, `mcp_relay_store_unreadable`, ...), a
-/// superseded runtime, an answer the relay cannot read, and a daemon that
-/// will not prepare the native lane. A reason not named by `warms_up` hands
-/// off, so a new readiness code never leaves a session waiting on a kick
-/// that cannot clear it.
+/// The reasons the session runs as the Python proxy: a runtime the daemon has
+/// superseded or a store schema newer than this runtime reads, which the
+/// proxy of the same release still serves, and the features the relay has
+/// not ported yet. Every other reason the lane, the probe or the gate names,
+/// and any code added later, keeps the session native, so a binding, store
+/// or daemon the resident cannot use refuses each call instead of letting
+/// the proxy decide it.
 pub(crate) fn hands_off(code: &str) -> bool {
-    !warms_up(code)
+    matches!(
+        code,
+        "mcp_relay_runtime_superseded"
+            | "mcp_relay_store_newer"
+            | "mcp_relay_saved_remote_policy"
+            | "mcp_relay_saved_policy_unverifiable"
+            | "mcp_relay_session_server_proxy_tools"
+    )
 }
 
 /// How the session starts.
@@ -153,7 +155,7 @@ pub(crate) fn startup(
     let kicked = match kick.kick(kick_deadline) {
         Kick::Requested => true,
         // A daemon that was not asked may still bind the lane by itself.
-        Kick::Skipped => false,
+        Kick::Skipped | Kick::Pending => false,
         Kick::DaemonUnreachable => return Gate::NotReady(DAEMON_UNREACHABLE.to_owned()),
         Kick::Refused => return Gate::NotReady(DAEMON_REFUSED.to_owned()),
     };
@@ -261,7 +263,8 @@ pub(crate) struct DaemonKick {
     readiness_path: String,
     /// `<python> ... guard daemon ensure ...`, when the argv names the proxy.
     ensure: Option<Vec<String>>,
-    last: Option<Instant>,
+    /// When the daemon was last asked, and what it answered.
+    last: Option<(Instant, Kick)>,
 }
 
 impl DaemonKick {
@@ -394,27 +397,31 @@ impl DaemonKick {
 impl LaneKick for DaemonKick {
     fn kick(&mut self, deadline: Instant) -> Kick {
         let now = Instant::now();
-        if self
-            .last
-            .is_some_and(|last| now.duration_since(last) < KICK_INTERVAL)
-        {
-            return Kick::Skipped;
+        if let Some((last, answer)) = self.last {
+            if now.duration_since(last) < KICK_INTERVAL {
+                return if answer == Kick::Requested {
+                    Kick::Pending
+                } else {
+                    Kick::Skipped
+                };
+            }
         }
         if remaining(deadline).is_zero() {
             return Kick::Skipped;
         }
-        self.last = Some(now);
         let answered = self
             .daemon()
             .and_then(|daemon| self.request(&daemon, deadline));
-        match answered {
+        let answer = match answered {
             Some(true) => Kick::Requested,
             Some(false) => Kick::Refused,
             None => {
                 self.spawn_ensure();
                 Kick::DaemonUnreachable
             }
-        }
+        };
+        self.last = Some((now, answer));
+        answer
     }
 }
 

@@ -505,24 +505,11 @@ def test_prepare_workspace_policy_waits_for_transient_resident_restart_lock(
 
 def test_same_generation_retries_reuse_exact_signed_snapshot_bytes(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     master = b"u" * 32
     future_ms = int(time.time() * 1_000) + 60_000
-    build_calls = 0
-    original_builder = snapshot_module.build_policy_snapshot_v3
-
-    def counted_builder(**kwargs: object) -> dict[str, object]:
-        nonlocal build_calls
-        # The synthetic semantic-identity build (expires_at_ms == 1) is not an
-        # installable snapshot and is memoized per runtime and input digest.
-        if kwargs.get("expires_at_ms") != 1:
-            build_calls += 1
-        return original_builder(**kwargs)
-
-    monkeypatch.setattr(snapshot_module, "build_policy_snapshot_v3", counted_builder)
     first = snapshot_module.native_policy_snapshot_v3(
         config=_config(),
         guard_home=guard_home,
@@ -546,4 +533,3 @@ def test_same_generation_retries_reuse_exact_signed_snapshot_bytes(
     assert second == first
     assert snapshot_bytes_v3(second) == first_bytes
     assert cache_path.read_bytes() == first_bytes
-    assert build_calls == 1

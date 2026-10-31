@@ -19,10 +19,15 @@ pub struct McpSensitiveReadConfigV1 {
     #[serde(default)]
     pub view_override: Option<String>,
     pub view_default_action: String,
-    /// `resolve_risk_action(view, "local_secret_read")`; empty or absent means
-    /// the conservative `require-reapproval`.
+    /// The configuration `local_secret_read` is resolved under. The caller
+    /// sends what it loaded; the resident resolves the class. An absent
+    /// configuration resolves to nothing and leaves the conservative
+    /// `require-reapproval` floor.
     #[serde(default)]
-    pub risk_action: Option<String>,
+    pub guard_config: Option<crate::RiskActionConfigV1>,
+    /// The harness whose per-harness risk actions and posture apply, if any.
+    #[serde(default)]
+    pub harness: Option<String>,
     /// Override and default of the unmodified configuration (bound into the token).
     #[serde(default)]
     pub artifact_override: Value,

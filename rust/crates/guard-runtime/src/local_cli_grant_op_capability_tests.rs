@@ -125,6 +125,7 @@ fn allowed_launch_answer_carries_capabilities() {
         &fixture.home.to_string_lossy(),
         &identity.source,
         None,
+        &[],
     )
     .unwrap();
     assert_eq!(answer["state"], "allowed");

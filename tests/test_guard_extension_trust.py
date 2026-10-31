@@ -28,19 +28,14 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
-    use_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.runtime.extension_trust import (
     trust_class_for,
 )
 from tests.command_extension_contracts import enable_local_admin_extension_layer
-from tests.native_command_test_support import (
-    extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
-)
 from tests.native_command_test_support import real_native_command_evaluation
 
 _NOODLE = "noodle request run users/get --collection ./my-api --env staging"
-_ESSH = "essh hosts remove web-1"
 _AWS = "aws --profile prod --region us-east-1 ec2 terminate-instances --instance-ids i-123"
 _GIT = "git push --force origin main"
 
@@ -158,70 +153,6 @@ def test_compatibility_class_does_not_revive_inert_external(tmp_path: Path) -> N
     assert all(item.extension.extension_id != "command.noodle" for item in evaluation.extension_observations)
     assert all(owned.extension.extension_id != "command.noodle" for owned in evaluation.matches)
     assert evaluation.controlling_rule_id != "command.noodle.run"
-
-
-def test_essh_runtime_extraction_stays_inert_until_local_admin_enable(tmp_path: Path) -> None:
-    assert (
-        extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": _ESSH},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
-    enabled_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            AuthorityHealth.PROTECTED,
-            1,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            (enable_local_admin_extension_layer("command.remote.essh"),),
-        )
-    )
-    with use_extension_control_snapshot(enabled_snapshot):
-        runtime_match = extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": _ESSH},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-    assert runtime_match is not None
-    assert runtime_match.action_class == "essh cache removal command"
-
-    inert = real_native_command_evaluation(
-        _ESSH,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        compatibility_action_class=runtime_match.action_class,
-        extension_control_layers=(),
-    ).evaluation
-    assert all(item.extension.extension_id != "command.remote.essh" for item in inert.extension_observations)
-    assert all(owned.extension.extension_id != "command.remote.essh" for owned in inert.matches)
-    assert inert.controlling_action_class is None
-    assert inert.controlling_rule_id is None
-
-    enabled = real_native_command_evaluation(
-        _ESSH,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        compatibility_action_class=runtime_match.action_class,
-        extension_control_layers=(enable_local_admin_extension_layer("command.remote.essh"),),
-    ).evaluation
-    assert any(item.extension.extension_id == "command.remote.essh" for item in enabled.extension_observations)
-    assert enabled.controlling_action_class == runtime_match.action_class
-    assert enabled.controlling_rule_id == "command.remote.essh.cache-removal"
-
-    disabled = real_native_command_evaluation(
-        _ESSH,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        compatibility_action_class=runtime_match.action_class,
-        extension_control_layers=(_disable_layer("command.remote.essh"),),
-    ).evaluation
-    assert all(item.extension.extension_id != "command.remote.essh" for item in disabled.extension_observations)
-    assert all(owned.extension.extension_id != "command.remote.essh" for owned in disabled.matches)
-    assert disabled.controlling_action_class is None
-    assert disabled.controlling_rule_id is None
 
 
 def test_projection_marks_inert_external_blocked_until_local_enable() -> None:

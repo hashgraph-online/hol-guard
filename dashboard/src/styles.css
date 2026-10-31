@@ -549,6 +549,12 @@ a:focus-visible {
   transition: transform 160ms var(--ease-out-quart);
 }
 
+/* Guard's own mark is the white logo, so it sits on a solid brand tile. */
+.guard-extension-mark[data-kind="guard"] {
+  border-color: var(--brand-dark);
+  background: var(--brand-dark);
+}
+
 .guard-extension-mark[data-size="sm"] {
   inline-size: 1.25rem;
   block-size: 1.25rem;

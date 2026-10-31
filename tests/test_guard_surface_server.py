@@ -3194,16 +3194,6 @@ class TestGuardSurfaceServer:
                 harness="codex",
             )
 
-    def test_surface_runtime_rejects_unknown_session_for_client_attachment(self, tmp_path) -> None:
-        runtime = GuardSurfaceRuntime(GuardStore(tmp_path / "guard-home"))
-
-        with pytest.raises(ValueError, match="Unknown guard session"):
-            runtime.attach_client(
-                client_id="approval-center-web",
-                surface="approval-center",
-                session_id="missing-session",
-            )
-
     def test_surface_runtime_rejects_unknown_operation_for_item(self, tmp_path) -> None:
         runtime = GuardSurfaceRuntime(GuardStore(tmp_path / "guard-home"))
 
@@ -3396,7 +3386,7 @@ class TestGuardSurfaceServer:
         assert "Codex prompt" in request["launch_summary"]
         assert "active Codex prompt" in request["trigger_summary"]
 
-    def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
+    def test_guard_daemon_initializes_surface_client(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -3418,34 +3408,14 @@ class TestGuardSurfaceServer:
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
                 initialize_payload = json.loads(response.read().decode("utf-8"))
-            session_token = _approval_center_session_token(daemon)
-
-            attach_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
-                data=json.dumps(
-                    {
-                        "client_id": initialize_payload["client_id"],
-                        "surface": "approval-center",
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Dashboard-Session": session_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(attach_request, timeout=5) as response:
-                attach_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
 
         assert initialize_payload["protocol_version"] == "1.1"
         assert "auth_token" not in initialize_payload
         assert "approval/list" in initialize_payload["server_capabilities"]["methods"]
-        assert attach_payload["attached"] is True
-        assert store.list_guard_client_attachments(surface="approval-center")
 
-    def test_guard_daemon_resume_endpoint_tracks_session_attachments_and_operations(self, tmp_path) -> None:
+    def test_guard_daemon_resume_endpoint_tracks_session_operations(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -3464,7 +3434,7 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
+                response.read()
             session_token = _approval_center_session_token(daemon)
 
             session_request = urllib.request.Request(
@@ -3485,34 +3455,6 @@ class TestGuardSurfaceServer:
             )
             with urllib.request.urlopen(session_request, timeout=5) as response:
                 session_payload = json.loads(response.read().decode("utf-8"))
-
-            attach_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
-                data=json.dumps(
-                    {
-                        "client_id": initialize_payload["client_id"],
-                        "surface": "approval-center",
-                        "session_id": session_payload["session_id"],
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Dashboard-Session": session_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(attach_request, timeout=5) as response:
-                attach_payload = json.loads(response.read().decode("utf-8"))
-
-            with urllib.request.urlopen(
-                _guard_dashboard_session_get_request(
-                    daemon.port,
-                    f"/v1/sessions/{session_payload['session_id']}/resume",
-                    session_token,
-                ),
-                timeout=5,
-            ) as response:
-                attached_resume_payload = json.loads(response.read().decode("utf-8"))
 
             operation_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/operations/start",
@@ -3545,65 +3487,9 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert attach_payload["item"]["session_id"] == session_payload["session_id"]
-        assert attached_resume_payload["session"]["status"] == "attached"
-        assert attached_resume_payload["attachments"][0]["client_id"] == initialize_payload["client_id"]
-        assert attached_resume_payload["operations"] == []
         assert active_resume_payload["session"]["status"] == "active"
+        assert active_resume_payload["attachments"] == []
         assert active_resume_payload["operations"][0]["operation_id"] == operation_payload["operation_id"]
-
-    def test_guard_daemon_attach_rejects_unknown_session_without_persisting_attachment(self, tmp_path) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        try:
-            initialize_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/initialize",
-                data=json.dumps(
-                    {
-                        "client_name": "approval-center-web",
-                        "surface": "approval-center",
-                        "supported_protocol_versions": ["1.1"],
-                    }
-                ).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
-            session_token = _approval_center_session_token(daemon)
-
-            attach_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
-                data=json.dumps(
-                    {
-                        "client_id": initialize_payload["client_id"],
-                        "surface": "approval-center",
-                        "session_id": "missing-session",
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Dashboard-Session": session_token,
-                },
-                method="POST",
-            )
-            attach_error = None
-            try:
-                urllib.request.urlopen(attach_request, timeout=5)
-            except urllib.error.HTTPError as error:
-                attach_error = error
-        finally:
-            daemon.stop()
-
-        assert attach_error is not None
-        assert attach_error.code == 400
-        assert json.loads(attach_error.read().decode("utf-8")) == {
-            "attached": False,
-            "error": "Unknown guard session: missing-session",
-        }
-        assert store.list_guard_client_attachments(surface="approval-center") == []
 
     def test_guard_daemon_session_and_operation_endpoints_drive_runtime(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -4146,26 +4032,6 @@ class TestGuardSurfaceServer:
         assert payload["error"] == "legacy_pairing_disabled"
         assert store.get_cloud_sync_profile() is None
 
-    def test_open_approval_center_skips_browser_when_live_surface_is_attached(self, tmp_path, monkeypatch) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-        runtime = GuardSurfaceRuntime(store)
-        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
-        opened_urls: list[str] = []
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.cli.commands_support_hook_payload.open_browser_url",
-            lambda url: opened_urls.append(url) or True,
-        )
-
-        runtime.attach_client(client_id="approval-center-web", surface="approval-center")
-
-        guard_commands_module._open_approval_center(
-            "http://127.0.0.1:4781",
-            store=store,
-            config=config,
-        )
-
-        assert opened_urls == []
-
     def test_open_approval_center_auto_open_once_tracks_operation_key(self, tmp_path, monkeypatch) -> None:
         store = GuardStore(tmp_path / "guard-home")
         config = GuardConfig(
@@ -4221,72 +4087,6 @@ class TestGuardSurfaceServer:
 
         assert opened_urls == []
 
-    def test_guard_daemon_heartbeat_renews_client_lease(self, tmp_path) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-
-        try:
-            initialize_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/initialize",
-                data=json.dumps(
-                    {
-                        "client_name": "approval-center-web",
-                        "surface": "approval-center",
-                        "supported_protocol_versions": ["1.0"],
-                    }
-                ).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
-            session_token = _approval_center_session_token(daemon)
-
-            attach_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
-                data=json.dumps(
-                    {
-                        "client_id": initialize_payload["client_id"],
-                        "surface": "approval-center",
-                        "lease_seconds": 1,
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Dashboard-Session": session_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(attach_request, timeout=5) as response:
-                attach_payload = json.loads(response.read().decode("utf-8"))
-
-            heartbeat_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/clients/heartbeat",
-                data=json.dumps(
-                    {
-                        "client_id": initialize_payload["client_id"],
-                        "lease_id": attach_payload["item"]["lease_id"],
-                        "lease_seconds": 60,
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Dashboard-Session": session_token,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(heartbeat_request, timeout=5) as response:
-                heartbeat_payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
-
-        attachments = store.list_guard_client_attachments(surface="approval-center")
-        assert heartbeat_payload["renewed"] is True
-        assert attachments
-        assert attachments[0]["client_id"] == initialize_payload["client_id"]
-        assert attachments[0]["lease_id"] == attach_payload["item"]["lease_id"]
-
     def test_copilot_adapter_implements_surface_runtime_contract(self, tmp_path) -> None:
         adapter = get_adapter("copilot")
         context = HarnessContext(
@@ -4295,30 +4095,13 @@ class TestGuardSurfaceServer:
             guard_home=tmp_path / "guard-home",
         )
 
-        session = adapter.attach_session(
-            context,
-            session_id="session-123",
-            client_name="copilot-cli",
-        )
         operation = adapter.start_operation(
             context,
             session_id="session-123",
             operation_type="run",
         )
-        approval = adapter.request_approval(
-            context,
-            request_ids=["req-1", "req-2"],
-        )
-        resumed = adapter.continue_after_approval(
-            context,
-            operation_id="operation-123",
-            approved=True,
-        )
 
-        assert session["session_id"] == "session-123"
         assert operation["operation_type"] == "run"
-        assert approval["request_ids"] == ["req-1", "req-2"]
-        assert resumed["status"] == "completed"
 
     def test_guard_surface_runtime_force_open_bypasses_auto_open_once(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

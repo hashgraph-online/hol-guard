@@ -43,9 +43,7 @@ from .aibom_reporting import _redact_inventory_store_item as _redact_inventory_s
 from .aibom_reporting import _render_aibom_markdown as _render_aibom_markdown
 from .aibom_reporting import _store_only_artifact_metadata_extensions as _store_only_artifact_metadata_extensions
 from .aibom_reporting import _store_row_config_path as _store_row_config_path
-from .aibom_reporting import summarize_aibom_drift as summarize_aibom_drift
 from .aibom_reporting import summarize_aibom_layers as summarize_aibom_layers
-from .aibom_reporting import summarize_aibom_trust as summarize_aibom_trust
 from .aibom_sync import _accepted_snapshot_ids as _accepted_snapshot_ids
 from .aibom_sync import _batch_inventory_events as _batch_inventory_events
 from .aibom_sync import _inventory_events_request_body as _inventory_events_request_body

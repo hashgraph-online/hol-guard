@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
-from .inventory_contract_constants import _IGNORED_TREE_DIR_NAMES, _MAX_FINGERPRINT_FILE_BYTES, _WHITESPACE_RE
+from .inventory_contract_constants import _WHITESPACE_RE
 from .inventory_contract_models import GuardAgentInventoryFinding, GuardAgentInventoryItem, GuardInventorySource
-from .inventory_contract_redaction import redact_local_path
 from .native_inventory_snapshot_digest import native_inventory_snapshot_digest
 
 
@@ -93,37 +91,3 @@ def inventory_item_id(agent_type: str, item_kind: str, display_name: str, semant
         }
     )
     return f"{agent_type}:{item_kind}:{digest[:24]}"
-
-
-def fingerprint_path_tree(root: Path, *, home_dir: Path | None = None) -> str:
-    """Fingerprint a bounded set of files without following untrusted path traversal."""
-    entries: list[dict[str, str]] = []
-    if root.is_file():
-        paths = [root]
-    else:
-        paths = sorted(
-            path
-            for path in root.rglob("*")
-            if path.is_file()
-            and path.name != ".env"
-            and not any(part in _IGNORED_TREE_DIR_NAMES for part in path.parts)
-        )
-    for path in paths:
-        safe_path = redact_local_path(path, home_dir=home_dir)
-        content_hash = _fingerprint_file_bytes(path)
-        entries.append({"path": safe_path, "sha256": content_hash})
-    return fingerprint_mapping(entries)
-
-
-def _fingerprint_file_bytes(path: Path) -> str:
-    """Read bounded file content for fingerprinting within the permitted inspection roots."""
-    digest = hashlib.sha256()
-    remaining = _MAX_FINGERPRINT_FILE_BYTES
-    with path.open("rb") as file_handle:
-        while remaining > 0:
-            chunk = file_handle.read(min(65536, remaining))
-            if not chunk:
-                break
-            digest.update(chunk)
-            remaining -= len(chunk)
-    return digest.hexdigest()

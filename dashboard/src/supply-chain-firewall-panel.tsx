@@ -14,11 +14,13 @@ import {
   runPackageFirewallAction,
   runPackageAudit,
   runPackageSync,
+  GuardOperationTimeoutError,
   repairSupplyChainProtection,
   startPackageFirewallConnect,
 } from "./guard-api";
 import {
   isApprovalGateRequiredError,
+  isPackageFirewallOperationInProgressError,
   isSupplyChainSyncConnectError,
   isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
@@ -46,9 +48,9 @@ import {
 import { resolveSupplyChainAuditWorkspaceTarget } from "./supply-chain-audit-workspace";
 import {
   FirewallControlsView,
+  GlobalActionsBar,
   type FirewallFailedOp,
   type FirewallPendingOp,
-  type FirewallStatusFilter,
 } from "./supply-chain-firewall-controls";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import { refreshSupplyChainBundle } from "./use-supply-chain-bundle";
@@ -81,7 +83,6 @@ type ApprovalOp = {
   manager: string | null;
 };
 
-type StatusFilter = FirewallStatusFilter;
 
 export type PackageFirewallPanelHandle = {
   scrollIntoView: () => void;
@@ -223,13 +224,15 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
   const [activatingRuntime, setActivatingRuntime] = useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
   const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [expandUnprotectedRequest, setExpandUnprotectedRequest] = useState(0);
   const [managerFilter, setManagerFilter] = useState("");
   const [interceptProof, setInterceptProof] = useState<InterceptProofSnapshot | null>(null);
   const [managerDrawerTarget, setManagerDrawerTarget] = useState<string | null>(null);
   const [auditConnectGateActive, setAuditConnectGateActive] = useState(false);
   const [resumeAuditAfterConnect, setResumeAuditAfterConnect] = useState(false);
   const [auditRecoveryGate, setAuditRecoveryGate] = useState<SupplyChainAuditRecoveryGate | null>(null);
+  // Tracks the dialog on screen so a sync that finishes late can tell whether its own dialog is still open.
+  const auditRecoveryGateRef = useRef<SupplyChainAuditRecoveryGate | null>(null);
   const [auditRecoveryPhase, setAuditRecoveryPhase] = useState<AuditRecoveryModalPhase>("ready");
   const [auditRecoveryError, setAuditRecoveryError] = useState<string | null>(null);
   const [auditRecoveryErrorOp, setAuditRecoveryErrorOp] = useState<SupplyChainRecoveryOperation>("sync");
@@ -250,6 +253,10 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     },
     [resolveApprovalGate],
   );
+
+  useEffect(() => {
+    auditRecoveryGateRef.current = auditRecoveryGate;
+  }, [auditRecoveryGate]);
 
   const closeAuditRecovery = useCallback(() => {
     setAuditRecoveryGate(null);
@@ -452,7 +459,11 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
           await continueAuditAfterRecovery();
           return;
         }
-        setAuditRecoveryPhase("ready");
+        // Nothing follows a standalone sync, so close the modal and let the panel show the result.
+        // Leave it alone if the user closed this dialog during the sync and opened another one.
+        if (auditRecoveryGateRef.current === auditRecoveryGate) {
+          closeAuditRecovery();
+        }
       } catch (err) {
         if (isSupplyChainSyncConnectError(err)) {
           const connectGate = resolveSupplyChainSyncConnectRecoveryGate(err);
@@ -462,6 +473,24 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             setAuditRecoveryError(null);
             return;
           }
+        }
+        if (isPackageFirewallOperationInProgressError(err)) {
+          // Another package protection change (a sync, repair or shim install) holds the daemon's lock; that is not a failure, so keep the dialog ready.
+          const message = "Guard is still finishing another package protection change. Wait a moment, then sync again.";
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(message);
+          setAuditRecoveryPhase("ready");
+          refreshInBackground();
+          return;
+        }
+        if (err instanceof GuardOperationTimeoutError) {
+          // The daemon may still finish this sync, so recheck status instead of asking for approval again.
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(err.message);
+          setAuditRecoveryPhase("ready");
+          setLastFailed({ op: "sync", manager: null, message: err.message });
+          refreshInBackground();
+          return;
         }
         if (isSupplyChainSyncRetryableError(err)) {
           const message = readHarnessActionUserMessage(
@@ -491,10 +520,12 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     },
     [
       auditRecoveryGate,
+      closeAuditRecovery,
       continueAuditAfterRecovery,
       onStateChanged,
       openSyncApprovalRecovery,
       refreshAfterOp,
+      refreshInBackground,
     ],
   );
 
@@ -857,11 +888,22 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         }
         const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });
+        if (err instanceof GuardOperationTimeoutError) {
+          refreshInBackground();
+        }
       } finally {
         setPendingOp(null);
       }
     },
-    [onStateChanged, openAuditConnectGate, openSyncApprovalRecovery, panelLoad, refreshAfterOp, runAuditOperation],
+    [
+      onStateChanged,
+      openAuditConnectGate,
+      openSyncApprovalRecovery,
+      panelLoad,
+      refreshAfterOp,
+      refreshInBackground,
+      runAuditOperation,
+    ],
   );
 
   const handleInstall = useCallback(
@@ -945,10 +987,6 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
     [handleAction, handleFixAll, pendingApprovalOp],
   );
 
-  const handleStatusFilterChange = useCallback((filter: StatusFilter) => {
-    setStatusFilter(filter);
-  }, []);
-
   const handleManagerFilterChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setManagerFilter(e.target.value);
   }, []);
@@ -972,11 +1010,11 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       },
       focusUnprotected: () => {
-        setStatusFilter("unprotected");
+        setExpandUnprotectedRequest((request) => request + 1);
         setManagerFilter("");
       },
       focusActionable: () => {
-        setStatusFilter("actionable");
+        // Tools that need a fix always lead the roster.
         setManagerFilter("");
       },
       runAudit: () => {
@@ -1011,17 +1049,22 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       aria-labelledby="package-firewall-heading"
       data-testid="package-firewall-panel"
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <h2 id="package-firewall-heading" className="text-lg font-semibold tracking-tight text-brand-dark">
             Package managers
           </h2>
           <p className="mt-0.5 max-w-[68ch] text-sm leading-6 text-slate-600">
-            Guard puts a shim in front of each tool so an install is checked before it runs.
+            Guard checks installs from protected tools before they run.
           </p>
         </div>
         {panelLoad.phase === "loaded" && (
-          <RefreshButton disabled={anyPending} spinning={anyPending} onRefresh={handleRetry} />
+          <div className="-ml-3 flex shrink-0 items-center gap-1 sm:ml-0">
+            {panelLoad.data.entitlement.allowed && (
+              <GlobalActionsBar anyPending={anyPending} pendingOp={pendingOp} onAudit={handleAudit} onSync={handleSync} />
+            )}
+            <RefreshButton disabled={anyPending} spinning={anyPending} onRefresh={handleRetry} />
+          </div>
         )}
       </div>
 
@@ -1060,10 +1103,8 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             lastCompleted={lastCompleted}
             lastFailed={lastFailed}
             confirmRemoveManager={confirmRemoveManager}
-            showGlobalActions={panelLoad.data.entitlement.allowed}
-            statusFilter={statusFilter}
+            expandUnprotectedRequest={expandUnprotectedRequest}
             managerFilter={managerFilter}
-            onStatusFilterChange={handleStatusFilterChange}
             onManagerFilterChange={handleManagerFilterChange}
             onInstall={handleInstall}
             onRepair={handleRepair}

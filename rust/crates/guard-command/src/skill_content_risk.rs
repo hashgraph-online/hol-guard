@@ -21,7 +21,16 @@ fn many(patterns: &[(&str, &str)]) -> Vec<Regex> {
     patterns.iter().map(|(p, f)| py_regex(p, f)).collect()
 }
 
-static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| py_regex(r"---\s.*?---", "s"));
+/// One `---` delimited block, read from where it opens.
+static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| py_regex(r"\A---\s.*?---", "s"));
+/// A block whose first line is a YAML `key:` entry. Keys may be dotted or
+/// quoted.
+static FRONTMATTER_KEY_OPEN: LazyLock<Regex> = LazyLock::new(|| {
+    py_regex(
+        r#"\A---[ \t]*\r?\n[ \t]*(?:[\w.-]+|"[^"\r\n]+"|'[^'\r\n]+')[ \t]*:"#,
+        "",
+    )
+});
 static SHELL_COMMAND: LazyLock<Regex> =
     LazyLock::new(|| py_regex(r"```(?:bash|sh|shell|zsh)\s(.*?)```", "s"));
 
@@ -311,11 +320,37 @@ fn check_unicode_controls(content: &str, out: &mut Vec<RiskSignalV2>) {
     ));
 }
 
+/// The `---` blocks that read as frontmatter: the one that opens the file,
+/// and any later one whose first line is a YAML `key:` entry. A Markdown body
+/// that puts `---` thematic breaks around a shell fence is not frontmatter.
+/// Blocks do not overlap, so a block's closing `---` never opens another.
+fn frontmatter_blocks(content: &str) -> Vec<&str> {
+    let body = content.trim_start_matches(['\u{feff}', ' ', '\t', '\r', '\n']);
+    let opening = content.len() - body.len();
+    let opening_dashes_end = opening + body.bytes().take_while(|&byte| byte == b'-').count();
+    let mut consumed = 0;
+    let mut blocks = Vec::new();
+    for (start, _) in content.char_indices() {
+        if start < consumed || !content[start..].starts_with("---") {
+            continue;
+        }
+        let opens = (opening..=opening_dashes_end).contains(&start)
+            || re_search(&FRONTMATTER_KEY_OPEN, &content[start..]);
+        if !opens {
+            continue;
+        }
+        if let Ok(Some(block)) = FRONTMATTER.find(&content[start..]) {
+            consumed = start + block.end();
+            blocks.push(block.as_str());
+        }
+    }
+    blocks
+}
+
 fn check_shell_in_frontmatter(content: &str, out: &mut Vec<RiskSignalV2>) {
-    let hit = FRONTMATTER
-        .find_iter(content)
-        .flatten()
-        .any(|block| re_search(&SHELL_COMMAND, block.as_str()));
+    let hit = frontmatter_blocks(content)
+        .into_iter()
+        .any(|block| re_search(&SHELL_COMMAND, block));
     if hit {
         out.push(skill_signal(
             &Sig {
@@ -344,6 +379,23 @@ macro_rules! strong {
             hint: None,
         }
     };
+}
+
+/// Whether `content` tells the agent to disable or bypass HOL Guard. Shared
+/// with the agent instruction file rules so both read the same wording.
+pub(crate) fn tells_guard_bypass(content: &str) -> bool {
+    any_match(&GUARD_BYPASS, content)
+}
+
+/// Whether `content` tells the agent to act without telling the user.
+pub(crate) fn tells_hidden_actions(content: &str) -> bool {
+    any_match(&HIDE_ACTIONS, content)
+}
+
+/// Whether `content` holds a Unicode control character that can hide text
+/// from a reader.
+pub(crate) fn has_unicode_controls(content: &str) -> bool {
+    UNICODE_CONTROLS.iter().any(|(ch, _)| content.contains(*ch))
 }
 
 /// `detect_skill_content_risk(content)`.

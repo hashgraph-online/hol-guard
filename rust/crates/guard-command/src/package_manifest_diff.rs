@@ -412,29 +412,96 @@ pub fn parse_manifest_dependencies_ordered(
     byte_limit: usize,
     deadline_ms: u64,
 ) -> DepMap {
+    try_parse_manifest_dependencies_ordered(path, text, byte_limit, deadline_ms).unwrap_or_default()
+}
+
+/// `parse_manifest_dependencies_ordered` for callers that must tell a file
+/// Guard could not parse from one that lists no dependencies. `None` when the
+/// file is too large, malformed, too slow to parse, or in a format Guard has no
+/// parser for; otherwise its dependencies, which may be none.
+pub fn try_parse_manifest_dependencies_ordered(
+    path: &str,
+    text: &str,
+    byte_limit: usize,
+    deadline_ms: u64,
+) -> Option<DepMap> {
     if text.len() > byte_limit {
-        return DepMap::new();
+        return None;
     }
     let deadline = Deadline::from_ms(deadline_ms);
-    dependency_map_for_path(path, text, &deadline).unwrap_or_default()
+    let dependencies = dependency_map_for_supported_path(path, text, &deadline)?.ok()?;
+    if dependencies.is_empty() && !has_lockfile_header(path, text) {
+        return None;
+    }
+    Some(dependencies)
+}
+
+/// The yarn, pnpm, Bundler and Gradle lockfile parsers skip lines they don't
+/// recognise and never fail, so finding no packages there proves nothing about
+/// the file. Such a lockfile counts as empty only when it carries the line its
+/// package manager always writes. Every other format fails on bad input.
+fn has_lockfile_header(path: &str, text: &str) -> bool {
+    let lower_path = path.to_lowercase();
+    let mut lines = text.lines().map(str::trim);
+    if lower_path.ends_with("yarn.lock") {
+        return lines.any(|line| line == "# yarn lockfile v1" || line == "__metadata:");
+    }
+    if lower_path.ends_with("pnpm-lock.yaml") {
+        return lines.any(|line| line.starts_with("lockfileVersion:"));
+    }
+    if lower_path.ends_with("gemfile.lock") {
+        return lines.any(|line| line == "BUNDLED WITH" || line == "DEPENDENCIES");
+    }
+    if lower_path.ends_with("gradle.lockfile") {
+        return lines.any(|line| line.starts_with("empty="));
+    }
+    true
 }
 
 /// Result-returning variant of `parse_manifest_dependencies` for callers that
 /// must tell a parse failure from an empty manifest (complete-or-fail lockfile
 /// parsing). The error is the lockfile `error_reason` the Python evaluator
 /// reports: `deadline_exceeded` or `parse_error`.
-pub fn try_dependency_map_for_path(
+///
+/// A JavaScript lockfile or Cargo.lock can resolve one package to several
+/// versions, each installed or built beside the others, so every version is
+/// returned, sorted by package; a package's last-listed version comes last.
+/// Other lockfiles keep one version per package: several versions there are
+/// alternatives for different environments, and only one of them is installed.
+pub fn try_dependency_versions_for_path(
     path: &str,
     text: &str,
     deadline_ms: u64,
-) -> Result<BTreeMap<String, String>, &'static str> {
+) -> Result<Vec<(String, String)>, &'static str> {
     let deadline = Deadline::from_ms(deadline_ms);
+    let every_version = installs_every_version(path);
     dependency_map_for_path(path, text, &deadline)
-        .map(DepMap::into_sorted)
+        .map(|map| {
+            if every_version {
+                map.into_sorted_versions()
+            } else {
+                map.into_sorted().into_iter().collect()
+            }
+        })
         .map_err(|failure| match failure {
             ParseFailure::Deadline => "deadline_exceeded",
             ParseFailure::Error => "parse_error",
         })
+}
+
+/// Lockfiles whose package manager installs or builds every version they
+/// resolve a package to, side by side.
+pub fn installs_every_version(path: &str) -> bool {
+    let lower_path = path.to_lowercase();
+    [
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lock",
+        "cargo.lock",
+    ]
+    .iter()
+    .any(|name| lower_path.ends_with(name))
 }
 
 // ---------------------------------------------------------------------------
@@ -442,10 +509,19 @@ pub fn try_dependency_map_for_path(
 // ---------------------------------------------------------------------------
 
 fn dependency_map_for_path(path: &str, text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    dependency_map_for_supported_path(path, text, deadline).unwrap_or_else(|| Ok(DepMap::new()))
+}
+
+/// `None` when Guard has no parser for the file's format.
+fn dependency_map_for_supported_path(
+    path: &str,
+    text: &str,
+    deadline: &Deadline,
+) -> Option<ParseResult<DepMap>> {
     let lower_path = path.to_lowercase();
     let lower_name = last_path_segment(&lower_path);
     if lower_path.ends_with("package.json") {
-        return json_dependency_map(
+        return Some(json_dependency_map(
             text,
             &[
                 "dependencies",
@@ -454,72 +530,80 @@ fn dependency_map_for_path(path: &str, text: &str, deadline: &Deadline) -> Parse
                 "peerDependencies",
             ],
             deadline,
-        );
+        ));
     }
     if lower_path.ends_with("package-lock.json") {
-        return package_lock_dependency_map(text, deadline);
+        return Some(package_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pnpm-lock.yaml") {
-        return pnpm_lock_dependency_map(text, deadline);
+        return Some(pnpm_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("yarn.lock") {
-        return yarn_lock_dependency_map(text, deadline);
+        return Some(yarn_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("bun.lock") {
-        return bun_lock_dependency_map(text, deadline);
+        return Some(bun_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("composer.json") {
-        return json_dependency_map(text, &["require", "require-dev"], deadline);
+        return Some(json_dependency_map(
+            text,
+            &["require", "require-dev"],
+            deadline,
+        ));
     }
     if lower_path.ends_with("requirements.txt")
         || lower_path.ends_with("constraints.txt")
         || lower_name.ends_with(".requirements.txt")
     {
-        return requirements_dependency_map(text, deadline);
+        return Some(requirements_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pyproject.toml") {
-        return pyproject_dependency_map(text, deadline);
+        return Some(pyproject_dependency_map(text, deadline));
     }
     if lower_path.ends_with("poetry.lock") {
-        return toml_lock_dependency_map(text, deadline);
+        return Some(toml_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("uv.lock") {
-        return toml_lock_dependency_map(text, deadline);
+        return Some(toml_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pipfile") {
-        return toml_table_dependency_map(text, &["packages", "dev-packages"], deadline);
+        return Some(toml_table_dependency_map(
+            text,
+            &["packages", "dev-packages"],
+            deadline,
+        ));
     }
     if lower_path.ends_with("pipfile.lock") {
-        return pipfile_lock_dependency_map(text, deadline);
+        return Some(pipfile_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("cargo.toml") {
-        return cargo_toml_dependency_map(text, deadline);
+        return Some(cargo_toml_dependency_map(text, deadline));
     }
     if lower_path.ends_with("cargo.lock") {
-        return toml_lock_dependency_map(text, deadline);
+        return Some(toml_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("go.mod") {
-        return go_mod_dependency_map(text, deadline);
+        return Some(go_mod_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pom.xml") {
-        return pom_dependency_map(text, deadline);
+        return Some(pom_dependency_map(text, deadline));
     }
     if lower_path.ends_with("build.gradle") || lower_path.ends_with("build.gradle.kts") {
-        return gradle_dependency_map(text, deadline);
+        return Some(gradle_dependency_map(text, deadline));
     }
     if lower_path.ends_with("gradle.lockfile") {
-        return gradle_lockfile_dependency_map(text, deadline);
+        return Some(gradle_lockfile_dependency_map(text, deadline));
     }
     if lower_path.ends_with("composer.lock") {
-        return composer_lock_dependency_map(text, deadline);
+        return Some(composer_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("gemfile") {
-        return gemfile_dependency_map(text, deadline);
+        return Some(gemfile_dependency_map(text, deadline));
     }
     if lower_path.ends_with("gemfile.lock") {
-        return gemfile_lock_dependency_map(text, deadline);
+        return Some(gemfile_lock_dependency_map(text, deadline));
     }
-    Ok(DepMap::new())
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -777,12 +861,14 @@ fn yarn_selector_name(selector: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 fn bun_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
-    bun_lock_first_versions(text, deadline)
+    bun_lock_versions(text, deadline)
 }
 
-/// `_bun_lock_package_versions` (:290-310) reduced to what `_bun_lock_dependency_map`
-/// keeps: the first version of each package, in first-seen document order.
-fn bun_lock_first_versions(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+/// `_bun_lock_package_versions` (:290-310): every version of each package, in
+/// first-seen document order. The first version stays the current one, as
+/// `_bun_lock_dependency_map` keeps it; the others are earlier versions, so
+/// the complete lockfile parse still lists every installed copy.
+fn bun_lock_versions(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     // loads_jsonc(text or "{}", deadline_check=...) (:292) — thread the
     // deadline into normalize_jsonc_checked so the check fires mid-pass.
@@ -803,7 +889,8 @@ fn bun_lock_first_versions(text: &str, deadline: &Deadline) -> ParseResult<DepMa
     };
     // `payload.get("packages", {})` — dict.get returns the value of the LAST
     // occurrence of a duplicated key.
-    let mut first_versions = DepMap::new();
+    let mut versions = DepMap::new();
+    let mut first_versions: Vec<(String, String)> = Vec::new();
     // `payload.get("packages", {})` — a missing key yields the empty-dict
     // default and iterates nothing; a non-dict value is a shape error (:298).
     if let Some(packages) = jsonc_pairs_get(&payload_pairs, "packages") {
@@ -821,12 +908,16 @@ fn bun_lock_first_versions(text: &str, deadline: &Deadline) -> ParseResult<DepMa
             let Some((package_name, version)) = bun_resolution_identity(resolution) else {
                 continue;
             };
-            if !first_versions.contains_key(&package_name) {
-                first_versions.insert(package_name, version);
+            if !versions.contains_key(&package_name) {
+                first_versions.push((package_name.clone(), version.clone()));
             }
+            versions.insert(package_name, version);
         }
     }
-    Ok(first_versions)
+    for (package_name, version) in first_versions {
+        versions.insert(package_name, version);
+    }
+    Ok(versions)
 }
 
 /// `dict.get(key)` semantics over `JsoncPairs::Object` pairs — the value of
@@ -1393,6 +1484,37 @@ mod tests {
     use super::*;
 
     const GENEROUS: u64 = 60_000;
+
+    #[test]
+    fn try_parse_tells_an_empty_lockfile_from_one_guard_cannot_parse() {
+        let root_only = r#"{"lockfileVersion": 3, "packages": {"": {"name": "demo"}}}"#;
+        let parse = |path: &str, text: &str, limit: usize| {
+            try_parse_manifest_dependencies_ordered(path, text, limit, GENEROUS)
+        };
+        assert!(parse("package-lock.json", root_only, 1024).is_some_and(|map| map.is_empty()));
+        assert!(parse("Cargo.lock", "version = 4\n", 1024).is_some_and(|map| map.is_empty()));
+        assert!(parse("package-lock.json", r#"{"lockfileVersion": 3,"#, 1024).is_none());
+        assert!(parse("package-lock.json", root_only, 8).is_none());
+        for (path, empty) in [
+            ("yarn.lock", "# yarn lockfile v1\n\n\n"),
+            ("yarn.lock", "__metadata:\n  version: 8\n"),
+            ("pnpm-lock.yaml", "lockfileVersion: '9.0'\n"),
+            (
+                "Gemfile.lock",
+                "GEM\n  specs:\n\nDEPENDENCIES\n\nBUNDLED WITH\n   2.5.0\n",
+            ),
+            ("gradle.lockfile", "# Gradle generated file\nempty=\n"),
+        ] {
+            assert!(
+                parse(path, empty, 1024).is_some_and(|map| map.is_empty()),
+                "{path}"
+            );
+            assert!(parse(path, "not a lockfile\n", 1024).is_none(), "{path}");
+        }
+        let go_sum = "github.com/pkg/errors v0.9.1 h1:abc=\n";
+        assert!(parse("go.sum", go_sum, 1024).is_none());
+        assert!(parse_manifest_dependencies_ordered("go.sum", go_sum, 1024, GENEROUS).is_empty());
+    }
 
     /// Oracle:
     /// `_dependency_map_for_path("package.json", TEXT, deadline=inf)`

@@ -406,3 +406,35 @@ fn a_port_variable_read_names_no_dotenv_file() {
         assert!(writes_sensitive(command), "{command}");
     }
 }
+
+#[test]
+fn a_stderr_redirect_beside_a_project_file_names_no_credential() {
+    let writes_sensitive = |command: &str| {
+        compatibility_observations(&model(command), None)
+            .unwrap()
+            .rule_matches
+            .iter()
+            .any(|matched| matched.rule_id == "command.shell-mutations.sensitive-file-write")
+    };
+    // Running or reading a project file whose name reads like a credential is
+    // the work the agent was asked to do. A stderr redirect writes no file, so
+    // it must not turn that name into a credential read.
+    for command in [
+        "bunx vitest run __tests__/guard-delivery-token.test.ts 2>&1",
+        "npx jest src/auth/token-store.test.ts 2>&1",
+        "cat src/tokenizer.rs 2>/dev/null",
+        "pytest tests/test_password_reset.py 2>&1 | tail -5",
+    ] {
+        assert!(!writes_sensitive(command), "{command}");
+    }
+    // A credential location, a bare name that is no source file, and text the
+    // command prints keep the review whatever redirect follows.
+    for command in [
+        "cat ~/.aws/credentials 2>/dev/null",
+        "cat config/credentials.json 2>&1",
+        "cat secrets/api_token 2>&1",
+        "echo token 2>&1",
+    ] {
+        assert!(writes_sensitive(command), "{command}");
+    }
+}

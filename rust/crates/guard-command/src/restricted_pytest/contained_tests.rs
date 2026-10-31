@@ -127,7 +127,9 @@ fn recorded_original_contained_execution_outcomes() {
     ))
     .unwrap();
     for case in vectors["cases"].as_array().unwrap() {
-        if case["operation"] == "process_ceiling_snapshot" {
+        // `contained_argv_tests` reads the test-script vectors through the
+        // screen itself, which no operation names any more.
+        if case["operation"] == "process_ceiling_snapshot" || case["operation"] == "test_script" {
             continue;
         }
         fs::set_permissions(&node, fs::Permissions::from_mode(0o755)).unwrap();
@@ -218,6 +220,33 @@ fn relative_vitest_entry_uses_request_cwd_without_changing_resident_cwd() {
     );
     assert_eq!(reply["value"]["command"][1], json!(entry));
     assert_eq!(env::current_dir().unwrap(), before);
+}
+
+#[test]
+fn the_vitest_cli_module_spelling_plans_the_installed_bin_entry() {
+    let fixture = fixture("guard-vitest-cli-module");
+    let workspace = fixture.0.join("project");
+    let bin = workspace.join("bin");
+    let entry = workspace.join("node_modules/vitest/vitest.mjs");
+    let module = workspace.join("node_modules/vitest/dist/cli.js");
+    fs::create_dir_all(&bin).unwrap();
+    fs::create_dir_all(module.parent().unwrap()).unwrap();
+    fs::write(workspace.join("package.json"), "{}").unwrap();
+    fs::write(&entry, "").unwrap();
+    fs::write(&module, "").unwrap();
+    fs::write(bin.join("node"), b"\x7fELFnative-fixture").unwrap();
+    fs::set_permissions(bin.join("node"), fs::Permissions::from_mode(0o755)).unwrap();
+    let reply = evaluate_with_deadline(
+        "prepare_vitest",
+        &json!({
+            "command":["node","./node_modules/vitest/dist/cli.js","run"],
+            "workspace":workspace,"cwd":workspace,"platform":"darwin",
+            "backend_executable":"/usr/bin/true","search_path":bin
+        }),
+        Instant::now() + Duration::from_secs(5),
+    );
+    // The CLI module names the same runner, and the plan runs the `bin` entry.
+    assert_eq!(reply["value"]["command"][1], json!(entry));
 }
 
 #[test]

@@ -343,7 +343,7 @@ fn in_session(
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         "omp",
@@ -421,9 +421,9 @@ fn a_session_certificate_anchor_keeps_the_publish_chain_proof() {
 }
 
 impl Repository {
-    /// As [`Repository::decision`], for a host whose harness has no workspace
-    /// sandbox: `workspace_contained::host_eligible` leaves `cursor` out, so
-    /// the containment route never runs and the proof here is the only one
+    /// As [`Repository::decision`], for a call with no workspace sandbox:
+    /// `workspace_contained::host_eligible` leaves a Cursor `bash` call out,
+    /// so the containment route never runs and the proof here is the only one
     /// that can settle a local Git write.
     fn unsandboxed(&self, command: &str) -> (String, String) {
         let result = evaluate_with_node(

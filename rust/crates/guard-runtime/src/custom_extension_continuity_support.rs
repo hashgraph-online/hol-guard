@@ -194,7 +194,7 @@ pub(super) fn is_sha256(value: &str) -> bool {
 }
 
 pub(super) fn is_command_id(value: &str) -> bool {
-    if matches!(value, "root" | "other") {
+    if matches!(value, "root" | "other") || crate::local_cli_help::is_option_name(value) {
         return true;
     }
     let parts: Vec<&str> = value.split('.').collect();

@@ -200,14 +200,28 @@ pub(super) fn settle_fast_forward(
     // more than allow, a permission the user keeps under review or an
     // uncertain match keeps its verdict. A `git status` or `git log` beside
     // the merge asks for nothing of its own, so it does not hold the proof
-    // back.
+    // back. Neither does the ruleless permission a Git plumbing read records
+    // (`git rev-parse`, `git merge-base`, `git show-ref`): it declares no
+    // floor, and exists so a disabled Git extension or permission can still
+    // block the read.
     let Some(extensions) = result.command_extensions.as_ref() else {
         return;
     };
     if !merges
         || extensions.binding.uncertainty_count != 0
         || extensions.evaluation_error.is_some()
-        || !extensions.permission_observations.is_empty()
+        || !extensions
+            .permission_observations
+            .iter()
+            .all(|observation| {
+                observation.uncertainty_reasons.is_empty()
+                    && controls.is_some_and(|controls| {
+                        controls.permission_settles_at_allow(
+                            &observation.extension_id,
+                            &observation.permission_id,
+                        )
+                    })
+            })
         || !extensions.observations.iter().all(|observation| {
             observation.uncertainty_reasons.is_empty()
                 && (matches!(
@@ -361,6 +375,34 @@ pub(super) fn verified_refresh(
             deadline,
             execution_environment,
         )?;
+        Some(work_tree_settles(&probe, &route))
+    })
+    .unwrap_or(false)
+}
+
+/// Whether a later read routed by `later` takes no configuration from the
+/// work tree, so an earlier step that rewrote tracked files (a checkout, a
+/// reset, a stash) cannot have changed what the read obeys. It is the proof a
+/// pull's fast-forward needs in [`verified_refresh`], asked of any step.
+pub(super) fn work_tree_outside_configuration(
+    later: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let (Some(executable), Some(route)) = (later.executable.as_deref(), read_route(later, context))
+    else {
+        return false;
+    };
+    let key = (
+        format!("\0tree-configuration:{executable}"),
+        vec![route.to_string_lossy().into_owned()],
+        context.home_dir.map(str::to_owned),
+        context.cwd.map(str::to_owned),
+        false,
+    );
+    super::git_probe::memoized(key, || {
+        let probe = Probe::new(executable, &[], context, deadline, execution_environment)?;
         Some(work_tree_settles(&probe, &route))
     })
     .unwrap_or(false)

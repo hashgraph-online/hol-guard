@@ -220,3 +220,23 @@ def test_index_urls_that_are_not_normalized_still_match(
     result = telemetry_report.build_report("ab" * 32, week="2026-W43", index=index)
     entries = result["report"]["entries"]
     assert [entry["slug"] for entry in entries] == ["acme/notes-kit"]
+
+
+def test_index_downloads_wait_for_a_server_that_is_still_building_the_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    # HOL builds the listing index from the whole catalog, about 30 seconds on a
+    # cold server; a 20 second limit made every first request to it fail.
+    from codex_plugin_scanner.guard.plugin_telemetry import updates as telemetry_updates
+
+    timeouts: list[float] = []
+
+    @contextlib.contextmanager
+    def record(request: object, *, timeout: float):
+        timeouts.append(timeout)
+        yield io.BytesIO(json.dumps({"entries": []}).encode())
+
+    monkeypatch.setattr(telemetry_report, "managed_urlopen", record)
+    monkeypatch.setattr(telemetry_updates, "managed_urlopen", record)
+    telemetry_report.fetch_index()
+    telemetry_updates.fetch_release_index()
+    assert len(timeouts) == 2
+    assert min(timeouts) >= 45

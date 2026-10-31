@@ -73,6 +73,7 @@ function testRiskControlConsequencesHasAllKeys(): void {
     "package_custom_registry",
     "package_install",
     "low_trust_artifact",
+    "runtime_known_vulnerable",
   ];
   for (const key of requiredKeys) {
     const entry = RISK_CONTROL_CONSEQUENCES[key];

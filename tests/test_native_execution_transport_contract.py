@@ -261,9 +261,18 @@ def test_hook_authority_state_bound_error_is_not_a_resident_failure(transport, t
     transport.succeeded.assert_not_called()
 
 
-@pytest.mark.parametrize("runner", ["node", "typescript", "package_script", "workspace_write"])
-def test_contained_runner_replies_are_accepted_without_outer_status(transport, tmp_path, runner):
-    reply = {"schema": f"guard-contained-{runner.replace('_', '-')}-execute-result.v1", "result": {"stdout": ""}}
+@pytest.mark.parametrize(
+    "runner,version,extra",
+    [
+        ("node", "v2", {"refusal": None}),
+        ("typescript", "v1", {}),
+        ("package_script", "v1", {}),
+        ("workspace_write", "v1", {}),
+    ],
+)
+def test_contained_runner_replies_are_accepted_without_outer_status(transport, tmp_path, runner, version, extra):
+    schema = f"guard-contained-{runner.replace('_', '-')}-execute-result.{version}"
+    reply = {"schema": schema, "result": {"stdout": ""}, **extra}
     transport.client.return_value = json.dumps(reply).encode()
     assert (
         bridge._resident_request(
@@ -293,10 +302,10 @@ def test_containment_health_probe_reply_reaches_the_caller(transport, tmp_path):
 
 
 def test_contained_runner_transport_budget_covers_resident_overhead(transport, tmp_path):
-    transport.client.return_value = b'{"schema":"guard-contained-node-execute-result.v1","result":null}'
+    transport.client.return_value = b'{"schema":"guard-contained-node-execute-result.v2","result":null,"refusal":null}'
     bridge._contained_runner_request(
         op_prefix="contained_node_execute",
-        request_schema="guard-contained-node-execute-request.v1",
+        request_schema="guard-contained-node-execute-request.v2",
         workspace=tmp_path,
         manager="npx",
         argv=("--no-install", "vitest", "run"),
@@ -304,11 +313,53 @@ def test_contained_runner_transport_budget_covers_resident_overhead(transport, t
         shim_directory=tmp_path,
         environment={},
         timeout_seconds=100.0,
-        evidence=None,
     )
     envelope = json.loads(transport.client.call_args.kwargs["payload"])
     assert envelope["deadline_budget_ms"] >= 100_000 + 60_000
     assert transport.client.call_args.kwargs["timeout_seconds"] >= 160.0
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        # A node reply without its refusal slot, or an older node reply.
+        {"schema": "guard-contained-node-execute-result.v2", "result": {"stdout": ""}},
+        {"schema": "guard-contained-node-execute-result.v1", "result": {"stdout": ""}, "refusal": None},
+        {"schema": "guard-contained-node-execute-result.v1", "result": {"stdout": ""}},
+    ],
+)
+def test_contained_node_reply_must_carry_its_refusal_slot(transport, tmp_path, reply):
+    transport.client.return_value = json.dumps(reply).encode()
+    assert (
+        bridge._resident_request(
+            operation="contained_node_execute",
+            request={},
+            guard_home=tmp_path,
+            timeout_seconds=1.0,
+            required_feature="contained-execution-v1",
+        )
+        is None
+    )
+
+
+def test_contained_node_refusal_stops_the_launch(transport, tmp_path):
+    refusal = "HOL Guard refused uncontained Vitest execution: sandbox startup or enforcement proof failed"
+    reply = {"schema": "guard-contained-node-execute-result.v2", "result": None, "refusal": refusal}
+    transport.client.return_value = json.dumps(reply).encode()
+    with pytest.raises(SystemExit) as stopped:
+        bridge.contained_node_execute_native(
+            tmp_path,
+            "bunx",
+            ("vitest", "run"),
+            guard_home=tmp_path,
+            shim_directory=tmp_path,
+            environment={},
+        )
+    assert stopped.value.code == refusal
+    envelope = json.loads(transport.client.call_args.kwargs["payload"])
+    assert envelope["operation"] == "contained_node_execute"
+    assert envelope["request"]["schema"] == "guard-contained-node-execute-request.v2"
+    assert "evidence" not in envelope["request"]
 
 
 @pytest.mark.parametrize(
@@ -339,35 +390,3 @@ def test_framed_resident_refusal_keeps_its_finite_code(transport, tmp_path, fram
     assert response is None
     assert native_resident_client_failure_code() == expected
     transport.failed.assert_called_once_with("a" * 64, tmp_path, reason="native_daemon_lifecycle_decide_schema")
-
-
-def test_contained_execute_reply_reaches_the_caller(transport, tmp_path):
-    """The contained execute op answers with a status-free versioned reply."""
-    result = {"exit_code": 0, "enforcement": "bubblewrap"}
-    transport.client.return_value = json.dumps(
-        {"schema": "guard-contained-execute-result.v1", "result": result}
-    ).encode()
-    request = {
-        "schema_version": "containment-contract-v1",
-        "kind": "probe",
-        "argv": ["/bin/true"],
-        "cwd": str(tmp_path),
-        "env_allowlist": [],
-        "timeout_seconds": 60,
-        "max_output_bytes": 1024,
-        "additional_read_paths": [],
-        "allow_outbound_network": False,
-    }
-    policy = {"schema_version": "containment-contract-v1", "action": "run"}
-    assert bridge.contained_execute_native(request, policy, guard_home=tmp_path, run_id="probe-1") == result
-    envelope = json.loads(transport.client.call_args.kwargs["payload"])
-    # The resident clamps this operation at the contract's one-hour request
-    # timeout plus the client's transport slack, so a minute-long contained run
-    # keeps the budget its own timeout earns.
-    assert envelope["deadline_budget_ms"] == 90_000
-    assert transport.client.call_args.kwargs["timeout_seconds"] == 90.0
-    # A reply carrying an outer status is not this operation's shape.
-    transport.client.return_value = json.dumps(
-        {"schema": "guard-contained-execute-result.v1", "result": result, "status": "ok"}
-    ).encode()
-    assert bridge.contained_execute_native(request, policy, guard_home=tmp_path, run_id="probe-1") is None

@@ -157,22 +157,6 @@ def _match(value: object, pattern: re.Pattern[str]) -> str:
     return value
 
 
-def _bounded_string(value: object, *, maximum: int, nullable: bool = False) -> str | None:
-    if value is None and nullable:
-        return None
-    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > maximum:
-        raise ValueError("health_lease_outbox_invalid")
-    return value
-
-
-def _optional_uint64(value: object) -> int | None:
-    if value is None:
-        return None
-    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= MAX_UINT64:
-        raise ValueError("health_lease_outbox_invalid")
-    return value
-
-
 @dataclass(frozen=True, slots=True)
 class HealthLeaseBinding:
     workspace_id: str

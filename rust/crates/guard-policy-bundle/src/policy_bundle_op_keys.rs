@@ -1,7 +1,8 @@
-//! Verification-key kinds of the `PolicyBundleAuthority` op.
+//! Key-material kinds of the `PolicyBundleAuthority` op.
 
 use serde_json::{json, Value};
 
+use crate::policy_bundle_dpop::jwk_thumbprint;
 use crate::policy_bundle_keys::{
     key_is_current, key_is_trusted, keys_to_value, load_keys, resolve_authorized, Key,
 };
@@ -14,6 +15,14 @@ use crate::policy_bundle_py::Obj;
 
 fn one_key(input: &Obj, name: &str) -> Result<Key, Fail> {
     Key::from_wire(field(input, name)?).ok_or(Fail::Invalid)
+}
+
+fn dpop(input: &Obj) -> Handled {
+    let jwk = field(input, "public_jwk")?
+        .as_object()
+        .ok_or(Fail::Invalid)?;
+    let thumbprint = jwk_thumbprint(text_field(input, "private_key_pem")?, jwk)?;
+    Ok(json!({ "thumbprint": thumbprint }))
 }
 
 fn load(input: &Obj) -> Handled {
@@ -97,6 +106,7 @@ fn persist(input: &Obj) -> Handled {
 
 pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
     Some(match kind {
+        "dpop_jwk_thumbprint" => dpop(input),
         "load_keys" => load(input),
         "key_is_current" => one_key(input, "key").and_then(|key| {
             let current = key_is_current(

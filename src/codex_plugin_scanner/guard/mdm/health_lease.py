@@ -176,12 +176,6 @@ def _load_ack(paths: MachinePaths) -> HealthLeaseAck | None:
         return None
 
 
-def load_pending_health_lease(paths: MachinePaths) -> HealthLeaseOutbox | None:
-    """Read an exact pending artifact without changing continuity state."""
-
-    return _load_pending(paths)
-
-
 def _normalized_snapshot(
     snapshot: Mapping[str, object], binding: HealthLeaseBinding, record: InstallationContinuityRecord
 ) -> bytes:
@@ -474,5 +468,4 @@ def issue_or_load_pending_health_lease(
 __all__ = [
     "acknowledge_pending_health_lease",
     "issue_or_load_pending_health_lease",
-    "load_pending_health_lease",
 ]

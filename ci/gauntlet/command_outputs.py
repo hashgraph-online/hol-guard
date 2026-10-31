@@ -19,6 +19,9 @@ from .feature_directory_fixtures import (
     SESSION_PATH,
 )
 from .fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES
+from .realism_fixtures import VITE_BUILD_MARKER
+from .runtime_cases import OUTPUT as RUNTIME_OUTPUT
+from .runtime_cases import QUIET_CASES as RUNTIME_QUIET_CASES
 from .script_cases import REPORT_CASES, report_output
 from .source_output_fixtures import (
     HELPER_MARKER,
@@ -28,18 +31,31 @@ from .source_output_fixtures import (
     WORKER_MARKER,
     WORKER_PATH,
 )
+from .workspace_runner_fixtures import HOME_BUN_ENTRY_CASE, RUNNER_MARKER, WORKSPACE_RUNNER_CASES
 
 TOKEN_READ_CASE = "omp-native-read-token-handling-sources"
 TOKEN_SHELL_CASE = "omp-native-shell-cat-token-handling-sources"
+# The same reads with each command's error output folded into its normal output, which is how
+# a session running a checked command spells them.
+TOKEN_STDERR_CASE = "omp-native-shell-cat-token-sources-with-stderr"
+TOKEN_SHELL_CASES = frozenset({TOKEN_SHELL_CASE, TOKEN_STDERR_CASE})
+TOKEN_CASES = frozenset({TOKEN_READ_CASE}) | TOKEN_SHELL_CASES
 FEATURE_DIRECTORY_CASE = "omp-native-read-feature-directory"
 WORKSPACE_GREP_CASE = "omp-native-grep-workspace-root"
 CLONE_GREP_CASE = "omp-native-shell-grep-clone-local-config"
 CLONE_SEARCH_CASES = frozenset({CLONE_GREP_CASE})
 WORKSPACE_FIND_CASE = "omp-native-shell-find-exec-grep-workspace-absolute"
+# Bun handed the installed package's own Node entry. The case pipes the build into `tail`,
+# which answers with its own successful status, so the build line is the only proof it ran.
+BUN_ENTRY_CASE = "omp-native-shell-linked-modules-bun-entry"
+# Both spellings of that launcher print the same build, so one check answers for either.
+BUN_ENTRY_CASES = frozenset({BUN_ENTRY_CASE, HOME_BUN_ENTRY_CASE})
 # Oh My Pi's bash tool adds its wall-time notice only to runs at least this long (milliseconds).
 WALL_TIME_NOTICE_MIN_MS = 1000
 # Every value in the fixture's local configuration files starts with this.
 LOCAL_VALUE_PREFIX = "GAUNTLET_SYNTHETIC_"
+# A leading file descriptor with a redirection operator: `2>&1`, `2>/dev/null`, `>out.txt`.
+_REDIRECT = re.compile(r"\d*>")
 # One line of each token-handling file, which only that file's real text carries.
 TOKEN_SOURCE_MARKERS = {ROUTE_PATH: ROUTE_MARKER, WORKER_PATH: WORKER_MARKER, HELPER_PATH: HELPER_MARKER}
 
@@ -58,6 +74,7 @@ OUTPUT_SCENARIOS = frozenset(
         "routed-git-inspection",
         "stdin-sed-transformation",
         *REPORT_CASES,
+        *RUNTIME_QUIET_CASES,
     }
 )
 
@@ -156,8 +173,10 @@ def _token_sources_match(scenario: Scenario, calls: list[dict[str, Any]]) -> boo
     for call in calls:
         if scenario.id == TOKEN_READ_CASE and call.get("name") == "read":
             target = re.sub(r":\d+(-\d+)?$", "", str(call["args"].get("path", "")))
-        elif scenario.id == TOKEN_SHELL_CASE and call.get("name") == "bash":
-            words = str(call["args"].get("command", "")).split()
+        elif scenario.id in TOKEN_SHELL_CASES and call.get("name") == "bash":
+            # A redirection writes no file of its own, so the last word that is not one names
+            # the source the command read.
+            words = [word for word in str(call["args"].get("command", "")).split() if not _REDIRECT.match(word)]
             target = words[-1] if words else ""
         else:
             continue
@@ -233,11 +252,27 @@ def _workspace_find_match(calls: list[dict[str, Any]]) -> bool:
     return text is not None and text.replace("\\", "/").splitlines() == ["{{workspace}}/src/settings.ts"]
 
 
+def _bun_entry_build_match(calls: list[dict[str, Any]]) -> bool:
+    """The installed build finished, rather than `tail` reporting its own success."""
+    if len(calls) != 1:
+        return False
+    text = _text(calls[0])
+    return text is not None and VITE_BUILD_MARKER in text
+
+
+def _workspace_runner_match(calls: list[dict[str, Any]]) -> bool:
+    """The workspace's own runner actually launched, printing the line only it prints."""
+    if len(calls) != 1:
+        return False
+    text = _text(calls[0])
+    return text is not None and RUNNER_MARKER in text
+
+
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """A successful host status cannot replace the required read, search or transformation."""
     if scenario.id == BUSINESS_ORDINARY_READ:
         return len(calls) == 1 and _text(calls[0]) == SOURCE
-    if scenario.id in (TOKEN_READ_CASE, TOKEN_SHELL_CASE):
+    if scenario.id in TOKEN_CASES:
         return _token_sources_match(scenario, calls)
     if scenario.id == FEATURE_DIRECTORY_CASE:
         return _feature_directory_match(calls)
@@ -247,6 +282,10 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         return _clone_search_match(scenario, calls)
     if scenario.id == WORKSPACE_FIND_CASE:
         return _workspace_find_match(calls)
+    if scenario.id in WORKSPACE_RUNNER_CASES:
+        return _workspace_runner_match(calls)
+    if scenario.id in BUN_ENTRY_CASES:
+        return _bun_entry_build_match(calls)
     if scenario.id not in OUTPUT_SCENARIOS:
         return True
     if len(calls) != len(scenario.commands):
@@ -296,6 +335,8 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         )
     if identifier in REPORT_CASES:
         return texts == [report_output()]
+    if identifier in RUNTIME_QUIET_CASES:
+        return texts == [RUNTIME_OUTPUT]
     if identifier == "bounded-source-discovery":
         return _discovery(texts)
     if identifier == "quoted-workspace-copy":

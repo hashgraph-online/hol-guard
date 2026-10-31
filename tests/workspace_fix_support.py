@@ -10,6 +10,29 @@ import pytest
 
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.workspace_assessment_reads import _run_payload
+
+
+def admit_worktree(
+    store: GuardStore, keys: assessments.WorktreeKeys, *, root: str, now_ms: int, resume: bool = True
+) -> bool:
+    """Admit a worktree; ``resume`` also unpauses one admitted before.
+
+    Without ``resume`` an already admitted worktree is left exactly as it is and
+    the call returns False, so an automatic admission never undoes a pause.
+    """
+
+    conflict = "update set private_root = excluded.private_root, paused = 0" if resume else "nothing"
+    with store._connect() as connection:
+        cursor = connection.execute(
+            f"""
+            insert into workspace_assessment_state (codebase_key, worktree_key, private_root, admitted_at_ms)
+            values (?, ?, ?, ?)
+            on conflict(codebase_key, worktree_key) do {conflict}
+            """,
+            (keys.codebase_key, keys.worktree_key, root, now_ms),
+        )
+        return cursor.rowcount == 1
 
 
 @pytest.fixture
@@ -81,7 +104,7 @@ def write_manifest(directory: Path, text: str = MANIFEST) -> Path:
 
 def seeded_store(tmp_path: Path, root: Path) -> GuardStore:
     store = GuardStore(tmp_path / "home")
-    assessments.admit_worktree(store, KEYS, root=str(root), now_ms=T0)
+    admit_worktree(store, KEYS, root=str(root), now_ms=T0)
     return store
 
 
@@ -106,3 +129,17 @@ def assess(
     )
     assert assessments.finish(store, claimed, outcome, now_ms=at + 1)
     return str(run_id)
+
+
+def get_run(store: GuardStore, run_id: str) -> dict[str, object] | None:
+    with store._connect() as connection:
+        row = connection.execute(
+            """
+            select run_id, codebase_key, worktree_key, snapshot_digest, kind, trigger_kind, state,
+                   dirty_generation, coverage_json, findings_json, error_code,
+                   created_at_ms, started_at_ms, finished_at_ms
+            from workspace_assessment_runs where run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+    return _run_payload(row) if row is not None else None

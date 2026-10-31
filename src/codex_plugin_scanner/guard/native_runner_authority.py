@@ -13,41 +13,25 @@ to launch. Nothing here ever computes an action, reason or signature locally.
 
 from __future__ import annotations
 
-import json
 import os
-import time
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .native_context import (
-    _COLD_START_ALLOWANCE_SECONDS,
-    _canonical_request_sha256,
-    _native_error,
     _native_runtime_status_memo,
     _resolve_digest_home,
-    ensure_resident_prerequisite,
 )
-from .native_resident_client import native_resident_client_ready, native_resident_client_request
-from .native_resident_prerequisite_reason import prerequisite_unavailable_code
-from .native_runtime import _isolated_environment
-from .native_runtime_resilience import (
-    native_record_overload,
-    native_record_resident_failure,
-    native_record_resident_success,
-)
+from .native_resident_decision import BoundCall, bound_resident_call
 
 _FEATURE = "runner-authority-v1"
-_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _REQUEST_SCHEMA = "guard-runner-authority-request.v1"
 _RESULT_SCHEMA = "guard-runner-authority-result.v1"
 _MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # The authority answer gates a launch, so a slow resident fails closed rather
 # than degrading; the budget is generous but bounded below the resident cap.
 _TIMEOUT_SECONDS = 5.0
-_MAX_DEADLINE_BUDGET_MS = 9_000
-_INVALID_RESULT = "native_runner_authority_result_invalid"
 
 
 class NativeRunnerAuthorityError(ValueError):
@@ -58,9 +42,18 @@ class NativeRunnerAuthorityRefusalError(NativeRunnerAuthorityError):
     """A healthy owner, or the bounded encoder, refused invalid input."""
 
 
-def _fail(status: Any, guard_home: Path, code: str) -> NativeRunnerAuthorityError:
-    native_record_resident_failure(status.identity.sha256, guard_home, reason=code)
-    return NativeRunnerAuthorityError(code)
+_CALL = BoundCall(
+    operation="runner_authority",
+    feature=_FEATURE,
+    prefix="native_runner_authority",
+    result_schema=_RESULT_SCHEMA,
+    max_request_bytes=_MAX_REQUEST_BYTES,
+    timeout_seconds=_TIMEOUT_SECONDS,
+    error=NativeRunnerAuthorityError,
+    refusal=NativeRunnerAuthorityRefusalError,
+    sha_prefix="",
+    clock_after_prerequisite=True,
+)
 
 
 def native_runner_authority(
@@ -72,14 +65,11 @@ def native_runner_authority(
     """Run one authority ``kind`` in the resident and return its bound payload.
 
     ``timeout_seconds`` widens the per-call budget for file-heavy kinds; the
-    envelope deadline stays bounded by ``_MAX_DEADLINE_BUDGET_MS``.
+    envelope deadline stays bounded by the resident call cap.
     """
 
     guard_home = _resolve_digest_home(guard_home)
     if kind in {
-        "projection_approval",
-        "projection_receipt",
-        "projection_surfaces",
         "projection_surfaces_batch",
         "projection_artifact_surfaces",
     }:
@@ -91,81 +81,15 @@ def native_runner_authority(
         "kind": kind,
         "args": dict(args),
     }
-    status = _native_runtime_status_memo()
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or _FEATURE not in status.capabilities.features
-        or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
-    ):
-        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
-    try:
-        prerequisite = ensure_resident_prerequisite(guard_home)
-    except Exception as error:
-        raise NativeRunnerAuthorityError("native_runner_authority_prerequisite_unavailable") from error
-    if not prerequisite:
-        raise NativeRunnerAuthorityError(
-            prerequisite_unavailable_code("native_runner_authority_prerequisite_unavailable", guard_home)
-        )
-    try:
-        request_sha256 = _canonical_request_sha256(request)
-        budget_seconds = _TIMEOUT_SECONDS if timeout_seconds is None else float(timeout_seconds)
-        if not native_resident_client_ready(status.identity.path, guard_home):
-            budget_seconds += _COLD_START_ALLOWANCE_SECONDS
-        deadline_budget_ms = max(1, min(_MAX_DEADLINE_BUDGET_MS, int(budget_seconds * 1_000)))
-        envelope = json.dumps(
-            {"operation": "runner_authority", "deadline_budget_ms": deadline_budget_ms, "request": request},
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
-    except (TypeError, ValueError, UnicodeEncodeError) as error:
-        raise NativeRunnerAuthorityRefusalError("native_runner_authority_component_unencodable") from error
-    if len(envelope) > _MAX_REQUEST_BYTES:
-        raise NativeRunnerAuthorityRefusalError("native_runner_authority_request_too_large")
-    try:
-        output = native_resident_client_request(
-            executable=status.identity.path,
-            guard_home=guard_home,
-            environment=_isolated_environment(),
-            payload=envelope,
-            deadline_monotonic=time.monotonic() + deadline_budget_ms / 1_000,
-        )
-    except Exception:
-        output = None
-    if output is None:
-        raise _fail(status, guard_home, "native_runner_authority_resident_unavailable")
-    try:
-        payload = json.loads(output)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise _fail(status, guard_home, _INVALID_RESULT) from error
-    error_code = _native_error(payload)
-    if error_code is not None:
-        if error_code == "native_overloaded":
-            native_record_overload(status.identity.sha256, guard_home)
-            raise NativeRunnerAuthorityError(error_code)
-        raise _fail(status, guard_home, error_code)
-    bound = (
-        isinstance(payload, dict)
-        and payload.get("schema") == _RESULT_SCHEMA
-        and payload.get("request_id") == request["request_id"]
-        and payload.get("request_sha256") == request_sha256
+    reply = bound_resident_call(
+        _CALL,
+        request,
+        guard_home=guard_home,
+        status=_native_runtime_status_memo(),
+        timeout_seconds=timeout_seconds,
+        cold_start=True,
     )
-    if not bound or not isinstance(payload, dict):
-        raise _fail(status, guard_home, _INVALID_RESULT)
-    code = payload.get("code")
-    if payload.get("status") == "error" and isinstance(code, str) and code.startswith("native_runner_authority_"):
-        # A bound refusal is the resident answering, not an outage: the request
-        # is refused (callers fail closed) but the resident stays healthy, so a
-        # bad request can never open the shared availability circuit.
-        native_record_resident_success(status.identity.sha256, guard_home)
-        raise NativeRunnerAuthorityRefusalError(code)
-    if payload.get("status") != "ok" or code != "ok" or not isinstance(payload.get("payload"), dict):
-        raise _fail(status, guard_home, _INVALID_RESULT)
-    native_record_resident_success(status.identity.sha256, guard_home)
-    return payload["payload"]
+    return reply.payload()
 
 
 def _projection_carrier_home(requested: Path) -> Path:

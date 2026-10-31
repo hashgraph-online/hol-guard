@@ -46,6 +46,21 @@ fn flags(command: &str, depth: isize) -> Value {
     })
 }
 
+/// The classification plus the floor and workflow eligibility its contract
+/// derives, so a caller never needs its own copy of the capability table.
+fn github_assessment_value(
+    assessment: &crate::github_capability_contract::GitHubCommandAssessment,
+) -> Value {
+    json!({
+        "capability": assessment.capability.as_str(),
+        "capabilities": assessment.capabilities.iter().map(|item| item.as_str()).collect::<Vec<_>>(),
+        "reason_code": assessment.reason_code,
+        "detail": assessment.detail,
+        "action_floor": assessment.action_floor().as_str(),
+        "workflow_authorizable": assessment.workflow_authorizable(),
+    })
+}
+
 /// One command-level request executes every nested helper inside Rust.
 ///
 /// # Errors
@@ -55,8 +70,11 @@ pub fn dispatch(entry: &str, args: &Value, context: &Ctx) -> Result<Value, &'sta
         "classify_github_shell_capabilities" => {
             let command = text(args, "command_text")?;
             let home = args["home_dir"].as_str().map(Path::new);
-            let assessment = crate::sfrs_gh_service::classify_github_shell_capabilities(command, home, context)
-                .map_or(Value::Null, |assessment| json!({"capability":assessment.capability.as_str(),"capabilities":assessment.capabilities.iter().map(|item|item.as_str()).collect::<Vec<_>>(),"reason_code":assessment.reason_code,"detail":assessment.detail}));
+            let assessment =
+                crate::sfrs_gh_service::classify_github_shell_capabilities(command, home, context)
+                    .map_or(Value::Null, |assessment| {
+                        github_assessment_value(&assessment)
+                    });
             return Ok(json!({"value":assessment,"flags":flags(command,0)}));
         }
         "pr_flags" => {
@@ -236,5 +254,33 @@ mod tests {
             let outcome = dispatch(entry, &Value::Object(args), &context).unwrap();
             assert_eq!(outcome["value"], case["result"], "{case}");
         }
+    }
+
+    #[test]
+    fn github_classification_carries_the_contract_floor() {
+        let host = NoEnvHost;
+        let context = Ctx::new(&host, "/", "/");
+        let classify = |command: &str| {
+            dispatch(
+                "classify_github_shell_capabilities",
+                &json!({"command_text": command, "home_dir": null}),
+                &context,
+            )
+            .unwrap()["value"]
+                .clone()
+        };
+
+        let secret = classify("gh pr view 1; gh secret set TOKEN --body value");
+        assert_eq!(
+            secret["capabilities"],
+            json!(["read_remote", "secret_remote"])
+        );
+        assert_eq!(secret["action_floor"], "block");
+        assert_eq!(secret["workflow_authorizable"], false);
+
+        let maintenance = classify("gh pr lock 1");
+        assert_eq!(maintenance["capabilities"], json!(["maintain_remote"]));
+        assert_eq!(maintenance["action_floor"], "review");
+        assert_eq!(maintenance["workflow_authorizable"], true);
     }
 }

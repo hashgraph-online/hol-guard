@@ -78,6 +78,7 @@ pub fn canonical_harness(harness: &str) -> Option<&'static str> {
         "zcode" | "zai" => "zcode",
         "devin" | "devin-cli" | "cognition-devin" => "devin",
         "cline" | "cline-cli" | "cline-vscode" => "cline",
+        "muse" | "muse-code" => "muse",
         _ => return None,
     })
 }

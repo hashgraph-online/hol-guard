@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shutil
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -14,17 +15,17 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action, native_launch_evidence
 from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import (
     EXACT_ACTION_CONTEXT_TOKEN_KEY,
     native_saved_decision_response,
 )
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.models import GuardAction, PolicyDecision
-from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import native_launch_evidence_helpers
-from tests.native_launch_evidence_helpers import _inventory, _permission
+from tests.native_launch_evidence_helpers import _inventory, _permission, native_exact_action, native_launch_evidence
+from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
+from tests.native_review_evidence_support import resident_review_evidence, with_review_evidence
 from tests.test_native_command_observations import _edge, _observations, _receipt
 
 _HARNESS = "claude-code"
@@ -119,6 +120,8 @@ def test_camel_case_harness_payload_offers_the_same_inventory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     # ZCode, Devin and Grok send ``toolInput``; the daemon receives that shape unchanged.
+    # The resident reads the tool name from the payload, as the daemon always did,
+    # so the camelCase payload names the same tool the snake_case one does.
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     expected = _inventory("npx wrangler --version", workspace)
     assert expected is not None, native_launch_evidence_helpers.LAST_UNAVAILABLE_REASON
@@ -127,7 +130,7 @@ def test_camel_case_harness_payload_offers_the_same_inventory(
         harness=_HARNESS,
         tool_name="Bash",
         payload={
-            "toolName": "run_terminal_command",
+            "toolName": "Bash",
             "toolInput": {"command": "npx wrangler --version"},
             "cwd": str(workspace),
         },
@@ -177,6 +180,10 @@ def _changed_rules(result: dict[str, Any], receipt: dict[str, Any]) -> tuple[dic
     changed_receipt = copy.deepcopy(receipt)
     for value in (changed_result["command_extensions"]["binding"], changed_receipt["command_extensions"]):
         value["control_revision"] += 1
+    return changed_result, _resigned(changed_receipt)
+
+
+def _resigned(changed_receipt: dict[str, Any]) -> dict[str, Any]:
     identity = {
         **{
             key: value
@@ -188,7 +195,7 @@ def _changed_rules(result: dict[str, Any], receipt: dict[str, Any]) -> tuple[dic
     changed_receipt["decision_id"] = hashlib.sha256(
         json.dumps(identity, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
     ).hexdigest()
-    return changed_result, changed_receipt
+    return changed_receipt
 
 
 def _proven(command: str, workspace: Path) -> bool:
@@ -207,7 +214,7 @@ def _proven(command: str, workspace: Path) -> bool:
     return first != _token(command, workspace, result=changed_result, receipt=changed_receipt)
 
 
-def test_token_changes_when_native_rules_change(
+def test_token_changes_when_the_configured_command_extensions_change(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
@@ -216,6 +223,22 @@ def test_token_changes_when_native_rules_change(
     original = _token("cat package.json", workspace, result=result, receipt=receipt)
     assert original is not None
     assert _token("cat package.json", workspace, result=changed_result, receipt=changed_receipt) not in {None, original}
+
+
+def test_a_guard_rule_upgrade_keeps_the_saved_always(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    # A new Guard release compiles different rules, so its `rule_digest`
+    # moves. The same reviewed action with the same verdict keeps its token:
+    # an upgrade must not re-ask for every saved Always allow.
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    result, receipt = _verdict()
+    upgraded = copy.deepcopy(receipt)
+    upgraded["rule_digest"] = "e" * 64
+    upgraded = _resigned(upgraded)
+    original = _token("cat package.json", workspace, result=result, receipt=receipt)
+    assert original is not None
+    assert _token("cat package.json", workspace, result=result, receipt=upgraded) == original
 
 
 def _node_script(workspace: Path) -> Path:
@@ -406,10 +429,10 @@ def _hook_worker(
 ) -> tuple[HookWorker, GuardStore]:
     from codex_plugin_scanner.guard.config import update_guard_settings
 
-    def review_raw_hook_native(*_args: object, **_kwargs: object) -> dict[str, object]:
+    def review_raw_hook_native(*_args: object, **kwargs: object) -> dict[str, object]:
         bound_receipt = copy.deepcopy(receipt)
         bound_receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(bound_receipt)).hexdigest()
-        return {
+        edge = {
             "schema": "guard-hook-edge-result.v2",
             "authority": "rust",
             "harness": _HARNESS,
@@ -424,6 +447,7 @@ def _hook_worker(
             },
             "receipt": bound_receipt,
         }
+        return with_review_evidence(edge, **kwargs)
 
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", review_raw_hook_native)
     store = GuardStore(tmp_path / "guard-home")
@@ -551,28 +575,22 @@ def test_native_review_derives_the_exact_action_token_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     """The saved lookup and the queued request share one derivation of the same token."""
-    from codex_plugin_scanner.guard.daemon import hook_native_review_approval, hook_native_saved_approval
+    from codex_plugin_scanner.guard.daemon import hook_native_review_approval
 
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     result, receipt = _verdict()
     worker, store = _hook_worker(tmp_path, monkeypatch, result, receipt)
     calls: list[str | None] = []
-    real = hook_native_saved_approval.native_exact_action
-    real_evidence = hook_native_review_approval.native_review_evidence
+    real_evidence = hook_native_review_approval.review_evidence_parts
 
-    def counting(**kwargs: Any) -> tuple[str | None, str | None]:
-        decision = real(**kwargs)
-        calls.append(decision[0])
-        return decision
+    def counting_evidence(
+        evidence: Mapping[str, object] | None,
+    ) -> tuple[bool, str | None, str | None, str | None] | None:
+        parts = real_evidence(evidence)
+        calls.append(None if parts is None else parts[2])
+        return parts
 
-    def counting_evidence(**kwargs: Any) -> tuple[str | None, str | None, str | None]:
-        evidence = real_evidence(**kwargs)
-        calls.append(evidence[1])
-        return evidence
-
-    monkeypatch.setattr(hook_native_review_approval, "native_exact_action", counting)
-    monkeypatch.setattr(hook_native_review_approval, "native_review_evidence", counting_evidence)
-    monkeypatch.setattr(hook_native_saved_approval, "native_exact_action", counting)
+    monkeypatch.setattr(hook_native_review_approval, "review_evidence_parts", counting_evidence)
     payload: dict[str, object] = {
         "hook_event_name": "PreToolUse",
         "session_id": "once",
@@ -602,35 +620,21 @@ def test_native_review_derives_the_exact_action_token_once(
     assert stored == _token("cat package.json", workspace, payload_extra={"session_id": "other"})
 
 
-def test_precomputed_token_binds_the_saved_decision_lookup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
-) -> None:
-    """A supplied token (including None) replaces derivation inside the saved review lookup."""
-    from codex_plugin_scanner.guard.daemon import hook_native_saved_approval
-    from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import native_saved_review_response
-
-    workspace = _wrangler_workspace(tmp_path, monkeypatch)
-    result, receipt = _verdict()
+def test_the_saved_decision_lookup_binds_the_derived_token(tmp_path: Path) -> None:
+    """The saved lookup reads only the token the review derived; no token keeps the review."""
+    result, _receipt = _verdict()
     store = GuardStore(tmp_path / "guard-home")
-    monkeypatch.setattr(
-        hook_native_saved_approval,
-        "native_exact_action",
-        lambda **_kwargs: pytest.fail("a precomputed token must not be re-derived"),
-    )
     kwargs: dict[str, Any] = {
         "harness": _HARNESS,
-        "tool_name": "Bash",
         "artifact_id": _ARTIFACT_ID,
-        "payload": {"tool_name": "Bash", "tool_input": {"command": "cat package.json"}, "cwd": str(workspace)},
         "native_result": result,
-        "native_receipt": receipt,
-        "workspace": workspace,
-        "home_dir": tmp_path / "home",
+        "workspace": tmp_path,
     }
-    assert native_saved_review_response(store, precomputed_token=None, **kwargs) is None
     token = "a" * 64
     _save(store, token, "block")
-    blocked = native_saved_review_response(store, precomputed_token=token, **kwargs)
+    assert native_saved_decision_response(store, token=None, **kwargs) is None
+    assert native_saved_decision_response(store, token="b" * 64, **kwargs) is None
+    blocked = native_saved_decision_response(store, token=token, **kwargs)
     assert blocked is not None and blocked["reason_code"] == "saved_exact_action_block"
 
 
@@ -717,18 +721,19 @@ def test_saved_block_wins_over_a_pending_once_approval(
     assert token is not None
     _save(store, token, "block")
     monkeypatch.setattr(hook_native_review_approval, "native_review_claimed_allow", lambda *_a, **_k: True)
-    monkeypatch.setattr(hook_native_review_approval, "native_review_matching_allow", lambda *_a, **_k: True)
+    monkeypatch.setattr(hook_native_review_approval, "native_review_settle", lambda *_a, **_k: "allowed")
     result, receipt = _verdict()
+    review = {
+        "harness": _HARNESS,
+        "payload": {"tool_name": "Bash", "tool_input": {"command": "cat package.json"}, "cwd": str(workspace)},
+        "native_result": result,
+        "native_receipt": receipt,
+        "workspace": workspace,
+        "guard_home": tmp_path / "guard-home",
+        "home_dir": workspace.parent / "home",
+    }
     response = hook_native_review_approval.pause_native_pre_tool_for_approval(
-        store,
-        harness=_HARNESS,
-        payload={"tool_name": "Bash", "tool_input": {"command": "cat package.json"}, "cwd": str(workspace)},
-        native_result=result,
-        native_receipt=receipt,
-        workspace=workspace,
-        guard_home=tmp_path / "guard-home",
-        home_dir=workspace.parent / "home",
-        claimed_saved_allow_hash="once-hash",
+        store, **review, review_evidence=resident_review_evidence(**review), claimed_saved_allow_hash="once-hash"
     )
     assert response["policy_action"] == "block"
     assert response["approval_reuse_status"] == "blocked"

@@ -10,8 +10,10 @@ returns ``None``; nothing is ever rendered in Python.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,10 +26,22 @@ _REQUEST_SCHEMA = "guard-hook-render-request.v1"
 _RESULT_SCHEMA = "guard-hook-render-result.v1"
 _TIMEOUT_SECONDS = 5.0
 _MAX_REQUEST_BYTES = 256 * 1024
+# ``cli_hook_emit`` carries a whole daemon answer as escaped JSON text and
+# ``cursor_shell_route`` carries the edge result the daemon already produced;
+# the resident gives both kinds the larger budget (``hook_render_max_bytes``).
+_CLI_HOOK_EMIT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+_CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+# The bridge kinds carry the whole daemon reply they render, which may be as
+# large as a native response, so they ask for the same larger budget.
+_DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
 
 def _render_payload(
-    request: dict[str, object], guard_home: Path | None, deadline: float | None = None
+    request: dict[str, object],
+    guard_home: Path | None,
+    deadline: float | None = None,
+    *,
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
 ) -> dict[str, object] | None:
     timeout = _TIMEOUT_SECONDS
     if deadline is not None:
@@ -46,7 +60,7 @@ def _render_payload(
             timeout_seconds=timeout,
             required_feature=HOOK_RENDER_FEATURE,
             response_schema=_RESULT_SCHEMA,
-            max_request_bytes=_MAX_REQUEST_BYTES,
+            max_request_bytes=max_request_bytes,
             record_success=False,
         )
     except (TypeError, ValueError, OSError, RuntimeError):
@@ -76,7 +90,18 @@ def native_render_cli(
     (``document``, ``silent`` or ``fallback``) and the document for ``document``.
     """
 
-    payload = _render_payload({"kind": kind, "harness": harness, "cli": dict(params)}, guard_home, deadline)
+    wire: dict[str, object] = {"kind": kind, "harness": harness, "cli": dict(params)}
+    # Each kind names its own bound here rather than reading one out of a
+    # table, so the scan that compares every bound against the transport's
+    # ceiling can still read what this call offers.
+    if kind == "cli_hook_emit":
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CLI_HOOK_EMIT_MAX_REQUEST_BYTES)
+    elif kind == "cursor_shell_route":
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
+    elif kind in {"hermes_bridge", "muse_bridge"}:
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
+    else:
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
     outcome = payload.get("outcome") if payload is not None else None
     if payload is None or outcome not in {"document", "silent", "fallback"}:
         return None
@@ -106,39 +131,84 @@ def native_hermes_bridge(
     return dict(document), exit_code
 
 
-# The payload fields ``claude_approval_copy`` reads to name the tool.
-_CLAUDE_COPY_PAYLOAD_FIELDS = ("tool_name", "message", "title")
-
-
-def native_claude_approval_copy(
-    which: str,
+def native_muse_bridge(
+    response: Mapping[str, object],
     *,
-    payload: Mapping[str, object] | None = None,
-    notice: Mapping[str, object] | None = None,
-    reason: str = "",
+    event_name: str,
     guard_home: Path | None = None,
-) -> object | None:
-    """Render one named piece of Claude approval copy; ``None`` when unavailable.
+    deadline: float | None = None,
+) -> tuple[dict[str, object] | None, int] | None:
+    """Read a Muse daemon reply into its stdout document and exit status.
 
-    The daemon path already renders this text; this ships the same pending
-    notice and the payload fields that name the tool, so the CLI path reads
-    the copy from the same place. Only those fields travel: the rest of a hook
-    payload carries the tool's own input, which this copy never reads and
-    which would push the request toward the op's size limit.
+    The document is ``None`` where Muse expects empty stdout, which is how it
+    reads a permitted call. ``None`` for the whole result means the resident
+    could not answer, and the caller fails closed rather than deciding here
+    what the reply meant. ``deadline`` is the hook's absolute
+    ``time.monotonic()`` budget; the render gets only what remains.
     """
 
-    fields = payload or {}
-    params: dict[str, object] = {
-        "which": which,
-        "payload": {key: fields[key] for key in _CLAUDE_COPY_PAYLOAD_FIELDS if key in fields},
-        "reason": reason,
-    }
-    if notice is not None:
-        params["notice"] = dict(notice)
-    rendered = native_render_cli("claude_approval_copy", "claude-code", params, guard_home=guard_home)
+    rendered = native_render_cli(
+        "muse_bridge",
+        "muse",
+        {"response": dict(response), "event_name": str(event_name)},
+        guard_home=guard_home,
+        deadline=deadline,
+    )
     if rendered is None or rendered[1] is None:
         return None
-    return rendered[1].get("value")
+    document = rendered[1].get("document")
+    exit_code = rendered[1].get("exit_code")
+    if document is not None and not isinstance(document, dict):
+        return None
+    if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+        return None
+    return (dict(document) if document is not None else None), exit_code
+
+
+def native_cli_hook_emit(
+    harness: str,
+    response: Mapping[str, object],
+    *,
+    event_name: str,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+    bridge: bool = False,
+    document: bool = False,
+) -> dict[str, object] | None:
+    """Read a daemon answer the way ``hol-guard hook`` prints it.
+
+    ``harness`` is canonical. A bridge-rendered harness gets ``stdout``,
+    ``stderr`` and ``exit_code``; any other gets the ``policy_action`` its
+    exit status follows. ``bridge`` asks for the bounded bridge's output for
+    every harness, which is what that bridge prints. ``document`` also asks
+    a harness outside the bridges for the redacted document it prints, as
+    ``stdout``, and the ``exit_code`` it exits with; the resident shortens
+    this process's home directory in it. A resident that predates
+    ``document`` answers without ``stdout``. ``None`` when the resident
+    cannot answer, so the caller fails closed rather than reading the answer here. The answer
+    travels as compact JSON so the resident reads the exact text Python would
+    have printed, lone surrogates included. ``deadline`` is the hook's
+    absolute ``time.monotonic()`` budget; the render gets only what remains.
+    """
+
+    try:
+        response_json = json.dumps(dict(response), ensure_ascii=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return None
+    params: dict[str, object] = {"event_name": event_name, "response_json": response_json}
+    if guard_home is not None:
+        # The store this command reads. An authority block's recovery line
+        # names it, so a person pasting the command repairs this install and
+        # not whichever one the bare command would find.
+        params["guard_home"] = str(guard_home)
+    if bridge:
+        params["bridge"] = True
+    if document:
+        params["document"] = True
+        with suppress(RuntimeError):
+            params["home_dir"] = str(Path.home())
+    rendered = native_render_cli("cli_hook_emit", harness, params, guard_home=guard_home, deadline=deadline)
+    return rendered[1] if rendered is not None else None
 
 
 def native_evaluation_has_terminal_policy_action(
@@ -164,110 +234,6 @@ def native_evaluation_has_terminal_policy_action(
 
 
 # The payload fields the observer-event rule reads to name an attested event.
-_OBSERVER_EVENT_PAYLOAD_FIELDS = (
-    "hook_event_name",
-    "hookEventName",
-    "cursor_source_hook_event",
-)
-
-
-def native_cursor_observer_event(
-    payload: Mapping[str, object],
-    *,
-    guard_home: Path | None = None,
-) -> str | None:
-    """Which observer event this Cursor payload is attested under; ``None`` when unavailable.
-
-    The event is a field of the message an after-observer proof is computed
-    over, and the side that issues a proof and the side that checks it both
-    derive it from the same harness-supplied payload. A second copy of the
-    selection would invalidate every proof the moment the two disagreed, so
-    the resident answers for both.
-    """
-
-    params: dict[str, object] = {
-        "payload": {key: payload[key] for key in _OBSERVER_EVENT_PAYLOAD_FIELDS if key in payload}
-    }
-    rendered = native_render_cli("cursor_observer_event", "cursor", params, guard_home=guard_home)
-    if rendered is None or rendered[1] is None:
-        return None
-    value = rendered[1].get("value")
-    return value if isinstance(value, str) and value else None
-
-
-# The payload fields the after-shell rule reads to judge a Cursor report.
-_AFTER_SHELL_PAYLOAD_FIELDS = (
-    "duration",
-    "event",
-    "hook_event_name",
-    "hookEventName",
-    "hook_name",
-    "output",
-    "result_json",
-)
-
-
-def native_cursor_after_shell_observed(
-    harness: str,
-    payload: Mapping[str, object],
-    *,
-    guard_home: Path | None = None,
-) -> bool | None:
-    """Whether this Cursor payload reports a finished command; ``None`` when unavailable.
-
-    The answer gates the step that turns a pending approval into a durable
-    session allowance, so reading a before-event as an after-report would mint
-    an allowance for a command nobody watched finish. The resident reads the
-    payload itself rather than taking the caller's account of it.
-    """
-
-    params: dict[str, object] = {
-        "payload": {key: payload[key] for key in _AFTER_SHELL_PAYLOAD_FIELDS if key in payload}
-    }
-    rendered = native_render_cli("cursor_after_shell_observed", harness, params, guard_home=guard_home)
-    if rendered is None or rendered[1] is None:
-        return None
-    value = rendered[1].get("value")
-    return value if isinstance(value, bool) else None
-
-
-# The payload fields the artifact-id rule reads to name an event.
-_ARTIFACT_ID_PAYLOAD_FIELDS = (
-    "source_scope",
-    "tool_name",
-    "event",
-    "hook_event_name",
-    "hookEventName",
-    "hook_name",
-)
-
-
-def native_artifact_id_from_event(
-    harness: str,
-    canonical_harness: str,
-    payload: Mapping[str, object],
-    *,
-    guard_home: Path | None = None,
-) -> str | None:
-    """Name the runtime artifact an event belongs to; ``None`` when unavailable.
-
-    The name is what a configured action override is keyed on, so the resident
-    derives it. ``canonical_harness`` is the resolved adapter name, which
-    decides whether the Claude builtin/MCP split applies; ``harness`` is the
-    raw tag the event arrived on and prefixes the id for every other harness.
-    Only the fields the rule reads travel: the rest of a hook payload carries
-    the tool's own input, which naming never reads.
-    """
-
-    params: dict[str, object] = {
-        "canonical_harness": canonical_harness,
-        "payload": {key: payload[key] for key in _ARTIFACT_ID_PAYLOAD_FIELDS if key in payload},
-    }
-    rendered = native_render_cli("artifact_id", harness, params, guard_home=guard_home)
-    if rendered is None or rendered[1] is None:
-        return None
-    value = rendered[1].get("value")
-    return value if isinstance(value, str) and value else None
 
 
 def native_render_pre_tool(
@@ -276,28 +242,6 @@ def native_render_pre_tool(
     """Render a PreToolUse verdict the daemon adjusted after the edge decision."""
 
     return _render({"kind": "pre_tool", "harness": harness, "verdict": dict(verdict)}, guard_home, deadline)
-
-
-def native_render_pre_tool_review(
-    harness: str,
-    verdict: Mapping[str, object],
-    *,
-    approval: Mapping[str, object] | None,
-    linked_reason: str | None,
-    guard_home: Path | None = None,
-    deadline: float | None = None,
-) -> dict[str, object] | None:
-    """Render a paused review; ``linked_reason`` already carries the signed approval link."""
-
-    request: dict[str, object] = {"kind": "pre_tool_review", "harness": harness, "verdict": dict(verdict)}
-    if approval is not None:
-        # The renderer reads only the link and the request id; the stored row can be large.
-        request["approval"] = {
-            key: approval[key] for key in ("approval_url", "request_id") if isinstance(approval.get(key), str)
-        }
-    if linked_reason is not None:
-        request["linked_reason"] = linked_reason
-    return _render(request, guard_home, deadline)
 
 
 def native_render_recording_only_pre_tool(
@@ -314,13 +258,9 @@ def native_render_recording_only_pre_tool(
 
 __all__ = [
     "HOOK_RENDER_FEATURE",
-    "native_artifact_id_from_event",
-    "native_claude_approval_copy",
-    "native_cursor_after_shell_observed",
-    "native_cursor_observer_event",
+    "native_cli_hook_emit",
     "native_evaluation_has_terminal_policy_action",
     "native_render_cli",
     "native_render_pre_tool",
-    "native_render_pre_tool_review",
     "native_render_recording_only_pre_tool",
 ]

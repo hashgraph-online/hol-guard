@@ -10,9 +10,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use guard_command::effect_decision::effect_decision_to_payload;
-use guard_command::verified_read_decision::{
-    verified_github_read_decision, verified_workspace_read_decision,
-};
+use guard_command::verified_read_decision::verified_github_read_decision;
 use guard_contracts::{
     write_canonical_json_with_limit, VerifiedReadDecisionKindV1, VerifiedReadDecisionRequestV1,
     VerifiedReadDecisionResultV1, VERIFIED_READ_DECISION_MAX_REQUEST_BYTES,
@@ -47,15 +45,6 @@ fn decide(
     }
     let digest = request.binding_digest.as_str();
     let decision = catch_unwind(AssertUnwindSafe(|| match &request.read {
-        VerifiedReadDecisionKindV1::Workspace { operation_id } => {
-            // The operation ref names the read this decision belongs to; an
-            // empty id would attach the allow to no operation at all.
-            if operation_id.is_empty() {
-                return Err("native_verified_read_decision_invalid");
-            }
-            verified_workspace_read_decision(operation_id, digest)
-                .map_err(|_| "native_verified_read_decision_invalid")
-        }
         VerifiedReadDecisionKindV1::GithubPublicRead {} => verified_github_read_decision(digest)
             .map_err(|_| "native_verified_read_decision_invalid"),
     }))

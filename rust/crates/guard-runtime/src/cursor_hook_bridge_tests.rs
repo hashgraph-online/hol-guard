@@ -198,10 +198,12 @@ fn only_tool_hooks_and_observers_are_sent() {
         query,
         event,
         kind,
+        probe,
     } = prepared_request(&client, shell).unwrap();
     assert_eq!(query, "guard-home=%2Fg&home=%2Fh");
     assert_eq!(event, "beforeShellExecution");
     assert_eq!(kind, Kind::PreToolUse);
+    assert!(!probe);
     let sent: Value = serde_json::from_str(&data).unwrap();
     assert_eq!(sent["hook_event_name"], "PreToolUse");
     assert_eq!(sent["cursor_source_hook_event"], "beforeShellExecution");

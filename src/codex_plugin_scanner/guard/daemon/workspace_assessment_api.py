@@ -6,6 +6,8 @@ them. Reads return digests, counts and package-coordinate findings. Writes
 admit, pause, queue or cancel runs (a run itself happens on the worker thread)
 or prepare and apply a reviewed dependency fix. Preparing only stores a diff;
 applying is the user's explicit action and edits one manifest, never more.
+An export preview reports what a source export of named files in a tracked
+worktree would contain; it reads and redacts locally and sends nothing.
 """
 
 from __future__ import annotations
@@ -15,13 +17,16 @@ from pathlib import Path
 from typing import Any, Final, Protocol, cast
 from urllib.parse import parse_qs
 
+from .. import native_workspace_export_preview as export_preview
 from .. import workspace_assessment_fix_proposals as fixes
 from .. import workspace_assessment_store as assessments
+from ..workspace_assessment_pressure import deferral_reason
 from ..workspace_assessment_worker import WorkspaceAdmissionError, admit_workspace, queue_manual_run
 
 ASSESSMENTS_PATH: Final = "/v1/supply-chain/workspace-assessments"
 FINDINGS_PATH: Final = "/v1/supply-chain/workspace-findings"
 FIX_PROPOSALS_PATH: Final = "/v1/supply-chain/workspace-fix-proposals"
+EXPORT_PREVIEW_PATH: Final = "/v1/supply-chain/workspace-export-preview"
 _ACTIONS: Final = frozenset({"run", "cancel", "pause", "resume"})
 _MAX_QUERY_CHARS: Final = 1024
 
@@ -45,6 +50,8 @@ def handle_workspace_assessment_get(request_handler: object, path: str, query: s
                 # The newest run of each worktree, so a busy worktree keeps its
                 # queued or running state however long the history above is.
                 "latest_runs": assessments.latest_runs(store),
+                # Set while a busy host holds automatic runs back.
+                "deferred_reason": deferral_reason(store),
             }
         )
         return True
@@ -93,6 +100,9 @@ def handle_workspace_assessment_post(
         return True
     if path == FIX_PROPOSALS_PATH:
         _prepare_fix(handler, payload)
+        return True
+    if path == EXPORT_PREVIEW_PATH:
+        _preview_export(handler, payload)
         return True
     fix_prefix = FIX_PROPOSALS_PATH + "/"
     if path.startswith(fix_prefix) and path.endswith("/apply"):
@@ -185,6 +195,45 @@ def _apply_fix(handler: WorkspaceAssessmentHandler, proposal_id: str) -> None:
     handler._write_json(applied)
 
 
+def _preview_export(handler: WorkspaceAssessmentHandler, payload: dict[str, object]) -> None:
+    keys = _keys(payload)
+    paths = payload.get("paths")
+    if keys is None:
+        handler._write_json({"error": "invalid_worktree"}, status=400)
+        return
+    if (
+        not isinstance(paths, list)
+        or len(paths) > export_preview.MAX_EXPORT_PREVIEW_PATHS
+        or not all(isinstance(item, str) and 0 < len(item) <= 4096 for item in paths)
+    ):
+        handler._write_json({"error": "invalid_paths"}, status=400)
+        return
+    worktree = next(
+        (
+            item
+            for item in assessments.list_worktrees(handler.server.store)
+            if item["codebase_key"] == keys.codebase_key and item["worktree_key"] == keys.worktree_key
+        ),
+        None,
+    )
+    if worktree is None:
+        handler._write_json({"error": "worktree_not_found"}, status=404)
+        return
+    try:
+        result = export_preview.preview(Path(str(worktree["root"])), [str(item) for item in paths])
+    except export_preview.WorkspaceExportPreviewError as error:
+        status = 503 if error.code == "workspace_export_preview_native_unavailable" else 422
+        handler._write_json({"error": error.code}, status=status)
+        return
+    # The native side keys the root it actually opened. A root that now resolves
+    # elsewhere, through a replaced directory or symlink, or whose Git pointer now
+    # names another repository, is another worktree.
+    if result["worktree_key"] != keys.worktree_key or result["codebase_key"] != keys.codebase_key:
+        handler._write_json({"error": "worktree_moved"}, status=409)
+        return
+    handler._write_json(result)
+
+
 def _keys(payload: Mapping[str, object]) -> assessments.WorktreeKeys | None:
     codebase_key = payload.get("codebase_key")
     worktree_key = payload.get("worktree_key")
@@ -213,6 +262,7 @@ def _now_ms() -> int:
 
 __all__ = [
     "ASSESSMENTS_PATH",
+    "EXPORT_PREVIEW_PATH",
     "FINDINGS_PATH",
     "FIX_PROPOSALS_PATH",
     "handle_workspace_assessment_get",

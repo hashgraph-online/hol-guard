@@ -11,7 +11,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_WORKFLOW = ROOT / ".github" / "workflows" / "publish.yml"
 NATIVE_WHEEL_WORKFLOW = ROOT / ".github/workflows/release-native-wheel.yml"
-NATIVE_WHEEL_LANES = ("linux-x64", "macos-x64", "macos-arm64", "windows-x64", "windows-arm64")
+NATIVE_WHEEL_LANES = ("linux-x64", "macos-x64", "macos-arm64", "windows-x64", "windows-arm64", "linux-arm64")
+# The Linux ARM64 wheel compiles in its own job; it has no warm-cache preparation lane.
+PREPARED_WHEEL_LANES = NATIVE_WHEEL_LANES[:5]
 
 
 def load_workflow(path: Path) -> dict[object, object]:

@@ -34,11 +34,11 @@ use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest, GuardSyncRunnerApi,
     JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
-    PackageIdentityApi, RestrictedArchiveApi,
+    PackageEvalResult, PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, SavedPolicyProbe, StoreExtrasApi,
     SupplyChainBundleApi, SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps,
-    WorkspaceIoApi,
+    WorkspaceIoApi, REVIEW_SETTLEMENT_KEY,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
@@ -1093,6 +1093,8 @@ impl SupplyChainStore for ResidentSupplyChainStore {
             local_once_integrity_key_b64: key_b64.as_ref().map(|k| k.to_string()),
             local_once_integrity_key_id: key_id,
             policy_bundle_decision_identities: None,
+            exception_workspace: None,
+            cloud_exception_bundle: Default::default(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,
@@ -1560,11 +1562,13 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
         request: &GuardSyncRequest,
         timeout_seconds: u64,
         retry_timeout_seconds: u64,
+        budget: &guard_command::guard_sync_transport::SyncBudget,
     ) -> EvalResult<Map<String, Value>> {
-        let payload = guard_command::guard_sync_transport::urlopen_json_with_timeout_retry(
+        let payload = guard_command::guard_sync_transport::urlopen_json_within_budget(
             request,
             timeout_seconds as f64,
             retry_timeout_seconds as f64,
+            budget,
         )?;
         match payload {
             Value::Object(map) => Ok(map),

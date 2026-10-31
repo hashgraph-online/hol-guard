@@ -44,6 +44,7 @@ HARNESS_IDS = frozenset(
         "grok",
         "hermes",
         "kimi",
+        "muse",
         "omp",
         "openclaw",
         "opencode",

@@ -151,11 +151,12 @@ pub(in crate::pretool) fn as_cd_list(
     if rest.is_empty() {
         return None;
     }
-    // Only scripts are projected; `bun x`, `npm exec` and other runners keep
-    // their own tool-runner proof.
-    if !matches!(rest.first().copied(), Some("run" | "test")) {
-        return None;
-    }
+    // Every rest is projected, not only `run` and `test`. What comes out is
+    // the `cd <dir> && <manager> <rest>` the user could have typed, so the
+    // rest is judged in the resolved directory on the terms it has there:
+    // `pnpm install` still meets the package checks, `npm exec vitest` still
+    // meets the node-tool containment route, and an implicit script run such
+    // as `pnpm build` reaches the containment route the `cd` form reaches.
     let remainder: String = chars[first.span.end..].iter().collect();
     let text = format!(
         "cd {directory} && {executable} {}{remainder}",
@@ -174,3 +175,9 @@ pub(in crate::pretool) fn as_cd_list(
         text,
     })
 }
+
+// The tests spell the workspace path inside POSIX shell text, and the peel
+// itself is Unix-only, so they run where the arm they cover compiles.
+#[cfg(all(test, unix))]
+#[path = "package_directory_flags_tests.rs"]
+mod tests;

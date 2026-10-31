@@ -21,6 +21,11 @@ on:
         required: false
         type: boolean
         default: false
+      allow_cache_write:
+        description: Trusted release builds may populate release caches. Pull request alphas must not.
+        required: false
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
@@ -31,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON('{"x86_64-unknown-linux-musl":[{"runner":"ubuntu-latest","platform_tag":"manylinux_2_17_x86_64","target":"x86_64-unknown-linux-musl","runtime":"rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime","source_compiler":"rust/target/x86_64-unknown-linux-musl/release/guard-command-source"}],"x86_64-apple-darwin":[{"runner":"macos-15-intel","platform_tag":"macosx_13_0_x86_64","target":"x86_64-apple-darwin","runtime":"rust/target/x86_64-apple-darwin/release/hol-guard-runtime","source_compiler":"rust/target/x86_64-apple-darwin/release/guard-command-source"}],"aarch64-apple-darwin":[{"runner":"macos-15","platform_tag":"macosx_11_0_arm64","target":"aarch64-apple-darwin","runtime":"rust/target/aarch64-apple-darwin/release/hol-guard-runtime","source_compiler":"rust/target/aarch64-apple-darwin/release/guard-command-source"}],"x86_64-pc-windows-msvc":[{"runner":"windows-latest","platform_tag":"win_amd64","rustflags":"-C link-arg=/Brepro","target":"x86_64-pc-windows-msvc","runtime":"rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe","source_compiler":"rust/target/x86_64-pc-windows-msvc/release/guard-command-source.exe"}],"aarch64-pc-windows-msvc":[{"runner":"windows-11-arm","platform_tag":"win_arm64","rustflags":"-C link-arg=/Brepro","target":"aarch64-pc-windows-msvc","runtime":"rust/target/aarch64-pc-windows-msvc/release/hol-guard-runtime.exe","source_compiler":"rust/target/aarch64-pc-windows-msvc/release/guard-command-source.exe"}]}')[inputs.target] || fromJSON('[]') }}
+        include: ${{ fromJSON('{"x86_64-unknown-linux-musl":[{"runner":"ubuntu-24.04","platform_tag":"manylinux_2_17_x86_64","target":"x86_64-unknown-linux-musl","runtime":"rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime","source_compiler":"rust/target/x86_64-unknown-linux-musl/release/guard-command-source"}],"x86_64-apple-darwin":[{"runner":"macos-15-intel","platform_tag":"macosx_13_0_x86_64","target":"x86_64-apple-darwin","runtime":"rust/target/x86_64-apple-darwin/release/hol-guard-runtime","source_compiler":"rust/target/x86_64-apple-darwin/release/guard-command-source"}],"aarch64-apple-darwin":[{"runner":"macos-15","platform_tag":"macosx_11_0_arm64","target":"aarch64-apple-darwin","runtime":"rust/target/aarch64-apple-darwin/release/hol-guard-runtime","source_compiler":"rust/target/aarch64-apple-darwin/release/guard-command-source"}],"x86_64-pc-windows-msvc":[{"runner":"windows-latest","platform_tag":"win_amd64","rustflags":"-C link-arg=/Brepro","target":"x86_64-pc-windows-msvc","runtime":"rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe","source_compiler":"rust/target/x86_64-pc-windows-msvc/release/guard-command-source.exe"}],"aarch64-pc-windows-msvc":[{"runner":"windows-11-arm","platform_tag":"win_arm64","rustflags":"-C link-arg=/Brepro","target":"aarch64-pc-windows-msvc","runtime":"rust/target/aarch64-pc-windows-msvc/release/hol-guard-runtime.exe","source_compiler":"rust/target/aarch64-pc-windows-msvc/release/guard-command-source.exe"}],"aarch64-unknown-linux-musl":[{"runner":"ubuntu-24.04-arm","platform_tag":"manylinux_2_17_aarch64","target":"aarch64-unknown-linux-musl","runtime":"rust/target/aarch64-unknown-linux-musl/release/hol-guard-runtime","source_compiler":"rust/target/aarch64-unknown-linux-musl/release/guard-command-source"}]}')[inputs.target] || fromJSON('[]') }}
     steps:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -44,6 +49,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          save-cache: ${{ inputs.allow_cache_write }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
@@ -79,9 +85,9 @@ jobs:
           # always stale after a fresh checkout, so storing them only spends quota.
           cache-workspace-crates: false
           cache-bin: false
-          # Release builds never consume the validation cache. PR canaries can
-          # restore this trusted cache, but cannot publish entries to it.
-          save-if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
+          # Release builds never consume the validation cache. PR canaries and
+          # pull request alphas can restore this cache, but cannot publish entries.
+          save-if: ${{ inputs.allow_cache_write && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
       - name: Build version-matched runtime
         if: inputs.precompiled != true
         shell: bash

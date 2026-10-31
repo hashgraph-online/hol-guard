@@ -8,16 +8,17 @@ from typing import Any, cast
 
 from ..approval_gate import ApprovalGateError
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
+from ..approval_scope_selection import resolve_request_scope_selection
 from ..approval_scope_support import (
     IneligibleApprovalScopeError,
     StaleApprovalScopeContractError,
     request_scope_contract_payload,
-    resolve_request_scope_selection,
 )
 from ..approvals import ApprovalRequestAlreadyResolvedError, ApprovalRequestNotFoundError, apply_approval_resolution
 from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
 from ..native_resident_revival import native_route_unavailable_body
+from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .background_diagnostics import failure_detail, record_background_event
 from .command_activity_api import handle_command_activity_feedback
 from .extension_control_api import ExtensionControlApiError
@@ -26,6 +27,7 @@ from .harness_version_api import handle_harness_version_write
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
+from .plugin_updates_http import handle_plugin_updates_dismiss
 from .server_common import _now
 from .workspace_assessment_api import handle_workspace_assessment_post
 
@@ -121,12 +123,6 @@ class _ControlPostRoutes:
         if parsed.path == "/v1/command-activity/feedback":
             handle_command_activity_feedback(self, payload)
             return
-        if parsed.path == "/v1/clients/attach":
-            self._handle_client_attach(payload)
-            return
-        if parsed.path == "/v1/clients/heartbeat":
-            self._handle_client_heartbeat(payload)
-            return
         if parsed.path == "/v1/sessions/start":
             self._handle_session_start(payload)
             return
@@ -220,6 +216,9 @@ class _ControlPostRoutes:
             return
         if parsed.path == "/v1/update/reconnect/prepare":
             self._handle_dashboard_reconnect_prepare()
+            return
+        if parsed.path == "/v1/plugins/updates/dismiss":
+            handle_plugin_updates_dismiss(self, payload)
             return
         if parsed.path == "/v1/update/channel":
             self._handle_update_channel(payload)
@@ -443,6 +442,13 @@ class _ControlPostRoutes:
         except ApprovalScopeUnavailableError:
             self._write_json(
                 {"resolved": False, "error": "native_approval_scope_unavailable"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        except LocalToolGrantUnavailableError as error:
+            self._write_json(
+                {"resolved": False, "error": str(error)},
                 status=503,
                 extra_headers={"Cache-Control": "no-store"},
             )

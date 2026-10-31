@@ -6,22 +6,13 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-import pytest
-
-from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
-    record_pre_hook_command_activity_best_effort,
-)
 from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityListQuery
 from codex_plugin_scanner.guard.runtime.command_activity_display import (
     build_invocation_preview,
     build_invocation_preview_from_payload,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_command_activity_display_schema import (
-    COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
-)
 from tests.guard_command_activity_api_support import evidence
-from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def test_invocation_preview_redacts_secrets_and_keeps_the_command() -> None:
@@ -123,34 +114,6 @@ def test_payload_preview_reads_codex_tool_calls() -> None:
         }
     )
     assert preview == "git status"
-
-
-def test_recorded_command_activity_exposes_local_preview(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    use_real_native_activity_reviews(monkeypatch)
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    assert record_pre_hook_command_activity_best_effort(
-        store=store,
-        guard_home=store.guard_home,
-        harness="codex",
-        event="PreToolUse",
-        payload={
-            "tool_name": "Shell",
-            "tool_input": {"command": "git status"},
-            "tool_call_id": "toolcall_preview_abcdef1234567890",
-        },
-        policy_action="warn",
-        receipt_id=None,
-        prompted=False,
-    )
-    page = store.list_command_activity_page(CommandActivityListQuery())
-    assert [item["invocation_preview"] for item in page["items"]] == ["git status"]
-    with sqlite3.connect(store.path) as connection:
-        version = connection.execute(
-            "select version from schema_migrations where version = ?",
-            (COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,),
-        ).fetchone()
-    assert version == (COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,)
-    assert store._schema_is_current() is True  # pyright: ignore[reportPrivateUsage]
 
 
 def test_legacy_activity_rows_report_missing_command(tmp_path: Path) -> None:

@@ -248,7 +248,7 @@ fn mcp_target_label(root: &Path, config: &Path, scan: &Scan<'_>) -> String {
 /// component-wise, so `/w/abc` is not under `/w/ab`, and names are folded
 /// where the platform folds them, which is what `relative_to` does on
 /// Windows.
-fn relative_to(path: &str, base: &str) -> Option<String> {
+pub(crate) fn relative_to(path: &str, base: &str) -> Option<String> {
     let mut components = Path::new(path).components();
     for expected in Path::new(base).components() {
         let actual = components.next()?;

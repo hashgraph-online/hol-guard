@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from ...safe_output import _normalized_output_path
@@ -97,8 +98,8 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         artifacts, found_paths = native_adapter_detection("openclaw_detect", request)
         return HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or _command_available(self.executable, context.home_dir),
+            command_available=_command_available(self.executable, context.home_dir),
             config_paths=found_paths,
             artifacts=artifacts,
         )
@@ -234,7 +235,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         managed_paths = _validated_managed_paths(context, manifest)
         overlay_path, pretool_path = managed_paths or (None, None)
         return {
-            "command": _run_command_probe([self.executable, "--help"]) if _command_available(self.executable) else None,
+            "command": _run_command_probe([self.executable, "--help"]) if shutil.which(self.executable) else None,
             "managed_install_present": bool(manifest),
             "managed_install_ready": (
                 overlay_path is not None

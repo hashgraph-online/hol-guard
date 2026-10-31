@@ -115,6 +115,7 @@ fn proven(
         source_context,
         deadline,
         execution_environment,
+        &mut None,
     )?
     .then_some(destination)
 }

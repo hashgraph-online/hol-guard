@@ -404,7 +404,7 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
     };
     resolved.to_str().is_some_and(|parent| {
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
-            || (!parent_steps && search::skill_listing_root(parent, context))
+            || (!parent_steps && search::skill_listing_root(parent, context, false))
     })
 }
 

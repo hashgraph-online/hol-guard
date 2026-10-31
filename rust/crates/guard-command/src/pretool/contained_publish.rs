@@ -25,6 +25,9 @@ pub(crate) const REASON_TEXT: &str = concat!(
 
 const PUBLISHERS: &[&str] = &["git", "gh"];
 
+#[path = "contained_worktree_add.rs"]
+pub(crate) mod worktree;
+
 /// The checks and the Git steps of `text`: the text before and after the
 /// `&&` that starts its final run of `git`/`gh` steps, or `None` for any
 /// other shape. Classification and the launch plan both split with this.
@@ -81,9 +84,22 @@ pub(crate) fn split(text: &str) -> Option<(String, String)> {
     Some((checks.to_owned(), publish.trim().to_owned()))
 }
 
+/// The chain split into parts the sandbox and the host each run, when every
+/// part passes on its own: checks before Git steps, or a new linked worktree
+/// before checks in it.
+pub(crate) fn rejudge(
+    raw: PreToolResultV1,
+    payload: &Value,
+    context: PathContext<'_>,
+    evaluate: impl Fn(&Value) -> PreToolResultV1,
+) -> PreToolResultV1 {
+    let published = publish(raw, payload, context, &evaluate);
+    worktree::rejudge(published, payload, context, evaluate)
+}
+
 /// The chain as a contained run of its checks followed by its proven Git
 /// steps, or `raw` unchanged when either part would not pass on its own.
-pub(crate) fn rejudge(
+fn publish(
     raw: PreToolResultV1,
     payload: &Value,
     context: PathContext<'_>,

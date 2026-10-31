@@ -1,5 +1,5 @@
 //! Golden tests: each `tests/fixtures/<case>/input` repository against the
-//! `check`, `links` and `package` output recorded in `expected/`.
+//! `check`, `links`, `card` and `package` output recorded in `expected/`.
 //!
 //! Set `UPDATE_GOLDEN=1` to rewrite the expected files after an intended
 //! change, then review the diff.
@@ -81,6 +81,7 @@ fn fixtures_match_expected_output() {
         let input = case.join("input");
         compare(&case, "check", &request("check", &input));
         compare(&case, "links", &request("links", &input));
+        compare(&case, "card", &request("card", &input));
         compare(&case, "package", &package(&input));
     }
 }

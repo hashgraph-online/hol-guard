@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import replace
+import hashlib
+from dataclasses import asdict, replace
 
 from codex_plugin_scanner.guard.local_risk_report import (
+    LocalRiskReport,
+    _canonical_report_payload,
     build_local_risk_report,
     local_risk_report_json,
     render_local_risk_report_html,
-    verify_local_risk_report,
 )
+
+
+def verify_local_risk_report(report: LocalRiskReport) -> bool:
+    payload = asdict(report)
+    return report.integrity_sha256 == hashlib.sha256(_canonical_report_payload(payload)).hexdigest()
 
 
 def _status_payload() -> dict[str, object]:

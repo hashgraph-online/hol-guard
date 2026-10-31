@@ -14,9 +14,47 @@ from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import KEYS, SNAPSHOT, T0, digest, snapshots
+from tests.workspace_fix_support import admit_worktree
 
 STAT = replace(SNAPSHOT, mode="stat")
 NOW = "2026-10-25T00:00:00+00:00"
+
+
+def seed_applied_fix_proposal(store: GuardStore, *, state: str = "verified_fixed") -> None:
+    """A proposal for an edit Guard made: the only record of that edit."""
+
+    with store._connect() as connection:
+        connection.execute(
+            """
+            insert into workspace_fix_proposals (
+              proposal_id, codebase_key, worktree_key, finding_id, ecosystem, package_name, fix_version,
+              advisory_ids_json, rule_ids_json, source_run_id, snapshot_digest, manifest_path, base_sha256,
+              new_sha256, edits_json, diff_text, state, created_at_ms, updated_at_ms, applied_at_ms,
+              verified_at_ms, verification_run_id
+            ) values (?, ?, ?, ?, 'npm', 'minimist', '1.2.9', '[]', '[]', 'run', ?, 'package.json', ?, ?, '[]',
+                      '-old\\n+new', ?, ?, ?, ?, ?, 'run-2')
+            """,
+            (
+                "proposal-1",
+                KEYS.codebase_key,
+                KEYS.worktree_key,
+                "f" * 32,
+                digest("snapshot"),
+                digest("before"),
+                digest("after"),
+                state,
+                T0,
+                T0 + 2,
+                T0 + 1,
+                T0 + 2,
+            ),
+        )
+
+
+def stored_records(store: GuardStore) -> dict[str, int]:
+    tables = ("workspace_assessment_runs", "workspace_fix_proposals", "workspace_assessment_state")
+    with store._connect() as connection:
+        return {table: connection.execute(f"select count(*) from {table}").fetchone()[0] for table in tables}
 
 
 def register(store: GuardStore, harness: str, workspace: str | None, *, active: bool = True) -> None:
@@ -56,7 +94,7 @@ def test_automatic_admission_never_resumes_a_paused_worktree(tmp_path: Path, mon
     store = GuardStore(tmp_path / "home")
     old_root = tmp_path / "old"
     old_root.mkdir()
-    assessments.admit_worktree(store, KEYS, root=str(old_root), now_ms=T0)
+    admit_worktree(store, KEYS, root=str(old_root), now_ms=T0)
     assert assessments.set_paused(store, KEYS, paused=True)
     # The same worktree, reached through a newly registered root.
     snapshots(monkeypatch, worker, STAT)
@@ -138,10 +176,14 @@ def test_root_that_now_names_another_worktree_is_admitted_again(tmp_path: Path, 
     snapshots(monkeypatch, worker, other)
 
     assert worker.admit_registered_workspaces(store, clock=lambda: T0 + 1) == 1
-    [worktree] = assessments.list_worktrees(store)
-    assert (worktree["codebase_key"], worktree["worktree_key"]) == (other.codebase_key, other.worktree_key)
-    [run] = assessments.recent_runs(store)
-    assert run["trigger_kind"] == "workspace_open"
+    by_key = {item["worktree_key"]: item for item in assessments.list_worktrees(store)}
+    assert by_key[other.worktree_key]["paused"] is False and by_key[other.worktree_key]["ended"] is False
+    # The old worktree stops being watched but keeps its history.
+    assert by_key[KEYS.worktree_key]["paused"] is True and by_key[KEYS.worktree_key]["ended"] is True
+    assert [item["root"] for item in assessments.list_worktrees(store, include_paused=False)] == [
+        str(tmp_path.resolve())
+    ]
+    assert {run["worktree_key"] for run in assessments.recent_runs(store)} == {KEYS.worktree_key, other.worktree_key}
 
 
 def test_failed_enqueue_leaves_no_admission_behind(tmp_path: Path, monkeypatch) -> None:
@@ -176,8 +218,11 @@ def test_uninstall_ends_an_automatic_admission(tmp_path: Path, monkeypatch) -> N
 
     register(store, "codex", str(tmp_path), active=False)
     worker.admit_registered_workspaces(store, clock=lambda: T0)
-    assert assessments.list_worktrees(store) == []
-    assert assessments.recent_runs(store) == []
+    # The admission ended: nothing is watched, and the history is still there.
+    assert assessments.list_worktrees(store, include_paused=False) == []
+    [worktree] = assessments.list_worktrees(store)
+    assert worktree["ended"] is True and worktree["paused"] is True
+    assert len(assessments.recent_runs(store)) == 1
 
 
 def test_uninstall_keeps_an_admission_someone_made_themselves(tmp_path: Path, monkeypatch) -> None:
@@ -196,7 +241,8 @@ def test_poll_admits_registered_workspaces_before_observing(tmp_path: Path, monk
     store = GuardStore(tmp_path / "home")
     snapshots(monkeypatch, worker, replace(STAT, snapshot_digest=digest("stat-1")))
     monkeypatch.setattr(guard_config, "load_guard_config", lambda home: object())
-    monkeypatch.setattr(worker, "run_next", lambda store, config, owner: False)
+    monkeypatch.setattr(worker, "run_next", lambda store, config, owner, user_only=False: False)
+    monkeypatch.setattr(worker, "host_resource_pressure", lambda: None)
     register(store, "claude-code", str(tmp_path))
 
     assert worker.poll_once(store, owner="test", stop=threading.Event(), attempted={}) == 0
@@ -212,3 +258,102 @@ def test_manual_admission_still_resumes_a_paused_worktree(tmp_path: Path, monkey
 
     worker.admit_workspace(store, str(tmp_path), clock=lambda: T0)
     assert assessments.list_worktrees(store)[0]["paused"] is False
+
+
+def test_removing_an_install_withdraws_its_admission_while_the_host_is_busy(tmp_path: Path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "home")
+    snapshots(monkeypatch, worker, STAT)
+    register(store, "claude-code", str(tmp_path))
+    assert worker.admit_registered_workspaces(store, clock=lambda: T0) == 1
+    register(store, "claude-code", str(tmp_path), active=False)
+    monkeypatch.setattr(worker, "host_resource_pressure", lambda: "resource_pressure")
+    monkeypatch.setattr(guard_config, "load_guard_config", lambda home: object())
+    monkeypatch.setattr(worker, "run_next", lambda store, config, owner, user_only=False: False)
+
+    worker.poll_once(store, owner="test")
+    assert assessments.list_worktrees(store, include_paused=False) == []
+    assert [item["ended"] for item in assessments.list_worktrees(store)] == [True]
+
+
+def admitted_with_records(tmp_path: Path, monkeypatch) -> GuardStore:
+    store = GuardStore(tmp_path / "home")
+    snapshots(monkeypatch, worker, STAT)
+    register(store, "claude-code", str(tmp_path))
+    assert worker.admit_registered_workspaces(store, clock=lambda: T0) == 1
+    [run] = assessments.recent_runs(store)
+    claimed = assessments.claim_next(store, owner="test", now_ms=T0 + 60_000)
+    assert claimed is not None and claimed.run_id == run["run_id"]
+    finding = {"finding_id": "f" * 32, "source_kind": "supply_chain", "package_name": "minimist"}
+    outcome = assessments.RunOutcome(state="completed", snapshot_digest=digest("snapshot"), findings=[finding])
+    assert assessments.finish(store, claimed, outcome, now_ms=T0 + 61_000)
+    seed_applied_fix_proposal(store)
+    return store
+
+
+def test_ending_an_admission_keeps_runs_findings_and_fix_proposals(tmp_path: Path, monkeypatch) -> None:
+    store = admitted_with_records(tmp_path, monkeypatch)
+    before = stored_records(store)
+    assert before == {"workspace_assessment_runs": 1, "workspace_fix_proposals": 1, "workspace_assessment_state": 1}
+
+    register(store, "claude-code", str(tmp_path), active=False)
+    worker.admit_registered_workspaces(store, clock=lambda: T0 + 70_000)
+
+    assert stored_records(store) == before
+    [run] = assessments.recent_runs(store)
+    assert run["finding_count"] == 1
+    [latest] = assessments.latest_assessed_runs(store)
+    assert [item["package_name"] for item in latest["findings"]] == ["minimist"]
+    with store._connect() as connection:
+        [(state, edits)] = connection.execute("select state, edits_json from workspace_fix_proposals").fetchall()
+    assert (state, edits) == ("verified_fixed", "[]")
+
+
+def test_an_ended_worktree_is_no_longer_scheduled(tmp_path: Path, monkeypatch) -> None:
+    store = admitted_with_records(tmp_path, monkeypatch)
+    register(store, "claude-code", str(tmp_path), active=False)
+    worker.admit_registered_workspaces(store, clock=lambda: T0 + 70_000)
+    snapshots(monkeypatch, worker, replace(STAT, snapshot_digest=digest("changed")))
+    monkeypatch.setattr(worker, "cached_runtime_digest", pytest.fail)
+
+    assert assessments.list_worktrees(store, include_paused=False) == []
+    assert worker.observe(store, clock=lambda: T0 + 80_000) == 0
+    assert worker.watched_roots(store, unavailable_digest=worker.UNAVAILABLE_STAT_DIGEST) == set()
+    assert worker.queue_manual_run(store, KEYS, clock=lambda: T0 + 80_000) is None
+    assert assessments.claim_next(store, owner="test", now_ms=T0 + 10_000_000) is None
+
+
+def test_registering_the_same_root_again_resumes_an_ended_worktree(tmp_path: Path, monkeypatch) -> None:
+    store = admitted_with_records(tmp_path, monkeypatch)
+    register(store, "claude-code", str(tmp_path), active=False)
+    worker.admit_registered_workspaces(store, clock=lambda: T0 + 70_000)
+    assert [item["ended"] for item in assessments.list_worktrees(store)] == [True]
+
+    register(store, "claude-code", str(tmp_path))
+    assert worker.admit_registered_workspaces(store, clock=lambda: T0 + 80_000) == 1
+
+    [worktree] = assessments.list_worktrees(store)
+    assert worktree["ended"] is False and worktree["paused"] is False
+    assert [item["root"] for item in assessments.list_worktrees(store, include_paused=False)] == [
+        str(tmp_path.resolve())
+    ]
+    runs = assessments.recent_runs(store)
+    assert [run["state"] for run in runs] == ["queued", "completed"]
+    assert stored_records(store)["workspace_fix_proposals"] == 1
+    # An ended admission is revived once; an admitted worktree is left alone again.
+    assert worker.admit_registered_workspaces(store, clock=lambda: T0 + 90_000) == 0
+
+
+def test_a_person_can_take_over_or_resume_an_ended_worktree(tmp_path: Path, monkeypatch) -> None:
+    store = admitted_with_records(tmp_path, monkeypatch)
+    register(store, "claude-code", str(tmp_path), active=False)
+    worker.admit_registered_workspaces(store, clock=lambda: T0 + 70_000)
+
+    assert assessments.set_paused(store, KEYS, paused=False)
+    [worktree] = assessments.list_worktrees(store)
+    assert worktree["ended"] is False and worktree["paused"] is False
+
+    register(store, "claude-code", str(tmp_path))
+    register(store, "claude-code", str(tmp_path), active=False)
+    # Resumed by hand, it is no longer tied to the install, so removing it ends nothing.
+    worker.admit_registered_workspaces(store, clock=lambda: T0 + 80_000)
+    assert [item["ended"] for item in assessments.list_worktrees(store)] == [False]

@@ -23,7 +23,12 @@ from ..codex_config import dump_toml, read_config_bytes, read_toml_payload
 from ..codex_hook_command_line import encode_hook_config_argument, render_hook_command
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND, NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
-from ..codex_hook_identity import CodexHookIdentityUnavailableError
+from ..codex_hook_identity import (
+    CodexHookGroupQuestion,
+    CodexHookIdentityUnavailableError,
+    canonical_codex_hook_group_conflict_keys,
+    canonical_codex_hook_group_identities,
+)
 from ..codex_hook_integrity import (
     atomic_write_bytes,
     atomic_write_text,
@@ -38,10 +43,7 @@ from ..codex_hook_integrity import (
 )
 from ..codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
-    CodexHookGroupQuestion,
     CodexHookInventory,
-    canonical_codex_hook_group_conflict_keys,
-    canonical_codex_hook_group_identities,
     enumerate_codex_hooks,
 )
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
@@ -73,6 +75,9 @@ from ..codex_hook_registration import (
 from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
+from ..codex_hook_registration import (
+    remove_unlaunchable_guard_hook_events as _remove_unlaunchable_guard_hook_events,
+)
 from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
 from ..codex_hook_self_binding import self_bound_hook_bindings
 from ..codex_hook_sources import parse_json_object, parse_toml_object
@@ -91,10 +96,17 @@ from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
+from ..native_codex_hook_identity import wire_codex_hook_bindings as _wire_bindings
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
 from ..stable_guard_cli import resolve_frozen_guard_cli
-from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _command_available
+from .base import (
+    HarnessAdapter,
+    HarnessContext,
+    PreparedHarnessInstall,
+    _command_available,
+    setup_failures_besides_missing_command,
+)
 from .codex_detect_sources import (
     json_payload_from_bytes,
     path_restorations,
@@ -403,7 +415,6 @@ def _hook_packaged_file_paths() -> tuple[tuple[str, Path], ...]:
     guard_root = Path(__file__).resolve().parents[1]
     return (
         ("bridge", Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()),
-        ("bridge_resume", Path(__file__).with_name("codex_daemon_hook_resume.py").resolve()),
         ("bridge_runtime", guard_root / "codex_hook_bridge_runtime.py"),
         ("hook_probe", guard_root / "runtime_transition_hook_probe.py"),
         ("native_receipt", guard_root / "native_decision_receipt.py"),
@@ -494,24 +505,6 @@ def _current_install_self_bindings(
         guard_home=_runtime_guard_home(context),
         recorded_commands=_recorded_handler_commands(authenticated_bindings),
     )
-
-
-def _wire_bindings(bindings: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
-    """Ownership bindings the native request can carry.
-
-    A binding holding a value JSON cannot carry (a TOML date, a non-finite
-    float) is left out, so the hook it would have claimed stays reviewable as
-    unmanaged instead of failing the whole detection.
-    """
-
-    wire: list[dict[str, object]] = []
-    for binding in bindings:
-        try:
-            json.dumps(binding, allow_nan=False)
-        except (TypeError, ValueError):
-            continue
-        wire.append(dict(binding))
-    return wire
 
 
 def _legacy_wire_bindings(context: HarnessContext, payload: dict[str, object]) -> list[dict[str, object]]:
@@ -629,6 +622,12 @@ def _migrate_hooks_json_into_config(
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(json_hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_json_hooks)
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, legacy_bindings)
+    # A legacy registration whose launcher no longer exists is a leftover
+    # from an install that is gone, not a handler to adopt: folding it into
+    # the active config would leave the harness invoking a missing program.
+    cleaned_json_hooks, _ = _remove_unlaunchable_guard_hook_events(
+        cleaned_json_hooks, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
+    )
     # The manifest authenticates the config entries, not hooks.json, so no
     # recorded command holds a JSON handler back, matching its inventory.
     self_bindings = _current_install_self_bindings(context, cleaned_json_hooks)
@@ -759,6 +758,12 @@ def _unmanaged_migration_payload(
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+    # The migration prunes unlaunchable legacy launchers instead of adopting
+    # them, so the identities verification expects must be pruned by the same
+    # rule; otherwise verification rejects the migration it just produced.
+    cleaned_hooks, _ = _remove_unlaunchable_guard_hook_events(
+        cleaned_hooks, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
+    )
     self_bindings = _current_install_self_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
     return {"hooks": cleaned_hooks} if cleaned_hooks else {}
@@ -1392,8 +1397,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         )
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or _command_available(self.executable, context.home_dir),
+            command_available=_command_available(self.executable, context.home_dir),
             config_paths=found_paths,
             artifacts=artifacts,
             warnings=warnings,
@@ -1812,7 +1817,17 @@ class CodexHarnessAdapter(HarnessAdapter):
         items = warning_items if isinstance(warning_items, list) else []
         warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
-        payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
+        base_status = payload.get("setup_status")
+        setup_status = finalize_codex_doctor_setup_status(base_status, hook_state, warnings)
+        leftover_only = not setup_failures_besides_missing_command(warnings)
+        if setup_status == "not_found" and not leftover_only:
+            # Hook warnings are added after the base status, so recheck before calling it leftover config.
+            setup_status = "broken"
+        elif setup_status == "broken" and base_status == "not_found" and leftover_only:
+            # A managed hook that Codex is no longer there to run is part of the same
+            # leftover configuration, not a second fault to report as a broken setup.
+            setup_status = "not_found"
+        payload["setup_status"] = setup_status
         apply_codex_hook_trust_doctor(payload, hook_state)
         payload["native_hook_state"] = hook_state
         return payload

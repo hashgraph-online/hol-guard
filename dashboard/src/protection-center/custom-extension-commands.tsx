@@ -30,7 +30,7 @@ export function emptyCommandCopy(surface: LocalCliSurface | undefined): string {
   if (surface === "package-scripts") {
     return "Guard has not loaded scripts from package.json yet. Paste npm run, a project folder, or package.json.";
   }
-  return "Guard has not loaded commands for this tool yet. Find the tool again to read its --help output.";
+  return "Guard has not loaded commands for this tool yet.";
 }
 
 export function CustomExtensionCommandRow(props: {

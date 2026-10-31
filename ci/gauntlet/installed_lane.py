@@ -23,7 +23,7 @@ from .installed_registration import (
     load_contract,
     read_config,
 )
-from .installed_replay import registered_argv, replay_harness
+from .installed_replay import argv_for_event, registered_argv, replay_harness
 from .installed_runtime import InstalledRuntime, InstalledRuntimeError, resolve_runtime
 from .installed_store import age_home, assess_aged
 
@@ -56,6 +56,24 @@ def build_home(root: Path, name: str) -> Path:
     return home
 
 
+def undeclared_case_events(contract: dict[str, Any]) -> list[str]:
+    """Events a case names that no replayable harness declares.
+
+    A case whose event is declared nowhere is skipped by every harness and the
+    lane still passes, which is the shape of the gap this per-event replay
+    exists to close. Refusing to start is the only way that stays visible.
+    """
+
+    declared = {
+        str(event)
+        for expectation in contract["harnesses"].values()
+        if expectation.get("replay")
+        for event in expectation.get("replay_events", [])
+    }
+    wanted = {str(case["event"]) for case in contract["replay_cases"] if case.get("event")}
+    return sorted(wanted - declared)
+
+
 def harness_pass(
     runtime: InstalledRuntime,
     harness: str,
@@ -82,6 +100,12 @@ def harness_pass(
         if argv is None:
             failures.append(f"{harness}: registration carries no runnable hook argv to replay")
         else:
+            # Cases that name their own event need that event's own argv, and
+            # only the events this harness declares are resolved. Guard prunes
+            # Claude Code's prompt hook on purpose, so a prompt case has
+            # nothing to replay there and the contract declares no such event
+            # for it; a declared event with no argv stays a failure below.
+            declared = [str(event) for event in expectation.get("replay_events", [])]
             replay = replay_harness(
                 harness,
                 argv,
@@ -90,6 +114,8 @@ def harness_pass(
                 guard_home=guard_home,
                 workspace=workspace,
                 repeat=repeat,
+                argv_by_event={event: argv_for_event(expectation, config, event) for event in declared},
+                native_runtime=runtime.native_runtime,
             )
             result["replay"] = replay
             failures.extend(replay["failures"])
@@ -161,6 +187,12 @@ def run_lane(
     unknown = [harness for harness in harnesses if harness not in contract["harnesses"]]
     if unknown:
         raise InstalledRuntimeError(f"no installed-acceptance expectations for {', '.join(unknown)}")
+    undeclared = undeclared_case_events(contract)
+    if undeclared:
+        raise InstalledRuntimeError(
+            "no harness declares replay_events for "
+            f"{', '.join(undeclared)}; a case no harness replays is coverage the lane does not have"
+        )
     output.mkdir(parents=True, exist_ok=True)
     root = work_root or (output / "work")
     root.mkdir(parents=True, exist_ok=True)
@@ -209,4 +241,12 @@ def _write(evidence: dict[str, Any], output: Path) -> None:
     (output / "installed-acceptance.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
 
 
-__all__ = ["EVIDENCE_VERSION", "aged_pass", "build_home", "build_workspace", "harness_pass", "run_lane"]
+__all__ = [
+    "EVIDENCE_VERSION",
+    "aged_pass",
+    "build_home",
+    "build_workspace",
+    "harness_pass",
+    "run_lane",
+    "undeclared_case_events",
+]

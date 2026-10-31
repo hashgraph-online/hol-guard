@@ -93,7 +93,7 @@ pub fn observed_mcp_tool_action<'a>(
         .map(String::as_str)
 }
 
-pub(crate) fn validate_mcp_provider_actions(actions: &BTreeMap<String, String>) -> bool {
+pub fn validate_mcp_provider_actions(actions: &BTreeMap<String, String>) -> bool {
     if actions.len() > super::POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS {
         return false;
     }

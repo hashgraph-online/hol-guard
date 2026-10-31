@@ -17,8 +17,6 @@ use super::Built;
 pub trait Ports {
     /// `context_sha256_digest`: digest of an already canonical JSON text.
     fn digest_material(&mut self, canonical_text: &str) -> String;
-    /// `context_opaque_digest`: digest of raw UTF-8 material.
-    fn opaque_digest(&mut self, material: &str) -> String;
     /// `context_package_environment_values`.
     fn environment_values(
         &mut self,
@@ -45,10 +43,6 @@ pub struct NativePorts;
 impl Ports for NativePorts {
     fn digest_material(&mut self, canonical_text: &str) -> String {
         sha256_hex(canonical_text.as_bytes())
-    }
-
-    fn opaque_digest(&mut self, material: &str) -> String {
-        sha256_hex(material.as_bytes())
     }
 
     fn environment_values(

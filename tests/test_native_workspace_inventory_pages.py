@@ -82,3 +82,27 @@ def test_targets_only_pages_are_joined(monkeypatch, tmp_path: Path) -> None:
     result = bridge.native_workspace_inventory(SimpleNamespace(guard_home=str(tmp_path)), tmp_path, targets_only=True)
     assert result.inventory == ()
     assert [item.package_name for item in result.scan_targets] == ["left-pad", "react"]
+
+
+def test_an_audit_deadline_stops_paging_before_the_next_request(monkeypatch, tmp_path: Path) -> None:
+    clock = [100.0]
+    sent: list[int] = []
+
+    def transport(request: dict[str, object], _guard_home: Path, **_kwargs: object) -> dict[str, object]:
+        offset = request["inventory_offset"]
+        assert isinstance(offset, int)
+        sent.append(offset)
+        clock[0] += 2.0
+        return _page([_item(f"pkg-{offset}")], offset + 1)
+
+    monkeypatch.setattr(bridge, "_transport", transport)
+    monkeypatch.setattr(bridge.time, "monotonic", lambda: clock[0])
+    with bridge.audit_deadline(5.0):
+        try:
+            bridge.native_workspace_inventory(SimpleNamespace(guard_home=str(tmp_path)), tmp_path)
+        except bridge.AuditDeadlineError:
+            pass
+        else:
+            raise AssertionError("paging continued past the audit deadline")
+    assert sent == [0, 1, 2]
+    bridge.check_audit_deadline()

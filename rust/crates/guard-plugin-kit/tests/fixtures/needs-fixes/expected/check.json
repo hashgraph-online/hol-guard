@@ -149,6 +149,15 @@
       ],
       "runtime": "agent-skills",
       "supported": true
+    },
+    {
+      "dropped": [
+        "skills_not_portable",
+        "mcp_servers_not_portable",
+        "mcp_env"
+      ],
+      "runtime": "agent-plugins",
+      "supported": false
     }
   ],
   "sources": [

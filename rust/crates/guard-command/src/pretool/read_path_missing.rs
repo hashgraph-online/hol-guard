@@ -60,7 +60,7 @@ pub(super) fn missing_absolute_read_allowed(
 #[cfg(test)]
 mod tests {
     use super::{missing_absolute_read_allowed, weak_canonical_path};
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     /// A home with a workspace below it, under a temporary root whose name is
     /// visible: a hidden component of its own would fail a different screen.
@@ -114,8 +114,11 @@ mod tests {
             home.to_str(),
             workspace.to_str()
         ));
+        // `/etc` is a guarded location only on a POSIX host; on Windows the
+        // same spelling is an ordinary folder at the root of the current drive.
+        #[cfg(unix)]
         assert!(!missing_absolute_read_allowed(
-            Path::new("/etc/absent-9183.conf"),
+            std::path::Path::new("/etc/absent-9183.conf"),
             home.to_str(),
             workspace.to_str()
         ));

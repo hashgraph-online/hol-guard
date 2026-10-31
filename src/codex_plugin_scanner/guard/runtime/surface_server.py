@@ -125,51 +125,6 @@ class GuardSurfaceRuntime:
         self.store.add_event("session/started", {"session": session}, _now())
         return session
 
-    def attach_client(
-        self,
-        *,
-        client_id: str,
-        surface: str,
-        session_id: str | None = None,
-        metadata: dict[str, object] | None = None,
-        lease_seconds: int = 60,
-    ) -> dict[str, object]:
-        if session_id is not None and self.store.get_guard_session(session_id) is None:
-            raise ValueError(f"Unknown guard session: {session_id}")
-        attachment = self.store.attach_guard_client(
-            client_id=client_id,
-            surface=surface,
-            session_id=session_id,
-            metadata=metadata or {},
-            lease_seconds=lease_seconds,
-            now=_now(),
-        )
-        if session_id is not None:
-            self._set_session_status(session_id, "attached")
-        self.store.add_event("session/attached", {"attachment": attachment}, _now())
-        return attachment
-
-    def renew_client(
-        self,
-        *,
-        client_id: str,
-        lease_id: str,
-        lease_seconds: int = 60,
-    ) -> dict[str, object]:
-        attachment = self.store.renew_guard_client_attachment(
-            client_id=client_id,
-            lease_id=lease_id,
-            lease_seconds=lease_seconds,
-            now=_now(),
-        )
-        if attachment is None:
-            raise ValueError(f"Unknown guard client lease: {client_id}")
-        self.store.add_event("session/attached", {"attachment": attachment}, _now())
-        return attachment
-
-    def has_live_surface(self, surface: str) -> bool:
-        return len(self.store.list_guard_client_attachments(surface=surface)) > 0
-
     def has_surface_opened(self, surface: str, open_key: str) -> bool:
         return self.store.has_guard_surface_open(surface=surface, open_key=open_key)
 
@@ -377,8 +332,6 @@ class GuardSurfaceRuntime:
             and self.has_surface_opened(surface, open_key)
         ):
             return {"surface": surface, "opened": False, "reason": "already-opened", "open_key": open_key}
-        if self.has_live_surface(surface):
-            return {"surface": surface, "opened": False, "reason": "live-client", "open_key": open_key}
         try:
             opened = opener(browser_url or approval_center_url)
         except Exception:

@@ -1,4 +1,39 @@
 {
+  "agent-plugins/mcp.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    "mcpServers": {
+      "docs": {
+        "type": "streamable-http",
+        "url": "https://mcp.acme.example/docs"
+      },
+      "pdf": {
+        "args": [
+          "-y",
+          "@acme/pdf-mcp@1.4.0"
+        ],
+        "command": "npx",
+        "type": "stdio"
+      }
+    }
+  },
+  "agent-plugins/plugin.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "author": {
+      "name": "Acme Labs"
+    },
+    "description": "Fill PDF forms and extract text from PDFs.",
+    "homepage": "https://acme.example/pdf-tools",
+    "keywords": [
+      "pdf",
+      "forms"
+    ],
+    "license": "MIT",
+    "name": "pdf-tools",
+    "repository": "https://github.com/acme/pdf-tools",
+    "version": "1.4.0"
+  },
+  "agent-plugins/skills/pdf-tools/SKILL.md": "sha256:c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124",
+  "agent-plugins/skills/pdf-tools/reference.md": "sha256:689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314",
   "agent-skills/skills/pdf-tools/SKILL.md": "sha256:c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124",
   "agent-skills/skills/pdf-tools/reference.md": "sha256:689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314",
   "claude-code/.claude-plugin/plugin.json": {
@@ -139,6 +174,22 @@
   "hol.provenance.json": {
     "files": [
       {
+        "path": "agent-plugins/mcp.json",
+        "sha256": "86f04f4d6faa5cad05768540eefb07fb64b5aa93027911757cf604e04a158244"
+      },
+      {
+        "path": "agent-plugins/plugin.json",
+        "sha256": "53f26035dd81bf06a1ddb1ed5f4a59fa3729480e3b87ab9c021f338367fd1773"
+      },
+      {
+        "path": "agent-plugins/skills/pdf-tools/SKILL.md",
+        "sha256": "c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124"
+      },
+      {
+        "path": "agent-plugins/skills/pdf-tools/reference.md",
+        "sha256": "689497a5264b2dcc1efa43a9db83a1ce893d07f1e16678e75bb2d5e323ef2314"
+      },
+      {
         "path": "agent-skills/skills/pdf-tools/SKILL.md",
         "sha256": "c2dc3275956a9547ad3bdf34d5578bd52eeeb8bdc2760c867ed8e3d289d8c124"
       },
@@ -227,7 +278,8 @@
       "cursor",
       "vscode",
       "opencode",
-      "agent-skills"
+      "agent-skills",
+      "agent-plugins"
     ],
     "schema": "hol.plugin-kit.provenance.v1",
     "source_digest": "sha256:bd336a7ce363e6b9e46b39c96376063c4107628f2b3692124d3de17f88b215cd"

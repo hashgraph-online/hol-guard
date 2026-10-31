@@ -5,7 +5,9 @@ the scanner result, the Plugin Kit check summary, the runtimes the Kit can
 package it for, and the plugin's permission surface (its MCP servers, the
 hosts they reach, the environment variables they read, and whether it ships
 hooks). HOL compares the surface with the previous release to show what
-changed.
+changed. When the release declares packages, the evidence also records the
+digest and size of its CycloneDX SBOM, which binds that file to the
+attestation.
 
 Scanner findings, file contents, prompts, credentials, environment variable
 values, header values and actor identity are never included.
@@ -22,6 +24,8 @@ from datetime import datetime, timezone
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
 from urllib.parse import urlsplit
+
+from .plugin_release_sbom import SbomSummary
 
 SCHEMA_VERSION = "plugin-release/v1"
 CLAIM = (
@@ -86,6 +90,7 @@ class PluginReleaseEvidence:
     visibility: Visibility
     claim: str
     sensitive_content_included: Literal[False]
+    sbom: SbomSummary | None = None
 
 
 def _text(value: object, *, limit: int = _MAX_TEXT) -> str | None:
@@ -285,7 +290,11 @@ def build_plugin_release_evidence(
 
 
 def plugin_release_evidence_dict(evidence: PluginReleaseEvidence) -> dict[str, object]:
-    return asdict(evidence)
+    document = asdict(evidence)
+    if document["sbom"] is None:
+        # Evidence without an SBOM keeps the exact bytes, and digest, it had before the field existed.
+        del document["sbom"]
+    return document
 
 
 def plugin_release_evidence_json(evidence: PluginReleaseEvidence) -> str:

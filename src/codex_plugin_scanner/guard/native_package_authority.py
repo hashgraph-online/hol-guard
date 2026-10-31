@@ -77,8 +77,15 @@ def _resident_request(
     deadline_monotonic: float | None = None,
     required_features: tuple[str, ...] = (_PACKAGE_AUTHORITY_FEATURE,),
     max_request_bytes: int = _MAX_REQUEST_BYTES,
+    result_schema: str = _RESULT_SCHEMA,
 ) -> dict[str, object] | None:
-    """Transport shared by package-authority operations; callers own failure handling."""
+    """Transport shared by package-authority operations; callers own failure handling.
+
+    ``result_schema`` is the reply discriminator this operation answers under.
+    Operations outside the package-authority family carry their own, and a
+    transport that only ever accepted this module's would discard every one of
+    their successful replies as malformed.
+    """
     if deadline_monotonic is not None:
         now = time.monotonic()
         deadline_monotonic = min(deadline_monotonic, now + timeout_seconds)
@@ -124,7 +131,7 @@ def _resident_request(
         return None
     if not isinstance(decoded, dict):
         return None
-    if decoded.get("schema") != _RESULT_SCHEMA:
+    if decoded.get("schema") != result_schema:
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
         return None
     if decoded.get("status") != "ok":

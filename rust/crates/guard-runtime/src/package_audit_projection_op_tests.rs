@@ -164,6 +164,20 @@ fn rejects_malformed_requests() {
     );
 }
 
+#[test]
+fn a_query_digests_as_the_client_sent_it() {
+    // The client hashes the request it sends and rejects a reply whose digest
+    // differs, so an absent optional field must stay absent.
+    for query in [
+        json!({"query": "package_identities", "findings": [], "earlier": []}),
+        json!({"query": "package_identities", "findings": [], "earlier": [], "listed": [["npm", "a", "1.0.0"]]}),
+    ] {
+        let parsed = request(query.clone());
+        assert_eq!(serde_json::to_value(&parsed.query).unwrap(), query);
+        assert!(run(&parsed).is_ok());
+    }
+}
+
 const CLOUD_VECTORS: &[u8] = include_bytes!("../testdata/cloud_audit_vectors.json.gz");
 const VECTOR_MACHINE: &str = "vector-host";
 

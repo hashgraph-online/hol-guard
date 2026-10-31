@@ -32,6 +32,7 @@ const VALID_RISK_KEYS: &[&str] = &[
     "package_custom_registry",
     "package_install",
     "low_trust_artifact",
+    "runtime_known_vulnerable",
     "execution",
     "supply_chain",
     "policy_bypass",

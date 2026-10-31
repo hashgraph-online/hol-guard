@@ -4,29 +4,13 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import cast
 
 from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityAnalyticsQuery
-from codex_plugin_scanner.guard.runtime.command_activity_contract import (
-    ActivityApprovalReuseStatus,
-    ActivityDecisionReason,
-)
-from codex_plugin_scanner.guard.runtime.command_activity_lifecycle import (
-    CommandActivityDecisionFacts,
-    build_pre_hook_evidence,
-)
-from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
-    CommandShadowCohort,
-    CommandShadowControl,
-    CommandShadowProposal,
-    build_command_shadow_observation,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_command_activity_api_support import evidence, seed
-from tests.native_command_test_support import real_native_command_evaluation
 
 _NOW = datetime(2026, 7, 18, 20, 4, tzinfo=timezone.utc)
 
@@ -37,35 +21,6 @@ def _health(store: GuardStore) -> dict[str, object]:
         as_of=date(2026, 7, 18),
     )
     return cast(dict[str, object], payload["health"])
-
-
-def _shadow_evidence(activity_id: str):
-    evaluation = real_native_command_evaluation("git push origin release/2.1 --force").evaluation
-    activity_evidence = build_pre_hook_evidence(
-        evaluation,
-        CommandActivityDecisionFacts(
-            policy_action="allow",
-            decision_reason_code=ActivityDecisionReason.EXTENSION_MATCH,
-            prompted=False,
-            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
-            receipt_id=None,
-        ),
-        activity_id=activity_id,
-        occurred_at=_NOW,
-        harness="codex",
-        request_correlation=None,
-    )
-    cohorts = frozenset({CommandShadowCohort.BASELINE})
-    shadow = build_command_shadow_observation(
-        evaluation,
-        authoritative_action="allow",
-        proposal=CommandShadowProposal(evaluation.decision_plane, cohorts, "proposal.recovery.v1"),
-        activity_id=activity_id,
-        occurred_at=_NOW,
-        control=CommandShadowControl(True, False, cohorts, frozenset(), 10_000),
-    )
-    assert shadow is not None
-    return activity_evidence, shadow
 
 
 def test_command_health_recovers_by_write_order_without_resetting_counters(tmp_path: Path) -> None:
@@ -99,83 +54,4 @@ def test_command_write_does_not_mask_maintenance_failure(tmp_path: Path) -> None
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     store.record_command_activity_persistence_failure(error_code="maintenance_failed", occurred_at=_NOW)
     store.record_command_activity(evidence("activity:command-success", minute=5))
-    assert _health(store)["status"] == "degraded"
-
-
-def test_shadow_failure_requires_successful_shadow_persistence_to_recover(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
-    activity_evidence, _shadow = _shadow_evidence("activity:shadow-not-run")
-    store.record_command_activity(activity_evidence)
-    assert _health(store)["status"] == "degraded"
-
-    recovered_evidence, recovered_shadow = _shadow_evidence("activity:shadow-recovered")
-    store.record_command_activity(recovered_evidence, shadow=recovered_shadow)
-    assert _health(store)["status"] == "healthy"
-
-
-def test_successful_disabled_shadow_evaluation_recovers_shadow_health(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
-    activity_evidence, _shadow = _shadow_evidence("activity:shadow-disabled")
-
-    store.record_command_activity(activity_evidence, shadow_evaluation_succeeded=True)
-
-    assert _health(store)["status"] == "healthy"
-
-
-def test_repair_probe_without_shadow_observation_recovers_command_and_shadow(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
-    store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
-    activity_evidence, _shadow = _shadow_evidence("activity:repair-probe-command-only")
-
-    store.probe_command_activity_persistence(
-        activity_evidence,
-        shadow=None,
-        shadow_evaluation_succeeded=True,
-    )
-
-    recovered = _health(store)
-    assert recovered["status"] == "healthy"
-    assert recovered["dropped_events"] == recovered["persistence_errors"] == 2
-
-
-def test_repair_probe_recovers_active_store_errors_without_resetting_history(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
-    store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
-
-    activity_evidence, shadow = _shadow_evidence("activity:repair-probe")
-    store.probe_command_activity_persistence(activity_evidence, shadow=shadow)
-
-    recovered = _health(store)
-    assert recovered["status"] == "healthy"
-    assert recovered["dropped_events"] == recovered["persistence_errors"] == 2
-    assert recovered["last_error_class"] == "shadow_evaluation_failed"
-
-
-def test_repair_probe_preserves_errors_when_real_command_write_fails(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
-    store.record_command_activity_persistence_failure(error_code="shadow_evaluation_failed", occurred_at=_NOW)
-    with store._connect() as connection:
-        connection.execute(
-            """
-            create trigger reject_command_activity_repair_probe
-            before insert on command_activity
-            begin
-              select raise(abort, 'simulated command write failure');
-            end
-            """
-        )
-    activity_evidence, shadow = _shadow_evidence("activity:rejected-repair-probe")
-
-    try:
-        store.probe_command_activity_persistence(activity_evidence, shadow=shadow)
-    except sqlite3.IntegrityError as error:
-        assert "simulated command write failure" in str(error)
-    else:
-        raise AssertionError("repair probe unexpectedly accepted a failing command write")
-
     assert _health(store)["status"] == "degraded"

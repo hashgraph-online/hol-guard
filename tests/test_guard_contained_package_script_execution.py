@@ -12,12 +12,8 @@ from codex_plugin_scanner.guard.contained_package_script_execution import (
     try_execute_contained_package_script,
 )
 from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
-from codex_plugin_scanner.guard.runtime import local_package_script_evidence as evidence_module
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRequirement, ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
-from codex_plugin_scanner.guard.runtime.local_package_script_evidence import (
-    build_local_package_script_evidence,
-)
 from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
 from tests.native_command_test_support import iter_native_command_evaluations
@@ -104,7 +100,9 @@ def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: i
         assert evaluation.minimum_action == "review"
         # Intrinsic Git-context reapproval strengthens, never replaces, the
         # independently required containment proof.
-        expected_floor = "require-reapproval" if reviewed.native_minimum_action == "require-reapproval" else "review"
+        expected_floor = (
+            "require-reapproval" if reviewed.payload["minimum_action"] == "require-reapproval" else "review"
+        )
         assert evaluation.decision_plane.action == expected_floor
         assert evaluation.decision_plane.proof_routes == frozenset()
     adversarial = list(
@@ -140,82 +138,11 @@ def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
     assert count == 275
 
 
-@pytest.mark.parametrize(
-    ("operation", "scripts", "reason"),
-    (
-        ("build", {"build": "vite build && cat /etc/passwd"}, "script_not_exact"),
-        ("build", {"prebuild": "node prepare.js"}, "lifecycle_script_present"),
-        (
-            "typecheck",
-            {"typecheck": "tsc --noEmit --project ../x"},
-            "script_arguments_not_result_only",
-        ),
-        ("lint", {"lint": "eslint --fix src/example.ts"}, "script_arguments_not_result_only"),
-        (
-            "test",
-            {"test": "vitest run --coverage src/example.test.ts"},
-            "script_arguments_not_result_only",
-        ),
-    ),
-)
-def test_workspace_code_abuse_cannot_complete_launch_evidence(
-    tmp_path: Path,
-    operation: str,
-    scripts: dict[str, str],
-    reason: str,
-) -> None:
-    workspace = _workspace(tmp_path, operation)
-    raw_manifest = cast(object, json.loads((workspace / "package.json").read_text(encoding="utf-8")))
-    assert isinstance(raw_manifest, dict)
-    manifest = cast(dict[str, object], raw_manifest)
-    raw_scripts = manifest.get("scripts")
-    assert isinstance(raw_scripts, dict)
-    cast(dict[str, object], raw_scripts).update(scripts)
-    _write(workspace / "package.json", json.dumps(manifest))
-
-    evidence = build_local_package_script_evidence("bun", ("run", operation), workspace=workspace)
-
-    assert evidence is not None
-    assert evidence.status == "incomplete"
-    assert reason in evidence.reasons
-
-
-@pytest.mark.parametrize("name", ("bun.lock", "pnpm-lock.yaml", "yarn.lock"))
-def test_ambiguous_lock_sources_fail_closed(tmp_path: Path, name: str) -> None:
-    workspace = _workspace(tmp_path, "build")
-    _write(workspace / name, "untrusted-lock")
-
-    evidence = build_local_package_script_evidence("bun", ("run", "build"), workspace=workspace)
-
-    assert evidence is not None
-    assert evidence.status == "incomplete"
-    assert "lock_source_ambiguous" in evidence.reasons
-
-
-@pytest.mark.parametrize(
-    ("specifier", "version", "expected"),
-    (("^1.2.3", "1.9.0", True), ("^0.12.0", "0.12.3", True), ("^0.0.3", "0.0.4", False)),
-)
-def test_caret_version_matching_follows_semver(specifier: str, version: str, expected: bool) -> None:
-    assert (
-        evidence_module.version_spec_matches(
-            specifier, version, version_re=evidence_module._VERSION, caret_pins_zero_major=True
-        )
-        is expected
-    )
-
-
-def test_scoped_registry_tarball_omits_scope_from_filename() -> None:
-    resolved = "https://registry.npmjs.org/@scope/tool/-/tool-1.2.3.tgz"
-    assert evidence_module._canonical_resolution("@scope/tool", "1.2.3", resolved)  # pyright: ignore[reportPrivateUsage]
-
-
-def test_all_bun_execution_enters_guard_but_only_exact_scripts_have_evidence(tmp_path: Path) -> None:
+def test_all_bun_execution_enters_guard(tmp_path: Path) -> None:
     for operation in _OPERATIONS:
         assert package_shim_command_requires_guard("bun", ("run", operation), workspace=tmp_path)
     for argv in (("run", "dev"), ("run", "build", "--watch"), ("script.ts",)):
         assert package_shim_command_requires_guard("bun", argv, workspace=tmp_path)
-        assert build_local_package_script_evidence("bun", argv, workspace=tmp_path) is None
     assert not package_shim_command_requires_guard("bun", ("--version",), workspace=tmp_path)
 
 

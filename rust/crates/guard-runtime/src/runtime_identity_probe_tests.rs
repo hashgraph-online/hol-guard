@@ -80,7 +80,11 @@ fn layouts_name_family_and_version() {
             (Some("node"), version.map(str::to_owned)),
             "{path}"
         );
+        // A bare system path may hold a distribution build with backports.
+        assert_eq!(hint_for(path).vendor, version.and(Some("nodejs.org")));
     }
+    assert_eq!(hint_for("/usr/bin/python3.12").vendor, None);
+    assert_eq!(hint_for("/x/node/v20.11/bin/node").vendor, None);
 }
 
 #[test]
@@ -128,7 +132,7 @@ fn layout_inferred_runtime_is_self_reported_with_hash() {
     assert_eq!(artifact["version"], "20.11.1");
     assert_eq!(artifact["identity_assurance"], "self_reported");
     assert_eq!(artifact["executable_sha256"], sha256_hex(body));
-    assert_eq!(artifact["vendor"], Value::Null);
+    assert_eq!(artifact["vendor"], "nodejs.org");
     assert_eq!(result["locations"][0]["state"], "present");
     assert_eq!(
         result["observations"][0]["resolved_path"],
@@ -181,14 +185,25 @@ fn spoofed_version_never_exceeds_self_reported() {
     });
     let reply = crate::runtime_identity::run_command(request.to_string().as_bytes()).unwrap();
     assert_eq!(reply["ok"], true, "{reply}");
-    let status = reply["result"]["artifacts"][0]["matches"][0]["status"]
-        .as_str()
-        .unwrap();
-    assert_ne!(status, "not_affected");
+    // Another vendor's rule yields no match row; either way, never cleared.
+    let status = reply["result"]["artifacts"][0]["matches"][0]["status"].as_str();
+    assert_ne!(status, Some("not_affected"));
     assert_ne!(
         reply["result"]["advisories"][0]["verdict"],
         "fixed_verified"
     );
+
+    // Its layout vendor flags an in-range build of the upstream release, but
+    // a self-reported vendor still cannot clear an out-of-range one.
+    for (fixed, expected) in [("22.5.0", "affected"), ("22.4.1", "unknown")] {
+        let rule = json!({"advisory_id": "ADV-2", "family": "node", "vendor": "nodejs.org",
+            "version_scheme": "semver", "ranges": [{"introduced": "22.0.0", "fixed": fixed}]});
+        let request = json!({"artifacts": result["artifacts"],
+            "locations": result["locations"], "advisories": [rule]});
+        let reply = crate::runtime_identity::run_command(request.to_string().as_bytes()).unwrap();
+        let row = &reply["result"]["artifacts"][0]["matches"][0];
+        assert_eq!(row["status"], expected);
+    }
 }
 
 #[test]

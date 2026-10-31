@@ -6,7 +6,6 @@ from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import (
     MAX_OBSERVED_MCP_TOOLS,
     discover_observed_mcp_tools,
-    native_observed_mcp_tool_actions,
     observed_mcp_tool,
     tools_from_receipts,
 )
@@ -66,7 +65,7 @@ def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
     with pytest.raises(LocalCliApiError):
         service.apply(payload)
     assert store.read_local_cli_revision() == 0
-    assert native_observed_mcp_tool_actions(store) == {}
+    assert store.read_observed_mcp_tool_actions() == {}
 
 
 @pytest.mark.parametrize("state", ["allowed", "blocked", "unset"])
@@ -214,7 +213,7 @@ def test_discovery_preserves_choices_and_never_approves_new_tools(
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:00Z")
     tool = observed_mcp_tool("codex", "mcp__codex_apps__composio__search")
     assert tool is not None
-    assert native_observed_mcp_tool_actions(store) == {}
+    assert store.read_observed_mcp_tool_actions() == {}
     store.upsert_local_cli_grant(
         identity=tool.identity,
         state="allowed",
@@ -225,7 +224,7 @@ def test_discovery_preserves_choices_and_never_approves_new_tools(
     receipts.append({"harness": "codex", "raw_command_text": "tool:mcp__codex_apps__composio__execute"})
     discover_observed_mcp_tools(store, seen_at="2026-01-01T00:00:02Z")
     assert store.read_local_cli_command_states(tool.identity.cli_id)[tool.command_id] == "allow"
-    assert native_observed_mcp_tool_actions(store) == {"codex:" + tool.qualified_name: "allow"}
+    assert store.read_observed_mcp_tool_actions() == {"codex:" + tool.qualified_name: "allow"}
     assert store.read_local_cli_revision() == 1
     from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 
@@ -283,7 +282,7 @@ def test_server_deny_is_scoped_to_its_harness_and_connector(tmp_path: Path, monk
         expected_revision=0,
         updated_at="2026-01-01T00:00:01Z",
     )
-    assert native_observed_mcp_tool_actions(store) == {"codex:mcp__codex_apps__composio__*": "block"}
+    assert store.read_observed_mcp_tool_actions() == {"codex:mcp__codex_apps__composio__*": "block"}
 
 
 def test_paused_native_requests_discover_connectors_without_receipts(
@@ -302,7 +301,7 @@ def test_paused_native_requests_discover_connectors_without_receipts(
     items = store.list_local_cli_items()
     assert len(items) == 1
     assert items[0]["name"] == "composio"
-    assert native_observed_mcp_tool_actions(store) == {}
+    assert store.read_observed_mcp_tool_actions() == {}
 
 
 def test_concurrent_catalog_growth_preserves_all_tools(tmp_path: Path) -> None:

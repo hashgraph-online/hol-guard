@@ -19,11 +19,10 @@ from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime_advisory_bundle import NOT_CONNECTED
 from codex_plugin_scanner.guard.runtime_identity_assessment import RuntimeIdentityError
 from codex_plugin_scanner.guard.runtime_identity_probe import (
-    RUNTIME_PROBE_FEATURE,
     RUNTIME_PROBE_LAUNCH_FEATURE,
     probe_runtime_launches,
-    probe_runtime_paths,
 )
+from codex_plugin_scanner.guard.runtime_instance_store import INSTANCE_STORE_NAME
 from codex_plugin_scanner.guard.runtime_posture import ADVISORIES_UNAVAILABLE, build_runtime_posture
 
 NOW = "2026-01-01T00:00:00+00:00"
@@ -242,25 +241,6 @@ def test_assess_receives_an_empty_advisory_list_and_incomplete_scope(
     assert [artifact["identity_assurance"] for artifact in request["artifacts"]] == ["self_reported"]
 
 
-def test_probe_output_is_usable_as_assess_input(native_runtime: Path, tmp_path: Path) -> None:
-    node = _nvm_node(tmp_path)
-    missing = tmp_path / "gone" / "node"
-
-    probe = probe_runtime_paths([str(node), str(missing)])
-
-    states = {row["location_id"]: row["state"] for row in probe.locations}
-    assert sorted(states.values()) == ["missing", "present"]
-    assert all(str(tmp_path) not in json.dumps(row) for row in (*probe.artifacts, *probe.locations))
-    assert RUNTIME_PROBE_FEATURE == "runtime-identity-probe-v1"
-
-
-def test_probe_refuses_relative_paths(native_runtime: Path) -> None:
-    with pytest.raises(RuntimeIdentityError) as refused:
-        probe_runtime_paths(["node_modules/.bin/node"])
-
-    assert refused.value.code == "runtime_identity_probe_path_invalid"
-
-
 def test_cli_json_shape(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path, native_runtime: Path
 ) -> None:
@@ -278,6 +258,29 @@ def test_cli_json_shape(
         payload
     )
     assert payload["runtimes"][0]["family"] == "node"
+
+
+def test_cli_enumerates_running_processes_only_when_asked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path, native_runtime: Path
+) -> None:
+    node = _nvm_node(tmp_path)
+    _patch_detections(monkeypatch, [_detection("node")], path=str(node.parent))
+    guard_args = _guard_args(tmp_path)
+    guard_home = Path(guard_args[guard_args.index("--guard-home") + 1])
+
+    assert main(["guard", "runtime", "posture", "--json", *guard_args]) == 0
+
+    quiet = json.loads(capsys.readouterr().out)
+    # The admitted read names launch paths. It does not look at other
+    # processes and leaves nothing behind in the Guard home.
+    assert quiet["coverage"]["instances_enumerated"] is False
+    assert not (guard_home / INSTANCE_STORE_NAME).exists()
+
+    assert main(["guard", "runtime", "posture", "--json", "--instances", *guard_args]) == 0
+
+    asked = json.loads(capsys.readouterr().out)
+    assert asked["coverage"]["instances_enumerated"] is True
+    assert (guard_home / INSTANCE_STORE_NAME).exists()
 
 
 def test_cli_unreadable_store_costs_the_advisories_not_the_report(
@@ -399,7 +402,11 @@ def test_probe_gets_a_longer_deadline_than_a_plain_assessment(monkeypatch: pytes
     monkeypatch.setattr(runtime_identity_probe, "run_native_identity_command", fake)
 
     with pytest.raises(RuntimeIdentityError):
-        probe_runtime_paths(["/opt/node/bin/node"])
+        probe_runtime_launches(
+            [{"command": "/opt/node/bin/node", "launch_dir": "/opt"}],
+            environment={},
+            candidate_limit=1,
+        )
 
     assert isinstance(seen["timeout"], float) and seen["timeout"] > 10.0
 

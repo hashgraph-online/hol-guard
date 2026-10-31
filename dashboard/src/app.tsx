@@ -36,6 +36,8 @@ import { selectNextAfterResolution, type QueueGroup } from "./queue-state";
 import { BulkBlockError, blockRequestsOnce, bulkBlockFailureMessage, bulkBlockSummary } from "./bulk-block-requests";
 import { useRouteFocus } from "./use-route-focus";
 import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
+import { openRecoveryView } from "./service-recovery";
+import { RuntimeGate } from "./runtime-error-state";
 
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
@@ -587,6 +589,7 @@ export function App() {
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenRecovery = useCallback(() => openRecoveryView(), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -913,6 +916,18 @@ export function App() {
       });
   }, []);
 
+  // The supply-chain pages read only the runtime snapshot, with receipts for
+  // Feed health. Their Retry must not wait on the approval queue, or a queue
+  // failure would keep them behind the error state after Guard is back.
+  const refreshHubRuntime = useCallback(async () => {
+    try {
+      const snapshot = await fetchRuntimeSnapshot({ includeItems: false, includeReceipts: true });
+      setRuntime({ kind: "ready", snapshot });
+    } catch (error: unknown) {
+      setRuntime({ kind: "error", message: error instanceof Error ? error.message : "Unable to reach Guard." });
+    }
+  }, []);
+
   const handleRepair = useCallback(async () => {
     await repairApprovalCenter();
     await new Promise<void>((resolve) => setTimeout(resolve, 1200));
@@ -1056,6 +1071,7 @@ export function App() {
             onOpenSettings={handleOpenSettings}
             onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
             onReconnectSession={handleReconnectSession}
+            onOpenRecovery={handleOpenRecovery}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}
@@ -1124,22 +1140,31 @@ export function App() {
         </Suspense>
       }
       supplyChainHubContent={
-        runtime.kind === "ready" ? (
-          <Suspense fallback={<LazyFallback />}>
-	            <SupplyChainHubWorkspace
-	              activeView={view}
-	              snapshot={runtime.snapshot}
-	              receipts={receipts.kind === "ready" ? receipts.items : []}
-	              policies={policies.kind === "ready" ? policies.items : []}
-	              approvalGate={approvalGate}
-	              onClearPolicy={handleClearPolicy}
-	              onOpenSettings={handleOpenSettings}
-	              onGoHome={handleGoHome}
-              onNavigate={navigate}
-              onRuntimeRefresh={refreshStateWithoutResult}
-            />
-          </Suspense>
-        ) : null
+        <RuntimeGate
+          runtime={runtime}
+          loading={<LazyFallback />}
+          onReconnectSession={handleReconnectSession}
+          onRefreshRuntime={refreshHubRuntime}
+          onOpenInbox={handleOpenInbox}
+          onOpenSettings={handleOpenSettings}
+        >
+          {(snapshot) => (
+            <Suspense fallback={<LazyFallback />}>
+              <SupplyChainHubWorkspace
+                activeView={view}
+                snapshot={snapshot}
+                receipts={receipts.kind === "ready" ? receipts.items : []}
+                policies={policies.kind === "ready" ? policies.items : []}
+                approvalGate={approvalGate}
+                onClearPolicy={handleClearPolicy}
+                onOpenSettings={handleOpenSettings}
+                onGoHome={handleGoHome}
+                onNavigate={navigate}
+                onRuntimeRefresh={refreshStateWithoutResult}
+              />
+            </Suspense>
+          )}
+        </RuntimeGate>
       }
       policyContent={policyContent}
       releasesContent={

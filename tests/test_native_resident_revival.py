@@ -127,6 +127,36 @@ def test_hold_helpers_arm_expire_and_clear(tmp_path: Path) -> None:
     assert not revival.restart_hold_active(key)
 
 
+def test_hold_remaining_reports_only_the_named_key(tmp_path: Path) -> None:
+    mine = (str(tmp_path / "a"), str(tmp_path / "state"))
+    other = (str(tmp_path / "b"), str(tmp_path / "state"))
+    assert revival.restart_hold_seconds_remaining(mine) == 0.0
+    revival.arm_restart_hold(mine, now=100.0)
+    # A newer hold on another runtime must not lengthen this caller's wait.
+    revival.arm_restart_hold(other, now=100.5)
+    assert revival.restart_hold_seconds_remaining(mine, now=101.0) == pytest.approx(revival.RESTART_HOLD_SECONDS - 1.0)
+    assert revival.restart_hold_seconds_remaining(other, now=101.0) == pytest.approx(revival.RESTART_HOLD_SECONDS - 0.5)
+    # An unarmed key waits for nothing even while another hold is running.
+    assert revival.restart_hold_seconds_remaining((str(tmp_path / "c"), str(tmp_path / "state")), now=101.0) == 0.0
+    assert revival.restart_hold_seconds_remaining(mine, now=99.0) == revival.RESTART_HOLD_SECONDS
+    assert revival.restart_hold_seconds_remaining(mine, now=100.0 + revival.RESTART_HOLD_SECONDS) == 0.0
+
+
+def test_hold_remaining_drops_lapsed_entries_instead_of_keeping_history(tmp_path: Path) -> None:
+    stale = [(str(tmp_path / f"runtime-{index}"), str(tmp_path / "state")) for index in range(8)]
+    for key in stale:
+        revival.arm_restart_hold(key, now=100.0)
+    after = 100.0 + revival.RESTART_HOLD_SECONDS + 1.0
+    for key in stale:
+        assert revival.restart_hold_seconds_remaining(key, now=after) == 0.0
+    assert not revival._HOLDS
+
+    live = (str(tmp_path / "runtime-live"), str(tmp_path / "state"))
+    revival.arm_restart_hold(live, now=after)
+    assert revival.restart_hold_seconds_remaining(live, now=after) == revival.RESTART_HOLD_SECONDS
+    assert set(revival._HOLDS) == {live}
+
+
 def test_restart_blocked_frame_matches_only_the_exact_refusal() -> None:
     assert revival.is_restart_blocked_frame(_BLOCKED)
     assert not revival.is_restart_blocked_frame(b'{"error":"native_resident_restart_circuit_open","retryable":true}')

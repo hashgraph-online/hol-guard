@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import hmac
 import sqlite3
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
+from ..native_decision_receipt import edge_receipt
 
 # v2 drops ``policy_digest``: it is ``H(config_digest, rule_digest)`` over the
 # whole compiled snapshot, so it moves whenever the publisher republishes, even
@@ -31,16 +30,8 @@ def native_review_policy_binding(
     receipt_bound = isinstance(verified_receipt, Mapping) and "command_extensions" in verified_receipt
     if "command_extensions" not in native_result and not receipt_bound:
         return None
-    receipt = validate_native_decision_receipt(verified_receipt)
-    if receipt is None or not receipt_matches_edge(
-        {
-            "harness": harness,
-            "event_name": "PreToolUse",
-            "payload_kind": receipt["payload_kind"],
-            "result": native_result,
-        },
-        receipt,
-    ):
+    receipt = edge_receipt(harness, native_result, verified_receipt)
+    if receipt is None:
         raise ValueError("native_review_policy_binding_invalid")
     if any(not isinstance(receipt.get(field), str) for field in ("policy_digest", "rule_digest", "runtime_identity")):
         raise ValueError("native_review_policy_binding_invalid")
@@ -58,7 +49,7 @@ def native_review_policy_binding(
     }
 
 
-def native_review_matching_allow(
+def native_review_settle(
     store: object,
     *,
     harness: str,
@@ -67,70 +58,31 @@ def native_review_matching_allow(
     launch_target: str,
     workspace: Path | None,
     identity: str | None,
-) -> bool:
-    return _native_review_matching_decision(
-        store,
-        method="consume_native_review_approval",
-        harness=harness,
-        artifact_id=artifact_id,
-        tool_name=tool_name,
-        launch_target=launch_target,
-        workspace=workspace,
-        identity=identity,
-    )
+    spend: bool,
+) -> str | None:
+    """Settle a retry in one resident transaction.
 
+    ``"blocked"`` when the user chose Keep blocked for it, ``"allowed"`` when
+    ``spend`` spent an approve-once, else ``None``.
+    """
 
-def native_review_matching_block(
-    store: object,
-    *,
-    harness: str,
-    artifact_id: str,
-    tool_name: str,
-    launch_target: str,
-    workspace: Path | None,
-    identity: str | None,
-) -> bool:
-    return _native_review_matching_decision(
-        store,
-        method="matching_native_review_block",
-        harness=harness,
-        artifact_id=artifact_id,
-        tool_name=tool_name,
-        launch_target=launch_target,
-        workspace=workspace,
-        identity=identity,
-    )
-
-
-def _native_review_matching_decision(
-    store: object,
-    *,
-    method: str,
-    harness: str,
-    artifact_id: str,
-    tool_name: str,
-    launch_target: str,
-    workspace: Path | None,
-    identity: str | None,
-) -> bool:
-    consume = getattr(store, method, None)
-    if not callable(consume) or identity is None or not launch_target:
-        return False
+    settle = getattr(store, "settle_native_review_reuse", None)
+    if not callable(settle) or identity is None or not launch_target:
+        return None
     try:
-        return (
-            consume(
-                harness=harness,
-                artifact_id=artifact_id,
-                artifact_name=tool_name,
-                artifact_hash=identity,
-                launch_target=launch_target,
-                workspace=str(workspace) if workspace is not None else None,
-                now=datetime.now(tz=timezone.utc).isoformat(),
-            )
-            is True
+        settled = settle(
+            harness=harness,
+            artifact_id=artifact_id,
+            artifact_name=tool_name,
+            artifact_hash=identity,
+            launch_target=launch_target,
+            workspace=str(workspace) if workspace is not None else None,
+            now=datetime.now(tz=timezone.utc).isoformat(),
+            spend=spend,
         )
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-        return False
+        return None
+    return settled if settled in ("blocked", "allowed") else None
 
 
 def native_review_claimed_allow(
@@ -144,40 +96,26 @@ def native_review_claimed_allow(
     claimed_approval_request_id: str | None,
     claim_saved_approval: bool,
 ) -> bool:
-    """Settle a MAC'd once-approval bound to this exact native request."""
+    """Settle a MAC'd once-approval bound to this exact native request.
 
-    if identity is None or not hmac.compare_digest(identity, claimed_saved_allow_hash):
-        return False
-    peek = getattr(store, "peek_local_once_approval", None)
-    if not callable(peek):
-        return False
-    try:
-        decision = peek(
-            harness=harness,
-            artifact_id=artifact_id,
-            artifact_hash=identity,
-            workspace=str(workspace) if workspace is not None else None,
-            publisher=None,
-            now=datetime.now(tz=timezone.utc).isoformat(),
-        )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-        return False
-    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
-        return False
-    if claimed_approval_request_id is not None and decision.get("request_id") != claimed_approval_request_id:
-        return False
-    if not claim_saved_approval:
-        return True
-    approval_id = decision.get("approval_id")
-    claim = getattr(store, "claim_approval_reuse_decision", None)
-    if not isinstance(approval_id, str) or not callable(claim):
+    The resident owns the identity check, the exact peek, the spend and the
+    exact Cloud fallback; no answer means no allow.
+    """
+
+    settle = getattr(store, "settle_claimed_native_allow", None)
+    if identity is None or not callable(settle):
         return False
     try:
         return (
-            claim(
-                decision,
+            settle(
+                harness=harness,
+                artifact_id=artifact_id,
+                workspace=str(workspace) if workspace is not None else None,
+                identity=identity,
+                claimed_saved_allow_hash=claimed_saved_allow_hash,
+                claimed_approval_request_id=claimed_approval_request_id,
+                claim_saved_approval=claim_saved_approval,
                 now=datetime.now(tz=timezone.utc).isoformat(),
-                consume_local_once=True,
             )
             is True
         )

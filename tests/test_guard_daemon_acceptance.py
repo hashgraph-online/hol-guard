@@ -20,6 +20,7 @@ from tests.guard_daemon_acceptance_fixtures import (
     load_soak_workload,
     run_workload,
 )
+from tests.runtime_hook_scheduler_support import set_active_limit
 
 
 def _fixture_id(workload: WorkloadSpec) -> str:
@@ -120,7 +121,7 @@ def test_twice_capacity_overload_is_typed_bounded_and_recovers() -> None:
         stats = scheduler.stats()
         assert stats["queued"] == stats["queued_limit"]
         assert stats["retained_bytes"] == stats["retained_bytes_limit"]
-        scheduler.set_active_limit(8)
+        set_active_limit(scheduler, 8)
         admitted = [future.result(timeout=1) for future in queued]
     for item in admitted:
         assert item.permit is not None
@@ -179,7 +180,7 @@ def test_clock_jump_expires_work_without_corrupting_scheduler() -> None:
             assert time.monotonic() < wait_deadline, "clock-jump admission was never queued"
             time.sleep(0.001)
         clock["now"] = 21.0
-        scheduler.set_active_limit(1)
+        set_active_limit(scheduler, 1)
         result = waiting.result(timeout=1)
     assert result.reason_code == "daemon_hook_deadline_exhausted"
     assert scheduler.stats()["queued"] == 0

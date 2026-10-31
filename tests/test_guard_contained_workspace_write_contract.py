@@ -32,7 +32,7 @@ def test_every_cdx_062_case_retains_exact_review_or_block_floor() -> None:
         assert isinstance(binding, dict)
         if int(binding["uncertainty_count"]) > 0:
             unsupported_apply_count += 1
-            assert reviewed.native_minimum_action == "review"
+            assert reviewed.payload["minimum_action"] == "review"
         assert evaluation.minimum_action == "review"
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
@@ -60,4 +60,3 @@ def test_direct_workspace_writes_retain_the_review_floor(command: str) -> None:
     assert evaluation.minimum_action == "review"
     assert evaluation.decision_plane.action == "review"
     assert evaluation.decision_plane.proof_routes == frozenset()
-

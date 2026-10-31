@@ -58,7 +58,7 @@ fn authenticates_both_release_manifests_executable_and_exact_root_descriptor() {
             "/compiler_manifest/executable",
             json!("../hol-guard-runtime"),
         ),
-        ("/compiler_manifest/compiler_size", json!(134217729)),
+        ("/compiler_manifest/compiler_size", json!(536870913)),
         ("/runtime_manifest/runtime_size", json!(17)),
         ("/binary_length", json!(17)),
         ("/binary_digest", json!("f".repeat(64))),

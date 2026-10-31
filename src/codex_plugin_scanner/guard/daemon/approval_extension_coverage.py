@@ -30,6 +30,22 @@ COVERAGE_SCHEMA: Final = "guard.approval-extension-coverage.v1"
 MAX_DELIVERED_SEGMENTS: Final = 12
 
 
+def _handed_off_permissions(
+    extension_ids: list[str],
+    *,
+    registry: CommandSafetyExtensionRegistry,
+) -> frozenset[str]:
+    """Rule-less permissions of extensions that hand their step to another protection."""
+
+    handed_off: set[str] = set()
+    for extension_id in extension_ids:
+        extension = registry.get(extension_id)
+        if extension is None or extension.delegated_protection is None:
+            continue
+        handed_off.update(permission.permission_id for permission in extension.permissions if not permission.rule_ids)
+    return frozenset(handed_off)
+
+
 def _covered_segment(
     segment: Mapping[str, object],
     *,
@@ -37,7 +53,14 @@ def _covered_segment(
 ) -> dict[str, object] | None:
     extension_ids = cast("list[str]", segment["extension_ids"])
     rule_ids = cast("list[str]", segment["rule_ids"])
-    permission_ids = cast("list[str]", segment["permission_ids"])
+    handed_off = _handed_off_permissions(extension_ids, registry=registry)
+    # A package manager's step matches its package-firewall permission whether
+    # or not anything about it needs review: `npx jest` matches it as much as
+    # `npm install`. That permission only hands the step to the firewall, which
+    # judges packages itself, so it never explains a pause, and the one switch
+    # it offers would turn the firewall off. Leave it out, and with it an
+    # extension that matched through nothing else.
+    permission_ids = [item for item in cast("list[str]", segment["permission_ids"]) if item not in handed_off]
     rules: list[dict[str, object]] = []
     for rule_id in rule_ids:
         rule = registry.get_rule(rule_id)
@@ -60,6 +83,9 @@ def _covered_segment(
         if extension is None:
             continue
         owned = {rule.rule_id for rule in extension.rules}
+        governs = {permission.permission_id for permission in extension.permissions}
+        if owned.isdisjoint(rule_ids) and governs.isdisjoint(permission_ids):
+            continue
         # The first rule this extension matched is what the link should open on.
         focus = next((rule_id for rule_id in rule_ids if rule_id in owned), None)
         # The dashboard builds the link itself from these two identifiers, so
@@ -101,14 +127,12 @@ def build_approval_extension_coverage(
     coverage = validated_extension_coverage_hint(approval.get("extension_allow_hint"))
     if coverage is None:
         return None
-    segments = [
-        covered
-        for segment in cast("list[Mapping[str, object]]", coverage["segments"])
-        if (covered := _covered_segment(segment, registry=registry)) is not None
-    ]
+    stored = cast("list[Mapping[str, object]]", coverage["segments"])
+    segments = [covered for segment in stored if (covered := _covered_segment(segment, registry=registry)) is not None]
     if not segments:
         return None
-    compound = _is_compound(coverage.get("segment_total"), segments)
+    # A step left out above is still a step of the command that needs review.
+    compound = _is_compound(coverage.get("segment_total"), segments) or len(segments) < len(stored)
     return {
         "schema": COVERAGE_SCHEMA,
         "catalog_digest": registry.catalog_digest or coverage["catalog_digest"],

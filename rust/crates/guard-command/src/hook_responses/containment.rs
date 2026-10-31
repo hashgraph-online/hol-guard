@@ -141,8 +141,12 @@ pub(super) fn receipt(
     reason_code: &str,
 ) -> Option<Map<String, Value>> {
     let text = |key: &str| response.get(key).and_then(Value::as_str);
-    if !matches!(canonical, "omp" | "pi" | "zcode" | "claude-code" | "codex")
-        || text("minimum_action") != Some("sandbox-required")
+    // Cursor's sink re-authorizes the call it saved under the Cursor harness,
+    // so the receipt it checks must be the one the other sinks read.
+    if !matches!(
+        canonical,
+        "omp" | "pi" | "zcode" | "claude-code" | "codex" | "cursor"
+    ) || text("minimum_action") != Some("sandbox-required")
         || text("policy_action") != Some("sandbox-required")
         || text("decision") != Some("deny")
         || text("authority") != Some("rust")
@@ -186,7 +190,7 @@ pub(super) fn receipt(
             .and_then(Value::as_str)?;
         receipt.insert("command_binding_digest".into(), json!(digest));
     }
-    if matches!(canonical, "zcode" | "claude-code" | "codex") {
+    if matches!(canonical, "zcode" | "claude-code" | "codex" | "cursor") {
         receipt.insert(
             "hookSpecificOutput".into(),
             json!({

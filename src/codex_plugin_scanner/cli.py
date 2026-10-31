@@ -389,8 +389,30 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     return run_frozen_package_shim(frozen_shim_path, requested_argv[1:])
 
 
+def _frozen_module_argv(argv: list[str]) -> list[str]:
+    """Drop the ``-m codex_plugin_scanner.cli`` prefix a frozen build cannot run.
+
+    MCP proxy entries keep the Python module argv so the native relay can parse
+    them, and the relay runs that argv unchanged when it hands a session back
+    to the proxy or restarts the daemon. A frozen launcher reads it as the CLI.
+    """
+
+    if bool(getattr(sys, "frozen", False)) and argv[:2] == ["-m", "codex_plugin_scanner.cli"]:
+        return argv[2:]
+    return argv
+
+
+def _program_name(argv0: str) -> str:
+    """The name users type: Windows launches console scripts as ``hol-guard.EXE``."""
+    name = Path(argv0).name
+    if name.lower().endswith(".exe"):
+        name = name[: -len(".exe")]
+    return name or "plugin-scanner"
+
+
 def main(argv: list[str] | None = None) -> int:
-    effective_argv = sys.argv[1:] if argv is None else argv
+    argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
+    effective_argv = argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
@@ -399,8 +421,8 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(effective_argv[1:])
-    program_name = Path(sys.argv[0]).name or "plugin-scanner"
-    requested_argv = sys.argv[1:] if argv is None else argv
+    program_name = _program_name(sys.argv[0])
+    requested_argv = argv
     frozen_exit = _run_frozen_early_dispatch(requested_argv)
     if frozen_exit is not None:
         return frozen_exit

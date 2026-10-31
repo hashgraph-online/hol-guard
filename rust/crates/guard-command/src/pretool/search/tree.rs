@@ -406,9 +406,8 @@ pub(super) fn descendant_allowed(path: &Path, root: &Path, is_file: bool) -> boo
         .to_ascii_lowercase();
     !SECRET_EXTENSIONS.contains(&extension.as_str())
         && (!guard_secure_fs::credential_named_path(relative)
-            || path
-                .strip_prefix(root)
-                .is_ok_and(|relative| synthetic_fixture(root, relative)))
+            || synthetic_fixture(root, relative)
+            || crate::pretool::search_scope_tracked::names::committed_document(path))
 }
 
 /// Directories that hold a project's test data.
@@ -528,6 +527,7 @@ pub(super) fn walk_uncached(
     // directory listing already reported for the entry.
     let mut pending = vec![(root.clone(), 0_usize, false, None::<std::fs::FileType>)];
     let mut inspected = 0_usize;
+    let _documents = crate::pretool::search_scope_tracked::names::document_walk();
     // Inspect metadata only. Never follow links or read a secret to classify it.
     while let Some((path, depth, admitted_below, listed)) = pending.pop() {
         let mut below = admitted_below;

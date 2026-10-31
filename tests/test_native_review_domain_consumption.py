@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.daemon.hook_native_review_approval import pause_
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_review_evidence_support import resident_review_evidence
 from tests.test_native_command_observations import _edge, _observations, _receipt, _rehash
 from tests.test_native_review_policy_binding import _resign_identity
 
@@ -53,16 +54,16 @@ def _review_fixture() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 def _pause(store: GuardStore, root: Path, result: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
-    return pause_native_pre_tool_for_approval(
-        store,
-        harness="claude-code",
-        payload={"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "cat .env"}},
-        native_result=result,
-        native_receipt=receipt,
-        workspace=root,
-        guard_home=root / "guard-home",
-        home_dir=root / "home",
-    )
+    review = {
+        "harness": "claude-code",
+        "payload": {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "cat .env"}},
+        "native_result": result,
+        "native_receipt": receipt,
+        "workspace": root,
+        "guard_home": root / "guard-home",
+        "home_dir": root / "home",
+    }
+    return pause_native_pre_tool_for_approval(store, **review, review_evidence=resident_review_evidence(**review))
 
 
 def _approve(store: GuardStore, response: dict[str, Any]) -> str:

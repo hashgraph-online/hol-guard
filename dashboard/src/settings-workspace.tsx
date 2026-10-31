@@ -279,6 +279,7 @@ const riskControls = [
   { key: "package_custom_registry", label: "Custom registries", description: "Installs that use a non-default package index or registry.", consequence: RISK_CONTROL_CONSEQUENCES["package_custom_registry"] },
   { key: "package_install", label: "Every package install", description: "Every package install or update, even with no risk signal.", consequence: RISK_CONTROL_CONSEQUENCES["package_install"] },
   { key: "low_trust_artifact", label: "Low trust scores", description: "Skills, MCP servers, and plugins scoring below 80 in the HOL Registry.", consequence: RISK_CONTROL_CONSEQUENCES["low_trust_artifact"] },
+  { key: "runtime_known_vulnerable", label: "Vulnerable runtimes", description: "Node.js builds with a known high or critical advisory, checked before launch.", consequence: RISK_CONTROL_CONSEQUENCES["runtime_known_vulnerable"] },
 ] as const;
 
 type RiskKey = (typeof riskControls)[number]["key"];
@@ -304,7 +305,8 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     package_direct_source: "allow",
     package_custom_registry: "allow",
     package_install: "allow",
-    low_trust_artifact: "warn"
+    low_trust_artifact: "warn",
+    runtime_known_vulnerable: "warn"
   },
   balanced: {
     local_secret_read: "require-reapproval",
@@ -326,7 +328,8 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     package_direct_source: "allow",
     package_custom_registry: "allow",
     package_install: "allow",
-    low_trust_artifact: "require-reapproval"
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "require-reapproval"
   },
   strict: {
     local_secret_read: "require-reapproval",
@@ -348,7 +351,8 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     package_direct_source: "require-reapproval",
     package_custom_registry: "allow",
     package_install: "allow",
-    low_trust_artifact: "require-reapproval"
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "block"
   },
   custom: {
     local_secret_read: "require-reapproval",
@@ -370,7 +374,8 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     package_direct_source: "allow",
     package_custom_registry: "allow",
     package_install: "allow",
-    low_trust_artifact: "require-reapproval"
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "require-reapproval"
   }
 };
 

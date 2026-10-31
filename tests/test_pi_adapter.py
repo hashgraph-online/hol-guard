@@ -14,14 +14,14 @@ from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import pre
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
-from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import classify_secret_content
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.live_hook_review_support import LIVE_REVIEWS_RETIRED_ALLOW, assert_secret_output_held, live_post_tool_flag
 
 
 def _write_worktree_git_marker(checkout_root: Path) -> None:
@@ -720,12 +720,12 @@ class TestPiRuntime:
         assert envelope.raw_payload_redacted["stdout"] == "[redacted]"
         assert "tool_response" in envelope.raw_payload_redacted
 
-    def test_pi_post_tool_output_creates_runtime_artifact(self, tmp_path: Path) -> None:
-        secret_path = tmp_path / ".npmrc"
+    def test_pi_post_tool_output_creates_runtime_artifact(self, live_hook_root: Path) -> None:
+        secret_path = live_hook_root / ".npmrc"
         secret_line = "//registry.npmjs.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\n"
         secret_path.write_text(secret_line, encoding="utf-8")
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "tool_name": "read",
@@ -733,40 +733,31 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": secret_line.strip()}],
                 "stdout": secret_line.strip(),
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
 
-        assert artifact is not None
-        assert artifact.harness == "pi"
-        assert artifact.artifact_id.startswith("pi:")
-        assert artifact.metadata["guard_default_action"] == "require-reapproval"
+        assert_secret_output_held(artifact)
 
-    def test_pi_stdout_only_post_tool_output_creates_runtime_artifact(self, tmp_path: Path) -> None:
-        secret_path = tmp_path / ".npmrc"
+    def test_pi_stdout_only_post_tool_output_creates_runtime_artifact(self, live_hook_root: Path) -> None:
+        secret_path = live_hook_root / ".npmrc"
         secret_line = "//registry.npmjs.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\n"
         secret_path.write_text(secret_line, encoding="utf-8")
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "tool_name": "read",
                 "tool_input": {"filePath": str(secret_path)},
                 "stdout": secret_line.strip(),
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
 
-        assert artifact is not None
-        assert artifact.harness == "pi"
-        assert artifact.artifact_id.startswith("pi:")
+        assert_secret_output_held(artifact)
 
-    def test_pi_grep_post_tool_output_records_rendered_command(self, tmp_path: Path) -> None:
+    def test_pi_grep_post_tool_output_records_rendered_command(self, live_hook_root: Path) -> None:
         payload = {
             "tool_name": "grep",
             "tool_input": {"pattern": "SupplyChainContextRow|context.*agent|context.*row", "path": "context"},
@@ -774,22 +765,22 @@ class TestPiRuntime:
             "stdout": "context/file.ts:2: credential = 'sk-test-secret'",
         }
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload=payload,
-            config_path="~/.omp/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
-        envelope = normalize_harness_payload("pi", "PostToolUse", payload, workspace=tmp_path, home_dir=tmp_path)
+        envelope = normalize_harness_payload(
+            "pi", "PostToolUse", payload, workspace=live_hook_root, home_dir=live_hook_root
+        )
 
-        assert artifact is not None
-        assert artifact.metadata["command_text"] == "grep 'SupplyChainContextRow|context.*agent|context.*row' context"
+        assert_secret_output_held(artifact)
         assert envelope.command == "grep 'SupplyChainContextRow|context.*agent|context.*row' context"
 
-    def test_pi_post_tool_use_allows_medium_matches_from_external_source_search(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    @LIVE_REVIEWS_RETIRED_ALLOW
+    def test_pi_post_tool_use_allows_medium_matches_from_external_source_search(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
         source_path = (home / "sibling-source" / "scripts" / "guard-cloud" / "guard-test").resolve()
         home.mkdir()
@@ -807,7 +798,7 @@ class TestPiRuntime:
         )
         assert any(match.sensitivity == "medium" for match in classify_secret_content(output))
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "hook_event_name": "PostToolUse",
@@ -816,26 +807,24 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": output}],
                 "stdout": output,
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
             cwd=workspace,
             home_dir=home,
         )
 
         assert artifact is None
 
-    def test_pi_post_tool_use_rejects_external_source_search_outside_home(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    def test_pi_post_tool_use_rejects_external_source_search_outside_home(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
-        source_path = (tmp_path / "outside-home" / "scripts" / "guard-cloud" / "guard-test").resolve()
+        source_path = (live_hook_root / "outside-home" / "scripts" / "guard-cloud" / "guard-test").resolve()
         home.mkdir()
         workspace.mkdir()
         source_path.parent.mkdir(parents=True)
         source_path.write_text("#!/bin/sh\n", encoding="utf-8")
-        _write_worktree_git_marker(tmp_path / "outside-home")
+        _write_worktree_git_marker(live_hook_root / "outside-home")
         output = f"{source_path}:42: auth_token = browser-proof-header-value-12345"
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "hook_event_name": "PostToolUse",
@@ -844,16 +833,14 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": output}],
                 "stdout": output,
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
             cwd=workspace,
             home_dir=home,
         )
 
         assert artifact is not None
 
-    def test_pi_external_source_search_still_blocks_dangerous_variants(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    def test_pi_external_source_search_still_blocks_dangerous_variants(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
         source_path = (home / "sibling-source" / "scripts" / "guard-test").resolve()
         home.mkdir()
@@ -879,7 +866,7 @@ class TestPiRuntime:
             f"rg 'auth_token' {source_path}",
             f"git grep 'auth_token' {source_path}",
         ):
-            artifact = _codex_post_tool_output_artifact(
+            artifact = live_post_tool_flag(
                 harness="pi",
                 payload={
                     "hook_event_name": "PostToolUse",
@@ -888,16 +875,14 @@ class TestPiRuntime:
                     "tool_response": [{"type": "text", "text": output}],
                     "stdout": output,
                 },
-                config_path="~/.pi/agent/settings.json",
-                source_scope="project",
                 cwd=workspace,
                 home_dir=home,
             )
 
             assert artifact is not None
 
-    def test_pi_external_source_search_still_blocks_real_credentials(self, tmp_path: Path) -> None:
-        home = (tmp_path / "home").resolve()
+    def test_pi_external_source_search_still_blocks_real_credentials(self, live_hook_root: Path) -> None:
+        home = (live_hook_root / "home").resolve()
         workspace = (home / "workspace").resolve()
         source_path = (home / "sibling-source" / "scripts" / "guard-test").resolve()
         home.mkdir()
@@ -908,7 +893,7 @@ class TestPiRuntime:
         real_key = "sk-proj-" + "A" * 32
         output = f"{source_path}:42: OPENAI_API_KEY = {real_key}"
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "hook_event_name": "PostToolUse",
@@ -917,40 +902,36 @@ class TestPiRuntime:
                 "tool_response": [{"type": "text", "text": output}],
                 "stdout": output,
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
             cwd=workspace,
             home_dir=home,
         )
 
         assert artifact is not None
 
-    def test_pi_source_file_read_with_credential_like_code_does_not_block(self, tmp_path: Path) -> None:
-        source_path = tmp_path / "src" / "lib" / "guard-notion-api.ts"
+    def test_pi_source_file_read_with_credential_like_code_does_not_block(self, live_hook_root: Path) -> None:
+        source_path = live_hook_root / "src" / "lib" / "guard-notion-api.ts"
         source_path.parent.mkdir(parents=True)
         source_path.write_text("export const NOTION_API_KEY = process.env.NOTION_API_KEY;\n", encoding="utf-8")
 
-        artifact = _codex_post_tool_output_artifact(
+        artifact = live_post_tool_flag(
             harness="pi",
             payload={
                 "tool_name": "Read",
                 "tool_input": {"file_path": str(source_path)},
                 "tool_response": [{"type": "text", "text": source_path.read_text(encoding="utf-8")}],
             },
-            config_path="~/.pi/agent/settings.json",
-            source_scope="project",
-            cwd=tmp_path,
-            home_dir=tmp_path,
+            cwd=live_hook_root,
+            home_dir=live_hook_root,
         )
 
         assert artifact is None
 
-    def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, tmp_path: Path) -> None:
-        store = GuardStore(tmp_path / "guard-home")
+    def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, live_hook_root: Path) -> None:
+        store = GuardStore(live_hook_root / "guard-home")
         # Provisioning the resident's verifier key writes a fake keyring beside
         # the guard home. The shell context below hashes this directory, so
         # provision before the first request instead of between the two.
-        assert ensure_resident_prerequisite(tmp_path / "guard-home")
+        assert ensure_resident_prerequisite(live_hook_root / "guard-home")
         command = 'cd /tmp/fix-skills-503-rb && rg "deps.config" src/api/server/internal/routes.ts 2>&1 | head -5'
 
         def queue_for(output: str) -> list[dict[str, object]]:
@@ -960,15 +941,20 @@ class TestPiRuntime:
                 "tool_input": {"command": command},
                 "stdout": output,
             }
-            artifact = _codex_post_tool_output_artifact(
-                harness="pi",
-                payload=payload,
-                config_path="~/.pi/agent/settings.json",
-                source_scope="project",
-                cwd=tmp_path,
-                home_dir=tmp_path,
+            assert (
+                live_post_tool_flag(harness="pi", payload=payload, cwd=live_hook_root, home_dir=live_hook_root)
+                is not None
             )
-            assert artifact is not None
+            # The queue keys on the reviewed request, never on the output it carried.
+            artifact = GuardArtifact(
+                artifact_id="pi:project:tool-output:Bash",
+                name="Bash output",
+                harness="pi",
+                artifact_type="tool_action_request",
+                source_scope="project",
+                config_path="~/.pi/agent/settings.json",
+                metadata={"command_text": command, "runtime_request_summary": "Pi tool output held for review."},
+            )
             return queue_blocked_approvals(
                 detection=HarnessDetection(
                     harness="pi",
@@ -994,8 +980,8 @@ class TestPiRuntime:
                                 "pi",
                                 "PostToolUse",
                                 payload,
-                                workspace=tmp_path,
-                                home_dir=tmp_path,
+                                workspace=live_hook_root,
+                                home_dir=live_hook_root,
                             ).to_dict(),
                         }
                     ]

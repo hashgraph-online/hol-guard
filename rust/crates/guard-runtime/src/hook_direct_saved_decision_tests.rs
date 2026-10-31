@@ -9,6 +9,8 @@ use guard_policy_snapshot::{DirectLaneEnvironmentV1, DirectLanePolicyIntegritySt
 use rusqlite::params;
 use std::collections::BTreeMap;
 
+pub(crate) use crate::cloud_exception_lift::VALIDATED_BUNDLE;
+
 const VECTORS: &str = include_str!("../tests/fixtures/hook_direct_saved_decision_vectors.json");
 pub(crate) const KEY: [u8; 32] = [7u8; 32];
 pub(crate) const KEY_ID: &str = "test-policy-key";
@@ -252,6 +254,21 @@ fn a_local_store_with_the_decision_is_read() {
         shape(&connection).readable(&published()).unwrap(),
         Some(true)
     );
+    assert_eq!(
+        shape(&connection).bundle_authority(SIGNED_AT),
+        Ok((Vec::new(), None))
+    );
+    // An empty bundle authorizes none of the rows saved from it.
+    connection
+        .execute_batch(
+            "insert into policy_decisions (harness, scope, action, source, created_at, updated_at)
+             values ('*', 'global', 'block', 'policy-bundle', 'x', 'x');",
+        )
+        .unwrap();
+    assert_eq!(
+        shape(&connection).bundle_authority(SIGNED_AT),
+        Ok((Vec::new(), None))
+    );
 }
 
 #[test]
@@ -263,7 +280,7 @@ fn a_store_the_lookup_reads_differently_defers() {
         ),
         (
             "bundle",
-            "insert into sync_state values ('policy_bundle', '{}', 'x');
+            "insert into sync_state values ('policy_bundle', 'not json', 'x');
              insert into policy_decisions (harness, scope, action, source, created_at, updated_at)
              values ('*', 'global', 'block', 'policy-bundle', 'x', 'x');",
         ),
@@ -289,7 +306,8 @@ fn a_store_the_lookup_reads_differently_defers() {
         assert!(
             !(store.supported().unwrap()
                 && !store.grants().unwrap()
-                && store.readable(&published()).unwrap().is_some()),
+                && store.readable(&published()).unwrap().is_some()
+                && store.bundle_authority(SIGNED_AT).is_ok()),
             "{tag}"
         );
     }
@@ -477,3 +495,7 @@ mod subdirectory;
 #[cfg(unix)]
 #[path = "hook_direct_saved_seeded_tests.rs"]
 mod seeded;
+
+#[cfg(unix)]
+#[path = "hook_direct_saved_custom_grant_tests.rs"]
+mod custom_grant_tests;

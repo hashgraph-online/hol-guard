@@ -21,24 +21,24 @@ const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
 #[cfg(any(target_os = "linux", all(unix, test)))]
 const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 /// Set to `0` to keep every workspace sandbox on the daemon's sink.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 const NATIVE_SINK_SWITCH: &str = "HOL_GUARD_NATIVE_CONTAINED_SINK";
 /// Command text whose meaning depends on what the native sink does not yet
 /// replay: home expansion. Pipes, stderr folding and exit-status reads run
 /// whole in the sandbox, as the edge classified them, so the shell gives
 /// them their own meaning.
-#[cfg(any(target_os = "macos", all(unix, test)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 const NATIVE_SINK_UNSUPPORTED: [&str; 1] = ["~"];
 /// Package manager flags that run a script in another directory. The native
 /// sink takes them only when `inner_package_directory` holds.
-#[cfg(any(target_os = "macos", all(unix, test)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 const PACKAGE_DIRECTORY_FLAGS: [&str; 3] = ["--cwd", "--prefix", "--dir"];
 /// The short directory flag, which moves the working directory for every
 /// tool that takes it (`git -C`, `make -C`). Only npm and pnpm, which the
 /// edge projects the same way as their long flags, take the native sink.
-#[cfg(any(target_os = "macos", all(unix, test)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 const SHORT_DIRECTORY_FLAG: &str = "-C";
-#[cfg(any(target_os = "macos", all(unix, test)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 const SHORT_DIRECTORY_MANAGERS: [&str; 2] = ["npm", "pnpm"];
 const PRE_TOOL_EVENTS: [&str; 2] = ["PreToolUse", "pre_tool_use"];
 const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "run_terminal_command", "run_command"];
@@ -113,8 +113,13 @@ pub(super) fn route(
 /// runtime's own sink for the calls `native` names it for.
 struct Host {
     platform: fn(&str) -> bool,
-    native: fn(&Value, &Map<String, Value>, &str) -> Option<String>,
+    native: NativeSink,
 }
+
+/// The runtime executable that runs a call's sink itself, given the answer,
+/// the call's tool input, its workspace and the user's home; `None` keeps
+/// Guard's own sink.
+pub(crate) type NativeSink = fn(&Value, &Map<String, Value>, &str, &str) -> Option<String>;
 
 /// `route` on `host`, with request snapshots under `temp`.
 fn route_on(
@@ -134,9 +139,9 @@ fn route_on(
     let Some(original) = shell_input(payload) else {
         return Ok(None);
     };
-    let projected = projected_input(original, target);
+    let projected = projected_input(original, target.workspace, target.home_dir);
     let original = projected.as_ref().unwrap_or(original);
-    let native = (host.native)(response, original, target.workspace);
+    let native = (host.native)(response, original, target.workspace, target.home_dir);
     request::write_and_route(temp, payload, original, target, native.as_deref())
 }
 
@@ -154,7 +159,8 @@ fn route_on(
 /// removed. Any other command has no projection and keeps its own bytes.
 fn projected_input(
     original: &Map<String, Value>,
-    target: &SinkTarget<'_>,
+    workspace: &str,
+    home_dir: &str,
 ) -> Option<Map<String, Value>> {
     let command = original.get("command")?.as_str()?;
     // The pre-tool pass answered with the settled workspace, not the spelling
@@ -164,8 +170,8 @@ fn projected_input(
     let projected = guard_command::pretool::generic::contained_target(
         command,
         guard_command::pretool::PathContext {
-            home_dir: Some(target.home_dir),
-            cwd: Some(target.workspace),
+            home_dir: Some(home_dir),
+            cwd: Some(workspace),
             ..Default::default()
         },
     )?;
@@ -174,12 +180,51 @@ fn projected_input(
     Some(input)
 }
 
-/// The runtime executable, when it runs this call's sink itself: a macOS
-/// workspace sandbox of a shape the native sink reproduces. Any other call
-/// keeps the daemon's sink.
-#[cfg(target_os = "macos")]
-fn native_sink(response: &Value, original: &Map<String, Value>, workspace: &str) -> Option<String> {
-    if !native_shape(response, original, workspace)
+/// The runtime's own sink command for a call whose request snapshot keeps
+/// the text the harness sent, as the Codex bridge writes it. A verdict
+/// answered for a projection of that text (a virtualenv activation, a
+/// trailing group or a home-spelled launcher) decides on the projected
+/// call, as the direct route does; the native sink projects the text again
+/// before it plans it, as Guard's own sink does.
+#[cfg(unix)]
+pub(crate) fn unprojected_sink_command(
+    response: &Value,
+    original: &Map<String, Value>,
+    workspace: &str,
+    home_dir: &str,
+    native: NativeSink,
+) -> Option<Vec<String>> {
+    let projected = projected_input(original, workspace, home_dir);
+    let decided = projected.as_ref().unwrap_or(original);
+    let executable = native(response, decided, workspace, home_dir)?;
+    Some(vec![
+        executable,
+        crate::contained_workspace_sink::SINK_COMMAND.to_owned(),
+    ])
+}
+
+#[cfg(not(unix))]
+pub(crate) fn unprojected_sink_command(
+    _response: &Value,
+    _original: &Map<String, Value>,
+    _workspace: &str,
+    _home_dir: &str,
+    _native: NativeSink,
+) -> Option<Vec<String>> {
+    None
+}
+
+/// The runtime executable, when it runs this call's sink itself: a workspace
+/// sandbox of a shape the native sink reproduces, on a platform whose sandbox
+/// the sink runs itself. Any other call keeps the daemon's sink.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) fn native_sink(
+    response: &Value,
+    original: &Map<String, Value>,
+    workspace: &str,
+    home: &str,
+) -> Option<String> {
+    if !native_shape(response, original, workspace, home)
         || std::env::var_os(NATIVE_SINK_SWITCH).is_some_and(|value| value == "0")
     {
         return None;
@@ -191,31 +236,42 @@ fn native_sink(response: &Value, original: &Map<String, Value>, workspace: &str)
         .flatten()
 }
 
-#[cfg(not(target_os = "macos"))]
-fn native_sink(
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) fn native_sink(
     _response: &Value,
     _original: &Map<String, Value>,
     _workspace: &str,
+    _home: &str,
 ) -> Option<String> {
     None
 }
 
-/// Whether the native sink reproduces this workspace sandbox: a plain
-/// workspace run, not a chain whose Git steps follow the checks, started in
-/// the workspace itself, with no pipe, redirection of stderr, exit-status
-/// read, home expansion or directory change the sink does not yet replay.
-#[cfg(any(target_os = "macos", all(unix, test)))]
-fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str) -> bool {
-    use crate::contained_workspace_sink::{PUBLISH_REASON, WORKSPACE_PROFILE, WORKSPACE_REASON};
+/// Whether the native sink reproduces this workspace sandbox: a workspace
+/// run, or checks followed by Git steps, but not a `git worktree add` chain,
+/// started in the workspace itself or below a sibling repository's root,
+/// with no home expansion or directory change the sink does not yet replay.
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
+fn native_shape(
+    response: &Value,
+    original: &Map<String, Value>,
+    workspace: &str,
+    home: &str,
+) -> bool {
+    use crate::contained_workspace_sink::{host_split, WORKSPACE_PROFILE, WORKSPACE_REASON};
     let text = |name: &str| response.get(name).and_then(Value::as_str);
     let Some(command) = original.get("command").and_then(Value::as_str) else {
         return false;
     };
+    if crate::contained_workspace_sink::readonly_shape(response, original, workspace, home) {
+        return true;
+    }
     text("reason_code") == Some(WORKSPACE_REASON)
         && text("required_execution_profile") == Some(WORKSPACE_PROFILE)
-        && text("reason") != Some(PUBLISH_REASON)
+        && !host_split(response.get("reason"))
         && !original.contains_key("cwd")
-        && (!command.trim_start().starts_with("cd") || inner_directory_change(command, workspace))
+        && (!command.trim_start().starts_with("cd")
+            || inner_directory_change(command, workspace)
+            || crate::contained_workspace_sink::entered_sibling(command, workspace, home).is_some())
         && (!PACKAGE_DIRECTORY_FLAGS
             .iter()
             .chain([&SHORT_DIRECTORY_FLAG])
@@ -229,9 +285,10 @@ fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str
 /// Whether a leading `cd` leaves the call as the daemon's sink runs it: a
 /// plain target naming a directory strictly inside the workspace, then `&&`.
 /// The daemon runs such a command whole, `cd` included, from the workspace
-/// root, as the native sink does. A `cd` to the root itself or out to a
-/// sibling repository is planned again there, so it keeps the daemon's sink.
-#[cfg(any(target_os = "macos", all(unix, test)))]
+/// root, as the native sink does. A `cd` to the root itself or to a sibling
+/// repository's root is planned again there, so it keeps the daemon's sink;
+/// one below a sibling's root runs from that root (`entered_sibling`).
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn inner_directory_change(command: &str, workspace: &str) -> bool {
     let Some(rest) = command.trim_start_matches([' ', '\t']).strip_prefix("cd") else {
         return false;
@@ -261,7 +318,7 @@ fn inner_directory_change(command: &str, workspace: &str) -> bool {
 /// such a call whole from the workspace root, as the native sink does. The
 /// root itself or a sibling repository is planned again there, so it keeps
 /// the daemon's sink, as does any other spelling of the flags.
-#[cfg(any(target_os = "macos", all(unix, test)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn inner_package_directory(command: &str, workspace: &str) -> bool {
     if command.trim_start().starts_with("cd") {
         return false;
@@ -303,7 +360,7 @@ fn inner_package_directory(command: &str, workspace: &str) -> bool {
 }
 
 /// Whether `text` is one plain shell word that needs no quoting or expansion.
-#[cfg(any(target_os = "macos", all(unix, test)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn plain(text: &str) -> bool {
     !text.is_empty()
         && text
@@ -313,7 +370,7 @@ fn plain(text: &str) -> bool {
 
 /// Whether `target`, from the workspace, is an existing directory strictly
 /// inside it.
-#[cfg(any(target_os = "macos", all(unix, test)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn strictly_inside(workspace: &str, target: &str) -> bool {
     let (Ok(root), Ok(directory)) = (
         std::fs::canonicalize(workspace),
@@ -340,7 +397,8 @@ fn routable(response: &Value, platform: fn(&str) -> bool) -> bool {
         && text("required_execution_profile") == Some(profile)
 }
 
-/// macOS runs every contained profile; Linux runs the workspace sandbox.
+/// macOS runs every contained profile; Linux runs the workspace sandbox,
+/// which it contains with a bubblewrap overlay.
 fn platform_contains(profile: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -422,3 +480,7 @@ mod tests;
 #[cfg(test)]
 #[path = "hook_direct_contained_venv_tests.rs"]
 mod venv_tests;
+
+#[cfg(test)]
+#[path = "hook_direct_contained_sibling_tests.rs"]
+mod sibling_tests;

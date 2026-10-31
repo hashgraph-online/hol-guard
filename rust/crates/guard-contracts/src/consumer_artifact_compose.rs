@@ -22,7 +22,12 @@ pub const CONSUMER_ARTIFACT_COMPOSE_REQUEST_SCHEMA: &str =
 pub const CONSUMER_ARTIFACT_COMPOSE_RESULT_SCHEMA: &str =
     "guard-consumer-artifact-compose-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const CONSUMER_ARTIFACT_COMPOSE_FEATURE: &str = "consumer-artifact-compose-v2";
+///
+/// v3 adds the `LowTrustFloor` query. A resident still advertising v2 would
+/// refuse that query while answering the rest, which is how a fresh low-trust
+/// artifact could be composed with no review floor, so the capability moves
+/// with the query set rather than the request schema.
+pub const CONSUMER_ARTIFACT_COMPOSE_FEATURE: &str = "consumer-artifact-compose-v3";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -41,6 +46,34 @@ pub enum ConsumerArtifactComposeQueryV1 {
     RuntimeDecision(Box<ConsumerRuntimeDecisionQueryV1>),
     /// Compose and build its canonical decision in one resident request.
     RuntimeAuthoritative(Box<ConsumerRuntimeAuthoritativeQueryV1>),
+    /// Decide the registry trust review floor of a fresh artifact.
+    LowTrustFloor(Box<ConsumerLowTrustFloorQueryV1>),
+}
+
+/// The facts the review floor for a low registry trust score is decided from.
+///
+/// Python holds the registry lookup because it is network IO with an on-disk
+/// cache; every judgement around it is made here. The resident decides whether
+/// the artifact qualifies at all, resolves the `low_trust_artifact` action from
+/// the sent configuration, compares the score against the threshold and writes
+/// the signal. A first query leaves `trust_score` null: the answer asks for the
+/// score only when the floor would otherwise apply, so a configured, settled or
+/// unscored artifact still costs no lookup.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ConsumerLowTrustFloorQueryV1 {
+    pub risk_action_config: crate::RiskActionConfigV1,
+    /// The harness the artifact was detected in; `null` when unknown.
+    pub harness: Value,
+    pub artifact_type: Value,
+    pub artifact_id: String,
+    pub artifact_name: String,
+    /// Per-artifact or publisher override; a configured artifact keeps it.
+    pub configured_action: Value,
+    /// The artifact is first seen or changed, so its action is decided now.
+    pub fresh_decision: bool,
+    /// The registry trust score, or `null` when it has not been looked up.
+    pub trust_score: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

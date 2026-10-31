@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from .store_workspace_assessment_schema import MAX_COVERAGE_JSON_BYTES, MAX_FINDINGS_JSON_BYTES
+from .workspace_assessment_carry import carry_unchecked_findings, keep_package_identities
 from .workspace_assessment_reads import (
-    get_run,
     latest_assessed_run,
     latest_assessed_runs,
     latest_runs,
@@ -66,26 +66,8 @@ class RunOutcome:
     coverage: Mapping[str, object] | None = None
     findings: Sequence[Mapping[str, object]] = ()
     error_code: str | None = None
-
-
-def admit_worktree(store: Any, keys: WorktreeKeys, *, root: str, now_ms: int, resume: bool = True) -> bool:
-    """Admit a worktree; ``resume`` also unpauses one admitted before.
-
-    Without ``resume`` an already admitted worktree is left exactly as it is and
-    the call returns False, so an automatic admission never undoes a pause.
-    """
-
-    conflict = "update set private_root = excluded.private_root, paused = 0" if resume else "nothing"
-    with store._connect() as connection:
-        cursor = connection.execute(
-            f"""
-            insert into workspace_assessment_state (codebase_key, worktree_key, private_root, admitted_at_ms)
-            values (?, ?, ?, ?)
-            on conflict(codebase_key, worktree_key) do {conflict}
-            """,
-            (keys.codebase_key, keys.worktree_key, root, now_ms),
-        )
-        return cursor.rowcount == 1
+    # (ecosystem, name, version) of every package the audit read; None if it stopped early.
+    listed_packages: frozenset[tuple[str, str, str]] | None = None
 
 
 def set_paused(store: Any, keys: WorktreeKeys, *, paused: bool) -> bool:
@@ -94,6 +76,12 @@ def set_paused(store: Any, keys: WorktreeKeys, *, paused: bool) -> bool:
             "update workspace_assessment_state set paused = ? where codebase_key = ? and worktree_key = ?",
             (1 if paused else 0, keys.codebase_key, keys.worktree_key),
         )
+        if cursor.rowcount == 1 and not paused:
+            # Resuming is a person's choice to watch it, which supersedes an ended admission.
+            connection.execute(
+                "delete from workspace_assessment_ended_admissions where codebase_key = ? and worktree_key = ?",
+                (keys.codebase_key, keys.worktree_key),
+            )
         return cursor.rowcount == 1
 
 
@@ -199,12 +187,14 @@ def claim_next(
     owner: str,
     now_ms: int,
     detector_set_digest: str | None = None,
+    user_only: bool = False,
 ) -> ClaimedRun | None:
     """Lease the next due run.
 
     ``detector_set_digest`` is the set the caller will execute. A run queued by
     an older daemon is relabelled with it at claim time, so the stored digest
     always names the detectors that actually produced the result.
+    ``user_only`` leaves automatic runs queued, for a host under pressure.
     """
 
     with store._connect() as connection:
@@ -228,13 +218,20 @@ def claim_next(
               )
               and (
                 r.trigger_kind in ({", ".join("?" for _ in USER_TRIGGERS)})
-                or ((r.triggered_at_ms <= ? or r.created_at_ms <= ?)
+                or (? = 0
+                    and (r.triggered_at_ms <= ? or r.created_at_ms <= ?)
                     and (s.last_scan_at_ms is null or s.last_scan_at_ms <= ?))
               )
             order by r.created_at_ms, r.run_id
             limit 1
             """,
-            (*USER_TRIGGERS, now_ms - DEBOUNCE_MS, now_ms - MAX_DEBOUNCE_WAIT_MS, now_ms - MIN_INTERVAL_MS),
+            (
+                *USER_TRIGGERS,
+                1 if user_only else 0,
+                now_ms - DEBOUNCE_MS,
+                now_ms - MAX_DEBOUNCE_WAIT_MS,
+                now_ms - MIN_INTERVAL_MS,
+            ),
         ).fetchone()
         if row is None:
             return None
@@ -264,21 +261,29 @@ def claim_next(
 def _expire_leases_locked(connection: sqlite3.Connection, *, now_ms: int) -> None:
     expired = connection.execute(
         """
-        select run_id, codebase_key, worktree_key, trigger_kind, detector_set_digest, kind
+        select run_id, codebase_key, worktree_key, trigger_kind, detector_set_digest, kind, created_at_ms
         from workspace_assessment_runs where state = 'running' and lease_until_ms < ?
         """,
         (now_ms,),
     ).fetchall()
-    for run_id, codebase_key, worktree_key, trigger_kind, detector_set_digest, kind in expired:
+    for run_id, codebase_key, worktree_key, trigger_kind, detector_set_digest, kind, created_at in expired:
+        # The runner renews its lease between stages, so an expired lease means
+        # the worker died or one stage hung. Retry once; a retry that also
+        # expires would repeat forever, so the worktree stays stale until its
+        # next change or request instead.
+        retry = _is_lease_retry_locked(connection, str(codebase_key), str(worktree_key), int(created_at))
+        error_code = "assessment_timed_out" if retry else "lease_expired"
         connection.execute(
             """
             update workspace_assessment_runs set
-              state = 'failed', error_code = 'lease_expired', finished_at_ms = ?,
+              state = 'failed', error_code = ?, finished_at_ms = ?,
               lease_generation = lease_generation + 1
             where run_id = ?
             """,
-            (now_ms, run_id),
+            (error_code, now_ms, run_id),
         )
+        if error_code != "lease_expired":
+            continue
         _enqueue_locked(
             connection,
             WorktreeKeys(str(codebase_key), str(worktree_key)),
@@ -294,6 +299,11 @@ def finish(store: Any, run: ClaimedRun, outcome: RunOutcome, *, now_ms: int) -> 
 
     if outcome.state not in _FINISHED_STATES:
         raise ValueError("invalid workspace assessment outcome state")
+    # Only one run of a worktree runs at a time, so its last run stays put.
+    previous = latest_assessed_run(store, run.keys)
+    outcome, settled = keep_package_identities(outcome, previous, store=store)
+    if outcome.state == "partial":
+        outcome = carry_unchecked_findings(outcome, previous, settled)
     coverage_json = _bounded_json(dict(outcome.coverage or {}), MAX_COVERAGE_JSON_BYTES)
     findings_json = _bounded_json([dict(item) for item in outcome.findings], MAX_FINDINGS_JSON_BYTES)
     with store._connect() as connection:
@@ -351,6 +361,37 @@ def finish(store: Any, run: ClaimedRun, outcome: RunOutcome, *, now_ms: int) -> 
                 kind=run.kind,
             )
         return True
+
+
+def _is_lease_retry_locked(
+    connection: sqlite3.Connection, codebase_key: str, worktree_key: str, created_at_ms: int
+) -> bool:
+    # A retry is inserted in the same transaction that expires the run before
+    # it, so it was created at that run's finish time. A run queued later (for
+    # example after a paused worktree resumes) gets its own retry.
+    row = connection.execute(
+        """
+        select 1 from workspace_assessment_runs
+        where codebase_key = ? and worktree_key = ? and error_code = 'lease_expired' and finished_at_ms = ?
+        limit 1
+        """,
+        (codebase_key, worktree_key, created_at_ms),
+    ).fetchone()
+    return row is not None
+
+
+def renew_lease(store: Any, run: ClaimedRun, *, now_ms: int) -> bool:
+    """Extend ``run``'s lease between stages; False once it is canceled, expired or fenced."""
+
+    with store._connect() as connection:
+        cursor = connection.execute(
+            """
+            update workspace_assessment_runs set lease_until_ms = ?
+            where run_id = ? and state = 'running' and lease_generation = ? and lease_until_ms >= ?
+            """,
+            (now_ms + LEASE_MS, run.run_id, run.lease_generation, now_ms),
+        )
+        return cursor.rowcount == 1
 
 
 def cancel(store: Any, run_id: str, *, now_ms: int) -> bool:
@@ -426,17 +467,16 @@ __all__ = [
     "ClaimedRun",
     "RunOutcome",
     "WorktreeKeys",
-    "admit_worktree",
     "cancel",
     "claim_next",
     "enqueue",
     "finish",
-    "get_run",
     "latest_assessed_run",
     "latest_assessed_runs",
     "latest_runs",
     "list_worktrees",
     "recent_runs",
     "record_observation",
+    "renew_lease",
     "set_paused",
 ]

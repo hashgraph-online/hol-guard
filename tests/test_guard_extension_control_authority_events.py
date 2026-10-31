@@ -68,7 +68,7 @@ from .guard_extension_control_authority_fixtures import (
 )
 
 
-def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) -> None:
+def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
@@ -84,7 +84,9 @@ def test_prepared_transition_retries_with_same_reserved_proof(tmp_path: Path) ->
     )
     secrets.fail_anchor_set_number = secrets.anchor_set_count + 1
 
-    with pytest.raises(ExtensionControlAuthorityError, match="anchor unavailable"):
+    # A process that dies after preparing cannot take its row back.
+    with monkeypatch.context() as patch, pytest.raises(ExtensionControlAuthorityError, match="anchor unavailable"):
+        patch.setattr(store, "_roll_back_abandoned_transition", lambda *_args, **_kwargs: False)
         store.commit_extension_control_layers(
             layers,
             catalog_digest=digest,

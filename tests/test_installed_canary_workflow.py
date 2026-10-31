@@ -78,7 +78,7 @@ def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() 
     assert "github.event.pull_request.head.repo.full_name == github.repository" in _text(job["if"])
     strategy = _mapping(job["strategy"])
     assert strategy["fail-fast"] is False
-    assert _mapping(strategy["matrix"])["os"] == ["ubuntu-latest", "macos-latest", "windows-latest"]
+    assert _mapping(strategy["matrix"])["os"] == ["ubuntu-24.04", "macos-latest", "windows-latest"]
     steps = _steps(job)
     checkout = _action_step(steps, "actions/checkout")
     assert _mapping(checkout["with"])["ref"] == "${{ needs.build.outputs.source_sha }}"
@@ -107,9 +107,10 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
     assert cache_inputs["shared-key"] == "release-${{ matrix.target }}"
     assert cache_inputs["cache-bin"] is False
     assert cache_inputs["save-if"] == (
-        "${{ github.event_name != 'pull_request' && "
+        "${{ inputs.allow_cache_write && github.event_name != 'pull_request' && "
         "(github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}"
     )
+    assert _mapping(setup_uv["with"])["save-cache"] == "${{ inputs.allow_cache_write }}"
     assert not cache.get("env")
     setup_python_inputs = _mapping(setup_python["with"])
     assert not {"cache", "cache-dependency-path", "pip-install"} & setup_python_inputs.keys()
@@ -283,7 +284,7 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
                 ownership[path] = _text(item["id"])
             ownership_counts[cast(int, item["pull_request"])] += 1
     assert observed_overlaps == overlap_exceptions.keys()
-    assert ownership_counts == {1761: 37, 1763: 36}
+    assert ownership_counts == {1761: 31, 1763: 33}
 
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])

@@ -37,6 +37,9 @@ concurrency:
   # in-flight run on every push, so a main run can actually finish green.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Linux jobs name ubuntu-24.04 rather than ubuntu-latest. The hosted image behind ubuntu-latest
+# moved to 26.04, where the native sandbox and coreutils layout the runtime tests assert against
+# differ; that platform needs its own qualification before CI follows it.
 jobs:
   # Trusted change planner (shadow mode): computes which lanes the diff requires.
   # Runs on PRs only; the diff is taken from the strict PR merge parent so a
@@ -45,7 +48,7 @@ jobs:
   plan:
     name: plan
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -142,7 +145,7 @@ jobs:
           retention-days: 7
 
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -153,7 +156,7 @@ jobs:
   # Rust validation is required, but is not on the artifact/Python fan-out critical path.
   native-workspace:
     name: Rust workspace (${{ matrix.check }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Required main consumers are the archive producers. Only the two runtime
     # shards share an archive; core/command and PR/Clippy work stay independent.
@@ -334,7 +337,7 @@ jobs:
           retention-days: 1
 
   native-command-evaluators:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       shard-indices: ${{ steps.shard-indices.outputs.indices }}
       shard-count: ${{ steps.shard-indices.outputs.count }}
@@ -404,7 +407,7 @@ jobs:
 
   native-offline-previous:
     name: native-offline-previous
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -499,7 +502,7 @@ jobs:
   native-offline-upgrade:
     name: native-offline-upgrade
     needs: [native-command-evaluators, native-offline-previous]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -549,7 +552,7 @@ jobs:
   native-gates:
     name: native-gates (${{ matrix.shard-index }})
     needs: native-command-evaluators
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Includes checkout/setup plus the shard. The gate gains cases with each
     # false-positive fix, so a slower runner cancelled shards whose tests had
     # all passed. The cap stays well above the measured shard so that keeps
@@ -633,7 +636,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Includes checkout/setup plus the instrumented shard. Five minutes can
     # cancel a healthy shard before it produces the coverage artifact Sonar needs.
     # Planning lags a newly slower test by one main run; the headroom lets that
@@ -703,12 +706,6 @@ jobs:
             --deselect tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources \
             --deselect tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker \
             --deselect tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[artifact]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[workspace]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[publisher]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[harness]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[global]' \
-            --deselect tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow \
             --deselect tests/test_guard_headless_daemon_api.py::test_supply_chain_package_firewall_paid_install_and_test_roundtrip \
             --deselect tests/test_guard_shim_intercept_proofs.py::test_daemon_package_shim_test_uses_projected_shell_profile_path \
             --deselect tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque \
@@ -748,7 +745,7 @@ jobs:
       needs.coverage.result == 'success' &&
       needs.native-command-evaluators.result == 'success'
     needs: [coverage, native-command-evaluators]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -789,7 +786,7 @@ jobs:
     # PRs already run the full behavioral suite above; Sonar consumes the
     # authoritative instrumented main run and stays off the contributor path.
     if: vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
       has-token: ${{ steps.token-presence.outputs.has-token }}
@@ -810,7 +807,7 @@ jobs:
     name: Rust coverage (${{ matrix.partition }})
     needs: sonar-context
     if: needs.sonar-context.outputs.has-token == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -832,7 +829,7 @@ jobs:
       needs.sonar-rust-coverage.result == 'success' &&
       needs.native-workspace.result == 'success' &&
       needs.coverage.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -857,7 +854,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -881,7 +878,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     strategy:
       fail-fast: false
@@ -921,7 +918,7 @@ jobs:
       !cancelled() &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -951,7 +948,7 @@ jobs:
       !cancelled() &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1035,7 +1032,7 @@ jobs:
       needs.dashboard-integration-wheel.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1087,7 +1084,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1235,9 +1232,14 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    # Use the three allocated CPU cores while retaining twelve runners,
-    # the full gate catalog and the existing five-minute job budget.
-    timeout-minutes: 5
+    # Use the three allocated CPU cores while retaining twelve runners and
+    # the full gate catalog. The catalog has since grown past the old
+    # five-minute budget: the slowest shards now spend around 290 seconds in
+    # pytest alone, so checkout and setup pushed three of them over the job
+    # limit and GitHub cancelled them after their cases had already passed.
+    # Eight minutes restores the headroom without a wider macOS fan-out,
+    # which the runner pool cannot spare.
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
@@ -1262,7 +1264,7 @@ jobs:
     name: hol-guard / required
     if: always()
     needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration-wheel, dashboard-integration, cisco-full, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read

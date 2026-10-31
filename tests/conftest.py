@@ -5,7 +5,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from hashlib import sha256
 from pathlib import Path
 
@@ -14,6 +14,7 @@ import pytest
 from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 from tests.home_isolation import isolate_user_home
+from tests.outbound_network_guard import outbound_network_attempts
 
 # Before any Guard module computes a default home or a test spawns a helper.
 isolate_user_home()
@@ -57,6 +58,26 @@ if pythonpath_prefix:
 # and so an inherited value cannot silently re-enable launches.
 os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
 os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
+
+# Fixtures carry production Guard Cloud URLs and tokens that are not valid
+# there, so no test may reach a public host. Inside this process the socket
+# guard below refuses it; a fake that stands in for the transport never opens a
+# socket and is unaffected. The flag carries the rule to supply-chain egress in
+# helpers a test spawns, and to archive fetches the native runtime makes, which
+# no Python socket guard can see. Tests that need Cloud answers serve them from loopback.
+os.environ["HOL_GUARD_TEST_LOOPBACK_EGRESS_ONLY"] = "1"
+
+_session_network_guard = ExitStack()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    # Session-wide rather than per test: background threads a test leaves
+    # running are still covered after its own fixtures are torn down.
+    _session_network_guard.enter_context(outbound_network_attempts())
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    _session_network_guard.close()
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -179,15 +200,18 @@ def _fetch_pi_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.Mo
 
 
 @pytest.fixture(autouse=True)
-def _python_mcp_proxy_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
+def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """Install MCP proxies with the Python launcher argv unless a test opts in.
 
-    Most install and refresh tests pin the Python proxy entry. Relay tests
-    select the native relay by setting or clearing ``HOL_GUARD_MCP_RELAY``.
+    Most install and refresh tests pin the Python proxy entry. Tests marked
+    ``native_mcp_relay`` keep the native relay selection.
     """
 
-    # Subprocess installers copy os.environ, so the pin is an environment value.
-    monkeypatch.setenv("HOL_GUARD_MCP_RELAY", "python")
+    if request.node.get_closest_marker("native_mcp_relay") is not None:
+        return
+    from codex_plugin_scanner.guard.adapters import mcp_relay_native
+
+    monkeypatch.setattr(mcp_relay_native, "native_mcp_relay", lambda guard_home=None: None)
 
 
 @pytest.fixture(autouse=True)
@@ -415,6 +439,30 @@ def _isolate_lifecycle_authority_home(
     node_digest = sha256(request.node.nodeid.encode()).hexdigest()[:24]
     user_home = tmp_path_factory.getbasetemp() / "lifecycle-authority" / node_digest
     monkeypatch.setattr(commands_lifecycle_gate, "trusted_user_home", lambda: user_home)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_hook_cli_loader_search_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the runner's loader search paths out of `hol-guard hook` reviews.
+
+    The hook CLI stamps the caller's environment like a bridge does. CI's Python
+    exports LD_LIBRARY_PATH, which the native review rightly treats as a loader
+    override, so hook tests would answer for the runner rather than the fixture.
+    Child processes still inherit the variable.
+    """
+    from codex_plugin_scanner.guard.cli import commands_hook_native_authority as hook_authority
+    from codex_plugin_scanner.guard.hook_execution_environment import LIBRARY_SEARCH_PATH_NAMES
+
+    collect = hook_authority.collect_hook_execution_environment
+
+    def collect_without_runner_loader_paths() -> dict[str, object]:
+        stamped = collect()
+        names = stamped.get("environment_names")
+        if isinstance(names, list):
+            stamped["environment_names"] = [name for name in names if name not in LIBRARY_SEARCH_PATH_NAMES]
+        return {**stamped, "library_search_paths": {}}
+
+    monkeypatch.setattr(hook_authority, "collect_hook_execution_environment", collect_without_runner_loader_paths)
 
 
 @pytest.fixture(autouse=True)

@@ -66,6 +66,12 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "kill -SIGTERM %1",
         "kill -- %1",
         "kill %+ %-",
+        // Signal 0 delivers nothing, so these ask whether a process is still
+        // there and leave every process they name running.
+        "kill -0 4821",
+        "kill -s 0 4821",
+        "kill -n 0 4821 7312",
+        "kill -0 %1",
         "rm -f init_repo.py",
         "rm a.py && rm -rf __pycache__",
         "echo hi > scratch.txt && rm scratch.txt",
@@ -78,6 +84,11 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "git checkout -b fix-1",
         "git stash",
         "git stash push -m 'wip: parser'",
+        // A pathspec keeps strictly less work than the unbounded form does,
+        // and the entry still holds every change the command moves.
+        "git stash push -- src/app.py",
+        "git stash push src/app.py",
+        "git stash push -m 'warm cache' -- src/app.py",
         "git stash -u && git switch -c spike",
     ] {
         let got = reason("omp", command, &ws, true);
@@ -211,6 +222,25 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "kill -9 -4821 %1",
         "kill -s TERM -1 %1",
         "kill -- -1 %1",
+        // The exception is signal 0 with an operand that names a process:
+        // a negative operand asks about every process the user can reach,
+        // and a signal that is only spelled like 0 is a different signal.
+        "kill -0 -1",
+        "kill -0 -4821",
+        "kill -00 4821",
+        "kill -s SIGNULL 4821",
+        "kill -0",
+        // Pid `0` asks about the caller's own process group, which is the
+        // same survey a negative operand asks for, and a leading zero writes
+        // both of those another way.
+        "kill -0 0",
+        "kill -0 00",
+        "kill -0 01",
+        "kill -s 0 0",
+        // Arithmetic stands for a number by the time the operands are read,
+        // so the words the caller wrote are what this form admits.
+        "kill -0 $((-1))",
+        "kill -0 $((4821))",
         "echo $(x)",
         "echo hi > ../out",
         "git reset --hard",
@@ -224,7 +254,6 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "git stash pop",
         "git stash drop",
         "git stash clear",
-        "git stash push -- src/app.py",
         "git stash -m",
         "cat .env",
         "GIT_DIR=/x git status",
@@ -576,7 +605,7 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let controls = controls();
     let reason = |command: &str| {

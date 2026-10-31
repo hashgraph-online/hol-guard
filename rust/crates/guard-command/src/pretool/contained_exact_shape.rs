@@ -19,6 +19,12 @@ use std::path::Path;
 /// still runs, so such a shape must run it whole, and the real `mktemp`
 /// creates its directory under the sandbox's private `TMPDIR`.
 pub(crate) fn exact_shape(text: &str, workspace: &Path) -> Option<Shape> {
+    // Blanking a list of groups drops the boundary a `cd` inside one of them
+    // stops at. The decision may treat that as a wider reading. The sandbox
+    // runs the submitted text, so that reading is not a plan.
+    if crate::parser_segments::command_has_top_level_group_list(text) {
+        return None;
+    }
     // A trailing subshell group runs exactly the command list inside it, so
     // the list's shape is the group's. The group text itself models no
     // command, so without this the sandbox could not plan a group the

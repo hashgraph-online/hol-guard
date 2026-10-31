@@ -250,23 +250,74 @@ fn policy_cases_match_the_retired_python() {
     let cases = vectors["policy_cases"].as_array().expect("cases");
     assert!(cases.len() > 2000);
     for case in cases {
-        let query = CiscoPolicyQueryV1 {
-            signal_sources: serde_json::from_value(case["sources"].clone()).expect("sources"),
-            configured_actions: serde_json::from_value(case["configured"].clone())
-                .expect("configured"),
-        };
-        let actual = cisco_evidence::policy_action(&query).expect("policy");
+        let sources: Vec<String> =
+            serde_json::from_value(case["sources"].clone()).expect("sources");
+        let configured = serde_json::from_value(case["configured"].clone()).expect("configured");
+        let actual = cisco_evidence::compose_policy_action(&sources, &configured).expect("policy");
         assert_eq!(actual["policy_action"], case["expected"], "{case}");
     }
 }
 
 #[test]
 fn a_missing_configured_action_fails_closed() {
+    assert!(cisco_evidence::compose_policy_action(
+        &["cisco_skill".to_owned()],
+        &std::collections::BTreeMap::new(),
+    )
+    .is_err());
+}
+
+#[test]
+fn the_resident_resolves_each_signal_source_from_the_sent_config() {
     let query = CiscoPolicyQueryV1 {
-        signal_sources: vec!["cisco_skill".to_owned()],
-        configured_actions: std::collections::BTreeMap::new(),
+        signal_sources: vec!["cisco_skill".to_owned(), "cisco_mcp".to_owned()],
+        guard_config: guard_contracts::RiskActionConfigV1 {
+            security_level: "balanced".to_owned(),
+            protection_posture: "protected".to_owned(),
+            protection_posture_explicit: false,
+            risk_actions: [("malicious_skill".to_owned(), "block".to_owned())]
+                .into_iter()
+                .collect(),
+            ..Default::default()
+        },
+        harness: None,
     };
-    assert!(cisco_evidence::policy_action(&query).is_err());
+    let actual = cisco_evidence::policy_action(&query).expect("policy");
+    assert_eq!(actual["policy_action"], "block");
+}
+
+#[test]
+fn a_per_harness_risk_action_overrides_the_global_one() {
+    let config = guard_contracts::RiskActionConfigV1 {
+        security_level: "balanced".to_owned(),
+        protection_posture: "protected".to_owned(),
+        protection_posture_explicit: false,
+        risk_actions: [("malicious_skill".to_owned(), "warn".to_owned())]
+            .into_iter()
+            .collect(),
+        harness_risk_actions: [(
+            "codex".to_owned(),
+            [("malicious_skill".to_owned(), "block".to_owned())]
+                .into_iter()
+                .collect(),
+        )]
+        .into_iter()
+        .collect(),
+        ..Default::default()
+    };
+    let query = |harness: Option<&str>| CiscoPolicyQueryV1 {
+        signal_sources: vec!["cisco_skill".to_owned()],
+        guard_config: config.clone(),
+        harness: harness.map(str::to_owned),
+    };
+    assert_eq!(
+        cisco_evidence::policy_action(&query(Some("codex"))).expect("policy")["policy_action"],
+        "block"
+    );
+    assert_eq!(
+        cisco_evidence::policy_action(&query(None)).expect("policy")["policy_action"],
+        "warn"
+    );
 }
 
 #[test]

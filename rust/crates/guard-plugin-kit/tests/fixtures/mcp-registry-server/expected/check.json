@@ -79,6 +79,13 @@
       ],
       "runtime": "agent-skills",
       "supported": false
+    },
+    {
+      "dropped": [
+        "mcp_env"
+      ],
+      "runtime": "agent-plugins",
+      "supported": true
     }
   ],
   "sources": [

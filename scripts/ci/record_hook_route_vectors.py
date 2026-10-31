@@ -21,8 +21,7 @@ effect worlds (what the stubbed effects report):
 
 A vector holds the resident's inputs (``facts``), the route the traces exhibit
 (the plan and the event name outage responses carry) and, per world, the trace
-and return code. The Rust ``hook_decision_hook_route_tests`` replays the route;
-``tests/test_hook_route_parity.py`` runs the new dispatcher with the same stubs.
+and return code. The Rust ``hook_decision_hook_route_tests`` replays the route.
 The plan is read off the traces: the base world (no optional handler fires)
 shows every handler reached before a terminal one answered, and the
 ``edge_missing`` world shows whether the edge outage check applied.

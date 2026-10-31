@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import glob as globlib
 from collections.abc import Sequence
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ..adapters import get_adapter, list_adapters
@@ -16,6 +17,7 @@ from ..codex_install_transaction import codex_install_transaction
 from ..managed_install_proof import bind_managed_install_proof, verify_managed_install_proof
 from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
 from ..native_runner_authority import NativeRunnerAuthorityError
+from ..runtime.fleet_posture_common import DIAGNOSTICS_STATE_KEY, parse_timestamp
 from ..runtime.skill_protection import detect_skill_content_risk
 from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
@@ -37,8 +39,16 @@ from .native_install_checks import _native_mcp_server_names as _native_mcp_serve
 from .native_install_checks import _opencode_protection_checks as _opencode_protection_checks
 from .native_install_checks import grok_hooks_protection_ready as grok_hooks_protection_ready
 
+# A setup check older than this no longer says much about the app; fall back to the install record.
+_FLEET_CHECK_MAX_AGE = timedelta(hours=24)
+# Connect, disconnect and repair stamp the install record before they change the app, so a
+# setup check that ran while one was in progress can describe the old state. Only trust a
+# check that ran this long after the last install change.
+_FLEET_CHECK_SETTLE = timedelta(minutes=5)
+
 _HARNESS_OBSERVED_COPY = {
     "protected": "Active Guard protection is installed.",
+    "needs_repair": "Guard protection is installed but its setup check failed. Run hol-guard repair.",
     "found": "Observed locally, not protected by Guard yet.",
     "not_found": "Not installed on this machine.",
 }
@@ -154,9 +164,11 @@ def _apply_managed_install_owned(
 def list_harness_setup_items(context: HarnessContext, store: GuardStore | None = None) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
     for adapter in list_adapters():
-        detection = _safe_setup_detection(adapter, context, store)
+        detection = _safe_setup_detection(adapter, context, store, use_fleet_check=True)
         detected = detection["installed"] or detection["command_available"] or bool(detection["config_paths"])
-        if detection["installed"]:
+        if detection["needs_repair"]:
+            status = "needs_repair"
+        elif detection["installed"]:
             status = "protected"
         elif detected:
             status = "found"
@@ -301,7 +313,14 @@ def _safe_setup_detection(
     adapter: HarnessAdapter,
     context: HarnessContext,
     store: GuardStore | None,
+    *,
+    use_fleet_check: bool = False,
 ) -> dict[str, object]:
+    """Detect an app's Guard setup.
+
+    Only the app list sets ``use_fleet_check``, so it matches what Guard Cloud shows. Verification
+    (``apps test`` and headless checks) keeps reading the install record and runs its own checks.
+    """
     managed = store.get_managed_install(adapter.harness) if store is not None else None
     if adapter.harness == "paseo":
         diagnostics = adapter.diagnostics(context)
@@ -312,16 +331,54 @@ def _safe_setup_detection(
                 and diagnostics.get("setup_status") == "active"
                 and verify_managed_install_proof(managed.get("manifest"), context) is True
             ),
+            "needs_repair": False,
             "command_available": diagnostics.get("command_available", False),
             "config_paths": diagnostics.get("config_paths", []),
         }
     protection_contract = contract_for(adapter.harness)
     config_paths = protection_contract.config_paths if protection_contract is not None else ()
+    managed_active = bool(managed and managed.get("active"))
+    checked_status = _fleet_checked_setup_status(adapter.harness, managed, store) if use_fleet_check else None
     return {
-        "installed": bool(managed and managed.get("active")),
+        "installed": checked_status == "active" or (checked_status is None and managed_active),
+        "needs_repair": checked_status == "broken" or (managed_active and checked_status in {"partial", "not_found"}),
         "command_available": adapter.resolved_executable(context) is not None,
         "config_paths": _existing_contract_config_paths(config_paths, context),
     }
+
+
+def _fleet_checked_setup_status(
+    harness: str,
+    managed: dict[str, object] | None,
+    store: GuardStore | None,
+) -> str | None:
+    """Return the setup status Guard last reported to Cloud for this app, when it is still current.
+
+    Fleet sync runs each app's setup check and caches the result. Using it here keeps this
+    list in step with Guard Cloud without re-running checks that can launch the app's CLI.
+    An install change wins until a check has run ``_FLEET_CHECK_SETTLE`` after it, so connect,
+    disconnect and repair show at once and a check that overlapped them is ignored.
+    """
+    if store is None:
+        return None
+    try:
+        cached = store.get_sync_payload(DIAGNOSTICS_STATE_KEY)
+    except Exception:
+        return None
+    entry = cached.get(harness) if isinstance(cached, dict) else None
+    if not isinstance(entry, dict) or not isinstance(entry.get("diagnostics"), dict):
+        return None
+    checked_at = parse_timestamp(entry.get("at"))
+    if checked_at is None:
+        return None
+    age = datetime.now(timezone.utc) - checked_at
+    if age < timedelta(0) or age > _FLEET_CHECK_MAX_AGE:
+        return None
+    managed_at = parse_timestamp(managed.get("updated_at")) if managed else None
+    if managed_at is not None and checked_at < managed_at + _FLEET_CHECK_SETTLE:
+        return None
+    status = entry["diagnostics"].get("setup_status")
+    return status if status in {"active", "broken", "partial", "not_found"} else None
 
 
 def _existing_contract_config_paths(config_paths: tuple[str, ...], context: HarnessContext) -> list[str]:

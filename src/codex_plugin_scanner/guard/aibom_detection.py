@@ -58,7 +58,7 @@ _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 # workspace directory; keep in sync with ``WORKSPACE_SKILL_HARNESSES`` in the
 # resident's ``aibom_discovery.rs``. Only the portable skill walk reads this.
 _WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
-    {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp"}
+    {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp", "muse"}
 )
 
 

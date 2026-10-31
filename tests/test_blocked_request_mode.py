@@ -5,15 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.blocked_request_mode import safe_alternative_reason
-from codex_plugin_scanner.guard.cli.commands_support_prompts import _runtime_artifact_native_reason
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, update_guard_settings
-from codex_plugin_scanner.guard.models import GuardArtifact
-
-
-def _composer_never_called(*_args: object, **_kwargs: object) -> dict[str, object]:
-    """Fail when a reason the CLI still composes locally reaches the resident."""
-
-    raise AssertionError("the resident must not be asked for this reason")
 
 
 def test_prompt_mode_defaults_and_round_trip(tmp_path: Path) -> None:
@@ -36,33 +28,6 @@ def test_workspace_cannot_enable_prompts(tmp_path: Path) -> None:
     workspace.mkdir()
     (workspace / ".hol-guard.toml").write_text('blocked_request_mode = "ask"\n')
     assert load_guard_config(tmp_path / "guard-home", workspace=workspace).blocked_request_mode == "safe-alternative"
-
-
-def test_terminal_cli_response_preserves_safe_alternative_guidance() -> None:
-    guidance = safe_alternative_reason("HOL Guard blocked this action.")
-    artifact = GuardArtifact(
-        artifact_id="guarded-tool",
-        harness="zcode",
-        artifact_type="prompt_request",
-        name="Guarded tool",
-        source_scope="project",
-        config_path="config.json",
-        command=None,
-        args=(),
-        transport="stdio",
-    )
-    reason = _runtime_artifact_native_reason(
-        artifact,
-        {
-            "policy_action": "block",
-            "blocked_request_guidance": guidance,
-            "decision_v2_json": {"harness_message": "Wait for approval."},
-        },
-        composer=_composer_never_called,
-        guard_home=None,
-    )
-    assert reason == guidance
-    assert "Wait for approval" not in reason
 
 
 @pytest.mark.parametrize(

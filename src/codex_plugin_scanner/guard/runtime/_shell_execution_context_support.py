@@ -25,7 +25,6 @@ SHELL_CWD_UNRESOLVED_PARENT_SHELL = "shell_cwd_unresolved_parent_shell_effect"
 SHELL_CWD_UNRESOLVED_SYNTAX = "shell_cwd_unresolved_syntax"
 SHELL_CWD_PATH_CHANGED = "shell_cwd_path_changed"
 
-FLOW_OPERATORS = frozenset({"&&", "||", ";", "\n", "|", "|&", "&"})
 SHELL_DIRECTORY_COMMAND = re.compile(
     r"(?:^|(?:&&|\|\||[;|&(){}\n]))\s*"
     r"(?:(?:builtin|command|time)\s+(?:-[^\s]+\s+)*|function\s+|!\s+)?"
@@ -65,7 +64,3 @@ class ShellPathProof:
     lexical_path: Path
     resolved_path: Path
     identity: ShellPathIdentity
-
-
-def last_flow_operator(controls: tuple[str, ...]) -> str | None:
-    return next((control for control in reversed(controls) if control in FLOW_OPERATORS), None)

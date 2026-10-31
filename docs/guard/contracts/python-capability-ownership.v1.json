@@ -35,9 +35,7 @@
     "src/codex_plugin_scanner/guard/adapters/*hook*.py",
     "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-    "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
-    "src/codex_plugin_scanner/guard/cli/commands_hook_decision_copy.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
     "src/codex_plugin_scanner/guard/daemon/hook_*.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
@@ -50,18 +48,14 @@
     "src/codex_plugin_scanner/guard/native_runtime_process_cache.py",
     "src/codex_plugin_scanner/guard/native_runtime_status_share.py",
     "src/codex_plugin_scanner/guard/native_runtime_values.py",
-    "src/codex_plugin_scanner/guard/native_runtime_admission.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
     "src/codex_plugin_scanner/guard/native_runtime_durable.py",
     "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
-    "src/codex_plugin_scanner/guard/native_runtime_artifact_identity.py",
-    "src/codex_plugin_scanner/guard/native_mode.py",
-    "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
+    "src/codex_plugin_scanner/guard/native_mode.py"
    ],
    "exclude_patterns": [
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
-    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
-    "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py"
+    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py"
    ],
    "production_role": "authentication, transport, adapter projection, supervision, and non-authoritative evidence plumbing",
    "owner": "python-control-and-transport"
@@ -71,8 +65,7 @@
    "class": "required_control_plane",
    "patterns": [
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
-    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
-    "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py"
+    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py"
    ],
    "production_role": "non-blocking receipts, metrics, and enrichment only; no decision authority",
    "owner": "evidence-persistence"
@@ -1806,6 +1799,107 @@
    "native_replacements": [
     "rust/crates/guard-command/src/sfrs_patterns.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
+   "module": "codex_plugin_scanner.guard.runtime.github_capability_contract",
+   "source_sha256": "f7d4de5d01a067673b2b3bea3e14800e80f13043b9f1b841367e357e70081c36",
+   "forbidden_symbols": [
+    "GitHubCapabilityContract",
+    "GitHubCommandAssessment",
+    "github_capability_contracts",
+    "strongest_github_capability",
+    "github_assessment",
+    "combine_github_assessments"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/github_capability_contract.rs",
+    "rust/crates/guard-command/src/shell_request_authority.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py",
+   "module": "codex_plugin_scanner.guard.runtime.github_capability_interaction",
+   "source_sha256": "d65f80db51dafe925d2554bbcaa7fce3dafee03a7b75ad018c9c83342d35f390",
+   "forbidden_symbols": [
+    "github_capability_requires_confirmation"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/github_capability_interaction.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
+   "module": "codex_plugin_scanner.guard.runtime.structured_data_sensitivity",
+   "source_sha256": "923a670b3e9a8500fb980bd7583354d9fd8c8a4db19ef1228313319a874a9c02",
+   "forbidden_symbols": [
+    "_scan_credential_content",
+    "_scan_credential_window",
+    "DeclaredField",
+    "DeclaredSchema"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/content_sensitivity.rs",
+    "rust/crates/guard-runtime/src/content_sensitivity_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
+   "module": "codex_plugin_scanner.guard.runtime.structured_output_mediation",
+   "source_sha256": "f75a612d86365e85f4e37c0ef395d92622414c29e9d552667b54b6a9c19fce20",
+   "forbidden_symbols": [
+    "StructuredContentMediation",
+    "StructuredOutputBinding",
+    "StructuredOutputResolution",
+    "mediate_native_post_tool_content",
+    "resolve_managed_structured_output_resolution"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/content_sensitivity.rs",
+    "rust/crates/guard-runtime/src/content_sensitivity_op.rs",
+    "rust/crates/guard-runtime/src/edge_structured.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_action_risk_metadata.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_action_risk_metadata",
+   "source_sha256": "d8c96d66bd936b9db7c431420dc168918aee6d6dad27f96e1f563aef125caf43",
+   "forbidden_symbols": [
+    "risk_classes_for_command_action",
+    "COMMAND_ACTION_RISK_CLASSES",
+    "_BASE_COMMAND_ACTION_RISK_CLASSES",
+    "BLITCP_ACTION_RISK_CLASSES",
+    "GITHUB_ACTION_RISK_CLASSES",
+    "OLLAMA_ACTION_RISK_CLASSES"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_action_risk_classes.rs",
+    "rust/crates/guard-runtime/src/hook_artifact_facts_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
+   "module": "codex_plugin_scanner.guard.runtime.local_cli_runner",
+   "source_sha256": "13340152570b07e144ad87c60afa7831b1e2d160667bc24ccefaacaba87f59ed",
+   "forbidden_symbols": [
+    "runner_name",
+    "runner_target",
+    "_split_runner_arguments"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/native_exact_action_op/runner_bin.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher",
+   "source_sha256": "60cd955b234541b6cb5f835c2a8e29190cbaab418bec2d309de9f8e64676212b",
+   "forbidden_symbols": [
+    "validate_reviewed_literal_argv"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_reviewed_literal.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -1845,6 +1939,39 @@
   "tests/test_guard_shell_static_path_boundaries.py"
  ],
  "retired_bodies": [
+ {
+  "path": "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
+  "source_sha256": "9038e0b37af50bedc19d635fb3be92bfe0ec9cfc91771fcfbbf376271e71e8d3",
+  "forbidden_symbols": [
+   "UNCERTAINTY_FLOOR"
+  ],
+  "native_replacements": [
+   "rust/crates/guard-command/src/effect_decision.rs"
+  ]
+ },
+ {
+  "path": "src/codex_plugin_scanner/guard/runtime/command_model.py",
+  "source_sha256": "11ab5a21f22eefd813957346a81606209bb78b85e0941f84a35c42af5ce5ee6a",
+  "forbidden_symbols": [
+   "MAX_COMMAND_SEGMENTS",
+   "MAX_COMMAND_TOKENS"
+  ],
+  "native_replacements": [
+   "rust/crates/guard-command/src/command_model.rs",
+   "rust/crates/guard-command/src/command_parse_surface.rs"
+  ]
+ },
+ {
+  "path": "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",
+  "source_sha256": "d0b0a011a9f33c5de6390ecad17cbfb3fc492ad3c8fd2e00b8b0d5d47f0e1d55",
+  "forbidden_symbols": [
+   "APPROVAL_REUSE_REAPPROVAL_REQUIRED",
+   "APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM"
+  ],
+  "native_replacements": [
+   "rust/crates/guard-command/src/approval_reuse.rs"
+  ]
+ },
   {
    "path": "src/codex_plugin_scanner/guard/policy_document.py",
    "source_sha256": "c20051517d9e4c1a4ead1dea82e80bbc348adbc3082d8ae6baf7cc430157c3d3",
@@ -1920,34 +2047,6 @@
     "_SAMPLE_SECRET_VALUE_PATTERN",
     "_secret_content_match_is_sample",
     "_extract_secret_assignment_value"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/content_sensitivity.rs",
-    "rust/crates/guard-runtime/src/content_sensitivity_op.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
-   "source_sha256": "923a670b3e9a8500fb980bd7583354d9fd8c8a4db19ef1228313319a874a9c02",
-   "forbidden_symbols": [
-    "_scan_credential_content",
-    "_scan_credential_window",
-    "_typed_value",
-    "_PATH_SEGMENT"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/content_sensitivity.rs",
-    "rust/crates/guard-runtime/src/content_sensitivity_op.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
-   "source_sha256": "f75a612d86365e85f4e37c0ef395d92622414c29e9d552667b54b6a9c19fce20",
-   "forbidden_symbols": [
-    "_has_safe_numbers",
-    "_reject_constant",
-    "_setting_at_path",
-    "_valid_policy_hash"
    ],
    "native_replacements": [
     "rust/crates/guard-command/src/content_sensitivity.rs",
@@ -2125,7 +2224,7 @@
    ],
    "native_replacements": [
     "rust/crates/guard-command/src/verified_npm.rs",
-    "rust/crates/guard-runtime/src/verified_npm_op.rs"
+    "rust/crates/guard-runtime/src/package_review_plan_op.rs"
    ]
   },
   {
@@ -2224,19 +2323,27 @@
   },
   {
    "path": "src/codex_plugin_scanner/guard/runtime/verified_read_execution.py",
-   "source_sha256": "6e5394e8e2211428639706ac8d0033cf451d8bdc062f7f529081611963528159",
+   "source_sha256": "097cfa14009cea9c2a5ea4d08aa4b66eb17c916724eee02965b1bd12f0f7a7cb",
    "forbidden_symbols": [
     "_MAX_COUNT",
     "_SED_RANGE",
+    "_WorkspaceContext",
+    "_current_workspace_context",
     "_dynamic",
     "_head_tail",
     "_line_count",
-    "_sed"
+    "_read_bounded_text",
+    "_resolve_target",
+    "_sed",
+    "_stable_file_identity",
+    "verified_read_plan",
+    "workspace_read_decision"
    ],
    "native_replacements": [
     "rust/crates/guard-command/src/verified_read_plan.rs",
-    "rust/crates/guard-contracts/src/verified_read_plan.rs",
-    "rust/crates/guard-runtime/src/verified_read_plan_op.rs"
+    "rust/crates/guard-contracts/src/verified_read_execute.rs",
+    "rust/crates/guard-runtime/src/verified_read_execute.rs",
+    "rust/crates/guard-runtime/src/verified_read_execute_op.rs"
    ]
   },
   {
@@ -2390,6 +2497,33 @@
     "rust/crates/guard-contracts/src/inventory_item_classification.rs",
     "rust/crates/guard-command/src/inventory_item_metadata.rs",
     "rust/crates/guard-runtime/src/inventory_item_classification_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/native_policy_snapshot_constants.py",
+   "source_sha256": "69f505d30daa7f9d0d5f68177b7a1de3233a4cee7a2556f249bf9c563daa30ef",
+   "forbidden_symbols": [
+    "_ACTION_SEVERITY",
+    "_VALID_ACTIONS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/decision_lattice.rs",
+    "rust/crates/guard-policy-snapshot/src/lib.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
+   "source_sha256": "aa240d99aee2f85396db7a7176be2671c72aa984e34872bd3818e40d431c955b",
+   "forbidden_symbols": [
+    "_RULE_MODE_FLOOR",
+    "_SEVERITY",
+    "_UNCERTAINTY_REASON",
+    "_UNMAPPED_RISK_CLASS_EFFECTS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_decision_adapter.rs",
+    "rust/crates/guard-command/src/command_model.rs",
+    "rust/crates/guard-command/src/native_command_controls_floor.rs"
    ]
   }
  ]

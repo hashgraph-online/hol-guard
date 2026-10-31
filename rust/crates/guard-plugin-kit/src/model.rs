@@ -12,9 +12,13 @@ pub enum SourceKind {
     CodexPlugin,
     GeminiExtension,
     McpServer,
+    /// An Agent Plugins `plugin.json` (its `$schema` names agent-plugins.org).
+    AgentPlugin,
     ClaudeMarketplace,
     CodexMarketplace,
     McpConfig,
+    /// An Agent Plugins `mcp.json`.
+    AgentPluginMcp,
     AgentSkill,
 }
 
@@ -23,7 +27,11 @@ impl SourceKind {
     pub(crate) fn is_plugin_root(self) -> bool {
         matches!(
             self,
-            Self::ClaudePlugin | Self::CodexPlugin | Self::GeminiExtension | Self::McpServer
+            Self::ClaudePlugin
+                | Self::CodexPlugin
+                | Self::GeminiExtension
+                | Self::McpServer
+                | Self::AgentPlugin
         )
     }
 }
@@ -68,7 +76,27 @@ pub struct McpServer {
     /// Headers left out because their values were literals.
     #[serde(skip)]
     pub literal_headers: Vec<String>,
+    /// The folder an Agent Plugins stdio server starts in, as written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    /// Paths below the plugin root that the command or args name and that
+    /// exist there. A package that runs the server must carry them.
+    #[serde(skip)]
+    pub bundled: Vec<String>,
+    /// The command or args name a path below the plugin root that does not
+    /// exist there, so no package can carry it.
+    #[serde(skip)]
+    pub bundle_missing: bool,
 }
+
+/// The plugin-root placeholders runtimes expand in server commands and
+/// args. Agent Plugins sources are read with `./` commands rewritten to
+/// `${PLUGIN_ROOT}`, so every root reference starts with one of these.
+pub(crate) const ROOT_PLACEHOLDERS: [&str; 3] = [
+    "${CLAUDE_PLUGIN_ROOT}",
+    "${PLUGIN_ROOT}",
+    "${extensionPath}",
+];
 
 impl McpServer {
     /// Every user environment variable the server reads, sorted.

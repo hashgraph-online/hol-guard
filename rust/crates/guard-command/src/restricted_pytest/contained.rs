@@ -1,8 +1,8 @@
 //! Native preparation for contained Node/Vitest and direct inline evaluation.
 use super::*;
 use crate::contained_argv::{
-    bun_vitest_invocation, inline_eval, node_runtime_args, node_script_index, python_runtime_args,
-    tsx_test_invocation, vitest_arguments,
+    bun_vitest_invocation, contained_runner_invocation, inline_eval, node_runtime_args,
+    node_script_index, python_runtime_args, tsx_test_invocation,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -263,7 +263,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
     if let Some((script, arguments)) = tsx_test_invocation(&argv)? {
         return prepare_tsx(input, &argv, &script, &arguments);
     }
-    let args = vitest_arguments(&input.command)?;
+    let (tool, args) = contained_runner_invocation(&input.command)?;
     let runtime = node_runtime_args(&input.command)?;
     let mut workspace = input.workspace.clone();
     let mut cwd = input.cwd.clone();
@@ -307,10 +307,15 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
     let mut plan = prepare_node(&base)?;
     let workspace = Path::new(plan["workspace"].as_str().unwrap());
     let cwd = Path::new(plan["cwd"].as_str().unwrap());
-    let modules = nearest_project_root(cwd, workspace, "node_modules/vitest/vitest.mjs")?
+    // Each contained runner is the workspace's own installed entry point.
+    let package_entry = match tool {
+        "jest" => "jest/bin/jest.js",
+        _ => "vitest/vitest.mjs",
+    };
+    let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{package_entry}"))?
         .join("node_modules");
     let entry = modules
-        .join("vitest/vitest.mjs")
+        .join(package_entry)
         .canonicalize()
         .ok()
         .filter(|p| p.is_file() && path_is_within(p, &modules));
@@ -320,18 +325,46 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             .and_then(OsStr::to_str),
         Some("node" | "nodejs")
     );
+    // Vitest's `bin` shim and the CLI module that shim imports name the same
+    // installed runner, so either spelling resolves to the entry point Guard
+    // runs; the plan below still executes the package's own `bin` entry.
+    let spelled: Vec<PathBuf> = entry
+        .iter()
+        .cloned()
+        .chain(
+            (tool != "jest")
+                .then(|| {
+                    modules
+                        .join("vitest/dist/cli.js")
+                        .canonicalize()
+                        .ok()
+                        .filter(|p| p.is_file() && path_is_within(p, &modules))
+                })
+                .flatten(),
+        )
+        .collect();
     let matching = !node
         || input
             .command
             .get(1 + runtime.len())
             .and_then(|p| cwd.join(p).canonicalize().ok())
-            == entry;
+            .is_some_and(|p| spelled.contains(&p));
     if entry.is_none() || !matching {
-        return Err(RestrictedPytestError::new("vitest_restricted_dependency_unavailable",
-        "Vitest is not installed inside this workspace. Guard did not download or execute a replacement."));
+        return Err(RestrictedPytestError::new(
+            "vitest_restricted_dependency_unavailable",
+            match tool {
+                "jest" => "Jest is not installed inside this workspace. Guard did not download or execute a replacement.",
+                _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
+            },
+        ));
     }
     let entry = entry.unwrap();
-    let args = readonly_config_arguments(&args, &entry.parent().unwrap().join("package.json"));
+    // The config loader argument is Vitest's own; Jest takes its arguments as given.
+    let args = if tool == "jest" {
+        args
+    } else {
+        readonly_config_arguments(&args, &entry.parent().unwrap().join("package.json"))
+    };
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);
     command.push(entry.to_string_lossy().into_owned());

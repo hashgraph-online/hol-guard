@@ -25,10 +25,25 @@ if TYPE_CHECKING:
 
 HOOK_AUTHORITY_STATE_FEATURE = "hook-authority-state-v1"
 HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE = "hook-authority-state-session-ops-v1"
+HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE = "hook-authority-state-question-settle-v1"
+HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE = "hook-authority-state-claude-lifecycle-v1"
 _REQUEST_SCHEMA = "guard-hook-authority-state-request.v1"
 _RESULT_SCHEMA = "guard-hook-authority-state-result.v1"
 _TIMEOUT_SECONDS = 5.0
 _MAX_REQUEST_BYTES = 512 * 1024
+
+
+def hook_authority_integrity_key(store: GuardStore, *, create_key: bool = False) -> dict[str, str] | None:
+    """The integrity key fields a resident store write signs Claude state under, or ``None``."""
+
+    try:
+        key, key_id = store._policy_integrity_secret_material(create=create_key)
+    except (AttributeError, OSError, RuntimeError, ValueError):
+        return None
+    encoded = encode_key(key)
+    if encoded is None or key_id is None:
+        return None
+    return {"integrity_key_b64": encoded, "integrity_key_id": key_id}
 
 
 def hook_authority_state(
@@ -87,25 +102,3 @@ def object_field(payload: dict[str, object] | None, name: str) -> dict[str, obje
 
     value = payload.get(name) if payload is not None else None
     return value if isinstance(value, dict) else None
-
-
-def text_field(payload: dict[str, object] | None, name: str) -> str | None:
-    """A non-empty string reply field, else ``None``."""
-
-    value = payload.get(name) if payload is not None else None
-    return value if isinstance(value, str) and value else None
-
-
-def flag_field(payload: dict[str, object] | None, name: str) -> bool:
-    """Whether a reply field is exactly ``true``."""
-
-    return payload is not None and payload.get(name) is True
-
-
-def keys_field(payload: dict[str, object] | None, name: str) -> list[str]:
-    """A list-of-strings reply field; anything else is no keys."""
-
-    value = payload.get(name) if payload is not None else None
-    if isinstance(value, list) and all(isinstance(item, str) for item in value):
-        return list(value)
-    return []

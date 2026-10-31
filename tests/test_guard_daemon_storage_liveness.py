@@ -17,9 +17,7 @@ from typing import TypeGuard, cast, final
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
-    record_pre_hook_command_activity_best_effort,
-)
+from codex_plugin_scanner.guard import store_review_event_outbox, store_storage_gate
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon.discovery import (
     DAEMON_DISCOVERY_PROTOCOL_VERSION,
@@ -33,11 +31,9 @@ from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_connect_timeout_seconds,
     sqlite_operation_deadline_monotonic,
 )
-from codex_plugin_scanner.guard import store_review_event_outbox, store_storage_gate
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_review_event_outbox import StoreReviewEventOutboxMixin
 from tests.daemon_control_patching import patch_daemon_global
-from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -375,77 +371,6 @@ def test_store_call_budget_starts_once_the_storage_gate_is_held(
     # whatever the queue left of it. A wait longer than the cap is refused by
     # the gate itself, whose own deadline is a separate bound.
     assert budgets == pytest.approx([0.25], abs=0.05)
-
-
-def test_store_promotes_rollback_journal_before_bounded_hook_writes(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    use_real_native_activity_reviews(monkeypatch)
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    database_path = guard_home / "guard.db"
-    with sqlite3.connect(database_path) as legacy_connection:
-        legacy_connection.execute("create table legacy_marker (value integer)")
-        assert legacy_connection.execute("pragma journal_mode").fetchone() == ("delete",)
-
-    traced_statements: list[str] = []
-    connect = GuardStore._connect
-
-    @contextmanager
-    def connect_with_trace(store: GuardStore) -> Iterator[sqlite3.Connection]:
-        with connect(store) as connection:
-            connection.set_trace_callback(traced_statements.append)
-            yield connection
-
-    monkeypatch.setattr(GuardStore, "_connect", connect_with_trace)
-    store = GuardStore(guard_home, prime_policy_integrity=False)
-    wal_index = next(
-        index for index, statement in enumerate(traced_statements) if statement.lower() == "pragma journal_mode=wal"
-    )
-    schema_dml_index = next(
-        index
-        for index, statement in enumerate(traced_statements)
-        if statement.lower().startswith(
-            ("create table", "create index", "alter table", "insert ", "update ", "delete ")
-        )
-    )
-    assert wal_index < schema_dml_index
-    with sqlite3.connect(database_path) as verification_connection:
-        assert verification_connection.execute("pragma journal_mode").fetchone() == ("wal",)
-
-    reader = sqlite3.connect(database_path, isolation_level=None)
-    try:
-        reader.execute("begin")
-        assert reader.execute("select count(*) from command_activity").fetchone() == (0,)
-        # The override is a wall clock from entry, and native review runs before
-        # the write. The reader keeps its transaction until this call returns,
-        # so a lock wait still fails instead of waiting the reader out.
-        with sqlite_connect_timeout_override(5):
-            assert record_pre_hook_command_activity_best_effort(
-                store=store,
-                guard_home=guard_home,
-                harness="cursor",
-                event="PreToolUse",
-                payload={
-                    "tool_name": "Shell",
-                    "tool_input": {"command": "git status --short"},
-                    "generation_id": "cursor_generation_abcdef1234567890",
-                    "cursor_source_hook_event": "beforeShellExecution",
-                },
-                policy_action="allow",
-                receipt_id=None,
-                prompted=False,
-                cwd=tmp_path,
-                home_dir=tmp_path,
-            )
-    finally:
-        reader.rollback()
-        reader.close()
-
-    health = store.get_command_activity_persistence_health()
-    assert health.active_error_count == 0
-    assert health.persistence_error_count == 0
 
 
 def test_new_store_keeps_incremental_auto_vacuum_with_wal(tmp_path: Path) -> None:

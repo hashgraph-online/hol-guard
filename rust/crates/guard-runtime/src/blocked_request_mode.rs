@@ -36,6 +36,48 @@ pub(crate) fn approval_wait_hint_for_home(
     hint.replace(" --json`", &format!(" --json --home {quoted}`"))
 }
 
+/// The `blocked_request_mode` a silent block is recorded with.
+pub(crate) const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
+/// The silent block's reason when the review gave none.
+pub(crate) const BLOCKED_REASON: &str = "HOL Guard blocked this action.";
+
+/// `str(value or fallback)` for the values the resident reproduces: a string,
+/// or a falsy `None`, `False` or `""`. Anything else is `None`.
+pub(crate) fn falsy_or_text<'a>(
+    value: Option<&'a serde_json::Value>,
+    fallback: &'a str,
+) -> Option<&'a str> {
+    use serde_json::Value;
+    match value {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => Some(fallback),
+        Some(Value::String(text)) if text.is_empty() => Some(fallback),
+        Some(Value::String(text)) => Some(text),
+        Some(_) => None,
+    }
+}
+
+/// The `safe-alternative` PreToolUse response that blocks `result` with
+/// `reason`: rendered for `harness`, never prompted.
+pub(crate) fn safe_alternative_block(
+    harness: &str,
+    result: &guard_command::hook_responses::Object,
+    reason: &str,
+) -> guard_command::hook_responses::Object {
+    use serde_json::json;
+    let mut blocked = result.clone();
+    blocked.insert("decision".to_owned(), json!("deny"));
+    blocked.insert("minimum_action".to_owned(), json!("block"));
+    blocked.insert("policy_action".to_owned(), json!("block"));
+    blocked.insert("reason".to_owned(), json!(reason));
+    let mut response = guard_command::hook_responses::pre_tool(harness, &blocked);
+    response.insert("prompted".to_owned(), json!(false));
+    response.insert(
+        "blocked_request_mode".to_owned(),
+        json!(SAFE_ALTERNATIVE_MODE),
+    );
+    response
+}
+
 pub(crate) fn wait_hint_projection(
     args: &serde_json::Value,
 ) -> crate::runner_authority_op::KindResult {
@@ -200,6 +242,12 @@ fn reason_code_hint(reason_code: &str) -> &'static str {
              the lockfile and settings. If this was already that form, reuse dependencies that \
              are already installed where you can."
         }
+        // Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
+        "native_package_cloud_unavailable" => {
+            "Guard Cloud could not check this package, so Guard paused the install instead of \
+             treating it as safe. This is not a finding about the package, and another form of \
+             the same install is paused the same way until Guard Cloud can check it."
+        }
         "native_network_review" => "This makes a network request that Guard has not seen before.",
         "native_file_read_review" => {
             "This reads a file outside what Guard treats as safe to read. A search is checked \
@@ -362,5 +410,19 @@ mod tests {
             Some(true),
         );
         assert!(install.contains("--ignore-scripts"), "{install}");
+    }
+
+    #[test]
+    fn a_cloud_outage_pause_does_not_offer_the_lockfile_form() {
+        let text = safe_alternative_reason(
+            "HOL Guard requires review before this package or script command can execute.",
+            Some("native_package_cloud_unavailable"),
+            Some(true),
+        );
+        assert!(
+            text.contains("Guard Cloud could not check this package"),
+            "{text}"
+        );
+        assert!(!text.contains("--ignore-scripts"), "{text}");
     }
 }

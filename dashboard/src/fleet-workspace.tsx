@@ -16,6 +16,7 @@ import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import {
   detectedHarnesses,
   resolveDetectedAppStatus,
+  setupStatusFor,
   useHarnessDetection,
   versionCompatibilityFor,
   visibleHarnessesFor,
@@ -124,7 +125,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     const install = managedInstalls.find((i) => i.harness === harness);
     const presentInventory = inventory.filter((i) => i.harness === harness && i.present);
     const appProtection = protectionHealthFor(props.runtime, harness);
-    const status = resolveDetectedAppStatus(install, appProtection, presentInventory.length > 0, receiptHarnesses.has(harness), detected.includes(harness));
+    const status = resolveDetectedAppStatus(install, appProtection, presentInventory.length > 0, receiptHarnesses.has(harness), detected.includes(harness), setupStatusFor(harnessDetection, harness));
     return {
       harness,
       status,

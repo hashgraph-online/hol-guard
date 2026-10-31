@@ -3,12 +3,15 @@
 //! The vectors under `fixtures/package_context_vectors.v1.json.gz` were recorded
 //! from the retired Python builder, by a recorder that has since been removed
 //! along with it. They are the only record of what that builder answered, so
-//! they are read and never regenerated. Each scenario materialises a file tree
-//! in a scratch directory, runs the Rust build over it with replay ports, and
-//! requires the same digest, components and non-portable reason, plus the same
-//! ordered log of native hook calls (digest texts, search-path digest,
-//! environment projection and launch identity) with the scratch directory
-//! replaced by `{root}`.
+//! they are never regenerated. One deliberate contract change was applied to
+//! them mechanically: the package-manager executable material no longer binds
+//! a digest of the whole PATH, so its `opaque` hook and `search_path_digest`
+//! field were removed and the affected digests recomputed. Each scenario
+//! materialises a file tree in a scratch directory, runs the Rust build over
+//! it with replay ports, and requires the same digest, components and
+//! non-portable reason, plus the same ordered log of native hook calls (digest
+//! texts, environment projection and launch identity) with the scratch
+//! directory replaced by `{root}`.
 #![cfg(unix)]
 
 use std::collections::BTreeMap;
@@ -84,13 +87,6 @@ impl Ports for Replay<'_> {
         let normal = canonical_text.replace(self.root, TOKEN);
         let hook = self.next("digest");
         assert_eq!(hook["text"], Value::String(normal.clone()), "digest text");
-        sha256_hex(&normal)
-    }
-
-    fn opaque_digest(&mut self, material: &str) -> String {
-        let normal = material.replace(self.root, TOKEN);
-        let hook = self.next("opaque");
-        assert_eq!(hook["text"], Value::String(normal.clone()), "opaque text");
         sha256_hex(&normal)
     }
 

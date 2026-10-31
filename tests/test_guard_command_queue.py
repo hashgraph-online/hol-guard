@@ -33,7 +33,6 @@ from codex_plugin_scanner.guard.runtime import (
     command_queue_authority,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-from codex_plugin_scanner.guard.runtime.cloud_request_native import cloud_safe_local_request_payload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_oauth_token_support import oauth_binding_access_token
 from tests.guard_review_signing_helpers import (
@@ -42,6 +41,7 @@ from tests.guard_review_signing_helpers import (
     review_verification_keys,
     sign_review_payload,
 )
+from tests.local_request_snapshots_client import cloud_safe_local_request_payload
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +74,7 @@ def _isolate_legacy_queue_mechanics(monkeypatch: pytest.MonkeyPatch) -> None:
             requires_local_approval=False,
         ),
     )
+    monkeypatch.setattr(command_queue, "command_identity_digest", lambda *_args, **_kwargs: "identity-digest-1")
     monkeypatch.setattr(command_queue, "consume_local_command_approval", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(command_queue, "mark_command_job_consumed", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(command_queue, "audit_command_decision", lambda *_args, **_kwargs: None)
@@ -93,6 +94,12 @@ class FakeStore:
         self.payloads: dict[str, dict[str, object] | list[object]] = {
             "policy_bundle_keyring": review_trusted_keyring_payload(),
         }
+
+    def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+        # The real store answers with no key until one is created; the resident
+        # reads that as ``local_signing_key_unavailable`` rather than an error.
+        del create
+        return None, None
 
     def get_sync_payload(self, key: str) -> dict[str, object] | list[object] | None:
         return self.payloads.get(key)
@@ -118,6 +125,9 @@ class FakeStore:
 
     def get_or_create_installation_id(self) -> str:
         return "22222222-2222-4222-8222-222222222222"
+
+    def get_device_metadata(self) -> dict[str, object]:
+        return {"installation_id": self.get_or_create_installation_id()}
 
     def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object]:
         return {
@@ -982,6 +992,102 @@ def test_poll_once_clears_active_job_when_heartbeat_fails(tmp_path: Path, monkey
     assert isinstance(state, dict)
     assert state["state"] == "error"
     assert "active_job" not in state
+
+
+def test_poll_once_posts_rejection_when_capability_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.native_command_capability import CommandCapabilityUnavailableError
+
+    store = FakeStore(tmp_path / "guard-home")
+    result_payloads: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-unavailable",
+                    "leaseId": "lease-unavailable",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        if path.endswith("/result"):
+            result_payloads.append(payload)
+        return {"ok": True}
+
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise CommandCapabilityUnavailableError
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(command_queue, "authorize_command_queue_job", unavailable)
+
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert status["active_job"] is None
+    assert result_payloads[0]["status"] == "failed"
+    assert result_payloads[0]["failureCode"] == "native_command_capability_unavailable"
+
+
+def test_poll_once_posts_rejection_when_the_approval_grant_cannot_be_settled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.native_command_envelope import CommandEnvelopeUnavailableError
+    from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
+
+    store = FakeStore(tmp_path / "guard-home")
+    result_payloads: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        command_queue,
+        "_resolve_guard_sync_auth_context",
+        lambda current_store: {"sync_url": "https://hol.test/api/guard/receipts/sync", "access_token": "token"},
+    )
+
+    def fake_json_request(
+        auth_context: dict[str, object],
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        if path == "/lease":
+            return {
+                "item": {
+                    "id": "job-unsettled",
+                    "leaseId": "lease-unsettled",
+                    "operation": "guard.packageShims.status",
+                }
+            }
+        if path.endswith("/result"):
+            result_payloads.append(payload)
+        return {"ok": True}
+
+    def unsettled(*_args: object, **_kwargs: object) -> bool:
+        raise CommandCapabilityError(CommandEnvelopeUnavailableError.reason)
+
+    monkeypatch.setattr(command_queue, "_json_request", fake_json_request)
+    monkeypatch.setattr(command_queue, "consume_local_command_approval", unsettled)
+
+    # The job is already leased here, so a runtime that cannot match the grant
+    # has to be posted as this job's failure; escaping the poll would leave the
+    # lease open with no result.
+    status = command_queue.poll_command_queue_once(store, _context(tmp_path))
+
+    assert status["state"] == "idle"
+    assert status["active_job"] is None
+    assert result_payloads[0]["status"] == "failed"
+    assert result_payloads[0]["failureCode"] == "native_command_envelope_unavailable"
 
 
 def test_poll_once_posts_failed_result_when_execution_raises(tmp_path: Path, monkeypatch) -> None:

@@ -20,6 +20,14 @@ export type IntelFreshness = {
   tone: "green" | "attention" | "slate";
 };
 
+/** What the intel panel says when no signed advisory bundle is cached on this device. */
+export function missingBundleMessage(cloudState: "local_only" | "paired_waiting" | "paired_active"): string {
+  if (cloudState === "local_only") {
+    return "Guard has not synced a supply chain bundle yet. Connect to Guard Cloud for live advisory data.";
+  }
+  return "Guard Cloud is connected, but no signed advisory bundle has synced to this device yet. Use Sync on this page to fetch it.";
+}
+
 /** Changes when a policy or cloud sync lands, which is when the cached bundle can change. */
 export function bundleRefreshKey(snapshot: {
   cloud_policy_bundle_hash?: string | null;

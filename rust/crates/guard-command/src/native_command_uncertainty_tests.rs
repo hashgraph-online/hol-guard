@@ -686,3 +686,6 @@ fn a_stderr_merging_pipe_decides_like_the_pipeline_it_spells() {
         assert_eq!(left.reason_code, right.reason_code, "{merged}");
     }
 }
+
+#[path = "native_command_compound_launch_tests.rs"]
+mod compound_launch;

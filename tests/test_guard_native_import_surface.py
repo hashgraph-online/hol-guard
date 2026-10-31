@@ -22,19 +22,6 @@ def _run_import_probe(source: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_control_migration_module_imports_without_python_matchers() -> None:
-    result = _run_import_probe(
-        """
-import sys
-import codex_plugin_scanner.guard.runtime.command_dns_control_migration
-forbidden = sorted(name for name in sys.modules if name.endswith("command_rules"))
-if forbidden:
-    raise SystemExit("unexpected matcher imports: " + repr(forbidden))
-"""
-    )
-    assert result.returncode == 0, result.stderr or result.stdout
-
-
 def test_store_and_inspection_imports_keep_legacy_matchers_out() -> None:
     result = _run_import_probe(
         """

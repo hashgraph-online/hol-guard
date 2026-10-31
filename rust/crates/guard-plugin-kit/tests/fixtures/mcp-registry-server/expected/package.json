@@ -1,4 +1,24 @@
 {
+  "agent-plugins/mcp.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    "mcpServers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "type": "stdio"
+      }
+    }
+  },
+  "agent-plugins/plugin.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "description": "Search and edit notes.",
+    "name": "notes",
+    "repository": "https://github.com/acme/notes",
+    "version": "2.0.1"
+  },
   "claude-code/.claude-plugin/plugin.json": {
     "description": "Search and edit notes.",
     "name": "notes",
@@ -82,6 +102,14 @@
   "hol.provenance.json": {
     "files": [
       {
+        "path": "agent-plugins/mcp.json",
+        "sha256": "cd0e94433a3b4349ae2801c374857ff459660a7122d717a55664ccf916077d6f"
+      },
+      {
+        "path": "agent-plugins/plugin.json",
+        "sha256": "15b7279733cddc151fc930154f126269306a6b0a447b97d2f005e5e0f73c8813"
+      },
+      {
         "path": "claude-code/.claude-plugin/plugin.json",
         "sha256": "77e8f88d48bed0de00e6400324cefd74c8403ab3c8758dbf3d53f481e515e649"
       },
@@ -134,7 +162,8 @@
       "cursor",
       "vscode",
       "opencode",
-      "mcp-registry"
+      "mcp-registry",
+      "agent-plugins"
     ],
     "schema": "hol.plugin-kit.provenance.v1",
     "source_digest": "sha256:3f231441e8fafcd609225f85ff2d1b54af3547eff2ae5794c48bca74aa330d97"

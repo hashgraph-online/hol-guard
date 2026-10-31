@@ -7,11 +7,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    canonical_policy_bundle_payload,
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-)
 from codex_plugin_scanner.guard.policy_document import (
     canonical_policy_document_bytes,
     policy_document_digest,
@@ -20,9 +15,14 @@ from codex_plugin_scanner.guard.policy_document_yaml import (
     MAX_POLICY_BYTES,
     MAX_POLICY_TOKENS,
     PolicyDocumentError,
+    _load_policy_document_schema,
     format_policy_document_yaml,
     parse_policy_document_yaml,
-    policy_document_schema,
+)
+from tests.policy_bundle_parser_support import (
+    canonical_policy_bundle_payload,
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,11 +49,7 @@ def test_normative_and_packaged_schema_are_identical() -> None:
     )
 
     assert packaged == normative
-    assert policy_document_schema()["$id"] == "https://guard.hashgraphonline.com/schema/policy/v1alpha1"
-
-    mutable_copy = policy_document_schema()
-    mutable_copy.clear()
-    assert policy_document_schema()["$id"] == "https://guard.hashgraphonline.com/schema/policy/v1alpha1"
+    assert _load_policy_document_schema()["$id"] == "https://guard.hashgraphonline.com/schema/policy/v1alpha1"
 
 
 def test_valid_conformance_fixtures_are_stable() -> None:
@@ -440,6 +436,6 @@ def test_a_pattern_the_runtime_compiles_keeps_the_document_valid() -> None:
     round_tripped = document.rules[0].match.to_mapping()["commands"]
     assert isinstance(round_tripped, dict)
     assert round_tripped["combinator"] == "all"
-    assert [
-        (condition["operator"], condition["value"]) for condition in round_tripped["conditions"]
-    ] == [(condition["operator"], condition["value"]) for condition in commands["conditions"]]
+    assert [(condition["operator"], condition["value"]) for condition in round_tripped["conditions"]] == [
+        (condition["operator"], condition["value"]) for condition in commands["conditions"]
+    ]

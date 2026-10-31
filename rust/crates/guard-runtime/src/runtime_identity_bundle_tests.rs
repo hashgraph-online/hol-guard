@@ -418,3 +418,30 @@ fn a_grace_signing_key_bounds_how_long_the_bundle_counts_as_fresh() {
         assert_eq!(source["valid_until"], json!(1_792_904_400.0));
     }
 }
+
+#[test]
+fn an_expired_bundle_keeps_its_launch_matches_only_while_its_grace_key_is_valid() {
+    // The bundle expires at 2026-10-25T12:00Z (1_792_929_600).
+    let expired = 1_792_929_600.0;
+    let launch = |key_until: Option<&str>, at: f64| {
+        let mut response = signed_response(Some(section(vec![node_rule()])));
+        if let Some(until) = key_until {
+            response["verificationKeys"][0]["state"] = json!("grace");
+            response["verificationKeys"][0]["validUntil"] = json!(until);
+        }
+        let mut input = cached(response);
+        input["now"] = json!(at);
+        let input: super::CachedBundleInput = serde_json::from_value(input).expect("input");
+        super::launch_bundle_advisories(Some(&input))
+    };
+    let held = launch(Some("2026-10-25T13:00:00.000Z"), expired + 1_800.0);
+    assert_eq!(held.source["state"], json!("stale"));
+    assert_eq!(held.source["valid_until"], json!(expired + 3_600.0));
+    assert_eq!(held.advisories.len(), 1);
+    let lapsed = launch(Some("2026-10-25T13:00:00.000Z"), expired + 7_200.0);
+    assert!(lapsed.advisories.is_empty(), "{}", lapsed.source);
+    let active = launch(None, expired + 400_000.0);
+    assert_eq!(active.source["state"], json!("stale"));
+    assert_eq!(active.source["valid_until"], Value::Null);
+    assert_eq!(active.advisories.len(), 1);
+}

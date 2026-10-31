@@ -62,6 +62,23 @@ const state = normalizeWorkspaceFindingsState(
           },
           { finding_id: "secret-no-path", source_kind: "secret", rule_ids: ["github-token"], path: "", line: 1 },
           { finding_id: "secret-no-rule", source_kind: "secret", rule_ids: [], path: "a.txt", line: 1 },
+          {
+            finding_id: "r".repeat(32),
+            source_kind: "agent_inventory",
+            detector: "runtime_identity_v1",
+            severity: "high",
+            decision: "warn",
+            runtime_family: "node",
+            runtime_version: "20.11.1",
+            path: "/Users/dev/.nvm/versions/node/v20.11.1/bin/node",
+            rule_ids: ["restart_required"],
+            advisory_ids: ["GHSA-node-0001"],
+            title: "Path traversal in node",
+            known_exploited: true,
+            package_name: null,
+          },
+          { finding_id: "runtime-no-advisory", source_kind: "agent_inventory", detector: "runtime_identity_v1", runtime_family: "node", path: "/bin/node" },
+          { finding_id: "inventory-other", source_kind: "agent_inventory", detector: "something_else", advisory_ids: ["X"], path: "/bin/node" },
         ],
       },
     ],
@@ -78,6 +95,11 @@ assert.equal(
   normalizeWorkspaceFindingsState({}, { worktrees: [], suggested_root_tracked: true }).suggestedRootTracked,
   true,
 );
+assert.equal(state.deferredReason, null, "no deferral unless the daemon reports one");
+assert.equal(
+  normalizeWorkspaceFindingsState({ deferred_reason: "resource_pressure" }, { worktrees: [] }).deferredReason,
+  "resource_pressure",
+);
 assert.equal(state.worktrees.length, 1, "worktrees without both keys are dropped");
 assert.deepEqual(
   state.runs.map((run) => run.runId),
@@ -89,7 +111,7 @@ const [assessment] = state.assessments;
 assert.deepEqual(assessment.reasons, ["snapshot_unstable"], "detector gaps are reported separately from coverage gaps");
 assert.deepEqual(assessment.notRun, ["secrets"]);
 assert.equal(assessment.partial, true);
-assert.equal(assessment.findings.length, 2, "findings with neither a package nor a secret location are dropped");
+assert.equal(assessment.findings.length, 3, "findings with neither a package, a secret location nor a matched runtime are dropped");
 assert.deepEqual(assessment.findings[0].advisoryIds, ["GHSA-xxxx-yyyy-zzzz"]);
 const secretFinding = assessment.findings[1];
 assert.deepEqual(
@@ -99,6 +121,19 @@ assert.deepEqual(
 );
 assert.deepEqual(secretFinding.lines, [2, 9, 31], "every line of a repeated secret is kept, malformed entries dropped");
 assert.deepEqual(assessment.findings[0].lines, [], "a dependency finding has no lines");
+assert.equal(assessment.findings[0].runtime, null);
+const runtimeFinding = assessment.findings[2];
+assert.deepEqual(
+  [runtimeFinding.kind, runtimeFinding.packageName, runtimeFinding.path, runtimeFinding.ruleIds, runtimeFinding.runtime],
+  [
+    "runtime",
+    null,
+    "/Users/dev/.nvm/versions/node/v20.11.1/bin/node",
+    ["restart_required"],
+    { family: "node", version: "20.11.1", title: "Path traversal in node", knownExploited: true },
+  ],
+  "a runtime finding names the launched executable and the advisory, with no package",
+);
 
 const [onlyNotRun] = normalizeWorkspaceFindingsState(
   { worktrees: [], runs: [] },
@@ -136,6 +171,9 @@ assert.equal(
   "Partial coverage",
   "an expired lease is retried, so the last assessed result still stands",
 );
+const timedOut = worktreeStatus(worktree, { ...failedRun, errorCode: "assessment_timed_out" }, assessment);
+assert.equal(timedOut.label, "Assessment failed", "a run stopped after its retry is not retried again");
+assert.match(timedOut.detail ?? "", /took too long twice/);
 
 const markup = renderToStaticMarkup(
   createElement(WorktreeRow, { worktree, newestRun: partialRun, assessment, busyKey: null, onAction: () => {} }),
@@ -147,17 +185,26 @@ for (const copy of [
   "Secret scanning is not part of this check yet.",
   "minimist",
   "1.2.9",
-  "Blocked",
+  ">Block<",
+  "Advisory match",
   "GHSA-xxxx-yyyy-zzzz",
   "github-token",
   "src/deploy.py:2",
-  "Not verified",
+  "Rule match, not confirmed",
   "Assess now",
   "Pause",
   "Prepare fix",
+  "/Users/dev/.nvm/versions/node/v20.11.1/bin/node",
+  "20.11.1",
+  "Restart needed",
+  "Known exploited",
+  "GHSA-node-0001",
+  "Path traversal in node",
 ]) {
   assert.ok(markup.includes(copy), `row shows ${copy}`);
 }
+assert.ok(!markup.includes(">Blocked<"), "a finding in the worktree is not shown as a blocked action");
+assert.equal(markup.match(/Prepare fix/g)?.length, 1, "a runtime finding is observation only and offers no fix");
 
 const secretsRan = normalizeWorkspaceFindingsState(
   { worktrees: [], runs: [] },
@@ -181,6 +228,28 @@ const cleanMarkup = renderToStaticMarkup(
 );
 assert.ok(cleanMarkup.includes("No dependency or secret findings in the checked files."), "a clean run says secrets were checked");
 assert.ok(!cleanMarkup.includes("not part of this check yet"));
+const noDependencyFiles = normalizeWorkspaceFindingsState(
+  { worktrees: [], runs: [] },
+  {
+    worktrees: [],
+    assessments: [
+      {
+        ...ids,
+        run_id: "run-5",
+        state: "completed",
+        coverage: { status: "complete", reasons: [], detectors: { supply_chain: "no_inputs", secrets: "complete" } },
+        findings: [],
+      },
+    ],
+  },
+).assessments[0];
+assert.equal(noDependencyFiles.dependencyFilesFound, false);
+assert.equal(secretsRan.dependencyFilesFound, true);
+const noDependencyMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, { worktree, newestRun: partialRun, assessment: noDependencyFiles, busyKey: null, onAction: () => {} }),
+);
+assert.ok(noDependencyMarkup.includes("No dependency files were found"), "a workspace with nothing to audit says so");
+assert.ok(!noDependencyMarkup.includes("No dependency or secret findings"), "an empty audit is never described as clean dependencies");
 const incompleteMarkup = renderToStaticMarkup(
   createElement(WorktreeRow, {
     worktree,
@@ -191,6 +260,187 @@ const incompleteMarkup = renderToStaticMarkup(
   }),
 );
 assert.ok(incompleteMarkup.includes("Secret scanning did not cover every file"), "truncation is named to the operator");
+const runtimeGapMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, {
+    worktree,
+    newestRun: partialRun,
+    assessment: { ...secretsRan, partial: true, reasons: ["runtime_advisories_unavailable"], notRun: ["runtime_identity_v1"] },
+    busyKey: null,
+    onAction: () => {},
+  }),
+);
+assert.ok(runtimeGapMarkup.includes("Guard has no runtime advisories cached"), "unchecked runtimes are never shown as clean");
+assert.ok(runtimeGapMarkup.includes("Runtime checking is not part of this check yet."));
+
+const skillState = normalizeWorkspaceFindingsState(
+  { worktrees: [], runs: [] },
+  {
+    worktrees: [],
+    assessments: [
+      {
+        ...ids,
+        run_id: "run-skill",
+        state: "completed",
+        coverage: {
+          status: "complete",
+          reasons: [],
+          detectors: { supply_chain: "complete", secrets: "complete", skill_content_v1: "complete" },
+        },
+        findings: [
+          {
+            finding_id: "skill-1",
+            source_kind: "workspace_source",
+            detector: "skill_content_v1",
+            severity: "critical",
+            decision: "warn",
+            rule_ids: ["skill.remote-fetch-exec"],
+            path: ".claude/skills/setup/SKILL.md",
+            confidence: "strong",
+            title: "Skill downloads and runs remote code",
+            reason: "The skill tells the agent to pipe a download into a shell.",
+            false_positive_hint: null,
+          },
+          { finding_id: "skill-no-path", source_kind: "workspace_source", detector: "skill_content_v1", rule_ids: ["skill.cron"], title: "t", reason: "r" },
+          { finding_id: "skill-no-title", source_kind: "workspace_source", detector: "skill_content_v1", rule_ids: ["skill.cron"], path: "skills/a/SKILL.md", reason: "r" },
+        ],
+      },
+    ],
+  },
+).assessments[0];
+assert.equal(skillState.findings.length, 1, "a skill finding without a path or rule wording is dropped");
+const [skillFinding] = skillState.findings;
+assert.deepEqual(
+  [skillFinding.kind, skillFinding.path, skillFinding.ruleIds, skillFinding.packageName, skillFinding.skill?.confidence],
+  ["skill", ".claude/skills/setup/SKILL.md", ["skill.remote-fetch-exec"], null, "strong"],
+);
+const skillMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, { worktree, newestRun: partialRun, assessment: skillState, busyKey: null, onAction: () => {} }),
+);
+assert.ok(skillMarkup.includes("Agent skills with risky instructions"), "skill findings get their own table");
+assert.ok(skillMarkup.includes("Skill downloads and runs remote code"));
+assert.ok(skillMarkup.includes(".claude/skills/setup/SKILL.md"));
+assert.ok(!skillMarkup.includes("No dependency or secret findings"), "a run with only skill findings is not shown as clean");
+const mcpState = normalizeWorkspaceFindingsState(
+  { worktrees: [], runs: [] },
+  {
+    worktrees: [],
+    assessments: [
+      {
+        ...ids,
+        run_id: "run-mcp",
+        state: "completed",
+        coverage: { status: "complete", reasons: [], detectors: { supply_chain: "complete", mcp_config_v1: "complete" } },
+        findings: [
+          {
+            finding_id: "mcp-1",
+            source_kind: "workspace_source",
+            detector: "mcp_config_v1",
+            severity: "high",
+            decision: "warn",
+            rule_ids: ["mcp.config.privileged-launch"],
+            path: ".mcp.json",
+            server: "admin-tools",
+            confidence: "strong",
+            title: "MCP server launches with elevated privileges",
+            reason: "The server's launch command runs through a privilege wrapper.",
+            false_positive_hint: "Expected only for a server that manages the machine itself.",
+          },
+          { finding_id: "mcp-no-server", source_kind: "workspace_source", detector: "mcp_config_v1", rule_ids: ["mcp.config.remote-code"], path: ".mcp.json", title: "t", reason: "r" },
+          { finding_id: "mcp-no-path", source_kind: "workspace_source", detector: "mcp_config_v1", rule_ids: ["mcp.config.remote-code"], server: "s", title: "t", reason: "r" },
+        ],
+      },
+    ],
+  },
+).assessments[0];
+assert.equal(mcpState.findings.length, 1, "an MCP finding without its server or path is dropped");
+const [mcpFinding] = mcpState.findings;
+assert.deepEqual(
+  [mcpFinding.kind, mcpFinding.path, mcpFinding.mcp?.server, mcpFinding.skill, mcpFinding.packageName],
+  ["mcp", ".mcp.json", "admin-tools", null, null],
+);
+const mcpMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, { worktree, newestRun: partialRun, assessment: mcpState, busyKey: null, onAction: () => {} }),
+);
+assert.ok(mcpMarkup.includes("MCP servers with risky launch settings"), "MCP findings get their own table");
+assert.ok(mcpMarkup.includes("admin-tools") && mcpMarkup.includes(".mcp.json"));
+assert.ok(mcpMarkup.includes("MCP server launches with elevated privileges"));
+assert.ok(mcpMarkup.includes("Expected only for a server that manages the machine itself."));
+assert.ok(!mcpMarkup.includes("No dependency or secret findings"), "a run with only MCP findings is not shown as clean");
+const hookState = normalizeWorkspaceFindingsState(
+  { worktrees: [], runs: [] },
+  {
+    worktrees: [],
+    assessments: [
+      {
+        ...ids,
+        run_id: "run-hook",
+        state: "completed",
+        coverage: { status: "complete", reasons: [], detectors: { supply_chain: "complete", hook_config_v1: "complete" } },
+        findings: [
+          {
+            finding_id: "hook-1",
+            source_kind: "workspace_source",
+            detector: "hook_config_v1",
+            severity: "critical",
+            decision: "warn",
+            rule_ids: ["hook.config.remote-code"],
+            path: ".claude/settings.json",
+            event: "SessionStart",
+            confidence: "strong",
+            title: "Project hook runs downloaded code",
+            reason: "A hook the project configures pipes a download into a shell.",
+          },
+          { finding_id: "hook-no-event", source_kind: "workspace_source", detector: "hook_config_v1", rule_ids: ["hook.config.remote-code"], path: ".cursor/hooks.json", title: "t", reason: "r" },
+          { finding_id: "hook-no-path", source_kind: "workspace_source", detector: "hook_config_v1", rule_ids: ["hook.config.remote-code"], event: "stop", title: "t", reason: "r" },
+        ],
+      },
+    ],
+  },
+).assessments[0];
+assert.equal(hookState.findings.length, 1, "a hook finding without its event or path is dropped");
+const [hookFinding] = hookState.findings;
+assert.deepEqual(
+  [hookFinding.kind, hookFinding.path, hookFinding.hook?.event, hookFinding.mcp, hookFinding.packageName],
+  ["hook", ".claude/settings.json", "SessionStart", null, null],
+);
+const hookMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, { worktree, newestRun: partialRun, assessment: hookState, busyKey: null, onAction: () => {} }),
+);
+assert.ok(hookMarkup.includes("Project hooks with risky commands"), "hook findings get their own table");
+assert.ok(hookMarkup.includes("SessionStart") && hookMarkup.includes(".claude/settings.json"));
+assert.ok(hookMarkup.includes("Project hook runs downloaded code"));
+assert.ok(!hookMarkup.includes("No dependency or secret findings"), "a run with only hook findings is not shown as clean");
+const hookGapMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, {
+    worktree,
+    newestRun: partialRun,
+    assessment: { ...secretsRan, partial: true, reasons: ["hook_config_incomplete"], notRun: ["hook_config_v1"] },
+    busyKey: null,
+    onAction: () => {},
+  }),
+);
+assert.ok(hookGapMarkup.includes("Some agent hook settings could not be fully checked"), "an incomplete hook scan is named");
+assert.ok(hookGapMarkup.includes("Project hook checking is not part of this check yet."));
+const skillGapMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, {
+    worktree,
+    newestRun: partialRun,
+    assessment: { ...secretsRan, partial: true, reasons: ["skills_incomplete"], notRun: [] },
+    busyKey: null,
+    onAction: () => {},
+  }),
+);
+assert.ok(skillGapMarkup.includes("Some agent skills could not be read in full"), "an incomplete skill scan is named");
+const skillNotRunMarkup = renderToStaticMarkup(
+  createElement(WorktreeRow, {
+    worktree,
+    newestRun: partialRun,
+    assessment: { ...secretsRan, partial: true, notRun: ["skill_content_v1"] },
+    busyKey: null,
+    onAction: () => {},
+  }),
+);
+assert.ok(skillNotRunMarkup.includes("Skill checking is not part of this check yet."));
 
 const paused = renderToStaticMarkup(
   createElement(WorktreeRow, {

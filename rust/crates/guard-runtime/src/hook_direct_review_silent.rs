@@ -4,12 +4,14 @@
 
 use super::super::{Context, HookDirectDefer, ENVELOPE_BYTES, ESCAPE_FACTOR};
 use super::{
-    canonical_harness, connector, falsy_or_text, now_micros, queued_request, run_lookup, write,
-    Flags, BLOCKED_REASON, SAFE_ALTERNATIVE_MODE, SILENT_WRITE_METHOD,
+    connector, falsy_or_text, queued_request, run_lookup, write, Flags, SILENT_WRITE_METHOD,
 };
-use crate::blocked_request_mode::safe_alternative_reason_with_retry;
+use crate::blocked_request_mode::{
+    safe_alternative_block, safe_alternative_reason_with_retry, BLOCKED_REASON,
+};
 use crate::guard_store_approval_request::rewrite_approval_url;
-use guard_command::hook_responses::{pre_tool, Object};
+use crate::native_review_link::{canonical_harness, now_micros};
+use guard_command::hook_responses::Object;
 use guard_contracts::HOOK_RENDER_MAX_BYTES;
 use serde_json::{json, Map, Value};
 use std::path::Path;
@@ -153,11 +155,5 @@ pub(super) fn silent_block(harness: &str, result: &Object, reason: &str) -> Opti
     if encoded * ESCAPE_FACTOR + ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {
         return None;
     }
-    let mut response = pre_tool(harness, &blocked);
-    response.insert("prompted".to_owned(), json!(false));
-    response.insert(
-        "blocked_request_mode".to_owned(),
-        json!(SAFE_ALTERNATIVE_MODE),
-    );
-    Some(response)
+    Some(safe_alternative_block(harness, result, reason))
 }

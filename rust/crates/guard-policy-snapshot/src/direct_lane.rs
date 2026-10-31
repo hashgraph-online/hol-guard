@@ -43,7 +43,10 @@ pub const DIRECT_LANE_MAX_INTEGRITY_DEGRADED_REASONS: usize = 16;
 /// every exact-action proof it asks the resident for, and
 /// `policy_integrity_state` is the policy-integrity state the daemon refreshed
 /// when it published. Without all three, a saved decision for an exact action
-/// stays with the daemon.
+/// stays with the daemon. The environment binds on its own, without the other
+/// two, because the resident also resolves a command's local CLI against the
+/// daemon's home and `PATH`; without it a workspace with a custom block rule
+/// sends every allowed `PreToolUse` back to the daemon.
 /// `blocked_request_mode`, `approval_center_origin`, `review_oauth_source` and
 /// `review_host_cwd` are what the daemon queues a reviewed `PreToolUse` for
 /// approval with: the blocked-request mode every bound config resolves to,

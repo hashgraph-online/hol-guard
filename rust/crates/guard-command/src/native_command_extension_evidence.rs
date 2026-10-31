@@ -1,5 +1,5 @@
-//! `native_command_extension_evidence.py` + the strict wire validator in
-//! `native_command_observations.py`.
+//! `native_command_extension_evidence.py` + the strict wire validator for
+//! `guard.native-command-observations.v1`.
 //!
 //! `observations_from_native_evidence` is the binding-validation bridge:
 //! `evaluate_command` passes the `native_extension_evidence` payload (the

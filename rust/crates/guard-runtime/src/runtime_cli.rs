@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_update::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if guard_config_resolve::is_command(command) && flag == "--stdin" => {
+            let response = guard_config_resolve::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -208,10 +212,17 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag, state_dir] if command == "resident-stop" && flag == "--state-dir" => {
             managed_resident::stop_managed(std::path::Path::new(state_dir), false)
         }
+        [command, flag, state_dir] if command == "resident-prewarm" && flag == "--state-dir" => {
+            managed_resident::prewarm(std::path::Path::new(state_dir))
+        }
         [command, flag, state_dir]
             if command == "resident-reset-restart-budget" && flag == "--state-dir" =>
         {
             managed_resident::reset_restart_budget(std::path::Path::new(state_dir))
+        }
+        [command, flag, state_dir] if command == "resident-health" && flag == "--state-dir" => {
+            let health = managed_resident::lifecycle_health(std::path::Path::new(state_dir))?;
+            write_json(&serde_json::json!({"health": health}))
         }
         [command, flag] if command == "command-model" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -222,6 +233,32 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_pre_tool_bytes(&bytes)?;
             write_bytes_response(&response)
+        }
+        // Provisioning the policy verifier key cannot be a resident call: the
+        // resident refuses to serve until that key exists. This one-shot arm
+        // is the bootstrap, so the master arrives on stdin and never on argv,
+        // where another local process could read it.
+        [command, flag, state_dir]
+            if command == "provision-verifier-key" && flag == "--stdin" =>
+        {
+            let bytes = read_stdin_bounded()?;
+            let request = strict_json_value(&bytes)?;
+            let encoded = request
+                .get("policy_integrity_key")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "native_policy_verifier_master_invalid".to_owned())?;
+            let master = zeroize::Zeroizing::new(
+                hex::decode(encoded)
+                    .map_err(|_| "native_policy_verifier_master_invalid".to_owned())?,
+            );
+            let outcome = policy_verifier_key_provision::provision_verifier_key(
+                std::path::Path::new(state_dir),
+                &master,
+            )?;
+            write_json(&serde_json::json!({
+                "schema": "hol-guard-native-verifier-key.v1",
+                "status": outcome.as_str(),
+            }))
         }
         [command, flag, state_dir, request_flag, request_id]
             if command == "workspace-review-decision"
@@ -269,6 +306,11 @@ pub(super) fn run() -> Result<(), String> {
             let response = archive_inspect::evaluate_archive_inspection_bytes(&bytes)?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == "content-decode" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            let response = content_decode::evaluate_content_decode_bytes(&bytes)?;
+            write_bytes_response(&response)
+        }
         [command, flag] if command == runtime_identity::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&runtime_identity::run_command(&bytes)?)
@@ -292,6 +334,16 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag] if command == workspace_snapshot::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&workspace_snapshot::run_command(&bytes)?)
+        }
+        [command, flag]
+            if command == workspace_snapshot::export_preview::COMMAND && flag == "--stdin" =>
+        {
+            let bytes = read_stdin_bounded()?;
+            write_json(&workspace_snapshot::export_preview::run_command(&bytes)?)
+        }
+        [command, flag] if command == workspace_mcp_config::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&workspace_mcp_config::run_command(&bytes)?)
         }
         [command, flag] if command == workspace_fix::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -369,7 +421,7 @@ pub(super) fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | secrets-cli --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | resident-reset-restart-budget --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
+            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | content-decode --stdin | secrets-cli --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | resident-prewarm --state-dir STATE_DIR | resident-reset-restart-budget --state-dir STATE_DIR | resident-health --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
                 .into(),
         ),
     }

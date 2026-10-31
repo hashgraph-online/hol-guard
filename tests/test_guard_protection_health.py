@@ -1,16 +1,27 @@
+"""What the runtime proves about each protection check.
+
+Whether a set of signals adds up to a protected machine belongs to the native
+runtime (`guard_command::protection_health`), and is pinned by
+`rust/crates/guard-command/tests/`. What this module owes is the signals
+themselves, so these tests stand in for the transport and read the request the
+runtime built rather than evaluating it a second time.
+"""
+
 from __future__ import annotations
 
 import hashlib
 import itertools
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard import approvals as approvals_module
 from codex_plugin_scanner.guard.models import GuardRuntimeState
+from codex_plugin_scanner.guard.native_protection_health import NativeProtectionHealthError
+from codex_plugin_scanner.guard.runtime import protection_health_runtime
 from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
 from codex_plugin_scanner.guard.runtime.containment_health import (
     CONTAINMENT_POLICY_CONTRACT_DIGEST,
@@ -18,13 +29,8 @@ from codex_plugin_scanner.guard.runtime.containment_health import (
 )
 from codex_plugin_scanner.guard.runtime.protection_health import (
     PROTECTION_CHECK_IDS,
-    PROTECTION_HEALTH_SCHEMA_VERSION,
     ProtectionCheckStatus,
     ProtectionSignal,
-    evaluate_protection_health,
-)
-from codex_plugin_scanner.guard.runtime.protection_health_runtime import (
-    build_runtime_protection_health,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -74,38 +80,85 @@ def _containment_evidence() -> dict[str, object]:
     ).to_dict()
 
 
-def _payload(
-    *,
-    installs: list[dict[str, object]] | None = None,
-    trust: dict[str, object] | None = None,
-    dropped: int = 0,
-    errors: int = 0,
-    active_errors: int | None = None,
-    activity_count: int = 1,
-    runtime_state: dict[str, object] | None = None,
-    hook_verification: dict[str, bool] | None = None,
-) -> dict[str, object]:
-    if runtime_state is None:
-        runtime_state = {
-            "last_heartbeat_at": _NOW.isoformat(),
-            "containment_health": _containment_evidence(),
-        }
-    return build_runtime_protection_health(
-        store=_Store(
-            count=activity_count,
-            dropped=dropped,
-            errors=errors,
-            active_errors=(1 if dropped > 0 or errors > 0 else 0) if active_errors is None else active_errors,
-        ),
-        runtime_state=runtime_state,
-        managed_installs=installs or [],
-        hook_verification=hook_verification,
-        trust_status=trust or {},
-        now=_NOW,
-    )
+@dataclass(frozen=True)
+class _Collected:
+    """The request the runtime built, as the resident would have received it."""
+
+    signals: Mapping[str, ProtectionSignal]
+    harness_signals: Mapping[str, ProtectionSignal]
+
+    def row(self, check_id: str) -> tuple[str, str]:
+        signal = self.signals[check_id]
+        return signal.status.value, signal.reason_code
+
+    def harness(self, name: str) -> tuple[str, str]:
+        signal = self.harness_signals[name]
+        return signal.status.value, signal.reason_code
+
+    def all_pass(self) -> bool:
+        return all(signal.status is ProtectionCheckStatus.PASS for signal in self.signals.values())
 
 
-def test_missing_positive_proofs_never_claim_protected_or_partial() -> None:
+@pytest.fixture
+def collect(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[..., _Collected]:
+    """Collect the signals the runtime produced, without reaching a resident."""
+
+    def _collect(
+        *,
+        installs: Sequence[Mapping[str, object]] | None = None,
+        trust: Mapping[str, object] | None = None,
+        dropped: int = 0,
+        errors: int = 0,
+        active_errors: int | None = None,
+        activity_count: int = 1,
+        runtime_state: Mapping[str, object] | None = None,
+        hook_verification: Mapping[str, bool] | None = None,
+    ) -> _Collected:
+        recorded: dict[str, Mapping[str, ProtectionSignal]] = {}
+
+        def _record(
+            signals: Mapping[str, ProtectionSignal],
+            *,
+            harness_signals: Mapping[str, ProtectionSignal],
+            guard_home: Path,
+        ) -> dict[str, object]:
+            recorded["signals"] = dict(signals)
+            recorded["harness_signals"] = dict(harness_signals)
+            return {}
+
+        monkeypatch.setattr(protection_health_runtime, "protection_health_report", _record)
+        if runtime_state is None:
+            runtime_state = {
+                "last_heartbeat_at": _NOW.isoformat(),
+                "containment_health": _containment_evidence(),
+            }
+        protection_health_runtime.build_runtime_protection_health(
+            store=_Store(
+                count=activity_count,
+                dropped=dropped,
+                errors=errors,
+                active_errors=(1 if dropped > 0 or errors > 0 else 0) if active_errors is None else active_errors,
+            ),
+            guard_home=tmp_path / "guard-home",
+            runtime_state=runtime_state,
+            managed_installs=list(installs or []),
+            hook_verification=hook_verification,
+            trust_status=trust or {},
+            now=_NOW,
+        )
+        return _Collected(recorded["signals"], recorded["harness_signals"])
+
+    return _collect
+
+
+def test_every_check_the_report_needs_is_produced(collect: Callable[..., _Collected]) -> None:
+    collected = collect(installs=[{"harness": "codex", "active": True}])
+    assert set(collected.signals) == set(PROTECTION_CHECK_IDS)
+
+
+def test_missing_positive_proofs_never_produce_an_all_passing_signal_set(
+    collect: Callable[..., _Collected],
+) -> None:
     for active, runtime_protection, remembered_rules, dropped, errors in itertools.product(
         (False, True),
         ("protected", "degraded", "unknown"),
@@ -113,19 +166,21 @@ def test_missing_positive_proofs_never_claim_protected_or_partial() -> None:
         (0, 1),
         (0, 1),
     ):
-        payload = _payload(
+        collected = collect(
             installs=[{"harness": "codex", "active": active}],
             trust={"runtime_protection": runtime_protection, "remembered_rules": remembered_rules},
             dropped=dropped,
             errors=errors,
         )
-        assert payload["state"] == "degraded"
-        assert payload["label"] == "Degraded"
-        assert payload["state"] not in {"protected", "partial"}
+        # Without every required proof the grammar can only call this degraded,
+        # which `guard_protection_health_truth_table.rs` pins exhaustively.
+        assert not collected.all_pass()
 
 
-def test_repaired_live_state_ignores_historical_evidence_errors() -> None:
-    payload = _payload(
+def test_repaired_live_state_ignores_historical_evidence_errors(
+    collect: Callable[..., _Collected],
+) -> None:
+    collected = collect(
         installs=[{"harness": "codex", "active": True}],
         trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
         dropped=12_338,
@@ -134,34 +189,24 @@ def test_repaired_live_state_ignores_historical_evidence_errors() -> None:
         activity_count=38_102,
         hook_verification={"codex": True},
     )
-    checks = cast(list[dict[str, str]], payload["checks"])
-    by_id = {check["check_id"]: check for check in checks}
-    assert by_id["rule_packs"]["status"] == "pass"
-    assert by_id["decision_stream"] == {
-        "check_id": "decision_stream",
-        "status": "pass",
-        "reason_code": "decision_stream_healthy",
-    }
-    assert by_id["tamper_checks"]["status"] == "pass"
-    assert payload["state"] == "protected"
+    assert collected.row("rule_packs")[0] == "pass"
+    assert collected.row("decision_stream") == ("pass", "decision_stream_healthy")
+    assert collected.row("tamper_checks")[0] == "pass"
+    assert collected.all_pass()
 
 
-def test_fresh_evidence_store_is_ready_before_first_command() -> None:
-    payload = _payload(
+def test_fresh_evidence_store_is_ready_before_first_command(
+    collect: Callable[..., _Collected],
+) -> None:
+    collected = collect(
         installs=[{"harness": "codex", "active": True}],
         trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
         active_errors=0,
         activity_count=0,
         hook_verification={"codex": True},
     )
-    checks = cast(list[dict[str, str]], payload["checks"])
-    decision_stream = next(check for check in checks if check["check_id"] == "decision_stream")
-    assert decision_stream == {
-        "check_id": "decision_stream",
-        "status": "pass",
-        "reason_code": "decision_stream_ready",
-    }
-    assert payload["state"] == "protected"
+    assert collected.row("decision_stream") == ("pass", "decision_stream_ready")
+    assert collected.all_pass()
 
 
 def test_canonical_managed_install_supersedes_legacy_alias() -> None:
@@ -196,58 +241,44 @@ def test_cursor_attestation_unavailable_is_unproven_not_inactive(
     assert approvals_module._live_hook_verification(installs, store) == {}
 
 
-def test_report_distinguishes_failed_and_unproven_facts() -> None:
-    active = _payload(
+def test_signals_distinguish_failed_and_unproven_facts(
+    collect: Callable[..., _Collected],
+) -> None:
+    active = collect(
         installs=[{"harness": "codex", "active": True}],
         trust={"runtime_protection": "protected", "remembered_rules": "enforced"},
     )
-    raw_checks = active["checks"]
-    assert isinstance(raw_checks, list)
-    checks = cast(list[dict[str, str]], raw_checks)
-    by_id = {check["check_id"]: check for check in checks}
-    assert by_id["daemon"]["status"] == "pass"
-    assert by_id["harness_hooks"]["status"] == "unknown"
-    assert by_id["harness_hooks"]["reason_code"] == "hook_attestation_unavailable"
-    assert by_id["decision_plane_compatibility"]["status"] == "pass"
-    assert by_id["sandbox"]["status"] == "pass"
+    assert active.row("daemon")[0] == "pass"
+    assert active.row("harness_hooks") == ("unknown", "hook_attestation_unavailable")
+    assert active.row("decision_plane_compatibility")[0] == "pass"
+    assert active.row("sandbox")[0] == "pass"
 
-    degraded = _payload(
+    degraded = collect(
         installs=[{"harness": "codex", "active": False}],
         trust={"runtime_protection": "degraded", "remembered_rules": "disabled_degraded"},
         dropped=1,
     )
-    raw_degraded_checks = degraded["checks"]
-    assert isinstance(raw_degraded_checks, list)
-    degraded_checks = cast(list[dict[str, str]], raw_degraded_checks)
-    degraded_by_id = {check["check_id"]: check for check in degraded_checks}
-    assert degraded_by_id["harness_hooks"] == {
-        "check_id": "harness_hooks",
-        "status": "fail",
-        "reason_code": "no_managed_harness",
-    }
-    assert degraded_by_id["tamper_checks"]["status"] == "fail"
-    assert degraded_by_id["decision_stream"]["status"] == "fail"
+    assert degraded.row("harness_hooks") == ("fail", "no_managed_harness")
+    assert degraded.row("tamper_checks")[0] == "fail"
+    assert degraded.row("decision_stream")[0] == "fail"
 
 
-def test_inactive_duplicate_rows_do_not_override_an_active_install() -> None:
+def test_inactive_duplicate_rows_do_not_override_an_active_install(
+    collect: Callable[..., _Collected],
+) -> None:
     for installs in (
         [{"harness": "codex", "active": False}, {"harness": "codex", "active": True}],
         [{"harness": "codex", "active": True}, {"harness": "codex", "active": False}],
     ):
-        payload = _payload(installs=cast(list[dict[str, object]], installs))
-        apps = cast(list[dict[str, object]], payload["apps"])
-        assert len(apps) == 1
-        assert apps[0]["state"] == "degraded"
-        checks = cast(list[dict[str, str]], apps[0]["checks"])
-        assert checks[0] == {
-            "check_id": "harness_hooks",
-            "status": "unknown",
-            "reason_code": "hook_attestation_unavailable",
-        }
+        collected = collect(installs=installs)
+        assert list(collected.harness_signals) == ["codex"]
+        assert collected.harness("codex") == ("unknown", "hook_attestation_unavailable")
 
 
-def test_inactive_historical_rows_do_not_degrade_verified_active_hooks() -> None:
-    payload = _payload(
+def test_inactive_historical_rows_do_not_degrade_verified_active_hooks(
+    collect: Callable[..., _Collected],
+) -> None:
+    collected = collect(
         installs=[
             {"harness": "pi", "active": False},
             {"harness": "cursor", "active": True},
@@ -256,82 +287,23 @@ def test_inactive_historical_rows_do_not_degrade_verified_active_hooks() -> None
         hook_verification={"cursor": True},
     )
 
-    assert payload["state"] == "protected"
-    apps = cast(list[dict[str, object]], payload["apps"])
-    assert [app["harness"] for app in apps] == ["cursor"]
-    assert apps[0]["state"] == "protected"
-    checks = cast(list[dict[str, str]], apps[0]["checks"])
-    assert checks[0] == {
-        "check_id": "harness_hooks",
-        "status": "pass",
-        "reason_code": "hooks_verified",
-    }
+    assert list(collected.harness_signals) == ["cursor"]
+    assert collected.harness("cursor") == ("pass", "hooks_verified")
+    assert collected.all_pass()
 
 
-def test_stale_or_invalid_runtime_rows_never_prove_daemon_health() -> None:
-    stale = _payload(runtime_state={"last_heartbeat_at": (_NOW - timedelta(seconds=31)).isoformat()})
-    invalid = _payload(runtime_state={"last_heartbeat_at": "not-a-time"})
-    for payload, expected_status, expected_reason in (
-        (stale, "fail", "daemon_heartbeat_stale"),
-        (invalid, "unknown", "daemon_heartbeat_invalid"),
-    ):
-        checks = cast(list[dict[str, str]], payload["checks"])
-        daemon = next(check for check in checks if check["check_id"] == "daemon")
-        assert daemon["status"] == expected_status
-        assert daemon["reason_code"] == expected_reason
-        assert payload["state"] == "degraded"
+def test_stale_or_invalid_runtime_rows_never_prove_daemon_health(
+    collect: Callable[..., _Collected],
+) -> None:
+    stale = collect(runtime_state={"last_heartbeat_at": (_NOW - timedelta(seconds=31)).isoformat()})
+    invalid = collect(runtime_state={"last_heartbeat_at": "not-a-time"})
+    assert stale.row("daemon") == ("fail", "daemon_heartbeat_stale")
+    assert invalid.row("daemon") == ("unknown", "daemon_heartbeat_invalid")
 
 
-def test_partial_is_reserved_for_evidence_gap_after_core_proof() -> None:
-    passing = {
-        check_id: ProtectionSignal(ProtectionCheckStatus.PASS, f"{check_id}_verified")
-        for check_id in PROTECTION_CHECK_IDS
-    }
-    protected = evaluate_protection_health(passing)
-    assert protected["state"] == "protected"
-    evidence_gap = {
-        **passing,
-        "decision_stream": ProtectionSignal(ProtectionCheckStatus.UNKNOWN, "decision_stream_gap"),
-    }
-    assert evaluate_protection_health(evidence_gap)["state"] == "partial"
-    assert (
-        evaluate_protection_health(evidence_gap)["detail"]
-        == "Core protection passes, but decision-stream evidence is incomplete."
-    )
-    for core_check in set(PROTECTION_CHECK_IDS).difference({"decision_stream"}):
-        core_gap = {
-            **passing,
-            core_check: ProtectionSignal(ProtectionCheckStatus.UNKNOWN, f"{core_check}_gap"),
-        }
-        assert evaluate_protection_health(core_gap)["state"] == "degraded"
-
-
-def test_exhaustive_check_truth_table_is_monotonic() -> None:
-    statuses = tuple(ProtectionCheckStatus)
-    for combination in itertools.product(statuses, repeat=len(PROTECTION_CHECK_IDS)):
-        signals = {
-            check_id: ProtectionSignal(status, f"{check_id}_{status.value}")
-            for check_id, status in zip(PROTECTION_CHECK_IDS, combination, strict=True)
-        }
-        actual = evaluate_protection_health(signals)["state"]
-        evidence_status = combination[PROTECTION_CHECK_IDS.index("decision_stream")]
-        core_statuses = tuple(
-            status
-            for check_id, status in zip(PROTECTION_CHECK_IDS, combination, strict=True)
-            if check_id != "decision_stream"
-        )
-        if all(status is ProtectionCheckStatus.PASS for status in core_statuses):
-            expected = (
-                "protected"
-                if evidence_status is ProtectionCheckStatus.PASS
-                else ("partial" if evidence_status is ProtectionCheckStatus.UNKNOWN else "degraded")
-            )
-        else:
-            expected = "degraded"
-        assert actual == expected
-
-
-def test_app_reports_are_bounded_and_privacy_safe() -> None:
+def test_harness_signals_carry_only_a_stable_identity(
+    collect: Callable[..., _Collected],
+) -> None:
     installs: list[dict[str, object]] = [
         {
             "harness": f"app-{index}",
@@ -342,52 +314,41 @@ def test_app_reports_are_bounded_and_privacy_safe() -> None:
         for index in range(120)
     ]
     installs.append({"harness": "../../private", "active": True, "workspace": "/secret"})
-    payload = _payload(installs=installs)
-    assert payload["schema_version"] == PROTECTION_HEALTH_SCHEMA_VERSION
-    raw_apps = payload["apps"]
-    assert isinstance(raw_apps, list)
-    apps = cast(list[dict[str, object]], raw_apps)
-    assert len(apps) == 100
-    serialized = repr(payload)
+
+    collected = collect(installs=installs)
+
+    assert "../../private" not in collected.harness_signals
+    serialized = repr(collected)
     assert "/private/" not in serialized
     assert "secret-command" not in serialized
-    assert "../../private" not in serialized
-    assert all(
-        set(app) == {"harness", "state", "label", "detail", "evidence_gap", "checks", "reason_codes"} for app in apps
+    # How many of these the report may name is the native runtime's bound, and
+    # `guard_protection_health_truth_table.rs` pins it at a hundred.
+    assert len(collected.harness_signals) == 120
+
+
+def test_an_unreachable_runtime_leaves_the_snapshot_without_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unreachable(**_kwargs: object) -> dict[str, object]:
+        raise NativeProtectionHealthError("native_protection_health_report_unavailable")
+
+    monkeypatch.setattr(approvals_module, "build_runtime_protection_health", unreachable)
+    snapshot = approvals_module.build_runtime_snapshot(
+        store=GuardStore(tmp_path / "guard-home"),
+        approval_center_url=None,
     )
 
-
-def test_unsupported_platform_containment_does_not_degrade_supported_layers() -> None:
-    unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
-    payload = evaluate_protection_health(
-        {
-            "harness_hooks": ProtectionSignal(ProtectionCheckStatus.PASS, "hooks_verified"),
-            "daemon": ProtectionSignal(ProtectionCheckStatus.PASS, "daemon_healthy"),
-            "policy_engine": unsupported,
-            "rule_packs": ProtectionSignal(ProtectionCheckStatus.PASS, "rule_packs_enforced"),
-            "decision_plane_compatibility": unsupported,
-            "containment_compatibility": unsupported,
-            "sandbox": unsupported,
-            "decision_stream": ProtectionSignal(ProtectionCheckStatus.PASS, "decision_stream_healthy"),
-            "tamper_checks": ProtectionSignal(ProtectionCheckStatus.PASS, "runtime_protection_trusted"),
-        }
+    assert snapshot["protection_health"] is None
+    # A machine with no runtime row reads as "setup" before the report is even
+    # asked for. The state an unreachable runtime leaves behind is the one a
+    # registered machine falls to, and that is the headline resolver's own
+    # branch: an empty protection state is never rendered as protection.
+    assert (
+        approvals_module._resolve_runtime_headline_state(
+            pending_count=0,
+            runtime_state={"session_id": "session"},
+            protection_state="",
+        )
+        == "degraded"
     )
-    assert payload["state"] == "protected"
-    assert payload["label"] == "Protected"
-
-
-def test_unsupported_platform_reason_does_not_mask_hook_failures() -> None:
-    payload = evaluate_protection_health(
-        {
-            "harness_hooks": ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform"),
-            "daemon": ProtectionSignal(ProtectionCheckStatus.PASS, "daemon_healthy"),
-            "policy_engine": ProtectionSignal(ProtectionCheckStatus.PASS, "policy_engine_compatible"),
-            "rule_packs": ProtectionSignal(ProtectionCheckStatus.PASS, "rule_packs_enforced"),
-            "decision_plane_compatibility": ProtectionSignal(ProtectionCheckStatus.PASS, "decision_plane_compatible"),
-            "containment_compatibility": ProtectionSignal(ProtectionCheckStatus.PASS, "containment_compatible"),
-            "sandbox": ProtectionSignal(ProtectionCheckStatus.PASS, "containment_backend_enforced"),
-            "decision_stream": ProtectionSignal(ProtectionCheckStatus.PASS, "decision_stream_healthy"),
-            "tamper_checks": ProtectionSignal(ProtectionCheckStatus.PASS, "runtime_protection_trusted"),
-        }
-    )
-    assert payload["state"] == "degraded"

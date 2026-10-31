@@ -15,7 +15,6 @@ use crate::benign_request_api::{
 use crate::codex_output_env::Ctx;
 use crate::command_evaluation::CommandDecisionFloor;
 use crate::command_model::{parse_shell_command, CanonicalCommand};
-use crate::compound_artifact::compound_artifact;
 use crate::hook_adapter_value::OValue;
 use crate::sfrs_dispatcher::{extract_sensitive_tool_action_request, ExtractInputs};
 use crate::sfrs_dispatcher_request::{NativeEvaluationView, ToolActionRequestMatch};
@@ -26,9 +25,8 @@ use crate::sfrs_requests::{
     build_file_read_request_artifact, build_file_write_request_artifact, classify_sensitive_path,
     command_list_candidate_texts, extract_sensitive_file_read_request,
     extract_sensitive_file_read_request_from_action, extract_sensitive_file_write_request,
-    FileReadRequest, FileWriteRequest, SensitivePath,
+    harness_protected_write_paths, FileReadRequest, FileWriteRequest, SensitivePath,
 };
-use crate::unmodeled_shell_artifact::unmodeled_shell_artifact;
 use crate::CommandModelRequestV1;
 
 #[cfg(all(test, unix))]
@@ -50,8 +48,6 @@ pub const QUERIES: &[&str] = &[
     "benign_tool_action",
     "read_only_lookup_target_is_safe",
     "benign_github_shell",
-    "unmodeled_shell_artifact",
-    "compound_artifact",
 ];
 
 /// Answer one query. `controls` is the extension-control snapshot the
@@ -120,7 +116,16 @@ pub fn evaluate(
         }
         "file_write_artifact" => {
             let naming = ArtifactNaming::from_input(input)?;
-            let protected = protected_paths(field("protected_paths"))?;
+            // The harness configuration files are this side's to name. The
+            // caller's table is added to them rather than consulted instead,
+            // so a caller that sends none still cannot leave a Codex
+            // configuration file writable without a review.
+            let mut protected = harness_protected_write_paths(&naming.harness, cwd, home);
+            for entry in protected_paths(field("protected_paths"))? {
+                if !protected.iter().any(|(path, _)| *path == entry.0) {
+                    protected.push(entry);
+                }
+            }
             let found = extract_sensitive_file_write_request(
                 &ovalue_from_json(field("tool_name")),
                 &ovalue_from_json(field("arguments")),
@@ -173,8 +178,6 @@ pub fn evaluate(
                     || gh_pr_create_uses_safe_ephemeral_body(command, ctx)
             ))
         }
-        "unmodeled_shell_artifact" => unmodeled_shell_artifact(input, ctx),
-        "compound_artifact" => compound_artifact(input, cwd, home, ctx),
         _ => Err("native_sensitive_request_query_unknown"),
     }
 }

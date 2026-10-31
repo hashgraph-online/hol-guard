@@ -1,4 +1,6 @@
-use super::super::tests::{binding, local_store, sign_decision, ARTIFACT, SIGNED_AT, TOKEN};
+use super::super::tests::{
+    binding, local_store, sign_decision, ARTIFACT, SIGNED_AT, TOKEN, VALIDATED_BUNDLE,
+};
 use super::super::{saved_response, Context, HookDirectDefer, StoreShape};
 use crate::project_identity::{resolve, PortableIdentity, PORTABLE_PROJECT_IDENTITY_PREFIX};
 use rusqlite::{params, Connection, OpenFlags};
@@ -171,14 +173,105 @@ fn a_local_row_an_identity_named_workspace_never_reads_does_not_stop_it() {
 #[test]
 fn an_identity_the_resident_does_not_resolve_exactly_defers() {
     let (home, connection) = store("portable-unknown");
-    let checkout = directory("unknown", Some(REMOTE));
-    // The daemon resolves the part of the name that exists and appends the
-    // rest unread; the resident reaches no part of a name it cannot open,
-    // so a workspace under a directory that is not there defers.
-    let missing = format!("{checkout}/not-here");
-    assert_eq!(resolve(&missing), PortableIdentity::Unknown);
+    // `expanduser` rewrites a `~` name against the asking process's
+    // environment, which the resident does not read, so the workspace
+    // settles to no identity at all rather than to none being there, and the
+    // saved lookup defers instead of composing a portable decision.
+    let unresolved = "~/not-here";
+    assert_eq!(resolve(unresolved), PortableIdentity::Unknown);
     assert_eq!(
-        status(&connection, &home, &missing),
+        status(&connection, &home, unresolved),
         Err(HookDirectDefer::SavedDecision)
+    );
+
+    // A workspace under a directory that is not there is a different case:
+    // `resolve(strict=False)` appends the names that do not exist to the
+    // part that does, so it is read under the checkout above it.
+    let checkout = directory("unknown", Some(REMOTE));
+    assert!(matches!(
+        resolve(&format!("{checkout}/not-here")),
+        PortableIdentity::Identity(_)
+    ));
+}
+
+/// The daemon's saved response in `workspace` while the validated bundle
+/// carries the Cloud rule that blocks the artifact and `exceptions`.
+fn status_under_bundle(
+    connection: &Connection,
+    guard_home: &str,
+    workspace: &str,
+    exceptions: Value,
+) -> Result<Option<Value>, HookDirectDefer> {
+    let rule = json!([
+        "claude-code",
+        "artifact",
+        ARTIFACT,
+        null,
+        null,
+        null,
+        "block",
+        "managed",
+        "pkg-block",
+        "policy-bundle",
+        null
+    ]);
+    let bundle = json!({ "workspaceId": "workspace-1", "cloudExceptions": exceptions });
+    let authority = (
+        vec![rule.as_array().unwrap().clone()],
+        bundle.as_object().cloned(),
+    );
+    VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = Some(authority));
+    let answered = status(connection, guard_home, workspace);
+    VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
+    answered
+}
+
+#[test]
+fn a_cloud_exception_for_the_checkout_lifts_the_cloud_block_from_its_portable_lookup_too() {
+    checkout_exception_lifts_the_cloud_block("policy-bundle");
+}
+
+/// A v2 bundle compiles to canonical rows and materializes no identities; its
+/// exception still lifts them in the hook's own lookup.
+#[test]
+fn a_cloud_exception_lifts_a_v2_canonical_block_in_the_hook() {
+    checkout_exception_lifts_the_cloud_block("policy-bundle-canonical");
+}
+
+fn checkout_exception_lifts_the_cloud_block(source: &str) {
+    let (home, connection) = store(&format!("portable-exception-{source}"));
+    let checkout = directory(&format!("exception-{source}"), Some(REMOTE));
+    connection
+        .execute(
+            "insert into policy_decisions (harness, scope, artifact_id, action, reason, owner,
+               source, created_at, updated_at)
+             values ('claude-code', 'artifact', ?1, 'block', 'managed', 'pkg-block',
+               ?3, ?2, ?2)",
+            params![ARTIFACT, SIGNED_AT, source],
+        )
+        .unwrap();
+    sign_decision(&connection, connection.last_insert_rowid());
+    // The Cloud block outranks the saved allow, so the review stands.
+    assert_eq!(
+        status_under_bundle(&connection, &home, &checkout, json!([])),
+        Ok(None)
+    );
+    // An exception approved for this checkout's working directory lifts the
+    // Cloud block from both the local lookup and the lookup under the
+    // checkout's portable identity, so the saved allow answers. Lifting the
+    // portable lookup against the identity instead would keep the block
+    // there, and the composition would keep the review standing.
+    let exception = json!([{
+        "exceptionId": "exception-checkout",
+        "scope": "artifact",
+        "harness": "claude-code",
+        "artifactId": ARTIFACT,
+        "workingDirectory": checkout,
+        "owner": "owner@example.test",
+        "expiresAt": "2099-01-01T00:00:00+00:00",
+    }]);
+    assert_eq!(
+        status_under_bundle(&connection, &home, &checkout, exception),
+        Ok(Some(json!("accepted")))
     );
 }

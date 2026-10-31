@@ -310,6 +310,24 @@ fn a_tool_action_class_contributes_its_command_risk_classes() {
     );
 }
 
+/// A sensitive request discovered before an authenticated evaluation exists
+/// carries an empty `risk_classes` list: nothing evaluated it, so the Python
+/// side names none. The action class the dispatcher produced is what still has
+/// to reach the resident's answer.
+#[test]
+fn a_secret_read_request_keeps_its_risk_class_without_an_evaluated_list() {
+    assert_eq!(
+        facts(
+            "tool_action_request",
+            json!({
+                "action_class": "local secret read shell command",
+                "risk_classes": [],
+            }),
+        )["risk_classes"],
+        json!(["local_secret_read"])
+    );
+}
+
 #[test]
 fn composite_classes_lead_and_duplicates_collapse() {
     assert_eq!(

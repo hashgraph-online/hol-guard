@@ -5,14 +5,12 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Protocol
 
+from ..native_protection_health import protection_health_report
 from .containment_health import ContainmentHealthEvidence, containment_health_signals
-from .protection_health import (
-    ProtectionCheckStatus,
-    ProtectionSignal,
-    evaluate_protection_health,
-)
+from .protection_health import ProtectionCheckStatus, ProtectionSignal
 
 _STABLE_HARNESS = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _DAEMON_HEARTBEAT_MAX_AGE = timedelta(seconds=30)
@@ -144,13 +142,20 @@ def _tamper_signal(trust_status: Mapping[str, object]) -> ProtectionSignal:
 def build_runtime_protection_health(
     *,
     store: ProtectionHealthStore,
+    guard_home: Path,
     runtime_state: Mapping[str, object] | None,
     managed_installs: Sequence[Mapping[str, object]],
     hook_verification: Mapping[str, bool] | None = None,
     trust_status: Mapping[str, object],
     now: datetime,
 ) -> dict[str, object]:
-    """Build current health without treating configuration as runtime proof."""
+    """Collect the signals and return the resident's verdict on them.
+
+    This module decides only what each check has proven; whether that adds up
+    to a protected machine is the native runtime's answer, and
+    ``NativeProtectionHealthError`` reaches the caller rather than a verdict
+    assembled here from an unreachable runtime.
+    """
 
     harness_signals = _hook_signals(managed_installs, hook_verification)
     containment_signals = containment_health_signals(
@@ -168,7 +173,7 @@ def build_runtime_protection_health(
         "decision_stream": _decision_stream_signal(store),
         "tamper_checks": _tamper_signal(trust_status),
     }
-    return evaluate_protection_health(signals, harness_signals=harness_signals)
+    return protection_health_report(signals, harness_signals=harness_signals, guard_home=guard_home)
 
 
 __all__ = ("ProtectionHealthStore", "build_runtime_protection_health")

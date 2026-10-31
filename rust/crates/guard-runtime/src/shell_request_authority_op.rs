@@ -4,7 +4,7 @@ use guard_command::Ctx;
 use guard_contracts::CodexToolOutputFactsV1;
 use serde_json::Value;
 
-use crate::codex_tool_output_op::ResidentInspectionHost;
+use crate::resident_inspection_host::ResidentInspectionHost;
 use crate::runner_authority_op::KindResult;
 use crate::shell_request_inspection_host::ShellInspectionHost;
 

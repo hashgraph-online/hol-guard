@@ -14,7 +14,9 @@ from pathlib import Path
 from .native_policy_snapshot_windows_support import _runtime_state_directory
 
 RESIDENT_UPDATE_LOCK_NAME = "resident-update.v1.lock"
-_MAX_RUNTIME_BYTES = 128 * 1024 * 1024
+# Matches the resident's own bound, which admits the larger runtime a Gauntlet
+# development wheel carries. The digest streams, so the bound only limits hashing time.
+_MAX_RUNTIME_BYTES = 512 * 1024 * 1024
 _MAX_MARKER_BYTES = 128
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 

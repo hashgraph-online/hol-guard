@@ -160,6 +160,54 @@ def test_status_includes_cloud_delivery_for_this_device(tmp_path: Path, monkeypa
     assert "This device: rejected (signature)" in text
 
 
+def test_status_counts_listed_devices_when_fleet_counts_are_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "home")
+    delivery = {
+        "available": True,
+        "versionNumber": 4,
+        "devices": [{"id": "a", "name": "laptop", "state": "applied", "reason": None}],
+        "stateCounts": {"applied": "many", "pending": 1},
+    }
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Cloud version 4: 1 applied, 0 pending, 0 rejected" in text
+
+
+def test_status_counts_the_whole_fleet_beyond_the_listed_devices(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.policy_delivery_status import fetch_policy_delivery
+    from codex_plugin_scanner.guard.runtime import runner
+
+    store = GuardStore(tmp_path / "home")
+    response = {
+        "versionNumber": 3,
+        "devices": [{"id": "a", "name": "laptop", "state": "applied", "reason": None}],
+        "deviceCount": 620,
+        "stateCounts": {"applied": 600, "pending": 18, "rejected": 2},
+    }
+    monkeypatch.setattr(
+        runner, "_resolve_guard_sync_auth_context", lambda _store: {"sync_url": "https://hol.example/api/guard/receipts/sync"}
+    )
+    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: response)
+
+    delivery = fetch_policy_delivery(store)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert delivery["deviceCount"] == 620
+    assert "Cloud version 3: 600 applied, 18 pending, 2 rejected" in text
+
+
 def test_delivery_url_follows_the_receipts_sync_host() -> None:
     assert (
         normalized_policy_delivery_url("https://hol.example/api/guard/receipts/sync")

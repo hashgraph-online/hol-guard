@@ -341,6 +341,7 @@ def test_affected_rows_carry_rule_metadata_and_render(
         "verdict": "affected",
         "reasons": [],
         "affected_artifact_ids": [],
+        "affected_instance_ids": [],
         "severity": "high",
         "known_exploited": True,
         "title": "Title",

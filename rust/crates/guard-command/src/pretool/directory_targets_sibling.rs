@@ -1,6 +1,6 @@
 //! Paths that climb out of the session's checkout into a linked worktree of
 //! the same repository, such as `cd ../report-wt` after `git worktree add
-//! ../report-wt`.
+//! ../report-wt`, or into the plain directory a leading `..` names.
 //!
 //! The worktree shares the session repository's objects, configuration and
 //! hooks, so entering it reaches nothing the workspace does not already
@@ -28,6 +28,48 @@ pub(crate) fn linked_root(value: &str, cwd: &Path) -> Option<PathBuf> {
     }
     let target = resolved(value, cwd)?;
     same_repository_root(&target, cwd).then_some(target)
+}
+
+/// The directory a relative `cd` operand made of a leading run of `..` and
+/// then plain names reaches from `cwd`, as in `cd ..` or `cd ../app`. It is
+/// the same directory the absolute spelling of that path names, which the
+/// caller proves an unaliased, readable directory. Only read-only steps are
+/// proved after it: a write or Git write route reached through a relative
+/// `cd` assumes a target in the workspace or a linked worktree of it.
+///
+/// In its default logical mode, `cd ..` is `cd "$(dirname "$PWD")"`. The
+/// `$PWD` projection (see `chain_literals_pwd`) already reads `$PWD` as the
+/// reported cwd and `$(dirname "$PWD")` as its lexical parent, so the
+/// climb rests on the same assumption, and the residual described above is
+/// the one that projection and a linked worktree accept. A cwd that is not
+/// its own canonical path is refused, since its lexical parent need not be
+/// its physical one.
+pub(crate) fn climbed(value: &str, cwd: &Path) -> Option<PathBuf> {
+    if cfg!(windows)
+        || value.len() > 4096
+        || !(value == ".." || value.starts_with("../"))
+        || !cwd.is_absolute()
+        || std::fs::canonicalize(cwd).ok()? != cwd
+    {
+        return None;
+    }
+    let mut target = cwd.to_path_buf();
+    let mut named = false;
+    for component in Path::new(value).components() {
+        match component {
+            Component::ParentDir if !named => {
+                if !target.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(name) if name.to_str().is_some_and(plain) => {
+                named = true;
+                target.push(name);
+            }
+            _ => return None,
+        }
+    }
+    Some(target)
 }
 
 /// `rm` of a symbolic link that sits directly in the root of a linked

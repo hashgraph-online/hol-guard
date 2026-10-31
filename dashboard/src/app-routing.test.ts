@@ -82,6 +82,8 @@ assert(isDisplayableHarness("codex"), "real app harness is displayable");
 assert(isConnectableAppHarness("codex"), "registered AI app is connectable");
 assert(isConnectableAppHarness("pi-agent"), "registered AI app alias is connectable");
 assert(isConnectableAppHarness("omp"), "Oh My Pi is a connectable app");
+assert(isConnectableAppHarness("muse"), "Muse is a connectable app");
+assert(appSetupTarget("muse") === "harness", "Muse evidence routes to AI app setup");
 assert(!isConnectableAppHarness("bunx"), "package runner is not sent to AI app setup");
 assert(!isConnectableAppHarness("bun"), "Bun package tool is not sent to AI app setup");
 assert(!isConnectableAppHarness("npm"), "npm package tool is not sent to AI app setup");

@@ -45,7 +45,7 @@ pub(super) fn safe_find_listing_arguments(
         && roots.iter().all(|root| {
             !super::search::skill_link_resolves_over_home(root, context)
                 && (bounded_read_target(root, context.home_dir, context.cwd, true)
-                    || super::search::skill_listing_root(root, context)
+                    || super::search::skill_listing_root(root, context, true)
                     || super::search::agent_root_listing(root, context, true)
                     || super::search::metadata_directory_walk(root, context)
                     || super::listing_reads::absent_listing_operand(root, context)

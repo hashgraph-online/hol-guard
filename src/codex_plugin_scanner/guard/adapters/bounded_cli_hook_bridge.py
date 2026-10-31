@@ -10,11 +10,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..codex_hook_launch_runtime import (
-    isolated_guard_cli_command,
-    isolated_hook_environment,
-    run_isolated_hook_process,
-)
 from ..hook_execution_environment import stamp_hook_input_text
 from ..stable_guard_cli import prune_safe_cli_executable
 from ._modules.grok.grok_hook_invocation_template import configured_grok_payload
@@ -29,9 +24,6 @@ from .bounded_cli_hook_envelope import (
     _grok_pretool_event_conflict as _grok_pretool_event_conflict,
 )
 from .bounded_cli_hook_envelope import (
-    _has_json_object_line as _has_json_object_line,
-)
-from .bounded_cli_hook_envelope import (
     _json_object as _json_object,
 )
 from .bounded_cli_hook_failure import failure_payload as _failure_payload
@@ -42,7 +34,6 @@ from .bounded_cli_hook_native import (
     daemon_start_command,
     frozen_daemon_start_command,
     native_bridge_executable,
-    take_native_handoff_environment,
 )
 from .bounded_cli_hook_script_template import BOUNDED_HOOK_SCRIPT_TEMPLATE
 from .cursor_hook_config import isolated_cursor_hook_python
@@ -279,12 +270,6 @@ def _validated_frozen_cli_args(
     )
 
 
-def _cli_args_with_json(cli_args: Sequence[str]) -> list[str]:
-    if cli_args and cli_args[-1] == "--json":
-        return list(cli_args)
-    return [*cli_args, "--json"]
-
-
 def _emit_failure(
     *,
     harness: str,
@@ -313,12 +298,11 @@ def run_bounded_cli_hook(
     *,
     input_text: str,
     deadline_monotonic: float | None = None,
-    skip_daemon: bool = False,
 ) -> int:
-    """Run one isolated CLI hook and preserve its native stdout contract.
+    """Answer one hook from the daemon in its native stdout contract.
 
-    ``skip_daemon`` is set when the native bridge already asked the daemon
-    about this hook, so one hook never reaches the daemon twice.
+    The bridge never evaluates a hook itself: when no daemon answers, even
+    after one recovery attempt, the hook fails closed.
     """
 
     started_monotonic = time.monotonic()
@@ -375,78 +359,51 @@ def run_bounded_cli_hook(
     remaining = max(0.0, deadline - time.monotonic())
     if remaining <= 0:
         return fail()
-    daemon_result = (
-        None
-        if skip_daemon
-        else try_daemon_hook(
-            guard_home=guard_home,
-            harness=harness,
-            input_text=input_text,
-            timeout_seconds=remaining,
-            deadline_monotonic=deadline,
-        )
-    )
-    if daemon_result is None and runtime_frozen:
-        from .bounded_cli_hook_frozen_recovery import ask_after_frozen_recovery
-
-        daemon_result = ask_after_frozen_recovery(
-            guard_home=guard_home, harness=harness, input_text=input_text, cli_args=cli_args, deadline=deadline
-        )
-    if time.monotonic() >= deadline:
-        return fail()
-    if daemon_result is not None:
-        remaining = max(0.0, deadline - time.monotonic())
-        daemon_stdout, daemon_stderr, daemon_exit = _apply_grok_bridge_approval_wait(
-            guard_home=guard_home,
-            harness=harness,
-            input_text=input_text,
-            stdout=daemon_result[0],
-            stderr=daemon_result[1],
-            exit_code=daemon_result[2],
-            timeout_seconds=remaining,
-        )
-        if time.monotonic() >= deadline:
-            return fail()
-        if daemon_stdout:
-            _ = sys.stdout.write(daemon_stdout)
-        if daemon_stderr:
-            print(daemon_stderr, file=sys.stderr)
-        return daemon_exit
-    if runtime_frozen:
-        # A frozen Guard has no cold evaluator: without a recovered daemon the hook fails closed.
-        return fail()
-    if harness == "grok" and _event_name(input_text).lower().replace("_", "").replace("-", "") in {
-        "userpromptsubmit",
-        "userpromptsubmitted",
-    }:
-        # A cold evaluator fallback can outlive Grok's prompt deadline and fail open.
-        # Return a native block while the trusted daemon is unavailable instead.
-        return fail()
-    if time.monotonic() >= deadline:
-        return fail()
-    command = isolated_guard_cli_command(python_executable, package_root, _cli_args_with_json(cli_args))
-    result = run_isolated_hook_process(
-        command,
+    daemon_result = try_daemon_hook(
+        guard_home=guard_home,
+        harness=harness,
         input_text=input_text,
-        cwd=guard_home,
-        environment=isolated_hook_environment(),
-        timeout_seconds=float(timeout_seconds),
+        timeout_seconds=remaining,
         deadline_monotonic=deadline,
     )
-    if result.timed_out or time.monotonic() >= deadline:
+    if daemon_result is None:
+        from .bounded_cli_hook_recovery import ask_after_daemon_recovery, daemon_identity
+
+        # Read after the miss: a daemon that replaced the failed one in between
+        # is skipped too, which fails the hook closed rather than asking twice.
+        failed = daemon_identity(guard_home)
+        start_command = (
+            frozen_daemon_start_command(sys.executable, guard_home, cli_args)
+            if runtime_frozen
+            else daemon_start_command(python_executable, package_root, guard_home, cli_args)
+        )
+        daemon_result = ask_after_daemon_recovery(
+            start_command=start_command,
+            guard_home=guard_home,
+            harness=harness,
+            input_text=input_text,
+            deadline=deadline,
+            failed=failed,
+        )
+    if daemon_result is None or time.monotonic() >= deadline:
         return fail()
-    if result.output_limit_exceeded:
-        return fail("HOL Guard blocked this action because hook output exceeded the safe size limit.")
-    if result.returncode is None:
+    remaining = max(0.0, deadline - time.monotonic())
+    daemon_stdout, daemon_stderr, daemon_exit = _apply_grok_bridge_approval_wait(
+        guard_home=guard_home,
+        harness=harness,
+        input_text=input_text,
+        stdout=daemon_result[0],
+        stderr=daemon_result[1],
+        exit_code=daemon_result[2],
+        timeout_seconds=remaining,
+    )
+    if time.monotonic() >= deadline:
         return fail()
-    compact_payload = _json_object(result.stdout.strip())
-    if compact_payload is None and not _has_json_object_line(result.stdout):
-        return fail()
-    if compact_payload is not None:
-        _ = sys.stdout.write(json.dumps(compact_payload, ensure_ascii=True, separators=(",", ":")) + "\n")
-    elif result.stdout:
-        _ = sys.stdout.write(result.stdout)
-    return result.returncode
+    if daemon_stdout:
+        _ = sys.stdout.write(daemon_stdout)
+    if daemon_stderr:
+        print(daemon_stderr, file=sys.stderr)
+    return daemon_exit
 
 
 def _is_config_argv(argv: Sequence[str]) -> bool:
@@ -459,14 +416,12 @@ def main_from_argv(argv: Sequence[str]) -> int:
     """Parse the authenticated install-time hook config and run it."""
 
     started_monotonic = time.monotonic()
-    native_elapsed, daemon_tried = take_native_handoff_environment()
     config = _json_object(argv[0]) if _is_config_argv(argv) else None
     configured_harness = config.get("harness") if config is not None else None
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
     timeout = config.get("timeout_seconds") if config is not None else None
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
         return _emit_failure(harness=harness, input_text="{}")
-    started_monotonic -= native_elapsed(float(timeout))
     deadline = started_monotonic + float(timeout)
     try:
         input_text, stdin_prefix = _read_bounded_stdin(deadline)
@@ -485,7 +440,7 @@ def main_from_argv(argv: Sequence[str]) -> int:
     input_text = stamp_hook_input_text(input_text)
     if config is None:
         return _emit_failure(harness=harness, input_text=input_text)
-    return run_bounded_cli_hook(config, input_text=input_text, deadline_monotonic=deadline, skip_daemon=daemon_tried)
+    return run_bounded_cli_hook(config, input_text=input_text, deadline_monotonic=deadline)
 
 
 __all__ = [

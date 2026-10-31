@@ -342,13 +342,6 @@ def _row_str(row: sqlite3.Row, name: str) -> str:
     return value
 
 
-def _row_optional_str(row: sqlite3.Row, name: str) -> str | None:
-    value = cast(object, row[name])
-    if value is not None and not isinstance(value, str):
-        raise ExtensionControlAuthorityError("invalid extension control authority row")
-    return value
-
-
 def _row_int(row: sqlite3.Row, name: str) -> int:
     value = cast(object, row[name])
     if type(value) is not int:

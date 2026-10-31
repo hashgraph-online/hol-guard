@@ -21,7 +21,7 @@ from ..config import resolve_guard_home
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from .report import (
     _INDEX_LIMIT_BYTES,
-    _TIMEOUT_SECONDS,
+    _INDEX_TIMEOUT_SECONDS,
     PluginTelemetryError,
     _native_request,
     _request,
@@ -38,7 +38,7 @@ def fetch_release_index() -> list[dict[str, object]]:
     """The public release index entries. The native runtime checks each field."""
 
     try:
-        with managed_urlopen(_request(RELEASE_INDEX_URL), timeout=_TIMEOUT_SECONDS) as response:
+        with managed_urlopen(_request(RELEASE_INDEX_URL), timeout=_INDEX_TIMEOUT_SECONDS) as response:
             raw = response.read(_INDEX_LIMIT_BYTES + 1)
     except (ManagedNetworkError, urllib.error.URLError, OSError) as error:
         raise PluginTelemetryError("The HOL release index could not be downloaded.") from error
@@ -69,6 +69,20 @@ def check_updates(guard_home: Path) -> dict[str, Any]:
             "index": index,
             "releases": releases,
             "guardHome": str(guard_home),
+        },
+        feature=PLUGIN_UPDATES_FEATURE,
+    )
+
+
+def dismiss_update(guard_home: Path, slug: str, version: str) -> dict[str, Any]:
+    """Stop prompting for ``slug`` until a release newer than ``version`` is checked."""
+
+    return _native_request(
+        {
+            "command": "updates-dismiss",
+            "guardHome": str(guard_home),
+            "slug": slug,
+            "version": version,
         },
         feature=PLUGIN_UPDATES_FEATURE,
     )
@@ -114,15 +128,7 @@ def main(argv: Sequence[str], *, program_name: str = "hol-guard plugin updates")
     guard_home = resolve_guard_home(args.guard_home)
     try:
         if args.action == "dismiss":
-            payload = _native_request(
-                {
-                    "command": "updates-dismiss",
-                    "guardHome": str(guard_home),
-                    "slug": args.slug,
-                    "version": args.version,
-                },
-                feature=PLUGIN_UPDATES_FEATURE,
-            )
+            payload = dismiss_update(guard_home, args.slug, args.version)
             print(json.dumps(payload, sort_keys=True) if args.json else f"Dismissed {args.slug} {args.version}.")
             return 0
         if args.action == "reset":

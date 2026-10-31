@@ -4,33 +4,30 @@ from __future__ import annotations
 
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
 # ruff: noqa: F403,F405
-from .approval_resolution import approval_resolution_block_reasons, require_resolvable_approval_request
-from .native_approval_queue_identity import connection_guard_home
-from .store_approvals import _begin_immediate, _unresolved_queue_result
 from .store_base import *
-from .temporary_mcp_approvals import TemporaryMcpGrantSelection, temporary_mcp_grant_covers_request
+from .temporary_mcp_approvals import TemporaryMcpGrantSelection
 
 
 class StoreTemporaryMcpMixin:
+    @serialize_policy_integrity_generation
     def apply_temporary_mcp_grant_resolution(
         self,
         *,
         request_id: str,
-        decisions: list[PolicyDecision],
+        decision: PolicyDecision,
         selection: TemporaryMcpGrantSelection,
         reason: str | None,
         resolved_at: str,
         approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> tuple[dict[str, object], list[str]]:
-        for decision in decisions:
-            validate_policy_write_authority(decision, remote_write_authorized=False)
-            require_policy_write(
-                self.guard_home,
-                decision=decision,
-                approval_gate_grant=approval_gate_grant,
-                now=resolved_at,
-            )
-            _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
+        validate_policy_write_authority(decision, remote_write_authorized=False)
+        require_policy_write(
+            self.guard_home,
+            decision=decision,
+            approval_gate_grant=approval_gate_grant,
+            now=resolved_at,
+        )
+        _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
         require_request_resolution(
             self.guard_home,
             resolution_action="allow",
@@ -38,78 +35,34 @@ class StoreTemporaryMcpMixin:
             approval_gate_grant=approval_gate_grant,
             now=resolved_at,
         )
-        secret_material = self._policy_integrity_secret_material(create=True)
-        next_control_state: dict[str, object] | None = None
-        covered_ids: list[str] = []
-        with self._connect() as connection:
-            _begin_immediate(connection)
-            source = load_approval_request(connection, request_id)
-            if source is None:
-                result = _unresolved_queue_result(connection, error="not_found")
-            elif source.get("status") != "pending":
-                result = _unresolved_queue_result(connection, error="already_resolved", item=source)
-            else:
-                require_resolvable_approval_request(source, guard_home=connection_guard_home(connection))
-                if selection.target != "exact":
-                    covered_ids = self._covered_pending_request_ids_locked(
-                        connection,
-                        source=source,
-                        request_id=request_id,
-                        selection=selection,
-                    )
-                for decision in decisions:
-                    next_control_state = self._upsert_policy_locked(
-                        connection,
-                        decision=decision,
-                        now=resolved_at,
-                        secret_material=secret_material,
-                    )
-                result = persist_queue_resolution(
-                    connection,
-                    request_id,
-                    resolution_action="allow",
-                    resolution_scope="artifact",
-                    reason=reason,
-                    resolved_at=resolved_at,
-                )
-                persist_bulk_resolution(
-                    connection,
-                    covered_ids,
-                    resolution_action="allow",
-                    resolution_scope="artifact",
-                    reason=reason,
-                    resolved_at=resolved_at,
-                )
-        if next_control_state is not None:
-            self._finalize_policy_integrity_control_state(next_control_state)
-        return result, covered_ids
-
-    @staticmethod
-    def _covered_pending_request_ids_locked(
-        connection: sqlite3.Connection,
-        *,
-        source: dict[str, object],
-        request_id: str,
-        selection: TemporaryMcpGrantSelection,
-    ) -> list[str]:
-        candidates: list[tuple[str, dict[str, object]]] = []
-        for item in load_approval_requests(
-            connection,
-            status="pending",
-            harness=str(source["harness"]),
-            limit=None,
-        ):
-            candidate_id = str(item["request_id"])
-            if candidate_id == request_id or not temporary_mcp_grant_covers_request(selection, item):
-                continue
-            candidates.append((candidate_id, item))
-        if not candidates:
-            return []
-        # One call for the whole sweep: the grant is applied under the write
-        # lock, so asking per row would put a round trip between every covered
-        # request and the next.
-        reasons = approval_resolution_block_reasons(
-            [item for _, item in candidates],
-            guard_home=connection_guard_home(connection),
+        fields, integrity = self._policy_write_args(decision, resolved_at)
+        # The resident holds the write lock across the grant, the request that
+        # asked for it and the requests it covers, so the sweep and the queue
+        # answer come back from the same transaction.
+        payload = self._native_store_call(
+            "apply_temporary_mcp_grant_resolution",
+            {
+                "request_id": request_id,
+                "resolved_at": resolved_at,
+                "reason": reason,
+                "grant_target": selection.target,
+                "grant_server_identity_hash": selection.eligibility.server_identity_hash,
+                "grant_category": selection.eligibility.category,
+                "decision": fields,
+                **integrity,
+            },
         )
-        return [candidate_id for (candidate_id, _), reason in zip(candidates, reasons, strict=True) if reason is None]
+        if not isinstance(payload, dict):
+            raise RuntimeError("Guard temporary MCP grant was not written.")
+        blocked = payload.get("blocked")
+        if isinstance(blocked, str) and blocked:
+            # A request no approval can lift is a caller contract error, not a
+            # queue answer, so it is raised rather than returned.
+            raise ValueError(blocked)
+        self._finalize_native_control_state(payload.get("next_control_state"))
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            raise RuntimeError("Guard temporary MCP grant returned no queue result.")
+        covered = payload.get("covered_request_ids")
+        covered_ids = [str(item) for item in covered] if isinstance(covered, list) else []
+        return result, covered_ids

@@ -1,3 +1,4 @@
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -21,10 +22,18 @@ where
             thread::spawn(move || loop {
                 let next = match receiver.lock() {
                     Ok(guard) => guard.recv(),
-                    Err(_) => return,
+                    // A worker that panicked while holding the queue would
+                    // otherwise take every other worker down with it.
+                    Err(poisoned) => poisoned.into_inner().recv(),
                 };
                 match next {
-                    Ok(item) => handler(item),
+                    // One request that panics loses its own answer, not the
+                    // worker that was serving it: a pool that shed a thread per
+                    // panic would end with none, and the resident would stop
+                    // answering while it still held the owner lock.
+                    Ok(item) => {
+                        let _ = catch_unwind(AssertUnwindSafe(|| handler(item)));
+                    }
                     Err(_) => return,
                 }
             })
@@ -63,5 +72,22 @@ mod tests {
         drop(sender);
         drain(workers, Duration::from_secs(1));
         assert_eq!(result.try_recv().unwrap(), 7);
+    }
+
+    #[test]
+    fn a_job_that_panics_leaves_its_worker_serving_the_queue() {
+        let (sender, receiver) = sync_channel(2);
+        let (completed, result) = sync_channel(2);
+        let workers = spawn_workers(1, receiver, move |value: u8| {
+            assert_ne!(value, 1, "the panicking job");
+            completed.send(value).unwrap();
+        });
+        sender.send(1).unwrap();
+        sender.send(2).unwrap();
+        drop(sender);
+
+        drain(workers, Duration::from_secs(2));
+
+        assert_eq!(result.try_recv().unwrap(), 2);
     }
 }

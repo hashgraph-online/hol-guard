@@ -6,11 +6,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ..approval_resolution import approval_resolution_block_reason
+from ..approval_scope_selection import resolve_request_scope_selection
 from ..approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
     IneligibleApprovalScopeError,
     request_scope_contract,
-    resolve_request_scope_selection,
 )
 from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..review_contracts import (

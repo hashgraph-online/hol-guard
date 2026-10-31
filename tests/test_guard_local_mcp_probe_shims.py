@@ -8,7 +8,6 @@ import pytest
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import probe_stdio_mcp_server
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     is_package_shim_executable,
-    probe_env,
     probe_search_path,
 )
 
@@ -64,8 +63,6 @@ def test_probe_search_path_omits_package_shim_dirs(tmp_path: Path, monkeypatch) 
     path_entries = probe_search_path().split(os.pathsep)
     assert str(shim) not in path_entries
     assert str(real) in path_entries
-    env = probe_env(str(tmp_path / "tmp"))
-    assert str(shim) not in env["PATH"].split(os.pathsep)
 
 
 def test_probe_search_path_does_not_restore_shim_only_path(tmp_path: Path, monkeypatch) -> None:

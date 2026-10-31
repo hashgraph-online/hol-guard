@@ -52,7 +52,7 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(contained_hook_parser)
     contained_hook_parser.add_argument(
         "--harness",
-        choices=("omp", "pi", "zcode", "claude-code", "codex"),
+        choices=("omp", "pi", "zcode", "claude-code", "codex", "cursor"),
         default="omp",
     )
     contained_hook_parser.add_argument("--request-file", required=True)

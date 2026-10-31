@@ -46,6 +46,7 @@ _PROXY_HARNESSES = {
     "opencode-mcp-proxy": "opencode",
     "copilot-mcp-proxy": "copilot",
     "cursor-mcp-proxy": "cursor",
+    "hermes-mcp-proxy": "hermes",
 }
 
 

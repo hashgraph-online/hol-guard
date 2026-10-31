@@ -21,8 +21,9 @@ use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{
     classify_scannable_source_path, classify_source_path, credential_path_markers,
     hidden_empty_work_tree_file, hidden_project_document, hidden_read_parts_allowed,
-    is_source_code_extension, sensitive_external_filename, sensitive_path_family, source_like,
-    win32_name, EXTERNAL_SENSITIVE_PARTS,
+    is_source_code_extension, project_config_file_name, sensitive_external_filename,
+    sensitive_path_family, source_document_extension, source_like, tool_login_file_name,
+    tool_login_name, win32_name, EXTERNAL_SENSITIVE_PARTS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

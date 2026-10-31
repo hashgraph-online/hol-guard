@@ -47,6 +47,31 @@ pub(crate) fn add_seconds_isoformat(text: &str, delta_micros: i64) -> Option<Str
     format_iso(parsed, delta_micros)
 }
 
+/// `add_seconds_isoformat` for a caller that refuses a naive instant, as
+/// `_fresh_until` does with `if received.tzinfo is None: return None`. A
+/// freshness deadline without an offset names no moment in particular, so the
+/// catalog stores no deadline rather than one that is hours wrong.
+pub(crate) fn add_micros_aware_isoformat(text: &str, delta_micros: i64) -> Option<String> {
+    let parsed = parse_iso(&text.replace('Z', "+00:00"))?;
+    parsed.offset_seconds?;
+    format_iso(parsed, delta_micros)
+}
+
+/// `datetime.fromisoformat(...)` read as UTC — a naive instant is UTC and an
+/// aware one is converted, as `astimezone(timezone.utc)` does — plus
+/// `+ timedelta(...)` and `.isoformat()`. The grant expiry is spelled this way
+/// so a pick made under any offset is stored as the same instant.
+pub(crate) fn add_seconds_utc_isoformat(text: &str, delta_micros: i64) -> Option<String> {
+    let micros_since_epoch = epoch_micros(text)?;
+    format_iso(
+        Parsed {
+            micros_since_epoch,
+            offset_seconds: Some(0),
+        },
+        delta_micros,
+    )
+}
+
 /// `datetime.fromisoformat(text).timestamp()` in whole microseconds. Instants
 /// without an offset are read as UTC: the transport hands the resident aware
 /// instants only, converting naive input at the boundary.
@@ -167,7 +192,8 @@ fn parse_iso(text: &str) -> Option<Parsed> {
                 break;
             }
         }
-        if text.as_bytes().get(at) == Some(&b'.') {
+        // CPython 3.11+ takes a comma before the fraction too.
+        if matches!(text.as_bytes().get(at), Some(b'.' | b',')) {
             let mut end = at + 1;
             while text.as_bytes().get(end).is_some_and(u8::is_ascii_digit) {
                 end += 1;
@@ -313,6 +339,20 @@ mod tests {
             dumps_sorted(&parsed).unwrap(),
             r#"{"a":0.1,"b":1e-07,"c":1.5e+300,"d":-0.0,"e":2.0,"f":1e+16,"g":1.2345678901234568e+17,"h":[0.0001,1e-05]}"#
         );
+    }
+
+    #[test]
+    fn a_comma_fraction_reads_like_a_dot() {
+        assert_eq!(
+            add_micros_aware_isoformat("2026-10-30T12:05:00,5+00:00", 0).unwrap(),
+            "2026-10-30T12:05:00.500000+00:00"
+        );
+        assert_eq!(
+            add_micros_aware_isoformat("2026-10-30T12:05:00,5+00:00", 0),
+            add_micros_aware_isoformat("2026-10-30T12:05:00.5+00:00", 0)
+        );
+        assert!(add_micros_aware_isoformat("2026-10-30T12:05:00,+00:00", 0).is_none());
+        assert!(add_micros_aware_isoformat("2026-10-30T12:05:00;5+00:00", 0).is_none());
     }
 
     #[test]

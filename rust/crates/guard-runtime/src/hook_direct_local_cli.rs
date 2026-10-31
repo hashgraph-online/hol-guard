@@ -42,6 +42,17 @@ pub(super) struct RuleCheck<'a> {
     pub(super) home_dir: &'a str,
     pub(super) guard_home: &'a str,
     pub(super) recording_only: bool,
+    /// The daemon's home and environment, which the launch resolves
+    /// against. Without them a launch past a package script cannot be
+    /// identified, as one the daemon could not identify.
+    pub(super) launch_env: Option<LaunchEnv<'a>>,
+}
+
+/// The home and environment a launch resolves against.
+#[derive(Clone, Copy)]
+pub(super) struct LaunchEnv<'a> {
+    pub(super) user_home: &'a str,
+    pub(super) env: &'a BTreeMap<String, String>,
 }
 
 /// The harness response the daemon returns for `answered` once it checked
@@ -62,7 +73,8 @@ pub(super) fn custom_rule_response(
     {
         return Ok(None);
     }
-    let Some(launched) = launch_for(payload, check.workspace, check.home_dir)? else {
+    let Some(launched) = launch_for(payload, check.workspace, check.home_dir, check.launch_env)?
+    else {
         return Ok(None);
     };
     match grant(&launched, check.home_dir, check.guard_home)? {
@@ -91,16 +103,21 @@ struct Launched<'a> {
 }
 
 impl Launched<'_> {
-    /// `command_tokens_for_invocation` past the package script branch: the
-    /// first segment's arguments after the runner or the script's own path.
-    fn invocation_tokens(&self, home_dir: &str) -> Vec<String> {
-        crate::local_cli_hook_op::invocation_command_tokens(
+    /// `command_tokens_for_invocation` past the package script branch, and
+    /// the arguments it reads them from: the first segment's arguments after
+    /// the runner or the script's own path.
+    fn invocation(&self, home_dir: &str) -> (Vec<String>, Vec<String>) {
+        let arguments = crate::local_cli_hook_op::invocation_command_arguments(
             self.command,
             &self.cwd,
             Some(home_dir),
             &self.launch.name,
             &self.launch.kind,
             self.launch.runner.as_deref(),
+        );
+        (
+            crate::local_cli_hook_op::leading_command_tokens(&arguments),
+            arguments,
         )
     }
 }
@@ -111,6 +128,7 @@ fn launch_for<'a>(
     payload: &'a Map<String, Value>,
     workspace: &str,
     home_dir: &str,
+    launch_env: Option<LaunchEnv<'_>>,
 ) -> Result<Option<Launched<'a>>, ()> {
     let Some(command) = pre_tool_command(payload)? else {
         return Ok(None);
@@ -119,7 +137,7 @@ fn launch_for<'a>(
         return Ok(None);
     };
     Ok(
-        local_launch(command, &cwd, home_dir)?.map(|launch| Launched {
+        local_launch(command, &cwd, home_dir, launch_env)?.map(|launch| Launched {
             launch,
             command,
             cwd,
@@ -130,22 +148,27 @@ fn launch_for<'a>(
 /// The launch identity the daemon derives: the package script's, else the
 /// first unlisted CLI's. `Err` is any failure the daemon blocks as
 /// unverified.
-fn local_launch(command: &str, cwd: &str, home_dir: &str) -> Result<Option<Launch>, ()> {
+fn local_launch(
+    command: &str,
+    cwd: &str,
+    home_dir: &str,
+    launch_env: Option<LaunchEnv<'_>>,
+) -> Result<Option<Launch>, ()> {
     let package = package_json_scripts(command, cwd, home_dir).map_err(|_| ())?;
     block::launch(package, || {
-        // The resident inherits the daemon's `PATH` and home; the daemon
-        // resolves the launch against its own environment.
-        let user_home = std::env::var("HOME").map_err(|_| ())?;
-        let env: BTreeMap<String, String> = std::env::vars_os()
-            .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)))
-            .collect();
+        // The daemon resolves the launch against its own home and
+        // environment. The resident runs with neither the daemon's `PATH` nor
+        // the rest of its environment, so it never substitutes its own: an
+        // `env`-shebang script would resolve to a different identity, miss
+        // its grant, and leave an allowed extension paused for review.
+        let launch_env = launch_env.ok_or(())?;
         identify(&Request {
             command_text: command,
             cwd,
             home_dir: Some(home_dir),
-            user_home: &user_home,
+            user_home: launch_env.user_home,
             compound: false,
-            env: &env,
+            env: launch_env.env,
             budget_ms: IDENTIFY_BUDGET_MS,
         })
         .map_err(|_| ())
@@ -164,20 +187,26 @@ fn grant_answer(
     let launch = &launched.launch;
     let catalog =
         crate::local_cli_grant_op::command_catalog(guard_home, &launch.cli_id).map_err(|_| ())?;
-    let command_id = if catalog.is_empty() {
-        None
+    let (command_id, options) = if catalog.is_empty() {
+        (None, Vec::new())
     } else {
-        let tokens = match launch.tokens.clone() {
-            Some(tokens) => tokens,
-            None => launched.invocation_tokens(home_dir),
-        };
-        block::command_selector(&catalog, &tokens)
+        // A package script's tokens name the script. What the call passes
+        // after them, the manager's own options included, still reads as the
+        // script's options and commands.
+        let (invoked, arguments) = launched.invocation(home_dir);
+        let tokens = launch.tokens.clone().unwrap_or(invoked);
+        let command_id = block::command_selector(&catalog, &tokens);
+        let entries = command_id.as_deref().map_or_else(Vec::new, |id| {
+            crate::local_cli_grant_op::invocation_entries(&arguments, id, &catalog)
+        });
+        (command_id, entries)
     };
     Ok(crate::local_cli_grant_op::decide_launch(
         guard_home,
         current_action,
         &launch.source,
         command_id.as_deref(),
+        &options,
     )
     .ok())
 }
@@ -193,7 +222,8 @@ fn grant(launched: &Launched<'_>, home_dir: &str, guard_home: &str) -> Result<Ve
 /// leaves the review standing here, as the daemon's own lane does.
 pub(super) fn review_grant(check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
     let payload = check.payload?;
-    let launched = launch_for(payload, check.workspace, check.home_dir).ok()??;
+    let launched =
+        launch_for(payload, check.workspace, check.home_dir, check.launch_env).ok()??;
     let answer = grant_answer(&launched, "review", check.home_dir, check.guard_home).ok()?;
     match block::review_verdict(&launched.launch, answer.as_ref()) {
         ReviewVerdict::Unchanged => None,
@@ -203,7 +233,7 @@ pub(super) fn review_grant(check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
 
 /// The daemon's command rule: the first non-blank command field of the tool
 /// input, then the arguments, then the payload itself.
-fn pre_tool_command(payload: &Map<String, Value>) -> Result<Option<&str>, ()> {
+pub(crate) fn pre_tool_command(payload: &Map<String, Value>) -> Result<Option<&str>, ()> {
     let tool_input = TOOL_INPUT_FIELDS
         .iter()
         .find_map(|field| payload.get(*field).and_then(Value::as_object));
@@ -227,10 +257,23 @@ pub(super) fn launch_cwd(
     payload: &Map<String, Value>,
     workspace: &str,
 ) -> Result<Option<String>, ()> {
-    let raw = match payload.get("cwd").and_then(Value::as_str) {
+    resolve_launch_dir(launch_dir_candidate(payload, workspace)?)
+}
+
+/// The directory `launch_cwd` resolves: the payload's non-blank `cwd`, else
+/// the workspace.
+pub(crate) fn launch_dir_candidate<'a>(
+    payload: &'a Map<String, Value>,
+    workspace: &'a str,
+) -> Result<&'a str, ()> {
+    Ok(match payload.get("cwd").and_then(Value::as_str) {
         Some(raw) if python_strip(raw).map_err(|_| ())?.is_some() => raw,
         _ => workspace,
-    };
+    })
+}
+
+/// `raw` resolved, when absolute and an existing directory once resolved.
+pub(crate) fn resolve_launch_dir(raw: &str) -> Result<Option<String>, ()> {
     if !Path::new(raw).is_absolute() {
         return Ok(None);
     }
@@ -249,6 +292,8 @@ pub(super) fn launch_cwd(
 
 #[path = "hook_direct_local_cli_block.rs"]
 pub(crate) mod block;
+#[path = "hook_direct_local_cli_rule_op.rs"]
+pub(crate) mod rule_op;
 
 #[cfg(test)]
 #[path = "hook_direct_local_cli_tests.rs"]

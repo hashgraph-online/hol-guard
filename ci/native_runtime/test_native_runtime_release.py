@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -20,7 +22,17 @@ TARGETS = {
     "macosx_11_0_arm64": "aarch64-apple-darwin",
     "win_amd64": "x86_64-pc-windows-msvc",
     "win_arm64": "aarch64-pc-windows-msvc",
+    "manylinux_2_17_aarch64": "aarch64-unknown-linux-musl",
 }
+
+
+def _core_metadata(project: str, version: str) -> bytes:
+    return f"Metadata-Version: 2.4\nName: {project}\nVersion: {version}\n".encode()
+
+
+def _write_wheel_metadata(archive: zipfile.ZipFile, wheel: Path) -> None:
+    distribution, version = wheel.name.split("-")[:2]
+    archive.writestr(f"{distribution}-{version}.dist-info/METADATA", _core_metadata(distribution, version))
 
 
 def _native_wheel(
@@ -49,6 +61,7 @@ def _native_wheel(
     if descriptor is not None:
         manifest["command_pack_bundle"] = descriptor
     with zipfile.ZipFile(wheel, "w") as archive:
+        _write_wheel_metadata(archive, wheel)
         archive.writestr(release.MANIFEST_PATH, json.dumps(manifest))
         archive.writestr(runtime_path, runtime)
         if bundle_root is not None:
@@ -63,19 +76,25 @@ def _native_set(root: Path) -> dict[str, Path]:
 
 def _pure_wheel(root: Path, project: str) -> Path:
     wheel = root / f"{project.replace('-', '_')}-{VERSION}-py3-none-any.whl"
-    wheel.write_bytes(b"pure-wheel-placeholder")
+    with zipfile.ZipFile(wheel, "w") as archive:
+        _write_wheel_metadata(archive, wheel)
     return wheel
 
 
 def _sdist(root: Path) -> Path:
     sdist = root / f"hol_guard-{VERSION}.tar.gz"
-    sdist.write_bytes(b"source-distribution-placeholder")
+    metadata = _core_metadata("hol-guard", VERSION)
+    member = tarfile.TarInfo(f"hol_guard-{VERSION}/PKG-INFO")
+    member.size = len(metadata)
+    with tarfile.open(sdist, mode="w:gz") as archive:
+        archive.addfile(member, io.BytesIO(metadata))
     return sdist
 
 
 def _embed_native_manifest(pure: Path, wheels: dict[str, str], *, version: str = VERSION) -> None:
     document = {"schema": release.NATIVE_WHEEL_MANIFEST_SCHEMA, "version": version, "wheels": wheels}
     with zipfile.ZipFile(pure, "w") as archive:
+        _write_wheel_metadata(archive, pure)
         archive.writestr(release.NATIVE_WHEEL_MANIFEST_PATH, json.dumps(document))
 
 
@@ -273,7 +292,7 @@ def test_plan_upload_copies_only_missing_artifacts(
         output_dir=tmp_path / "upload",
     )
 
-    assert len(planned) == 4
+    assert len(planned) == 5
     assert set(planned) == set(by_name) - existing_names
     assert {path.name for path in (tmp_path / "upload").iterdir()} == set(planned)
 
@@ -301,7 +320,7 @@ def test_plan_upload_recovers_when_base_artifacts_are_missing(
     assert native.name not in planned
     assert f"hol_guard-{VERSION}-py3-none-any.whl" in planned
     assert f"hol_guard-{VERSION}.tar.gz" in planned
-    assert len(planned) == 6
+    assert len(planned) == 7
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX dangling-symlink regression")
@@ -516,10 +535,11 @@ def test_canary_native_set_may_omit_windows_arm64(tmp_path: Path) -> None:
         release.local_native_hashes(dist, version=canary, source_sha=SOURCE_SHA)
 
 
-def test_release_native_set_requires_windows_arm64(tmp_path: Path) -> None:
+@pytest.mark.parametrize("platform", ["win_arm64", "manylinux_2_17_aarch64"])
+def test_release_native_set_requires_github_only_arm64_wheels(tmp_path: Path, platform: str) -> None:
     wheels = _native_set(tmp_path / "dist")
-    wheels["win_arm64"].unlink()
-    with pytest.raises(release.NativeReleaseError, match=r"missing=\['win_arm64'\]"):
+    wheels[platform].unlink()
+    with pytest.raises(release.NativeReleaseError, match=rf"missing=\['{platform}'\]"):
         release.local_native_hashes(tmp_path / "dist", version=VERSION, source_sha=SOURCE_SHA)
 
 
@@ -531,7 +551,7 @@ def test_local_guard_set_requires_exact_native_wheel_manifest(tmp_path: Path, ch
     wheels = {path.name: release._sha256_file(path) for path in sorted(dist.glob("*.whl")) if path != pure}
     version = VERSION
     if change == "missing":
-        pure.write_bytes(b"pure-wheel-placeholder")
+        _pure_wheel(dist, release.PROJECT)
     else:
         if change == "stale_digest":
             wheels[next(iter(wheels))] = "0" * 64

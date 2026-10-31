@@ -30,17 +30,15 @@ if TYPE_CHECKING:
 
 from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
-from ..daemon.bounded_http import daemon_admission_snapshot
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..native_aibom_summaries import NativeAibomSummariesError
-from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
 from .commands_parser_helpers import *
-from .doctor_native_runtime import doctor_native_availability
+from .doctor_native_runtime import native_runtime_section
 from .doctor_readiness import doctor_runtime_readiness
 
 
@@ -296,6 +294,31 @@ def _run_guard_doctor_command(
             getattr(args, "json", False),
         )
         return 0
+    if getattr(args, "native", False):
+        # Native state alone, without the rest of doctor's scan. Nothing is
+        # started or repaired here, so support can ask for it at any time.
+        import sys
+
+        from .render import emit_guard_payload
+        from .runtime_posture_command import render_runtime_status
+
+        with without_command_probes():
+            section = native_runtime_section(guard_home)
+        if getattr(args, "json", False):
+            # Both branches honour the caller's stream; a caller that captures
+            # the text report must not have the JSON one land on stdout instead.
+            emit_guard_payload(
+                "doctor",
+                {"generated_at": _now(), "native_runtime": section},
+                True,
+                output_stream=output_stream,
+            )
+        else:
+            # The doctor renderer describes a harness; this payload describes a
+            # runtime, so it is rendered by the command that owns that report.
+            stream = output_stream if output_stream is not None else sys.stdout
+            stream.write(render_runtime_status(section))
+        return 0
     if getattr(args, "harnesses", False):
         from ..adapters.contracts import HARNESS_CONTRACTS
 
@@ -409,18 +432,7 @@ def _run_guard_doctor_command(
         )
         native_runtime_repair = repair[0] if repair is not None else None
     with nullcontext() if args.harness else without_command_probes():
-        availability = doctor_native_availability(guard_home)
-    native_runtime: dict[str, object] = {
-        "availability": availability,
-        "admission": native_resident_admission_snapshot(),
-        "daemon_http": daemon_admission_snapshot(),
-    }
-    bundled_runtime = bundled_native_runtime_report()
-    if bundled_runtime is not None:
-        native_runtime["bundled"] = bundled_runtime
-    if native_runtime_repair is not None:
-        native_runtime["repair"] = native_runtime_repair
-    payload["native_runtime"] = native_runtime
+        payload["native_runtime"] = native_runtime_section(guard_home, repair=native_runtime_repair)
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError

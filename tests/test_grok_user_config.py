@@ -7,11 +7,22 @@ import tomlkit
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, grok_runtime_hooks_verified
-from codex_plugin_scanner.guard.adapters.grok_config import MANAGED_DENY_RULES, build_managed_config_block
+from codex_plugin_scanner.guard.adapters.grok_config import MANAGED_DENY_RULES
 from codex_plugin_scanner.guard.adapters.grok_user_config import prepare_user_config_text, remove_user_config_settings
 from codex_plugin_scanner.guard.cli.native_install_checks import _grok_protection_checks
 from codex_plugin_scanner.guard.codex_config import tomllib
 from codex_plugin_scanner.guard.shims import PreparedGuardShim
+
+_LEGACY_MANAGED_BLOCK = (
+    "# BEGIN HOL GUARD MANAGED GROK\n"
+    "# Permission rules below are managed by HOL Guard. Do not edit manually.\n"
+    "[permission]\n"
+    'deny = ["Read(~/.grok/auth/**)"]\n'
+    "\n"
+    "[[hooks.PreToolUse]]\n"
+    'hooks = [{ type = "command", command = "old guard hook", timeout = 30 }]\n'
+    "# END HOL GUARD MANAGED GROK"
+)
 
 
 def test_merge_preserves_comments_existing_permissions_and_hooks() -> None:
@@ -148,7 +159,7 @@ def test_legacy_backup_hooks_migrate_without_changing_vendor_settings(
     vendor = context.home_dir / ".grok" / "managed_config.toml"
     vendor.parent.mkdir(parents=True)
     enterprise = '# Enterprise settings\nmodel="synthetic-enterprise-model"\n'
-    vendor.write_text(enterprise + build_managed_config_block("old guard hook"))
+    vendor.write_text(enterprise + _LEGACY_MANAGED_BLOCK)
     GrokHarnessAdapter().install(context)
     assert tomllib.loads(vendor.read_text()) == tomllib.loads(enterprise)
     assert "old guard hook" not in vendor.read_text()

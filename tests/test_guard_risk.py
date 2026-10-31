@@ -15,7 +15,6 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
-from codex_plugin_scanner.guard.incident import build_incident_context
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -24,21 +23,13 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_shell_request_authority import shell_request_authority
 from codex_plugin_scanner.guard.risk import (
-    artifact_risk_signals,
-    artifact_risk_signals_typed,
     artifact_risk_signals_v2,
     artifact_risk_summary,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.git_execution_safety import git_binary_path_is_trusted
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
-    classify_sensitive_path,
-    extract_sensitive_file_read_request,
-    extract_sensitive_file_read_request_artifact,
-    extract_sensitive_file_read_request_from_action,
     extract_sensitive_tool_action_request,
-    is_file_read_tool_name,
 )
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import (
     SecretContentMatch,
@@ -47,6 +38,8 @@ from codex_plugin_scanner.guard.runtime.secret_sensitivity import (
     classify_secret_path,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.artifact_risk_support import artifact_risk_signals, artifact_risk_signals_typed
+from tests.incident_context_support import build_incident_context
 
 LOCAL_COMPOSE_SAFE_CASES = (
     "docker compose up -d postgres",
@@ -542,9 +535,9 @@ def test_incident_context_keeps_context_for_generic_config_file_names():
 
 
 def test_secret_file_path_classifier_stays_precise(tmp_path):
-    env_match = classify_sensitive_path(".env")
-    env_local_match = classify_sensitive_path("/workspace/.env.local")
-    aws_match = classify_sensitive_path("~/.aws/credentials", home_dir=tmp_path)
+    env_match = classify_secret_path(".env")
+    env_local_match = classify_secret_path("/workspace/.env.local")
+    aws_match = classify_secret_path("~/.aws/credentials", home_dir=tmp_path)
 
     assert env_match is not None
     assert env_match.path_class == "local .env file"
@@ -553,8 +546,8 @@ def test_secret_file_path_classifier_stays_precise(tmp_path):
     assert aws_match is not None
     assert aws_match.path_class == "AWS shared credentials file"
     assert aws_match.normalized_path.endswith(".aws/credentials")
-    assert classify_sensitive_path("README.md") is None
-    assert classify_sensitive_path(".envrc") is None
+    assert classify_secret_path("README.md") is None
+    assert classify_secret_path(".envrc") is None
 
 
 @pytest.mark.parametrize(
@@ -651,115 +644,6 @@ def test_secret_content_classifier_does_not_upgrade_npm_token_prose():
 )
 def test_secret_content_classifier_suppresses_sample_token_values(content):
     assert classify_secret_content(content) == ()
-
-
-def test_file_read_request_classifier_is_argument_aware(tmp_path):
-    env_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
-    claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)
-    copilot_request = extract_sensitive_file_read_request("view", {"path": ".env"})
-
-    assert is_file_read_tool_name("read_file") is True
-    assert is_file_read_tool_name("Read") is True
-    assert is_file_read_tool_name("view") is True
-    assert is_file_read_tool_name("write_file") is False
-    assert env_request is not None
-    assert env_request.path_match.path_class == "local .env file"
-    assert claude_request is not None
-    assert claude_request.path_match.path_class == "SSH client config"
-    assert copilot_request is not None
-    assert copilot_request.path_match.path_class == "local .env file"
-    assert extract_sensitive_file_read_request("read_file", {"path": "README.md"}) is None
-    assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
-
-
-def test_file_read_request_classifier_uses_exact_normalized_action_paths(tmp_path):
-    action = normalize_codex_hook_payload(
-        {
-            "event": "PreToolUse",
-            "toolName": "Read",
-            "toolInput": {"filePath": ".env.local"},
-        },
-        workspace=tmp_path / "workspace",
-        home_dir=tmp_path,
-    )
-
-    request = extract_sensitive_file_read_request_from_action(action, cwd=tmp_path / "workspace", home_dir=tmp_path)
-
-    assert request is not None
-    assert request.tool_name == "Read"
-    assert request.path_match.family == "local .env file"
-
-
-def test_file_read_request_classifier_skips_redacted_action_paths(tmp_path):
-    action = normalize_codex_hook_payload(
-        {
-            "event": "PreToolUse",
-            "toolName": "Read",
-            "toolInput": {"filePath": str(tmp_path.parent / "outside" / ".env")},
-        },
-        workspace=tmp_path / "workspace",
-        home_dir=tmp_path / "home",
-    )
-
-    request = extract_sensitive_file_read_request_from_action(action, cwd=tmp_path / "workspace", home_dir=tmp_path)
-
-    assert action.target_paths == (".../.env",)
-    assert request is None
-
-
-@pytest.mark.parametrize(
-    ("path", "family"),
-    [
-        (".env", "local .env file"),
-        (".npmrc", "npm registry credentials"),
-        (".pypirc", "Python package credentials"),
-        ("~/.aws/" + "credentials", "AWS shared credentials file"),
-        ("~/.ssh/id_rsa", "SSH private key"),
-        ("~/.ssh/id_ed25519", "SSH private key"),
-        ("~/.gnupg/private-keys-v1.d/example.key", "GnuPG key material"),
-        ("~/.docker/" + "config.json", "Docker client config"),
-        ("~/.kube/config", "Kubernetes config"),
-        (".terraform.tfvars", "Terraform variable secrets"),
-    ],
-)
-def test_file_read_request_classifier_covers_planned_secret_paths(tmp_path, path, family):
-    request = extract_sensitive_file_read_request("Read", {"file_path": path}, home_dir=tmp_path)
-
-    assert request is not None
-    assert request.path_match.family == family
-
-
-def test_file_read_request_artifact_hash_is_exact_to_tool_and_path():
-    def artifact_for(path: str):
-        _request, artifact = extract_sensitive_file_read_request_artifact(
-            "read_file",
-            {"path": path},
-            harness="claude-code",
-            config_path="/workspace/.claude/settings.local.json",
-            source_scope="project",
-        )
-        assert artifact is not None
-        return artifact
-
-    first_artifact = artifact_for(".env")
-    same_artifact = artifact_for(".env")
-    different_artifact = artifact_for(".env.local")
-
-    assert artifact_hash(first_artifact) == artifact_hash(same_artifact)
-    assert artifact_hash(first_artifact) != artifact_hash(different_artifact)
-
-
-def test_an_ordinary_read_earns_no_request_artifact():
-    request, artifact = extract_sensitive_file_read_request_artifact(
-        "read_file",
-        {"path": "src/app.py"},
-        harness="claude-code",
-        config_path="/workspace/.claude/settings.local.json",
-        source_scope="project",
-    )
-
-    assert request is None
-    assert artifact is None
 
 
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_null():
@@ -1368,7 +1252,7 @@ def test_tool_action_request_classifier_reviews_native_coauthored_commit_redirec
     assert request.canonical_command.confidence == "exact"
     assert request.guard_default_action is None
     native = real_native_command_evaluation(request.command_text, cwd=tmp_path)
-    assert native.native_minimum_action == "review"
+    assert native.payload["minimum_action"] == "review"
     assert native.evaluation.minimum_action == "review"
 
 

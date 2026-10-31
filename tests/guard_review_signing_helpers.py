@@ -6,9 +6,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.guard import review_contracts as review_contracts_module
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    policy_bundle_verification_key_from_public_key,
-)
+from tests.policy_bundle_signing_helpers import policy_bundle_verification_key_from_public_key
 
 REVIEW_SIGNING_KEY_ID = "guard-review-test-key"
 REVIEW_SIGNING_KEY_PURPOSE = "remote_approval"

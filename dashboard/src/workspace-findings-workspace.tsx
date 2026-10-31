@@ -14,7 +14,25 @@ import {
   type WorkspaceWorktree,
 } from "./workspace-findings-api";
 import { createLatestRefresh } from "./workspace-findings-refresh";
+import { sameWorktree, worktreeStatus } from "./workspace-findings-status";
+import {
+  CarriedNote,
+  Cell,
+  EditorTaskFindingsTable,
+  EvidenceNote,
+  HookFindingsTable,
+  InstructionFindingsTable,
+  McpFindingsTable,
+  PluginFindingsTable,
+  RuntimeFindingsTable,
+  SecretFindingsTable,
+  SkillFindingsTable,
+  WorkflowFindingsTable,
+} from "./workspace-findings-tables";
+import { ExportPreviewPanel } from "./workspace-export-preview-panel";
 import { FixCell, FixHistory, FixLoadError, FixReview, useWorktreeFixes, type WorktreeFixes } from "./workspace-fix-panel";
+
+export { worktreeStatus, type WorktreeStatus } from "./workspace-findings-status";
 
 const REFRESH_MS = 15_000;
 
@@ -26,46 +44,56 @@ const COVERAGE_REASONS: Record<string, string> = {
   snapshot_unstable: "Files changed while Guard was reading them.",
   snapshot_depth_cap: "Some folders are nested deeper than one assessment reads.",
   snapshot_visit_cap: "The workspace has more entries than one assessment visits.",
+  snapshot_unsupported_dependency_input: "Some lockfiles use a format Guard does not check yet, so those dependencies were not checked.",
+  snapshot_undiscovered_dependency_input:
+    "Some dependency files are more than three folders below the workspace root, so those dependencies were not checked.",
   supply_chain_incomplete: "Some dependencies need registry data Guard does not have offline. Use Assess now to look them up.",
+  advisory_data_unavailable:
+    "No threat intel is cached on this device yet, so dependencies were listed but not checked for known vulnerabilities.",
   lockfile_warnings: "A lockfile could not be fully parsed.",
   finding_cap: "There were more findings than one assessment keeps.",
   secrets_incomplete: "Secret scanning did not cover every file, so some secrets may not be listed.",
+  runtime_advisories_unavailable: "Runtimes this workspace's tools launch were not checked: Guard has no runtime advisories cached.",
+  runtimes_incomplete: "Some runtimes this workspace's tools launch could not be identified or checked.",
+  skills_incomplete: "Some agent skills could not be read in full, so their instructions may not all be checked.",
+  mcp_config_incomplete: "Some MCP server settings could not be read, so not every configured server was checked.",
+  hook_config_incomplete: "Some agent hook settings could not be fully checked, so not every project hook was screened.",
+  plugin_manifest_incomplete: "Some agent plugin files could not be fully read, so not every plugin hook or MCP server was checked.",
+  ci_workflow_incomplete: "Some GitHub Actions workflows could not be fully read, so not every workflow was checked.",
+  editor_task_incomplete:
+    "Some editor task or dev container files could not be fully read, so not every file was checked.",
+  instruction_file_incomplete: "Some agent instruction files could not be fully read, so not every file was checked.",
 };
 
-const FAILURE_REASONS: Record<string, string> = {
-  workspace_snapshot_failed: "Guard could not read this workspace.",
-  workspace_snapshot_native_unavailable: "The Guard runtime needed to read files is unavailable.",
-  workspace_identity_changed: "The folder now points at a different repository. Add it again.",
-  supply_chain_detector_failed: "The dependency check stopped before it finished.",
-  assessment_result_too_large: "The result was too large to store.",
-  lease_expired: "The assessment took too long and was retried.",
-  feed_context_unavailable: "Guard could not read its cached advisories.",
+const DETECTOR_LABELS: Record<string, string> = {
+  secrets: "Secret scanning",
+  runtime_identity_v1: "Runtime checking",
+  skill_content_v1: "Skill checking",
+  mcp_config_v1: "MCP server checking",
+  hook_config_v1: "Project hook checking",
+  plugin_manifest_v1: "Agent plugin checking",
+  ci_workflow_v1: "CI workflow checking",
+  editor_task_v1: "Editor task checking",
+  instruction_file_v1: "Instruction file checking",
 };
 
-const DETECTOR_LABELS: Record<string, string> = { secrets: "Secret scanning" };
-
-export type WorktreeStatus = { label: string; tone: TagTone; detail: string | null };
-
-function sameWorktree(left: WorkspaceWorktree, right: { codebaseKey: string; worktreeKey: string }): boolean {
-  return left.codebaseKey === right.codebaseKey && left.worktreeKey === right.worktreeKey;
-}
-
-export function worktreeStatus(
+// When the newest run has not produced a result yet, or failed, the findings
+// on screen still come from the last finished assessment, so say when that was.
+export function checkedSummary(
   worktree: WorkspaceWorktree,
   newestRun: WorkspaceRun | undefined,
   assessment: WorkspaceAssessment | undefined,
-): WorktreeStatus {
-  if (worktree.paused) return { label: "Paused", tone: "slate", detail: "Guard is not watching this workspace." };
-  if (newestRun?.state === "running") return { label: "Assessing", tone: "slate", detail: null };
-  if (newestRun?.state === "queued") return { label: "Queued", tone: "slate", detail: null };
-  if (newestRun?.state === "failed" && newestRun.errorCode !== "lease_expired") {
-    const detail = FAILURE_REASONS[newestRun.errorCode ?? ""] ?? "The last assessment did not finish.";
-    return { label: "Assessment failed", tone: "red", detail };
-  }
-  if (assessment === undefined) return { label: "Not assessed yet", tone: "slate", detail: null };
-  if (worktree.stale) return { label: "Out of date", tone: "attention", detail: "Files changed since the last assessment." };
-  if (assessment.partial) return { label: "Partial coverage", tone: "attention", detail: null };
-  return { label: "Up to date", tone: "green", detail: null };
+): string {
+  const pending = newestRun?.state === "running" || newestRun?.state === "queued" || newestRun?.state === "failed";
+  // lastScanAtMs also moves when a run fails, so it cannot stand in for a finished check.
+  if (assessment === undefined && pending) return "No check has finished yet.";
+  const earlier = assessment !== undefined && pending && newestRun?.runId !== assessment.runId;
+  // The two endpoints are read separately, so a finished run can arrive before its assessment.
+  const runAtMs = newestRun?.state === "completed" || newestRun?.state === "partial" ? newestRun.finishedAtMs : null;
+  const atMs = assessment?.finishedAtMs ?? (earlier ? null : (runAtMs ?? worktree.lastScanAtMs));
+  if (atMs === null) return earlier ? "Showing results from an earlier check." : "Waiting for the first check.";
+  const when = formatRelativeTime(new Date(atMs).toISOString());
+  return earlier ? `Showing results from the check ${when.replace(/^Yesterday/, "yesterday")}.` : `Checked ${when}`;
 }
 
 function trimTrailingSeparators(root: string): string {
@@ -84,7 +112,10 @@ function decisionTone(decision: string): TagTone {
   return "slate";
 }
 
-const DECISION_LABELS: Record<string, string> = { block: "Blocked", ask: "Needs review", warn: "Warning" };
+// Package policy's verdict on this version. A finding in the worktree is not
+// itself a blocked action, and a saved approval or observe mode can still
+// change what happens at install.
+const DECISION_LABELS: Record<string, string> = { block: "Block", ask: "Ask", warn: "Warn" };
 
 export function WorkspaceFindingsWorkspace(props: {
   suggestedRoot: string;
@@ -179,6 +210,11 @@ export function WorkspaceFindingsWorkspace(props: {
       </div>
       {loadError && <ErrorNotice message={loadError} onRetry={() => void refresh()} />}
       {actionError && <ErrorNotice message={actionError} />}
+      {state.deferredReason === "resource_pressure" && state.worktrees.length > 0 && (
+        <p role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          This device is busy, so background checks are waiting. Checks you start with Assess now still run.
+        </p>
+      )}
       {state.worktrees.length === 0 ? (
         <EmptyState
           title="No workspaces assessed yet"
@@ -246,9 +282,8 @@ export function WorktreeRow(props: {
           <p className="mt-1 truncate font-mono text-xs text-slate-500" title={worktree.root}>
             {worktree.root}
           </p>
-          <p className="mt-1 text-sm text-slate-600">
-            {status.detail ?? (worktree.lastScanAtMs ? `Checked ${formatRelativeTime(new Date(worktree.lastScanAtMs).toISOString())}` : "Waiting for the first check.")}
-          </p>
+          {status.detail && <p className="mt-1 text-sm text-slate-600">{status.detail}</p>}
+          <p className="mt-1 text-sm text-slate-500">{checkedSummary(worktree, props.newestRun, assessment)}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <ActionButton
@@ -280,74 +315,55 @@ export function WorktreeRow(props: {
 }
 
 function AssessmentFindings(props: { worktree: WorkspaceWorktree; assessment: WorkspaceAssessment }) {
-  const { findings, runId, notRun } = props.assessment;
+  const { findings, runId, notRun, dependencyFilesFound } = props.assessment;
   const fixes = useWorktreeFixes(props.worktree, runId);
   return (
     <div className="space-y-4">
       <FixLoadError fixes={fixes} />
-      <FindingsSections findings={findings} secretsChecked={!notRun.includes("secrets")} fixes={fixes} />
+      <FindingsSections findings={findings} dependencyFilesFound={dependencyFilesFound} secretsChecked={!notRun.includes("secrets")} fixes={fixes} />
       <FixReview fixes={fixes} findings={findings} />
       <FixHistory fixes={fixes} findings={findings} />
+      <ExportPreviewPanel worktree={props.worktree} findings={findings} />
     </div>
   );
 }
 
-function FindingsSections(props: { findings: WorkspaceFinding[]; secretsChecked: boolean; fixes: WorktreeFixes }) {
+function emptyFindingsCopy(dependencyFilesFound: boolean, secretsChecked: boolean): string {
+  // A workspace without dependency files had nothing to audit; saying its
+  // dependencies came back clean would overstate what was checked.
+  const none = "No dependency files were found, so there were no dependencies to check.";
+  if (!dependencyFilesFound) return secretsChecked ? `${none} No secret findings in the checked files.` : none;
+  return secretsChecked ? "No dependency or secret findings in the checked files." : "No dependency findings in the checked files.";
+}
+
+type FindingsSectionsProps = { findings: WorkspaceFinding[]; dependencyFilesFound: boolean; secretsChecked: boolean; fixes: WorktreeFixes };
+
+function FindingsSections(props: FindingsSectionsProps) {
   const dependencies = props.findings.filter((finding) => finding.kind === "supply_chain");
   const secrets = props.findings.filter((finding) => finding.kind === "secret");
-  if (dependencies.length === 0 && secrets.length === 0) {
-    return (
-      <p className="text-sm text-slate-600">
-        {props.secretsChecked
-          ? "No dependency or secret findings in the checked files."
-          : "No dependency findings in the checked files."}
-      </p>
-    );
+  const runtimes = props.findings.filter((finding) => finding.kind === "runtime");
+  const skills = props.findings.filter((finding) => finding.kind === "skill");
+  const servers = props.findings.filter((finding) => finding.kind === "mcp");
+  const hooks = props.findings.filter((finding) => finding.kind === "hook");
+  const plugins = props.findings.filter((finding) => finding.kind === "plugin");
+  const workflows = props.findings.filter((finding) => finding.kind === "workflow");
+  const editorTasks = props.findings.filter((finding) => finding.kind === "editor_task");
+  const instructions = props.findings.filter((finding) => finding.kind === "instruction");
+  if (props.findings.length === 0) {
+    return <p className="text-sm text-slate-600">{emptyFindingsCopy(props.dependencyFilesFound, props.secretsChecked)}</p>;
   }
   return (
     <div className="space-y-4">
       {dependencies.length > 0 && <FindingsTable findings={dependencies} fixes={props.fixes} />}
       {secrets.length > 0 && <SecretFindingsTable findings={secrets} />}
-    </div>
-  );
-}
-
-function secretLines(finding: WorkspaceFinding): string {
-  const lines = finding.lines.length > 0 ? finding.lines : finding.line !== null ? [finding.line] : [];
-  return lines.length > 0 ? `:${lines.join(", ")}` : "";
-}
-
-function SecretFindingsTable({ findings }: { findings: WorkspaceFinding[] }) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-200">
-      <table className="w-full text-left text-sm">
-        <caption className="sr-only">Possible secrets in files</caption>
-        <thead className="hidden bg-slate-50 text-xs font-semibold text-slate-600 md:table-header-group">
-          <tr>
-            <th scope="col" className="px-3 py-2">Rule</th>
-            <th scope="col" className="px-3 py-2">Location</th>
-            <th scope="col" className="px-3 py-2">Severity</th>
-            <th scope="col" className="px-3 py-2">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {findings.map((finding) => (
-            <tr key={finding.findingId} className="grid grid-cols-2 gap-x-3 gap-y-2 px-3 py-3 md:table-row md:p-0">
-              <Cell label="Rule">
-                <span className="break-all font-mono text-xs text-slate-700">{finding.ruleIds.join(", ")}</span>
-              </Cell>
-              <Cell label="Location" wide>
-                <span className="break-all font-mono text-xs text-slate-700">
-                  {finding.path}
-                  {secretLines(finding)}
-                </span>
-              </Cell>
-              <Cell label="Severity"><span className="capitalize text-slate-700">{finding.severity}</span></Cell>
-              <Cell label="Status"><Tag tone="slate">Not verified</Tag></Cell>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {runtimes.length > 0 && <RuntimeFindingsTable findings={runtimes} />}
+      {skills.length > 0 && <SkillFindingsTable findings={skills} />}
+      {servers.length > 0 && <McpFindingsTable findings={servers} />}
+      {hooks.length > 0 && <HookFindingsTable findings={hooks} />}
+      {plugins.length > 0 && <PluginFindingsTable findings={plugins} />}
+      {workflows.length > 0 && <WorkflowFindingsTable findings={workflows} />}
+      {editorTasks.length > 0 && <EditorTaskFindingsTable findings={editorTasks} />}
+      {instructions.length > 0 && <InstructionFindingsTable findings={instructions} />}
     </div>
   );
 }
@@ -362,7 +378,7 @@ function FindingsTable({ findings, fixes }: { findings: WorkspaceFinding[]; fixe
             <th scope="col" className="px-3 py-2">Package</th>
             <th scope="col" className="px-3 py-2">Installed</th>
             <th scope="col" className="px-3 py-2">Fixed in</th>
-            <th scope="col" className="px-3 py-2">Decision</th>
+            <th scope="col" className="px-3 py-2">Policy</th>
             <th scope="col" className="px-3 py-2">Severity</th>
             <th scope="col" className="px-3 py-2">Advisories</th>
             <th scope="col" className="px-3 py-2">Fix</th>
@@ -377,8 +393,10 @@ function FindingsTable({ findings, fixes }: { findings: WorkspaceFinding[]; fixe
               </Cell>
               <Cell label="Installed"><Mono value={finding.packageVersion} /></Cell>
               <Cell label="Fixed in"><Mono value={finding.fixVersion} fallback="No fix yet" /></Cell>
-              <Cell label="Decision">
+              <Cell label="Policy">
                 <Tag tone={decisionTone(finding.decision)}>{DECISION_LABELS[finding.decision] ?? finding.decision}</Tag>
+                <EvidenceNote finding={finding} />
+                <CarriedNote finding={finding} />
               </Cell>
               <Cell label="Severity"><span className="capitalize text-slate-700">{finding.severity}</span></Cell>
               <Cell label="Advisories" wide>
@@ -394,15 +412,6 @@ function FindingsTable({ findings, fixes }: { findings: WorkspaceFinding[]; fixe
         </tbody>
       </table>
     </div>
-  );
-}
-
-function Cell(props: { label: string; wide?: boolean; children: React.ReactNode }) {
-  return (
-    <td className={`min-w-0 md:px-3 md:py-2.5 ${props.wide ? "col-span-2 md:col-span-1" : ""}`}>
-      <span className="block text-xs font-semibold text-slate-500 md:hidden">{props.label}</span>
-      {props.children}
-    </td>
   );
 }
 

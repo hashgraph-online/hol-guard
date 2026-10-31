@@ -8,6 +8,7 @@ import { describeFirewallFailure } from "./supply-chain-firewall-controls";
 import {
   formatBundleExpiry,
   isBundleExpired,
+  missingBundleMessage,
   resolveIntelFreshness,
   type SupplyChainBundleLoad,
 } from "./supply-chain-intel-freshness";
@@ -130,5 +131,19 @@ assert(detailsSource.includes("resolveIntelFreshness("), "the details panel read
 assert(detailsSource.includes("Guard Cloud connected, syncing"), "paired_waiting is not labeled live");
 const bundlePanelSource = readFileSync(`${here}supply-chain-bundle-panel.tsx`, "utf8");
 assert(!bundlePanelSource.includes("formatRelativeTime"), "the bundle panel does not format expiry with the past-only helper");
+
+assert(
+  missingBundleMessage("local_only").includes("Connect to Guard Cloud"),
+  "a local-only device is told to connect Guard Cloud for live intel",
+);
+for (const cloudState of ["paired_waiting", "paired_active"] as const) {
+  const message = missingBundleMessage(cloudState);
+  assert(!message.includes("Connect to Guard Cloud"), `${cloudState} is not told to connect a cloud it already has`);
+  assert(message.includes("Sync"), `${cloudState} is pointed at Sync to fetch the bundle`);
+}
+assert(
+  !bundlePanelSource.includes("Connect to Guard Cloud for live advisory data"),
+  "the bundle panel takes its empty-state copy from the cloud state",
+);
 
 console.log("supply-chain-intel-freshness tests passed");

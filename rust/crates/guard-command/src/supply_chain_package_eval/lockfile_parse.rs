@@ -15,7 +15,7 @@ use super::contracts::{
 use super::lockfile_validate::validate_structure;
 use super::*;
 use crate::local_supply_chain::stable_digest_hex;
-use crate::package_manifest_diff::{compile_patterns, try_dependency_map_for_path};
+use crate::package_manifest_diff::{compile_patterns, try_dependency_versions_for_path};
 
 pub const LOCKFILE_PARSER_VERSION: &str = "complete-v1";
 const LOCKFILE_MAX_BYTES: usize = 8 * 1024 * 1024;
@@ -162,7 +162,7 @@ fn parse_complete(
         let remaining_ms = deadline
             .saturating_duration_since(Instant::now())
             .as_millis() as u64;
-        try_dependency_map_for_path(path, text, remaining_ms)
+        try_dependency_versions_for_path(path, text, remaining_ms)
             .map_err(reason)?
             .into_iter()
             .map(|(package_name, version)| LockfileDependencyEntry {

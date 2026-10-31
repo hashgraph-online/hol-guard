@@ -31,6 +31,10 @@ inputs:
     description: "Send the evidence to HOL. Only the trusted reusable workflow is accepted by HOL."
     required: false
     default: "false"
+  offer_line:
+    description: "Allow one HOL Blue line in the job summary, at most once in 28 days, for a listing without a membership"
+    required: false
+    default: "true"
   release_endpoint:
     description: "HTTPS HOL Plugin Release endpoint"
     required: false
@@ -55,6 +59,12 @@ outputs:
   evidence_sha256:
     description: "Release evidence SHA-256"
     value: ${{ steps.evidence.outputs.evidence_sha256 }}
+  sbom_path:
+    description: "Path to the CycloneDX SBOM, empty when the release declares no packages"
+    value: ${{ steps.evidence.outputs.sbom_path }}
+  sbom_components:
+    description: "Number of components in the SBOM"
+    value: ${{ steps.evidence.outputs.sbom_components }}
   attestation_url:
     description: "GitHub artifact attestation URL"
     value: ${{ steps.attest.outputs.attestation-url }}
@@ -226,7 +236,9 @@ runs:
         FINDINGS_TOTAL: ${{ steps.scan.outputs.findings_total }}
         CHECK_PATH: ${{ steps.check.outputs.check_path }}
         VISIBILITY: ${{ inputs.visibility }}
+        PLUGIN_DIR: ${{ inputs.plugin_dir }}
         EVIDENCE_PATH: ${{ runner.temp }}/hol-plugin-release-evidence.json
+        SBOM_PATH: ${{ runner.temp }}/hol-plugin-release-sbom.cdx.json
         PYTHONNOUSERSITE: "1"
         PYTHONSAFEPATH: "1"
       run: python3 -P -m codex_plugin_scanner.plugin_release_runner evidence
@@ -244,6 +256,7 @@ runs:
       env:
         REGISTER_RELEASE: ${{ inputs.register_release }}
         RELEASE_ENDPOINT: ${{ inputs.release_endpoint }}
+        OFFER_LINE: ${{ inputs.offer_line }}
         EVIDENCE_PATH: ${{ steps.evidence.outputs.evidence_path }}
         ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
         ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
@@ -258,6 +271,8 @@ runs:
         ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
         RELEASE_STATUS: ${{ steps.register.outputs.release_status }}
         RELEASE_URL: ${{ steps.register.outputs.release_url }}
+        OFFER_URL: ${{ steps.register.outputs.offer_url }}
+        CHANGES: ${{ steps.register.outputs.changes }}
         FAIL_ON_CHECK_ERRORS: ${{ inputs.fail_on_check_errors }}
         FAIL_ON_SEVERITY: ${{ inputs.fail_on_severity }}
         PYTHONNOUSERSITE: "1"

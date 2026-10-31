@@ -7,6 +7,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::config::Excludes;
+
 pub(crate) const MAX_DEPTH: usize = 5;
 pub(crate) const MAX_ENTRIES: usize = 20_000;
 pub(crate) const MAX_TEXT_BYTES: u64 = 1024 * 1024;
@@ -27,7 +29,22 @@ const SKIPPED_DIRECTORIES: &[&str] = &[
 
 /// Every regular file under `root`, relative to it, sorted. Hidden plugin
 /// manifest directories (`.claude-plugin`, `.codex-plugin`) are walked.
-pub(crate) fn files(root: &Path) -> Result<Vec<PathBuf>, String> {
+/// `prefix` is `root` relative to the repository, so `excludes` can match
+/// repository paths; an excluded directory is skipped without counting its
+/// entries toward the walk's limit.
+pub(crate) fn files(
+    root: &Path,
+    prefix: &str,
+    excludes: &Excludes,
+) -> Result<Vec<PathBuf>, String> {
+    let repository_path = |relative: &Path| {
+        let relative = display(relative);
+        if prefix.is_empty() {
+            relative
+        } else {
+            format!("{prefix}/{relative}")
+        }
+    };
     let mut found = Vec::new();
     let mut visited = 0usize;
     let mut stack = vec![(root.to_path_buf(), 0usize)];
@@ -47,16 +64,20 @@ pub(crate) fn files(root: &Path) -> Result<Vec<PathBuf>, String> {
                 continue;
             };
             let path = entry.path();
+            let Ok(relative) = path.strip_prefix(root) else {
+                continue;
+            };
             if file_type.is_dir() {
                 let name = entry.file_name();
                 let name = name.to_string_lossy();
-                if depth < MAX_DEPTH && !SKIPPED_DIRECTORIES.contains(&name.as_ref()) {
+                if depth < MAX_DEPTH
+                    && !SKIPPED_DIRECTORIES.contains(&name.as_ref())
+                    && !excludes.directory(&repository_path(relative))
+                {
                     stack.push((path, depth + 1));
                 }
-            } else if file_type.is_file() {
-                if let Ok(relative) = path.strip_prefix(root) {
-                    found.push(relative.to_path_buf());
-                }
+            } else if file_type.is_file() && !excludes.file(&repository_path(relative)) {
+                found.push(relative.to_path_buf());
             }
         }
     }

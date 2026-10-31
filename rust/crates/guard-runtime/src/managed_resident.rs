@@ -19,6 +19,9 @@ pub(crate) use client_timeout_policy::{client_timeout, DAEMON_LIFECYCLE_TIMEOUT_
 mod containment;
 #[path = "managed_resident_handoff.rs"]
 mod handoff;
+pub(crate) use handoff::answer_shutdown;
+#[path = "managed_resident_handoff_record.rs"]
+mod handoff_record;
 #[path = "managed_resident_lease.rs"]
 mod lease;
 pub(crate) use lease::client_request;
@@ -32,15 +35,20 @@ mod managed_resident_transport;
 mod managed_resident_windows;
 #[path = "managed_resident_owner_lock.rs"]
 mod owner_lock;
+#[path = "managed_resident_prewarm.rs"]
+mod prewarm_lane;
 pub(crate) use owner_lock::ManagedOwnerLock;
 #[path = "managed_resident_exit.rs"]
 mod exit_record;
+#[path = "resident_lifecycle_journal.rs"]
+mod lifecycle_journal;
 #[path = "resident_private_file.rs"]
 mod private_file;
 #[path = "resident_requested_stop.rs"]
 mod requested_stop;
 #[path = "resident_failure_log.rs"]
 mod resident_failure_log;
+pub(crate) use lifecycle_journal::lifecycle_health;
 #[path = "resident_state_retirement.rs"]
 mod resident_state_retirement;
 #[path = "resident_restart_budget.rs"]
@@ -56,6 +64,13 @@ use crate::resident_state::{
 
 pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
     client_stream::run(state_base)
+}
+
+/// Start this runtime's resident, if no client is already holding one, and
+/// keep it up for a bounded window so a session's first hook does not pay
+/// for the start. `managed_resident_prewarm.rs` has the whole contract.
+pub(crate) fn prewarm(state_base: &Path) -> Result<(), String> {
+    prewarm_lane::run(state_base)
 }
 
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
@@ -159,7 +174,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     // stop can initialize it before publishing test or recovery state.
     let digest = runtime_digest()?;
     let runtime_scope = state_scope(state_base, &digest)?;
-    let request = br#"{"operation":"shutdown","request":{}}"#;
+    let request = handoff::STOP_SHUTDOWN_REQUEST;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
     let Some((scope, digest, state)) = discover_home_states_prefer(state_base, Some(&digest))?
         .into_iter()
@@ -477,3 +492,7 @@ mod tests;
 #[cfg(test)]
 #[path = "managed_resident_client_timeout_tests.rs"]
 mod client_timeout_tests;
+
+#[cfg(test)]
+#[path = "managed_resident_identity_tests.rs"]
+mod identity_tests;

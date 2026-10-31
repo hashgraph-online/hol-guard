@@ -194,7 +194,7 @@
 },
 {
 "action_type": "shell_command",
-"command": "\nHOL Guard encoded canary exfil fixture \u2014 T605.\n\nThis script uses base64 encoding to test HOL Guard's encoded-execution detector.\nAll credentials are fake sentinel values. The endpoint is a canary domain\ncontrolled by Hashgraph Online for testing purposes only.\n",
+"command": "\nHOL Guard encoded canary exfil fixture \u2014 T605.\n\nThis script uses base64 encoding to test HOL Guard's encoded-execution detector.\nAll credentials are fake sentinel values. The endpoint is a canary domain\ncontrolled by HOL for testing purposes only.\n",
 "signal_ids": [],
 "workspace": null
 },

@@ -3,7 +3,8 @@
 One state row per admitted worktree carries its dirty generation; one run row
 per assessment attempt carries the snapshot it was bound to, its lease and its
 bounded result. A worktree watched only because a harness install registered
-it is marked, so its admission ends with the install. Customer source never
+it is marked, so its admission ends with the install. An ended admission is
+marked too, and its runs, findings and fix proposals stay. Customer source never
 lands here: findings hold package coordinates and rule identifiers only. A fix proposal row binds one reviewed
 manifest edit to the snapshot it was prepared against; it holds a bounded
 diff of the edit and the byte offsets to apply it, never the manifest itself.
@@ -21,6 +22,9 @@ WORKSPACE_FIX_PROPOSAL_MIGRATION_VERSION: Final = 34
 
 MAX_COVERAGE_JSON_BYTES: Final = 16 * 1024
 MAX_FINDINGS_JSON_BYTES: Final = 256 * 1024
+MAX_FINDINGS: Final = 500
+# Leave room under the column bound for the list brackets and separators.
+FINDINGS_BYTE_BUDGET: Final = MAX_FINDINGS_JSON_BYTES - 1024
 MAX_FIX_DIFF_BYTES: Final = 64 * 1024
 MAX_FIX_EDITS_JSON_BYTES: Final = 16 * 1024
 
@@ -45,6 +49,16 @@ _STATEMENTS: Final = (
     CREATE TABLE IF NOT EXISTS workspace_assessment_install_admissions (
         codebase_key TEXT NOT NULL,
         worktree_key TEXT NOT NULL,
+        PRIMARY KEY (codebase_key, worktree_key),
+        FOREIGN KEY (codebase_key, worktree_key)
+            REFERENCES workspace_assessment_state(codebase_key, worktree_key) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS workspace_assessment_ended_admissions (
+        codebase_key TEXT NOT NULL,
+        worktree_key TEXT NOT NULL,
+        ended_at_ms INTEGER NOT NULL CHECK (ended_at_ms >= 0),
         PRIMARY KEY (codebase_key, worktree_key),
         FOREIGN KEY (codebase_key, worktree_key)
             REFERENCES workspace_assessment_state(codebase_key, worktree_key) ON DELETE CASCADE
@@ -188,7 +202,9 @@ def ensure_workspace_fix_proposal_schema(connection: sqlite3.Connection, *, appl
 
 
 __all__ = [
+    "FINDINGS_BYTE_BUDGET",
     "MAX_COVERAGE_JSON_BYTES",
+    "MAX_FINDINGS",
     "MAX_FINDINGS_JSON_BYTES",
     "MAX_FIX_DIFF_BYTES",
     "MAX_FIX_EDITS_JSON_BYTES",

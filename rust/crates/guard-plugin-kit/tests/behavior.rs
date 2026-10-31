@@ -191,6 +191,109 @@ fn forced_package_removes_files_the_new_plan_dropped() {
 }
 
 #[test]
+fn output_at_the_source_a_parent_or_root_is_refused_even_with_force() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let parent = root.parent().expect("parent").to_path_buf();
+    // The filesystem root of this host: `/` on Unix, the drive root on Windows,
+    // where a bare `/` is not an absolute path.
+    let filesystem_root = root.ancestors().last().expect("root").to_path_buf();
+    for out in [root.clone(), parent.clone(), filesystem_root] {
+        for force in [false, true] {
+            let code = error(json!({
+                "command": "package", "root": root_str(&root),
+                "out_dir": root_str(&out), "force": force,
+            }));
+            assert_eq!(code, "plugin_kit_output_unsafe", "{out:?} force={force}");
+        }
+    }
+    assert!(!root.join("claude-code").exists());
+    assert!(!parent.join("claude-code").exists());
+}
+
+#[test]
+fn output_at_the_home_folder_is_refused() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return;
+    };
+    // Without --force, so a regression stops at the non-empty check instead
+    // of writing into the real home folder.
+    let code = error(json!({
+        "command": "package", "root": root_str(&root),
+        "out_dir": PathBuf::from(home).to_string_lossy(),
+    }));
+    assert_eq!(code, "plugin_kit_output_unsafe");
+}
+
+#[test]
+fn force_never_replaces_a_file_the_kit_did_not_write() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let out = root.parent().expect("parent").join("handmade");
+    let mine = out.join("claude-code/.claude-plugin/plugin.json");
+    fs::create_dir_all(mine.parent().expect("dir")).expect("dirs");
+    fs::write(&mine, "mine").expect("user file");
+    let code = error(json!({
+        "command": "package", "root": root_str(&root),
+        "out_dir": root_str(&out), "force": true,
+    }));
+    assert_eq!(code, "plugin_kit_output_not_generated");
+    assert_eq!(fs::read_to_string(&mine).expect("kept"), "mine");
+    assert!(!out.join("hol.provenance.json").exists());
+}
+
+#[test]
+fn force_keeps_the_earlier_package_when_it_cannot_prove_what_it_wrote() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let package = |out: &Path| json!({"command": "package", "root": root_str(&root), "out_dir": root_str(out), "force": true});
+    let claude = Path::new("claude-code/.claude-plugin/plugin.json");
+
+    // A provenance file the Kit cannot read proves nothing.
+    let out = root.parent().expect("parent").join("unreadable");
+    ok(package(&out));
+    fs::write(out.join("hol.provenance.json"), "{not json").expect("corrupt");
+    assert_eq!(error(package(&out)), "plugin_kit_output_not_generated");
+    assert!(out.join(claude).is_file());
+
+    // A file of the user's where the plan needs a folder.
+    let out = root.parent().expect("parent").join("in-the-way");
+    ok(package(&out));
+    fs::remove_dir_all(out.join("codex")).expect("drop codex");
+    fs::write(out.join("codex"), "mine").expect("user file");
+    assert_eq!(error(package(&out)), "plugin_kit_output_path_blocked");
+    assert!(out.join(claude).is_file());
+    assert_eq!(fs::read_to_string(out.join("codex")).expect("kept"), "mine");
+}
+
+#[cfg(unix)]
+#[test]
+fn force_never_removes_through_a_symlinked_folder() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let out = root.parent().expect("parent").join("linked");
+    let request = json!({"command": "package", "root": root_str(&root), "out_dir": root_str(&out), "force": true});
+    ok(request.clone());
+    let elsewhere = root.parent().expect("parent").join("elsewhere");
+    fs::rename(out.join("claude-code"), &elsewhere).expect("move");
+    std::os::unix::fs::symlink(&elsewhere, out.join("claude-code")).expect("link");
+    assert_eq!(error(request), "plugin_kit_output_path_blocked");
+    assert!(elsewhere.join(".claude-plugin/plugin.json").is_file());
+}
+
+#[test]
 fn a_blocked_path_stops_package_before_any_write() {
     let root = repo(&[
         (".claude-plugin/plugin.json", MANIFEST),
@@ -227,6 +330,142 @@ fn skills_with_the_same_name_are_an_error() {
     ]);
     let check = ok(json!({"command": "check", "root": root_str(&root)}));
     assert!(codes(&check).contains(&"skill_name_duplicate".to_owned()));
+}
+
+#[test]
+fn excluded_copies_of_a_skill_are_not_part_of_the_plugin() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        (
+            ".plugin-scanner.toml",
+            "[plugin_kit]\nexclude_paths = [\"distributions/*\"]\n",
+        ),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+        ("distributions/marketplace/skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let check = ok(json!({"command": "check", "root": root_str(&root)}));
+    assert!(
+        !codes(&check).contains(&"skill_name_duplicate".to_owned()),
+        "{check}"
+    );
+    assert_eq!(check["summary"]["skills"], json!(1), "{check}");
+    assert!(plan(&root, &["claude-code"])
+        .iter()
+        .all(|output| !output.path.contains("distributions")));
+}
+
+#[test]
+fn excluded_files_inside_skill_and_hooks_folders_are_not_packaged() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        (
+            ".plugin-scanner.toml",
+            "[plugin_kit]\nexclude_paths = [\"skills/pdf-tools/drafts/*\", \"*.local.sh\"]\n",
+        ),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+        ("skills/pdf-tools/drafts/notes.md", "# Notes"),
+        ("hooks/hooks.json", r#"{"hooks": {}}"#),
+        ("hooks/run.sh", "echo run"),
+        ("hooks/debug.local.sh", "echo debug"),
+    ]);
+    let paths: Vec<String> = plan(&root, &["claude-code"])
+        .into_iter()
+        .map(|output| output.path)
+        .collect();
+    assert!(
+        paths.contains(&"claude-code/skills/pdf-tools/SKILL.md".to_owned()),
+        "{paths:?}"
+    );
+    assert!(
+        paths.contains(&"claude-code/hooks/run.sh".to_owned()),
+        "{paths:?}"
+    );
+    assert!(
+        paths
+            .iter()
+            .all(|path| !path.contains("drafts") && !path.contains(".local.")),
+        "{paths:?}"
+    );
+}
+
+#[test]
+fn an_excluded_package_json_does_not_name_the_repository() {
+    let manifest =
+        r#"{"name":"pdf-tools","version":"1.0.0","description":"PDF tools.","license":"MIT"}"#;
+    let package = r#"{"name":"pdf-tools","repository":"https://github.com/acme/pdf-tools"}"#;
+    let included = repo(&[
+        (".claude-plugin/plugin.json", manifest),
+        ("package.json", package),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let check = ok(json!({"command": "check", "root": root_str(&included)}));
+    assert_eq!(
+        check["plugin"]["repository"],
+        json!("https://github.com/acme/pdf-tools"),
+        "{check}"
+    );
+    let excluded = repo(&[
+        (".claude-plugin/plugin.json", manifest),
+        ("package.json", package),
+        (
+            ".plugin-scanner.toml",
+            "[plugin_kit]\nexclude_paths = [\"package.json\"]\n",
+        ),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let check = ok(json!({"command": "check", "root": root_str(&excluded)}));
+    assert!(check["plugin"]["repository"].is_null(), "{check}");
+}
+
+#[test]
+fn an_excluded_folder_does_not_count_toward_the_repository_limit() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        (
+            ".plugin-scanner.toml",
+            "[plugin_kit]\nexclude_paths = [\"distributions/*\"]\n",
+        ),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let copies = root.join("distributions/copies");
+    fs::create_dir_all(&copies).unwrap();
+    for index in 0..20_001 {
+        fs::write(copies.join(format!("{index}.md")), "").unwrap();
+    }
+    let check = ok(json!({"command": "check", "root": root_str(&root)}));
+    assert_eq!(check["summary"]["skills"], json!(1), "{check}");
+}
+
+#[test]
+fn the_scanner_ignore_paths_do_not_drop_plugin_parts() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        (
+            ".plugin-scanner.toml",
+            "[scanner]\nignore_paths = [\"examples/*\"]\n",
+        ),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+        ("examples/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let check = ok(json!({"command": "check", "root": root_str(&root)}));
+    assert!(codes(&check).contains(&"skill_name_duplicate".to_owned()));
+}
+
+#[test]
+fn a_malformed_exclude_list_is_an_error() {
+    for config in [
+        "[plugin_kit]\nexclude_paths = \"distributions/*\"\n",
+        "[plugin_kit]\nexclude_paths = [3]\n",
+        "plugin_kit = [\"distributions/*\"]\n",
+        "[plugin_kit\n",
+    ] {
+        let root = repo(&[
+            (".plugin-scanner.toml", config),
+            ("skills/pdf-tools/SKILL.md", SKILL),
+        ]);
+        let code = error(json!({"command": "check", "root": root_str(&root)}));
+        assert_eq!(code, "plugin_kit_config_invalid", "{config}");
+    }
 }
 
 #[test]
@@ -354,6 +593,83 @@ fn each_runtime_installs_from_its_own_marketplace() {
 }
 
 #[test]
+fn links_block_is_only_returned_when_asked_and_names_the_listing() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+        (
+            ".claude-plugin/marketplace.json",
+            r#"{"name":"acme-claude","plugins":[{"name":"pdf-tools","source":"./"}]}"#,
+        ),
+    ]);
+    let plain = ok(json!({"command": "links", "root": root_str(&root)}));
+    assert!(plain.get("block").is_none());
+
+    let links = ok(
+        json!({"command": "links", "root": root_str(&root), "block": true, "slug": "acme/pdf-tools"}),
+    );
+    let block = links["block"].as_str().expect("block");
+    // The portal's owner card prints this same text; its test pins it too.
+    assert_eq!(
+        block,
+        r#"<!-- hol-install-block:v2 slug=acme/pdf-tools -->
+Install with [HOL Guard](https://hol.org/guard/docs/plugin-scanner/install-with-hol-guard), which checks the [HOL listing](https://hol.org/registry/plugins/acme%2Fpdf-tools) and asks before each runtime:
+
+```sh
+hol-guard plugin install acme/pdf-tools --apply
+```
+
+Get HOL Guard with `pipx install hol-guard` or `uv tool install hol-guard`.
+
+<details>
+<summary>Install with each runtime's own CLI</summary>
+
+| Runtime | Commands |
+| --- | --- |
+| Claude Code | `claude plugin marketplace add acme/pdf-tools`<br>`claude plugin install pdf-tools@acme-claude` |
+| Agent skills (Cursor, Gemini CLI, OpenCode and others) | `npx skills@1.7.4 add acme/pdf-tools` |
+
+</details>
+<!-- /hol-install-block -->"#
+    );
+
+    for slug in ["../x", "acme/pdf tools", "-acme"] {
+        assert_eq!(
+            error(
+                json!({"command": "links", "root": root_str(&root), "block": true, "slug": slug})
+            ),
+            "plugin_kit_links_slug_invalid"
+        );
+    }
+}
+
+#[test]
+fn links_block_is_null_without_a_marketplace_guard_can_install_from() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+    ]);
+    let links = ok(json!({"command": "links", "root": root_str(&root), "block": true}));
+    assert_eq!(links["block"], Value::Null);
+}
+
+#[test]
+fn links_skip_marketplace_names_that_could_break_a_readme_cell() {
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        ("skills/pdf-tools/SKILL.md", SKILL),
+        (
+            ".claude-plugin/marketplace.json",
+            r#"{"name":"acme` | [x](https://evil.example)","plugins":[{"name":"pdf-tools","source":"./"}]}"#,
+        ),
+    ]);
+    let links = ok(json!({"command": "links", "root": root_str(&root), "block": true}));
+    assert_eq!(links["block"], Value::Null, "{links}");
+    let commands = links["install"].to_string();
+    assert!(!commands.contains("evil.example"), "{commands}");
+}
+
+#[test]
 fn init_scaffolds_only_a_new_folder_and_never_overwrites() {
     let root = repo(&[("README.md", "# New"), (".gitignore", "dist/")]);
     let result = ok(json!({"command": "init", "root": root_str(&root), "name": "my-plugin"}));
@@ -369,4 +685,53 @@ fn init_scaffolds_only_a_new_folder_and_never_overwrites() {
         "plugin_kit_init_folder_not_empty"
     );
     assert!(!busy.join(".claude-plugin").exists());
+}
+
+#[test]
+fn card_declares_without_claiming_verification_or_echoing_secrets() {
+    let input = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/needs-fixes/input");
+    let body = json!({"command": "card", "root": input.to_string_lossy()});
+    let response = guard_plugin_kit::run_request(body.to_string().as_bytes());
+    assert_eq!(response["ok"], json!(true), "{response}");
+    let card = &response["result"];
+    assert_eq!(card["schema"], json!("hol.plugin-card.v0-draft"));
+    assert_eq!(card["identity"]["verified"], json!(false));
+    let rendered = card.to_string();
+    assert!(rendered.contains("SERVICE_API_KEY"));
+    assert!(!rendered.contains("replace-me-123"));
+
+    let refused = json!({"command": "card", "root": input.to_string_lossy(), "slug": "a b"});
+    let response = guard_plugin_kit::run_request(refused.to_string().as_bytes());
+    assert_eq!(response["error"], json!("plugin_kit_card_slug_invalid"));
+}
+
+#[test]
+fn card_lists_unnamed_skills_arg_and_url_variables_and_uppercase_hosts() {
+    let mcp = json!({"mcpServers": {
+        "local": {
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/server.js", "--token", "${GITHUB_TOKEN}"],
+        },
+        "remote": {"type": "http", "url": "HTTPS://MCP.Example/mcp"},
+        "templated": {"type": "http", "url": "https://${MCP_HOST}/mcp"},
+    }});
+    let root = repo(&[
+        (".claude-plugin/plugin.json", MANIFEST),
+        (".mcp.json", &mcp.to_string()),
+        (
+            "skills/helper/SKILL.md",
+            "---\ndescription: Helps.\n---\n# Helper\n",
+        ),
+    ]);
+    let card = ok(json!({"command": "card", "root": root_str(&root)}));
+    assert_eq!(card["capabilities"]["skills"], json!(["helper"]));
+    assert_eq!(card["permissions"]["networkHosts"], json!(["mcp.example"]));
+    assert_eq!(
+        card["permissions"]["environment"],
+        json!(["GITHUB_TOKEN", "MCP_HOST"])
+    );
+    assert_eq!(
+        error(json!({"command": "card", "root": root_str(&root), "slug": "acme/"})),
+        "plugin_kit_card_slug_invalid"
+    );
 }

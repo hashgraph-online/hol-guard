@@ -13,22 +13,20 @@ import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 
+from ..policy_integrity import REMOTE_POLICY_SOURCES
+from ..store_policy import memory_lookup_candidates
 from ..store_policy_decision import policy_decision_hash_exists
 from .hook_fail_closed import render_accepted_allow, render_pre_tool
-from .hook_native_exact_action import GUARD_CONTROL_ACTION_TYPES, native_exact_action
 
 _LOGGER = logging.getLogger(__name__)
 
 EXACT_ACTION_CONTEXT_TOKEN_KEY = "exact_context_token"
 EXACT_ACTION_IDENTITY_KIND_KEY = "exact_identity_kind"
 ONCE_ONLY_REASON_KEY = "once_only_reason"
-
-
-class TokenUnset:
-    """Sentinel type: distinguishes "not supplied" from a computed ``None`` token."""
-
-
-TOKEN_UNSET = TokenUnset()
+# Action types the native authority gives a shell command line. A tool call
+# that only carries a ``command`` argument, such as an MCP tool, is not one.
+_SHELL_ACTION_TYPES = frozenset({"command", "package", "process_service", "network", "shell", "shell_command"})
+_EXACT_COMMAND_RETRY_HINT = "Do not retry it; continue with a permitted alternative."
 
 
 def native_saved_decision_response(
@@ -103,48 +101,100 @@ def native_saved_decision_response(
     return render_accepted_allow(harness, allowed, guard_home=store_guard_home(store))
 
 
-def native_saved_review_response(
+def native_exact_command_block_response(
     store: object,
     *,
     harness: str,
-    tool_name: str,
-    artifact_id: str,
-    payload: Mapping[str, object],
+    command: str | None,
     native_result: Mapping[str, object],
-    native_receipt: Mapping[str, object] | None,
     workspace: Path | None,
-    home_dir: Path | None,
-    precomputed_token: str | None | TokenUnset = TOKEN_UNSET,
-    guard_home: Path | None = None,
+    edge_hint: object = None,
 ) -> dict[str, object] | None:
-    """Return the saved exact-action outcome for a paused native review.
+    """Apply a saved block on this exact shell command; ``None`` keeps the review flow.
 
-    ``precomputed_token`` lets the caller reuse the token it already derived for
-    this exact request instead of repeating its filesystem and resident work.
+    Guard Cloud policy rules and remembered decisions save "block this command"
+    under the exact-command artifact ids, which a native review's exact-action
+    token never names. The store's lookup owns expiry, harness scope and
+    integrity; this only asks it about those ids, so a block keeps the command
+    from running whatever allow the review would otherwise reuse.
+
+    ``edge_hint`` is the edge's ``exact_command_block`` answer. The edge read
+    the store for a block that may name this command; ``False`` means none
+    can, so the lookup is skipped. ``True`` or no answer leaves it to decide.
     """
 
-    token = (
-        native_exact_action(
-            harness=harness,
-            tool_name=tool_name,
-            payload=payload,
-            native_result=native_result,
-            native_receipt=native_receipt,
-            workspace=workspace,
-            home_dir=home_dir,
-            guard_home=guard_home,
-        )[0]
-        if isinstance(precomputed_token, TokenUnset)
-        else precomputed_token
-    )
-    return native_saved_decision_response(
-        store,
-        harness=harness,
-        token=token,
-        artifact_id=artifact_id,
-        native_result=native_result,
-        workspace=workspace,
-    )
+    if command is None or edge_hint is False or not _is_shell_action(native_result):
+        return None
+    try:
+        exact_ids, _memory_id = memory_lookup_candidates(
+            harness,
+            None,
+            memory_command=command,
+            memory_artifact_type="shell_command",
+            memory_artifact_name=None,
+            guard_home=store_guard_home(store),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # Without the ids there is no telling "no block" apart from a block
+        # missed, and an allowed command would run on that answer, so it stops
+        # here.
+        _LOGGER.warning("Native exact-command block probe failed (%s)", type(error).__name__)
+        return _saved_block_response(
+            harness,
+            native_result,
+            reason_code="saved_exact_command_unreadable",
+            reason="HOL Guard could not check this command against saved blocks. Try it again in a moment.",
+            guard_home=store_guard_home(store),
+        )
+    lookup = getattr(store, "resolve_policy_decision_lookup", None)
+    if not callable(lookup):
+        return None
+    for exact_id in exact_ids:
+        try:
+            result = lookup(
+                harness,
+                exact_id,
+                workspace=str(workspace) if workspace is not None else None,
+                consume_one_shot=False,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+            # The edge said a block may name this command, or gave no answer
+            # (an older resident); a failed lookup cannot rule one out.
+            _LOGGER.warning("Native exact-command block lookup failed (%s)", type(error).__name__)
+            return _saved_block_response(
+                harness,
+                native_result,
+                reason_code="saved_exact_command_unreadable",
+                reason=f"HOL Guard could not read the saved block for this exact command. {_EXACT_COMMAND_RETRY_HINT}",
+                guard_home=store_guard_home(store),
+            )
+        decision = result.get("decision") if isinstance(result, Mapping) else None
+        if (
+            not isinstance(decision, Mapping)
+            or decision.get("scope") != "artifact"
+            or decision.get("artifact_id") != exact_id
+            or decision.get("action") != "block"
+        ):
+            continue
+        if decision.get("source") in REMOTE_POLICY_SOURCES:
+            reason = f"Your Guard Cloud policy blocks this exact command. {_EXACT_COMMAND_RETRY_HINT}"
+            reason_code = "policy_exact_command_block"
+        else:
+            reason = f"You chose to always block this exact command in HOL Guard. {_EXACT_COMMAND_RETRY_HINT}"
+            reason_code = "saved_exact_command_block"
+        return _saved_block_response(
+            harness,
+            native_result,
+            reason_code=reason_code,
+            reason=reason,
+            guard_home=store_guard_home(store),
+        )
+    return None
+
+
+def _is_shell_action(native_result: Mapping[str, object]) -> bool:
+    action = native_result.get("action")
+    return isinstance(action, Mapping) and action.get("action_type") in _SHELL_ACTION_TYPES
 
 
 def store_guard_home(store: object) -> Path | None:
@@ -186,22 +236,10 @@ def _native_review_is_approvable(native_result: Mapping[str, object]) -> bool:
     ) in {"review", "require-reapproval"}
 
 
-def _native_review_is_overridable(native_result: Mapping[str, object]) -> bool:
-    """A review a broad local-CLI grant may lift: never Guard control or a package action."""
-
-    if not _native_review_is_approvable(native_result):
-        return False
-    action = native_result.get("action")
-    action_type = action.get("action_type") if isinstance(action, Mapping) else None
-    return action_type not in {*GUARD_CONTROL_ACTION_TYPES, "package"}
-
-
 __all__ = [
     "EXACT_ACTION_CONTEXT_TOKEN_KEY",
     "EXACT_ACTION_IDENTITY_KIND_KEY",
     "ONCE_ONLY_REASON_KEY",
-    "TOKEN_UNSET",
-    "TokenUnset",
+    "native_exact_command_block_response",
     "native_saved_decision_response",
-    "native_saved_review_response",
 ]

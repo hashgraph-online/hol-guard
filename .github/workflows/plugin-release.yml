@@ -41,6 +41,11 @@ on:
         required: false
         type: boolean
         default: true
+      offer_line:
+        description: Allow one HOL Blue line in the job summary, at most once in 28 days, for a listing without a membership
+        required: false
+        type: boolean
+        default: true
     outputs:
       score:
         description: Scanner score
@@ -51,6 +56,9 @@ on:
       supported_runtimes:
         description: Number of agent runtimes the Plugin Kit can package this plugin for
         value: ${{ jobs.release.outputs.supported_runtimes }}
+      sbom_components:
+        description: Number of components in the CycloneDX SBOM, 0 when the release declares no packages
+        value: ${{ jobs.release.outputs.sbom_components }}
       attestation_url:
         description: GitHub artifact attestation URL
         value: ${{ jobs.release.outputs.attestation_url }}
@@ -72,12 +80,13 @@ jobs:
       attestations: write
       artifact-metadata: write
       security-events: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
       score: ${{ steps.release.outputs.score }}
       check_passed: ${{ steps.release.outputs.check_passed }}
       supported_runtimes: ${{ steps.release.outputs.supported_runtimes }}
+      sbom_components: ${{ steps.release.outputs.sbom_components }}
       attestation_url: ${{ steps.release.outputs.attestation_url }}
       release_status: ${{ steps.release.outputs.release_status }}
       release_url: ${{ steps.release.outputs.release_url }}
@@ -89,7 +98,7 @@ jobs:
 
       - name: Scan, check, attest, and register
         id: release
-        uses: hashgraph-online/hol-guard/plugin-release@543f44894608ad55e1e1dc74cdb322f03994e8c6
+        uses: hashgraph-online/hol-guard/plugin-release@6b0c1bedfc13b3a17f7121ed0e71ad3e454f2aab
         with:
           plugin_dir: ${{ inputs.plugin_dir }}
           profile: ${{ inputs.profile }}
@@ -98,4 +107,16 @@ jobs:
           upload_sarif: ${{ inputs.upload_sarif }}
           visibility: ${{ inputs.visibility }}
           register_release: ${{ inputs.register_release }}
+          offer_line: ${{ inputs.offer_line }}
           release_endpoint: https://hol.org/api/guard/plugins/releases/attestations
+
+      - name: Keep the evidence and SBOM with the run
+        if: ${{ always() && steps.release.outputs.evidence_path != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-plugin-release
+          path: |
+            ${{ runner.temp }}/hol-plugin-release-evidence.json
+            ${{ runner.temp }}/hol-plugin-release-sbom.cdx.json
+          if-no-files-found: ignore
+          retention-days: 90

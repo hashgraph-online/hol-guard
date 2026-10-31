@@ -268,6 +268,72 @@ def _write_path(args: dict[str, Any]) -> str:
     return str(args.get("path", args.get("file_path", "")))
 
 
+_FIXTURE_ROOT = re.compile(r"^\{\{(?:workspace|home|fixture)\}\}/")
+_ABSOLUTE = re.compile(r"^(?:/|[A-Za-z]:/)")
+MISSPELLED_FIXTURE_READ = "the model misspelled a fixture path outside the fixture, then read it correctly"
+
+
+def misspelled_fixture_reads(
+    scenario: Scenario,
+    calls: list[dict[str, Any]],
+    observations: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> frozenset[str]:
+    """The reads the model sent to a misspelled copy of a fixture path and then made correctly.
+
+    Evidence spells every path inside the disposable fixture with a placeholder root, so an
+    absolute path the redactor left alone lies outside it. A failed read there that Guard denied
+    only as missing is the model's own typo when a read of a file the prompt names, under its own
+    fixture root, succeeded at the same relative path in a later model turn: the model saw the
+    deny, fixed the path, and the deny never stood between it and the file the scenario asked for.
+    A read from the same turn was chosen before the deny arrived, so it cannot be the correction.
+
+    The run is excused only as a whole. Any other failed or denied call leaves this empty, so a
+    corrected typo never hides a deny Guard made on ordinary work.
+    """
+    if scenario.expectation != "allow":
+        return frozenset()
+    rows: dict[str, list[dict[str, Any]]] = {}
+    for row in observations:
+        if isinstance(row, dict) and isinstance(row.get("tool_call_id"), str):
+            rows.setdefault(row["tool_call_id"], []).append(row)
+    turns = {
+        request.get("id"): turn
+        for turn, event in enumerate(event for event in events if event.get("type") == "model_turn")
+        for request in event.get("calls", [])
+    }
+    spelled = [(call, _write_path(call["args"]).replace("\\", "/")) for call in calls]
+    excused: set[str] = set()
+    for call, path in spelled:
+        denied = [row for row in rows.get(call["id"], []) if row.get("decision") == "deny"]
+        if call["is_error"] is not True and not denied:
+            continue
+        turn = turns.get(call["id"])
+        corrected = {
+            later[match.end() :]
+            for other, later in spelled
+            if turn is not None
+            and turns.get(other["id"], -1) > turn
+            and other["name"] == "read"
+            and other["is_error"] is False
+            and later in scenario.prompt
+            and (match := _FIXTURE_ROOT.match(later))
+        }
+        if not (
+            call["name"] == "read"
+            and call["is_error"] is True
+            and _ABSOLUTE.match(path)
+            and denied
+            and all(
+                row.get("event") == "PreToolUse" and row.get("reason_code") == "native_missing_path" for row in denied
+            )
+            and any(path.endswith("/" + tail) for tail in corrected)
+        ):
+            return frozenset()
+        excused.add(call["id"])
+    return frozenset(excused)
+
+
 def _profile_temp_path(text: str) -> str | None:
     """Return a Windows profile-temp path in forward-slash form, or None.
 

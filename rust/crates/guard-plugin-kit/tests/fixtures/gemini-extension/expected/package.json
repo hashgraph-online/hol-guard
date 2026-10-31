@@ -1,4 +1,20 @@
 {
+  "agent-plugins/mcp.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    "mcpServers": {
+      "weather": {
+        "type": "streamable-http",
+        "url": "https://weather.example/mcp"
+      }
+    }
+  },
+  "agent-plugins/plugin.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "description": "Forecasts and alerts for Gemini CLI.",
+    "name": "weather-tools",
+    "repository": "https://github.com/acme/weather-tools",
+    "version": "0.3.0"
+  },
   "claude-code/.claude-plugin/plugin.json": {
     "description": "Forecasts and alerts for Gemini CLI.",
     "name": "weather-tools",
@@ -49,6 +65,14 @@
   },
   "hol.provenance.json": {
     "files": [
+      {
+        "path": "agent-plugins/mcp.json",
+        "sha256": "38decfc6420826254a2501914bfc3f21c190c998bf7f75a9446a2b225df3f176"
+      },
+      {
+        "path": "agent-plugins/plugin.json",
+        "sha256": "28e1299f20f422911d68a9be7320cc44bd0bd16b63eb4f2d97192cf44b2b8bd6"
+      },
       {
         "path": "claude-code/.claude-plugin/plugin.json",
         "sha256": "e78f7020269f42b01f1c82635035523fdc665861e3dfb376bf1589668d8365f7"
@@ -106,7 +130,8 @@
       "cursor",
       "vscode",
       "opencode",
-      "mcp-registry"
+      "mcp-registry",
+      "agent-plugins"
     ],
     "schema": "hol.plugin-kit.provenance.v1",
     "source_digest": "sha256:0bd1d0dc8893fa7d8a8dcb2b95ccd1c6c76c1a0f8c9bc11e69db3855db55e3bc"

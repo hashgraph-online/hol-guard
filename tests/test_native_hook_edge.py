@@ -7,24 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_command_model
-from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.hook_execution_environment import (
     LIBRARY_SEARCH_PATH_NAMES,
     collect_hook_execution_environment,
 )
-from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
-from codex_plugin_scanner.guard.native_resident_client import (
-    native_resident_client_failure_code,
-    native_resident_client_request,
-)
+from codex_plugin_scanner.guard.native_route_receipt import native_hook_route
 from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeCapabilities,
     NativeRuntimeIdentity,
     NativeRuntimeStatus,
 )
+from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 
 
 @pytest.mark.parametrize("value", ("1", "true", "TRUE", "yes", "on"))
@@ -104,10 +99,13 @@ def _edge_result() -> dict[str, object]:
     edge = {
         "schema": "guard-hook-edge-result.v2",
         "authority": "rust",
+        # The edge answers with the request id the envelope carried.
+        "request_id": "request-1",
         "harness": "claude-code",
         "event_name": "PreToolUse",
         "payload_kind": "inline",
         "harness_response": {"continue": True},
+        "containment_route": "none",
         "result": {
             "schema": "guard-pre-tool-result.v1",
             "version": 1,
@@ -183,126 +181,73 @@ def test_edge_decoder_refuses_a_containment_route_it_does_not_know(route: object
     assert _decode_edge({**_edge_result(), "containment_route": route}) is None
 
 
-def test_edge_decoder_requires_receipt_bound_to_result() -> None:
+def test_edge_decoder_refuses_an_edge_without_a_containment_route() -> None:
+    # Read as `none`, an unstamped edge would skip the grant and sink steps.
+    edge = _edge_result()
+    del edge["containment_route"]
+    assert _decode_edge(edge) is None
+
+
+@pytest.mark.parametrize(("recorded", "accepted"), [(True, True), (False, True), ("yes", False), (1, False)])
+def test_edge_decoder_reads_whether_the_edge_recorded_its_receipt(recorded: object, accepted: bool) -> None:
+    edge = {**_edge_result(), "receipt_recorded": recorded}
+    assert _decode_edge(edge) == (edge if accepted else None)
+
+
+@pytest.mark.parametrize(("hint", "accepted"), [(True, True), (False, True), ("no", False), (0, False)])
+def test_edge_decoder_reads_whether_a_saved_block_may_name_the_command(hint: object, accepted: bool) -> None:
+    edge = {**_edge_result(), "exact_command_block": hint}
+    assert _decode_edge(edge) == (edge if accepted else None)
+
+
+_EVIDENCE = {"policy_binding_valid": True, "binding": "binding", "token": None, "once_only_reason": "reason"}
+
+
+def test_edge_decoder_keeps_a_reviews_evidence() -> None:
+    edge = {**_edge_result(), "review_evidence": dict(_EVIDENCE)}
+    assert _decode_edge(edge) == edge
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    (
+        [],
+        {**_EVIDENCE, "policy_binding_valid": "true"},
+        {**_EVIDENCE, "binding": 1},
+        {**_EVIDENCE, "extra": None},
+        {key: value for key, value in _EVIDENCE.items() if key != "token"},
+    ),
+)
+def test_edge_decoder_refuses_malformed_review_evidence(evidence: object) -> None:
+    assert _decode_edge({**_edge_result(), "review_evidence": evidence}) is None
+
+
+def test_edge_decoder_requires_a_receipt() -> None:
+    # Whether the receipt records this result is the edge's own check now.
     missing_receipt = _edge_result()
     del missing_receipt["receipt"]
     assert _decode_edge(missing_receipt) is None
 
-    mutated_result = _edge_result()
-    result = mutated_result["result"]
-    assert isinstance(result, dict)
-    result["reason_code"] = "native_other_reason"
-    assert _decode_edge(mutated_result) is None
 
-
-def test_edge_decoder_accepts_only_bound_native_prompt_decision() -> None:
+def test_edge_decoder_keeps_a_repair_link() -> None:
+    # The edge adds the link and its status to a block the user can repair;
+    # this decoder used to refuse the whole answer and drop the link.
     edge = _edge_result()
     result = edge["result"]
-    receipt = edge["receipt"]
-    assert isinstance(result, dict) and isinstance(receipt, dict)
-    action = result["action"]
-    assert isinstance(action, dict)
-    edge["event_name"] = receipt["event_name"] = action["event"] = "UserPromptSubmit"
-    action.update(action_type="prompt", operation="submit", sensitive_target=True)
-    result.update(
-        decision="deny",
-        minimum_action="block",
-        policy_action="block",
-        reason_code="native_guard_bypass_prompt",
-        reason="HOL Guard blocked this prompt because it asks to disable Guard protection.",
-        explicitly_benign=False,
-        prompt_risk_classes=["local_env_read", "exfil_intent", "guard_bypass_intent"],
-    )
-    receipt.update(
-        decision="deny",
-        policy_action="block",
-        reason_code="native_guard_bypass_prompt",
-        prompt_risk_classes=["local_env_read", "exfil_intent", "guard_bypass_intent"],
-    )
-    receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(receipt)).hexdigest()
+    assert isinstance(result, dict)
+    result.update(repair_url="http://127.0.0.1:1/repair", repair_status="approval_required")
     assert _decode_edge(edge) == edge
 
-    wrong_action = json.loads(json.dumps(edge))
-    wrong_action["result"]["action"]["event"] = "PreToolUse"
-    assert _decode_edge(wrong_action) is None
-    wrong_classes = json.loads(json.dumps(edge))
-    wrong_classes["result"]["prompt_risk_classes"] = ["guard_bypass_intent"]
-    assert _decode_edge(wrong_classes) is None
-    wrong_kind = {**edge, "payload_kind": "source_file_ref"}
-    assert _decode_edge(wrong_kind) is None
 
-
-def test_python_launcher_only_invokes_package_bound_native_client(
+@pytest.mark.parametrize("event", ["PreToolUse", "PostToolUse", "Stop"])
+def test_raw_hook_bridge_refuses_a_resident_whose_edge_does_not_check_itself(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    event: str,
 ) -> None:
-    executable = tmp_path / "hol-guard-runtime"
-    executable.write_bytes(b"runtime")
-    captured: dict[str, object] = {}
-
-    def fake_run(command: tuple[str, ...], **kwargs: object) -> BoundedHookProcessResult:
-        captured.update(command=tuple(command), **kwargs)
-        return BoundedHookProcessResult(0, '{"ok":true}\n', False, False)
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_resident_client.run_isolated_hook_process",
-        fake_run,
-    )
-    result = native_resident_client_request(
-        executable=executable,
-        guard_home=tmp_path / "guard-home",
-        environment={"HOME": str(tmp_path)},
-        payload=b"{}",
-        timeout_seconds=0.5,
-        raw_hook_envelope=True,
-    )
-    assert result == b'{"ok":true}\n'
-    assert captured["command"] == (
-        str(executable),
-        "hook-client",
-        "--stdin",
-        str(tmp_path / "guard-home" / "native-runtime"),
-    )
-    assert captured["input_text"] == "{}"
-    assert captured["timeout_seconds"] == 0.5
-    assert captured["output_limit"] == 2 * 1024 * 1024
-    assert captured["windows_kill_on_job_close"] is False
-    assert native_resident_client_failure_code() is None
-
-
-def test_native_client_forwards_absolute_deadline_without_relative_floor(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_run(command: tuple[str, ...], **kwargs: object) -> BoundedHookProcessResult:
-        captured.update(command=tuple(command), **kwargs)
-        return BoundedHookProcessResult(0, '{"ok":true}\n', False, False)
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_resident_client.run_isolated_hook_process",
-        fake_run,
-    )
-    deadline = time.monotonic() + 0.001
-    result = native_resident_client_request(
-        executable=tmp_path / "runtime",
-        guard_home=tmp_path / "guard-home",
-        environment={},
-        payload=b"{}",
-        deadline_monotonic=deadline,
-    )
-
-    assert result == b'{"ok":true}\n'
-    assert captured["deadline_monotonic"] == deadline
-    assert captured["timeout_seconds"] is None
-
-
-def test_command_model_budget_is_bound_at_resident_envelope_top_level(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runtime = tmp_path / "runtime"
+    # Python no longer re-checks the edge result or receipt, so a resident that
+    # predates the edge self-check must never be asked, even in force mode.
+    runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
     identity = NativeRuntimeIdentity(
         path=runtime,
@@ -312,19 +257,20 @@ def test_command_model_budget_is_bound_at_resident_envelope_top_level(
     )
     capabilities = NativeRuntimeCapabilities(
         protocol_version=1,
-        runtime_version="test",
+        runtime_version="older",
         rule_digest="b" * 64,
         build_sha="c" * 40,
         target="test",
         features=(
-            "pre-tool-command-model-shadow-v1",
-            "resident-command-model-shadow-v1",
-            "resident-protocol-v2",
+            "hook-envelope-v2",
+            "hook-harness-response-v1",
+            "native-resident-client-v1",
+            "pre-tool-generic-authority-v1",
+            "git-execution-context-v1",
         ),
     )
     monkeypatch.setattr(
-        native_command_model,
-        "native_runtime_status",
+        "codex_plugin_scanner.guard.native_hook_edge.native_runtime_status",
         lambda: NativeRuntimeStatus(
             mode="force",
             available=True,
@@ -334,84 +280,31 @@ def test_command_model_budget_is_bound_at_resident_envelope_top_level(
             capabilities=capabilities,
         ),
     )
-    captured: dict[str, object] = {}
+    calls: list[dict[str, object]] = []
 
     def fake_client(**kwargs: object) -> bytes:
-        captured.update(kwargs)
-        return b"{}"
+        calls.append(kwargs)
+        return json.dumps(_edge_result(), separators=(",", ":")).encode()
 
-    monkeypatch.setattr(native_command_model, "native_resident_client_request", fake_client)
     monkeypatch.setattr(
-        native_command_model,
-        "_decode_command_model",
-        lambda *_args, **_kwargs: {"confidence": "exact"},
+        "codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request",
+        fake_client,
     )
-
-    result = native_command_model.review_command_model_native(
-        "git status",
-        guard_home=tmp_path / "guard-home",
-        timeout_seconds=0.25,
+    result = review_raw_hook_native(
+        payload={"hook_event_name": event, "tool_input": {"command": "pwd"}},
+        harness="claude",
+        event=event,
+        guard_home=tmp_path,
+        home_dir=tmp_path,
+        cwd=tmp_path,
+        source_ref_external_allowed=False,
+        observe_mode=False,
+        deadline=None,
+        policy_snapshot={"generation": 1},
     )
-
-    assert result == {"confidence": "exact"}
-    encoded = captured["payload"]
-    assert isinstance(encoded, bytes)
-    envelope = json.loads(encoded)
-    assert envelope["deadline_budget_ms"] == 250
-    assert "deadline_monotonic" in captured
-    assert "timeout_seconds" not in captured
-
-
-def test_command_model_records_allowlisted_error_envelope(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runtime = tmp_path / "runtime"
-    runtime.write_bytes(b"runtime")
-    identity = NativeRuntimeIdentity(
-        path=runtime,
-        size=runtime.stat().st_size,
-        mtime_ns=runtime.stat().st_mtime_ns,
-        sha256="a" * 64,
-    )
-    capabilities = NativeRuntimeCapabilities(
-        protocol_version=1,
-        runtime_version="test",
-        rule_digest="b" * 64,
-        build_sha="c" * 40,
-        target="test",
-        features=(
-            "pre-tool-command-model-shadow-v1",
-            "resident-command-model-shadow-v1",
-            "resident-protocol-v2",
-        ),
-    )
-    monkeypatch.setattr(
-        native_command_model,
-        "native_runtime_status",
-        lambda: NativeRuntimeStatus(
-            mode="force",
-            available=True,
-            compatible=True,
-            reason="ready",
-            identity=identity,
-            capabilities=capabilities,
-        ),
-    )
-    monkeypatch.setattr(
-        native_command_model,
-        "native_resident_client_request",
-        lambda **_kwargs: b'{"error":"native_client_deadline_exceeded","retryable":false}',
-    )
-
-    assert (
-        native_command_model.review_command_model_native(
-            "git status",
-            guard_home=tmp_path / "guard-home",
-        )
-        is None
-    )
-    assert native_resident_client_failure_code() == "native_client_deadline_exceeded"
+    assert result is None
+    assert native_hook_route() == "native_fail_safe"
+    assert not calls
 
 
 @pytest.mark.parametrize("request_id", [None, "request-1", "different-request"])
@@ -439,6 +332,7 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
         features=(
             "hook-envelope-v2",
             "hook-harness-response-v1",
+            "edge-self-check-v1",
             "native-resident-client-v1",
             "pre-tool-generic-authority-v1",
             *(["git-execution-context-v1"] if execution_context_supported else []),
@@ -515,3 +409,275 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
             is None
         )
         assert captured == {}
+
+
+@pytest.mark.parametrize("rules", (False, True))
+def test_a_custom_rule_check_gets_its_own_allowance_past_the_review_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rules: bool
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"runtime")
+    identity = NativeRuntimeIdentity(
+        path=runtime, size=runtime.stat().st_size, mtime_ns=runtime.stat().st_mtime_ns, sha256="a" * 64
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=1,
+        runtime_version="test",
+        rule_digest="b" * 64,
+        build_sha="c" * 40,
+        target="test",
+        features=(
+            "hook-envelope-v2",
+            "hook-harness-response-v1",
+            "edge-self-check-v1",
+            "native-resident-client-v1",
+            "pre-tool-generic-authority-v1",
+            "git-execution-context-v1",
+            "edge-local-cli-rule-v1",
+        ),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_edge.native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto", available=True, compatible=True, reason="ready", identity=identity, capabilities=capabilities
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return json.dumps(_edge_result(), separators=(",", ":")).encode()
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    deadline = time.monotonic() + 1.0
+    review_raw_hook_native(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        harness="claude",
+        event="PreToolUse",
+        guard_home=tmp_path,
+        home_dir=tmp_path,
+        cwd=tmp_path,
+        source_ref_external_allowed=False,
+        observe_mode=False,
+        deadline=deadline,
+        policy_snapshot={"generation": 1},
+        local_cli_rules={"store_path": str(tmp_path / "guard.db"), "user_home": str(tmp_path), "env": {}}
+        if rules
+        else None,
+    )
+    envelope = json.loads(captured["payload"])
+    assert envelope["deadline_budget_ms"] <= 1_000
+    assert captured["deadline_monotonic"] == deadline + (5.0 if rules else 0.0)
+
+
+@pytest.mark.parametrize("advertised", (False, True))
+def test_a_review_evidence_request_needs_a_resident_that_proves_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, advertised: bool
+) -> None:
+    # The daemon reads a review's approval binding only from the edge, so a
+    # resident without that proof cannot answer a tool call at all.
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"runtime")
+    identity = NativeRuntimeIdentity(
+        path=runtime, size=runtime.stat().st_size, mtime_ns=runtime.stat().st_mtime_ns, sha256="a" * 64
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=1,
+        runtime_version="test",
+        rule_digest="b" * 64,
+        build_sha="c" * 40,
+        target="test",
+        features=(
+            "hook-envelope-v2",
+            "hook-harness-response-v1",
+            "edge-self-check-v1",
+            "native-resident-client-v1",
+            "pre-tool-generic-authority-v1",
+            "git-execution-context-v1",
+            "edge-local-cli-rule-v1",
+            *(["edge-review-evidence-v1"] if advertised else []),
+        ),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_edge.native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto", available=True, compatible=True, reason="ready", identity=identity, capabilities=capabilities
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return json.dumps(_edge_result(), separators=(",", ":")).encode()
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    review_raw_hook_native(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        harness="claude",
+        event="PreToolUse",
+        guard_home=tmp_path,
+        home_dir=tmp_path,
+        cwd=tmp_path,
+        source_ref_external_allowed=False,
+        observe_mode=False,
+        deadline=time.monotonic() + 1.0,
+        policy_snapshot={"generation": 1},
+        local_cli_rules={
+            "store_path": str(tmp_path / "guard.db"),
+            "user_home": str(tmp_path),
+            "env": {},
+            "exact_action_control_digest": "d" * 64,
+        },
+    )
+    if not advertised:
+        assert captured == {}
+        return
+    rules = json.loads(captured["payload"])["local_cli_rules"]
+    assert rules["exact_action_control_digest"] == "d" * 64
+
+
+@pytest.mark.parametrize(
+    ("feature", "option"),
+    [("edge-local-cli-observation-v1", "observe_local_cli"), ("edge-receipt-record-v1", "record_receipt")],
+)
+@pytest.mark.parametrize(("advertised", "asked"), [(True, True), (True, False), (False, True)])
+def test_the_envelope_asks_for_an_edge_option_only_from_a_resident_that_supports_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    feature: str,
+    option: str,
+    advertised: bool,
+    asked: bool,
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"runtime")
+    identity = NativeRuntimeIdentity(
+        path=runtime,
+        size=runtime.stat().st_size,
+        mtime_ns=runtime.stat().st_mtime_ns,
+        sha256="a" * 64,
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=1,
+        runtime_version="test",
+        rule_digest="b" * 64,
+        build_sha="c" * 40,
+        target="test",
+        features=(
+            "hook-envelope-v2",
+            "hook-harness-response-v1",
+            "edge-self-check-v1",
+            "native-resident-client-v1",
+            "pre-tool-generic-authority-v1",
+            "git-execution-context-v1",
+            *([feature] if advertised else []),
+        ),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_edge.native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto",
+            available=True,
+            compatible=True,
+            reason="ready",
+            identity=identity,
+            capabilities=capabilities,
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return json.dumps(_edge_result(), separators=(",", ":")).encode()
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    assert (
+        review_raw_hook_native(
+            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+            harness="claude",
+            event="PreToolUse",
+            guard_home=tmp_path,
+            home_dir=tmp_path,
+            cwd=tmp_path,
+            source_ref_external_allowed=False,
+            observe_mode=False,
+            deadline=None,
+            policy_snapshot={"generation": 1},
+            **{option: asked},
+        )
+        == _edge_result()
+    )
+    encoded = captured["payload"]
+    assert isinstance(encoded, bytes)
+    # An older resident would refuse the field, so it is sent only when advertised.
+    assert json.loads(encoded).get(option) is ((advertised and asked) or None)
+
+
+@pytest.mark.parametrize(
+    ("features", "resident_called"),
+    (
+        (("resident-protocol-v2",), False),
+        (("resident-protocol-v2", "edge-self-check-v1"), True),
+    ),
+)
+def test_post_tool_review_only_trusts_a_resident_that_checks_its_own_answer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    features: tuple[str, ...],
+    resident_called: bool,
+) -> None:
+    from ci.native_runtime import post_tool_review
+    from ci.native_runtime.post_tool_review import HookReviewRequest
+    from codex_plugin_scanner.guard import native_runtime
+
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"runtime")
+    identity = NativeRuntimeIdentity(
+        path=runtime,
+        size=runtime.stat().st_size,
+        mtime_ns=runtime.stat().st_mtime_ns,
+        sha256="a" * 64,
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=1,
+        runtime_version="test",
+        rule_digest="b" * 64,
+        build_sha="c" * 40,
+        target="test",
+        features=features,
+    )
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto",
+            available=True,
+            compatible=True,
+            reason="ready",
+            identity=identity,
+            capabilities=capabilities,
+        ),
+    )
+    calls: list[object] = []
+
+    def fake_client(**kwargs: object) -> None:
+        calls.append(kwargs)
+        return None
+
+    monkeypatch.setattr(post_tool_review, "native_resident_client_request", fake_client)
+    request = HookReviewRequest(
+        harness="claude",
+        event_name="PostToolUse",
+        payload={"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": {"command": "pwd"}},
+        payload_kind="inline",
+        config_path=None,
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        guard_home=tmp_path,
+        source_scope="workspace",
+    )
+
+    result = post_tool_review.review_post_tool_native(request, observe_mode=False, policy_snapshot={"generation": 1})
+
+    assert result is None
+    assert bool(calls) is resident_called

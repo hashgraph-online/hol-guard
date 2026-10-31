@@ -8,9 +8,9 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_sensitive_request as client
-from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_request_context import NativeRequestContextFailure
 from codex_plugin_scanner.guard.runtime import secret_file_requests
+from tests import resident_probe_support as probes
 
 
 def _reply(query: str, result: object) -> dict[str, object]:
@@ -24,7 +24,6 @@ def _answer(monkeypatch: pytest.MonkeyPatch, reply: object, seen: list[dict[str,
         return reply
 
     monkeypatch.setattr(client, "_call", fake_call)
-    monkeypatch.setattr(client, "_control_snapshot", lambda: None)
 
 
 @pytest.mark.parametrize(
@@ -53,46 +52,10 @@ def test_classifier_error_keeps_the_legacy_value_error(monkeypatch: pytest.Monke
         secret_file_requests.extract_sensitive_tool_action_request("Bash", {"command": "ls"}, cwd=tmp_path)
 
 
-def test_file_read_match_is_rebuilt_from_the_reply(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    seen: list[dict[str, Any]] = []
-    path_match = {
-        "family": "ssh_private_key",
-        "path": str(tmp_path / ".ssh/id_rsa"),
-        "reason": "synthetic",
-        "requested_path": "~/.ssh/id_rsa",
-        "sensitivity": "critical",
-    }
-    _answer(
-        monkeypatch,
-        _reply("file_read", {"tool_name": "Read", "normalized_tool_name": "read", "path_match": path_match}),
-        seen,
-    )
-    found = secret_file_requests.extract_sensitive_file_read_request(
-        "Read", {"file_path": "~/.ssh/id_rsa"}, cwd=tmp_path, home_dir=tmp_path
-    )
-    assert found is not None
-    assert found.path_match.family == "ssh_private_key"
-    assert found.path_match.sensitivity == "critical"
-    body = seen[0]["body"]
-    assert body["query"] == "file_read"
-    assert body["input"]["home_dir"] == str(tmp_path)
-    assert "verdict" not in body["input"]
-
-
-def test_unknown_sensitivity_is_not_presented(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    path_match = {"family": "x", "path": "/x", "reason": "x", "requested_path": "x", "sensitivity": "low"}
-    _answer(
-        monkeypatch,
-        _reply("file_read", {"tool_name": "Read", "normalized_tool_name": "read", "path_match": path_match}),
-    )
-    with pytest.raises(client.NativeSensitiveRequestError):
-        secret_file_requests.extract_sensitive_file_read_request("Read", {"file_path": "x"}, cwd=tmp_path)
-
-
 def test_boolean_answers_must_be_booleans(monkeypatch: pytest.MonkeyPatch) -> None:
     _answer(monkeypatch, _reply("read_only_lookup_target_is_safe", 1))
     with pytest.raises(client.NativeSensitiveRequestError):
-        secret_file_requests._read_only_lookup_target_is_safe("README.md", allow_dirs=False)
+        probes._read_only_lookup_target_is_safe("README.md", allow_dirs=False)
 
 
 def test_tool_action_reply_rejects_a_non_string_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -192,167 +155,3 @@ def test_tool_action_reply_keeps_embedded_command_text(monkeypatch: pytest.Monke
     texts = [item.text for item in found.canonical_command.embedded_commands]
     assert "echo ~/.ssh/id_rsa" in texts
     assert "secret\n" in texts
-
-
-def test_post_tool_review_outage_blocks_the_post_tool_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
-    from codex_plugin_scanner.guard.native_codex_tool_output import ToolOutputAnswer
-
-    def down(*_args: object, **_kwargs: object) -> ToolOutputAnswer:
-        return ToolOutputAnswer(False, None, "native_codex_tool_output_unavailable")
-
-    monkeypatch.setattr(artifacts, "codex_tool_output_native", down)
-    result = artifacts._hook_runtime_artifact(
-        harness="codex",
-        payload={
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Bash",
-            "tool_input": {
-                "command": "cat ~/.ssh/id_rsa",
-                "commands": ["cat ~/.ssh/id_rsa"],
-            },
-        },
-        workspace=tmp_path,
-        home_dir=tmp_path,
-        guard_home=tmp_path / "guard",
-        action_envelope=None,
-    )
-    assert result is not None
-    assert result.metadata["guard_default_action"] == "block"
-    assert result.metadata["native_command_evaluation_status"] == "unavailable"
-    assert result.metadata.get("command_text") != "Bash"
-
-
-def test_resident_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands_support_codex_commands as codex
-    from codex_plugin_scanner.guard.native_codex_tool_output import ToolOutputAnswer
-
-    sent: list[tuple[str, dict[str, object]]] = []
-
-    def down(kind: str, *, body: dict[str, object]) -> ToolOutputAnswer:
-        sent.append((kind, body))
-        return ToolOutputAnswer(False, None, "native_codex_tool_output_unavailable")
-
-    monkeypatch.setattr(codex, "codex_tool_output_native", down)
-    assert (
-        codex._codex_post_tool_command_is_read_only_source_inspection(
-            payload={"tool_name": "Bash", "tool_input": {"commands": ["ls"]}, "session_id": "s"},
-            cwd=tmp_path,
-            home_dir=None,
-        )
-        is False
-    )
-    # The resident reads the commands from the tool name and input alone.
-    assert sent == [
-        (
-            "post_tool_read_only_payload",
-            {"tool_name": "Bash", "tool_input": {"commands": ["ls"]}, "cwd": str(tmp_path), "home_dir": None},
-        )
-    ]
-
-
-def test_command_list_texts_are_a_tuple_of_strings(monkeypatch: pytest.MonkeyPatch) -> None:
-    _answer(monkeypatch, _reply("command_list_candidate_texts", ["cat README.md"]))
-    assert secret_file_requests.command_list_candidate_texts(["cat", "README.md"]) == ("cat README.md",)
-
-
-def test_unmodeled_shell_artifact_forwards_the_temp_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    seen: list[dict[str, Any]] = []
-    reply = {"fingerprint": "f", "metadata": [["action_class", "unmodeled shell command"]]}
-    _answer(monkeypatch, _reply("unmodeled_shell_artifact", reply), seen)
-    monkeypatch.setenv("TMPDIR", str(tmp_path))
-
-    review = client.native_unmodeled_shell_artifact("gh run view 1 --log", workspace=None, home_dir=tmp_path)
-
-    assert review == ("f", {"action_class": "unmodeled shell command"})
-    assert seen[0]["body"]["facts"]["environment"]["TMPDIR"] == str(tmp_path)
-    assert seen[0]["body"]["input"]["workspace"] is None
-    assert seen[0]["body"]["input"]["home"] == str(tmp_path)
-
-
-def test_unmodeled_shell_artifact_is_none_for_a_modeled_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    _answer(monkeypatch, _reply("unmodeled_shell_artifact", None))
-
-    assert client.native_unmodeled_shell_artifact("ls", workspace=Path("/w"), home_dir=Path("/h")) is None
-
-
-def _finding(artifact_id: str, artifact_type: str, **metadata: object) -> GuardArtifact:
-    return GuardArtifact(
-        artifact_id=artifact_id,
-        name=artifact_id,
-        harness="codex",
-        artifact_type=artifact_type,
-        source_scope="project",
-        config_path="/c",
-        metadata=metadata,
-    )
-
-
-def _compound(findings: list[GuardArtifact]) -> GuardArtifact:
-    return client.native_compound_artifact(
-        findings, command_text="ls; pwd", decision={}, workspace=None, home_dir=Path("/home/user")
-    )
-
-
-def test_compound_artifact_applies_the_resident_binding(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[dict[str, Any]] = []
-    reply = {
-        "primary": 1,
-        "artifact_id": "codex:pkg:f",
-        "name": "compound p",
-        "metadata": [["guard_default_action", "x"]],
-    }
-    _answer(monkeypatch, _reply("compound_artifact", reply), seen)
-    tool = _finding("codex:tool:1", "tool_action_request", action_class="a", private_note="kept local")
-    package = _finding("codex:pkg:1", "package_request", extension_allow_hint={"id": "h"}, guard_default_action="warn")
-
-    composed = _compound([tool, package])
-
-    assert (composed.artifact_id, composed.name) == ("codex:pkg:f", "compound p")
-    assert composed.metadata == {"guard_default_action": "x"}
-    sent = seen[0]["body"]["input"]["artifacts"]
-    assert sent[0]["metadata"] == {"action_class": "a"}
-
-
-def test_compound_artifact_keeps_an_unbound_primary(monkeypatch: pytest.MonkeyPatch) -> None:
-    _answer(monkeypatch, _reply("compound_artifact", {"primary": 0, "metadata": None}))
-    finding = _finding("codex:tool:1", "tool_action_request")
-
-    assert _compound([finding]) is finding
-
-
-@pytest.mark.parametrize(
-    "reply",
-    [
-        {"fingerprint": "f"},
-        {"fingerprint": 1, "metadata": []},
-        {"fingerprint": "f", "metadata": [["k"]]},
-        {"fingerprint": "f", "metadata": [[1, "v"]]},
-        {"fingerprint": "f", "metadata": {}},
-    ],
-    ids=["missing-metadata", "non-text-fingerprint", "short-pair", "non-text-key", "not-pairs"],
-)
-def test_unmodeled_shell_artifact_rejects_malformed_replies(monkeypatch: pytest.MonkeyPatch, reply: object) -> None:
-    _answer(monkeypatch, _reply("unmodeled_shell_artifact", reply))
-
-    with pytest.raises(client.NativeSensitiveRequestError):
-        client.native_unmodeled_shell_artifact("ls", workspace=None, home_dir=Path("/h"))
-
-
-@pytest.mark.parametrize(
-    "reply",
-    [
-        None,
-        {"primary": 2, "metadata": None},
-        {"primary": True, "metadata": None},
-        {"primary": 0, "artifact_id": "a", "name": "n", "metadata": [["k"]]},
-        {"primary": 0, "artifact_id": "a", "name": "n", "metadata": None},
-        {"primary": 0, "artifact_id": 1, "name": "n", "metadata": []},
-    ],
-    ids=["not-object", "out-of-range", "bool-index", "short-pair", "unbound-with-id", "non-text-id"],
-)
-def test_compound_artifact_rejects_malformed_replies(monkeypatch: pytest.MonkeyPatch, reply: object) -> None:
-    _answer(monkeypatch, _reply("compound_artifact", reply))
-
-    with pytest.raises(client.NativeSensitiveRequestError):
-        _compound([_finding("codex:tool:1", "tool_action_request")])

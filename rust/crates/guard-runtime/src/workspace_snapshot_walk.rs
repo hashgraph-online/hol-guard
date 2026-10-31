@@ -1,12 +1,22 @@
 //! The bounded, no-follow directory walk behind `workspace-snapshot`.
 
 use std::ffi::OsStr;
+use std::path::Path;
 
 use guard_command::local_supply_chain::is_audit_sensitive_basename;
 use sha2::{Digest, Sha256};
 
+use super::editor_tasks::EditorTaskScan;
+use super::hooks::HookScan;
+use super::instructions::InstructionScan;
+use super::plugins::PluginScan;
 use super::secrets::SecretScan;
+use super::skills::SkillScan;
+use super::workflows::WorkflowScan;
 use super::{Limits, SnapshotMode, SKIP_DIRS};
+use crate::workspace_inventory_files::{
+    LOCKFILE_CANDIDATES, MANIFEST_CANDIDATES, MAX_DEPTH as AUDIT_DISCOVERY_DEPTH,
+};
 use crate::workspace_snapshot_file::{hash_stable, DirHandle, HashError, Kind, Node};
 
 /// Directories nested deeper than this below the root are recorded, not
@@ -43,6 +53,22 @@ const DETECTOR_INPUT_BASENAMES: [&str; 25] = [
     "Gemfile.lock",
 ];
 
+/// Lockfiles of ecosystems no detector reads yet. Their dependencies go
+/// unchecked, so a snapshot that holds one is partial rather than clean.
+const UNSUPPORTED_DEPENDENCY_BASENAMES: [&str; 11] = [
+    "mix.lock",
+    "pubspec.lock",
+    "Package.resolved",
+    "Podfile.lock",
+    "packages.lock.json",
+    "paket.lock",
+    "deno.lock",
+    "renv.lock",
+    "cabal.project.freeze",
+    "stack.yaml.lock",
+    "conan.lock",
+];
+
 #[derive(Default)]
 pub(super) struct Walk {
     /// `path\0size\0sha256` (content) or `path\0size\0mtime\0ino` (stat).
@@ -62,9 +88,23 @@ pub(super) struct Walk {
     pub(super) oversize_detector_input: bool,
     pub(super) depth_cap_hit: bool,
     pub(super) visit_cap_hit: bool,
+    pub(super) unsupported_dependency_input: bool,
+    pub(super) undiscovered_dependency_input: bool,
     /// Present when the caller asked for secret detection over the bytes the
     /// walk hashes.
     pub(super) secrets: Option<SecretScan>,
+    /// Present when the caller asked for skill-content detection.
+    pub(super) skills: Option<SkillScan>,
+    /// Present when the caller asked for the project hook check.
+    pub(super) hooks: Option<HookScan>,
+    /// Present when the caller asked for the agent plugin check.
+    pub(super) plugins: Option<PluginScan>,
+    /// Present when the caller asked for the CI workflow check.
+    pub(super) workflows: Option<WorkflowScan>,
+    /// Present when the caller asked for the editor task check.
+    pub(super) editor_tasks: Option<EditorTaskScan>,
+    /// Present when the caller asked for the agent instruction file check.
+    pub(super) instructions: Option<InstructionScan>,
 }
 
 #[derive(Default)]
@@ -81,6 +121,90 @@ impl Walk {
         self.exclusions.update(b"\nexclude\0");
         self.exclusions.update(record.as_bytes());
         self.exclusion_count += 1;
+    }
+
+    /// Record that the walk left `relative` unread, which matters only when it
+    /// is a skill, hook configuration, plugin file, workflow or editor task
+    /// configuration a scan had to read.
+    fn left_unread(&mut self, relative: &str) {
+        if let Some(skills) = self.skills.as_mut() {
+            if skills.admits(relative) {
+                skills.left_unread();
+            }
+        }
+        if let Some(hooks) = self.hooks.as_mut() {
+            if hooks.admits(relative) {
+                hooks.left_unread();
+            }
+        }
+        if let Some(plugins) = self.plugins.as_mut() {
+            if plugins.admits(relative) {
+                plugins.left_unread(relative);
+            }
+        }
+        if let Some(workflows) = self.workflows.as_mut() {
+            if workflows.admits(relative) {
+                workflows.left_unread();
+            }
+        }
+        if let Some(editor_tasks) = self.editor_tasks.as_mut() {
+            if editor_tasks.admits(relative) {
+                editor_tasks.left_unread();
+            }
+        }
+        if let Some(instructions) = self.instructions.as_mut() {
+            if instructions.admits(relative) {
+                instructions.left_unread();
+            }
+        }
+    }
+
+    /// Record a special file the walk did not follow, which the skill, hook,
+    /// plugin, workflow and editor task scans count when their input could be
+    /// there.
+    fn left_special(&mut self, relative: &str) {
+        if let Some(skills) = self.skills.as_mut() {
+            skills.left_special(relative);
+        }
+        if let Some(hooks) = self.hooks.as_mut() {
+            hooks.left_unfollowed(relative);
+        }
+        if let Some(plugins) = self.plugins.as_mut() {
+            plugins.left_special(relative);
+        }
+        if let Some(workflows) = self.workflows.as_mut() {
+            workflows.left_unfollowed(relative);
+        }
+        if let Some(editor_tasks) = self.editor_tasks.as_mut() {
+            editor_tasks.left_special(relative);
+        }
+        if let Some(instructions) = self.instructions.as_mut() {
+            instructions.left_special(relative);
+        }
+    }
+
+    /// Record a symlink the walk did not follow, which the skill, hook,
+    /// plugin, workflow and editor task scans count when their input could be
+    /// behind it.
+    fn left_link(&mut self, relative: &str, target: Option<&Path>) {
+        if let Some(skills) = self.skills.as_mut() {
+            skills.left_link(relative, target);
+        }
+        if let Some(hooks) = self.hooks.as_mut() {
+            hooks.left_unfollowed(relative);
+        }
+        if let Some(plugins) = self.plugins.as_mut() {
+            plugins.left_link(relative, target);
+        }
+        if let Some(workflows) = self.workflows.as_mut() {
+            workflows.left_unfollowed(relative);
+        }
+        if let Some(editor_tasks) = self.editor_tasks.as_mut() {
+            editor_tasks.left_link(relative);
+        }
+        if let Some(instructions) = self.instructions.as_mut() {
+            instructions.left_link(relative, target);
+        }
     }
 
     fn stopped(&self) -> bool {
@@ -140,11 +264,13 @@ pub(super) fn walk_directory(
         match node.kind {
             Kind::Symlink => {
                 walk.counts.symlinks += 1;
-                let target = directory
-                    .read_link(&os_name)
+                let target = directory.read_link(&os_name);
+                let digest = target
+                    .as_ref()
                     .map(|target| hex::encode(Sha256::digest(target.as_encoded_bytes())))
                     .unwrap_or_else(|| "-".to_owned());
-                walk.exclude(format!("{child}\0symlink\0{target}"));
+                walk.exclude(format!("{child}\0symlink\0{digest}"));
+                walk.left_link(&child, target.as_deref().map(Path::new));
             }
             Kind::Directory if SKIP_DIRS.contains(&name.as_str()) => {
                 walk.counts.directories += 1;
@@ -170,6 +296,7 @@ pub(super) fn walk_directory(
             Kind::Special => {
                 walk.counts.special += 1;
                 walk.exclude(format!("{child}\0special"));
+                walk.left_special(&child);
             }
             Kind::File if is_audit_sensitive_basename(&name) => {
                 walk.counts.sensitive += 1;
@@ -180,6 +307,13 @@ pub(super) fn walk_directory(
             ),
         }
     }
+}
+
+/// The workspace audit only discovers dependency files a few directories
+/// below the root, so a deeper one is never checked.
+fn is_beyond_audit_discovery(child: &str, name: &str) -> bool {
+    (MANIFEST_CANDIDATES.contains(&name) || LOCKFILE_CANDIDATES.contains(&name))
+        && child.matches('/').count() > AUDIT_DISCOVERY_DEPTH
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -193,6 +327,12 @@ fn admit_file(
     limits: &Limits,
     walk: &mut Walk,
 ) {
+    if UNSUPPORTED_DEPENDENCY_BASENAMES.contains(&name) {
+        walk.unsupported_dependency_input = true;
+    }
+    if is_beyond_audit_discovery(child, name) {
+        walk.undiscovered_dependency_input = true;
+    }
     if walk.entries.len() >= limits.entries {
         walk.entry_cap_hit = true;
         return;
@@ -203,6 +343,7 @@ fn admit_file(
         if DETECTOR_INPUT_BASENAMES.contains(&name) {
             walk.oversize_detector_input = true;
         }
+        walk.left_unread(child);
         walk.exclude(format!("{child}\0oversize\0{size}"));
         return;
     }
@@ -213,11 +354,13 @@ fn admit_file(
     }
     if walk.hashed_bytes.saturating_add(size) > limits.total_bytes {
         walk.byte_cap_hit = true;
+        walk.left_unread(child);
         walk.exclude(format!("{child}\0byte_budget\0{size}"));
         return;
     }
     let Some(file) = directory.open_file(os_name) else {
         walk.unreadable += 1;
+        walk.left_unread(child);
         walk.exclude(format!("{child}\0unreadable"));
         return;
     };
@@ -226,7 +369,35 @@ fn admit_file(
         .secrets
         .as_mut()
         .is_some_and(|secrets| secrets.admits(child));
-    let capture = scan_content.then_some(&mut captured);
+    let scan_skill = walk
+        .skills
+        .as_mut()
+        .is_some_and(|skills| skills.admits(child));
+    let scan_hooks = walk.hooks.as_mut().is_some_and(|hooks| hooks.admits(child));
+    let scan_plugin = walk
+        .plugins
+        .as_mut()
+        .is_some_and(|plugins| plugins.admits(child));
+    let scan_workflow = walk
+        .workflows
+        .as_mut()
+        .is_some_and(|workflows| workflows.admits(child));
+    let scan_editor_task = walk
+        .editor_tasks
+        .as_mut()
+        .is_some_and(|editor_tasks| editor_tasks.admits(child));
+    let scan_instruction = walk
+        .instructions
+        .as_mut()
+        .is_some_and(|instructions| instructions.admits(child));
+    let capture = (scan_content
+        || scan_skill
+        || scan_hooks
+        || scan_plugin
+        || scan_workflow
+        || scan_editor_task
+        || scan_instruction)
+        .then_some(&mut captured);
     match hash_stable(file, node, limits.file_bytes, capture) {
         Ok((digest, read)) => {
             walk.hashed_bytes += read;
@@ -236,13 +407,45 @@ fn admit_file(
                     secrets.observe(child, &captured);
                 }
             }
+            if scan_skill {
+                if let Some(skills) = walk.skills.as_mut() {
+                    skills.observe(child, &captured);
+                }
+            }
+            if scan_hooks {
+                if let Some(hooks) = walk.hooks.as_mut() {
+                    hooks.observe(child, &captured);
+                }
+            }
+            if scan_plugin {
+                if let Some(plugins) = walk.plugins.as_mut() {
+                    plugins.observe(child, &captured);
+                }
+            }
+            if scan_workflow {
+                if let Some(workflows) = walk.workflows.as_mut() {
+                    workflows.observe(child, &captured);
+                }
+            }
+            if scan_editor_task {
+                if let Some(editor_tasks) = walk.editor_tasks.as_mut() {
+                    editor_tasks.observe(child, &captured);
+                }
+            }
+            if scan_instruction {
+                if let Some(instructions) = walk.instructions.as_mut() {
+                    instructions.observe(child, &captured);
+                }
+            }
         }
         Err(HashError::Unstable) => {
             walk.unstable += 1;
+            walk.left_unread(child);
             walk.exclude(format!("{child}\0unstable"));
         }
         Err(HashError::Unreadable) => {
             walk.unreadable += 1;
+            walk.left_unread(child);
             walk.exclude(format!("{child}\0unreadable"));
         }
     }

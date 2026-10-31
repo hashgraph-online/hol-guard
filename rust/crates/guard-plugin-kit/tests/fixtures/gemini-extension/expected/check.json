@@ -86,6 +86,13 @@
       ],
       "runtime": "agent-skills",
       "supported": false
+    },
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "agent-plugins",
+      "supported": true
     }
   ],
   "sources": [

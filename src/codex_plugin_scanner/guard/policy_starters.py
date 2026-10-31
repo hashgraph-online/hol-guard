@@ -141,10 +141,6 @@ _FALLTHROUGH_EXAMPLES: tuple[tuple[str, str, StarterEvent], ...] = (
 )
 
 
-def starter_ids() -> tuple[str, ...]:
-    return tuple(starter.id for starter in POLICY_STARTERS)
-
-
 def with_modeline(text: str) -> str:
     """Prefix canonical policy YAML with the editor schema modeline unless it is already there."""
 
@@ -247,6 +243,5 @@ __all__ = [
     "PolicyStarter",
     "find_starter",
     "render_starter_yaml",
-    "starter_ids",
     "with_modeline",
 ]

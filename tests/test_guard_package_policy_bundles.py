@@ -12,6 +12,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_store_support import replace_remote_policies
 from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_package_shims import (
     _cached_policy_rule,
@@ -47,7 +48,8 @@ def test_guard_protect_ignores_stale_policy_bundle_package_family_block(
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",
@@ -123,7 +125,8 @@ def test_guard_protect_ignores_ecosystem_scoped_policy_bundle_family_block(
     )
     try:
         store = GuardStore(home_dir)
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="*",

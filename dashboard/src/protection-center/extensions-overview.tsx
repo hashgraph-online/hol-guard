@@ -24,6 +24,7 @@ import {
 } from "./extensions-spotlight-model";
 import { useExtensionPopularity } from "./use-extension-popularity";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
+import { PluginUpdatesSection } from "../plugin-updates/plugin-updates-section";
 import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
 import { CustomExtensionsSection } from "./custom-extensions-section";
@@ -485,6 +486,7 @@ export function ExtensionsOverview(props: {
           {/* Inspect-only sources sit below the catalog: they inform, they do not change protection. */}
           <CodexHostConnectors inventory={props.hostInventory} />
           <LocalSkillsWorkspace />
+          <PluginUpdatesSection />
         </>
       )}
       </div>

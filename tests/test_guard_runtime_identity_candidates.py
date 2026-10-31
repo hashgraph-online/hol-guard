@@ -360,7 +360,13 @@ def test_no_servers_never_touch_the_native_runtime(monkeypatch: pytest.MonkeyPat
 def test_request_shares_only_variables_a_launch_could_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, object] = {}
 
-    def capture(specs: list[dict[str, object]], *, environment: dict[str, str], candidate_limit: int) -> RuntimeProbe:
+    def capture(
+        specs: list[dict[str, object]],
+        *,
+        environment: dict[str, str],
+        candidate_limit: int,
+        known_instances: object = None,
+    ) -> RuntimeProbe:
         seen.update(specs=specs, environment=environment, limit=candidate_limit)
         return RuntimeProbe(
             (), (), (), ({"index": 0, "state": "unresolved", "lookup": "search_path", "targets": []},), False

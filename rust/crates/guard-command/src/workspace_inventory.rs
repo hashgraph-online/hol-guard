@@ -209,11 +209,14 @@ fn path_name(path: &str) -> &str {
 pub type InventoryKey = (String, Option<String>, String);
 
 /// Insertion-ordered map from `InventoryKey` to the merged inventory item —
-/// a faithful stand-in for the oracle's `dict[tuple, dict]`.
+/// the oracle's `dict[tuple, dict]`, except that a second resolved version of
+/// a listed package keeps an item of its own (see `merge_inventory_item`).
 #[derive(Debug, Default)]
 pub struct InventoryMap {
     order: Vec<InventoryKey>,
     index: HashMap<InventoryKey, usize>,
+    /// Slots for a further resolved version of a package already listed.
+    versions: HashMap<(InventoryKey, String), usize>,
     items: Vec<Map<String, Value>>,
 }
 
@@ -225,6 +228,44 @@ impl InventoryMap {
     /// `tuple(inventory_map.values())` in insertion order.
     pub fn into_values(self) -> Vec<Map<String, Value>> {
         self.items
+    }
+
+    /// Moves the packages in `leading` to the front, in that order: the slots
+    /// they held when every manifest was merged before any lockfile. A
+    /// package's versions keep their order, and so does every other package.
+    pub fn lead_with(&mut self, leading: impl IntoIterator<Item = InventoryKey>) {
+        let mut rank: HashMap<InventoryKey, usize> = HashMap::new();
+        for key in leading {
+            let next = rank.len();
+            rank.entry(key).or_insert(next);
+        }
+        let mut items: Vec<(usize, Map<String, Value>)> = std::mem::take(&mut self.items)
+            .into_iter()
+            .map(|item| {
+                let place = rank
+                    .get(&inventory_key(&item))
+                    .copied()
+                    .unwrap_or(usize::MAX);
+                (place, item)
+            })
+            .collect();
+        // A stable sort keeps the insertion order within each place.
+        items.sort_by_key(|(place, _)| *place);
+        *self = Self::default();
+        for (_, item) in items {
+            let key = inventory_key(&item);
+            let slot = self.items.len();
+            match resolved_version(&item) {
+                Some(version) if self.index.contains_key(&key) => {
+                    self.versions.insert((key, version.to_owned()), slot);
+                }
+                _ => {
+                    self.index.insert(key.clone(), slot);
+                    self.order.push(key);
+                }
+            }
+            self.items.push(item);
+        }
     }
 }
 
@@ -242,12 +283,32 @@ pub fn inventory_key(item: &Map<String, Value>) -> InventoryKey {
     )
 }
 
+/// A non-empty string `version`: the resolved version a lockfile recorded.
+fn resolved_version(item: &Map<String, Value>) -> Option<&str> {
+    match item.get("version") {
+        Some(Value::String(version)) if !version.is_empty() => Some(version),
+        _ => None,
+    }
+}
+
 /// `_merge_inventory_item` (:3574). First writer wins the slot; later items
 /// OR `direct` and fill `range`/`version` only when the stored value is
-/// `None` (null *or absent*).
+/// `None` (null *or absent*). A different resolved version of a listed
+/// package gets its own slot: two lockfiles (or a nested npm copy) can hold
+/// a vulnerable version beside a fixed one, and both must be audited.
 pub fn merge_inventory_item(inventory_map: &mut InventoryMap, item: &Map<String, Value>) {
     let key = inventory_key(item);
-    match inventory_map.index.get(&key) {
+    let version = resolved_version(item).map(str::to_owned);
+    let slot = inventory_map.index.get(&key).and_then(|&first| {
+        match (&version, resolved_version(&inventory_map.items[first])) {
+            (Some(version), Some(stored)) if stored != version.as_str() => inventory_map
+                .versions
+                .get(&(key.clone(), version.clone()))
+                .copied(),
+            _ => Some(first),
+        }
+    });
+    match slot {
         None => {
             let mut entry = Map::new();
             entry.insert(
@@ -274,13 +335,19 @@ pub fn merge_inventory_item(inventory_map: &mut InventoryMap, item: &Map<String,
                 "version".into(),
                 item.get("version").cloned().unwrap_or(Value::Null),
             );
-            inventory_map
-                .index
-                .insert(key.clone(), inventory_map.items.len());
-            inventory_map.order.push(key);
+            let slot = inventory_map.items.len();
+            match version {
+                Some(version) if inventory_map.index.contains_key(&key) => {
+                    inventory_map.versions.insert((key, version), slot);
+                }
+                _ => {
+                    inventory_map.index.insert(key.clone(), slot);
+                    inventory_map.order.push(key);
+                }
+            }
             inventory_map.items.push(entry);
         }
-        Some(&slot) => {
+        Some(slot) => {
             let existing = &mut inventory_map.items[slot];
             let existing_direct = existing.get("direct").map(python_truthy).unwrap_or(false);
             let item_direct = item.get("direct").map(python_truthy).unwrap_or(false);
@@ -302,6 +369,118 @@ pub fn merge_inventory_item(inventory_map: &mut InventoryMap, item: &Map<String,
 // ---------------------------------------------------------------------------
 // Name splitting + target projection.
 // ---------------------------------------------------------------------------
+
+/// Packages each manifest lists itself, by the manifest's directory and
+/// ecosystem. A lockfile beside the manifest resolves them as direct
+/// dependencies, so a second resolved version of a package that another
+/// workspace requires directly keeps its own `direct` flag and range. A
+/// requirement no lockfile beside its manifest resolved is merged only after
+/// every lockfile, so an unrelated or nested copy never takes its range.
+#[derive(Debug, Default)]
+pub struct DirectDependencies {
+    index: HashMap<(String, String, String), usize>,
+    listed: Vec<DirectDependency>,
+}
+
+#[derive(Debug)]
+struct DirectDependency {
+    ecosystem: String,
+    package_name: String,
+    range: Option<String>,
+    resolved: bool,
+}
+
+fn parent_dir(path: &str) -> &str {
+    path.rsplit_once(['/', '\\']).map_or("", |(dir, _)| dir)
+}
+
+impl DirectDependencies {
+    /// The first range a manifest states for a package wins, as in
+    /// `merge_inventory_item`.
+    pub fn record(
+        &mut self,
+        manifest_path: &str,
+        ecosystem: &str,
+        package_name: &str,
+        range: Option<String>,
+    ) {
+        let key = (
+            parent_dir(manifest_path).to_owned(),
+            ecosystem.to_owned(),
+            package_name.to_owned(),
+        );
+        if self.index.contains_key(&key) {
+            return;
+        }
+        self.index.insert(key, self.listed.len());
+        self.listed.push(DirectDependency {
+            ecosystem: ecosystem.to_owned(),
+            package_name: package_name.to_owned(),
+            range,
+            resolved: false,
+        });
+    }
+
+    /// `Some(range)` when the manifest beside `lockfile_path` lists
+    /// `package_name` itself, which marks that requirement resolved. A copy
+    /// npm nests under another package (`a/node_modules/b`) is never direct.
+    pub fn lockfile_range(
+        &mut self,
+        lockfile_path: &str,
+        ecosystem: &str,
+        package_name: &str,
+    ) -> Option<Option<String>> {
+        if package_name.contains("/node_modules/") {
+            return None;
+        }
+        let key = (
+            parent_dir(lockfile_path).to_owned(),
+            ecosystem.to_owned(),
+            package_name.to_owned(),
+        );
+        let requirement = &mut self.listed[*self.index.get(&key)?];
+        requirement.resolved = true;
+        Some(requirement.range.clone())
+    }
+
+    /// Every package a manifest lists, in the order the manifests list them.
+    pub fn listed_keys(&self) -> impl Iterator<Item = InventoryKey> + '_ {
+        self.listed.iter().map(|requirement| {
+            let (namespace, name) =
+                dependency_name(&requirement.ecosystem, &requirement.package_name);
+            (requirement.ecosystem.clone(), namespace, name)
+        })
+    }
+
+    /// The requirements no lockfile beside their manifest resolved, in the
+    /// order the manifests list them, as `(ecosystem, package_name, range)`.
+    pub fn unresolved(&self) -> impl Iterator<Item = (&str, &str, Option<String>)> {
+        self.listed
+            .iter()
+            .filter(|requirement| !requirement.resolved)
+            .map(|requirement| {
+                (
+                    requirement.ecosystem.as_str(),
+                    requirement.package_name.as_str(),
+                    requirement.range.clone(),
+                )
+            })
+    }
+}
+
+/// The namespace and name a dependency entry is audited under. An npm
+/// lockfile names a copy nested under another package by its install path
+/// (`a/node_modules/b`), audited as its last `node_modules/` segment so
+/// advisories still match. Other ecosystems keep the whole name: a Go module
+/// path may hold a `node_modules` segment of its own.
+pub fn dependency_name(ecosystem: &str, package_name: &str) -> (Option<String>, String) {
+    if ecosystem == "npm" {
+        if let Some((_, leaf)) = package_name.rsplit_once("/node_modules/") {
+            return split_namespace_name(leaf);
+        }
+    }
+    split_namespace_name(package_name)
+}
 
 /// `_split_namespace_name` (:3602) — npm `@scope/name` handling only.
 pub fn split_namespace_name(package_name: &str) -> (Option<String>, String) {
@@ -666,6 +845,10 @@ pub fn package_manager_for_scan(manifest_paths: &[String]) -> String {
 // Oracle parity tests — golden vectors generated by `gen_golden.py` against
 // `codex_plugin_scanner.guard.local_supply_chain` on this checkout.
 // ---------------------------------------------------------------------------
+
+#[cfg(test)]
+#[path = "workspace_inventory_versions_tests.rs"]
+mod versions_tests;
 
 #[cfg(test)]
 mod tests {

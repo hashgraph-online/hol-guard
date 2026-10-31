@@ -185,18 +185,32 @@ fn proven(
         return None;
     }
     // A `gh pr create`, or a GitHub read such as `gh pr list`, the user's
-    // GitHub permissions allow on its own. Nothing else may carry a permission
-    // observation, and a read still needs the read proof below.
+    // GitHub permissions allow on its own. A ruleless permission is the other
+    // form admitted: a Git plumbing read (`git rev-parse`, `git merge-base`)
+    // records one so a disabled extension or permission can still block it,
+    // and it declares no floor of its own. Either way the segment still needs
+    // the read proof below.
     let granted = controls
         .map(|controls| controls.github_granted_segments(&extensions.permission_observations))
         .unwrap_or_default();
     let allowed_alone = |observation: &NativeCommandPermissionObservationV1| {
-        let mut segments = observation.matcher_evidence.iter();
-        matches!(
+        if matches!(
             observation.permission_id.as_str(),
             PROPOSE_PERMISSION | READ_PERMISSION
-        ) && !observation.matcher_evidence.is_empty()
-            && segments.all(|evidence| granted.contains(&evidence.segment_index))
+        ) {
+            return !observation.matcher_evidence.is_empty()
+                && observation
+                    .matcher_evidence
+                    .iter()
+                    .all(|evidence| granted.contains(&evidence.segment_index));
+        }
+        observation.uncertainty_reasons.is_empty()
+            && controls.is_some_and(|controls| {
+                controls.permission_settles_at_allow(
+                    &observation.extension_id,
+                    &observation.permission_id,
+                )
+            })
     };
     if !extensions.permission_observations.iter().all(allowed_alone) {
         return None;

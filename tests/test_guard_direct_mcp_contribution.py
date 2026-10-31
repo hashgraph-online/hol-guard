@@ -11,10 +11,8 @@ import pytest
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
-    load_mcp_contribution_payloads,
-    validate_mcp_contribution,
-)
+from codex_plugin_scanner.guard.runtime.mcp_server_contribution import validate_mcp_contribution
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401

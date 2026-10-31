@@ -298,7 +298,6 @@ def test_frozen_codex_contract_binds_commands_and_roles_to_one_executable(
     assert {path for _role, path in package_paths} == {executable_target}
     assert {role for role, _path in package_paths} == {
         "bridge",
-        "bridge_resume",
         "bridge_runtime",
         "hook_probe",
         "native_receipt",

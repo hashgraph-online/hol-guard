@@ -1,0 +1,748 @@
+{
+  "schema": "hol-guard.python-verdict-sites.v1",
+  "audit": "docs/guard/audits/maj-ac-01-per-root-authority-audit.md",
+  "generated_by": "scripts/audit_python_verdict_sites.py",
+  "readings": {
+    "renders-native": "Carries a verdict the resident produced.",
+    "decodes-signed": "Decodes a signed or stored authority-bearing decision into the enforced vocabulary.",
+    "records-approval": "Files or replays the answer the user gave at the approval gate.",
+    "validates-input": "Admits or rejects a value it was given; chooses nothing.",
+    "fails-closed": "Produces only a block, a review or a reapproval, so it can never authorize anything.",
+    "health-probe": "Writes a probe row that is rolled back; evaluates no policy.",
+    "presentation": "A label, band or next-step string that never reaches enforcement.",
+    "composes-in-python": "Settles a verdict in Python that the resident did not give. The invariant forbids this.",
+    "acknowledges-observation": "Replies to an event that reports completed activity, so its allow authorizes no tool action. A site filed here may still block, and does so for any event that can pause a tool call.",
+    "labels-finding": "A field on a scan finding record, alongside its severity and lifecycle state; no hook reads it.",
+    "routes-guard-own-sink": "Passes a call through to Guard's own approval sink, which opens the request owner-only, checks its digest and re-authorizes the command there."
+  },
+  "unparsed_templates": [
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py",
+      "label": "literal#0",
+      "line": 112,
+      "reason": "unmatched ')'"
+    }
+  ],
+  "sites": [
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
+      "func": "_observe_payload",
+      "root": "hook",
+      "reading": "acknowledges-observation",
+      "actions": [
+        "allow"
+      ],
+      "note": "The reply to an observation event, which reports activity that already finished; failure_payload only routes here when hook_event_pauses_when_unavailable is false, so nothing is being authorized."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
+      "func": "_pause_payload",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "The reply to an event that pauses when review cannot finish."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_canonical_policy_action",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Places the resident's policy_action in the lattice the generated client carries. A recognised action passes through unchanged; the only verdict this function itself composes is the block it answers for an action it cannot place, matching the native bridge's own is_guard_action filter."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_agreeing_native_response",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block",
+        "review"
+      ],
+      "note": "Reconciles the decision fields the resident already put in its own response with the canonical action beside them, so a harness that reads the envelope and one that reads the exit code answer alike. It only ever tightens: a deny or block field lowers an allowing action to block, an ask field lowers it to review, and an unplaceable decision word reads as deny. It composes no permission, and the native bridge that answers for this client reconciles the same two fields the same way."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_failure_payload",
+      "root": "hook",
+      "reading": "acknowledges-observation",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "The generated client's own fail-safe: a pausing event denies, an observation acknowledges. The allow is only ever the observation branch. Same split as _pause_payload and _observe_payload above."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_hermes_policy",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Reads the resident's decision out of the daemon response; an answer it cannot read becomes a block."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_permission_decision",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow"
+      ],
+      "note": "Maps the resident's policy_action into the harness permission vocabulary. _canonical_policy_action reads an unplaceable action as block first, so the None branch is now unreachable from a daemon response."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_to_native",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Allows only when _hermes_policy read allow or warn off the resident's answer; anything else blocks."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_muse_behavior",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow",
+        "block",
+        "review"
+      ],
+      "note": "Places a verdict word the resident wrote (decision, permissionDecision or a nested behavior) in Guard's vocabulary. A word it does not know reads as no verdict, which _muse_native then treats as restrictive on a gating event."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_muse_action",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Reads the resident's action off the daemon answer, preferring policy_action through _canonical_policy_action, which reads an unplaceable action as block. The allow and block returned here come from the answer's own continue flag, which the resident sets for a harness it does not manage."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_native.py",
+      "func": "BOUNDED_HOOK_NATIVE_TEMPLATE:_muse_native",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Writes Muse's wire answer for the action _muse_action read. A permitted call is empty stdout and exit 0, because Muse rejects an envelope that says allow without the reviewed input, so the only verdict this function itself writes is the deny it sends for a restrictive action and for an answer that names no verdict on a gating event."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
+      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_rewrite_grok_decision",
+      "root": "hook",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Rewrites the decision from the approval wait, which allows only once every request id the resident opened resolved to allow."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_script_template.py",
+      "func": "BOUNDED_HOOK_SCRIPT_TEMPLATE:_rewrite_muse_decision",
+      "root": "hook",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Rewrites the decision from the approval wait, which allows only once every request id the resident opened resolved to allow. The allow echoes the reviewed tool input back as updatedInput, which is what Muse needs to resume the identical call."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
+      "func": "_deny_event",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "The bridge's deny rendering for each Claude event shape."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/grok_approval_resume.py",
+      "func": "apply_grok_pretool_approval_wait",
+      "root": "hook",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Carries the answer wait_for_grok_live_approval read out of the approval store."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/grok_approval_resume.py",
+      "func": "wait_for_grok_live_approval",
+      "root": "shim-launch",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Returns allow only when every approval row the user answered resolved to allow; it reads the store, it does not judge the call."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/grok_hooks.py",
+      "func": "grok_hook_response_from_guard",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Renders the resident's policy_action for Grok. An action it does not recognise is normalized to the review tier before rendering, so an enforcement event denies like the other two renderings in this table; a prompt blocks, an observe-only event renders nothing and a recording-only session renders allow because it records rather than enforces."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/adapters/muse_hook_render.py",
+      "func": "apply_muse_pretool_approval_wait",
+      "root": "hook",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Carries the answer wait_for_approval_requests read out of the approval store: allow only when every request the resident opened resolved to allow, block when any did not, and the review unchanged while one is still pending."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
+      "func": "_local_skill_security_label",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "review"
+      ],
+      "note": "An AIBOM skill-report label, not an enforced action."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/approvals.py",
+      "func": "apply_approval_resolution",
+      "root": "none",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Applies the resident's resolution plan; allow only when the plan the resident built says allow."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
+      "func": "_receipt_decision",
+      "root": "direct-cli",
+      "reading": "presentation",
+      "actions": [
+        "review"
+      ],
+      "note": "Projects a stored receipt into a display bucket for the desktop list."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py",
+      "func": "_emit_protect_resident_failure",
+      "root": "guard-run",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "The protect command's reply when the resident request fails."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
+      "func": "emit_hook_review",
+      "root": "hook",
+      "reading": "acknowledges-observation",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "The outage path: a pausing event blocks, an observation does not. The allow is only ever the observation branch."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/product.py",
+      "func": "_resolve_next_action",
+      "root": "direct-cli",
+      "reading": "presentation",
+      "actions": [
+        "review"
+      ],
+      "note": "A product-page next-step string that happens to spell `review`; never reaches enforcement."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/prompt.py",
+      "func": "_prompt_for_artifact",
+      "root": "direct-cli",
+      "reading": "records-approval",
+      "actions": [
+        "block"
+      ],
+      "note": "Returns the user's own pick from the interactive prompt."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/prompt.py",
+      "func": "resolve_interactive_decisions",
+      "root": "direct-cli",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Prompts only for artifacts the resident already marked warn/review/require-reapproval/block, and files the user's pick behind the approval gate."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/protect_approvals.py",
+      "func": "_queue_local_protect_approvals",
+      "root": "guard-run",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Queues a block while the approval is pending."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/cli/render.py",
+      "func": "_plain_text_protect",
+      "root": "direct-cli",
+      "reading": "presentation",
+      "actions": [
+        "review"
+      ],
+      "note": "Picks the sentence that describes a verdict already rendered; the default is only the text for an unreadable payload."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/continuation_runtime.py",
+      "func": "_continuation_action",
+      "root": "shim-launch",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Blocks a continuation it cannot settle."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/business_review_queue.py",
+      "func": "project_request",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "require-reapproval"
+      ],
+      "note": "A display-only queue row, as its docstring states."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
+      "func": "cursor_shell_route_response",
+      "root": "hook",
+      "reading": "routes-guard-own-sink",
+      "actions": [
+        "allow"
+      ],
+      "note": "Same route: an argv shape that matches Guard's own sink is passed through to it, and the sink does the authorizing."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
+      "func": "_probe_response",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow"
+      ],
+      "note": "The edge's own route: a probe the native edge does not route to the sink gets the plain allow the resident would have answered, and the shell call itself is still judged at execution."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_fail_closed.py",
+      "func": "render_silent_review_block",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "The fixed deny render_pre_tool falls back to when the resident cannot compose the silent block."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+      "func": "_blocked",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Renders the block response."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+      "func": "native_package_review_response",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "allow"
+      ],
+      "note": "Renders the resident's review_settlement: an allow only where the resident settled the review as allow and the package review plan's may_allow still holds. Closed MAJ-AC-01 finding: the script-free watch widening now lives in the resident."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "func": "_policy_binding_failed",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Renders a block when a review cannot be bound to its native policy."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "func": "_policy_binding_failed",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Renders a block when a review cannot be bound to its native policy."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "func": "_policy_binding_failed",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Blocks when a native review cannot be bound to its native policy."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+      "func": "pause_native_pre_tool_for_approval",
+      "root": "hook",
+      "reading": "records-approval",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Blocks while the review is pending, and allows only on the two saved-approval matches native_review_settle finds in the store."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
+      "func": "_saved_block_response",
+      "root": "hook",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Renders the saved block."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
+      "func": "native_saved_decision_response",
+      "root": "hook",
+      "reading": "records-approval",
+      "actions": [
+        "allow"
+      ],
+      "note": "Replays the user's saved exact-action decision, bound to the artifact hash and gated on the resident having marked the review approvable."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
+      "func": "_continuation",
+      "root": "hook",
+      "reading": "records-approval",
+      "actions": [
+        "allow"
+      ],
+      "note": "Builds the retry copy for an approval the user already allowed."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/daemon/server_control_connect_flow.py",
+      "func": "_repair_command_activity_persistence_health",
+      "root": "guard-run",
+      "reading": "health-probe",
+      "actions": [
+        "allow"
+      ],
+      "note": "Writes an ordinary probe row inside a savepoint and rolls it back; it proves the evidence write path and evaluates no policy."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/harness_resume.py",
+      "func": "_normalize_action",
+      "root": "shim-launch",
+      "reading": "decodes-signed",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Decodes the stored resume resolution into the enforced vocabulary."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/local_risk_report.py",
+      "func": "_risk_band",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "review"
+      ],
+      "note": "A local risk-report band."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
+      "func": "allow_tool_call",
+      "root": "mcp",
+      "reading": "renders-native",
+      "actions": [
+        "allow"
+      ],
+      "note": "Files the policy row and receipt for a call the native route already allowed; `policy_action` is the caller's native action."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
+      "func": "_expected_policy_action",
+      "root": "package",
+      "reading": "renders-native",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Echoes the action the request carried so the reply can be checked against it."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
+      "func": "native_unavailable_block_evaluation",
+      "root": "package",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "The evaluation used when the resident cannot be reached."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/native_supply_chain_eval.py",
+      "func": "_review_settlement",
+      "root": "hook",
+      "reading": "renders-native",
+      "actions": [
+        "block",
+        "review"
+      ],
+      "note": "Reads the resident's review_settlement as sent; anything unreadable leaves a block standing as a block and every other verdict as a review, so it never produces an allow the resident did not send."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/native_supply_chain_eval.py",
+      "func": "unavailable_block_evaluation",
+      "root": "package",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "The evaluation used when the resident cannot be reached."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/protect.py",
+      "func": "refresh_additional_authority",
+      "root": "guard-run",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Blocks when the authority cannot be refreshed."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
+      "func": "_allow_and_forward",
+      "root": "mcp",
+      "reading": "fails-closed",
+      "actions": [
+        "require-reapproval"
+      ],
+      "note": "Raises the action to require-reapproval; never lowers one."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
+      "func": "_deny_inline_tool_call",
+      "root": "mcp",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Renders the inline denial."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
+      "func": "_handle_message_serialized",
+      "root": "mcp",
+      "reading": "fails-closed",
+      "actions": [
+        "block",
+        "require-reapproval"
+      ],
+      "note": "The serialized message path's stop and queue replies."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
+      "func": "_handle_package_request",
+      "root": "mcp",
+      "reading": "fails-closed",
+      "actions": [
+        "block",
+        "require-reapproval"
+      ],
+      "note": "Raises the action to require-reapproval or block; never lowers one."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
+      "func": "_render_package_postclaim",
+      "root": "mcp",
+      "reading": "renders-native",
+      "actions": [
+        "require-reapproval"
+      ],
+      "note": "Labels the queue disposition the resident returned."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
+      "func": "_tool_decision_after_runtime_allow",
+      "root": "mcp",
+      "reading": "renders-native",
+      "actions": [
+        "allow"
+      ],
+      "note": "Carries the native route's `decision_policy_action` onto the decision it forwards."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/review_contracts.py",
+      "func": "_request_recommended_scope",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "The string is a key into the row's recommended_scope_by_action table, not an action."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/review_contracts.py",
+      "func": "normalize_remote_approval_decision",
+      "root": "shim-launch",
+      "reading": "decodes-signed",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Normalizes the documented signed remote decision wire values."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",
+      "func": "approval_reuse_authority_unavailable",
+      "root": "none",
+      "reading": "fails-closed",
+      "actions": [
+        "block"
+      ],
+      "note": "Preserves the caller's current action when the resident is unreachable and claims no saved approval; a non-GuardAction becomes block."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/runtime/exact_cloud_review.py",
+      "func": "_exact_action",
+      "root": "shim-launch",
+      "reading": "decodes-signed",
+      "actions": [
+        "allow",
+        "block"
+      ],
+      "note": "Decodes a signed one-time cloud decision."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/runtime/extension_directory_operations.py",
+      "func": "_default_action",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "block",
+        "review"
+      ],
+      "note": "Describes what an extension rule does for `scripts/export_extension_directory.py`; nothing in the runtime calls it."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/runtime/local_cli_commands.py",
+      "func": "local_cli_command_state",
+      "root": "direct-cli",
+      "reading": "validates-input",
+      "actions": [
+        "allow",
+        "block",
+        "review"
+      ],
+      "note": "Admits a configured state value or rejects it; it chooses nothing."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/schemas/consumer_mode.py",
+      "func": "_install_recommendation",
+      "root": "none",
+      "reading": "presentation",
+      "actions": [
+        "allow",
+        "block",
+        "review"
+      ],
+      "note": "Feeds policy_recommendation.action and can_install in the consumer-mode contract. Both are read only by the CLI report renderer; nothing gates on them."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/temporary_mcp_approvals.py",
+      "func": "temporary_mcp_grant_decision",
+      "root": "mcp",
+      "reading": "records-approval",
+      "actions": [
+        "allow"
+      ],
+      "note": "Files the row for a temporary grant the user picked at the approval gate."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/trusted_local_tools.py",
+      "func": "local_tool_grant_decision",
+      "root": "mcp",
+      "reading": "renders-native",
+      "actions": [
+        "allow"
+      ],
+      "note": "Renders the policy row the resident filed, and refuses any reply that is not a resident allow."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/workspace_rule_findings.py",
+      "func": "_finding",
+      "root": "none",
+      "reading": "labels-finding",
+      "actions": [
+        "warn"
+      ],
+      "note": "A scan finding's own decision field, next to its severity and lifecycle state."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/workspace_runtime_findings.py",
+      "func": "project_runtime_findings",
+      "root": "none",
+      "reading": "labels-finding",
+      "actions": [
+        "warn"
+      ],
+      "note": "Same scan-finding record field."
+    },
+    {
+      "file": "src/codex_plugin_scanner/guard/workspace_secret_findings.py",
+      "func": "_finding",
+      "root": "none",
+      "reading": "labels-finding",
+      "actions": [
+        "warn"
+      ],
+      "note": "Same scan-finding record field."
+    }
+  ]
+}

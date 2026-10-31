@@ -44,7 +44,7 @@ concurrency:
 jobs:
   contracts:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -64,7 +64,7 @@ jobs:
     env:
       GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: ${{ github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3' && github.sha || '' }}
     if: github.event_name == 'workflow_dispatch' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -116,7 +116,7 @@ jobs:
       GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: ${{ github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3' && github.sha || '' }}
     if: always() && github.event_name == 'workflow_dispatch' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3')
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read

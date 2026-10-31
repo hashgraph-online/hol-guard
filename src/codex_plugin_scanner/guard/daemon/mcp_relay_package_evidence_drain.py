@@ -1,8 +1,8 @@
 """Record the receipt of a package call the native relay decided.
 
 A relayed ``tools/call`` the resident answers through its package lane leaves a
-different receipt from a plain tool call: ``_record_package_block``
-(``runtime_mcp.py:2327``) and ``_record_package_forward`` (:2025) write the
+different receipt from a plain tool call: the proxy's package blocks (the
+``package_answer`` package kinds) and ``_record_package_forward`` write the
 block and allow receipts against the *package request's* artifact and the
 approval-context token that request hashed to, with the evaluation's reason
 signals and the package scanner evidence. The tool legs of the same lane are
@@ -233,7 +233,7 @@ def record_mcp_relay_package_evidence(store: object, guard_home: Path, record: o
                 **recorded,
             )
         else:
-            # `_record_package_block`: no risk categories and no policy
+            # A package block: no risk categories and no policy
             # workspace, as the proxy writes it. A queued request is recorded
             # by `_queue_approval_center_response` instead, which projects the
             # call with its artifact and so does carry risk categories.

@@ -12,6 +12,7 @@ The supported claim is intentionally narrow:
 
 - `plugin-release/action.yml` is the composite action. It installs a pinned, hash-checked `hol-guard` Linux wheel after verifying its provenance against this repository, runs the scan and the Kit check, builds the evidence, and attests it. Registration with HOL defaults off. The `fail_on_severity` and `fail_on_check_errors` gates run after the attestation, so a release that fails a gate still gets an attested record of why.
 - `src/codex_plugin_scanner/plugin_release_evidence.py` defines the evidence contract.
+- `src/codex_plugin_scanner/plugin_release_sbom.py` builds the CycloneDX SBOM.
 - `src/codex_plugin_scanner/plugin_release_runner.py` runs the evidence, registration and summary steps.
 
 The composite runs the evidence code from the installed wheel, so it needs a `hol-guard` release that contains these modules. `plugin-release/guard-version.txt` and `plugin-release/guard-sha256.txt` pin that wheel. A stable pin is downloaded from PyPI and its PyPI provenance is verified. An alpha pin (`X.Y.ZaN`) is downloaded from the `alpha/vX.Y.ZaN` GitHub prerelease, because alpha native wheels are not published to PyPI, and its GitHub attestation must name this repository's `publish.yml` on `main` as the signer. Either way the SHA-256 must match the pin. `.github/workflows/plugin-release-smoke.yml` runs the composite on a Plugin Kit fixture when a pull request from a branch in this repository changes the pin or the locks. Pull requests from forks skip it, because the job installs the pinned Guard release with repository permissions; a maintainer runs it for a fork change with `workflow_dispatch` on the fork's commit after review. The trusted reusable workflow `.github/workflows/plugin-release.yml` pins this composite by commit, the same way `guarded-repository.yml` pins its composite.
@@ -45,6 +46,8 @@ jobs:
 
 The job needs `id-token: write` for the OIDC token HOL verifies and `attestations: write` for the GitHub attestation. `security-events: write` is needed only with `upload_sarif: true`. The workflow sends the attested evidence to HOL by default; set `register_release: false` to attest without registering. HOL records every verified registration and shows it on the releases page of the listing whose repository matches; `release_url` is empty when no public listing matches.
 
+When the matching listing has no HOL Blue or Gold membership, the job summary of the repository's first recorded release in 28 days carries one line about HOL Blue. HOL only decides whether the line appears and supplies a link to its own promote page; Guard writes the text and drops any link that is not on `https://hol.org/guard/plugins/promote`. Set `offer_line: false` to turn the line off. It never changes the evidence, the score or the listing.
+
 ## Evidence contract
 
 The evidence records the repository and exact commit SHA, ref, workflow run ID, `hol-guard` version, scan profile, score and grade, highest finding severity, finding count, the Kit check result with its error and warning counts and diagnostic codes, the runtimes the Kit can package for, counts of skills, commands and agents, whether hooks ship, and one entry per MCP server:
@@ -57,5 +60,22 @@ The evidence records the repository and exact commit SHA, ref, workflow run ID, 
 A plugin that declares more than 50 MCP servers gets no evidence rather than a partial surface.
 
 The evidence never includes source code, scanner findings, file contents, local paths, URLs beyond the host, environment variable values, header values, prompts, credentials or actor identity.
+
+## SBOM
+
+When the release declares third-party packages, the evidence step also writes a CycloneDX 1.6 SBOM (`sbom_path` output) and the evidence records its format, spec version, SHA-256 and component count under `sbom`. Because the evidence is attested, the attestation binds the SBOM file by digest. The SBOM lists:
+
+- the non-development entries of `package-lock.json` (lockfile versions 1 to 3), with their SHA-512 integrity hashes;
+- exact `==` pins in `requirements*.txt`, except development files such as `requirements-dev.txt` or `requirements-test.txt`;
+- registry and git packages in `uv.lock`, without the plugin's own editable or local entries;
+- the packages MCP servers start through `npx`, `bunx`, `pnpx` or `uvx`, without a version when the launch names a tag or range or no version at all. An unversioned launch of a package the lockfile already lists is left out.
+
+Only files directly in `plugin_dir` are read. Symbolic links, files over 32 MiB and files that do not parse are skipped. A release with no packages, or more than 50,000, gets no SBOM rather than a partial one, and its evidence has no `sbom` key. The document records no run time, so rerunning a release of the same commit with the same Guard version reproduces the same digest. A `uv.lock` package installed from git carries its repository in a `vcs_url` qualifier, so it never merges with the registry release of the same name and version. The reusable workflow keeps the evidence and the SBOM as the `hol-plugin-release` run artifact for 90 days.
+
+## Changes since the previous release
+
+When HOL records a release, it compares the evidence with the previous checked version of the same repository and returns what the new version can newly reach or run: new MCP servers, network destinations, environment variables or launched packages, hooks that were not there before, a higher scan severity, or a Plugin Kit check that now fails. The job summary lists these under "Changes since X" and each one becomes a warning annotation on the run. They never fail the job. Guard keeps only the known kinds of change, at most 20, as plain single-line text.
+
+## Canonical form
 
 The evidence file is canonical JSON (sorted keys, two-space indent, ASCII escapes, trailing newline). Its SHA-256 is the attestation subject and is bound into the OIDC audience `hol-plugin-release:<evidence-sha256>`, so a token cannot be replayed for other evidence.

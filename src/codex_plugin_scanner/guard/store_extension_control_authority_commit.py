@@ -378,13 +378,26 @@ class ExtensionControlAuthorityCommitMixin:
                         catalog_digest=catalog_digest,
                         recorded_at=created_at,
                     )
-            if not proof_already_consumed:
-                consume_extension_control_proof(self.guard_home, proof, mutation)
-            anchored = AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED)
             try:
-                self._write_and_verify_anchor(anchored, key=key)
-            except Exception as exc:
-                raise ExtensionControlAuthorityError("extension control authority anchor unavailable") from exc
+                if not proof_already_consumed:
+                    consume_extension_control_proof(self.guard_home, proof, mutation)
+                anchored = AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED)
+                try:
+                    self._write_and_verify_anchor(anchored, key=key)
+                except Exception as exc:
+                    raise ExtensionControlAuthorityError("extension control authority anchor unavailable") from exc
+            except Exception:
+                # The row prepared above never reached the anchor. Left in
+                # place it refuses every later save, so take it back now; the
+                # resident keeps it if the anchor did move.
+                with contextlib.suppress(Exception):
+                    self._roll_back_abandoned_transition(
+                        previous_revision,
+                        snapshot_digest=previous_digest,
+                        key=key,
+                        own_transition_digest=transition_digest,
+                    )
+                raise
             with self._connect() as connection:
                 from .catalog_delivery.activation_journal import finish
 

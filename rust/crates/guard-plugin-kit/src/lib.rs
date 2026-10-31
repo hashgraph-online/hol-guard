@@ -1,15 +1,21 @@
 //! The HOL Guard Plugin Kit: check a plugin source, package it for every
 //! agent runtime that can load it, and print its install links.
 //!
-//! The Kit reads only the repository it is pointed at, runs no commands, and
+//! The Kit reads only the repository it is pointed at, plus the record of
+//! what `plugin install` added under the Guard home. It runs no commands and
 //! makes no network calls. `hol-guard plugin` sends one JSON request on stdin
 //! to `hol-guard-runtime plugin-kit --stdin` and gets one response back:
 //! `{"ok": true, "result": ...}` or `{"ok": false, "error": <code>}`.
 
+mod agent_plugins;
+mod card;
 mod check;
+mod config;
 mod detect;
 mod emit;
 mod init;
+mod install;
+mod ledger;
 mod links;
 mod model;
 mod output;
@@ -37,6 +43,13 @@ enum Request {
         #[serde(default)]
         strict: bool,
     },
+    /// Conformance to a published plugin format; see `agent_plugins.rs`.
+    Conformance {
+        root: String,
+        spec: String,
+        #[serde(default)]
+        strict: bool,
+    },
     Package {
         root: String,
         #[serde(default)]
@@ -50,12 +63,74 @@ enum Request {
     },
     Links {
         root: String,
+        #[serde(default)]
+        block: bool,
+        #[serde(default)]
+        slug: Option<String>,
+    },
+    /// A draft `.well-known` card; see `card.rs`.
+    Card {
+        root: String,
+        #[serde(default)]
+        slug: Option<String>,
     },
     Init {
         root: String,
         #[serde(default)]
         name: Option<String>,
     },
+    /// The spec is the registry's untrusted answer; see `install.rs`.
+    /// `slug` and `version` are what the user asked for; the spec must match.
+    Install {
+        spec: Value,
+        #[serde(default)]
+        available: Vec<String>,
+        #[serde(default)]
+        runtimes: Vec<String>,
+        #[serde(default)]
+        slug: Option<String>,
+        #[serde(default)]
+        version: Option<String>,
+        /// Set only when the user overrode the install-spec endpoint.
+        #[serde(default)]
+        listing_origin: Option<String>,
+        /// Days since 1970-01-01, to age HOL's scan. Tests pin it; Guard
+        /// leaves it out and the Kit reads the clock.
+        #[serde(default)]
+        today: Option<i64>,
+    },
+    /// Plans from what Guard recorded installing; see `ledger.rs`.
+    Uninstall {
+        guard_home: String,
+        slug: String,
+        #[serde(default)]
+        available: Vec<String>,
+        #[serde(default)]
+        runtimes: Vec<String>,
+        #[serde(default)]
+        listing_origin: Option<String>,
+    },
+    Record {
+        guard_home: String,
+        slug: String,
+        runtime: String,
+        installed: bool,
+        #[serde(default)]
+        spec: Option<Value>,
+        #[serde(default)]
+        listing_origin: Option<String>,
+        /// Guard registered the marketplace for this install.
+        #[serde(default)]
+        marketplace_added: bool,
+    },
+    Installs {
+        guard_home: String,
+        /// Move a record that no longer parses aside instead of failing.
+        #[serde(default)]
+        recover: bool,
+    },
+    /// Checks an install-spec endpoint override; see `install::endpoint_origin`.
+    Endpoint { value: String },
 }
 
 /// Runs one request and wraps the outcome in the native response envelope.
@@ -75,10 +150,23 @@ fn handle(request: Request) -> Result<Value, String> {
             let root = resolve_root(&root)?;
             check_report(&root, strict)
         }
-        Request::Links { root } => {
+        Request::Conformance { root, spec, strict } => {
+            let root = resolve_root(&root)?;
+            match spec.as_str() {
+                agent_plugins::SPEC => Ok(agent_plugins::check(&root, strict)),
+                _ => Err("plugin_kit_spec_unsupported".to_owned()),
+            }
+        }
+        Request::Links { root, block, slug } => {
             let root = resolve_root(&root)?;
             let detection = detect::detect(&root)?;
-            serde_json::to_value(links::links(&detection))
+            serde_json::to_value(links::links(&detection, block, slug.as_deref())?)
+                .map_err(|_| "plugin_kit_encode_failed".to_owned())
+        }
+        Request::Card { root, slug } => {
+            let root = resolve_root(&root)?;
+            let detection = detect::detect(&root)?;
+            serde_json::to_value(card::card(&detection, slug.as_deref())?)
                 .map_err(|_| "plugin_kit_encode_failed".to_owned())
         }
         Request::Init { root, name } => {
@@ -88,6 +176,91 @@ fn handle(request: Request) -> Result<Value, String> {
             let written = output::write(&root, &outputs, output::Mode::Exclusive)?;
             Ok(json!({"written": written, "scaffolded": detection.sources.is_empty()}))
         }
+        Request::Install {
+            spec,
+            available,
+            runtimes,
+            slug,
+            version,
+            listing_origin,
+            today,
+        } => {
+            let origin = origin(listing_origin.as_deref())?;
+            let plan = install::plan(
+                spec,
+                install::Action::Install,
+                &available,
+                &runtimes,
+                origin,
+                today.unwrap_or_else(install::today),
+            )?;
+            if slug.is_some_and(|slug| slug != plan.slug) {
+                return Err("plugin_kit_install_spec_mismatch".to_owned());
+            }
+            if version.is_some_and(|version| plan.version.as_ref() != Some(&version)) {
+                return Err("plugin_kit_install_version_unavailable".to_owned());
+            }
+            encode(&plan)
+        }
+        Request::Uninstall {
+            guard_home,
+            slug,
+            available,
+            runtimes,
+            listing_origin,
+        } => {
+            let origin = origin(listing_origin.as_deref())?;
+            let spec = ledger::spec(&guard_home, &slug)?;
+            // A listing recorded through another install-spec endpoint is
+            // readable, just not removable from this one; say which.
+            let listing = spec.get("listingUrl").and_then(Value::as_str);
+            if listing.is_some_and(|url| !url.starts_with(origin)) {
+                return Err("plugin_kit_install_recorded_elsewhere".to_owned());
+            }
+            let owned = ledger::marketplaces_added(&guard_home, &slug)?;
+            let mut plan = install::plan(
+                spec,
+                install::Action::Uninstall,
+                &available,
+                &runtimes,
+                origin,
+                install::today(),
+            )
+            .map_err(|error| match error.as_str() {
+                "plugin_kit_install_runtime_not_offered" => ledger::NOT_RECORDED.to_owned(),
+                "plugin_kit_install_runtime_unknown" => error,
+                _ => ledger::INVALID.to_owned(),
+            })?;
+            install::offer_marketplace_removal(&mut plan, &owned);
+            encode(&plan)
+        }
+        Request::Record {
+            guard_home,
+            slug,
+            runtime,
+            installed,
+            spec,
+            listing_origin,
+            marketplace_added,
+        } => {
+            let origin = origin(listing_origin.as_deref())?;
+            ledger::record(
+                &guard_home,
+                &slug,
+                &runtime,
+                installed,
+                spec,
+                origin,
+                marketplace_added,
+            )
+        }
+        Request::Installs {
+            guard_home,
+            recover,
+        } => ledger::installs(&guard_home, recover),
+        Request::Endpoint { value } => install::endpoint_origin(&value)
+            .map(|origin| json!({ "origin": origin }))
+            .ok_or_else(|| "plugin_kit_install_endpoint_invalid".to_owned()),
         Request::Package {
             root,
             out_dir,
@@ -99,6 +272,20 @@ fn handle(request: Request) -> Result<Value, String> {
             package(&root, out_dir.as_deref(), &runtimes, force, strict)
         }
     }
+}
+
+/// The origin listing URLs must use: HOL's own unless the CLI passed the
+/// origin of an overridden install-spec endpoint.
+fn origin(listing_origin: Option<&str>) -> Result<&str, String> {
+    match listing_origin {
+        None => Ok(install::HOL_ORIGIN),
+        Some(origin) if install::valid_origin(origin) => Ok(origin),
+        Some(_) => Err("plugin_kit_request_invalid".to_owned()),
+    }
+}
+
+fn encode(plan: &install::Plan) -> Result<Value, String> {
+    serde_json::to_value(plan).map_err(|_| "plugin_kit_encode_failed".to_owned())
 }
 
 fn resolve_root(root: &str) -> Result<PathBuf, String> {
@@ -134,7 +321,13 @@ pub fn package_plan(root: &Path, requested: &[String]) -> Result<Vec<Output>, St
     let detection = detect::detect(root)?;
     let runtimes = select_runtimes(root, &detection.plugin, requested)?;
     let mut copied = BTreeSet::new();
-    let mut outputs = emit::plan(root, &detection.plugin, &runtimes, &mut copied)?;
+    let mut outputs = emit::plan(
+        root,
+        &detection.plugin,
+        &detection.excludes,
+        &runtimes,
+        &mut copied,
+    )?;
     let mut inputs: BTreeSet<PathBuf> = detection.inputs.iter().cloned().collect();
     inputs.extend(copied);
     let inputs: Vec<PathBuf> = inputs.into_iter().collect();
@@ -236,10 +429,11 @@ fn package(
         }
     };
     let detection = detect::detect(root)?;
+    output::reject_unsafe_out(root, &out)?;
     output::reject_source_overlap(root, &out, &detection.plugin)?;
     let outputs = package_plan(root, requested)?;
     let mode = if force {
-        output::clear_previous(&out)?;
+        output::clear_previous(&out, &outputs)?;
         output::Mode::Replace
     } else {
         output::require_empty(&out)?;

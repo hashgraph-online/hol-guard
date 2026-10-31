@@ -92,15 +92,6 @@ def hook_event_is_permission_request(event_name: str) -> bool:
     return _compact_hook_event_name(event_name) in _PERMISSION_REQUEST_EVENTS
 
 
-def hook_reason_continues_session(reason_code: str) -> bool:
-    """True when this availability reason must not stop the harness."""
-
-    code = reason_code.strip()
-    if code in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
-        return False
-    return code in _REVIEW_CANNOT_FINISH_REASON_CODES
-
-
 def availability_harness_response(
     *,
     harness: str,
@@ -159,5 +150,4 @@ __all__ = [
     "cursor_unparseable_input_permission",
     "hook_event_is_permission_request",
     "hook_event_pauses_when_unavailable",
-    "hook_reason_continues_session",
 ]

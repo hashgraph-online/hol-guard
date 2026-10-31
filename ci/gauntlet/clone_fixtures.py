@@ -6,6 +6,11 @@ the branch is gone, which pushes the configuration listing past a quarter
 megabyte, and ``commit.gpgsign`` is common on maintainers' checkouts. Neither
 runs code for a branch switch, an index update, a configuration read or a new
 linked worktree.
+
+A maintainer's checkout also keeps settings that point outside the work tree:
+``core.hooksPath`` names an empty directory under home and
+``credential.helper`` answers Git from a shell function. An ordinary edit in a
+linked worktree of that checkout is contained exactly as in a plain clone.
 """
 
 from __future__ import annotations
@@ -25,6 +30,11 @@ LONG_LIVED_WORKTREES = {
     "project-report-followup": LONG_LIVED_NEW_BRANCH,
     "reviews/pending/report": "fix/report-nested",
 }
+HOME_HOOKS_CASE = "omp-native-home-hooks-clone-notes-edit"
+HOME_HOOKS_NOTES = "docs/release-notes.md"
+HOME_HOOKS_HELPER = (
+    '!f() { echo "username=x-access-token"; echo "password=$(gh auth token --hostname github.com)"; }; f'
+)
 
 
 def long_lived_clone_config() -> str:
@@ -43,6 +53,16 @@ def long_lived_clone_config() -> str:
 
 def add_long_lived_clone_config(main: Path, scenario_id: str | None, environment: dict[str, str]) -> None:
     """Append the shape to the main checkout's config, which its linked worktrees share."""
+    if scenario_id == HOME_HOOKS_CASE:
+        (main.parent / ".app-hooks/empty").mkdir(parents=True, exist_ok=True)
+        for arguments in (
+            ("config", "core.hooksPath", "~/.app-hooks/empty"),
+            ("config", "credential.helper", HOME_HOOKS_HELPER),
+        ):
+            subprocess.run(["git", *arguments], cwd=main, env=environment, check=True, capture_output=True)
+        notes = main.parent / "project-feature" / HOME_HOOKS_NOTES
+        notes.write_text("Draft release notes.\n", encoding="utf-8", newline="\n")
+        return
     if scenario_id not in {LONG_LIVED_CLONE_CASE, LONG_LIVED_WORKTREE_CASE}:
         return
     if scenario_id == LONG_LIVED_WORKTREE_CASE:
@@ -66,6 +86,12 @@ def _linked_head(worktree: Path) -> str | None:
 
 def long_lived_clone_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     """The linked worktree ends on the new branch, or each new sibling worktree on its own."""
+    if scenario_id == HOME_HOOKS_CASE:
+        try:
+            edited = (workspace / HOME_HOOKS_NOTES).read_text(encoding="utf-8") == "Final release notes.\n"
+        except (OSError, UnicodeError):
+            edited = False
+        return {"home-hooks-notes-edited": edited}
     if scenario_id == LONG_LIVED_WORKTREE_CASE:
         home = workspace.parent
         return {

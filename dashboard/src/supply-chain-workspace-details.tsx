@@ -147,16 +147,18 @@ function SupplyChainAuditTeaser({ auditSnapshot, auditRunning, onOpenAudit }: Su
 
 type SupplyChainWorkspaceDetailsProps = {
   snapshot: GuardRuntimeSnapshot;
-  onGoHome: () => void;
   onAuditNavigate: () => void;
   auditSnapshot: SupplyChainAuditSnapshot | null;
   auditRunning: boolean;
 };
 
-/** The facts behind the roster, below it, as ruled sections. */
+/**
+ * The facts behind the roster, below it, folded into one line until asked
+ * for: recent activity, audit, intel, apps and sources answer "why", not
+ * "what do I do next", so they wait behind a disclosure.
+ */
 export function SupplyChainWorkspaceDetails({
   snapshot,
-  onGoHome,
   onAuditNavigate,
   auditSnapshot,
   auditRunning,
@@ -166,6 +168,8 @@ export function SupplyChainWorkspaceDetails({
     () => snapshot.managed_installs ?? [],
     [snapshot.managed_installs],
   );
+  const [open, setOpen] = useState(false);
+  const toggleOpen = useCallback(() => setOpen((value) => !value), []);
   // undefined while receipts load, null when they could not be read.
   const [evidenceRail, setEvidenceRail] = useState<SupplyChainEvidenceRailSnapshot | null | undefined>(undefined);
   const supplyChainIssues = useMemo(() => resolveSupplyChainIssues(snapshot), [snapshot]);
@@ -197,8 +201,26 @@ export function SupplyChainWorkspaceDetails({
 
   return (
     <div data-testid="supply-chain-workspace">
-      <h2 className="text-lg font-semibold tracking-tight text-brand-dark">Activity and sources</h2>
-      <div className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
+      <h2 className="text-lg font-semibold tracking-tight text-brand-dark">
+        <button
+          type="button"
+          onClick={toggleOpen}
+          aria-expanded={open}
+          aria-controls="supply-chain-activity"
+          className="-ml-1 inline-flex min-h-11 items-center gap-1.5 rounded-md px-1 text-left hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+        >
+          Activity and sources
+          <HiMiniChevronDown
+            className={`h-4 w-4 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
+            aria-hidden="true"
+          />
+        </button>
+      </h2>
+      {!open && (
+        <p className="text-sm text-slate-600">Recent blocks, workspace audit, safety data and connected apps.</p>
+      )}
+      {open && (
+      <div id="supply-chain-activity" className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
         {evidenceRail === undefined ? (
           <SupplyChainEvidenceRailPlaceholder />
         ) : evidenceRail !== null ? (
@@ -211,7 +233,7 @@ export function SupplyChainWorkspaceDetails({
           onOpenAudit={onAuditNavigate}
         />
 
-        <SupplyChainBundlePanel refreshKey={bundleRefreshKey(snapshot)} />
+        <SupplyChainBundlePanel refreshKey={bundleRefreshKey(snapshot)} cloudState={snapshot.cloud_state} />
 
         <SupplyChainDetailSection
           id="supply-chain-apps-heading"
@@ -251,13 +273,7 @@ export function SupplyChainWorkspaceDetails({
           <SupplyChainCloudCapabilitiesPanel state={cloudCapabilities} />
         ) : null}
       </div>
-
-      {/* Pulled left so the label lines up with the content edge. */}
-      <div className="mt-4 -ml-3 sm:-ml-4">
-        <ActionButton variant="ghost" onClick={onGoHome}>
-          Back to Home
-        </ActionButton>
-      </div>
+      )}
     </div>
   );
 }

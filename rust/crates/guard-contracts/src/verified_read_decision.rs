@@ -1,9 +1,9 @@
 //! Request/result contract for the `VerifiedReadDecision` resident op.
 //!
-//! Two executors compose this decision: the verified workspace read and the
-//! verified GitHub public read. Both ask the same question — may this proven
-//! read run silently — so they share one op and differ only in the variant
-//! they send. The host transports the decision and never re-derives it.
+//! The verified GitHub public read asks here whether its proven read may run
+//! silently. The verified workspace read asks the same question, but it runs in
+//! the resident already and composes its decision there, so it never crosses
+//! this wire. The host transports the decision and never re-derives it.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,14 +15,13 @@ pub const VERIFIED_READ_DECISION_RESULT_SCHEMA: &str = "guard-verified-read-deci
 /// carries two short identifiers, so this is generous by a wide margin.
 pub const VERIFIED_READ_DECISION_MAX_REQUEST_BYTES: usize = 16 * 1024;
 
-/// Which verified read is asking. The workspace read names the operation it
-/// belongs to; the GitHub read's operation ref is fixed by the executor, so
-/// there is nothing for the host to supply and nothing it could get wrong.
+/// Which verified read is asking. The workspace read composes its own decision
+/// inside `verified-read-execute-v1`, so the only read that still asks over the
+/// wire is the GitHub one, whose operation ref is fixed by the executor: there
+/// is nothing for the host to supply and nothing it could get wrong.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum VerifiedReadDecisionKindV1 {
-    /// `verified_read_execution._decision`.
-    Workspace { operation_id: String },
     /// `verified_github_reads._decision`.
     GithubPublicRead {},
 }

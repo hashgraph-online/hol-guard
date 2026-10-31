@@ -22,8 +22,7 @@ use crate::context_digest_package_scripts::invocation_is_safe;
 use crate::custom_extension_suggestion::is_common_tool_name;
 use crate::native_exact_action_op::context::{Ctx, Engines, ResidentEngines};
 use crate::native_exact_action_op::runner_bin::{
-    package_name_pattern, read_manifest, runner_local_bin, runner_target, Manifest,
-    LOCAL_BIN_RUNNERS,
+    package_name_pattern, read_manifest, runner_local_bin, runner_name, runner_target, Manifest,
 };
 
 const MAX_BUDGET_MS: u64 = 5_000;
@@ -105,7 +104,14 @@ fn identify_with(
         owned,
     };
     let mut found = Vec::new();
-    push_unique(&mut found, scope.identify(request.command_text)?);
+    let mut launched = scope.identify(request.command_text)?;
+    if launched.is_none() {
+        let model = scope.parse(request.command_text);
+        if let Some(head) = model.as_ref().and_then(forms::filtered_pipeline_head) {
+            launched = scope.identify(head)?;
+        }
+    }
+    push_unique(&mut found, launched);
     if request.compound {
         if let Some(model) = scope.parse(request.command_text) {
             let mut allow_relative = true;
@@ -208,6 +214,11 @@ impl Scope<'_> {
         let Some(exe_name) = executable_name(Some(executable)) else {
             return Ok(None);
         };
+        if is_shell_name(&exe_name) {
+            if let Some(direct) = self.direct_launch(segment, entrypoint)? {
+                return Ok(Some(direct));
+            }
+        }
         if let Some(script) = script_identity(entrypoint, Some(&exe_name))? {
             return Ok(Some(script));
         }
@@ -333,6 +344,29 @@ impl Scope<'_> {
                 source,
             )
         }))
+    }
+
+    /// The executable identity a direct launch of the shell script a shell
+    /// runs derives, so both forms meet the same grant.
+    fn direct_launch(
+        &self,
+        segment: &CommandSegment,
+        entrypoint: &Value,
+    ) -> Outcome<Option<UnlistedCliV1>> {
+        let Some(name) = forms::direct_launch_name(entrypoint) else {
+            return Ok(None);
+        };
+        // The script must be the shell's first operand, so the words after it
+        // are the ones a direct launch passes and select the same subcommand.
+        if forms::shell_script_arguments(segment, &name).is_none()
+            || is_interpreter_name(&name)
+            || is_common_tool_name(&name)
+            || is_reserved_tool_name(&name)
+            || self.owned.contains(&name)
+        {
+            return Ok(None);
+        }
+        executable_identity(entrypoint, &name)
     }
 
     /// `_identity_from_segment`: a script one compound segment sources or runs.
@@ -491,18 +525,6 @@ fn executable_identity(executable: &Value, exe_name: &str) -> Outcome<Option<Unl
         .map(|identity| unlisted(identity, exe_name, "executable", source_path, source)))
 }
 
-/// `runner_name`: the package runner an executable names, if any.
-fn runner_name(executable: &str) -> Option<&'static str> {
-    let mut base = python_path_name(&executable.replace('\\', "/")).to_lowercase();
-    if base.ends_with(".cmd") || base.ends_with(".exe") {
-        base.truncate(base.len() - 4);
-    }
-    LOCAL_BIN_RUNNERS
-        .iter()
-        .copied()
-        .find(|runner| *runner == base)
-}
-
 /// `is_direct_dependency`: the nearest `package.json` declares the package.
 fn is_direct_dependency(cwd: &str, package_name: &str) -> bool {
     for directory in Path::new(cwd).ancestors().take(MAX_MANIFEST_ANCESTORS) {
@@ -538,6 +560,10 @@ fn strip_windows_suffix(name: &str) -> String {
 fn is_interpreter_name(name: &str) -> bool {
     let base = strip_windows_suffix(name);
     INTERPRETER_NAMES.contains(&base.as_str()) || base.starts_with("python3.")
+}
+
+fn is_shell_name(name: &str) -> bool {
+    SHELL_INTERPRETERS.contains(&strip_windows_suffix(name).as_str())
 }
 
 fn is_reserved_tool_name(name: &str) -> bool {
@@ -617,6 +643,11 @@ fn owned_executables() -> Outcome<&'static HashSet<String>> {
         .as_ref()
         .ok_or(PROGRAM_UNAVAILABLE)
 }
+
+#[path = "local_cli_identify_forms.rs"]
+mod forms;
+
+pub(crate) use forms::launch_arguments;
 
 #[cfg(test)]
 #[path = "local_cli_identify_tests.rs"]

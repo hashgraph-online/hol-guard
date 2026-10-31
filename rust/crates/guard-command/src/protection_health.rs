@@ -6,9 +6,9 @@
 //! without degrading the state are the four that a platform may not support at
 //! all, and only when they fail for exactly that reason.
 //!
-//! `TruthfulState`, `ProtectionHealth` and `derive_protection_state` mirror
-//! `runtime/effect_contract.py`, whose only consumer on this path is the module
-//! ported here. Python's `ProtectionHealth fields must be booleans` guard has no
+//! `TruthfulState`, `ProtectionHealth` and `derive_protection_state` are the
+//! only implementation; the Python copies in `runtime/effect_contract.py` were
+//! removed. Python's `ProtectionHealth fields must be booleans` guard has no
 //! Rust counterpart, because the type system already refuses anything else.
 //!
 //! The report serializes with its fields in Python's insertion order, so
@@ -88,7 +88,7 @@ pub enum ProtectionState {
     Degraded,
 }
 
-/// `TruthfulState` (effect_contract.py:224).
+/// `TruthfulState`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TruthfulState {
@@ -104,7 +104,7 @@ pub enum TruthfulState {
     Blocked,
 }
 
-/// `ProtectionHealth` (effect_contract.py:238).
+/// `ProtectionHealth`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProtectionHealth {
     pub required_hooks: bool,
@@ -114,7 +114,7 @@ pub struct ProtectionHealth {
     pub evidence_health: bool,
 }
 
-/// `derive_protection_state` (effect_contract.py:250).
+/// `derive_protection_state`.
 pub fn derive_protection_state(health: ProtectionHealth) -> TruthfulState {
     let core_healthy = health.required_hooks
         && health.daemon_and_policy

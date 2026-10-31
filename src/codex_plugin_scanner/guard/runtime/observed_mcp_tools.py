@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 from ..adapters.contracts import display_name_for
 from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
-from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS, NativePolicySnapshotError
 from ..store_local_cli_retention import LocalCliReplaySkippedError, later_timestamp
 from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
@@ -267,36 +266,3 @@ def discover_observed_mcp_tools(
             saturated += 1
             continue
     return saturated
-
-
-def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
-    """Compile exact operator choices into the authenticated native policy.
-
-    Only catalogued tools can be allowed. The fallback may block new tools,
-    but cannot grant permission to tools the operator has never seen. The
-    guard store resident reads the grants and compiles the selectors.
-    """
-
-    return bound_native_mcp_tool_actions(store.read_observed_mcp_tool_actions())
-
-
-def bound_native_mcp_tool_actions(
-    actions: Mapping[str, str],
-    *,
-    required_blocks: frozenset[str] = frozenset(),
-) -> dict[str, str]:
-    """Retain every restriction; reject capacity that would discard a floor."""
-
-    if sum(action in {"block", "review"} for action in actions.values()) > POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS:
-        raise NativePolicySnapshotError("native_mcp_permission_capacity_exceeded")
-
-    ordered = sorted(
-        actions,
-        key=lambda key: (
-            actions[key] not in {"block", "review"},
-            key not in required_blocks,
-            not key.endswith("*"),
-            key,
-        ),
-    )
-    return {key: actions[key] for key in ordered[:POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS]}

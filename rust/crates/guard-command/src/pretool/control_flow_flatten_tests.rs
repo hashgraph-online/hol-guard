@@ -182,3 +182,92 @@ fn an_unmodeled_construct_keeps_its_review() {
         );
     }
 }
+
+/// A `!` in front of an item inverts an exit status and runs nothing of its
+/// own, so the flat list runs the same commands without it. It goes only
+/// where no successor reads the outcome it inverts.
+#[test]
+fn a_negated_item_flattens_to_the_pipeline_it_negates() {
+    for (command, expected) in [
+        ("if ! npm test; then echo fail; fi", "npm test; echo fail"),
+        ("if ! pytest -q; then echo fail; fi", "pytest -q; echo fail"),
+        (
+            "if ! cargo test; then echo retry; else echo ok; fi",
+            "cargo test; echo retry; echo ok",
+        ),
+        ("case $1 in check) ! pytest -q;; esac", "pytest -q"),
+        (
+            "while read name; do ! wc -l README.md; done < README.md",
+            "cat README.md; wc -l README.md",
+        ),
+    ] {
+        assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+/// A `!` whose outcome chooses which successor runs stays written, because
+/// the flat list without it would run the other one.
+#[test]
+fn a_negation_a_successor_reads_stays_written() {
+    for (command, expected) in [
+        (
+            "if ! ls && echo both; then echo yes; fi",
+            "! ls && echo both; echo yes",
+        ),
+        (
+            "if ! ls || echo either; then echo yes; fi",
+            "! ls || echo either; echo yes",
+        ),
+    ] {
+        assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+/// `then` runs when a negated `cd` fails, so the branch is still outside
+/// `src`. Dropping the `!` would check `touch ../escape.txt` as if `cd` had
+/// succeeded.
+#[test]
+fn a_negated_directory_change_keeps_the_negation_its_branch_reads() {
+    assert_eq!(
+        flatten("if ! cd src; then touch ../escape.txt; fi").as_deref(),
+        Some("! cd src; touch ../escape.txt")
+    );
+    assert_eq!(
+        flatten("if ! cd src; then echo in; else echo out; fi").as_deref(),
+        Some("! cd src; echo in; echo out")
+    );
+    // A quote, a backslash or an expansion hides the same builtin. `then`
+    // still runs only when that command fails, from the directory it did not
+    // enter.
+    for command in [
+        "if ! \\cd src; then touch ../escape.txt; fi",
+        "if ! 'cd' src; then touch ../escape.txt; fi",
+        "if ! \"cd\" src; then touch ../escape.txt; fi",
+        "if ! c\\d src; then touch ../escape.txt; fi",
+    ] {
+        let flat = flatten(command).unwrap_or_default();
+        assert!(flat.starts_with('!'), "{command} flattened to {flat}");
+    }
+}
+
+/// The body grammar is shared, so a conditional's branches read a subshell
+/// group the same way a loop body does.
+#[test]
+fn a_branch_flattens_a_subshell_group() {
+    for (command, expected) in [
+        (
+            "if [ -d packages/core ]; then (cd packages/core && npm test); fi",
+            "[ -d packages/core ]; (cd packages/core && npm test)",
+        ),
+        (
+            "if [ -d web ]; then (cd web && npm run build); else echo none; fi",
+            "[ -d web ]; (cd web && npm run build); echo none",
+        ),
+        (
+            "case $1 in build) (cd web && npm run build);; esac",
+            "(cd web && npm run build)",
+        ),
+    ] {
+        assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
+    }
+}

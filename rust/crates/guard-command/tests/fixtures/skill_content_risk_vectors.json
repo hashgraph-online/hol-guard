@@ -318,22 +318,7 @@
   "name": "fm-two-blocks-second",
   "content": "---\nname: demo\ndescription: demo skill\n---\ntext\n---\nz\n```bash\nls\n```\n---\n",
   "has_skill_structure": true,
-  "signals": [
-   {
-    "signal_id": "skill.shell-in-frontmatter",
-    "category": "execution",
-    "severity": "high",
-    "confidence": "strong",
-    "detector": "skill.content",
-    "title": "Skill YAML frontmatter contains shell code blocks",
-    "plain_reason": "This skill embeds shell commands inside its YAML frontmatter section.",
-    "technical_detail": "shell code block found in frontmatter",
-    "evidence_ref": "skill_content",
-    "redaction_level": "summary",
-    "false_positive_hint": null,
-    "advisory_id": null
-   }
-  ]
+  "signals": []
  },
  {
   "name": "fm-no-ws-after-dashes",
@@ -6696,6 +6681,102 @@
     "title": "Skill content sends data to a remote endpoint",
     "plain_reason": "This skill contains HTTP upload or network exfiltration instructions.",
     "technical_detail": "outbound HTTP sink in skill content",
+    "evidence_ref": "skill_content",
+    "redaction_level": "summary",
+    "false_positive_hint": null,
+    "advisory_id": null
+   }
+  ]
+ },
+ {
+  "name": "fm-thematic-breaks-around-fence",
+  "content": "---\nname: tidy\ndescription: Tidy the workspace\n---\n# Tidy\n\nList the files first.\n\n---\n\n```bash\nls -la\n```\n\n---\n\nThen remove what is not needed.\n",
+  "has_skill_structure": true,
+  "signals": []
+ },
+ {
+  "name": "fm-opening-after-blank-lines",
+  "content": "\n\n----\n```sh\nls\n```\n---",
+  "has_skill_structure": false,
+  "signals": [
+   {
+    "signal_id": "skill.shell-in-frontmatter",
+    "category": "execution",
+    "severity": "high",
+    "confidence": "strong",
+    "detector": "skill.content",
+    "title": "Skill YAML frontmatter contains shell code blocks",
+    "plain_reason": "This skill embeds shell commands inside its YAML frontmatter section.",
+    "technical_detail": "shell code block found in frontmatter",
+    "evidence_ref": "skill_content",
+    "redaction_level": "summary",
+    "false_positive_hint": null,
+    "advisory_id": null
+   }
+  ]
+ },
+ {
+  "name": "fm-key-block-after-thematic-break",
+  "content": "---\nname: tidy\n---\n# Tidy\n\n---\n\n---\nscript: x\n```bash\nls\n```\n---\n",
+  "has_skill_structure": true,
+  "signals": [
+   {
+    "signal_id": "skill.shell-in-frontmatter",
+    "category": "execution",
+    "severity": "high",
+    "confidence": "strong",
+    "detector": "skill.content",
+    "title": "Skill YAML frontmatter contains shell code blocks",
+    "plain_reason": "This skill embeds shell commands inside its YAML frontmatter section.",
+    "technical_detail": "shell code block found in frontmatter",
+    "evidence_ref": "skill_content",
+    "redaction_level": "summary",
+    "false_positive_hint": null,
+    "advisory_id": null
+   }
+  ]
+ },
+ {
+  "name": "fm-closing-delimiter-before-key-line",
+  "content": "---\nname: x\n---\nUsage:\n```bash\nls\n```\n---\n",
+  "has_skill_structure": true,
+  "signals": []
+ },
+ {
+  "name": "fm-dotted-key-block-after-thematic-break",
+  "content": "---\nname: tidy\n---\n# Tidy\n\n---\nhol-guard.dependencies: x\n```bash\nls\n```\n---\n",
+  "has_skill_structure": true,
+  "signals": [
+   {
+    "signal_id": "skill.shell-in-frontmatter",
+    "category": "execution",
+    "severity": "high",
+    "confidence": "strong",
+    "detector": "skill.content",
+    "title": "Skill YAML frontmatter contains shell code blocks",
+    "plain_reason": "This skill embeds shell commands inside its YAML frontmatter section.",
+    "technical_detail": "shell code block found in frontmatter",
+    "evidence_ref": "skill_content",
+    "redaction_level": "summary",
+    "false_positive_hint": null,
+    "advisory_id": null
+   }
+  ]
+ },
+ {
+  "name": "fm-quoted-key-block-after-thematic-break",
+  "content": "---\nname: tidy\n---\n# Tidy\n\n---\n\"run\": x\n```bash\nls\n```\n---\n",
+  "has_skill_structure": true,
+  "signals": [
+   {
+    "signal_id": "skill.shell-in-frontmatter",
+    "category": "execution",
+    "severity": "high",
+    "confidence": "strong",
+    "detector": "skill.content",
+    "title": "Skill YAML frontmatter contains shell code blocks",
+    "plain_reason": "This skill embeds shell commands inside its YAML frontmatter section.",
+    "technical_detail": "shell code block found in frontmatter",
     "evidence_ref": "skill_content",
     "redaction_level": "summary",
     "false_positive_hint": null,

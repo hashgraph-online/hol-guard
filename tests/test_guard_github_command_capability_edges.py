@@ -4,9 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
-from tests.native_github_capability_support import github_cli_assessment
+from tests.native_github_capability_support import GitHubCommandCapability, github_cli_assessment
 
 PR_MERGE_ADMIN_CAPABILITY_CASES: tuple[tuple[str, tuple[str, ...], tuple[GitHubCommandCapability, ...]], ...] = (
     ("admin-001", ("pr", "merge", "123", "--squash"), ("routine_merge_remote",)),

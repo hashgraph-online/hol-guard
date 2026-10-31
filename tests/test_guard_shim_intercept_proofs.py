@@ -156,7 +156,7 @@ def _hold_probe_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PYTHONPATH", str(startup))
 
 
-def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
+def test_package_shim_intercept_probe_marks_hung_manager_as_timed_out(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -181,7 +181,7 @@ def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
             "evaluator_invoked": False,
             "intercept_ran": False,
             "manager": "npm",
-            "skipped_reason": "probe_failed",
+            "skipped_reason": "probe_timed_out",
         },
     ]
 
@@ -211,7 +211,7 @@ def test_package_shim_intercept_probe_timeout_covers_store_busy_wait(
     assert default_timeout == int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
     assert default_timeout > 15
     assert result["intercept_proved"] is False
-    assert result["manager_results"][0]["skipped_reason"] == "probe_failed"
+    assert result["manager_results"][0]["skipped_reason"] == "probe_timed_out"
 
 
 def test_package_shim_intercept_probe_omits_manager_stdout_secrets(

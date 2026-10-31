@@ -43,12 +43,16 @@ use crate::CanonicalCommandV1;
 
 #[path = "native_command_unmodeled_case.rs"]
 mod case_labels;
+#[path = "native_command_unmodeled_compound.rs"]
+mod compound;
 #[path = "native_command_unmodeled_expansion.rs"]
 mod expansion;
 #[path = "native_command_unmodeled_find_exec.rs"]
 mod find_exec;
 #[path = "native_command_unmodeled_functions.rs"]
 mod functions;
+#[path = "native_command_unmodeled_heredoc.rs"]
+mod heredoc;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
 #[path = "native_command_unmodeled_redirections.rs"]
@@ -77,6 +81,15 @@ const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
     ("command.kubernetes-operations", &["kubectl", "oc"]),
     ("command.kubernetes-secrets", &["kubectl", "oc"]),
 ];
+
+/// The programs a compatibility-only rule of `extension_id` stands for, when
+/// the catalog names them outside the program itself.
+pub(super) fn compatibility_executables(extension_id: &str) -> Option<&'static [&'static str]> {
+    COMPATIBILITY_EXECUTABLES
+        .iter()
+        .find(|(id, _)| *id == extension_id)
+        .map(|(_, executables)| *executables)
+}
 
 const UNMODELED_ERRORS: [&str; 2] = [
     "native_command_compatibility_model_unsupported",
@@ -207,7 +220,7 @@ impl CompiledNativeCommandControls {
         let heredocs = data_heredocs(text);
         let shell = match &heredocs {
             Some((shell, _)) => shell.clone(),
-            None => shell_text(text).to_owned(),
+            None => shell_text(text),
         };
         // A redirection such as `;2>&1` is not a program. It goes before the
         // awk pass, which rejoins words with spaces: `2>&1` became `2 >& 1`,
@@ -325,7 +338,12 @@ impl CompiledNativeCommandControls {
                 // command the prefix runs is the one the text already names,
                 // and its own programs count toward the owners below.
                 None if crate::pretool::prefixed_launch(command, context) => {}
-                None => return None,
+                None if compound::redirected_launch(command, context) => {}
+                None => named.extend(
+                    compound::listed_inline_sources(&bare, sourced_bounded, context)?
+                        .iter()
+                        .flat_map(|source| named_words(source)),
+                ),
             }
         }
         // The programs read out of an `xargs` or a `find -exec`. Reading one
@@ -363,10 +381,7 @@ impl CompiledNativeCommandControls {
         let mut floor = "review";
         for &index in self.candidate_index.extension_indices() {
             let extension = &self.program.extensions[index];
-            let compatibility = COMPATIBILITY_EXECUTABLES
-                .iter()
-                .find(|(id, _)| *id == extension.extension_id)
-                .map(|(_, executables)| *executables);
+            let compatibility = compatibility_executables(&extension.extension_id);
             let extension_names = self.program.extension_names(index, compatibility);
             let owns = extension_names
                 .as_ref()
@@ -409,10 +424,7 @@ impl CompiledNativeCommandControls {
                 if extension.required || !self.active_extensions.contains(&extension.extension_id) {
                     return false;
                 }
-                let compatibility = COMPATIBILITY_EXECUTABLES
-                    .iter()
-                    .find(|(id, _)| *id == extension.extension_id)
-                    .map(|(_, executables)| *executables);
+                let compatibility = compatibility_executables(&extension.extension_id);
                 !self
                     .program
                     .extension_known_names(index, compatibility)
@@ -434,10 +446,7 @@ impl CompiledNativeCommandControls {
                 {
                     return false;
                 }
-                let compatibility = COMPATIBILITY_EXECUTABLES
-                    .iter()
-                    .find(|(id, _)| *id == extension.extension_id)
-                    .map(|(_, executables)| *executables);
+                let compatibility = compatibility_executables(&extension.extension_id);
                 let extension_names = self.program.extension_names(index, compatibility);
                 extension_names
                     .as_ref()
@@ -561,7 +570,8 @@ fn named_xargs_pipeline(text: &str) -> bool {
 fn named_find_exec(text: &str) -> bool {
     let literal = unquoted_literal(text);
     find_exec_programs(text).is_some_and(|programs| !programs.is_empty())
-        && !text.contains(['<', '>', '`', '$', '\n'])
+        && !text.contains(['<', '>', '`', '\n'])
+        && (!text.contains('$') || compound::parameters_only_root_paths(text))
         && !moves_data(&literal)
 }
 
@@ -692,7 +702,7 @@ fn reviewable_structure(
             // `;2>&1 python3 evil.py` has no segments: the redirect is the
             // uncertainty. Reviewing it would hide the interpreter.
             !glued_redirect_runs_interpreter(&text)
-                && (input_heredoc(&text)
+                && (heredoc::input_heredoc(&text)
                     || literal_redirects_only(&text)
                     || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell)))
         }
@@ -835,41 +845,15 @@ fn moves_data(literal: &str) -> bool {
     literal.contains(['<', '>', '`'])
         || literal.contains("$(")
         || command_words(literal).any(|word| {
-            (is_assignment(word) && !saves_job_pid(word) && !assigns_nothing(word))
+            (is_assignment(word)
+                && !saves_job_pid(word)
+                && !assigns_nothing(word)
+                && !compound::binds_a_shell_variable(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
                 )
         })
-}
-
-/// One heredoc on the first line, ending the text, whose body cannot run
-/// commands: its delimiter is quoted, or the body expands nothing.
-fn input_heredoc(text: &str) -> bool {
-    let Some((line, rest)) = text.split_once('\n') else {
-        return false;
-    };
-    let Some((before, after)) = line.split_once("<<") else {
-        return false;
-    };
-    let after = after.strip_prefix('-').unwrap_or(after).trim();
-    let quoted = after.starts_with(['\'', '"']);
-    let delimiter = after.trim_matches(['\'', '"']);
-    if delimiter.is_empty()
-        || !delimiter
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        || moves_data(&unquoted_literal(before))
-    {
-        return false;
-    }
-    let mut lines: Vec<&str> = rest.lines().collect();
-    if lines.pop().map(str::trim) != Some(delimiter)
-        || lines.iter().any(|body| body.trim() == delimiter)
-    {
-        return false;
-    }
-    quoted || lines.iter().all(|body| !body.contains(['$', '`', '\\']))
 }
 
 /// Every word the shell could read as a program name or keyword token, with
@@ -948,12 +932,20 @@ fn unquoted_literal(text: &str) -> String {
 }
 
 /// The text the shell runs as commands. An accepted input heredoc contributes
-/// only its command, since `input_heredoc` already keeps its body from
-/// expanding and the body is data on standard input.
-fn shell_text(text: &str) -> &str {
-    match text.split_once('\n') {
-        Some((line, _)) if text.contains("<<") => line.split_once("<<").map_or(line, |(b, _)| b),
-        _ => text,
+/// its command and whatever follows its delimiter, since `input_heredoc`
+/// already keeps the body from expanding and the body is data on standard
+/// input. Dropping the rest of the line with the body would hide the
+/// programs a pipe after the heredoc names from the owners below.
+fn shell_text(text: &str) -> String {
+    let Some((line, _)) = text.split_once('\n').filter(|_| text.contains("<<")) else {
+        return text.to_owned();
+    };
+    match heredoc::first_heredoc(text) {
+        Some(heredoc) => format!("{}{}", heredoc.before, heredoc.trailing),
+        None => line
+            .split_once("<<")
+            .map_or(line, |(before, _)| before)
+            .to_owned(),
     }
 }
 

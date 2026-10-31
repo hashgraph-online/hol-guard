@@ -11,6 +11,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::risk_action_config::RiskActionConfigV1;
+
 /// Schema discriminator for the request.
 pub const PACKAGE_AUTHORITY_REQUEST_SCHEMA: &str = "guard-package-authority-request.v1";
 /// Schema discriminator for the result.
@@ -20,9 +22,10 @@ pub const PACKAGE_AUTHORITY_FEATURE: &str = "package-authority-v1";
 /// Capability advertised when the package-evaluation composition op exists.
 pub const PACKAGE_EVALUATION_COMPOSE_FEATURE: &str = "package-evaluation-compose-v1";
 pub const PACKAGE_APPROVAL_HASH_FEATURE: &str = "package-approval-hash-v1";
-/// Capability advertised when the resident proves which npm an agent will
-/// run, so a script-free registry install can continue without review.
-pub const VERIFIED_NPM_FEATURE: &str = "verified-npm-v1";
+/// Capability advertised when the resident plans a package review settle:
+/// it reads the hook's command, checks its shape, parses the package intent,
+/// proves the npm it runs and builds the request artifact the evaluator reads.
+pub const PACKAGE_REVIEW_PLAN_FEATURE: &str = "package-review-plan-v1";
 /// Capability advertised when the stored package policy resolution op exists.
 pub const PACKAGE_POLICY_RESOLVE_FEATURE: &str = "package-policy-resolve-v1";
 /// Capability advertised when `supply_chain_eval` is the sole package-verdict
@@ -413,34 +416,36 @@ pub struct PackageEvaluationComposeRequestV1 {
 }
 
 // ---------------------------------------------------------------------------
-// VerifiedNpm — resident op proving which `npm` the agent's `PATH` runs.
+// PackageReviewPlan — resident op planning how a package review may settle.
 // ---------------------------------------------------------------------------
 
-/// Prove the npm an install will actually execute.
+/// Plan the settle of a native package review.
 ///
-/// The caller sends the hook's stamped execution environment verbatim and the
-/// workspace the command runs in; the runtime resolves `npm` and `node`,
-/// reads the npm manifest and the npm config files above the project, and
-/// answers with a version only when nothing could have moved the fetch. The
-/// caller never re-derives any part of that answer.
+/// The caller forwards the hook payload as the daemon recorded it, with the
+/// stamped execution environment. The runtime reads the command (including
+/// Copilot's `toolArgs`), checks it is one plain JS package-manager command,
+/// parses its install or exec intent, proves the npm a plain npm install runs,
+/// and answers with the request artifact the package evaluator reads and
+/// whether the evaluator's verdict may let the command continue. Without that
+/// proof only a block verdict applies.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub struct VerifiedNpmRequestV1 {
+pub struct PackageReviewPlanRequestV1 {
     pub schema: String,
     pub request_id: String,
     pub guard_home: String,
-    /// Absolute workspace directory the install runs in.
+    /// Absolute workspace directory the command runs in.
     pub workspace: String,
-    /// The hook's stamped execution environment, forwarded unchanged. Any
-    /// shape is accepted so a malformed stamp fails closed in the runtime
-    /// rather than being filtered by the caller. Serialized even when absent:
-    /// the request digest covers the fields exactly as the caller sent them.
+    pub harness: String,
+    /// The hook payload, forwarded unchanged.
+    pub payload: Value,
     #[serde(default)]
-    pub environment: Option<Value>,
-    /// Programs the command pipes its output through, which must also resolve
-    /// outside the workspace.
-    #[serde(default)]
-    pub filter_programs: Vec<String>,
+    pub home_dir: Option<String>,
+    /// The native review's reason code. A command review, which the edge
+    /// gives an `npx` or `bunx` launch, is planned only for those launchers
+    /// and only a block verdict applies to it. Absent means a package review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_reason: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -465,9 +470,22 @@ pub struct PackageApprovalHashRequestV1 {
     /// `exception_id`, `matched_rule_id`, `packages`, `policy_version`,
     /// `reasons`.
     pub evaluation: Value,
-    /// Hydrated `GuardConfig` policy view (`{"available": false}` when no
-    /// config is bound).
+    /// The policy view already hydrated, for a caller that holds no
+    /// configuration to hydrate it from: `{"available": false}` when none is
+    /// bound, and the natively built view on the relay path. A caller that
+    /// holds the configuration sends `config_facts` instead and this is absent.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
     pub config_policy: Value,
+    /// The configuration fields the policy view is hydrated from, as they were
+    /// loaded: `mode`, `security_level`, `protection_posture`,
+    /// `protection_posture_explicit`, `managed_locked_settings`,
+    /// `managed_policy_status`, `managed_policy_hash`, `risk_actions`,
+    /// `harness_risk_actions`, `harness_postures`, and the `artifact_actions`,
+    /// `publisher_actions` and `harness_actions` override maps. The resident
+    /// resolves `package_script` and the override from them, so no caller
+    /// sends a resolved action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_facts: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub additional_current_action: Option<Value>,
     /// `artifact_hash` only: the signed-store path the cached advisory feed is
@@ -543,9 +561,9 @@ pub struct PackagePolicyResolveRequestV1 {
 // ---------------------------------------------------------------------------
 // PackagePosture — resident op owning the local supply-chain posture: the
 // status, health, bundle and policy projection `local_supply_chain.py` used to
-// derive in Python. The caller hydrates the store payloads, the bound
-// configuration actions and the package-manager shim status; the runtime
-// decides every derived field.
+// derive in Python. The caller hydrates the store payloads, the configuration
+// the risk actions are resolved from and the package-manager shim status; the
+// runtime decides every derived field.
 // ---------------------------------------------------------------------------
 
 /// Capability advertised when the supply-chain posture op exists.
@@ -573,11 +591,11 @@ pub struct PackagePostureRequestV1 {
     /// The cached signed bundle body (empty object when unset).
     pub bundle_payload: Value,
     pub security_level: String,
-    /// Configured `cloud_advisory` / `package_script` risk actions.
+    /// The configuration the `cloud_advisory` and `package_script` actions
+    /// reported in the posture are resolved from. The caller sends the fields
+    /// rather than the two actions, so the resident resolves them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config_cloud_advisory_action: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config_package_script_action: Option<String>,
+    pub risk_action_config: Option<RiskActionConfigV1>,
     /// Package-manager shim status; carried through unchanged.
     pub package_manager_protection: Value,
 }

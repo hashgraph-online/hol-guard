@@ -4,7 +4,7 @@ The hint is advisory. The native resident decides it (``extension_review_hint``,
 ``extension_allow_hint``): it re-evaluates the command against its own admitted
 controls with hypothetical enabled permissions, so nothing is mutated and the
 answer carries only catalog identifiers (no command text). This module
-shape-checks a stored or answered hint and builds the connector setup hint.
+shape-checks a stored or answered hint, the connector setup hint included.
 Enabling a permission still requires the normal proof-bound extension-control
 mutation.
 """
@@ -95,37 +95,6 @@ def connector_setup_deep_link(cli_id: str) -> str:
     """Dashboard-relative Protect path for one connector; never carries a host."""
 
     return f"/extensions/local-cli/{quote(cli_id, safe='')}"
-
-
-def connector_setup_hint(
-    *,
-    cli_id: str,
-    identity_hash: str,
-    display_name: str,
-    surface: str,
-    risk_classes: object = None,
-) -> dict[str, object] | None:
-    """The connector analogue of the allow hint, recorded when a review is a setup decision.
-
-    It names only the connector and the advisory card recommendation. Setting
-    the connector up still goes through the proof-bound local-CLI write.
-    """
-
-    candidates = cast("list[object]", list(risk_classes)) if isinstance(risk_classes, list | tuple) else []
-    classes = sorted({item for item in candidates if isinstance(item, str) and _RISK_CLASS.fullmatch(item)})
-    return validated_connector_setup_hint(
-        {
-            "schema": CONNECTOR_SETUP_HINT_SCHEMA,
-            "identity_hash": identity_hash,
-            "cli_id": cli_id,
-            "surface": surface,
-            "display_name": display_name,
-            "deep_link": connector_setup_deep_link(cli_id),
-            # Advisory only: the live recommendation is recomputed on every read.
-            "card_recommendation": {"state": "allowed", "capabilities": []},
-            "risk_classes": classes[:_MAX_RISK_CLASSES],
-        }
-    )
 
 
 def validated_connector_setup_hint(value: object) -> dict[str, object] | None:

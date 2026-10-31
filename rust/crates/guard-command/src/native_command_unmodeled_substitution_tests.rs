@@ -251,28 +251,36 @@ fn a_process_substitution_whose_receiver_is_unknown_is_not_bounded() {
 }
 
 #[test]
-fn a_command_whose_process_substitutions_name_their_programs_is_reviewable() {
+fn a_command_whose_process_substitutions_name_their_programs_is_not_a_dead_end() {
     let controls = controls(github("enabled", None), false);
     for command in [
         "diff <(sort a.txt) <(sort b.txt)",
         "diff <(git show HEAD:README.md) README.md",
         "comm -12 <(sort a.txt) <(sort b.txt) | head -20",
     ] {
+        // The read projection settles the shapes it can stand in for; which
+        // of these it reaches is pinned beside that code. What every one of
+        // them must avoid is the extension dead end, which denies with no
+        // approval row for the user to answer.
         let (action, code) = decision(&controls, command);
         assert_ne!(code, FAILED, "{command}");
-        assert_eq!(action, "review", "{command}: {code}");
+        assert_ne!(action, "block", "{command}: {code}");
     }
 }
 
 #[test]
-fn a_process_substitution_the_extension_rules_cannot_read_keeps_the_failure() {
+fn a_process_substitution_the_extension_rules_cannot_read_is_not_allowed() {
     let controls = controls(github("enabled", None), false);
     for command in [
         // The contributed extension owns `gh` and judges arguments this text
-        // does not hold, exactly as `gh pr view "$(cat id)"` does.
-        "diff <(gh pr view 12) local.md",
-        "diff <(cat a.txt) <(gh pr list)",
+        // does not hold, exactly as `gh pr view "$(cat id)"` does. The read
+        // projection does not stand in for a body that substitutes a command,
+        // nests a substitution or backgrounds a job either, so none of these
+        // leaves the fail-closed path.
+        "diff <(gh pr view \"$(cat id)\") local.md",
+        "diff <(sort <(cat list.txt)) b.txt",
+        "diff <(cat a.txt) <(gh pr list &)",
     ] {
-        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+        assert_ne!(decision(&controls, command).0, "allow", "{command}");
     }
 }

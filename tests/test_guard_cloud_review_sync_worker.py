@@ -10,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import cloud_review_sync as cloud_review_sync_module
 from codex_plugin_scanner.guard.runtime import cloud_review_sync_worker
-from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
 from codex_plugin_scanner.guard.runtime.cloud_review_sync import (
     start_cloud_sync_sync_worker,
     stop_cloud_sync_sync_worker,
@@ -445,15 +444,3 @@ class TestIndependentWorker:
 
     def test_stop_worker_none_noop(self, tmp_path: Path) -> None:
         assert stop_cloud_sync_sync_worker(None) is None
-
-
-class TestSyncStatus:
-    def test_status_returns_protocol_version(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.store import GuardStore
-
-        store = GuardStore(tmp_path)
-        from codex_plugin_scanner.guard.runtime.cloud_review_sync import cloud_review_sync_status
-
-        status = cloud_review_sync_status(store)
-        assert isinstance(status, dict)
-        assert status["protocolVersion"] == CLOUD_REVIEW_EVENT_PROTOCOL_VERSION

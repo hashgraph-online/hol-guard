@@ -140,6 +140,7 @@ def _observe(
         skipped_harnesses=skipped,
         advisory_bundle=advisory[0],
         advisory_bundle_reason=advisory[1],
+        instance_home=context.guard_home,
     )
 
 

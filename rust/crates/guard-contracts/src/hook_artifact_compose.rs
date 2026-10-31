@@ -54,6 +54,12 @@ pub const HOOK_ARTIFACT_COMPOSE_PACKAGE_FIREWALL_ACCESS_FEATURE: &str =
 /// caller requires this feature for that query alone.
 pub const HOOK_ARTIFACT_COMPOSE_SIGNAL_COMPOSITION_FEATURE: &str =
     "hook-artifact-compose-signal-composition-v1";
+/// Capability advertised when the `codex_live_allow_precheck` and
+/// `codex_live_allow_settle` queries are served. The two are halves of one
+/// decision — the fresh review runs in the caller between them — so a runtime
+/// that serves one serves both, and they share a feature.
+pub const HOOK_ARTIFACT_COMPOSE_CODEX_LIVE_ALLOW_FEATURE: &str =
+    "hook-artifact-compose-codex-live-allow-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -111,6 +117,56 @@ pub enum HookArtifactComposeQueryV1 {
     /// The settled verdict's `policy_composition` trace and receipt
     /// `approval_source`.
     PolicyComposition(Box<PolicyCompositionQueryV1>),
+    /// Whether a live Codex allow still names the action that was approved,
+    /// and the saved allow a fresh review of it may claim.
+    CodexLiveAllowPrecheck(Box<CodexLiveAllowPrecheckQueryV1>),
+    /// Whether that fresh review authorizes the live allow to complete.
+    CodexLiveAllowSettle(CodexLiveAllowSettleQueryV1),
+}
+
+/// The row and payload facts a live Codex allow is revalidated against.
+///
+/// Each field is a value the daemon read straight out of the approval row, the
+/// resume row or the decoded payload; none is a verdict it composed. The
+/// resident decides whether a fresh review may run at all and which saved
+/// allow that review is allowed to claim.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CodexLiveAllowPrecheckQueryV1 {
+    /// `resolution_action` of the approval row, `null` when there is no row.
+    pub resolution_action: Value,
+    /// `artifact_hash` of the approval row.
+    pub artifact_hash: Value,
+    /// `request_id` as the approval row records it.
+    pub row_request_id: Value,
+    /// `action_envelope_json` of the approval row: the action as it was
+    /// persisted when the user answered.
+    pub stored_envelope: Value,
+    /// `resolution_action` of the resume row, `null` when there is none.
+    pub previous_resolution_action: Value,
+    /// `status` of that resume row.
+    pub previous_status: Value,
+    /// The request id the live decision was submitted under.
+    pub request_id: Value,
+    /// Whether the store resolved live-allow authority for this request. The
+    /// resolution reads credentials and clocks the daemon owns; what it
+    /// entitles the request to is decided here.
+    pub authority_resolved: bool,
+    /// `hook_event_name` of the decoded hook payload, `null` when the payload
+    /// was missing or was not a JSON object.
+    pub hook_event_name: Value,
+    /// The action envelope rebuilt from that payload now, `null` when none
+    /// could be built.
+    pub fresh_envelope: Value,
+}
+
+/// The fresh review a live Codex allow is settled against.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CodexLiveAllowSettleQueryV1 {
+    /// The review's hook output, `null` when the reviewer returned no mapping
+    /// or raised.
+    pub fresh_review: Value,
 }
 
 /// The store rows the package-firewall entitlement is resolved from.

@@ -66,10 +66,20 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         joined.as_path()
     };
     let canonical = std::fs::canonicalize(supplied).ok()?;
+    // The user's private macOS temporary directory is as much theirs as
+    // home, and agents put worktrees there, so a directory below it is a
+    // target like one below home. Every other location check still applies.
+    let temporary =
+        super::read_paths::inside_private_temporary_directory(&canonical, context.home_dir);
     // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
     if !absolute_path_spelling_matches(supplied, &canonical, anchored)
         || !canonical.is_dir()
-        || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
+        || !super::read_paths::resolved_path_allowed_in_scope(
+            &canonical,
+            context.home_dir,
+            context.cwd,
+            temporary,
+        )
     {
         return None;
     }
@@ -79,11 +89,36 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     canonical.to_str().map(str::to_owned)
 }
 
+/// A `cd` operand that climbs out of the cwd, such as `cd ..` or
+/// `cd ../app`, proved for read-only steps only (see `sibling::climbed`). It
+/// must name its canonical directory exactly and clear the read screens an
+/// absolute `cd` does. Write, Git write and contained-run routes keep
+/// [`verified_cwd_target`], which proves `..` only into a linked worktree.
+pub(crate) fn verified_climb_target(
+    value: &str,
+    context: super::PathContext<'_>,
+) -> Option<String> {
+    if context.home_dir.is_none() || !safe_directory_target(value) {
+        return None;
+    }
+    let supplied = sibling::climbed(value, std::path::Path::new(context.cwd?))?;
+    let canonical = std::fs::canonicalize(&supplied).ok()?;
+    if canonical != supplied
+        || !canonical.is_dir()
+        || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
+    {
+        return None;
+    }
+    canonical.to_str().map(str::to_owned)
+}
+
 /// POSIX `cd` skips the CDPATH search for operands that begin with `.` or
 /// `..`; any other relative operand needs proof that CDPATH is unset. The
 /// lexical join is what a logical `cd` reaches, so the caller's spelling
-/// check rejects symlinked components. `..` is proved only into a linked
-/// worktree of the session's repository (see `sibling`): elsewhere the
+/// check rejects symlinked components. `..` is proved here only into a
+/// linked worktree of the session's repository (see `sibling`); read-only
+/// steps may also follow a plain climb (see `verified_climb_target`).
+/// Elsewhere the
 /// shell resolves it against its logical `$PWD`, which may name a symlinked
 /// parent the reported cwd does not show. On Windows a `:` can name a
 /// drive-relative path (`C:src`) or an alternate data stream, and Git Bash
@@ -178,6 +213,18 @@ pub(crate) fn home_targets_unquoted(segment: &crate::CommandSegmentV1) -> bool {
         .arguments
         .iter()
         .any(|argument| argument.starts_with('~'))
+        || !shell_keeps_tilde_literal(&segment.text)
+}
+
+/// Whether a `~`-spelled executable reaches the shell as the home path the
+/// path proofs resolve it to. A quoted or escaped `~` stays a literal
+/// relative name, which the shell looks for under the working directory —
+/// the one place the agent writes without review.
+pub(crate) fn home_executable_unquoted(segment: &crate::CommandSegmentV1) -> bool {
+    !segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| executable.starts_with('~'))
         || !shell_keeps_tilde_literal(&segment.text)
 }
 
@@ -399,7 +446,7 @@ impl<'a> super::PathContext<'a> {
                 environment.has_valid_shape()
                     && !environment.environment_names.iter().any(|name| {
                         npm_selector(name)
-                            && !super::npm_environment::inert_npm_config_name(name)
+                            && !super::npm_environment::inert_stamped_name(environment, name)
                             && !super::npm_environment::trusted_stamped_loader(
                                 environment,
                                 name,
@@ -412,7 +459,7 @@ impl<'a> super::PathContext<'a> {
                 let name = name.to_string_lossy();
                 !value.is_empty()
                     && npm_selector(&name)
-                    && !super::npm_environment::inert_npm_config_name(&name)
+                    && !super::npm_environment::inert_inherited(&name, &value)
             }),
         };
         // pip reads a configuration file and a variable for every option

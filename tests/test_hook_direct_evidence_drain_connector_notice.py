@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import approvals, native_decision_receipt
-from codex_plugin_scanner.guard.daemon import hook_native_cli_observer
+from codex_plugin_scanner.guard import approvals
 from codex_plugin_scanner.guard.daemon.hook_direct_evidence_drain import record_direct_hook_evidence
 from tests.test_hook_direct_evidence_drain import _Host, _record
 
@@ -33,8 +32,6 @@ class _Store:
 @pytest.fixture
 def notified(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, Mapping[str, object], str]]:
     calls: list[tuple[object, Mapping[str, object], str]] = []
-    monkeypatch.setattr(native_decision_receipt, "validate_native_decision_receipt", lambda receipt: receipt)
-    monkeypatch.setattr(hook_native_cli_observer, "observe_native_pre_tool_cli", lambda store, **values: None)
     monkeypatch.setattr(
         approvals,
         "notify_connector_setup",
@@ -94,8 +91,6 @@ def test_a_row_the_store_no_longer_holds_raises_nothing(
 
 
 def test_a_failing_notice_does_not_fail_the_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(native_decision_receipt, "validate_native_decision_receipt", lambda receipt: receipt)
-    monkeypatch.setattr(hook_native_cli_observer, "observe_native_pre_tool_cli", lambda store, **values: None)
 
     def fail(store: object, queued: Mapping[str, object], *, connector_name: str) -> None:
         raise RuntimeError("notifier unavailable")

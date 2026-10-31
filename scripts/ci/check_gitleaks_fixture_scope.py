@@ -62,6 +62,16 @@ def verify_fixture_scope(root: Path, executable: str) -> None:
         ("credential beside authoring digest", record, digest_line + " " + credential_line, True),
         ("credential after authoring digest", record, digest_line + "\n" + credential_line, True),
     )
+    vectors = Path("rust/crates/guard-runtime/testdata/guard_store/mcp_provider_read_vectors.json")
+    fingerprint = "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd"
+    token_line = f'      "catalog_token": "{fingerprint}",'
+    cases += (
+        ("audited provider-catalog fingerprint", vectors, token_line, False),
+        ("fingerprint line outside the vectors", Path("src/production.json"), token_line, True),
+        ("changed fingerprint in the vectors", vectors, token_line.replace(fingerprint, fingerprint[::-1]), True),
+        ("credential beside the fingerprint", vectors, token_line + " " + unexpected, True),
+        ("credential after the fingerprint", vectors, token_line + "\n" + unexpected, True),
+    )
     with tempfile.TemporaryDirectory(prefix="gitleaks-fixture-scope-") as temporary:
         base = Path(temporary)
         for index, (name, path, content, expect_leak) in enumerate(cases):

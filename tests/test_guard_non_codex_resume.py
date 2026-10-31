@@ -6,7 +6,6 @@ import json
 import urllib.request
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_hooks import pi_hook_response_from_guard
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.harness_resume import resume_harness_operation
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -210,39 +209,6 @@ def test_omp_denial_marks_waiting_operation_blocked_without_leaking_resume_token
     operation = store.get_guard_operation("pi-operation-block")
     assert operation is not None
     assert operation["status"] == "blocked"
-
-
-def test_pi_hook_response_includes_resume_poll_metadata_for_pending_approval() -> None:
-    payload = pi_hook_response_from_guard(
-        policy_action="require-reapproval",
-        reason="Open HOL Guard to approve this request.",
-        approval_payload={
-            "primary_approval_request_id": "req-pi",
-            "primary_approval_url": "http://127.0.0.1:5474/requests/req-pi",
-            "approval_center_url": "http://127.0.0.1:5474",
-        },
-    )
-
-    assert payload == {
-        "decision": "deny",
-        "reason": "Open HOL Guard to approve this request.",
-        "approval_request_id": "req-pi",
-        "resume_poll_path": "/v1/requests/req-pi",
-        "approval_url": "http://127.0.0.1:5474/requests/req-pi",
-        "approval_center_url": "http://127.0.0.1:5474",
-    }
-
-
-def test_pi_hook_response_denies_unsatisfied_review() -> None:
-    payload = pi_hook_response_from_guard(
-        policy_action="review",
-        reason="Review in HOL Guard.",
-    )
-
-    assert payload == {
-        "decision": "deny",
-        "reason": "Review in HOL Guard.",
-    }
 
 
 class TestSafeResumeMetadata:

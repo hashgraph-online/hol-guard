@@ -16,7 +16,7 @@ ARTIFACT_SETS: Final = ("full", "wheels", "pure")
 # Stable native wheels for these platforms ship on the GitHub release only. Few installs use them, and keeping
 # them off PyPI keeps each release inside the project storage quota; clients fetch them from the release and
 # verify them against the digest manifest embedded in the PyPI pure wheel.
-GITHUB_ONLY_PLATFORM_TAGS: Final = frozenset({"macosx_13_0_x86_64", "win_arm64"})
+GITHUB_ONLY_PLATFORM_TAGS: Final = frozenset({"macosx_13_0_x86_64", "manylinux_2_17_aarch64", "win_arm64"})
 
 
 class ArtifactSetError(RuntimeError):

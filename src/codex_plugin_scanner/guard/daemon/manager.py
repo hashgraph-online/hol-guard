@@ -8,6 +8,7 @@ import json
 import math
 import ntpath
 import os
+import re
 import secrets
 import signal
 import stat
@@ -28,13 +29,14 @@ from pathlib import Path
 from typing import Any, BinaryIO, Literal, TypedDict, cast
 
 from ...version import __version__
+from .. import live_process_identity as _live_process_identity
 from .. import windows_processes
 from ..fork_safety import forget_in_child
 from ..frozen_runtime_commands import (
     decode_frozen_daemon_serve_payload,
     frozen_daemon_serve_command,
 )
-from ..live_process_identity import process_start_token
+from ..live_process_identity import process_owner_marker
 from ..mdm.file_lock import release_file_lock
 from ..native_daemon_lifecycle import (
     NativeDaemonLifecycleError,
@@ -96,6 +98,8 @@ _GUARD_DAEMON_PRIVATE_FILE_MODE = 0o600
 _GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
 _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 _GUARD_DAEMON_PENDING_LAUNCH_FILE = "daemon-launch-pending.json"
+_GUARD_DAEMON_LAUNCH_NONCE_ENV = "HOL_GUARD_DAEMON_LAUNCH_NONCE"
+_GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH = 64
 _GUARD_DAEMON_START_PROGRESS_FILE = "daemon-start-progress.json"
 _GUARD_DAEMON_WAKE_RESERVATION_FILE = "daemon-wake-reservation.json"
 _GUARD_DAEMON_RECOVERY_RESERVATION_FILE = "daemon-recovery-reservation.json"
@@ -104,8 +108,7 @@ _GUARD_DAEMON_RECOVERY_LOCK_FILE = "daemon-recovery.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
 _GUARD_DAEMON_START_PROGRESS_MAX_BYTES = 4096
-_GUARD_DAEMON_WAKE_RESERVATION_MAX_BYTES = 4096
-_GUARD_DAEMON_RECOVERY_RESERVATION_MAX_BYTES = 4096
+_GUARD_DAEMON_RESERVATION_MAX_BYTES = 4096
 _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS = 30.0
 _START_CLASSIFICATION_RESERVE_SECONDS = 3.0
 _START_CLASSIFICATION_RESERVE_FRACTION = 0.25
@@ -185,6 +188,15 @@ forget_in_child(_DUPLICATE_RETIRE_IN_FLIGHT)
 _LAST_EPHEMERAL_REAP_AT = 0.0
 _runtime_fingerprint_cache: tuple[str, str] | None = None
 
+
+def _launch_nonce_is_valid(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == _GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH
+        and re.fullmatch(r"[0-9a-f]+", value) is not None
+    )
+
+
 GuardDaemonHookFailureKind = Literal[
     "authenticated-control-plane-failure",
     "overload",
@@ -210,6 +222,15 @@ class _ExistingGuardDaemon(TypedDict):
     pid: int
 
 
+@dataclasses.dataclass(slots=True)
+class _GuardDaemonLaunch:
+    process: subprocess.Popen[bytes]
+    launch_nonce: str
+    deadline: float
+    process_start_marker: str | None = None
+    receipt_recorded: bool = False
+
+
 def _trusted_daemon_home(home_dir: Path | None) -> Path:
     candidate = Path.home() if home_dir is None else Path(home_dir)
     if not candidate.is_absolute():
@@ -228,6 +249,7 @@ def _daemon_launcher_env(
     home_dir: Path | None = None,
     guard_home: Path | None = None,
     executable: Path | None = None,
+    launch_nonce: str | None = None,
 ) -> dict[str, str]:
     """Build a minimal detached-daemon environment without Python startup hooks."""
 
@@ -260,6 +282,8 @@ def _daemon_launcher_env(
         env["USERPROFILE"] = str(trusted_home)
     if guard_home is not None and not _guard_home_is_ephemeral(guard_home):
         env["GUARD_DAEMON_IDLE_TIMEOUT_SECONDS"] = "0"
+    if isinstance(launch_nonce, str) and _launch_nonce_is_valid(launch_nonce):
+        env[_GUARD_DAEMON_LAUNCH_NONCE_ENV] = launch_nonce
     _bind_native_runtime_override(env)
     return env
 
@@ -590,6 +614,20 @@ def _ensure_guard_daemon_body(
     if background_maintenance:
         _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
+    initial_pending = load_authenticated_guard_daemon_pending_launch(guard_home)
+    initial_progress = load_authenticated_guard_daemon_start_progress(guard_home)
+    # A live still-starting record is adopted or waited on under the start lock
+    # below; only an unaccounted unresolved launch receipt fails closed here.
+    initial_progress_is_live = initial_progress is not None and _guard_daemon_start_progress_is_live(
+        guard_home, initial_progress
+    )
+    if (
+        not initial_progress_is_live
+        and _guard_daemon_pending_launch_is_generation_bound(initial_pending)
+        and not _guard_daemon_pending_launch_state_is_resolved(guard_home)
+        and not _resolve_abandoned_guard_daemon_pending_launch(guard_home, initial_pending)
+    ):
+        raise RuntimeError("A previous Guard daemon launch could not be retired safely.")
     existing_url = _live_or_newer_daemon_url(guard_home, executable=executable, preferred_port=preferred_port)
     if existing_url is not None:
         if background_maintenance:
@@ -680,8 +718,17 @@ def _ensure_guard_daemon_body(
             retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not guard_daemon_retirement_is_complete(guard_home):
                 raise RuntimeError("In-progress Guard daemon launch could not be retired safely.")
-        if _windows_pending_launch_needs_retirement(guard_home, progress_is_live=progress_is_live):
-            retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
+        pending_path_exists = _pending_launch_path(guard_home).is_file()
+        pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
+        if pending_path_exists or pending_launch is not None:
+            if (
+                _guard_daemon_pending_launch_is_generation_bound(pending_launch)
+                and not _guard_daemon_pending_launch_state_is_resolved(guard_home)
+                and not _resolve_abandoned_guard_daemon_pending_launch(guard_home, pending_launch)
+            ):
+                raise RuntimeError("A previous Guard daemon launch could not be retired safely.")
+            if _windows_pending_launch_needs_retirement(guard_home, progress_is_live=progress_is_live):
+                retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not _guard_daemon_pending_launch_state_is_resolved(guard_home):
                 raise RuntimeError("A previous Guard daemon launch could not be retired safely.")
         clear_guard_daemon_state(guard_home)
@@ -693,6 +740,7 @@ def _ensure_guard_daemon_body(
             remaining_start_time = start_deadline - time.monotonic()
             if remaining_start_time <= 0:
                 break
+            launch_nonce = secrets.token_hex(_GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH // 2)
             if executable is None:
                 command = _guard_daemon_launch_command(
                     guard_home,
@@ -700,7 +748,11 @@ def _ensure_guard_daemon_body(
                     home_dir=home_dir,
                     gate_on_stdin=os.name == "nt",
                 )
-                launcher_env = _daemon_launcher_env(home_dir=home_dir, guard_home=guard_home)
+                launcher_env = _daemon_launcher_env(
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    launch_nonce=launch_nonce,
+                )
             else:
                 command = _guard_daemon_launch_command(
                     guard_home,
@@ -713,6 +765,7 @@ def _ensure_guard_daemon_body(
                     home_dir=home_dir,
                     guard_home=guard_home,
                     executable=executable,
+                    launch_nonce=launch_nonce,
                 )
             if time.monotonic() >= start_deadline:
                 break
@@ -741,25 +794,32 @@ def _ensure_guard_daemon_body(
                     env=launcher_env,
                     start_new_session=True,
                 )
+            launch = _GuardDaemonLaunch(
+                process=process,
+                launch_nonce=launch_nonce,
+                deadline=start_deadline,
+            )
             pending_creation_time: int | None = None
+            handed_off = False
             retirement_attempted = False
             try:
                 pending_creation_time = _record_guard_daemon_pending_launch(
                     guard_home,
-                    process=process,
+                    launch=launch,
                     port=candidate_port,
                 )
                 _release_guard_daemon_launch_gate(process)
                 wait_deadline = _spawned_daemon_wait_deadline(start_deadline)
                 url = _wait_for_spawned_guard_daemon_url(
                     guard_home,
-                    process=process,
+                    launch=launch,
                     executable=executable,
                     wait_deadline=wait_deadline,
                 )
                 if url is not None:
+                    handed_off = True
                     if not _clear_spawned_guard_daemon_pending_launch(
-                        guard_home, process=process, creation_time=pending_creation_time
+                        guard_home, launch=launch, creation_time=pending_creation_time
                     ):
                         raise RuntimeError("Guard daemon pending launch state could not be cleared safely.")
                     if background_maintenance:
@@ -797,10 +857,17 @@ def _ensure_guard_daemon_body(
                         f"Guard daemon is still starting; retry shortly. Expected state file at {state_path}."
                     )
                 retirement_attempted = True
-                if not _terminate_spawned_guard_daemon(process, deadline_monotonic=start_deadline):
+                root_retired = _terminate_spawned_guard_daemon(process, deadline_monotonic=start_deadline)
+                if launch.receipt_recorded:
+                    # The signed launch receipt stays in place, so replacement is blocked
+                    # until a matching handoff or a proven-dead generation resolves it.
+                    raise RuntimeError(
+                        "Guard approval center did not start; launch ownership could not be proven contained."
+                    )
+                if not root_retired:
                     raise RuntimeError("Guard daemon startup process could not be retired safely.")
                 if not _clear_spawned_guard_daemon_pending_launch(
-                    guard_home, process=process, creation_time=pending_creation_time
+                    guard_home, launch=launch, creation_time=pending_creation_time
                 ):
                     raise RuntimeError("Guard daemon pending launch state could not be cleared safely.")
                 if time.monotonic() >= wait_deadline:
@@ -811,13 +878,13 @@ def _ensure_guard_daemon_body(
             except GuardDaemonStillStartingError:
                 raise
             except BaseException:
-                if not retirement_attempted and _terminate_spawned_guard_daemon(
-                    process,
-                    deadline_monotonic=start_deadline,
-                ):
-                    _clear_spawned_guard_daemon_pending_launch(
-                        guard_home, process=process, creation_time=pending_creation_time
-                    )
+                # Once the child has exposed its authenticated endpoint, the
+                # process is handed off to the daemon lifecycle. A pending
+                # launch cleanup failure must not terminate that live daemon.
+                # The pending receipt stays until a matching handoff or a
+                # proven-dead generation resolves it, so it is never cleared here.
+                if not handed_off and not retirement_attempted:
+                    _terminate_spawned_guard_daemon(process, deadline_monotonic=start_deadline)
                 raise
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
 
@@ -890,27 +957,6 @@ def schedule_guard_daemon_recovery(
     )
 
 
-def _guard_recovery_is_disabled(guard_home: Path) -> bool:
-    from .recovery_lifecycle import guard_recovery_is_disabled
-
-    return guard_recovery_is_disabled(guard_home)
-
-
-def _terminate_recovery_worker(process: subprocess.Popen[bytes]) -> bool:
-    from .recovery_lifecycle import terminate_recovery_worker
-
-    return terminate_recovery_worker(process)
-
-
-def _authenticated_live_current_daemon_url(
-    guard_home: Path,
-    state: dict[str, object] | None,
-) -> str | None:
-    from .recovery_lifecycle import authenticated_live_current_daemon_url
-
-    return authenticated_live_current_daemon_url(guard_home, state)
-
-
 def retire_all_guard_daemons_for_home(
     guard_home: Path,
     *,
@@ -938,6 +984,16 @@ def _retire_guard_daemons_for_home(
     retired: list[int] = []
     handled_pids: set[int] = set()
     pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
+    if (
+        _guard_daemon_pending_launch_is_generation_bound(pending_launch)
+        and not _guard_daemon_pending_launch_state_is_resolved(guard_home)
+        and not _guard_daemon_pending_launch_is_abandoned(pending_launch)
+    ):
+        # A launch-specific receipt is deliberately unresolved until its
+        # owner publishes the matching handoff or its root is gone. Inventory
+        # cannot prove that a same-home process is one of a live launch's
+        # descendants.
+        return retired
     if isinstance(pending_launch, dict):
         pending_pid = pending_launch.get("pid")
         pending_port = pending_launch.get("port")
@@ -992,10 +1048,23 @@ def _retire_guard_daemons_for_home(
                         pid=state_pid,
                         session_id=state_id if isinstance(state_id, str) else None,
                     )
-                retirement_succeeded = retire_pid(
-                    state_pid,
-                    expected_guard_home=guard_home,
-                )
+                expected_start_marker = authenticated_state.get("process_start_marker")
+                expected_owner_marker = authenticated_state.get("user")
+                if isinstance(expected_start_marker, str) and expected_start_marker.strip():
+                    retirement_succeeded = retire_pid(
+                        state_pid,
+                        expected_guard_home=guard_home,
+                        expected_start_marker=expected_start_marker,
+                        expected_owner_marker=(
+                            expected_owner_marker
+                            if isinstance(expected_owner_marker, str) and expected_owner_marker
+                            else None
+                        ),
+                    )
+                else:
+                    # Markerless live state cannot identify a PID generation: only a proven-dead
+                    # PID may be treated as retired, and no signal is ever sent to it.
+                    retirement_succeeded = _guard_daemon_pid_is_proven_dead(state_pid)
                 if retirement_succeeded:
                     if _guard_daemon_pid_is_proven_dead(state_pid):
                         _clear_authenticated_guard_daemon_state_if_current(
@@ -1021,7 +1090,16 @@ def _retire_guard_daemons_for_home(
         for pid, port in inventory:
             if pid in handled_pids or (keep_port is not None and port == keep_port):
                 continue
-            if retire_pid(pid, expected_guard_home=guard_home) and _guard_daemon_pid_is_proven_dead(pid):
+            retirement_identity = _guard_daemon_pid_identity_for_retirement(pid)
+            if retirement_identity is None:
+                continue
+            expected_start_marker, expected_owner_marker = retirement_identity
+            if retire_pid(
+                pid,
+                expected_guard_home=guard_home,
+                expected_start_marker=expected_start_marker,
+                expected_owner_marker=expected_owner_marker,
+            ) and _guard_daemon_pid_is_proven_dead(pid):
                 handled_pids.add(pid)
                 if pid not in retired:
                     retired.append(pid)
@@ -1031,6 +1109,7 @@ def _retire_guard_daemons_for_home(
             empty_inventory_confirmed = _guard_daemon_process_inventory_for_guard_home(guard_home) == []
         if empty_inventory_confirmed and keep_port is None:
             _reconcile_invalid_daemon_lifecycle_artifacts(guard_home)
+            _resolve_abandoned_guard_daemon_pending_launch(guard_home, pending_launch)
     reap_orphaned_daemon_workers(deadline=deadline)
     return retired
 
@@ -1102,7 +1181,11 @@ def guard_daemon_retirement_is_complete(guard_home: Path) -> bool:
     elif _state_path(guard_home).is_file():
         if not _daemon_lifecycle_artifact_is_exact_tombstone(_state_path(guard_home)):
             return False
-    if not _guard_daemon_pending_launch_state_is_resolved(guard_home):
+    if not _guard_daemon_pending_launch_state_is_resolved(
+        guard_home
+    ) and not _resolve_abandoned_guard_daemon_pending_launch(
+        guard_home, load_authenticated_guard_daemon_pending_launch(guard_home)
+    ):
         return False
     inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
     return inventory == []
@@ -1123,10 +1206,10 @@ def _guard_daemon_wake_reservation_path(guard_home: Path) -> Path:
     return guard_home / _GUARD_DAEMON_WAKE_RESERVATION_FILE
 
 
-def _load_guard_daemon_wake_reservation(guard_home: Path) -> dict[str, object] | None:
+def _load_reservation(path: Path) -> dict[str, object] | None:
     raw_payload = read_private_regular_text(
-        _guard_daemon_wake_reservation_path(guard_home),
-        max_bytes=_GUARD_DAEMON_WAKE_RESERVATION_MAX_BYTES,
+        path,
+        max_bytes=_GUARD_DAEMON_RESERVATION_MAX_BYTES,
         require_private_parent=True,
     )
     if raw_payload is None:
@@ -1138,12 +1221,24 @@ def _load_guard_daemon_wake_reservation(guard_home: Path) -> dict[str, object] |
     return payload if isinstance(payload, dict) else None
 
 
+def _clear_reservation(guard_home: Path, path: Path, token: str) -> bool:
+    with _guard_daemon_state_write_lock(guard_home):
+        reservation = _load_reservation(path)
+        if not isinstance(reservation, dict) or not secrets.compare_digest(
+            str(reservation.get("token", "")),
+            token,
+        ):
+            return False
+        _write_private_atomic_text(path, "{}")
+    return True
+
+
 def _claim_guard_daemon_wake_reservation(guard_home: Path) -> str | None:
     token = secrets.token_hex(16)
     now = time.time()
     _ensure_private_directory(guard_home)
     with _guard_daemon_state_write_lock(guard_home):
-        existing = _load_guard_daemon_wake_reservation(guard_home)
+        existing = _load_reservation(_guard_daemon_wake_reservation_path(guard_home))
         query = {"existing": _reservation_facts(existing), "now": now}
         if not _lifecycle("wake_claim", query, home=guard_home)["claim"]:
             return None
@@ -1155,15 +1250,7 @@ def _claim_guard_daemon_wake_reservation(guard_home: Path) -> str | None:
 
 
 def clear_guard_daemon_wake_reservation(guard_home: Path, *, token: str) -> bool:
-    with _guard_daemon_state_write_lock(guard_home):
-        reservation = _load_guard_daemon_wake_reservation(guard_home)
-        if not isinstance(reservation, dict) or not secrets.compare_digest(
-            str(reservation.get("token", "")),
-            token,
-        ):
-            return False
-        _write_private_atomic_text(_guard_daemon_wake_reservation_path(guard_home), "{}")
-    return True
+    return _clear_reservation(guard_home, _guard_daemon_wake_reservation_path(guard_home), token)
 
 
 def _guard_daemon_recovery_reservation_path(guard_home: Path) -> Path:
@@ -1171,18 +1258,7 @@ def _guard_daemon_recovery_reservation_path(guard_home: Path) -> Path:
 
 
 def _load_guard_daemon_recovery_reservation(guard_home: Path) -> dict[str, object] | None:
-    raw_payload = read_private_regular_text(
-        _guard_daemon_recovery_reservation_path(guard_home),
-        max_bytes=_GUARD_DAEMON_RECOVERY_RESERVATION_MAX_BYTES,
-        require_private_parent=True,
-    )
-    if raw_payload is None:
-        return None
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
+    return _load_reservation(_guard_daemon_recovery_reservation_path(guard_home))
 
 
 def _claim_guard_daemon_recovery_reservation(guard_home: Path) -> str | None:
@@ -1237,15 +1313,7 @@ def _bind_guard_daemon_recovery_reservation(
 
 
 def clear_guard_daemon_recovery_reservation(guard_home: Path, *, token: str) -> bool:
-    with _guard_daemon_state_write_lock(guard_home):
-        reservation = _load_guard_daemon_recovery_reservation(guard_home)
-        if not isinstance(reservation, dict) or not secrets.compare_digest(
-            str(reservation.get("token", "")),
-            token,
-        ):
-            return False
-        _write_private_atomic_text(_guard_daemon_recovery_reservation_path(guard_home), "{}")
-    return True
+    return _clear_reservation(guard_home, _guard_daemon_recovery_reservation_path(guard_home), token)
 
 
 def schedule_guard_daemon_ensure(
@@ -1559,7 +1627,16 @@ def _retire_duplicate_guard_daemons_unlocked(guard_home: Path, *, keep_port: int
         if port == keep_port:
             continue
         saw_duplicate = True
-        if not _retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
+        retirement_identity = _guard_daemon_pid_identity_for_retirement(pid)
+        if retirement_identity is None:
+            return
+        expected_start_marker, expected_owner_marker = retirement_identity
+        if not _retire_guard_daemon_pid(
+            pid,
+            expected_guard_home=guard_home,
+            expected_start_marker=expected_start_marker,
+            expected_owner_marker=expected_owner_marker,
+        ):
             return
     if not saw_duplicate:
         return
@@ -1614,6 +1691,7 @@ def write_guard_daemon_state(
     _ensure_private_directory(state_path.parent)
     with _guard_daemon_state_write_lock(guard_home):
         discovery_key = ensure_daemon_discovery_key(guard_home)
+        state_pid = pid if isinstance(pid, int) and pid > 0 else os.getpid()
         state_payload: dict[str, object] = {
             "guard_home": str(guard_home.resolve()),
             "host": host,
@@ -1623,11 +1701,27 @@ def write_guard_daemon_state(
             "executable": _daemon_state_executable(),
             "source_root": _current_guard_daemon_source_root(),
             "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
-            "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
+            "pid": state_pid,
             "started_at": started_at or datetime.now(timezone.utc).isoformat(),
             "state_id": state_id or secrets.token_hex(16),
             "auth_token_id": hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
         }
+        process_marker = process_start_token(state_pid)
+        if isinstance(process_marker, str) and process_marker:
+            state_payload["process_start_marker"] = process_marker
+        process_owner = process_owner_marker(state_pid)
+        if isinstance(process_owner, str) and process_owner:
+            state_payload["user"] = process_owner
+            state_payload["owner"] = process_owner
+        launch_nonce = os.environ.get(_GUARD_DAEMON_LAUNCH_NONCE_ENV)
+        if _launch_nonce_is_valid(launch_nonce):
+            state_payload["launch_nonce"] = launch_nonce
+            state_payload["launch_generation"] = launch_nonce
+            state_payload["generation"] = launch_nonce
+        if os.name == "nt":
+            creation_time = windows_process_creation_time(state_pid)
+            if creation_time is not None:
+                state_payload["process_creation_time"] = creation_time
         if trust_status is not None:
             state_payload["trust_status"] = trust_status
         daemon_state = authenticate_daemon_state(
@@ -1981,44 +2075,86 @@ def _pending_launch_path(guard_home: Path) -> Path:
     return guard_home / _GUARD_DAEMON_PENDING_LAUNCH_FILE
 
 
+def _guard_daemon_pending_launch_is_generation_bound(pending: dict[str, object] | None) -> bool:
+    return (
+        isinstance(pending, dict)
+        and _launch_nonce_is_valid(pending.get("launch_nonce"))
+        and pending.get("launch_generation") == pending.get("launch_nonce")
+        and pending.get("generation") == pending.get("launch_nonce")
+    )
+
+
 def _record_guard_daemon_pending_launch(
     guard_home: Path,
     *,
-    process: subprocess.Popen[bytes],
+    launch: _GuardDaemonLaunch,
     port: int,
 ) -> int | None:
-    """Persist a Windows PID identity before a detached daemon may escape its parent."""
+    """Persist launch identity before a detached daemon may escape its parent."""
 
-    if os.name != "nt":
+    process = launch.process
+    pid = getattr(process, "pid", None)
+    if type(pid) is not int or pid <= 0:
+        # Lightweight launch doubles do not expose a native process identity.
+        # Real Popen handles always do, and must take the identity-bound path.
         return None
-    creation_time = windows_process_creation_time(process.pid)
-    if creation_time is None:
+    launch_nonce = launch.launch_nonce
+    if not _launch_nonce_is_valid(launch_nonce):
+        raise RuntimeError("Guard daemon launch nonce could not be recorded.")
+    process_marker: str | None = None
+    process_owner: str | None = None
+    launch_deadline = launch.deadline
+    for _attempt in range(10):
+        if time.monotonic() >= launch_deadline:
+            break
+        process_marker = process_start_token(pid)
+        process_owner = process_owner_marker(pid) if isinstance(process_marker, str) and process_marker else None
+        if isinstance(process_marker, str) and process_marker and isinstance(process_owner, str) and process_owner:
+            break
+        if getattr(process, "poll", lambda: None)() is not None:
+            break
+        sleep_seconds = 0.02
+        sleep_seconds = min(sleep_seconds, max(0.0, launch_deadline - time.monotonic()))
+        if sleep_seconds <= 0:
+            break
+        time.sleep(sleep_seconds)
+    if not isinstance(process_marker, str) or not process_marker:
+        raise RuntimeError("Guard daemon process start marker could not be recorded.")
+    if not isinstance(process_owner, str) or not process_owner:
+        raise RuntimeError("Guard daemon process owner could not be recorded.")
+    creation_time = windows_process_creation_time(pid) if os.name == "nt" else None
+    if os.name == "nt" and creation_time is None:
         raise RuntimeError("Guard daemon process identity could not be recorded.")
+    launch.process_start_marker = process_marker
     _ensure_private_directory(guard_home)
     with _guard_daemon_state_write_lock(guard_home):
         discovery_key = ensure_daemon_discovery_key(guard_home)
-        pending = authenticate_daemon_state(
-            {
-                "state_kind": "daemon_launch_pending",
-                "guard_home": str(guard_home.resolve()),
-                "pid": process.pid,
-                "port": port,
-                "process_creation_time": creation_time,
-            },
-            discovery_key=discovery_key,
-        )
+        pending_payload: dict[str, object] = {
+            "state_kind": "daemon_launch_pending",
+            "guard_home": str(guard_home.resolve()),
+            "pid": pid,
+            "port": port,
+            "launch_nonce": launch_nonce,
+            "launch_generation": launch_nonce,
+            "generation": launch_nonce,
+            "process_start_marker": process_marker,
+            "user": process_owner,
+            "owner": process_owner,
+            "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
+        }
+        if creation_time is not None:
+            pending_payload["process_creation_time"] = creation_time
+        pending = authenticate_daemon_state(pending_payload, discovery_key=discovery_key)
         _write_private_atomic_text(
             _pending_launch_path(guard_home),
             json.dumps(pending, sort_keys=True),
         )
+    launch.receipt_recorded = True
     return creation_time
 
 
 def load_authenticated_guard_daemon_pending_launch(guard_home: Path) -> dict[str, object] | None:
-    """Load one signed pending-launch PID identity from a private regular file."""
-
-    if os.name != "nt":
-        return None
+    """Load one signed pending-launch identity from a private regular file."""
     raw_payload = read_private_regular_text(
         _pending_launch_path(guard_home),
         max_bytes=_GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES,
@@ -2047,9 +2183,26 @@ def load_authenticated_guard_daemon_pending_launch(guard_home: Path) -> dict[str
         or pid <= 0
         or type(port) is not int
         or not 0 < port <= 65535
-        or type(creation_time) is not int
-        or creation_time <= 0
         or not isinstance(payload_guard_home, str)
+    ):
+        return None
+    if os.name == "nt" and (type(creation_time) is not int or creation_time <= 0):
+        return None
+    launch_nonce = payload.get("launch_nonce")
+    launch_generation = payload.get("launch_generation")
+    process_marker = payload.get("process_start_marker")
+    process_owner = payload.get("owner", payload.get("user"))
+    runtime_fingerprint = payload.get("runtime_fingerprint")
+    if os.name != "nt" and (
+        not _launch_nonce_is_valid(launch_nonce)
+        or launch_generation != launch_nonce
+        or payload.get("generation") != launch_nonce
+        or not isinstance(process_marker, str)
+        or not process_marker
+        or not isinstance(process_owner, str)
+        or not process_owner
+        or not isinstance(runtime_fingerprint, str)
+        or not runtime_fingerprint
     ):
         return None
     try:
@@ -2065,12 +2218,22 @@ def _clear_guard_daemon_pending_launch_if_current(
     *,
     pid: int,
     creation_time: int | None,
+    launch_nonce: str | None = None,
+    process_start_marker: str | None = None,
 ) -> bool:
-    if os.name != "nt" or creation_time is None:
-        return True
     with _guard_daemon_state_write_lock(guard_home):
         pending = load_authenticated_guard_daemon_pending_launch(guard_home)
-        if pending is None or pending.get("pid") != pid or pending.get("process_creation_time") != creation_time:
+        if pending is None:
+            return not _pending_launch_path(guard_home).is_file()
+        if pending.get("pid") != pid:
+            return False
+        if os.name == "nt" and pending.get("process_creation_time") != creation_time:
+            return False
+        if launch_nonce is not None and not secrets.compare_digest(str(pending.get("launch_nonce", "")), launch_nonce):
+            return False
+        if process_start_marker is not None and not secrets.compare_digest(
+            str(pending.get("process_start_marker", "")), process_start_marker
+        ):
             return False
         _write_private_atomic_text(_pending_launch_path(guard_home), "{}")
         return True
@@ -2079,15 +2242,19 @@ def _clear_guard_daemon_pending_launch_if_current(
 def _clear_spawned_guard_daemon_pending_launch(
     guard_home: Path,
     *,
-    process: subprocess.Popen[bytes],
+    launch: _GuardDaemonLaunch,
     creation_time: int | None,
 ) -> bool:
-    if creation_time is None:
+    process = launch.process
+    pid = getattr(process, "pid", None)
+    if type(pid) is not int or pid <= 0:
         return True
     return _clear_guard_daemon_pending_launch_if_current(
         guard_home,
-        pid=process.pid,
+        pid=pid,
         creation_time=creation_time,
+        launch_nonce=launch.launch_nonce,
+        process_start_marker=launch.process_start_marker,
     )
 
 
@@ -2235,40 +2402,72 @@ def _windows_pending_launch_needs_retirement(guard_home: Path, *, progress_is_li
     )
 
 
-def _guard_daemon_pending_launch_is_active(guard_home: Path) -> bool:
-    pending = load_authenticated_guard_daemon_pending_launch(guard_home)
-    if pending is None:
-        return False
-    pid = pending.get("pid")
-    creation_time = pending.get("process_creation_time")
-    if type(pid) is not int or type(creation_time) is not int:
-        return False
-    actual_creation_time = windows_process_creation_time(pid)
-    if actual_creation_time != creation_time:
-        if actual_creation_time is not None or not _guard_daemon_pid_is_running(pid):
-            _clear_guard_daemon_pending_launch_if_current(
-                guard_home,
-                pid=pid,
-                creation_time=creation_time,
-            )
-        return False
-    return _guard_daemon_pid_is_running(pid)
-
-
 def _guard_daemon_pending_launch_state_is_resolved(guard_home: Path) -> bool:
-    if os.name != "nt":
-        return True
+    """A launch resolves once a tombstone replaces its receipt.
+
+    Its own handoff leaves that tombstone, and so does
+    ``_resolve_abandoned_guard_daemon_pending_launch`` once the launch is gone.
+    Callers must fail closed while the receipt remains unresolved.
+    """
+
     path = _pending_launch_path(guard_home)
-    if not path.is_file():
+    return not path.is_file() or _daemon_lifecycle_artifact_is_exact_tombstone(path)
+
+
+def _resolve_abandoned_guard_daemon_pending_launch(guard_home: Path, pending: dict[str, object] | None) -> bool:
+    """Tombstone a launch whose root is gone and whose home runs no daemon.
+
+    Only a matching handoff resolves a launch that may still publish. A launch
+    that timed out or crashed before its handoff never publishes one, so its
+    receipt would otherwise refuse every later daemon start for this home, and
+    every later Guard core with it. Once the root process is gone and a proven
+    inventory finds no daemon for this home, nothing of that launch can still
+    answer for it. A helper it moved into its own session cannot be found from
+    here either way: keeping the receipt would not stop that helper, only Guard.
+    The clear below rereads the receipt under the state lock and only removes
+    the same launch.
+    """
+
+    if pending is None or not _guard_daemon_pending_launch_is_abandoned(pending):
+        return False
+    if _guard_daemon_process_inventory_for_guard_home(guard_home) != []:
+        return False
+    pid = pending["pid"]
+    creation_time = pending.get("process_creation_time")
+    assert type(pid) is int
+    return _clear_guard_daemon_pending_launch_if_current(
+        guard_home,
+        pid=pid,
+        creation_time=creation_time if type(creation_time) is int else None,
+        launch_nonce=str(pending["launch_nonce"]),
+        process_start_marker=str(pending["process_start_marker"]),
+    )
+
+
+def _guard_daemon_pending_launch_is_abandoned(pending: dict[str, object] | None) -> bool:
+    """Whether a generation-bound launch's root process is gone."""
+
+    if not _guard_daemon_pending_launch_is_generation_bound(pending):
+        return False
+    assert pending is not None
+    pid = pending.get("pid")
+    marker = pending.get("process_start_marker")
+    if type(pid) is not int or pid <= 0 or not isinstance(marker, str) or not marker:
+        return False
+    return _guard_daemon_pending_launch_root_is_gone(
+        pid, marker=marker, creation_time=pending.get("process_creation_time")
+    )
+
+
+def _guard_daemon_pending_launch_root_is_gone(pid: int, *, marker: str, creation_time: object) -> bool:
+    if _guard_daemon_pid_is_proven_dead(pid):
         return True
-    pending = load_authenticated_guard_daemon_pending_launch(guard_home)
-    if pending is not None:
-        if _guard_daemon_pending_launch_is_active(guard_home):
-            return False
-        pending = load_authenticated_guard_daemon_pending_launch(guard_home)
-        if pending is not None:
-            return False
-    return _daemon_lifecycle_artifact_is_exact_tombstone(path)
+    # A live pid that started at another moment is a reused pid, not the launch.
+    if os.name == "nt":
+        actual_creation_time = windows_process_creation_time(pid)
+        return type(creation_time) is int and actual_creation_time is not None and actual_creation_time != creation_time
+    actual_marker = process_start_token(pid)
+    return isinstance(actual_marker, str) and bool(actual_marker) and actual_marker != marker
 
 
 def _remove_invalid_daemon_discovery_key(guard_home: Path) -> bool:
@@ -2741,13 +2940,52 @@ def _guard_daemon_command_for_pid(pid: int) -> str | None:
     return stdout or None
 
 
+def _guard_daemon_pid_identity_for_retirement(pid: int) -> tuple[str, str] | None:
+    """Capture an exact process generation and OS owner before inventory signals."""
+
+    start_marker = process_start_token(pid)
+    owner_marker = process_owner_marker(pid)
+    current_owner_marker = process_owner_marker(os.getpid())
+    if (
+        not isinstance(start_marker, str)
+        or not start_marker
+        or not isinstance(owner_marker, str)
+        or not owner_marker
+        or not isinstance(current_owner_marker, str)
+        or not current_owner_marker
+    ):
+        return None
+    try:
+        if not secrets.compare_digest(owner_marker, current_owner_marker):
+            return None
+    except TypeError:
+        return None
+    return start_marker, owner_marker
+
+
 def _retire_guard_daemon_process(payload: dict[str, object]) -> bool:
     pid = payload.get("pid")
     if not isinstance(pid, int) or pid <= 0:
         return False
     guard_home = payload.get("guard_home")
     expected_guard_home = Path(guard_home) if isinstance(guard_home, str) and guard_home.strip() else None
-    return _retire_guard_daemon_pid(pid, expected_guard_home=expected_guard_home)
+    expected_start_marker = payload.get("process_start_marker")
+    if not isinstance(expected_start_marker, str) or not expected_start_marker:
+        # A stale state record may point at a recycled PID. If command identity
+        # proves that a live process belongs to another Guard home or command,
+        # clear the record without signaling it. A matching or unresolvable
+        # process still requires a generation marker below.
+        if _guard_daemon_pid_is_proven_dead(pid):
+            return True
+        identity = _guard_daemon_pid_command_identity(pid, expected_guard_home=expected_guard_home)
+        return identity is False
+    expected_owner_marker = payload.get("user")
+    return _retire_guard_daemon_pid(
+        pid,
+        expected_guard_home=expected_guard_home,
+        expected_start_marker=expected_start_marker,
+        expected_owner_marker=expected_owner_marker if isinstance(expected_owner_marker, str) else None,
+    )
 
 
 def _terminate_spawned_guard_daemon(
@@ -2795,40 +3033,93 @@ def _release_guard_daemon_launch_gate(process: subprocess.Popen[bytes]) -> None:
             process.stdin.close()
 
 
+def process_start_token(pid: int, *, deadline_monotonic: float | None = None) -> str | None:
+    """Resolve the live process generation marker through the identity module at call time."""
+
+    resolve = _live_process_identity.process_start_token
+    if deadline_monotonic is None:
+        return resolve(pid)
+    return resolve(pid, deadline_monotonic=deadline_monotonic)
+
+
 def _retire_guard_daemon_pid(
     pid: int,
     *,
     expected_guard_home: Path | None = None,
     expected_creation_time: int | None = None,
+    expected_start_marker: str | None = None,
+    expected_owner_marker: str | None = None,
+    timeout: float | None = None,
     deadline_monotonic: float | None = None,
     expected_start_token: str | None = None,
 ) -> bool:
-    from ..live_process_identity import process_start_token
+    # The start token is the same identity as the start marker; a caller may supply either.
+    start_marker = expected_start_marker if expected_start_marker is not None else expected_start_token
+    retirement_deadline = None if timeout is None else time.monotonic() + max(0.0, timeout)
+    if deadline_monotonic is not None:
+        retirement_deadline = (
+            deadline_monotonic if retirement_deadline is None else min(retirement_deadline, deadline_monotonic)
+        )
 
-    def admitted() -> bool:
-        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+    def start_marker_matches() -> bool:
+        if start_marker is None:
+            return True
+        actual_start_marker = (
+            process_start_token(pid)
+            if deadline_monotonic is None
+            else process_start_token(pid, deadline_monotonic=deadline_monotonic)
+        )
+        return isinstance(actual_start_marker, str) and secrets.compare_digest(
+            actual_start_marker,
+            start_marker,
+        )
+
+    def owner_marker_matches() -> bool:
+        owner_marker = expected_owner_marker
+        if not isinstance(owner_marker, str) or not owner_marker:
+            owner_marker = process_owner_marker(os.getpid())
+        actual_owner_marker = process_owner_marker(pid)
+        if not (
+            isinstance(owner_marker, str)
+            and bool(owner_marker)
+            and isinstance(actual_owner_marker, str)
+            and bool(actual_owner_marker)
+        ):
             return False
-        if expected_start_token is not None:
-            token = (
-                process_start_token(pid)
-                if deadline_monotonic is None
-                else process_start_token(pid, deadline_monotonic=deadline_monotonic)
-            )
-            if token != expected_start_token:
-                return False
-        return deadline_monotonic is None or time.monotonic() < deadline_monotonic
+        try:
+            return secrets.compare_digest(actual_owner_marker, owner_marker)
+        except TypeError:
+            return False
 
     def wait_for_death() -> bool:
-        if deadline_monotonic is None:
+        if retirement_deadline is None:
             return _wait_for_guard_daemon_pid_death(pid)
-        return _wait_for_guard_daemon_pid_death(pid, timeout=min(1.0, max(0.0, deadline_monotonic - time.monotonic())))
+        remaining = max(0.0, retirement_deadline - time.monotonic())
+        return _wait_for_guard_daemon_pid_death(pid, timeout=min(1.0, remaining) if deadline_monotonic else remaining)
+
+    def terminate_exact(creation_time: int) -> bool:
+        if not start_marker_matches() or not owner_marker_matches():
+            return False
+        if retirement_deadline is None:
+            return windows_terminate_process_if_creation_time(pid, creation_time)
+        return windows_terminate_process_if_creation_time(
+            pid,
+            creation_time,
+            timeout=max(0.0, retirement_deadline - time.monotonic()),
+        )
 
     if _guard_daemon_pid_is_proven_dead(pid):
         return True
-    if not admitted():
+    if retirement_deadline is not None and time.monotonic() >= retirement_deadline:
+        return False
+    if os.name != "nt" and (not isinstance(start_marker, str) or not start_marker):
+        return False
+    # Admit the exact process generation before any further probing; it is
+    # re-verified immediately before each signal below.
+    if not start_marker_matches():
         return False
     if os.name == "nt" and expected_creation_time is not None:
-        return windows_terminate_process_if_creation_time(pid, expected_creation_time)
+        return terminate_exact(expected_creation_time)
     observed_creation_time: int | None = None
     if os.name == "nt":
         observed_creation_time = windows_process_creation_time(pid)
@@ -2843,10 +3134,10 @@ def _retire_guard_daemon_pid(
         return identity is False
     if os.name == "nt":
         assert observed_creation_time is not None
-        if not admitted():
-            return False
-        return windows_terminate_process_if_creation_time(pid, observed_creation_time)
-    if not admitted():
+        return terminate_exact(observed_creation_time)
+    if retirement_deadline is not None and time.monotonic() >= retirement_deadline:
+        return _guard_daemon_pid_is_proven_dead(pid)
+    if not start_marker_matches() or not owner_marker_matches():
         return False
     try:
         os.kill(pid, signal.SIGTERM)
@@ -2856,10 +3147,12 @@ def _retire_guard_daemon_pid(
         return _guard_daemon_pid_is_proven_dead(pid)
     if wait_for_death():
         return True
+    if retirement_deadline is not None and time.monotonic() >= retirement_deadline:
+        return _guard_daemon_pid_is_proven_dead(pid)
+    if not start_marker_matches() or not owner_marker_matches():
+        return False
     sigkill = getattr(signal, "SIGKILL", None)
     if sigkill is None:
-        return False
-    if not admitted():
         return False
     try:
         os.kill(pid, sigkill)
@@ -2887,7 +3180,7 @@ def _spawned_daemon_wait_deadline(start_deadline: float) -> float:
 def _wait_for_spawned_guard_daemon_url(
     guard_home: Path,
     *,
-    process: subprocess.Popen[bytes],
+    launch: _GuardDaemonLaunch,
     executable: Path | None,
     wait_deadline: float,
 ) -> str | None:
@@ -2895,7 +3188,7 @@ def _wait_for_spawned_guard_daemon_url(
         return _wait_for_started_guard_daemon_url(
             guard_home,
             timeout=max(0.0, wait_deadline - time.monotonic()),
-            process=process,
+            launch=launch,
             executable=executable,
         )
     except TimeoutError:
@@ -2908,14 +3201,18 @@ def _wait_for_started_guard_daemon_url(
     guard_home: Path,
     *,
     timeout: float,
-    process: subprocess.Popen[bytes],
+    launch: _GuardDaemonLaunch,
     executable: Path | None,
 ) -> str | None:
+    process = launch.process
+    launch_nonce = launch.launch_nonce if launch.receipt_recorded else None
     if executable is None:
         return _wait_for_guard_daemon_url(
             guard_home,
             timeout=timeout,
             process=process,
+            expected_pid=getattr(process, "pid", None),
+            expected_launch_nonce=launch_nonce if isinstance(launch_nonce, str) else None,
         )
     return _wait_for_guard_daemon_url(
         guard_home,
@@ -2923,7 +3220,68 @@ def _wait_for_started_guard_daemon_url(
         process=process,
         require_current_runtime=False,
         expected_pid=process.pid,
+        expected_launch_nonce=launch_nonce if isinstance(launch_nonce, str) else None,
     )
+
+
+def _guard_daemon_handoff_matches_launch(
+    guard_home: Path,
+    *,
+    launch_nonce: str,
+    expected_pid: int,
+    expected_port: int | None = None,
+) -> bool:
+    """Accept a startup endpoint only when its signed state binds this launch."""
+
+    if not _launch_nonce_is_valid(launch_nonce) or expected_pid <= 0:
+        return False
+    pending = load_authenticated_guard_daemon_pending_launch(guard_home)
+    identity = _load_authenticated_daemon_identity(guard_home)
+    if pending is None or identity is None:
+        return False
+    state, _auth_token = identity
+    expected_home = str(guard_home.resolve())
+    if (
+        pending.get("guard_home") != expected_home
+        or state.get("guard_home") != expected_home
+        or pending.get("launch_nonce") != launch_nonce
+        or pending.get("launch_generation") != launch_nonce
+        or pending.get("generation") != launch_nonce
+        or state.get("launch_nonce") != launch_nonce
+        or state.get("launch_generation") != launch_nonce
+        or state.get("generation") != launch_nonce
+        or pending.get("pid") != expected_pid
+        or pending.get("port") != state.get("port")
+        or (expected_port is not None and state.get("port") != expected_port)
+        or pending.get("runtime_fingerprint") != state.get("runtime_fingerprint")
+        or pending.get("owner", pending.get("user")) != state.get("owner", state.get("user"))
+    ):
+        return False
+    if os.name == "nt" and pending.get("process_creation_time") != state.get("process_creation_time"):
+        return False
+    pending_marker = pending.get("process_start_marker")
+    pending_owner = pending.get("owner", pending.get("user"))
+    state_pid = state.get("pid")
+    state_marker = state.get("process_start_marker")
+    state_owner = state.get("owner", state.get("user"))
+    if (
+        not isinstance(pending_marker, str)
+        or not pending_marker
+        or not isinstance(pending_owner, str)
+        or not pending_owner
+        or not isinstance(state_pid, int)
+        or state_pid <= 0
+        or not isinstance(state_marker, str)
+        or not state_marker
+        or not isinstance(state_owner, str)
+        or state_owner != pending_owner
+    ):
+        return False
+    if process_start_token(expected_pid) != pending_marker or process_owner_marker(expected_pid) != pending_owner:
+        return False
+    if process_start_token(state_pid) != state_marker or process_owner_marker(state_pid) != state_owner:
+        return False
+    return state_pid == expected_pid or _guard_daemon_pid_is_spawned_launch(state_pid, expected_pid)
 
 
 def _wait_for_guard_daemon_url(
@@ -2933,6 +3291,7 @@ def _wait_for_guard_daemon_url(
     process: subprocess.Popen[bytes] | None = None,
     require_current_runtime: bool = True,
     expected_pid: int | None = None,
+    expected_launch_nonce: str | None = None,
 ) -> str | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -2956,7 +3315,15 @@ def _wait_for_guard_daemon_url(
                     reset_daemon_lifecycle_deadline(token)
         except (NativeDaemonLifecycleError, TimeoutError):
             url = None
-        if url is not None:
+        if url is not None and (
+            expected_launch_nonce is None
+            or _guard_daemon_handoff_matches_launch(
+                guard_home,
+                launch_nonce=expected_launch_nonce,
+                expected_pid=expected_pid if expected_pid is not None else -1,
+                expected_port=_guard_daemon_url_port(url),
+            )
+        ):
             return url
         if process is not None and process.poll() is not None:
             return None
@@ -2989,14 +3356,17 @@ def _guard_daemon_recovery_lock(guard_home: Path, *, timeout_seconds: float | No
                 file_locked = True
             else:
                 assert deadline is not None
-                while time.monotonic() < deadline:
+                while True:
                     if _try_lock_daemon_file(handle):
                         file_locked = True
+                        break
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0.0:
                         break
                     time.sleep(
                         min(
                             GUARD_DAEMON_POLL_INTERVAL_SECONDS,
-                            max(0.0, deadline - time.monotonic()),
+                            remaining,
                         )
                     )
                 if not file_locked:

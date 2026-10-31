@@ -21,7 +21,6 @@ from ..native_request_context import (
     RequestContextSource,
     native_request_context_build,
     native_shell_hashes,
-    native_shell_validate_segment,
 )
 from ._shell_execution_context_support import (
     SHELL_CWD_AMBIGUOUS_STACK,
@@ -39,7 +38,6 @@ from ._shell_execution_context_support import (
     SHELL_DIRECTORY_COMMAND,
     ShellPathIdentity,
     ShellPathProof,
-    last_flow_operator,
     shell_path_identity_payload,
 )
 
@@ -66,10 +64,6 @@ class ShellExecutionSegment:
     @property
     def command_text(self) -> str:
         return shlex.join(self.tokens)
-
-    @property
-    def control_operator(self) -> str | None:
-        return last_flow_operator(self.control_after)
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,30 +291,6 @@ def model_shell_execution_context(
         return _unavailable_context(command_text, SHELL_CWD_NATIVE_UNAVAILABLE)
 
 
-def validate_shell_execution_segment(
-    context: ShellExecutionContext,
-    segment: ShellExecutionSegment,
-) -> tuple[Path | None, str | None]:
-    """Revalidate a modeled cwd immediately before a filesystem-sensitive use."""
-
-    if not segment.complete or segment.effective_cwd is None or segment.cwd_identity is None:
-        return None, segment.reason_code or context.reason_code or SHELL_CWD_PATH_CHANGED
-    if context.workspace_root is None or context.workspace_identity is None:
-        return None, context.reason_code or SHELL_CWD_PATH_CHANGED
-    wire = _single_segment_wire(context, segment)
-    result = native_shell_validate_segment(wire, 0)
-    if isinstance(result, NativeRequestContextFailure):
-        return None, SHELL_CWD_NATIVE_UNAVAILABLE
-    cwd, reason = result
-    return (Path(cwd) if cwd is not None else None), reason
-
-
-def _single_segment_wire(context: ShellExecutionContext, segment: ShellExecutionSegment) -> dict[str, Any]:
-    """Segment checks and hashes depend only on the workspace and the segment."""
-
-    return _context_wire(context, (segment,))
-
-
 def _unbound_hash(label: str) -> str:
     return f"{_UNBOUND_PREFIX}{label}"
 
@@ -355,5 +325,4 @@ __all__ = [
     "ShellExecutionSegment",
     "model_shell_execution_context",
     "shell_execution_context_hash",
-    "validate_shell_execution_segment",
 ]

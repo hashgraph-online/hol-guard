@@ -14,17 +14,46 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    canonical_policy_bundle_payload,
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-)
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     POLICY_BUNDLE_KEY_PURPOSE,
     PolicyBundleVerificationKey,
     policy_bundle_keyring_payload,
-    policy_bundle_verification_key_from_public_key,
 )
+from codex_plugin_scanner.guard.stable_digest import sha256_content_digest
+from tests.policy_bundle_parser_support import (
+    canonical_policy_bundle_payload,
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+)
+
+
+def policy_bundle_key_fingerprint(public_key_pem: str) -> str:
+    normalized_pem = public_key_pem.replace("\r\n", "\n").strip()
+    return sha256_content_digest(normalized_pem.encode("utf-8"))
+
+
+def policy_bundle_verification_key_from_public_key(
+    *,
+    key_id: str,
+    public_key_pem: str,
+    state: str = "active",
+    purpose: str = POLICY_BUNDLE_KEY_PURPOSE,
+    workspace_id: str | None = None,
+    valid_from: str | None = None,
+    valid_until: str | None = None,
+) -> PolicyBundleVerificationKey:
+    normalized_pem = public_key_pem.replace("\r\n", "\n").strip()
+    return PolicyBundleVerificationKey(
+        key_id=key_id.strip(),
+        public_key_pem=normalized_pem,
+        fingerprint_sha256=policy_bundle_key_fingerprint(normalized_pem),
+        state=state,
+        purpose=purpose,
+        workspace_id=workspace_id,
+        valid_from=valid_from,
+        valid_until=valid_until,
+    )
+
 
 TEST_POLICY_BUNDLE_KEY_ID = "guard-policy-bundle-test-only-v1"
 TEST_POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"

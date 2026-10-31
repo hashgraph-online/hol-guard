@@ -274,7 +274,7 @@ pub(crate) fn is_kebab(value: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-fn is_semver(value: &str) -> bool {
+pub(crate) fn is_semver(value: &str) -> bool {
     let core = value.split(['-', '+']).next().unwrap_or("");
     let parts: Vec<&str> = core.split('.').collect();
     parts.len() == 3

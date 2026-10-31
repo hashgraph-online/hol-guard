@@ -11,8 +11,8 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
-from codex_plugin_scanner.guard.runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+from tests.browser_mcp_intent_client import normalize_browser_mcp_intent
 
 
 def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
@@ -142,11 +142,11 @@ class TestNormalizeBrowserMcpIntent:
 
     def test_returns_none_for_unrelated_mcp_tool(self) -> None:
         """HGBM014: Returns None for non-browser MCP tool."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
-            normalize_browser_mcp_intent,
-        )
         from codex_plugin_scanner.guard.runtime.mcp_protection import (
             build_mcp_server_identity,
+        )
+        from tests.browser_mcp_intent_client import (
+            normalize_browser_mcp_intent,
         )
 
         server_identity = build_mcp_server_identity(
@@ -166,7 +166,7 @@ class TestNormalizeBrowserMcpIntent:
 
     def test_returns_intent_for_browser_navigation(self) -> None:
         """HGBM014: Returns intent for browser navigation."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             normalize_browser_mcp_intent,
         )
 
@@ -183,7 +183,7 @@ class TestIsBrowserMcpServer:
     """HGBM015: is_browser_mcp_server function."""
 
     def test_chrome_devtools_is_browser(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             is_browser_mcp_server,
         )
 
@@ -191,7 +191,7 @@ class TestIsBrowserMcpServer:
         assert is_browser_mcp_server(artifact) is True
 
     def test_playwright_is_browser(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             is_browser_mcp_server,
         )
 
@@ -202,7 +202,7 @@ class TestIsBrowserMcpServer:
         assert is_browser_mcp_server(artifact) is True
 
     def test_browser_tools_is_browser(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             is_browser_mcp_server,
         )
 
@@ -210,11 +210,11 @@ class TestIsBrowserMcpServer:
         assert is_browser_mcp_server(artifact) is True
 
     def test_slack_mcp_is_not_browser(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
-            is_browser_mcp_server,
-        )
         from codex_plugin_scanner.guard.runtime.mcp_protection import (
             build_mcp_server_identity,
+        )
+        from tests.browser_mcp_intent_client import (
+            is_browser_mcp_server,
         )
 
         # Use a non-browser server identity (slack MCP package)
@@ -413,7 +413,7 @@ class TestFullIntentNormalization:
     """Integration: full normalize_browser_mcp_intent across scenarios."""
 
     def test_navigate_to_localhost(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             normalize_browser_mcp_intent,
         )
 
@@ -430,7 +430,7 @@ class TestFullIntentNormalization:
         assert "timeout" in result.volatile_fields_dropped
 
     def test_screenshot_classification(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             normalize_browser_mcp_intent,
         )
 
@@ -444,7 +444,7 @@ class TestFullIntentNormalization:
         assert "pageId" in result.volatile_fields_dropped
 
     def test_evaluate_script_is_privileged(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             normalize_browser_mcp_intent,
         )
 
@@ -458,7 +458,7 @@ class TestFullIntentNormalization:
         assert "script_eval" in result.sensitive_surface_flags
 
     def test_fill_form_is_interact(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             normalize_browser_mcp_intent,
         )
 
@@ -471,7 +471,7 @@ class TestFullIntentNormalization:
         assert result.intent == "browser.interact"
 
     def test_upload_file_is_transfer(self) -> None:
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             normalize_browser_mcp_intent,
         )
 
@@ -590,7 +590,9 @@ class TestBrowserRiskClassifierIntegration:
                 },
             },
         )
-        categories = _projected_call(native_context_digest, artifact, {"function": "() => document.title"}).risk_categories
+        categories = _projected_call(
+            native_context_digest, artifact, {"function": "() => document.title"}
+        ).risk_categories
         assert "filesystem_access" not in categories
         assert "browser_privileged" in categories
         with_file = _projected_call(

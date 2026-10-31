@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.runtime.detectors import (
     DetectorContext,
     DetectorRegistry,
     DetectorRunResult,
-    DetectorTelemetry,
 )
 from codex_plugin_scanner.guard.runtime.runner import _get_default_detector_registry
 
@@ -76,46 +75,7 @@ class TestSlowDetectorThreshold:
 
         registry = DetectorRegistry((), clock=fast_clock)
         result = registry.run(action, context)
-        assert result.slow_detectors() == ()
-
-    def test_slow_detectors_flags_entries_at_or_above_threshold(self) -> None:
-        fast_entry = DetectorTelemetry(
-            detector_id="fast.detector",
-            categories=("secret",),
-            status="ok",
-            elapsed_ms=50,
-        )
-        slow_entry = DetectorTelemetry(
-            detector_id="slow.detector",
-            categories=("network",),
-            status="ok",
-            elapsed_ms=100,
-        )
-        very_slow_entry = DetectorTelemetry(
-            detector_id="very.slow.detector",
-            categories=("prompt",),
-            status="ok",
-            elapsed_ms=250,
-        )
-        result = DetectorRunResult(
-            signals=(),
-            telemetry=(fast_entry, slow_entry, very_slow_entry),
-        )
-        slow = result.slow_detectors()
-        assert len(slow) == 2
-        assert slow[0].detector_id == "slow.detector"
-        assert slow[1].detector_id == "very.slow.detector"
-
-    def test_slow_detectors_custom_threshold(self) -> None:
-        entry = DetectorTelemetry(
-            detector_id="medium.detector",
-            categories=("secret",),
-            status="ok",
-            elapsed_ms=75,
-        )
-        result = DetectorRunResult(signals=(), telemetry=(entry,))
-        assert result.slow_detectors(threshold_ms=50) == (entry,)
-        assert result.slow_detectors(threshold_ms=100) == ()
+        assert all(entry.elapsed_ms < _SLOW_DETECTOR_THRESHOLD_MS for entry in result.telemetry)
 
 
 @pytest.mark.usefixtures("native_runtime_detectors_runtime")

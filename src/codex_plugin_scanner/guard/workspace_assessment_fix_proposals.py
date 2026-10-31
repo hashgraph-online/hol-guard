@@ -53,7 +53,15 @@ _MAX_FIELD_CHARS: Final = 128
 # (today the not-yet-existing secrets detector) is deliberately not listed: the
 # finding comes from the supply-chain detector, so another detector's gap cannot
 # hide it. Unknown or missing coverage is treated as incomplete.
-_BLOCKING_COVERAGE_REASONS: Final = frozenset({"finding_cap", "supply_chain_incomplete", "lockfile_warnings"})
+_BLOCKING_COVERAGE_REASONS: Final = frozenset(
+    {"finding_cap", "supply_chain_incomplete", "lockfile_warnings", "advisory_data_unavailable"}
+)
+# Snapshot reasons that leave nothing unread: the dependency file was read and
+# hashed but never audited (another ecosystem, or below audit discovery), so it
+# cannot hide a finding in a file the audit checked.
+_READ_SNAPSHOT_REASONS: Final = frozenset(
+    {"snapshot_unsupported_dependency_input", "snapshot_undiscovered_dependency_input"}
+)
 _COLUMNS: Final = (
     "proposal_id",
     "codebase_key",
@@ -296,7 +304,11 @@ def _supply_chain_verifiable(coverage: object) -> bool:
         return False
     if not isinstance(reasons, list) or not all(isinstance(reason, str) for reason in reasons):
         return False
-    return not any(reason in _BLOCKING_COVERAGE_REASONS or reason.startswith("snapshot_") for reason in reasons)
+    return not any(
+        reason in _BLOCKING_COVERAGE_REASONS
+        or (reason.startswith("snapshot_") and reason not in _READ_SNAPSHOT_REASONS)
+        for reason in reasons
+    )
 
 
 def _store_prepared(

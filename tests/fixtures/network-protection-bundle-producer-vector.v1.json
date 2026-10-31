@@ -1,0 +1,51 @@
+{
+  "schema": "guard.network-protection-bundle-producer-vector.v1",
+  "description": "Signed network protection bundle response whose canonical payload escapes non-ASCII text as \\uXXXX and sorts keys by code point.",
+  "verify_at_epoch_seconds": 1792890000,
+  "workspace_id": "workspace-producer-vector",
+  "response": {
+    "bundle": {
+      "contractVersion": "guard-network-protection-bundle.v1",
+      "workspaceId": "workspace-producer-vector",
+      "bundleVersion": "network-1792886400000-0123456789abcdef",
+      "generatedAt": "2026-10-25T00:00:00.000Z",
+      "expiresAt": "2026-10-25T07:00:00.000Z",
+      "keyId": "network-producer-key",
+      "workspaceRules": [
+        {
+          "action": "block",
+          "matchKind": "domain",
+          "pattern": "café.example"
+        },
+        {
+          "action": "allow",
+          "matchKind": "url_prefix",
+          "pattern": "docs.example/guía/"
+        }
+      ],
+      "threatUrls": {
+        "malware_distribution": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      },
+      "threatHosts": {
+        "phishing": [
+          "login-verify.pages.dev"
+        ]
+      }
+    },
+    "signatureAlgorithm": "rsa-pss-sha256",
+    "payloadHash": "1a8ae25fbad4265290aa16d1beab54234abd41f41671db21ed2ea2c48c5bfc71",
+    "signature": "E7YJU+kMpzydw4gqEI2Dg5Rqo76ygE7kYZZbkovgyKUhvJRm3ndH5uBW5agmpa+k/4Emn20bYst05M/M6YN6jo2Zyg2jPWlfA41vtwhginfXOwxsHsA7WpLJ2f3EuvY8l1QXtK/ojWBajEUp0v0AWy4THarOWqeElsoHhCDN7nHfif/LRSww3Q/FHVP8nhohgJ3+ZtNTSUxoI5yl93MSuhPXxXTYBD2xssDVObEaksNx9T9gleY7ZjFwcIG9iLSRVW3ryJxZHnWg0gzrOQG6joaKb/TXLaR0AvXhUfFiZt15+C9RWRLR3mqcVV+SqFrkbjoduVe0JyAboJobNlOwKw==",
+    "verificationKeys": [
+      {
+        "keyId": "network-producer-key",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtGPPAruyuDWaudvpuGyY\nac6QQcGZy4TgFy7PjvlwrXpPdWQEhWL8o3cwpsgRaBFvnk2UuGl7PMFDjeBAnaXX\nx0h8PLv0jvNEPrZ/Ht+g1lYBt5l29t7KxP0Zt+aNHscCkFfOahVXt2mRc0Vq6kpu\nbE+h659JdqTUQ0kZPcddUBI6WTGLEgFXNjKnc6Od11vNKPu4IZ0CojSSxj+68Ij9\nXy98gE1sjM0mM/V4esYKHswwl6M9yeSbcCmYnnkTOaRMialqI2mbd3gTxwiv2Eaj\ndB+YaebUanjMUag6QLfe2V5tump5v2H21OJmcNeok2zPoFzSCw+H59iRQlLoferp\noQIDAQAB\n-----END PUBLIC KEY-----\n",
+        "fingerprintSha256": "0cccc9cb0150bc6649c2fe4289ef5802fb25c99d072fb8175a7041d8c688845e",
+        "state": "active",
+        "validUntil": null
+      }
+    ]
+  }
+}

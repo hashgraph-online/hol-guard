@@ -130,6 +130,16 @@
       ],
       "runtime": "agent-skills",
       "supported": true
+    },
+    {
+      "dropped": [
+        "commands",
+        "agents",
+        "hooks",
+        "mcp_env"
+      ],
+      "runtime": "agent-plugins",
+      "supported": true
     }
   ],
   "sources": [

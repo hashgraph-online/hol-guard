@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
+from email.message import Message
 from pathlib import Path
 
 import pytest
@@ -194,6 +198,58 @@ def test_runner_reports_unavailable_when_registration_fails(monkeypatch: pytest.
     assert "release_status=unavailable" in output.read_text(encoding="utf-8")
 
 
+OFFER = "https://hol.org/guard/plugins/promote?plugin=acme%2Fweather-tools&source_surface=registry&source_section=ci_release_summary"
+
+
+@pytest.mark.parametrize(
+    ("offer_line", "offer", "expected"),
+    [
+        ("true", OFFER, OFFER),
+        ("false", OFFER, ""),
+        ("true", "https://evil.example/guard/plugins/promote?plugin=x", ""),
+        ("true", "https://hol.org/guard/plugins/promote?plugin=x)[click](https://evil", ""),
+        ("true", None, ""),
+    ],
+)
+def test_registration_keeps_only_a_hol_promote_offer_the_repository_allows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, offer_line: str, offer: object, expected: str
+) -> None:
+    output = _runner_env(monkeypatch, tmp_path, CHECK_REPORT)
+    assert plugin_release_runner.main(["evidence"]) == 0
+    monkeypatch.setenv("REGISTER_RELEASE", "true")
+    monkeypatch.setenv("OFFER_LINE", offer_line)
+    result = {"status": "recorded", "releaseUrl": "https://hol.org/registry/plugins/x/releases", "offerUrl": offer}
+    monkeypatch.setattr(plugin_release_runner, "register_plugin_release_evidence", lambda **_: result)
+
+    assert plugin_release_runner.main(["register"]) == 0
+    assert f"offer_url={expected}" in output.read_text(encoding="utf-8").splitlines()
+
+
+def test_runner_summary_writes_the_offer_line_only_for_a_hol_promote_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _runner_env(monkeypatch, tmp_path, CHECK_REPORT)
+    assert plugin_release_runner.main(["evidence"]) == 0
+    monkeypatch.setenv("RELEASE_STATUS", "recorded")
+    monkeypatch.setenv("OFFER_URL", OFFER)
+    assert plugin_release_runner.main(["summary"]) == 0
+    summary = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert f"HOL Blue adds full owner insights and the checkmark to this listing: {OFFER} " in summary
+    assert "`offer_line: false`" in summary
+
+    (tmp_path / "summary.md").unlink()
+    monkeypatch.setenv("OFFER_URL", "https://evil.example/")
+    assert plugin_release_runner.main(["summary"]) == 0
+    assert "HOL Blue" not in (tmp_path / "summary.md").read_text(encoding="utf-8")
+
+
+def test_composite_action_lets_the_repository_turn_the_offer_line_off() -> None:
+    text = (ROOT / "plugin-release" / "action.yml").read_text(encoding="utf-8")
+    assert "offer_line:" in text
+    assert "OFFER_LINE: ${{ inputs.offer_line }}" in text.split("- name: Record the release on HOL", 1)[1]
+    assert "OFFER_URL: ${{ steps.register.outputs.offer_url }}" in text.split("- name: Summarize", 1)[1]
+
+
 def test_composite_action_keeps_registration_off_and_pins_dependencies() -> None:
     text = (ROOT / "plugin-release" / "action.yml").read_text(encoding="utf-8")
 
@@ -271,3 +327,29 @@ def test_composite_action_attests_before_gating_and_tolerates_check_errors() -> 
     assert 'FAIL_ON: "none"' in scan
     assert check.index("set +e") < check.index("hol-guard plugin check")
     assert "FAIL_ON_SEVERITY: ${{ inputs.fail_on_severity }}" in text.split("- name: Summarize", 1)[1]
+
+
+def test_registration_names_itself_and_reports_the_http_status(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = _runner_env(monkeypatch, tmp_path, CHECK_REPORT)
+    assert plugin_release_runner.main(["evidence"]) == 0
+    monkeypatch.setenv("REGISTER_RELEASE", "true")
+    monkeypatch.setenv("RELEASE_ENDPOINT", "https://hol.example/api")
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://token.example/request")
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "runner-request-token")
+    seen: list[urllib.request.Request] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int) -> io.BytesIO:
+        seen.append(request)
+        if len(seen) == 1:
+            return io.BytesIO(b'{"value": "oidc-token"}')
+        raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", Message(), None)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    assert plugin_release_runner.main(["register"]) == 0
+    # hol.org's edge answers Python's default urllib User-Agent with a 403.
+    assert seen[1].get_header("User-agent") == "hol-guard-attestation-registration"
+    assert "registration unavailable: HTTPError 403" in capsys.readouterr().out
+    assert "release_status=unavailable" in output.read_text(encoding="utf-8")

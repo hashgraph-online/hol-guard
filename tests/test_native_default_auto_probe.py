@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -357,3 +358,32 @@ def test_stop_native_process_accepts_only_documented_idempotent_exit(
     )
 
     assert probe._stop_native_process(runtime, guard_home) is expected
+
+
+def test_probe_loads_from_a_script_under_scripts() -> None:
+    # The installed SLO benchmark runs as `python scripts/...` and loads this
+    # probe by path, so `scripts/` comes first on the search path and its own
+    # `ci` package shadows the top-level one.
+    root = Path(__file__).resolve().parents[1]
+    loader = (
+        "import importlib.util, sys\n"
+        "from pathlib import Path\n"
+        "root = Path(sys.argv[1])\n"
+        "sys.path.insert(0, str(root / 'scripts'))\n"
+        "sys.path.append(str(root))\n"
+        "spec = importlib.util.spec_from_file_location(\n"
+        "    'probe_under_scripts', root / 'ci/native_runtime/probe_native_default_auto.py'\n"
+        ")\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(module)\n"
+        "assert callable(module.review_post_tool_native)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", loader, str(root)],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

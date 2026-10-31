@@ -127,24 +127,31 @@ pub fn cached_supply_chain_bundle_valid_until(
     let bundle = &typed.bundle;
     let expires = bundle.expires_at_timestamp().ok()? + BUNDLE_CLOCK_SKEW_SECONDS;
     let aged = bundle.generated_at_timestamp().ok()? + BUNDLE_MAX_AGE_SECONDS;
-    let mut until = expires.min(aged);
-    let Some(signer) = typed
+    let until = expires.min(aged);
+    let key_until = cached_supply_chain_bundle_key_valid_until(typed, sync_keyring);
+    Some(key_until.map_or(until, |key_until| until.min(key_until)))
+}
+
+/// The earliest expiry among the grace keys that vouch for the bundle's
+/// signer, advertised or in the synced keyring. `None` when no grace key
+/// bounds it. Unlike the bundle's own freshness, this is never relaxed: a
+/// stale bundle signed under an expired grace key is not trusted.
+pub fn cached_supply_chain_bundle_key_valid_until(
+    typed: &SupplyChainBundleResponse,
+    sync_keyring: Option<&Value>,
+) -> Option<f64> {
+    let signer = typed
         .verification_keys
         .iter()
-        .find(|key| key.key_id == bundle.key_id)
-    else {
-        return Some(until);
-    };
+        .find(|key| key.key_id == typed.bundle.key_id)?;
     let synced = load_supply_chain_verification_keys(sync_keyring).unwrap_or_default();
     let grace = std::iter::once(signer).chain(
         synced
             .iter()
             .filter(|key| key.fingerprint_sha256 == signer.fingerprint_sha256),
     );
-    for key in grace.filter(|key| key.state == "grace") {
-        if let Ok(Some(key_until)) = key.valid_until_timestamp() {
-            until = until.min(key_until);
-        }
-    }
-    Some(until)
+    grace
+        .filter(|key| key.state == "grace")
+        .filter_map(|key| key.valid_until_timestamp().ok().flatten())
+        .reduce(f64::min)
 }

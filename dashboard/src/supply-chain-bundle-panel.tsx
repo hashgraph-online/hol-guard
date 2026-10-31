@@ -5,9 +5,9 @@ import {
   HiMiniArrowTopRightOnSquare,
 } from "react-icons/hi2";
 import { Badge } from "./approval-center-primitives";
-import type { SupplyChainBundleAdvisory } from "./guard-types";
+import type { GuardRuntimeSnapshot, SupplyChainBundleAdvisory } from "./guard-types";
 import { SupplyChainDetailSection } from "./supply-chain-detail-section";
-import { formatBundleExpiry, isBundleExpired } from "./supply-chain-intel-freshness";
+import { formatBundleExpiry, isBundleExpired, missingBundleMessage } from "./supply-chain-intel-freshness";
 import { useSupplyChainBundle } from "./use-supply-chain-bundle";
 
 function SeverityBadge({ severity }: { severity: string }) {
@@ -74,7 +74,13 @@ function IntelSection({ action, children }: { action?: ReactNode; children: Reac
   );
 }
 
-export function SupplyChainBundlePanel({ refreshKey = "" }: { refreshKey?: string }) {
+export function SupplyChainBundlePanel({
+  refreshKey = "",
+  cloudState,
+}: {
+  refreshKey?: string;
+  cloudState: GuardRuntimeSnapshot["cloud_state"];
+}) {
   const load = useSupplyChainBundle(refreshKey);
   const bundle = load.phase === "ready" ? load.bundle : null;
   const loading = load.phase === "loading";
@@ -137,8 +143,8 @@ export function SupplyChainBundlePanel({ refreshKey = "" }: { refreshKey?: strin
     return (
       <IntelSection>
         <p className="text-sm text-slate-600">
-          <span className="font-medium text-brand-dark">No intel available.</span> Guard has not synced a
-          supply chain bundle yet. Connect to Guard Cloud for live advisory data.
+          <span className="font-medium text-brand-dark">No intel available.</span>{" "}
+          {missingBundleMessage(cloudState)}
         </p>
       </IntelSection>
     );

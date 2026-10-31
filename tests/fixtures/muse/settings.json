@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "provider": "meta",
+  "model": "muse-wonder-1.0",
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "bash", "hooks": [{"type": "command", "command": "echo user-pretool", "timeout": 5}]}
+    ],
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "echo session-start", "timeout": 5}]}
+    ]
+  },
+  "mcpServers": {
+    "local-stdio": {"command": ["python3", "mcp/server.py"]},
+    "remote-http": {"url": "https://mcp.example.com/sse"}
+  }
+}

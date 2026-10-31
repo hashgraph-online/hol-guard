@@ -206,13 +206,37 @@ pub(crate) fn assess(request: &Request) -> Result<Value, String> {
     };
     let (bundled, advisory_source) =
         bundle::bundle_advisories(request.cached_bundle.as_ref(), &budget);
+    assess_with(request, &bundled, &advisory_source)
+}
+
+/// Launch admission: one probed artifact against advisories already taken
+/// from the cached bundle by [`launch_advisories`].
+pub(crate) fn assess_launch(artifact: &Value, bundled: &LaunchAdvisories) -> Result<Value, String> {
+    let artifact = ArtifactInput::deserialize(artifact)
+        .map_err(|_| "runtime_identity_request_invalid".to_owned())?;
+    let request = Request {
+        artifacts: vec![artifact],
+        locations: Vec::new(),
+        instances: Vec::new(),
+        advisories: Vec::new(),
+        scope_complete: false,
+        cached_bundle: None,
+    };
+    assess_with(&request, &bundled.advisories, &bundled.source)
+}
+
+fn assess_with(
+    request: &Request,
+    bundled: &[AdvisoryInput],
+    advisory_source: &Value,
+) -> Result<Value, String> {
     // An unanchored bundle can report a runtime affected but never clear it.
     let clear_from = if advisory_source["anchored"] == true {
         usize::MAX
     } else {
         request.advisories.len()
     };
-    let supplied: Vec<&AdvisoryInput> = request.advisories.iter().chain(&bundled).collect();
+    let supplied: Vec<&AdvisoryInput> = request.advisories.iter().chain(bundled).collect();
     validate_bounds(request, &supplied)?;
     let artifacts = artifacts_by_id(&request.artifacts)?;
     let locations = locations_by_id(&request.locations, &artifacts)?;
@@ -306,20 +330,36 @@ fn digest_ok(text: &Option<String>) -> bool {
     })
 }
 
+fn artifact_input_ok(input: &ArtifactInput) -> bool {
+    let optional_text = [&input.vendor, &input.version, &input.build_id];
+    [&input.artifact_id, &input.family, &input.os, &input.arch]
+        .into_iter()
+        .all(|value| text_ok(value))
+        && optional_text
+            .into_iter()
+            .flatten()
+            .all(|value| text_ok(value))
+        && digest_ok(&input.executable_sha256)
+        && digest_ok(&input.component_identity_sha256)
+}
+
+/// Whether `artifact` is one the assessment accepts, and claims no more than
+/// `self_reported`. A probe carries stored artifacts into its reply, so one the
+/// assessment would reject must be refused before it costs the whole reply.
+pub(crate) fn carried_artifact_ok(artifact: &Value) -> bool {
+    serde_json::from_value::<ArtifactInput>(artifact.clone()).is_ok_and(|input| {
+        artifact_input_ok(&input)
+            && matches!(
+                input.identity_assurance,
+                Assurance::Unknown | Assurance::SelfReported
+            )
+    })
+}
+
 fn artifacts_by_id(inputs: &[ArtifactInput]) -> Result<BTreeMap<&str, Artifact<'_>>, String> {
     let mut artifacts = BTreeMap::new();
     for input in inputs {
-        let optional_text = [&input.vendor, &input.version, &input.build_id];
-        let valid = [&input.artifact_id, &input.family, &input.os, &input.arch]
-            .into_iter()
-            .all(|value| text_ok(value))
-            && optional_text
-                .into_iter()
-                .flatten()
-                .all(|value| text_ok(value))
-            && digest_ok(&input.executable_sha256)
-            && digest_ok(&input.component_identity_sha256);
-        if !valid {
+        if !artifact_input_ok(input) {
             return Err("runtime_identity_artifact_invalid".to_owned());
         }
         let (assurance, downgraded) = effective_assurance(input);
@@ -454,7 +494,10 @@ use verdict::{advisory_verdict, match_artifact, parse_intervals};
 
 #[path = "runtime_identity_bundle.rs"]
 mod bundle;
-pub(crate) use bundle::FEATURE as BUNDLE_FEATURE;
+pub(crate) use bundle::{
+    launch_bundle_advisories as launch_advisories, now_seconds, CachedBundleInput,
+    LaunchAdvisories, FEATURE as BUNDLE_FEATURE,
+};
 
 #[cfg(test)]
 #[path = "runtime_identity_tests.rs"]

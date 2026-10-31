@@ -31,7 +31,7 @@ Run it locally without an account. Use the CLI and local dashboard to manage pro
 
 ## Install HOL Guard
 
-Requires Python 3.10 or newer and [pipx](https://pipx.pypa.io/stable/installation/).
+Requires Python 3.10 or newer, [pipx](https://pipx.pypa.io/stable/installation/), and a matching native runtime. Check the [platform support and Windows ARM64 setup notes](docs/guard/get-started.md#platform-support) before installing.
 
 ```bash
 pipx install hol-guard
@@ -170,11 +170,13 @@ Quality grades use the checks applicable to each package. Trust scoring has sepa
 ```bash
 hol-guard plugin check            # what marketplaces and runtime loaders would reject
 hol-guard plugin package          # writes dist/hol-plugin/<runtime>/ for each runtime
+hol-guard plugin convert --to agent-plugins   # Agent Plugins 1.0 package, checked against the spec
 hol-guard plugin links            # install commands per runtime, plus listing links
+hol-guard plugin card             # draft .well-known plugin card as JSON
 hol-guard plugin init --name my-plugin   # scaffold a new plugin in an empty folder
 ```
 
-Runtimes: `claude-code`, `codex`, `gemini-cli`, `cursor`, `vscode`, `opencode`, `mcp-registry` and `agent-skills`. See [the Plugin Kit guide](docs/guard/plugin-kit.md).
+Runtimes: `claude-code`, `codex`, `gemini-cli`, `cursor`, `vscode`, `opencode`, `mcp-registry`, `agent-skills` and `agent-plugins`. See [the Plugin Kit guide](docs/guard/plugin-kit.md).
 
 ### GitHub Actions
 
@@ -552,7 +554,7 @@ For optional Cisco coverage, use the dependency group command above. See [CONTRI
 
 ## Community
 
-Maintained by [Hashgraph Online](https://github.com/hashgraph-online).
+Maintained by [HOL](https://github.com/hashgraph-online).
 
 - [Report a bug or request a feature](https://github.com/hashgraph-online/hol-guard/issues)
 - [Browse release notes](https://hol.org/guard/releases)

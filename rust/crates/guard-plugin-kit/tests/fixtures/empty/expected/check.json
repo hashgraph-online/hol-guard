@@ -66,6 +66,11 @@
       "dropped": [],
       "runtime": "agent-skills",
       "supported": false
+    },
+    {
+      "dropped": [],
+      "runtime": "agent-plugins",
+      "supported": false
     }
   ],
   "sources": [],

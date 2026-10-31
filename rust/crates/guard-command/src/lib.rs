@@ -41,47 +41,34 @@ pub mod catalog_read_model;
 mod catalog_read_model_tests;
 mod catalog_read_projection;
 mod catalog_read_query;
+pub mod ci_workflow_risk;
 pub mod cloud_catalog;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;
 mod codex_output_args;
-mod codex_output_commands;
-mod codex_output_entry;
 mod codex_output_env;
 pub mod command_action_risk_classes;
+#[cfg(test)]
+mod command_action_risk_classes_tests;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
 pub mod command_expression_match;
-mod compound_artifact;
 mod credential_store_names;
 pub mod cursor_shell_command;
+pub mod editor_task_risk;
+pub mod instruction_file_risk;
 pub mod policy_document;
-pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
-pub use codex_output_env::{Ctx, GitCheck, GitProbe, GitRun, InspectionHost};
+pub use codex_output_env::{Ctx, GitCheck, GitProbe, InspectionHost};
+pub use codex_output_inspection::is_bounded_read_only_filter;
 pub mod codex_output_fnmatch;
 mod codex_output_fs;
-mod codex_output_git_conditions;
-mod codex_output_git_config;
-mod codex_output_git_diff;
-mod codex_output_identity;
 mod codex_output_inspection;
-mod codex_output_inspection_flow;
-mod codex_output_pathspecs;
-mod codex_output_post_tool;
-mod codex_output_post_tool_commands;
-mod codex_output_post_tool_copy;
-mod codex_output_post_tool_skips;
-mod codex_output_post_tool_sources;
 mod codex_output_py;
 mod codex_output_search;
 mod codex_output_shlex;
 mod codex_output_source_paths;
-mod codex_output_splitters;
-mod codex_output_wrappers;
-mod codex_prompt_attachment;
-pub mod codex_prompt_credential_file;
 pub mod command_compatibility;
 mod command_contained_routine_candidates;
 mod command_critical_floors;
@@ -103,6 +90,7 @@ pub mod command_native_factors;
 mod command_operand_matchers;
 pub mod command_option_parsing;
 mod command_parse_surface;
+mod command_reviewed_literal;
 mod command_segment_parsing;
 pub mod command_shadow;
 #[cfg(test)]
@@ -132,6 +120,7 @@ pub mod evidence_hash;
 mod evidence_hash_tests;
 mod executable_flag_contract;
 pub mod extension_control;
+pub mod extension_control_terminal;
 pub mod extension_evidence;
 pub mod extension_trust;
 mod github_additional_commands;
@@ -149,12 +138,14 @@ pub mod github_workflow_lineage;
 #[cfg(test)]
 mod github_workflow_lineage_tests;
 pub mod github_workflow_operations;
+pub mod harness_attribution;
 mod harness_config_names;
 pub mod harness_identity;
 mod home_path_text;
 #[cfg(test)]
 mod home_path_text_parity_tests;
 pub mod homebrew_intent;
+pub mod hook_config_risk;
 mod inline_shell_quoting;
 pub mod jsonc;
 #[cfg(unix)]
@@ -168,8 +159,10 @@ mod launch_identity_common;
 pub mod launch_identity_environment;
 #[cfg(windows)]
 mod launch_identity_windows;
+pub mod launch_screen;
 pub mod local_tool_eligibility;
 pub mod mcp_arguments;
+pub mod mcp_config_risk;
 pub mod mcp_launch_environment;
 pub mod mcp_runtime_evidence;
 pub mod mcp_skill_firewall;
@@ -184,7 +177,9 @@ pub mod native_command_extension_evidence;
 #[cfg(test)]
 mod native_command_extension_evidence_tests;
 pub mod native_command_program;
+pub mod network_protection_bundle;
 pub mod network_url;
+pub mod node_build_output;
 pub mod npm_source_spec;
 pub mod ordered_json;
 #[cfg(unix)]
@@ -211,6 +206,8 @@ pub mod protection_health;
 #[cfg(test)]
 mod protection_health_tests;
 pub mod pytest_argv;
+#[cfg(test)]
+mod pytest_argv_tests;
 mod read_only_fanout;
 pub mod reviewed_invocation_bindings;
 pub mod rich_command_model_api;
@@ -275,6 +272,8 @@ mod sfrs_gh_shell_vectors;
 mod sfrs_gh_static_body_safety;
 mod sfrs_git_audit;
 mod sfrs_git_cached_diff;
+#[cfg(test)]
+mod sfrs_git_cached_diff_tests;
 mod sfrs_git_fetch;
 mod sfrs_git_index;
 mod sfrs_git_routines;
@@ -398,7 +397,6 @@ pub mod typescript_launch_evidence;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
-mod unmodeled_shell_artifact;
 
 pub mod package_context_environment;
 
@@ -463,11 +461,22 @@ mod workspace_roots;
 pub mod aibom_reporting;
 pub mod aibom_trust_metadata;
 pub mod archive_inspection;
-pub mod command_operation_classification;
 pub mod composition_rules;
 pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
+mod contained_git;
+
+/// Whether `argv` is a protected Git read the contained planner admits, for
+/// the `contained_path` fuzz target, which no operation reaches it through.
+#[doc(hidden)]
+pub fn git_read_only_invocation(argv: &[String]) -> bool {
+    contained_git::read_only_invocation(argv).is_some()
+}
+mod contained_node_tool;
+mod contained_package_test;
+mod contained_prefix;
+mod contained_run_prefix;
 #[cfg(unix)]
 pub mod contained_runner;
 pub mod credential_patterns;
@@ -498,6 +507,9 @@ mod hook_adapter_envelope_text;
 mod hook_adapter_omp_tests;
 #[path = "adapters/hook/hook_adapter_paths.rs"]
 pub mod hook_adapter_paths;
+#[cfg(test)]
+#[path = "adapters/hook/hook_adapter_target_file_tests.rs"]
+mod hook_adapter_target_file_tests;
 use guard_hook_payload::{hook_adapter_cline_tables, hook_adapter_pyjson, hook_adapter_pytext};
 pub use guard_hook_payload::{
     hook_adapter_prepare, hook_adapter_prepare_cline, hook_adapter_value,
@@ -572,3 +584,6 @@ mod verified_read_decision_tests;
 pub mod verified_read_plan;
 #[cfg(test)]
 mod verified_read_plan_tests;
+pub mod vite_output;
+#[cfg(test)]
+mod vite_output_tests;

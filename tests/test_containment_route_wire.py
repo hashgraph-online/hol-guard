@@ -2,10 +2,12 @@
 
 The resident decides whether a native PreToolUse answer is routed into the
 contained sink, through the local CLI grant, or not at all, and whether the
-sink takes a rendered receipt on this host. These pin the transport: the
-facts it sends, the reply it accepts, and that anything else is a
-``NativeHookDecisionError`` the hook answers with the host outage response.
-The resident cases replay the retired Python tables on every host.
+sink takes a rendered receipt on this host. The hooks read the route stamped
+on the edge answer and the sink's choice inside ``containment_rewrite``; these
+ask both directly. They pin the transport the rewrite shares (the facts it
+sends, the reply it accepts, and that anything else is a
+``NativeHookDecisionError`` the hook answers with the host outage response)
+and replay the retired Python tables against the resident on every host.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import pytest
 from codex_plugin_scanner.guard import native_hook_containment_route as route_module
 from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
+from tests import containment_resident as probe
 
 OUTSIDE = "native_workspace_containment_executable_outside_roots"
 _SHELL_CALL = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "pytest -q"}}
@@ -79,9 +82,7 @@ def test_a_bound_route_is_decoded_behind_its_capability(monkeypatch: pytest.Monk
         "reason": "ignored",
         "action": {"action_type": "shell", "command": "ignored"},
     }
-    answer = route_module.native_containment_route(
-        result, event_name="PreToolUse", recording_only=False, guard_home=None
-    )
+    answer = probe.native_containment_route(result, event_name="PreToolUse", recording_only=False, guard_home=None)
     assert answer == route
     # Only the facts the route depends on are sent.
     assert asked == [
@@ -102,38 +103,15 @@ def test_a_bound_route_is_decoded_behind_its_capability(monkeypatch: pytest.Monk
     ]
 
 
-@pytest.mark.parametrize("route", ["none", "sink", "grant"])
-def test_the_route_stamped_on_the_edge_needs_no_second_round_trip(monkeypatch: pytest.MonkeyPatch, route: str) -> None:
-    asked: list[Any] = []
-    _resident_answering(monkeypatch, {"kind": "containment_route", "route": "none"}, asked)
-    edge = {"containment_route": route}
-    answer = route_module.edge_containment_route(
-        edge, {"minimum_action": "allow"}, event_name="PreToolUse", recording_only=False, guard_home=None
-    )
-    assert (answer, asked) == (route, [])
-
-
-@pytest.mark.parametrize("stamped", [None, "allow", ["sink"]])
-def test_an_edge_without_a_route_asks_the_resident(monkeypatch: pytest.MonkeyPatch, stamped: object) -> None:
-    asked: list[Any] = []
-    _resident_answering(monkeypatch, {"kind": "containment_route", "route": "sink"}, asked)
-    edge = {} if stamped is None else {"containment_route": stamped}
-    answer = route_module.edge_containment_route(
-        edge, {"minimum_action": "sandbox-required"}, event_name="PreToolUse", recording_only=False, guard_home=None
-    )
-    assert answer == "sink"
-    assert [query["kind"] for _feature, query in asked] == ["containment_route"]
-
-
 def test_a_spent_hook_deadline_is_an_outage_without_asking(monkeypatch: pytest.MonkeyPatch) -> None:
     asked: list[Any] = []
     _resident_answering(monkeypatch, {"kind": "containment_route", "route": "none"}, asked)
     with pytest.raises(NativeHookDecisionError):
-        route_module.native_containment_route(
+        probe.native_containment_route(
             {}, event_name="PreToolUse", recording_only=False, guard_home=None, deadline=time.monotonic() - 1
         )
     with pytest.raises(NativeHookDecisionError):
-        route_module.native_containment_sink(
+        probe.native_containment_sink(
             _PYTEST, harness="claude-code", bridge=False, payload=_SHELL_CALL, guard_home=None, deadline=0.0
         )
     assert asked == []
@@ -147,8 +125,8 @@ def test_the_query_waits_no_longer_than_the_hook_allows(monkeypatch: pytest.Monk
         return {"kind": "containment_route", "route": "none"}
 
     monkeypatch.setattr(route_module, "resident_decide", decide)
-    route_module.native_containment_route({}, event_name="PreToolUse", recording_only=False, guard_home=None)
-    route_module.native_containment_route(
+    probe.native_containment_route({}, event_name="PreToolUse", recording_only=False, guard_home=None)
+    probe.native_containment_route(
         {}, event_name="PreToolUse", recording_only=False, guard_home=None, deadline=time.monotonic() + 0.5
     )
     assert timeouts[0] == route_module._OPERATION.timeout_seconds
@@ -162,10 +140,10 @@ def test_the_sink_query_sends_the_receipt_call_and_host(monkeypatch: pytest.Monk
     )
     monkeypatch.setattr(route_module, "host_platform", lambda: "windows")
     payload = {"hookEventName": "PreToolUse", "toolName": "Bash", "toolInput": {"command": "pytest -q"}}
-    sink = route_module.native_containment_sink(
+    sink = probe.native_containment_sink(
         {**_PYTEST, "reason": "ignored"}, harness="codex", bridge=True, payload=payload, guard_home=None
     )
-    assert sink == route_module.ContainmentSink("pytest-readonly-v2", None)
+    assert sink == probe.ContainmentSink("pytest-readonly-v2", None)
     assert asked[0][1] == {
         "kind": "containment_sink",
         "inputs": {
@@ -188,24 +166,6 @@ def test_the_sink_query_sends_the_receipt_call_and_host(monkeypatch: pytest.Monk
 @pytest.mark.parametrize(
     "payload",
     [
-        {"kind": "containment_route"},
-        {"kind": "containment_route", "route": "allow"},
-        {"kind": "containment_route", "route": ["sink"]},
-        {"kind": "containment_route", "route": "sink", "extra": True},
-        {"kind": "containment_sink", "route": "sink"},
-    ],
-)
-def test_a_malformed_route_is_an_outage_not_a_route(monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]) -> None:
-    _resident_answering(monkeypatch, payload, [])
-    with pytest.raises(NativeHookDecisionError):
-        route_module.native_containment_route(
-            {"minimum_action": "sandbox-required"}, event_name="PreToolUse", recording_only=False, guard_home=None
-        )
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
         {"kind": "containment_sink", "profile": None, "kept_because": None},
         {"kind": "containment_sink", "profile": None, "kept_because": "because"},
         {"kind": "containment_sink", "profile": None, "kept_because": ["receipt_only"]},
@@ -219,7 +179,7 @@ def test_a_malformed_route_is_an_outage_not_a_route(monkeypatch: pytest.MonkeyPa
 def test_a_malformed_sink_answer_is_an_outage(monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]) -> None:
     _resident_answering(monkeypatch, payload, [])
     with pytest.raises(NativeHookDecisionError):
-        route_module.native_containment_sink(
+        probe.native_containment_sink(
             _PYTEST, harness="claude-code", bridge=False, payload=_SHELL_CALL, guard_home=None
         )
 
@@ -228,7 +188,7 @@ def test_a_harness_that_is_not_text_is_never_sent(monkeypatch: pytest.MonkeyPatc
     asked: list[Any] = []
     _resident_answering(monkeypatch, {"kind": "containment_sink", "profile": None, "kept_because": "x"}, asked)
     with pytest.raises(NativeHookDecisionError):
-        route_module.native_containment_sink(
+        probe.native_containment_sink(
             _PYTEST,
             harness=None,  # type: ignore[arg-type]
             bridge=False,
@@ -247,7 +207,7 @@ def test_the_host_is_named_for_the_resident(monkeypatch: pytest.MonkeyPatch, pla
 
 
 def _route(home: Path, result: dict[str, object], *, event: object = "PreToolUse", watch: bool = False) -> str:
-    return route_module.native_containment_route(result, event_name=event, recording_only=watch, guard_home=home)
+    return probe.native_containment_route(result, event_name=event, recording_only=watch, guard_home=home)
 
 
 def _sink(
@@ -259,9 +219,9 @@ def _sink(
     harness: str = "claude-code",
     bridge: bool = False,
     payload: dict[str, object] | None = None,
-) -> route_module.ContainmentSink:
+) -> probe.ContainmentSink:
     monkeypatch.setattr(route_module, "host_platform", lambda: host)
-    return route_module.native_containment_sink(
+    return probe.native_containment_sink(
         receipt, harness=harness, bridge=bridge, payload=_SHELL_CALL if payload is None else payload, guard_home=home
     )
 
@@ -289,11 +249,12 @@ def test_the_resident_route_matches_the_retired_python_edge(native_approval_reus
     assert _route(home, contained, watch=True) == "none"
     assert _route(home, contained, event="PostToolUse") == "none"
     assert _route(home, contained, event=None) == "none"
-    assert _route(home, _review()) == "grant"
-    assert _route(home, _review(action={"action_type": "shell"})) == "grant"
+    # An outside-roots review keeps its answer: an allowed CLI lifts it in the
+    # edge's custom rule, so nothing routes it.
     assert _route(home, _review(), watch=True) == "none"
-    # Only a review the saved-approval path could also override reaches the grant.
     for result in (
+        _review(),
+        _review(action={"action_type": "shell"}),
         _review(reason_code="native_policy_review"),
         _review(minimum_action="allow"),
         _review(policy_action="require-reapproval"),
@@ -372,5 +333,14 @@ def test_the_resident_sink_matches_the_retired_python_gate(
         receipt = options.pop("receipt")
         assert _sink(home, monkeypatch, "macos", receipt, **options) == (None, kept_because), change
     assert _sink(home, monkeypatch, "macos", _PYTEST, harness="codex", bridge=True).profile == "pytest-readonly-v2"
+    # Cursor's silent preToolUse probe names its shell tool Shell.
+    probe = {**_SHELL_CALL, "tool_name": "Shell"}
+    assert _sink(home, monkeypatch, "macos", _PYTEST, harness="cursor", bridge=True, payload=probe).profile == (
+        "pytest-readonly-v2"
+    )
+    assert _sink(home, monkeypatch, "windows", _PYTEST, harness="cursor", bridge=True, payload=probe) == (
+        None,
+        "platform_has_no_sink",
+    )
     camel = {"hookEventName": "pre_tool_use", "toolName": "run_command", "toolInput": {"command": "pytest"}}
     assert _sink(home, monkeypatch, "macos", _PYTEST, harness="zcode", payload=camel).profile == "pytest-readonly-v2"

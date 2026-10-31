@@ -301,7 +301,7 @@ mod windows_tests {
 #[cfg(all(test, unix))]
 mod unix_tests {
     use super::*;
-    use crate::codex_output_env::{GitCheck, GitRun, InspectionHost};
+    use crate::codex_output_env::{GitCheck, InspectionHost};
     use std::os::unix::fs::PermissionsExt;
 
     /// A host that answers the two questions this check asks of its caller:
@@ -337,9 +337,6 @@ mod unix_tests {
         }
         fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
             false
-        }
-        fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-            GitRun::Failed("body-file test host does not run git")
         }
     }
 

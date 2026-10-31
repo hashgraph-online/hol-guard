@@ -269,6 +269,15 @@ fn sensitive_paths_are_classified() {
         sensitive_path_family(Path::new(".env.local")).unwrap().1,
         "critical"
     );
+    // Shell reads already treat the dotted name as Terraform secrets; a
+    // harness file-read tool must classify it the same way.
+    for path in ["infra/terraform.tfvars", "infra/.terraform.tfvars"] {
+        assert_eq!(
+            sensitive_path_family(Path::new(path)),
+            Some(("Terraform variable secrets", "high")),
+            "{path}"
+        );
+    }
 }
 
 #[test]

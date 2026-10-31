@@ -69,6 +69,8 @@ for (const [error, code, guidance] of [
   ["observed_provider_scan_failed", "observed_provider_scan_failed", "Check for connectors again"],
   ["catalog_limit_reached", "catalog_limit_reached", "remove tools you do not use"],
   ["discovery_failed", "discovery_failed", "Check for connectors again"],
+  ["cli_help_unreadable", "cli_help_unreadable", "could not read this tool's --help output"],
+  ["cli_identity_changed", "cli_identity_changed", "found again as a different program"],
   ["configured_host_persist_failed", "configured_host_persist_failed", "could not save them"],
   ["codex_host_changed", "codex_host_changed", "restarted while Guard was reading it"],
   ["codex_host_untrusted", "codex_host_untrusted", "control socket"],

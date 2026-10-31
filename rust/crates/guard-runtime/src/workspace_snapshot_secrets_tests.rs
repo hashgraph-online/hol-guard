@@ -29,6 +29,12 @@ fn request(root: &Path) -> SnapshotRequest {
         max_visited_entries: 0,
         secrets: true,
         secret_key: Some(key("install-one")),
+        skills: false,
+        hooks: false,
+        plugins: false,
+        workflows: false,
+        editor_tasks: false,
+        instructions: false,
     }
 }
 

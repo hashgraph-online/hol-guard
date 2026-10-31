@@ -10,7 +10,15 @@
 pub(crate) struct Hint {
     pub(crate) family: Option<&'static str>,
     pub(crate) version: Option<String>,
+    /// Who built it, when the layout names an installer of that vendor's
+    /// releases. Still a path claim, so it can flag a build but never clear one.
+    pub(crate) vendor: Option<&'static str>,
 }
+
+/// Node install layouts that carry upstream release builds (nvm, fnm, Volta,
+/// asdf, Homebrew and the release tarball). A bare `/usr/bin/node` may be a
+/// distribution build with backported fixes, so it names no vendor.
+const NODE_UPSTREAM_VENDOR: &str = "nodejs.org";
 
 pub(crate) fn hint_for(resolved: &str) -> Hint {
     let normalized = resolved.replace('\\', "/");
@@ -23,6 +31,7 @@ pub(crate) fn hint_for(resolved: &str) -> Hint {
         return Hint::default();
     };
     let layout_version = layout_version(family, directories);
+    let laid_out = layout_version.is_some();
     let version = match (name_version, layout_version) {
         (Some(named), Some(laid_out)) => {
             // A name and a directory that disagree prove nothing either way.
@@ -33,9 +42,12 @@ pub(crate) fn hint_for(resolved: &str) -> Hint {
         (Some(named), None) => Some(named),
         (None, laid_out) => laid_out,
     };
+    let vendor =
+        (family == "node" && laid_out && version.is_some()).then_some(NODE_UPSTREAM_VENDOR);
     Hint {
         family: Some(family),
         version,
+        vendor,
     }
 }
 

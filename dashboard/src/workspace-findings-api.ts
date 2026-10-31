@@ -1,4 +1,5 @@
 import { fetchGuardApi } from "./guard-api";
+import type { WorkspaceFinding, WorkspaceFindingValidation } from "./workspace-finding-types";
 
 const ASSESSMENTS_PATH = "/v1/supply-chain/workspace-assessments";
 const FINDINGS_PATH = "/v1/supply-chain/workspace-findings";
@@ -22,33 +23,23 @@ export type WorkspaceRun = WorktreeKeys & {
   finishedAtMs: number | null;
 };
 
-export type WorkspaceFindingKind = "supply_chain" | "secret";
-
-export type WorkspaceFinding = {
-  findingId: string;
-  kind: WorkspaceFindingKind;
-  severity: string;
-  decision: string;
-  /** Rule or advisory codes that raised the finding. */
-  ruleIds: string[];
-  ecosystem: string;
-  /** Null for a secret finding, which names a file location instead of a package. */
-  packageName: string | null;
-  packageVersion: string | null;
-  fixVersion: string | null;
-  advisoryIds: string[];
-  /** Root-relative file path of a secret finding. Guard never receives the secret itself. */
-  path: string | null;
-  line: number | null;
-  /** Every line the same secret appears on in that file, first to last. */
-  lines: number[];
-};
+export type {
+  WorkspaceFinding,
+  WorkspaceFindingKind,
+  WorkspaceFindingValidation,
+  WorkspaceHookCheck,
+  WorkspaceMcpCheck,
+  WorkspaceRuntime,
+  WorkspaceSkillCheck,
+} from "./workspace-finding-types";
 
 export type WorkspaceAssessment = WorktreeKeys & {
   runId: string;
   partial: boolean;
   reasons: string[];
   notRun: string[];
+  /** False when the workspace has no dependency files, so there was nothing to audit. */
+  dependencyFilesFound: boolean;
   finishedAtMs: number | null;
   findings: WorkspaceFinding[];
 };
@@ -61,6 +52,8 @@ export type WorkspaceFindingsState = {
   assessments: WorkspaceAssessment[];
   /** Whether the daemon already tracks the folder asked about; null when none was asked about. */
   suggestedRootTracked: boolean | null;
+  /** Set while a busy device holds automatic checks back; checks the user starts still run. */
+  deferredReason: string | null;
 };
 
 const RUN_STATES = new Set<string>(["queued", "running", "completed", "partial", "superseded", "failed", "canceled"]);
@@ -126,6 +119,10 @@ function strings(value: unknown): string[] {
   return list(value).filter((entry): entry is string => typeof entry === "string");
 }
 
+function validationState(value: unknown): WorkspaceFindingValidation {
+  return value === "confirmed" || value === "unvalidated" ? value : "unknown";
+}
+
 function normalizeFinding(value: unknown): WorkspaceFinding | null {
   const item = record(value);
   const findingId = text(item.finding_id);
@@ -136,6 +133,8 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
     decision: text(item.decision) ?? "warn",
     ruleIds: strings(item.rule_ids),
     advisoryIds: strings(item.advisory_ids),
+    carried: text(item.carried_from_run_id) !== null,
+    validation: validationState(item.validation_state),
   };
   if (item.source_kind === "secret") {
     const path = text(item.path);
@@ -154,6 +153,189 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
         const value = count(entry);
         return value !== null && value >= 1 ? [value] : [];
       }),
+      runtime: null,
+      skill: null,
+      mcp: null,
+      hook: null,
+      workflow: null,
+      editorTask: null,
+      instruction: null,
+    };
+  }
+  if (item.source_kind === "workspace_source" && item.detector === "skill_content_v1") {
+    const path = text(item.path);
+    const title = text(item.title);
+    const reason = text(item.reason);
+    if (path === null || title === null || reason === null || common.ruleIds.length === 0) return null;
+    return {
+      ...common,
+      kind: "skill",
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: null,
+      skill: {
+        title,
+        reason,
+        confidence: text(item.confidence) ?? "likely",
+        falsePositiveHint: text(item.false_positive_hint),
+      },
+      mcp: null,
+      hook: null,
+      workflow: null,
+      editorTask: null,
+      instruction: null,
+    };
+  }
+  if (item.source_kind === "workspace_source" && item.detector === "mcp_config_v1") {
+    const path = text(item.path);
+    const server = text(item.server);
+    const title = text(item.title);
+    const reason = text(item.reason);
+    if (path === null || server === null || title === null || reason === null || common.ruleIds.length === 0) return null;
+    return {
+      ...common,
+      kind: "mcp",
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: null,
+      skill: null,
+      mcp: {
+        server,
+        title,
+        reason,
+        confidence: text(item.confidence) ?? "likely",
+        falsePositiveHint: text(item.false_positive_hint),
+      },
+      hook: null,
+      workflow: null,
+      editorTask: null,
+      instruction: null,
+    };
+  }
+  if (item.source_kind === "workspace_source" && item.detector === "hook_config_v1") {
+    const path = text(item.path);
+    const event = text(item.event);
+    const title = text(item.title);
+    const reason = text(item.reason);
+    if (path === null || event === null || title === null || reason === null || common.ruleIds.length === 0) return null;
+    return {
+      ...common,
+      kind: "hook",
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: null,
+      skill: null,
+      mcp: null,
+      hook: {
+        event,
+        title,
+        reason,
+        confidence: text(item.confidence) ?? "likely",
+        falsePositiveHint: text(item.false_positive_hint),
+      },
+      workflow: null,
+      editorTask: null,
+      instruction: null,
+    };
+  }
+  if (item.source_kind === "workspace_source" && item.detector === "plugin_manifest_v1") {
+    const path = text(item.path);
+    const title = text(item.title);
+    const reason = text(item.reason);
+    if (path === null || title === null || reason === null || common.ruleIds.length === 0) return null;
+    const check = { title, reason, confidence: text(item.confidence) ?? "likely", falsePositiveHint: text(item.false_positive_hint) };
+    const event = item.component === "hook" ? text(item.event) : null;
+    const server = item.component === "mcp_server" ? text(item.server) : null;
+    if (event === null && server === null) return null;
+    return {
+      ...common,
+      kind: "plugin",
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: null,
+      skill: null,
+      mcp: server === null ? null : { ...check, server },
+      hook: event === null ? null : { ...check, event },
+      workflow: null,
+      editorTask: null,
+      instruction: null,
+    };
+  }
+  if (
+    item.source_kind === "workspace_source" &&
+    (item.detector === "ci_workflow_v1" || item.detector === "editor_task_v1" || item.detector === "instruction_file_v1")
+  ) {
+    const path = text(item.path);
+    const title = text(item.title);
+    const reason = text(item.reason);
+    if (path === null || title === null || reason === null || common.ruleIds.length === 0) return null;
+    const check = { title, reason, confidence: text(item.confidence) ?? "likely", falsePositiveHint: text(item.false_positive_hint) };
+    const kind = item.detector === "ci_workflow_v1" ? "workflow" : item.detector === "editor_task_v1" ? "editor_task" : "instruction";
+    return {
+      ...common,
+      kind,
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: null,
+      skill: null,
+      mcp: null,
+      hook: null,
+      workflow: kind === "workflow" ? check : null,
+      editorTask: kind === "editor_task" ? check : null,
+      instruction: kind === "instruction" ? check : null,
+    };
+  }
+  if (item.source_kind === "agent_inventory" && item.detector === "runtime_identity_v1") {
+    const family = text(item.runtime_family);
+    const path = text(item.path);
+    if (family === null || path === null || common.advisoryIds.length === 0) return null;
+    return {
+      ...common,
+      kind: "runtime",
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: {
+        family,
+        version: text(item.runtime_version),
+        title: text(item.title),
+        knownExploited: item.known_exploited === true,
+      },
+      skill: null,
+      mcp: null,
+      hook: null,
+      workflow: null,
+      editorTask: null,
+      instruction: null,
     };
   }
   const packageName = text(item.package_name);
@@ -168,6 +350,13 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
     path: null,
     line: null,
     lines: [],
+    runtime: null,
+    skill: null,
+    mcp: null,
+    hook: null,
+      workflow: null,
+      editorTask: null,
+      instruction: null,
   };
 }
 
@@ -193,6 +382,7 @@ function normalizeAssessment(value: unknown): WorkspaceAssessment | null {
     partial: reasons.length > 0 || reportedPartial || notRun.length > 0,
     reasons,
     notRun,
+    dependencyFilesFound: detectors.supply_chain !== "no_inputs",
     finishedAtMs: count(item.finished_at_ms),
     findings: list(item.findings)
       .map(normalizeFinding)
@@ -213,11 +403,20 @@ export function normalizeWorkspaceFindingsState(assessmentsPayload: unknown, fin
       .map(normalizeAssessment)
       .filter((entry): entry is WorkspaceAssessment => entry !== null),
     suggestedRootTracked: typeof findings.suggested_root_tracked === "boolean" ? findings.suggested_root_tracked : null,
+    deferredReason: text(history.deferred_reason),
   };
 }
 
 async function readPayload(path: string, init?: RequestInit): Promise<{ status: number; body: unknown }> {
-  const response = await fetchGuardApi(path, init);
+  let response: Response;
+  try {
+    response = await fetchGuardApi(path, init);
+  } catch (error) {
+    // A request that never reaches the daemon fails with the browser's own
+    // wording, such as "Failed to fetch"; give the same advice as any failure.
+    if (init?.signal?.aborted) throw error;
+    throw new Error(workspaceErrorMessage(null));
+  }
   const body = (await response.json().catch(() => null)) as unknown;
   if (!response.ok && response.status !== 409) {
     throw new Error(workspaceErrorMessage(text(record(body).error)));

@@ -4,14 +4,14 @@ Four groups, each recorded from the daemon code itself:
 
 * ``source_ref_external_allowed``: the flag ``_review_native_edge_with_snapshot``
   passes the edge for a route harness spelling, captured at its edge call.
-* ``structured_mediation``: whether ``_apply_structured_mediation`` reads the
-  managed structured-output config for a harness and event, captured at that
-  read.
+* ``structured_mediation``: whether the daemon reads the managed
+  structured-output config for a harness and event, as
+  ``withholds_structured_destination`` decides.
 * ``structured_output``: for a managed policy and a ``pi`` or ``omp``
   ``PostToolUse``, the view the publisher binds (``null`` when it binds
-  none) and whether ``_apply_structured_mediation`` returned the edge
-  response unchanged after resolving that policy through the native
-  ``resolution`` query. The resident answers only such a hook.
+  none) and whether the daemon leaves the edge response unchanged, which is
+  whether the native ``resolution`` query finds that policy requires nothing.
+  The resident answers only such a hook.
 * ``lifecycle``: the constant ``availability_harness_response`` returns for an
   ``pi`` or ``omp`` event the edge does not review.
 
@@ -33,10 +33,17 @@ from types import SimpleNamespace
 
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import availability_harness_response
 from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
+from codex_plugin_scanner.guard.daemon.hook_worker_structured import (
+    read_structured_view,
+    structured_destination_required,
+    withholds_structured_destination,
+)
 from codex_plugin_scanner.guard.native_content_sensitivity import content_query
-from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_structured import structured_output_view
+from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_structured import (
+    _config_wire,  # pyright: ignore[reportPrivateUsage]
+    structured_output_view,
+)
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
-from codex_plugin_scanner.guard.runtime.structured_output_mediation import _config_wire
 from codex_plugin_scanner.guard.store import GuardStore
 
 OUT = Path(__file__).with_name("pi_vectors.json")
@@ -102,13 +109,6 @@ class _EdgeHost:
         raise _ReachedError
 
 
-class _MediationHost:
-    """Stops `_apply_structured_mediation` at its config read."""
-
-    def _structured_output_resolution(self, **_kwargs: object) -> None:
-        raise _ReachedError
-
-
 def _source_ref_external_allowed(spelling: str, guard_home: Path) -> bool:
     host = _EdgeHost()
     with suppress(_ReachedError):
@@ -130,29 +130,13 @@ def _source_ref_external_allowed(spelling: str, guard_home: Path) -> bool:
     return allowed
 
 
-def _structured_mediation(spelling: str, event: str, guard_home: Path) -> bool:
-    try:
-        HookWorkerNativeMixin._apply_structured_mediation(  # pyright: ignore[reportPrivateUsage]
-            _MediationHost(),  # type: ignore[arg-type]
-            {},
-            payload={},
-            native_harness=spelling,
-            native_event=event,
-            accepted_receipt=None,
-            guard_home=guard_home,
-            workspace=None,
-            deadline=None,
-            recording_only=False,
-        )
-    except _ReachedError:
-        return True
-    return False
+def _structured_mediation(spelling: str, event: str) -> bool:
+    return withholds_structured_destination(harness=spelling, event_name=event)
 
 
 SETTING = "data_control.structured_output"
 HASH = "a" * 64
 OTHER_HASH = "b" * 64
-EDGE_RESULT = {"harness_response": {"decision": "allow"}, "event_name": "PostToolUse"}
 
 
 def _setting(harnesses: object, **overrides: object) -> dict[str, object]:
@@ -243,22 +227,6 @@ MANAGED_POLICIES: list[tuple[str, SimpleNamespace]] = [
 ]
 
 
-class _ResolvingHost:
-    """Resolves through the daemon's own read and stops before mediating."""
-
-    def __init__(self, config: object) -> None:
-        self.config = config
-
-    def _load_config(self, _guard_home: Path, _workspace: Path | None) -> object:
-        return self.config
-
-    def _structured_output_resolution(self, **kwargs: object) -> object:
-        resolution = HookWorkerNativeMixin._structured_output_resolution(self, **kwargs)  # type: ignore[arg-type]
-        if resolution.required:
-            raise _ReachedError
-        return resolution
-
-
 def _resolves_natively(config: object, harness: str) -> None:
     # The daemon reads any query failure as required. Recording one would
     # record this machine, not the rule, so only an unencodable view may fail.
@@ -269,27 +237,12 @@ def _resolves_natively(config: object, harness: str) -> None:
     content_query("resolution", {"config": _config_wire(config), "harness": harness})
 
 
-def _edge_unchanged(config: object, harness: str, guard_home: Path) -> bool:
-    try:
-        result = HookWorkerNativeMixin._apply_structured_mediation(  # pyright: ignore[reportPrivateUsage]
-            _ResolvingHost(config),  # type: ignore[arg-type]
-            EDGE_RESULT,
-            payload={},
-            native_harness=harness,
-            native_event="PostToolUse",
-            accepted_receipt=None,
-            guard_home=guard_home,
-            workspace=None,
-            deadline=None,
-            recording_only=False,
-        )
-    except _ReachedError:
-        return False
-    assert result == EDGE_RESULT
-    return True
+def _edge_unchanged(config: object, harness: str) -> bool:
+    view = read_structured_view(lambda: config)
+    return not structured_destination_required(view, harness=harness)
 
 
-def _structured_output(guard_home: Path) -> list[dict[str, object]]:
+def _structured_output() -> list[dict[str, object]]:
     store_home = Path(os.environ["HOME"]) / ".hol-guard"
     store_home.mkdir(mode=0o700)
     provision_native_verifier_key_for_store(GuardStore(store_home))
@@ -302,7 +255,7 @@ def _structured_output(guard_home: Path) -> list[dict[str, object]]:
                     "policy": name,
                     "harness": harness,
                     "view": structured_output_view(config),
-                    "unchanged": _edge_unchanged(config, harness, guard_home),
+                    "unchanged": _edge_unchanged(config, harness),
                 }
             )
     return vectors
@@ -320,11 +273,11 @@ def main() -> None:
             for spelling in SPELLINGS
         ]
         mediation = [
-            {"harness": spelling, "event": event, "mediated": _structured_mediation(spelling, event, guard_home)}
+            {"harness": spelling, "event": event, "mediated": _structured_mediation(spelling, event)}
             for spelling in SPELLINGS
             for event in EVENTS
         ]
-        structured_output = _structured_output(guard_home)
+        structured_output = _structured_output()
     lifecycle = [
         {
             "harness": harness,

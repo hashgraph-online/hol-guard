@@ -213,7 +213,7 @@ def test_verified_outputs_are_safe_for_actions(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
     monkeypatch.setattr(verifier, "github_json", fixture.fetch)
     assert verifier.main() == 0
-    assert output_path.read_text() == f"sha={SHA}\nbranch=main\n"
+    assert output_path.read_text() == f"sha={SHA}\nbranch=main\ntag=\n"
 
 
 @pytest.mark.parametrize("branch", ["main", "release/3.0"])
@@ -318,11 +318,18 @@ def test_gate_executes_only_trusted_default_branch_verification_code() -> None:
     job = workflow["jobs"]["verify"]
     assert workflow["permissions"] == {}
     assert job["permissions"] == {"actions": "read", "contents": "read"}
-    assert job["if"] == "github.event_name == 'workflow_run'"
+    assert " ".join(job["if"].split()) == (
+        "github.event_name == 'workflow_run' || "
+        "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')"
+    )
     checkout = job["steps"][0]
     assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
     assert job["steps"][1]["run"] == "python3 -I -S scripts/ci/verify_release_workflow_run.py"
-    assert job["outputs"] == {"sha": "${{ steps.source.outputs.sha }}", "branch": "${{ steps.source.outputs.branch }}"}
+    assert job["outputs"] == {
+        "sha": "${{ steps.source.outputs.sha }}",
+        "branch": "${{ steps.source.outputs.branch }}",
+        "tag": "${{ steps.source.outputs.tag }}",
+    }
 
 
 def test_pull_request_validation_is_separate_from_privileged_triggers() -> None:

@@ -43,18 +43,14 @@ fn execution_environment_binds_identity_without_rejecting_unrelated_hooks() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     });
     assert!(validate_envelope_shape(&request).is_ok());
     assert_ne!(original_request, request_identity(&request).unwrap().1);
     assert_ne!(original_intent, execution_intent_digest(&request).unwrap());
     let intent = execution_intent_digest(&request).unwrap();
-    request
-        .source
-        .execution_environment
-        .as_mut()
-        .unwrap()
-        .environment_digest = "b".repeat(64);
+    let environment = request.source.execution_environment.as_mut().unwrap();
+    environment.environment_digest = "b".repeat(64);
     assert_ne!(intent, execution_intent_digest(&request).unwrap());
     request.source.execution_environment.as_mut().unwrap().path = "x".repeat(MAX_PATH_BYTES + 1);
     assert!(validate_envelope_shape(&request).is_ok());
@@ -66,7 +62,6 @@ fn execution_environment_binds_identity_without_rejecting_unrelated_hooks() {
         .has_valid_shape());
     // Core source paths still enforce the transport contract's strict bound.
     request.source.home_dir = "x".repeat(MAX_PATH_BYTES + 1);
-
     assert_eq!(
         validate_envelope_shape(&request).unwrap_err(),
         "native_hook_source_metadata_invalid"
@@ -86,7 +81,7 @@ fn write_fixture_file(path: &std::path::Path, bytes: &[u8]) {
     std::fs::write(path, bytes).unwrap();
 }
 
-fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
+pub(crate) fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
     let digest = "a".repeat(64);
     let guard_home = std::env::temp_dir().join(format!(
         "hol-guard-native-edge-generation-test-{}-{}",
@@ -132,10 +127,15 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
             execution_environment: None,
         },
         recording_only: false,
+        local_cli_rules: None,
+        observe_local_cli: false,
+        record_receipt: false,
+        structured_output_config: None,
+        containment_sink: None,
     }
 }
 
-fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
+pub(crate) fn evaluate_isolated(envelope: GuardHookEnvelopeV2) -> Result<Vec<u8>, String> {
     let guard_home = std::path::PathBuf::from(&envelope.source.guard_home);
     let result = validate_envelope_shape(&envelope)
         .and_then(|_| evaluate_validated_envelope(envelope, None, None));
@@ -251,6 +251,28 @@ fn prompt_injection_alias_is_reviewed_without_returning_prompt_content() {
     assert_eq!(result.receipt.event_name, "UserPromptSubmit");
     assert_eq!(result.receipt.decision, "deny");
     assert!(!String::from_utf8_lossy(&bytes).contains("Ignore all previous instructions"));
+}
+
+#[test]
+fn reads_hermes_tool_call_hook_names_as_tool_events() {
+    let bytes = evaluate_isolated(envelope(
+        "PreToolUse",
+        serde_json::json!({
+            "hook_event_name": "pre_tool_call",
+            "tool_name": "terminal",
+            "tool_input": {"command": "pwd"}
+        }),
+    ))
+    .unwrap();
+    let result: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(result.event_name, "PreToolUse");
+
+    let error = evaluate_isolated(envelope(
+        "PreToolUse",
+        serde_json::json!({"hook_event_name": "post_tool_call"}),
+    ))
+    .unwrap_err();
+    assert_eq!(error, "native_hook_event_mismatch");
 }
 
 #[test]
@@ -466,5 +488,11 @@ mod request_identity_tests;
 #[path = "edge_review_anchor_tests.rs"]
 mod review_anchor_tests;
 
+#[path = "edge_prompt_notice_tests.rs"]
+mod prompt_notice_tests;
+
 #[path = "edge_watch_tests.rs"]
 mod watch_tests;
+
+#[path = "edge_result_check_tests.rs"]
+mod result_check_tests;

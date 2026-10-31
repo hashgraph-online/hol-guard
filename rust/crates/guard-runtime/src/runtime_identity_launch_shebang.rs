@@ -96,6 +96,6 @@ pub(crate) fn env_command<'a>(tokens: &[&'a str]) -> Option<&'a str> {
     (program.chars().count() <= SHEBANG_NAME_LIMIT && !quoted).then_some(program)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "runtime_identity_launch_shebang_tests.rs"]
 mod tests;

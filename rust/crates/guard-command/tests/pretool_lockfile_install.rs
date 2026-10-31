@@ -135,7 +135,7 @@ impl Lab {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: true,
-            library_search_paths: Default::default(),
+            ..Default::default()
         };
         evaluate_pre_tool_envelope_with_execution_context(
             "codex",

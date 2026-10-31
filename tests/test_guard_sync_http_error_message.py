@@ -1,17 +1,24 @@
+import contextlib
+import errno
 import io
 import json
+import socket
+import ssl
+import struct
 import threading
 import time
 import urllib.error
 import urllib.request
 
 import pytest
+import urllib3
 
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncNotAvailableError,
     _check_plan_restriction_403,
     _cloud_edge_block_from_http_error,
     _fetch_supply_chain_bundle_payload,
+    _refresh_guard_oauth_access_token_once,
     _sync_http_error_message,
     _urlopen_json_with_timeout_retry,
     _urlopen_with_timeout_retry,
@@ -232,6 +239,195 @@ def test_fetch_supply_chain_bundle_payload_raises_retryable_unavailable_on_guard
         _fetch_supply_chain_bundle_payload(request)
     assert exc_info.value.retryable is True
     assert "Guard Cloud is unavailable" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        ConnectionRefusedError(61, "Connection refused"),
+        ConnectionResetError(54, "Connection reset by peer"),
+        socket.gaierror(8, "nodename nor servname provided, or not known"),
+        OSError(errno.EHOSTUNREACH, "No route to host"),
+        OSError(errno.ENETUNREACH, "Network is unreachable"),
+        TimeoutError("timed out"),
+    ],
+)
+def test_fetch_supply_chain_bundle_payload_reports_unreachable_guard_cloud_as_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+    reason: OSError,
+) -> None:
+    def _raise_unreachable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise urllib.error.URLError(reason)
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
+        _raise_unreachable,
+    )
+    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
+    with pytest.raises(GuardSyncNotAvailableError) as exc_info:
+        _fetch_supply_chain_bundle_payload(request)
+    assert exc_info.value.retryable is True
+    assert str(exc_info.value) == "Guard Cloud could not be reached. Local Guard keeps protecting this machine."
+    assert "Errno" not in str(exc_info.value)
+
+
+def _serve_proxy_once(reply: bytes | None, *, close: bool, reset: bool = False) -> tuple[str, threading.Thread]:
+    """Listen once as a proxy: send `reply` (or nothing), then close, reset or hang until the client gives up."""
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+
+    def _serve() -> None:
+        with listener:
+            connection, _address = listener.accept()
+            with connection:
+                connection.recv(4096)
+                if reply is not None:
+                    connection.sendall(reply)
+                if reset:
+                    if reply is not None:
+                        connection.recv(4096)
+                    connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                    return
+                if not close:
+                    connection.settimeout(5)
+                    with contextlib.suppress(OSError):
+                        connection.recv(4096)
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    return f"http://127.0.0.1:{listener.getsockname()[1]}", thread
+
+
+def _closed_proxy_url() -> str:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return f"http://127.0.0.1:{probe.getsockname()[1]}"
+
+
+def _managed_proxy_failure(proxy_url: str, target_url: str = "http://guard-cloud.test/api") -> urllib.error.URLError:
+    """Make a real urllib3 proxied request fail and wrap it as the managed proxy transport does."""
+    manager = urllib3.ProxyManager(proxy_url, retries=urllib3.Retry(total=0, redirect=False))
+    try:
+        manager.request("GET", target_url, timeout=urllib3.Timeout(connect=2, read=0.5))
+    except urllib3.exceptions.HTTPError as exc:
+        try:
+            raise urllib.error.URLError("managed_proxy_request_failed") from exc
+        except urllib.error.URLError as wrapped:
+            return wrapped
+    finally:
+        manager.clear()
+    raise AssertionError("the proxied request unexpectedly succeeded")
+
+
+def _proxy_failure(kind: str) -> urllib.error.URLError:
+    if kind == "refused":
+        return _managed_proxy_failure(_closed_proxy_url())
+    tunnel = b"HTTP/1.1 200 Connection established\r\n\r\n"
+    replies = {
+        "closed": (None, True),
+        "reset": (None, True),
+        # The proxy opens the tunnel, then the connection resets during the TLS handshake. urllib3
+        # reports a ProtocolError and keeps the socket error only as the implicit exception context.
+        "tunnel-reset": (tunnel, True),
+        "read-timeout": (None, False),
+        "garbage": (b"not http\r\n\r\n", True),
+    }
+    reply, close = replies[kind]
+    proxy_url, thread = _serve_proxy_once(reply, close=close, reset=kind in {"reset", "tunnel-reset"})
+    target_url = "https://guard-cloud.test/api" if kind == "tunnel-reset" else "http://guard-cloud.test/api"
+    try:
+        return _managed_proxy_failure(proxy_url, target_url)
+    finally:
+        thread.join(timeout=10)
+
+
+def _refresh_with_urlopen_failure(monkeypatch: pytest.MonkeyPatch, reason: BaseException) -> None:
+    def _raise(*_args: object, **_kwargs: object) -> object:
+        raise reason if isinstance(reason, urllib.error.URLError) else urllib.error.URLError(reason)
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner._guard_runtime_was_upgraded", lambda: False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner._sign_guard_dpop_proof", lambda **_kwargs: "proof")
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.runner.managed_urlopen", _raise)
+    _refresh_guard_oauth_access_token_once(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="client",
+        refresh_token="refresh",
+        dpop_key_material=object(),  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        ConnectionRefusedError(61, "Connection refused"),
+        ConnectionResetError(54, "Connection reset by peer"),
+        socket.gaierror(8, "nodename nor servname provided, or not known"),
+        TimeoutError("timed out"),
+    ],
+)
+def test_oauth_refresh_reports_unreachable_guard_cloud_as_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+    reason: OSError,
+) -> None:
+    with pytest.raises(GuardSyncNotAvailableError) as exc_info:
+        _refresh_with_urlopen_failure(monkeypatch, reason)
+    assert exc_info.value.retryable is True
+    assert str(exc_info.value) == "Guard Cloud could not be reached. Local Guard keeps protecting this machine."
+    assert "Errno" not in str(exc_info.value)
+
+
+def test_oauth_refresh_keeps_tls_failures_non_retryable(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(RuntimeError) as exc_info:
+        _refresh_with_urlopen_failure(monkeypatch, ssl.SSLCertVerificationError(1, "certificate verify failed"))
+    assert not isinstance(exc_info.value, GuardSyncNotAvailableError)
+    assert "certificate verify failed" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("kind", ["refused", "closed", "reset", "tunnel-reset", "read-timeout"])
+def test_unreachable_guard_cloud_behind_a_managed_proxy_is_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    failure = _proxy_failure(kind)
+    with pytest.raises(GuardSyncNotAvailableError) as refresh_info:
+        _refresh_with_urlopen_failure(monkeypatch, failure)
+    assert refresh_info.value.retryable is True
+
+    def _raise_proxy_failure(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise failure
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
+        _raise_proxy_failure,
+    )
+    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
+    with pytest.raises(GuardSyncNotAvailableError) as fetch_info:
+        _fetch_supply_chain_bundle_payload(request)
+    assert fetch_info.value.retryable is True
+
+
+def test_managed_proxy_failure_without_a_network_cause_stays_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(RuntimeError) as exc_info:
+        _refresh_with_urlopen_failure(monkeypatch, _proxy_failure("garbage"))
+    assert not isinstance(exc_info.value, GuardSyncNotAvailableError)
+
+
+def test_fetch_supply_chain_bundle_payload_keeps_tls_failures_non_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_tls_failure(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate verify failed"))
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
+        _raise_tls_failure,
+    )
+    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
+    with pytest.raises(RuntimeError) as exc_info:
+        _fetch_supply_chain_bundle_payload(request)
+    assert not isinstance(exc_info.value, GuardSyncNotAvailableError)
+    assert "certificate verify failed" in str(exc_info.value)
 
 
 def _cloudflare_error(body: str, headers: dict[str, str], *, code: int = 403) -> urllib.error.HTTPError:

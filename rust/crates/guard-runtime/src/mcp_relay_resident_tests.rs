@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use guard_contracts::McpToolArgumentsV1;
 use serde_json::json;
 
-use super::request::{arguments, delegated_tool, launcher_home, launcher_path};
+use super::request::{arguments, launcher_home, launcher_path, provider_catalog_tool};
 use super::*;
 use crate::mcp_relay_decide::McpRelayDecideRequestV1;
 
@@ -177,15 +177,14 @@ fn launcher_home_drops_trailing_separators() {
 }
 
 #[test]
-fn only_composio_tools_are_not_sent() {
+fn only_composio_tools_leave_the_provider_catalog_to_the_resident() {
     for name in ["composio_x", "a__COMPOSIO_SEARCH_TOOLS"] {
-        assert!(delegated_tool(name), "{name}");
+        assert!(provider_catalog_tool(name), "{name}");
     }
-    // Shell tools reach the resident, whose package check defers an intent.
     for name in ["read", "bash", " Shell ", "RUN_COMMAND", "my_composio_x"] {
-        assert!(!delegated_tool(name), "{name}");
+        assert!(!provider_catalog_tool(name), "{name}");
     }
-    assert!(!delegated_tool("composio__read"));
+    assert!(!provider_catalog_tool("composio__read"));
 }
 
 #[test]
@@ -247,12 +246,26 @@ fn request_matches_the_decide_wire_shape() {
         json!(expected.fingerprint)
     );
     assert_eq!(request["params"], json!(call));
+    assert!(request.get("resident_provider_catalog").is_none());
     let decoded: McpRelayDecideRequestV1 = serde_json::from_value(request).unwrap();
     assert_eq!(decoded.build.tool_name, "read");
     assert_eq!(decoded.hash_workspace, facts.hash_workspace);
     assert_eq!(decoded.path.as_deref(), Some("/usr/bin:/bin"));
+    assert!(!decoded.resident_provider_catalog);
     let shell = params(json!({"name": "bash", "arguments": {"command": "ls"}}));
     assert!(decide_request(&facts, &shell, None, &catalog, &no_prompt()).is_some());
+}
+
+#[test]
+fn a_composio_call_is_sent_with_its_provider_catalog_left_to_the_resident() {
+    let facts = facts();
+    let catalog = RelayCatalog::default();
+    let call = params(json!({"name": "composio_search_tools", "arguments": {}}));
+    let (request, _) = decide_request(&facts, &call, None, &catalog, &no_prompt()).unwrap();
+    assert_eq!(request["resident_provider_catalog"], json!(true));
+    assert_eq!(request["build"]["provider_catalog_hash"], Value::Null);
+    let decoded: McpRelayDecideRequestV1 = serde_json::from_value(request).unwrap();
+    assert!(decoded.resident_provider_catalog);
 }
 
 #[test]
@@ -264,7 +277,6 @@ fn calls_the_relay_cannot_send_are_not_requested() {
         json!({"name": "", "arguments": {}}),
         json!({"name": 7}),
         json!({"name": "caf\u{e9}"}),
-        json!({"name": "composio_x", "arguments": {}}),
     ] {
         assert!(
             decide_request(&facts, &params(call.clone()), None, &catalog, &no_prompt()).is_none(),

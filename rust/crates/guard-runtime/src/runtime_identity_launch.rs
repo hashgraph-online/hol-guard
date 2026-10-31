@@ -198,7 +198,7 @@ fn normalize(path: &Path) -> PathBuf {
         .collect()
 }
 
-fn path_separator() -> char {
+pub(crate) fn path_separator() -> char {
     if cfg!(windows) {
         ';'
     } else {

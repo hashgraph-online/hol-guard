@@ -4,6 +4,7 @@
 mod active_pack_security;
 #[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
+mod adapter_state_integrity_op;
 #[cfg(all(test, unix))]
 #[path = "adapters/adapter_vectors_tests.rs"]
 mod adapter_vectors_tests;
@@ -77,6 +78,7 @@ mod bounded_hook_bridge_grok;
 mod bounded_hook_bridge_grok_render;
 mod bounded_hook_bridge_grok_script;
 mod bounded_hook_bridge_hermes;
+mod bounded_hook_bridge_remediation;
 mod bounded_hook_bridge_render;
 mod browser_open;
 #[cfg(test)]
@@ -124,6 +126,7 @@ mod cli_copilot_resolution;
 mod cli_runtime_support_op;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
+mod cloud_exception_lift;
 mod cloud_receipt_payload;
 #[cfg(test)]
 mod cloud_receipt_vectors_tests;
@@ -141,28 +144,30 @@ mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
 mod codex_hook_bridge_direct_resident;
 mod codex_hook_bridge_transport;
+mod codex_hook_file_identity_op;
 mod codex_hook_identity;
+mod codex_hook_manifest_iso_time;
+mod codex_hook_manifest_verify_op;
 mod codex_hook_response;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
 mod codex_identity;
-#[cfg(all(test, unix))]
-mod codex_post_tool_output_vectors_tests;
+mod codex_live_operation;
+mod codex_live_wait_build;
 mod codex_proxy;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
 mod codex_sources;
 mod codex_thread_continue_op;
-mod codex_tool_output_git;
-mod codex_tool_output_op;
-#[cfg(all(test, unix))]
-mod codex_tool_output_vectors_tests;
 mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;
+mod command_capability_issue_op;
+mod command_capability_op;
 mod command_effect;
+mod command_envelope_op;
 mod command_expression_validate_op;
 mod command_policy_decide_op;
 mod command_policy_repair;
@@ -188,14 +193,19 @@ mod consumer_capabilities;
 mod consumer_capability_delta;
 mod consumer_evidence;
 mod consumer_incident;
+mod consumer_low_trust_floor;
+mod consumer_outcome;
 mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+mod contained_test_request;
 #[cfg(unix)]
 mod contained_workspace_grant_plan;
 #[cfg(unix)]
 mod contained_workspace_sink;
+mod contained_wrapper_plan_op;
+mod content_decode;
 mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;
@@ -264,6 +274,9 @@ mod directory_trust;
 mod discovery_placement_op;
 mod edge;
 mod edge_git_push;
+mod edge_receipt;
+mod edge_review_evidence;
+mod edge_structured;
 mod encrypted_secret_store;
 mod extension_allow_hint_op;
 mod extension_control_authority_op;
@@ -272,7 +285,11 @@ mod extension_control_op;
 mod extension_control_prepared_op;
 mod extension_control_preview_op;
 mod extension_control_proof;
+mod extension_control_terminal_op;
 mod extension_coverage_hint;
+/// Parser entry points for `rust/fuzz`; see `fuzz_entry.rs`.
+#[cfg(any(test, feature = "fuzzing"))]
+pub mod fuzz_entry;
 #[path = "adapters/detection/gemini_detect.rs"]
 mod gemini_detect;
 mod git_execution_safety_binary;
@@ -294,6 +311,7 @@ mod guard_config_harness;
 mod guard_config_iso;
 mod guard_config_load;
 mod guard_config_managed;
+mod guard_config_resolve;
 mod guard_config_update;
 mod guard_config_update_coerce;
 mod guard_config_update_harness;
@@ -319,8 +337,10 @@ mod guard_store_approval_row;
 mod guard_store_approval_sweep;
 mod guard_store_approval_write;
 mod guard_store_args;
+mod guard_store_claimed_native_allow;
 mod guard_store_claude_review;
 mod guard_store_clients;
+mod guard_store_cloud_events;
 mod guard_store_cmd_activity;
 mod guard_store_cmd_api;
 mod guard_store_cmd_feedback;
@@ -333,6 +353,8 @@ mod guard_store_cmd_rollups;
 #[cfg(test)]
 mod guard_store_cmd_vectors_tests;
 mod guard_store_cmd_wire;
+mod guard_store_codex_live_authority;
+mod guard_store_codex_live_completion;
 mod guard_store_composio_catalog;
 #[cfg(test)]
 mod guard_store_composio_catalog_tests;
@@ -342,6 +364,10 @@ mod guard_store_connect_effective;
 mod guard_store_connect_vectors_tests;
 mod guard_store_connector_context;
 mod guard_store_db;
+mod guard_store_devices;
+mod guard_store_evidence;
+mod guard_store_exact_cloud_apply;
+mod guard_store_exact_cloud_peek;
 mod guard_store_guard_event;
 #[cfg(test)]
 mod guard_store_guard_event_tests;
@@ -353,19 +379,39 @@ mod guard_store_inventory_vectors_tests;
 mod guard_store_json;
 mod guard_store_lineage;
 mod guard_store_local_cli;
+mod guard_store_local_cli_catalog;
 #[cfg(test)]
 mod guard_store_local_cli_grant_vectors_tests;
 mod guard_store_local_cli_grants;
+mod guard_store_local_cli_inventory;
+mod guard_store_local_cli_inventory_capabilities;
+mod guard_store_local_cli_inventory_item;
+mod guard_store_local_cli_inventory_rows;
+#[cfg(test)]
+mod guard_store_local_cli_inventory_rows_tests;
+#[cfg(test)]
+mod guard_store_local_cli_inventory_tests;
+#[cfg(test)]
+mod guard_store_local_cli_inventory_vectors_tests;
+#[cfg(test)]
+mod guard_store_local_cli_mcp_skills_tests;
+mod guard_store_local_cli_mcp_snapshot;
 #[cfg(test)]
 mod guard_store_local_cli_vectors_tests;
 mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
+mod guard_store_local_once_mint;
+mod guard_store_mcp_provider_reads;
+#[cfg(test)]
+mod guard_store_mcp_reads_tests;
+mod guard_store_mcp_workflow_reads;
 mod guard_store_native_receipts;
 #[cfg(test)]
 mod guard_store_native_receipts_tests;
 mod guard_store_native_review_consume;
 #[cfg(test)]
 mod guard_store_native_review_consume_tests;
+mod guard_store_native_review_queue;
 mod guard_store_observed_mcp;
 mod guard_store_op;
 mod guard_store_outbox_append;
@@ -383,6 +429,9 @@ mod guard_store_policy_source_context;
 mod guard_store_policy_source_context_vectors_tests;
 mod guard_store_policy_source_labels;
 mod guard_store_policy_source_rows;
+mod guard_store_policy_upsert;
+mod guard_store_queue_live_wait;
+mod guard_store_read_state;
 mod guard_store_receipt_analytics;
 mod guard_store_receipt_approval;
 mod guard_store_receipt_decision;
@@ -403,6 +452,7 @@ mod guard_store_state_ops_vectors_tests;
 mod guard_store_storage_maintenance;
 #[cfg(test)]
 mod guard_store_storage_maintenance_vectors_tests;
+mod guard_store_temporary_mcp;
 mod guard_store_tool_call_evidence;
 #[cfg(test)]
 mod guard_store_tool_call_evidence_tests;
@@ -439,6 +489,7 @@ mod hermes_yaml_resolve;
 #[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;
+mod hook_artifact_compose_codex_live_allow;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_package_firewall;
 mod hook_artifact_compose_package_firewall_entitlement;
@@ -450,7 +501,12 @@ mod hook_artifact_facts_op;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
 mod hook_bridge_fallback;
+#[cfg(unix)]
+mod hook_bridge_successor;
 mod hook_cli_claude_text;
+mod hook_cli_emit;
+mod hook_cli_emit_redaction;
+mod hook_cli_emit_redaction_text;
 #[cfg(test)]
 mod hook_decision_apply_patch_gate_tests;
 mod hook_decision_artifact_directive;
@@ -461,6 +517,7 @@ mod hook_decision_artifact_review_route;
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_claude_permission_verdict;
 mod hook_decision_compose;
+mod hook_decision_containment_rewrite;
 mod hook_decision_containment_route;
 mod hook_decision_directive;
 mod hook_decision_finalize;
@@ -471,6 +528,7 @@ mod hook_decision_native_facts_tests;
 mod hook_decision_native_permission_persist;
 mod hook_decision_op;
 mod hook_decision_pretool_floor;
+mod hook_decision_review_response;
 mod hook_decision_settle;
 mod hook_direct;
 mod hook_direct_counters;
@@ -478,6 +536,8 @@ mod hook_direct_evidence;
 mod hook_env_stamp;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
+#[path = "adapters/detection/muse_detect.rs"]
+mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
@@ -516,12 +576,14 @@ mod local_cli_help;
 mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
+mod local_cli_observer;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
 mod local_store_read;
 mod local_tool_eligibility_op;
+mod local_tool_grant_op;
 mod managed_controls_policy_fields;
 mod managed_policy;
 mod managed_policy_file_trust;
@@ -547,6 +609,7 @@ mod mcp_proxy_decision_tests;
 mod mcp_proxy_decision_vectors_tests;
 mod mcp_proxy_inline_approval;
 mod mcp_proxy_package;
+mod mcp_proxy_package_answer;
 mod mcp_proxy_postclaim;
 mod mcp_proxy_projection;
 #[cfg(test)]
@@ -568,6 +631,7 @@ mod mcp_relay_order;
 mod mcp_relay_package_eval;
 mod mcp_relay_pending;
 mod mcp_relay_ready;
+mod mcp_relay_receipt;
 mod mcp_relay_resident;
 mod mcp_relay_servers;
 mod mcp_runtime_evidence_op;
@@ -603,6 +667,7 @@ mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
 mod network_protection;
+mod network_protection_verify_op;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oci_bundle_evidence;
@@ -626,6 +691,7 @@ mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
 mod package_authority_op;
+mod package_config_mirror;
 mod package_context_build_op;
 mod package_evaluation_compose_op;
 mod package_evaluation_view_op;
@@ -634,6 +700,8 @@ mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_finalize_op;
 mod package_protect_projection_op;
+mod package_review_plan_op;
+mod package_workspace_scope_op;
 mod persistence_action_class;
 #[path = "adapters/detection/pi_detect.rs"]
 mod pi_detect;
@@ -648,6 +716,8 @@ use guard_policy_bundle::{
     python as policy_bundle_py, time as policy_bundle_time,
 };
 mod policy_bundle_op;
+mod policy_bundle_payload_hash;
+mod policy_bundle_store_identities;
 #[cfg(test)]
 mod policy_bundle_transport_tests;
 mod policy_decision_lookup_op;
@@ -666,10 +736,13 @@ mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
 mod policy_store;
+mod policy_verifier_key_provision;
 mod pre_tool_extension_evidence_op;
 mod project_identity;
+mod project_identity_op;
 mod prompt_analyze_op;
 mod protect_request_op;
+mod protection_health_report_op;
 use guard_runtime_pyjson as pyjson;
 #[cfg(test)]
 mod registry_vectors_tests;
@@ -679,6 +752,9 @@ mod request_context_shell;
 mod resident_client;
 mod resident_diagnostics;
 mod resident_endpoint;
+mod resident_health_counters;
+mod resident_health_op;
+mod resident_inspection_host;
 mod resident_inspection_services;
 mod resident_op_features;
 mod resident_ops;
@@ -698,6 +774,7 @@ mod restricted_pytest_op;
 mod retry_lineage_capture_op;
 mod reviewed_invocation_bindings_op;
 mod rich_command_model_op;
+mod risk_action;
 mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
@@ -709,12 +786,15 @@ mod runtime_artifact_identity_op;
 mod runtime_cli;
 mod runtime_detector_run_op;
 mod runtime_identity;
+mod runtime_identity_instances;
 mod runtime_identity_launch;
 mod runtime_identity_launch_shebang;
 mod runtime_identity_probe;
 mod runtime_identity_probe_format;
 mod runtime_identity_probe_layout;
 mod runtime_identity_range;
+mod runtime_known_vulnerable;
+mod runtime_known_vulnerable_source;
 mod secrets_cli;
 mod sensitive_request_op;
 #[cfg(all(test, unix))]
@@ -744,6 +824,7 @@ mod state_directory_lock;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;
+mod supply_chain_bundle_verify_op;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;
 mod supply_chain_egress;
@@ -753,12 +834,16 @@ mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
 mod tool_action_identity_op;
 mod totp;
+mod trust_attestation_verify_op;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
-mod verified_npm_op;
 mod verified_read_decision_op;
-mod verified_read_plan_op;
+#[cfg(unix)]
+mod verified_read_execute;
+mod verified_read_execute_op;
+#[cfg(unix)]
+mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
 #[cfg(windows)]
@@ -769,8 +854,11 @@ mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;
 mod workspace_fix_manifest;
+mod workspace_inventory_dependencies;
 mod workspace_inventory_files;
 mod workspace_inventory_op;
+mod workspace_mcp_config;
+mod workspace_package_findings;
 mod workspace_scan_targets;
 mod workspace_snapshot;
 mod workspace_snapshot_file;

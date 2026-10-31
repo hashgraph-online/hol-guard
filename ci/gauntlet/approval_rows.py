@@ -38,7 +38,7 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
     paths are already in the redacted tool evidence, so they are not copied again. The queue group
     is kept only as an opaque ``connector:<hash>:<digest>`` id; any other stored value is replaced.
     """
-    from codex_plugin_scanner.guard.approval_scope_support import request_scope_observation
+    from codex_plugin_scanner.guard.approval_scope_support import _native_scopes
 
     rows = []
     observations = _observations(store)
@@ -46,7 +46,7 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
         if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
             continue
         # The native contract also binds a token carried in the artifact hash, not only the envelope's.
-        contract, token = request_scope_observation(row)
+        ((contract, token),) = _native_scopes([row])
         scopes = [str(scope) for scope in contract.allow_scopes]
         envelope = _mapping(row.get("action_envelope_json"))
         decision = _mapping(row.get("decision_v2_json"))
@@ -150,7 +150,7 @@ def connector_class(row: dict[str, Any], envelope: dict[str, Any], observations:
 
 def covered_connector_classes(scenarios: Any) -> set[str]:
     """Classes these cases exercise, read from the cases themselves."""
-    from .connector_fixtures import ECHO_MCP, LANECTL, REMOTE_MCP
+    from .connector_fixtures import APPROVE_SCRIPT, ECHO_MCP, LANECTL, REMOTE_MCP
 
     covered: set[str] = set()
     for scenario in scenarios:
@@ -159,7 +159,7 @@ def covered_connector_classes(scenarios: Any) -> set[str]:
             covered.update({"mcp-tool:stdio", "surface:mcp"})
         if REMOTE_MCP in servers:
             covered.update({"mcp-tool:remote", "surface:mcp"})
-        if any(LANECTL in command for command in scenario.commands):
+        if any(LANECTL in command or APPROVE_SCRIPT in command for command in scenario.commands):
             covered.add("surface:cli")
     return covered
 

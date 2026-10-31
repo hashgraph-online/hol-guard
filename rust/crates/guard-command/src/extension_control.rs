@@ -3,9 +3,9 @@
 //! The owner of composition (`compose_control_layers`) and resolution
 //! (`resolve_extension_controls`); the Python resolver is retired and asks
 //! this module through the resident `extension_control` operation. The control
-//! types and `ResolverFailureCode` mirror `extension_control_contract.py`, and
-//! the legacy aggregate-DNS expansion mirrors `command_dns_control_migration.py`,
-//! which remain Python value types and a store import respectively.
+//! types and `ResolverFailureCode` mirror `extension_control_contract.py`,
+//! which remain Python value types. The legacy aggregate-DNS expansion lives
+//! only here.
 //!
 //! Catalog access is abstracted behind [`ControlRegistry`]; the resident
 //! implements it over the native command program/catalog so this module stays
@@ -325,7 +325,7 @@ pub struct RegistryPermission {
 }
 
 // ---------------------------------------------------------------------------
-// DNS migration (command_dns_control_migration.py)
+// Legacy aggregate-DNS migration
 // ---------------------------------------------------------------------------
 
 const LEGACY_DNS_EXTENSION_ID: &str = "command.dns";
@@ -338,7 +338,7 @@ const DNS_ZONE_PERMISSION_IDS: &[&str] = &[
     "command.dns.azure.permission.public-zone-deletion",
 ];
 
-/// `expand_legacy_dns_target` (:35-46).
+/// Expand a retired aggregate DNS target onto its provider-specific targets.
 fn expand_legacy_dns_target(target: &ControlTarget) -> Vec<ControlTarget> {
     match target.kind {
         ControlTargetKind::Extension if target.target_id == LEGACY_DNS_EXTENSION_ID => {
@@ -357,7 +357,7 @@ fn expand_legacy_dns_target(target: &ControlTarget) -> Vec<ControlTarget> {
     }
 }
 
-/// `expand_legacy_dns_layers` (:49-79).
+/// Rewrite persisted aggregate DNS controls onto provider-specific targets.
 ///
 /// Expansion-induced collisions merge with disable dominance; duplicate
 /// original targets stay duplicated (as `extras`) so composition fails closed.

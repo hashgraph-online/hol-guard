@@ -1,8 +1,10 @@
 """Steps of the HOL Plugin Release composite action.
 
-``evidence`` builds the release evidence from the scanner outputs and the
-Plugin Kit check report, ``register`` sends it to HOL when enabled, and
-``summary`` writes the job summary and applies the check gate. Each step reads
+``evidence`` builds the release evidence and its CycloneDX SBOM from the
+scanner outputs, the Plugin Kit check report and the plugin's lockfiles,
+``register`` sends it to HOL when enabled, and ``summary`` writes the job
+summary, annotates what changed since the previous release and applies the
+check gate. Each step reads
 its inputs from the environment the action sets.
 """
 
@@ -13,6 +15,7 @@ import os
 import re
 import sys
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from .plugin_release_evidence import (
@@ -21,6 +24,7 @@ from .plugin_release_evidence import (
     plugin_release_evidence_sha256,
 )
 from .plugin_release_registration import DEFAULT_ENDPOINT, register_plugin_release_evidence
+from .plugin_release_sbom import build_plugin_release_sbom
 
 
 def _env(name: str, default: str = "") -> str:
@@ -59,11 +63,32 @@ def evidence_step() -> int:
         check_report=check_report,
         visibility="private" if _env("VISIBILITY") == "private" else "public",
     )
+    sbom_path = _env("SBOM_PATH")
+    sbom = (
+        build_plugin_release_sbom(
+            plugin_dir=Path(_env("PLUGIN_DIR") or "."),
+            servers=evidence.mcp_servers,
+            repository=evidence.repository,
+            commit_sha=evidence.commit_sha,
+            plugin_name=evidence.plugin_name,
+            plugin_version=evidence.plugin_version,
+            guard_version=evidence.guard_version,
+        )
+        if sbom_path
+        else None
+    )
+    if sbom is None:
+        sbom_path = ""
+    else:
+        Path(sbom_path).write_text(sbom.document, encoding="utf-8")
+        evidence = replace(evidence, sbom=sbom.summary)
     path = Path(_env("EVIDENCE_PATH"))
     path.write_text(plugin_release_evidence_json(evidence), encoding="utf-8")
     _write_outputs(
         {
             "evidence_path": str(path),
+            "sbom_path": sbom_path,
+            "sbom_components": str(evidence.sbom.components) if evidence.sbom else "0",
             "evidence_sha256": plugin_release_evidence_sha256(evidence),
             "check_passed": "true" if evidence.check_passed else "false",
             "supported_runtimes": str(sum(1 for runtime in evidence.runtimes if runtime.supported)),
@@ -74,7 +99,7 @@ def evidence_step() -> int:
 
 def register_step() -> int:
     if _env("REGISTER_RELEASE") != "true":
-        _write_outputs({"release_status": "disabled", "release_url": ""})
+        _write_outputs({"release_status": "disabled", "release_url": "", "offer_url": "", "changes": ""})
         return 0
     try:
         result = register_plugin_release_evidence(
@@ -86,17 +111,61 @@ def register_step() -> int:
             oidc_request_token=os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN", ""),
         )
     except Exception as error:  # Registration is best effort; the attested evidence still stands.
-        print(f"HOL Plugin Release registration unavailable: {type(error).__name__}")
+        status_code = getattr(error, "code", None)
+        detail = f" {status_code}" if isinstance(status_code, int) else ""
+        print(f"HOL Plugin Release registration unavailable: {type(error).__name__}{detail}")
         result = {"status": "unavailable"}
     status = result.get("status")
+    changes = release_changes(result.get("changes"))
     url = result.get("releaseUrl")
+    offer = result.get("offerUrl")
+    allowed = _env("OFFER_LINE", "true") != "false"
+    offer_url = offer if allowed and isinstance(offer, str) and _is_offer_url(offer) else ""
     _write_outputs(
         {
             "release_status": status if isinstance(status, str) else "unavailable",
             "release_url": url if isinstance(url, str) and url.startswith("https://") else "",
+            "offer_url": offer_url,
+            "changes": json.dumps(changes, sort_keys=True, separators=(",", ":")) if changes else "",
         }
     )
     return 0
+
+
+_FLAG_KINDS = frozenset({"server", "egress", "env", "package", "hooks", "severity", "check"})
+_MAX_FLAGS = 20
+
+
+def release_changes(value: object) -> dict[str, object] | None:
+    """What HOL found new since the previous checked release, kept to known flag kinds and short text."""
+
+    if not isinstance(value, Mapping):
+        return None
+    previous = value.get("previousVersion")
+    flags = value.get("flags")
+    if not isinstance(previous, str) or not previous or not isinstance(flags, list):
+        return None
+    kept: list[dict[str, str]] = []
+    for flag in flags:
+        if len(kept) == _MAX_FLAGS:
+            break
+        if not isinstance(flag, Mapping):
+            continue
+        kind, text = flag.get("kind"), flag.get("text")
+        if isinstance(kind, str) and kind in _FLAG_KINDS and isinstance(text, str):
+            plain = "".join(character for character in text if character.isprintable())[:300]
+            if plain:
+                kept.append({"kind": kind, "text": plain})
+    return {"previousVersion": previous[:100], "flags": kept}
+
+
+_OFFER_URL = re.compile(r"https://hol\.org/guard/plugins/promote\?[A-Za-z0-9._~%=&-]{1,300}")
+
+
+def _is_offer_url(value: object) -> bool:
+    """HOL may only point the line at its own promote page; the text is ours."""
+
+    return isinstance(value, str) and _OFFER_URL.fullmatch(value) is not None
 
 
 _SEVERITY_ORDER = ("none", "info", "low", "medium", "high", "critical")
@@ -109,7 +178,35 @@ def _plain(value: object, *, limit: int = 100) -> str:
     return re.sub(r"([\\`*_{}\[\]()<>#+!|~&-])", r"\\\1", text)
 
 
-def _summary_lines(evidence: Mapping[str, object], *, attestation_url: str, status: str, url: str) -> list[str]:
+def _annotation(text: str) -> str:
+    """A GitHub workflow command message cannot start a new command or line."""
+
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _changes_lines(changes: Mapping[str, object] | None) -> list[str]:
+    if changes is None:
+        return []
+    previous = _plain(changes.get("previousVersion"))
+    flags = changes.get("flags")
+    texts = [str(flag.get("text")) for flag in (flags if isinstance(flags, list) else []) if isinstance(flag, Mapping)]
+    if not texts:
+        return [f"- Changes since {previous}: nothing new to review"]
+    return [
+        f"- Changes since {previous}, review before upgrading:",
+        *(f"  - {_plain(text, limit=300)}" for text in texts),
+    ]
+
+
+def _summary_lines(
+    evidence: Mapping[str, object],
+    *,
+    attestation_url: str,
+    status: str,
+    url: str,
+    offer_url: str = "",
+    changes: Mapping[str, object] | None = None,
+) -> list[str]:
     runtimes = evidence.get("runtimes")
     supported = [
         str(item.get("runtime"))
@@ -131,6 +228,15 @@ def _summary_lines(evidence: Mapping[str, object], *, attestation_url: str, stat
         f"- Packaged for {len(supported)} runtimes: {', '.join(supported) or 'none'}",
         f"- MCP servers: {server_count}; hooks: {'yes' if evidence.get('hooks') else 'no'}",
     ]
+    sbom = evidence.get("sbom")
+    if isinstance(sbom, Mapping):
+        lines.append(
+            f"- SBOM: CycloneDX {_plain(sbom.get('spec_version'))}, {_plain(sbom.get('components'))} components, "
+            f"SHA-256 {_plain(sbom.get('sha256'))}"
+        )
+    else:
+        lines.append("- SBOM: none, no package-lock.json, uv.lock, pinned requirements or launched packages found")
+    lines.extend(_changes_lines(changes))
     if attestation_url:
         lines.append(f"- Provenance attestation: {attestation_url}")
     if status == "disabled":
@@ -139,6 +245,11 @@ def _summary_lines(evidence: Mapping[str, object], *, attestation_url: str, stat
         lines.append(f"- HOL listing: {status}, {url}")
     else:
         lines.append(f"- HOL listing: {status}")
+    if _is_offer_url(offer_url):
+        lines.append(
+            f"- HOL Blue adds full owner insights and the checkmark to this listing: {offer_url} "
+            "(at most once in 28 days; set `offer_line: false` to hide it)"
+        )
     lines.extend(["", f"_{evidence.get('claim')}_", ""])
     return lines
 
@@ -147,12 +258,21 @@ def summary_step() -> int:
     evidence = json.loads(Path(_env("EVIDENCE_PATH")).read_text(encoding="utf-8"))
     if not isinstance(evidence, Mapping):
         raise ValueError("release evidence must be a JSON object")
+    try:
+        changes = release_changes(json.loads(_env("CHANGES"))) if _env("CHANGES") else None
+    except ValueError:
+        changes = None
     lines = _summary_lines(
         evidence,
         attestation_url=_env("ATTESTATION_URL"),
         status=_env("RELEASE_STATUS") or "unavailable",
         url=_env("RELEASE_URL"),
+        offer_url=_env("OFFER_URL"),
+        changes=changes,
     )
+    flags = changes.get("flags") if changes else None
+    for flag in flags if isinstance(flags, list) else []:
+        print(f"::warning title=HOL Plugin Release::{_annotation(str(flag.get('text')))}")
     summary_path = _env("GITHUB_STEP_SUMMARY")
     if summary_path:
         with Path(summary_path).open("a", encoding="utf-8") as handle:

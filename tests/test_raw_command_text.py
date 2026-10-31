@@ -16,10 +16,6 @@ from codex_plugin_scanner.guard.models import (
     HarnessDetection,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
-    get_approval_request,
-    list_approval_requests,
-)
 
 
 def _make_detection(artifact: GuardArtifact, tmp_path: Path) -> HarnessDetection:
@@ -178,12 +174,11 @@ class TestRawCommandTextPropagation:
             raw_command_text="rm -rf /var/tmp/*",
         )
         store.add_approval_request(req, "2026-06-27T00:00:00+00:00")
-        with store._connect() as conn:
-            rows = list_approval_requests(conn, limit=10)
-            assert len(rows) == 1
-            assert rows[0]["raw_command_text"] == "rm -rf /var/tmp/*"
-            single = get_approval_request(conn, "store-test-1")
-            assert single["raw_command_text"] == "rm -rf /var/tmp/*"
+        rows = store.list_approval_requests(limit=10)
+        assert len(rows) == 1
+        assert rows[0]["raw_command_text"] == "rm -rf /var/tmp/*"
+        single = store.get_approval_request("store-test-1")
+        assert single["raw_command_text"] == "rm -rf /var/tmp/*"
 
     def test_surface_runtime_passes_redaction_level(self, tmp_path):
         """GuardSurfaceRuntime.queue_blocked_operation passes redaction_level

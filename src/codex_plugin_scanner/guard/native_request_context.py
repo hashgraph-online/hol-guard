@@ -191,34 +191,6 @@ def _process_cwd() -> Path | None:
         return None
 
 
-def native_shell_validate_segment(
-    context: Mapping[str, Any],
-    segment_index: int,
-    *,
-    guard_home: Path | None = None,
-    budget_ms: int = _DEFAULT_BUDGET_MS,
-) -> tuple[str | None, str | None] | NativeRequestContextFailure:
-    """Re-read the filesystem for one modeled segment: ``(cwd, reason_code)``."""
-
-    payload = _call(
-        {"kind": "validate_segment", "body": {"context": dict(context), "segment_index": segment_index}},
-        source="hook",
-        guard_home=guard_home,
-        budget_ms=budget_ms,
-    )
-    if isinstance(payload, NativeRequestContextFailure):
-        return payload
-    cwd, reason = payload.get("effective_cwd"), payload.get("reason_code")
-    if (
-        set(payload) != {"effective_cwd", "reason_code", "context_hash", "segment_hash"}
-        or not (cwd is None or isinstance(cwd, str))
-        or not (reason is None or isinstance(reason, str))
-        or (cwd is None) == (reason is None)
-    ):
-        return NativeRequestContextFailure("native_request_context_payload_invalid")
-    return cwd, reason
-
-
 def native_shell_hashes(
     context: Mapping[str, Any],
     segment_index: int | None = None,
@@ -308,5 +280,4 @@ __all__ = [
     "RequestContextSource",
     "native_request_context_build",
     "native_shell_hashes",
-    "native_shell_validate_segment",
 ]

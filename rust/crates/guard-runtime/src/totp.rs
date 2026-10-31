@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! `totp.py` — local TOTP helpers for the HOL Guard approval gate.
+//! Ported from the retired `totp.py`: local TOTP helpers for the HOL Guard approval gate.
 //!
 //! RFC 6238 TOTP over RFC 4648 base32 (uppercase, padded), SHA-1 HMAC, dynamic
 //! truncation, 6 digits, 30s period, skew ±1 counter. `TotpSecretStore` is a

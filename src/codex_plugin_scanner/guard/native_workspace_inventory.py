@@ -9,7 +9,10 @@ validates the reply. A missing, mismatched or malformed answer raises
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -54,6 +57,35 @@ _DIFF_KEYS = frozenset({"changed_package_count", "changed_paths"})
 
 class NativeWorkspaceInventoryError(RuntimeError):
     """No authoritative native workspace inventory was available."""
+
+
+class AuditDeadlineError(NativeWorkspaceInventoryError):
+    """The audit's stage deadline passed before its next resident request."""
+
+
+_AUDIT_DEADLINE: ContextVar[float | None] = ContextVar("guard_audit_deadline", default=None)
+
+
+@contextmanager
+def audit_deadline(seconds: float) -> Iterator[None]:
+    """Refuse the audit's next resident request once ``seconds`` have passed.
+
+    Each request is bounded on its own, but a large workspace can need many
+    of them. A background assessment uses this to end its audit stage inside
+    its lease rather than relying on the lease to expire.
+    """
+
+    token = _AUDIT_DEADLINE.set(time.monotonic() + seconds)
+    try:
+        yield
+    finally:
+        _AUDIT_DEADLINE.reset(token)
+
+
+def check_audit_deadline() -> None:
+    deadline = _AUDIT_DEADLINE.get()
+    if deadline is not None and time.monotonic() >= deadline:
+        raise AuditDeadlineError("Workspace audit passed its stage deadline")
 
 
 @dataclass(frozen=True)
@@ -164,6 +196,7 @@ def native_workspace_inventory(
     offset = 0
     digest: str | None = None
     for _ in range(_MAX_PAGES):
+        check_audit_deadline()
         page_request = {**request, "inventory_offset": offset}
         if digest is not None:
             page_request["inventory_digest"] = digest

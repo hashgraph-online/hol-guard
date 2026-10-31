@@ -26,7 +26,7 @@ from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_test
 )
 from tests.benign_fp_gate_connectors import connector_setup_failure
 from tests.benign_fp_gate_git import signed_checkout_include
-from tests.native_gate_retry import BUDGET_MISS_REASONS
+from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
@@ -34,7 +34,15 @@ GATE_DOCUMENT = json.loads((FIXTURES / "benign_false_positive_gate.json").read_t
 
 # Tool names each harness really sends, by the case's abstract tool family. Pi names its built-ins
 # like omp, but ships only bash, read, edit, write, grep, find and ls.
-SHELL = {"codex": "Bash", "zcode": "Bash", "claude-code": "Bash", "omp": "bash", "pi": "bash", "cursor": "Shell"}
+SHELL = {
+    "codex": "Bash",
+    "zcode": "Bash",
+    "claude-code": "Bash",
+    "omp": "bash",
+    "pi": "bash",
+    "cursor": "Shell",
+    "muse": "bash",
+}
 READ = {"zcode": "Read", "claude-code": "Read", "omp": "read", "pi": "read", "cursor": "Read"}
 GLOB = {"claude-code": "Glob", "omp": "glob"}
 GREP = {"claude-code": "Grep", "omp": "grep", "pi": "grep"}
@@ -51,6 +59,11 @@ FIXED = {
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
+# The harnesses this lane records a payload shape for, and whose attack coverage it carries (see
+# `test_every_harness_and_attack_class_is_covered`). A benign gate case naming any other harness is
+# left to the gate itself, which drives the native runtime directly rather than through a recorded
+# hook payload; replaying it here would claim a coverage this lane does not have.
+REPLAYED = frozenset({"codex", "zcode", "claude-code", "omp", "pi", "cursor", "muse"})
 FAMILIES = {"shell": SHELL, "read": READ, "glob": GLOB, "grep": GREP, "write": WRITE}
 ENVIRONMENTS = ("clean", "realistic")
 # Profile and reason pairs the shipped OMP extension runs in Guard's sandbox instead of showing the
@@ -113,9 +126,16 @@ def expand() -> list[ReplayCase]:
         # a case that depends on an inherited variable.
         if entry.get("environment"):
             continue
+        # The workspace sandbox exists on macOS and on Linux only where the
+        # host offers it. A case it is the only allow route for would measure
+        # the host rather than Guard where there is none.
+        if entry.get("requires_sandbox") and sys.platform != "darwin":
+            continue
         # Pi's read tool takes files; an entry that reads a folder says so and is not mirrored.
         mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
-        harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
+        harnesses = [h for h in entry["harnesses"] if h in REPLAYED] + (["pi"] if mirror_pi else [])
+        if not harnesses:
+            continue
         # A setup case keeps its expectation: a generic review there is a regression, not a block.
         expect = {"allow": "quiet", "setup": "setup", "allow_or_review": "quiet_or_always"}.get(
             entry["expect"], "block"
@@ -159,16 +179,52 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
 
     Cursor reports shell calls as beforeShellExecution and reads as beforeReadFile.
     The script forwards both as PreToolUse, keeping the raw command or path beside tool_input.
+    A beforeReadFile event also carries the file's full text as ``content``.
     """
     tool_input = payload["tool_input"]
     assert isinstance(tool_input, dict)
     if tool == "read":
-        return {"file_path": tool_input["file_path"]}
+        file_path = str(tool_input["file_path"])
+        fields: dict[str, object] = {"file_path": file_path}
+        target = Path(str(payload["cwd"]), file_path)
+        if target.is_file():
+            fields["content"] = target.read_text(encoding="utf-8", errors="replace")
+        return fields
     return {
         "command": tool_input["command"],
         "tool_input": {**tool_input, "working_directory": payload["cwd"]},
         "cursor_source_hook_event": "beforeShellExecution",
     }
+
+
+def cursor_route_probe(
+    case_id: str, payload: dict[str, object], fixture: Any, worker: Any, workspace: Path
+) -> dict[str, object]:
+    """Send Cursor's silent preToolUse probe and return the call its shell hook then reviews.
+
+    Cursor asks its preToolUse hook for Shell first, and that hook may rewrite
+    the call into the workspace sandbox. beforeShellExecution follows with the
+    rewritten command, so a gate counts approvals across both hooks.
+    """
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    probe = {**payload, "tool_input": {**tool_input, "cwd": payload["cwd"]}, "cursor_route_probe": True}
+    answer = review_with_unavailable_retry(
+        case_id,
+        lambda: worker.review_http_payload(
+            payload=probe,
+            params={},
+            default_harness="cursor",
+            home_dir=fixture.home,
+            guard_home=fixture.guard_home,
+            workspace=workspace,
+        ),
+    )
+    output = answer.get("hookSpecificOutput")
+    updated = output.get("updatedInput") if isinstance(output, dict) else None
+    if not isinstance(updated, dict) or not isinstance(updated.get("command"), str):
+        return payload
+    return {**payload, "tool_input": {**tool_input, "command": updated["command"]}}
 
 
 def environment_overlay(kind: str, home: Path) -> dict[str, str]:

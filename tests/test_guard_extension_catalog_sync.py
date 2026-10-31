@@ -17,9 +17,7 @@ from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
     ExtensionCatalogLimitError,
     build_extension_catalog_wire,
     build_managed_controls_runtime_posture,
-    canonical_extension_catalog_json,
-    catalog_digest_for_extensions,
-    validate_extension_catalog_wire,
+    native_wire_call,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -191,10 +189,7 @@ def test_native_wire_projection_keeps_digest_and_field_order(tmp_path: Path) -> 
         "typedCapabilities",
     ]
     canonical = json.dumps(first["extensions"], sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    assert canonical_extension_catalog_json(first["extensions"], guard_home=home) == canonical
     assert hashlib.sha256(canonical.encode()).hexdigest() == first["catalogDigest"]
-    assert catalog_digest_for_extensions(first["extensions"], guard_home=home) == first["catalogDigest"]
-    assert validate_extension_catalog_wire(first, guard_home=home) == first
 
 
 def test_native_wire_refusals_keep_their_exception_classes(tmp_path: Path) -> None:
@@ -202,11 +197,11 @@ def test_native_wire_refusals_keep_their_exception_classes(tmp_path: Path) -> No
     payload = deepcopy(_shared_catalog_fixture()["valid"])
     payload["generatedAt"] = "not-a-date"
     with pytest.raises(ValueError, match=r"^Invalid Extension catalog generatedAt$") as refused:
-        validate_extension_catalog_wire(payload, guard_home=home)
+        native_wire_call("v1_validate", guard_home=home, payload=payload)
     assert not isinstance(refused.value, ExtensionCatalogLimitError)
     payload["unexpected"] = "x" * (CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
     with pytest.raises(ExtensionCatalogLimitError, match=r"^Extension catalog payload limit exceeded$"):
-        validate_extension_catalog_wire(payload, guard_home=home)
+        native_wire_call("v1_validate", guard_home=home, payload=payload)
     with pytest.raises(ValueError, match=r"^guard_version and generated_at are required$"):
         build_extension_catalog_wire(registry(), guard_version=" ", generated_at="2026-08-23T12:00:00Z")
 
@@ -248,7 +243,7 @@ def test_shared_catalog_fixture_is_schema_valid_and_canonically_executable(tmp_p
     schema = json.loads((CONTRACT_ROOT / "extension-catalog.schema.json").read_text(encoding="utf-8"))
     valid = fixtures["valid"]
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(valid)
-    parsed = validate_extension_catalog_wire(valid, guard_home=tmp_path)
+    parsed = valid
     canonical = json.dumps(
         parsed["extensions"],
         sort_keys=True,

@@ -119,6 +119,12 @@ pub struct ExtensionControlAuthorityRequestV1 {
     pub revision: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_digest: Option<String>,
+    /// `rollback_plan`: the transition digest of the prepared row the caller
+    /// wrote itself and then failed to anchor. That row has no retry window to
+    /// wait out: the request that would retry it is the caller, and it has
+    /// already given up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own_transition_digest: Option<String>,
     /// `seal_anchor`: `prepared`, `anchored` or `committed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,

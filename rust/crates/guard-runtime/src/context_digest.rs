@@ -497,6 +497,10 @@ fn evaluate_request(
                 reply_kind, material, request,
             ));
         }
+        ContextDigestKindV1::NativeDecisionReceiptValidation { receipt, edge } => {
+            result.native_decision_receipt_valid =
+                Some(crate::edge::standalone_receipt(receipt, edge));
+        }
         ContextDigestKindV1::McpLaunchEnvironment {
             inherited,
             configured,
@@ -828,6 +832,10 @@ fn evaluate_request(
         ContextDigestKindV1::GenericHookApprovalContext { inputs } => {
             result.token = Some(crate::hook_approval_context::generic_hook_token(inputs)?);
         }
+        ContextDigestKindV1::PackageRunnerTarget { tokens } => {
+            result.package_runner_target =
+                crate::native_exact_action_op::runner_bin::package_runner_target(tokens);
+        }
     }
     Ok(())
 }
@@ -892,6 +900,7 @@ fn evaluate_context_digest_request_inner(
         browser_mcp: None,
         mcp_redacted_value: None,
         native_bash_reply_valid: None,
+        native_decision_receipt_valid: None,
         runtime_identity: None,
         runtime_identity_match: None,
         runtime_identity_reusable: None,
@@ -907,6 +916,7 @@ fn evaluate_context_digest_request_inner(
         claude_guard_question: None,
         memory_pattern: None,
         guard_run_launch: None,
+        package_runner_target: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

@@ -13,26 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
-from codex_plugin_scanner.guard.approval_hook_copy import (
-    join_native_hook_reason,
-    live_hook_approval_context,
-    with_approval_review_url,
-)
 from codex_plugin_scanner.guard.blocked_request_mode import (
     SAFE_ALTERNATIVE_GUIDANCE,
     connector_setup_reason,
-    is_unlinked_connector_setup_reason,
 )
-from codex_plugin_scanner.guard.cli.commands_support_prompts import _copilot_hook_reason
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _native_hook_reason_for_harness
 
 _TESTDATA = Path(__file__).resolve().parents[1] / "rust" / "crates" / "guard-runtime" / "testdata"
-_URL = "https://guard.example.test/approvals/0123456789abcdef"
-_LINK = f"Open HOL Guard to approve or keep this blocked: {_URL}."
 _DEFAULT = connector_setup_reason("echo-mcp", "mcp", ask=False)
-_ASK = connector_setup_reason("echo-mcp", "mcp", ask=True)
-_LOCAL = connector_setup_reason("lanectl", "cli", ask=False)
 
 
 def _vectors(name: str) -> list[dict[str, object]]:
@@ -51,7 +38,6 @@ def test_reason_matches_the_rust_vectors(case: dict[str, object]) -> None:
         approvable=bool(case["approvable"]),
     )
     assert text == case["text"]
-    assert is_unlinked_connector_setup_reason(text) is case["unlinked"]
 
 
 def test_default_mode_names_only_computed_redirects() -> None:
@@ -69,73 +55,8 @@ def test_a_local_tool_is_an_ordinary_review_offering_the_users_choice(surface: s
     assert "hol-guard approvals" in text
     assert SAFE_ALTERNATIVE_GUIDANCE not in text
     assert "seek permission" not in text
-    assert not is_unlinked_connector_setup_reason(text)
 
 
 def test_a_local_tool_no_approval_can_release_stays_a_plain_block() -> None:
     text = connector_setup_reason("lanectl", "cli", ask=False, approvable=False)
     assert text.endswith(SAFE_ALTERNATIVE_GUIDANCE)
-    assert is_unlinked_connector_setup_reason(text)
-
-
-def test_a_local_tool_gets_the_shared_hook_link_in_the_default_mode() -> None:
-    assert with_approval_review_url(_LOCAL, {"approval_url": _URL}) == f"{_LOCAL} {_LINK}"
-    assert join_native_hook_reason(_LOCAL, _LINK) == f"{_LOCAL} {_LINK}"
-
-
-@pytest.mark.parametrize("case", _vectors("bounded_hook_bridge/connector_setup_vectors.json"))
-def test_bounded_bridge_harnesses_render_the_shared_vectors(case: dict[str, object]) -> None:
-    response = json.loads(str(case["response"]))
-    stdout, stderr, exit_code = _daemon_response_to_native(
-        response, harness=str(case["harness"]), event_name="PreToolUse"
-    )
-    assert (stdout, stderr, exit_code) == (case["stdout"], case["stderr"], case["exit_code"])
-    assert (str(response["approval_url"]) in stdout) is case["ask"]
-
-
-def test_default_mode_gets_no_link_from_the_shared_hook_copy() -> None:
-    assert with_approval_review_url(_DEFAULT, {"approval_url": _URL}) == _DEFAULT
-    assert join_native_hook_reason(_DEFAULT, _LINK) == _DEFAULT
-    payload = {"reason": _DEFAULT, "approval_url": _URL}
-    assert live_hook_approval_context(payload, harness="claude-code", guard_home=Path("/nonexistent")) is None
-
-
-def test_ask_mode_keeps_the_link_in_the_shared_hook_copy() -> None:
-    assert with_approval_review_url(_ASK, {"approval_url": _URL}) == f"{_ASK} {_LINK}"
-    assert join_native_hook_reason(_ASK, _LINK) == f"{_ASK} {_LINK}"
-
-
-@pytest.mark.parametrize(
-    ("harness", "render"),
-    [
-        ("codex", lambda reason: _native_hook_reason_for_harness("codex", reason)),
-        ("omp", lambda reason: _native_hook_reason_for_harness("omp", reason)),
-        ("claude-code", lambda reason: _native_hook_reason_for_harness("claude-code", reason)),
-        ("copilot", _copilot_hook_reason),
-    ],
-)
-def test_harness_copy_by_mode(harness: str, render: object) -> None:
-    assert callable(render)
-    default = render(_DEFAULT)
-    assert default == _DEFAULT, harness
-    assert "approve it" not in default.lower()
-    ask = render(_ASK)
-    assert ask.startswith(_ASK), harness
-    assert "Do not retry it" in ask
-
-
-@pytest.mark.parametrize(
-    ("harness", "render"),
-    [
-        ("codex", lambda reason: _native_hook_reason_for_harness("codex", reason)),
-        ("omp", lambda reason: _native_hook_reason_for_harness("omp", reason)),
-        ("claude-code", lambda reason: _native_hook_reason_for_harness("claude-code", reason)),
-        ("copilot", _copilot_hook_reason),
-    ],
-)
-def test_a_local_tool_keeps_its_approval_wait_in_every_harness(harness: str, render: object) -> None:
-    assert callable(render)
-    text = render(_LOCAL)
-    assert text.startswith(_LOCAL), harness
-    assert "Allow once or Always allow" in text
-    assert "seek permission" not in text

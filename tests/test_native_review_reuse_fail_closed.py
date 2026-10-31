@@ -7,7 +7,7 @@ resident unavailable, none may allow, and the single-use grant stays unspent.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,7 @@ import pytest
 from codex_plugin_scanner.guard import native_guard_store, native_store_policy, store_policy
 from codex_plugin_scanner.guard.daemon.hook_native_review_binding import (
     native_review_claimed_allow,
-    native_review_matching_allow,
+    native_review_settle,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -49,7 +49,7 @@ def test_consume_refuses_and_spends_nothing_without_the_resident(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     _resolved_allow(store, str(tmp_path))
-    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home: False)
+    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home, **_kwargs: False)
     kwargs = {
         "harness": "claude-code",
         "artifact_id": _ARTIFACT,
@@ -69,8 +69,27 @@ def test_consume_refuses_and_spends_nothing_without_the_resident(
             workspace=str(tmp_path),
             now=datetime.now(timezone.utc).isoformat(),
         )
-    assert native_review_matching_allow(store, **kwargs) is False
+    assert native_review_settle(store, **kwargs, spend=True) is None
     assert _effects(store) == 0
+
+
+def test_settle_spends_an_approve_once_only_when_asked(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    _resolved_allow(store, str(tmp_path))
+    kwargs = {
+        "harness": "claude-code",
+        "artifact_id": _ARTIFACT,
+        "tool_name": "Bash",
+        "launch_target": "cat .env",
+        "workspace": tmp_path,
+        "identity": _IDENTITY,
+    }
+
+    assert native_review_settle(store, **kwargs, spend=False) is None
+    assert _effects(store) == 0
+    assert native_review_settle(store, **kwargs, spend=True) == "allowed"
+    assert native_review_settle(store, **kwargs, spend=True) is None
+    assert _effects(store) == 1
 
 
 def _claimed(store: GuardStore, tmp_path: Path, *, claim: bool) -> bool:
@@ -102,8 +121,112 @@ def test_peek_denies_when_the_resident_gives_no_answer(tmp_path: Path, monkeypat
             publisher=None,
             now=datetime.now(timezone.utc).isoformat(),
         )
-    assert _claimed(store, tmp_path, claim=False) is False
+
+
+def test_claimed_allow_denies_when_the_resident_gives_no_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    _record_once(store, tmp_path)
+
+    calls: list[str] = []
+
+    def unavailable(method: str, _args: object) -> object:
+        calls.append(method)
+        raise native_guard_store.NativeGuardStoreUnavailable("native_guard_store_unavailable")
+
+    monkeypatch.setattr(store, "_native_store_call", unavailable)
+
+    # Neither a claim nor a live completion repeats a call that may have landed.
+    for claim in (False, True):
+        calls.clear()
+        assert _claimed(store, tmp_path, claim=claim) is False
+        assert calls == ["settle_claimed_native_allow"]
+
+
+def test_claimed_allow_provisions_the_resident_verifier_before_settling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _record_once(store, tmp_path)
+    key, _key_id = store._policy_integrity_secret_material(create=False)
+    assert key is not None
+
+    steps: list[object] = []
+    monkeypatch.setattr(store, "_provision_resident_verifier", lambda given=None: steps.append(given))
+
+    def settle(method: str, _args: object) -> object:
+        steps.append(method)
+        return True
+
+    monkeypatch.setattr(store, "_native_store_call", settle)
+
+    # A resident that restarted without its verifier is served again from the
+    # keyring key the settle already read, as the policy lookup does.
+    assert _claimed(store, tmp_path, claim=False) is True
+    assert steps == [key, "settle_claimed_native_allow"]
+
+
+def _record_once(store: GuardStore, tmp_path: Path, *, request_id: str = "r1") -> None:
+    now = datetime.now(timezone.utc)
+    approval_id = store.record_local_once_approval(
+        request_id=request_id,
+        harness="claude-code",
+        artifact_id=_ARTIFACT,
+        artifact_hash=_IDENTITY,
+        workspace=str(tmp_path),
+        publisher=None,
+        action="allow",
+        created_at=now.isoformat(),
+        expires_at=(now + timedelta(hours=1)).isoformat(),
+    )
+    assert approval_id is not None
+
+
+def test_claimed_allow_settles_the_exact_once_approval_in_the_resident(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _record_once(store, tmp_path)
+
+    # A live completion reads the allow without spending it; a retry spends it once.
+    assert _claimed(store, tmp_path, claim=False) is True
+    assert _claimed(store, tmp_path, claim=True) is True
     assert _claimed(store, tmp_path, claim=True) is False
+    assert _claimed(store, tmp_path, claim=False) is False
+
+
+def test_claimed_allow_refuses_another_identity_or_request(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _record_once(store, tmp_path)
+    other = _IDENTITY.replace("a" * 64, "b" * 64)
+
+    assert (
+        native_review_claimed_allow(
+            store,
+            harness="claude-code",
+            artifact_id=_ARTIFACT,
+            workspace=tmp_path,
+            identity=_IDENTITY,
+            claimed_saved_allow_hash=other,
+            claimed_approval_request_id=None,
+            claim_saved_approval=True,
+        )
+        is False
+    )
+    assert (
+        native_review_claimed_allow(
+            store,
+            harness="claude-code",
+            artifact_id=_ARTIFACT,
+            workspace=tmp_path,
+            identity=_IDENTITY,
+            claimed_saved_allow_hash=_IDENTITY,
+            claimed_approval_request_id="another-request",
+            claim_saved_approval=True,
+        )
+        is False
+    )
+    # Neither refusal spent the approval.
+    assert _claimed(store, tmp_path, claim=True) is True
 
 
 def test_claim_denies_when_the_resident_gives_no_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -115,10 +238,7 @@ def test_claim_denies_when_the_resident_gives_no_answer(tmp_path: Path, monkeypa
         "scope": "artifact",
         "source": "local-once",
     }
-    # A valid peek is not enough: the claim is the spend, and it is resident-owned.
-    monkeypatch.setattr(store, "peek_local_once_approval", lambda **_kwargs: dict(decision))
+    # The claim is the spend, and it is resident-owned.
     monkeypatch.setattr(native_store_policy, "_resident_request", lambda **_kwargs: None)
 
     assert store.claim_approval_reuse_decision(decision, consume_local_once=True) is False
-    assert _claimed(store, tmp_path, claim=False) is True
-    assert _claimed(store, tmp_path, claim=True) is False

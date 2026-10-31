@@ -44,6 +44,7 @@ from .native_package_protect_projection import (
     NativePackageProtectProjection,
     native_package_protect_projection,
 )
+from .native_package_workspace_scope import NativePackageWorkspaceScopeError
 from .native_shim_admin import NativeShimAdminError
 from .native_supply_chain_posture import native_local_supply_chain_posture
 from .native_workspace_inventory import native_workspace_inventory
@@ -188,6 +189,7 @@ def evaluate_package_request_artifact(
     now: str | None = None,
     external_archive_network_authorized: bool = False,
     retain_external_archive_blob: bool = False,
+    record_evidence: bool = True,
 ):
     """Evaluate a package request in the resident, which owns every verdict.
 
@@ -204,6 +206,7 @@ def evaluate_package_request_artifact(
         now=now,
         external_archive_network_authorized=external_archive_network_authorized,
         retain_external_archive_blob=retain_external_archive_blob,
+        record_evidence=record_evidence,
     )
 
 
@@ -698,6 +701,7 @@ def _final_package_protect_authority(
                 artifact_hash=current.artifact_hash,
                 workspace_dir=workspace_dir,
                 execution_context=current.execution_context,
+                guard_home=store.guard_home,
             ),
         )
     final_evaluation = native_finalize_package_protect(
@@ -936,19 +940,27 @@ def _resolve_stored_package_policy_override(
     execution_context: PackageExecutionContext | None = None,
     current_action: object | None = None,
     claim_saved_approval: bool = True,
+    policy_workspaces: tuple[str, ...] | None = None,
 ) -> _StoredPackagePolicyResolution:
-    """Hydrate saved-policy facts and let the resident decide the override."""
+    """Hydrate saved-policy facts and let the resident decide the override.
+
+    A caller that already holds the runtime workspace scope passes it as
+    ``policy_workspaces``; the scope comes from the resident, and deriving it a
+    second time here is a second round trip for an answer already in hand.
+    """
 
     resolved_context = execution_context or build_package_execution_context(
         workspace_dir=workspace_dir,
         artifact=artifact,
     )
-    policy_workspaces = _package_policy_workspace_candidates(
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        workspace_dir=workspace_dir,
-        execution_context=resolved_context,
-    )
+    if policy_workspaces is None:
+        policy_workspaces = _package_policy_workspace_candidates(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            workspace_dir=workspace_dir,
+            execution_context=resolved_context,
+            guard_home=store.guard_home,
+        )
     resolved, claim_disposition, reused_decision = native_resolve_stored_package_policy(
         evaluation,
         store=store,
@@ -982,17 +994,35 @@ def _package_policy_workspace_candidates(
     artifact_hash: str,
     workspace_dir: Path,
     execution_context: PackageExecutionContext | None = None,
+    guard_home: Path | None = None,
 ) -> tuple[str, ...]:
+    """Return the workspace scopes a saved package approval may be matched under.
+
+    The resident owns the derivation.  When it cannot answer - the probe's own
+    guard home has no resident, for one - there is no scope to match against,
+    so no saved approval is reused and the request is decided as if none had
+    been saved.  That is the closed outcome; deriving a key here instead would
+    be the guess this module no longer makes.
+    """
+
     resolved_execution_context = execution_context or build_package_execution_context(
         workspace_dir=workspace_dir,
         artifact=artifact,
     )
-    runtime_workspace = package_request_runtime_workspace_scope(
-        artifact_id=artifact.artifact_id,
-        artifact_hash=artifact_hash,
-        artifact_type=artifact.artifact_type,
-        execution_context=resolved_execution_context,
-    )
+    try:
+        # The home is named rather than left to the bridge: without it the
+        # resident is reached through whichever home the process last bound,
+        # and a scope derived under another home is not the key this store
+        # saved.
+        runtime_workspace = package_request_runtime_workspace_scope(
+            artifact_id=artifact.artifact_id,
+            artifact_hash=artifact_hash,
+            artifact_type=artifact.artifact_type,
+            execution_context=resolved_execution_context,
+            guard_home=guard_home,
+        )
+    except NativePackageWorkspaceScopeError:
+        return ()
     return (runtime_workspace,) if runtime_workspace is not None else ()
 
 

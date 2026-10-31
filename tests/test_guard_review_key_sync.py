@@ -9,14 +9,12 @@ from typing import cast, final
 import pytest
 
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    PolicyBundleVerificationKey,
-    policy_bundle_verification_key_from_public_key,
-)
+from codex_plugin_scanner.guard.policy_bundle_trusted_keys import PolicyBundleVerificationKey
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
+    policy_bundle_verification_key_from_public_key,
     sign_policy_bundle,
 )
 from tests.support.network import stub_authenticated_urlopen

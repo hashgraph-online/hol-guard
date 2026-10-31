@@ -166,59 +166,43 @@ def test_large_output_wire_encoding_is_lossless_and_keeps_the_callers_deadline(m
     assert json.loads(decoded) == body
 
 
-def test_unexpected_binding_recheck_logs_only_exception_class(monkeypatch, caplog):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
-
-    calls = []
-
-    def query(query, body, **kwargs):
-        calls.append((query, body.copy()))
-        return {"recheck_required": True} if query == "mediate_prepare" else None
+def test_unexpected_binding_recheck_logs_only_exception_class(caplog):
+    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
 
     def recheck():
         raise LookupError("private payload must never be logged")
 
-    monkeypatch.setattr(mediation, "content_query", query)
-    mediation.mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result={},
-        validated_receipt=None,
-        structured_output_json=None,
-        binding=None,
-        recheck_binding=recheck,
-    )
-    assert calls[-1][1]["recheck_error"] is True
+    forward = {"structured_content_mediation": {"action": "forward"}}
+    withheld = structured.withhold_stale_forward(forward, view={}, load_config=recheck, deadline=None)
+    assert withheld["structured_content_mediation"]["reason_code"] == "structured_binding_recheck_failed"
     assert "LookupError" in caplog.text
     assert "private payload" not in caplog.text
 
 
 def test_harness_presentation_is_available_without_native_runtime(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
+    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
 
     def unavailable(*args, **kwargs):
         raise client.NativeContentSensitivityError("offline")
 
-    monkeypatch.setattr(mediation, "content_query", unavailable)
-    assert mediation.canonical_harness_name(" Pi_Coding_Agent ") == "pi"
-    assert mediation.canonical_harness_name("oh-my-pi") == "omp"
+    monkeypatch.setattr(structured, "content_query", unavailable)
+    assert structured.withholds_structured_destination(harness=" Pi_Coding_Agent ", event_name="PostToolUse")
+    assert structured.withholds_structured_destination(harness="oh-my-pi", event_name="PostToolUse")
 
 
 def test_expired_mediation_projects_transport_failure_without_opening_a_client(monkeypatch):
-    from codex_plugin_scanner.guard.runtime import structured_output_mediation as mediation
+    from codex_plugin_scanner.guard.daemon import hook_worker_structured as structured
 
     calls = _resident(monkeypatch)
-    result = mediation.mediate_native_post_tool_content(
-        harness="pi",
-        event_name="PostToolUse",
-        native_result={"decision": "allow"},
-        validated_receipt=None,
-        structured_output_json="{}",
-        binding=None,
-        deadline_monotonic=0.0,
+    response = {"decision": "allow", "structured_content_mediation": {"action": "forward"}}
+    result = structured.withhold_stale_forward(
+        response,
+        view={},
+        load_config=lambda: pytest.fail("an expired deadline reads nothing"),
+        deadline=0.0,
     )
-    assert result.action == "withhold"
-    assert result.reason_code == "structured_review_deadline_exceeded"
+    assert result["structured_content_mediation"]["action"] == "withhold"
+    assert result["structured_content_mediation"]["reason_code"] == "structured_review_deadline_exceeded"
     assert not calls
 
 

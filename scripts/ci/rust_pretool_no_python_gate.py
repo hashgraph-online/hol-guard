@@ -154,22 +154,8 @@ def _native_cli_graph_failures(root: Path) -> list[str]:
     if native_route is None:
         failures.append("CLI native route is missing")
         return failures
-    pipeline_call = _called_node(native_route, "run_native_hook_pipeline")
-    if pipeline_call is None and _called_node(native_route, "try_native_hook_authority") is None:
+    if _called_node(native_route, "try_native_hook_authority") is None:
         failures.append("CLI native route does not call native authority")
-    if pipeline_call is not None:
-        pipeline_module = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py"
-        pipeline = _function_node_or_none(pipeline_module, "run_native_hook_pipeline")
-        if pipeline is None:
-            failures.append("CLI native pipeline dispatcher is missing")
-        elif _called_node(pipeline, "native_hook_route") is None or _called_node(pipeline, "run_route_plan") is None:
-            failures.append("CLI native pipeline does not take its route from the resident")
-        else:
-            # The resident's route names the handlers; the native edge is the handler it names first.
-            handlers = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_route_handlers.py"
-            edge = _function_node_or_none(handlers, "native_edge")
-            if edge is None or _called_node(edge, "review_native_edge_decision") is None:
-                failures.append("CLI native pipeline does not reach the native edge authority")
     for retired in ("_try_source_ref_fast_path", "record_python_semantic_hook_route", "evaluate_source_file_ref"):
         if _called_node(native_route, retired) is not None:
             failures.append(f"CLI native route still calls retired Python route {retired}")
@@ -250,6 +236,11 @@ def _contract_failures(root: Path) -> list[str]:
             (
                 "pre-tool-command-authority-v1",
                 "pre-tool-generic-authority-v1",
+                # The edge checks its own answer; Python trusts it only then.
+                "edge-self-check-v1",
+                # The edge resolves the managed-policy view Python sends and
+                # answers the structured mediation itself.
+                "edge-structured-output-v1",
                 # The resident PreToolUse frame carries the command model
                 # request, now wrapped in the envelope that adds the path
                 # context the lane runs in.
@@ -258,7 +249,7 @@ def _contract_failures(root: Path) -> list[str]:
         ),
         (
             root / "rust/crates/guard-runtime/src/edge.rs",
-            ("evaluate_pre_tool_envelope", "guard-pre-tool-result.v1"),
+            ("evaluate_pre_tool_envelope", "edge_result_check::validate_pre_tool_result"),
         ),
         (
             # PostToolUse is decided by the same native edge: the Rust review,
@@ -297,7 +288,6 @@ def _bridge_failures(root: Path) -> list[str]:
                 "def review_pre_tool_native(",
                 "native_resident_client_request",
                 '"operation": "pre_tool_use"',
-                "def native_pre_tool_policy_floor(",
             ),
         )
     )
@@ -305,7 +295,14 @@ def _bridge_failures(root: Path) -> list[str]:
     failures.extend(
         required_tokens(
             root / "src/codex_plugin_scanner/guard/native_hook_edge.py",
-            ("guard-pre-tool-result.v1", "pre-tool-generic-authority-v1", "_decode_pre_tool_result"),
+            ("pre-tool-generic-authority-v1", "edge-self-check-v1", "edge-structured-output-v1"),
+        )
+    )
+    # The edge checks its own pre-tool result and receipt before it answers.
+    failures.extend(
+        required_tokens(
+            root / "rust/crates/guard-runtime/src/edge_result_check.rs",
+            ("guard-pre-tool-result.v1", "fn pre_tool_result(", "fn receipt_agrees("),
         )
     )
     command_review = function_node(command_bridge, "review_pre_tool_native")
@@ -318,7 +315,7 @@ def _bridge_failures(root: Path) -> list[str]:
     if "Python remains authoritative" in bridge_source:
         failures.append(f"{command_bridge.as_posix()} still describes Python as authoritative")
     review_start = bridge_source.find("def review_pre_tool_native(")
-    review_end = bridge_source.find("\ndef native_pre_tool_policy_floor(", review_start)
+    review_end = bridge_source.find("\n__all__", review_start)
     review_body = bridge_source[review_start:review_end] if review_start >= 0 and review_end > review_start else ""
     if "evaluate_command(" in review_body:
         failures.append("review_pre_tool_native invokes the Python command evaluator")

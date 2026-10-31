@@ -16,12 +16,18 @@ Secret-bearing output remains blocked by the Rust path. Native unavailability, i
 
 ## Rollback
 
-`HOL_GUARD_NATIVE=off` is an explicit fail-safe disablement, not a semantic
-rollback. `shadow` is diagnostic-only and may compare against the Python
-reference only on an explicitly marked non-production surface. `force` requires
-native even for developer overrides. Invalid or empty values resolve to the
-product default instead of silently disabling Rust.
+There is no local rollback, and there is no local disablement either. The
+`off` and `shadow` values this ADR first described are retired: both stay
+accepted so an existing install keeps starting, both resolve to the product
+default, and each logs `native_mode_legacy_value_ignored` once. Honoring `off`
+would mean running supported review with no semantic authority at all, and
+honoring `shadow` would mean keeping a Python evaluator alive to compare
+against. `force` requires native even for developer overrides. Invalid or empty
+values resolve to the product default instead of silently disabling Rust.
+`HOL_GUARD_NATIVE_DIAGNOSTIC=1` on a declared non-production surface adds
+bounded transport and timeout diagnostics to that path; it evaluates nothing
+and compares nothing.
 
 ## Evidence
 
-Source contracts prove default and invalid values select `auto`, explicit `off` disables native execution, and supported auto/force paths fail closed without Python semantic evaluation. Stable main publication uploads the four Tier 1 native wheels plus the pure wheel to PyPI; the sdist is attached to the GitHub release only. Native-wheel jobs install the real wheel on Linux x64, macOS Intel, macOS Apple Silicon, and Windows x64 with no native environment variable, then prove runtime attestation, clean-output allow, secret-output deny, resident execution, and explicit rollback.
+Source contracts prove default, invalid and retired values all select `auto`, that a retired value warns exactly once, and that supported auto/force paths fail closed without Python semantic evaluation (`tests/test_native_legacy_modes.py`). Stable main publication uploads the four Tier 1 native wheels plus the pure wheel to PyPI; the sdist is attached to the GitHub release only. Native-wheel jobs install the real wheel on Linux x64, macOS Intel, macOS Apple Silicon, and Windows x64 with no native environment variable, then prove runtime attestation, clean-output allow, secret-output deny, and resident execution.

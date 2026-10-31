@@ -22,7 +22,7 @@ jobs:
   delete:
     name: Delete alpha prerelease, tag and container image
     if: github.repository == 'hashgraph-online/hol-guard'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Leaves room for a rate-limit retry to wait out one quota reset.
     timeout-minutes: 75
     permissions:

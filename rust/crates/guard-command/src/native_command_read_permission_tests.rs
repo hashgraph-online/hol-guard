@@ -41,6 +41,30 @@ fn action(controls: &CompiledNativeCommandControls, command: &str) -> String {
 }
 
 #[test]
+fn signed_in_user_shorthand_is_a_read_not_a_file() {
+    let controls = controls_with(&[]);
+    for command in [
+        "gh pr list --author @me",
+        "gh pr list --repo example-org/example-repo --state open --author @me --json number,title",
+        "gh issue list --assignee @me --state open",
+        "gh search prs --review-requested @me --state open",
+        "gh search issues --involves @me",
+    ] {
+        assert_eq!(action(&controls, command), "allow", "{command}");
+    }
+    // Only an option that takes a user makes `@me` the account; anywhere else
+    // an `@` value stays unproven, and the `api` file form still reads a file.
+    for command in [
+        "gh pr list @me",
+        "gh pr list --search @me",
+        "gh pr list -- --author @me",
+        "gh api repos/example-org/example-repo/issues/1/comments -F body=@me",
+    ] {
+        assert_ne!(action(&controls, command), "allow", "{command}");
+    }
+}
+
+#[test]
 fn read_only_graphql_queries_need_no_prompt_but_mutations_do() {
     let controls = controls_with(&[]);
     for endpoint in ["graphql", "/graphql"] {

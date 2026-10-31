@@ -360,27 +360,6 @@ def _runtime_hook_remaining_hint(payload: dict[str, object]) -> float:
     return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS if hint is None else hint
 
 
-def _codex_live_replay_authority(
-    request: object,
-    previous: object,
-) -> tuple[str | None, str | None]:
-    """Return already-claimed exact context only for a terminal allow replay."""
-
-    if not isinstance(request, Mapping) or not isinstance(previous, Mapping):
-        return None, None
-    if request.get("resolution_action") != "allow" or previous.get("resolution_action") != "allow":
-        return None, None
-    if previous.get("status") not in {"resumed", "sent"}:
-        return None, None
-    artifact_hash = request.get("artifact_hash")
-    request_id = request.get("request_id")
-    if not isinstance(artifact_hash, str) or not artifact_hash:
-        return None, None
-    if not isinstance(request_id, str) or not request_id:
-        return None, None
-    return artifact_hash, request_id
-
-
 _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 
 
@@ -820,11 +799,19 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self._enroll_authority_by_default()
         try:
             try:
-                return read(shared=True)
+                snapshot = read(shared=True)
             except NativeCommandControlMutationRequiredError:
                 # Release the shared lease before migration and recapture the
                 # active projection under the exclusive mutation fence.
                 return read(shared=False)
+            if snapshot.health is AuthorityHealth.RECOVERY_REQUIRED:
+                # A save that failed before anchoring leaves a prepared
+                # transition that only a writer may roll back, and a shared
+                # read only reports it. Read again as the writer so the
+                # authority heals here instead of refusing every save and
+                # holding every extension blocked until someone repairs it.
+                return read(shared=False)
+            return snapshot
         except NativeCommandControlAuthorityUnavailableError:
             # Nothing was read, so there is nothing to refresh from. Keeping the
             # snapshot already installed beats replacing a known authority with
@@ -1653,9 +1640,7 @@ class _GuardDaemonHandler(
             self._write_json(store.clear_command_activity_evidence())
             return
         if parsed.path == "/v1/evidence":
-            with store._connect() as conn:
-                deleted = clear_evidence(conn)
-            self._write_json({"deleted": deleted})
+            self._write_json({"deleted": clear_evidence(store)})
             return
         if parsed.path == "/v1/read-state":
             body = self._read_delete_body()
@@ -1892,23 +1877,23 @@ class _GuardDaemonHandler(
     def _handle_codex_live_decision(self, request_id: str, payload: Mapping[str, object]) -> None:
         request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
         previous = self.server.store.get_request_resume(request_id)  # type: ignore[attr-defined]
-        claimed_hash, claimed_request_id = _codex_live_replay_authority(request, previous)
+        authority_resolved = False
         if isinstance(request, Mapping) and request.get("resolution_action") == "allow":
-            authority = resolve_codex_live_allow_authority(
-                self.server.store,  # type: ignore[attr-defined]
-                request=request,
-                request_id=request_id,
-                now=_now(),
+            authority_resolved = (
+                resolve_codex_live_allow_authority(
+                    self.server.store,  # type: ignore[attr-defined]
+                    request=request,
+                    request_id=request_id,
+                    now=_now(),
+                )
+                is not None
             )
-            artifact_hash = request.get("artifact_hash")
-            if authority is not None and isinstance(artifact_hash, str) and artifact_hash:
-                claimed_hash = artifact_hash
-                claimed_request_id = request_id
         fresh_allow_authorized = self._revalidate_codex_live_allow(
             request,
             payload,
-            claimed_saved_allow_hash=claimed_hash,
-            claimed_approval_request_id=claimed_request_id,
+            previous=previous,
+            request_id=request_id,
+            authority_resolved=authority_resolved,
         )
         result = complete_codex_live_decision(
             self.server.store,  # type: ignore[attr-defined]
@@ -1923,8 +1908,9 @@ class _GuardDaemonHandler(
         request: object,
         payload: Mapping[str, object],
         *,
-        claimed_saved_allow_hash: str | None = None,
-        claimed_approval_request_id: str | None = None,
+        previous: object = None,
+        request_id: str | None = None,
+        authority_resolved: bool = False,
     ) -> bool:
         daemon_server = self._daemon_server()
         home_dir = daemon_server.home_dir
@@ -1933,8 +1919,9 @@ class _GuardDaemonHandler(
             payload,
             home_dir=home_dir,
             guard_home=daemon_server.store.guard_home,
-            claimed_saved_allow_hash=claimed_saved_allow_hash,
-            claimed_approval_request_id=claimed_approval_request_id,
+            previous=previous,
+            request_id=request_id,
+            authority_resolved=authority_resolved,
             reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
                 daemon_server.hook_worker.review_http_payload(
                     payload=dict(hook_payload),
@@ -2051,10 +2038,12 @@ class _GuardDaemonHandler(
         transport_deadline = self._daemon_server().request_deadline(self.request, admission_seconds)
         params = parse_qs(query)
         # Diagnostics only: a count by the harness the worker reviews (the
-        # `runtime-harness` override first), before anything is judged.
+        # `runtime-harness` override first), and the reason a bridge names
+        # for the resident not answering, before anything is judged.
         note_hook_received(
             getattr(self._daemon_server(), "hook_worker", None),
             self._optional_string(params.get("runtime-harness", [None])[-1]) or default_harness,
+            self.headers.get("X-Guard-Direct-Miss"),
         )
         hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
         hook_deadline = RuntimeHookDeadline.for_admission(
@@ -2182,18 +2171,6 @@ class _GuardDaemonHandler(
             )
             return
         with byte_reservation:
-            # A referenced payload reserves its bounded maximum, but remains
-            # an opaque envelope until the native edge owns its file I/O.
-            # Do not hydrate or re-encode it here: duplicate keys in the
-            # referenced bytes must not be collapsed by Python before Rust.
-            normalized_payload = None
-            if referenced_payload_bytes is None:
-                normalized_payload = json.dumps(
-                    payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                    sort_keys=True,
-                ).encode("utf-8")
             admission = daemon_server.runtime_hook_scheduler.acquire(
                 harness=capacity_harness,
                 client_key=self._runtime_hook_client_key(payload, workspace),
@@ -2201,7 +2178,6 @@ class _GuardDaemonHandler(
                 payload_bytes=payload_bytes,
                 deadline=hook_deadline,
                 byte_reservation=byte_reservation,
-                normalized_payload=normalized_payload,
             )
             if admission.permit is None:
                 self._record_hook_capacity_rejection(daemon_server, capacity_harness)

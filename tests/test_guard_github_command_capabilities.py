@@ -5,9 +5,8 @@ from typing import Final
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
-from tests.native_github_capability_support import github_cli_assessment
+from tests.native_github_capability_support import GitHubCommandCapability, github_cli_assessment
 
 
 def _text(*parts: str) -> str:
@@ -1105,8 +1104,8 @@ def test_guard_requires_confirmation_for_github_mutations_and_unverified_composi
 
 
 def test_native_classification_is_memoized_but_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_github_cli
     from tests import native_github_capability_support as bridge
+    from tests import native_github_cli
 
     answers: list[native_github_cli.NativeGitHubCliClassification | None] = [
         None,

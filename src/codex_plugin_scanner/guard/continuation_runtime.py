@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
@@ -39,7 +40,7 @@ from .continuation_payload import (
 from .continuation_payload import (
     text_value as _text,
 )
-from .continuation_snapshot import canonical_continuation_correlation_id
+from .continuation_snapshot import canonical_continuation_correlation_id, validated_continuation_snapshot
 from .continuation_worker import (
     StoreContinuationPlan,
     run_store_continuation_plan,
@@ -86,6 +87,9 @@ def continue_request_after_application(
     )
     offer_hash = _offer_hash(offer)
     existing = store.get_request_resume(request_id)
+    recorded = _live_hook_recorded_offer(request_row, existing, offer=offer, action=normalized_action)
+    if recorded is not None:
+        offer, offer_hash = recorded
     previous = _replayable_result(existing, offer=offer, offer_hash=offer_hash, action=normalized_action)
     if previous is not None:
         _persist_attempt(
@@ -257,51 +261,6 @@ def continuation_offer_payload(
     }
 
 
-def record_live_hook_completion(
-    store: GuardStore,
-    *,
-    request_id: str,
-    action: str,
-    now: str,
-    approval_decision: Mapping[str, object] | None = None,
-) -> dict[str, object] | None:
-    """Record proof that the original browser-waiting Codex hook consumed a decision."""
-
-    request = store.get_approval_request(request_id)
-    if not isinstance(request, Mapping):
-        return None
-    normalized_action = _continuation_action(action)
-    offer = _offer_from_request(
-        store,
-        request_row=request,
-        request_id=request_id,
-        observed_at=_parse_aware_timestamp(now),
-        headless=False,
-    )
-    if offer.capability != "suspended-response":
-        return None
-    previous = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
-    if previous is not None and previous.status != "waiting":
-        return _payload(offer, previous, replayed=True)
-    if normalized_action == "allow_once":
-        result = _result(offer, "resumed", "live_hook_completed", now)
-    else:
-        result = _result(offer, "blocked_not_resumed", "blocked_not_resumed", now)
-    persisted = _finalize_persist_attempt(
-        store,
-        request_id=request_id,
-        action=normalized_action,
-        offer=offer,
-        result=result,
-        now=now,
-        approval_decision=approval_decision,
-    )
-    if not persisted:
-        return None
-    authoritative = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
-    return _payload(offer, authoritative or result, replayed=authoritative is not None)
-
-
 def _finalize_persist_attempt(
     store: GuardStore,
     *,
@@ -327,6 +286,66 @@ def _finalize_persist_attempt(
         approval_decision=approval_decision,
     )
     return cast(bool, finalized["finalized"])
+
+
+def _live_hook_recorded_offer(
+    request_row: Mapping[str, object],
+    existing: Mapping[str, object] | None,
+    *,
+    offer: ContinuationOffer,
+    action: ContinuationAction,
+) -> tuple[ContinuationOffer, str] | None:
+    """The frozen offer a waiting Codex hook already completed this decision under.
+
+    The bridge completes its own decision as soon as it sees the resolution and
+    then exits. A caller that continues the request afterwards observes no live
+    hook and derives a retry-only offer, so without this it would record a second
+    terminal result for the same request under a different capability, which
+    Cloud rejects as a binding change. Returning the snapshot offer lets that
+    caller replay the hook's result instead. It applies only when the snapshot
+    reproduces the recorded offer hash exactly.
+    """
+    if (
+        offer.capability == "suspended-response"
+        or not isinstance(existing, Mapping)
+        or existing.get("continuation_capability") != "suspended-response"
+        or existing.get("continuation_action") != action
+        or existing.get("continuation_status") in {None, "waiting"}
+    ):
+        return None
+    raw_snapshot = request_row.get("continuation_snapshot")
+    if raw_snapshot is None:
+        raw_snapshot = request_row.get("continuation_snapshot_json")
+    if isinstance(raw_snapshot, str):
+        try:
+            raw_snapshot = json.loads(raw_snapshot)
+        except ValueError:
+            return None
+    snapshot = validated_continuation_snapshot(raw_snapshot)
+    if (
+        snapshot is None
+        or snapshot["capability"] != "suspended-response"
+        or snapshot["correlationId"] != offer.correlation_id
+    ):
+        return None
+    # Rebuild the deadline exactly as frozen, offset included, so the hash can match.
+    try:
+        wait_deadline = datetime.fromisoformat(cast(str, snapshot["waitDeadline"]))
+    except ValueError:
+        return None
+    if wait_deadline.utcoffset() is None:
+        return None
+    frozen = ContinuationOffer(
+        correlation_id=offer.correlation_id,
+        harness=offer.harness,
+        capability="suspended-response",
+        original_hook_attached=True,
+        wait_deadline=wait_deadline,
+    )
+    frozen_hash = _offer_hash(frozen)
+    if existing.get("continuation_offer_hash") != frozen_hash:
+        return None
+    return frozen, frozen_hash
 
 
 def _replayable_result(

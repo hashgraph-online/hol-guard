@@ -241,3 +241,284 @@ fn codex_plan_evidence_reads_but_auth_and_config_do_not() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+fn read(value: &Path, home: &Path, cwd: &Path) -> bool {
+    super::bounded_structured_file_read_target(value.to_str().unwrap(), home.to_str(), cwd.to_str())
+}
+
+fn plant(path: &Path, body: &str) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, body).unwrap();
+}
+
+#[test]
+fn a_repositorys_own_documents_read_from_hidden_directories() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    for document in [
+        ".codex-plugin/plugin.json",
+        ".claude-plugin/plugin.json",
+        ".well-known/agent-card.json",
+        ".github/workflows/ci.yml",
+        // A workflow is the repository's own document about a tool it uses,
+        // and a published card names the agent it describes. Reading the
+        // vendor's name in either as a login is the false positive this rule
+        // exists to lift.
+        ".github/workflows/docker.yml",
+        ".github/workflows/claude.yml",
+        ".well-known/agent.json",
+        "tests/fixtures/good-plugin/.codex-plugin/plugin.json",
+        ".next/standalone/server.mjs",
+    ] {
+        plant(&repo.join(document), "{}\n");
+        assert!(read(&repo.join(document), &home, &repo), "{document}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn the_administrative_tree_and_guarded_names_keep_their_review() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    for document in [
+        // The repository's own administrative tree is not its content: this
+        // script carries the author of the commit being rebased.
+        ".git/worktrees/fix/rebase-merge/author-script.sh",
+        ".git/config.toml",
+        // An environment file is never a document, whatever it is named.
+        ".config/.env.production.json",
+        ".envrc/settings.json",
+        // A credential store and a harness home stay guarded.
+        ".ssh/config.toml",
+        ".aws/config.json",
+        // A directory classified as a credential store keeps its review even
+        // when the file in it is named as source: `credential_named_path`
+        // stands aside for a source extension, so the directory half of the
+        // screen has to be applied in its own right.
+        ".secrets/read.py",
+        // A tool's own tree is not the repository's content, however the file
+        // in it is spelled, and neither is a login file under a directory the
+        // repository does own.
+        ".cursor/mcp.json",
+        ".next/mcp.json",
+        // A hidden leaf is that tool's own file wherever it sits, so the whole
+        // login screen still applies to it.
+        ".next/.claude.json",
+        ".github/id_ed25519.json",
+        // A directory spelled like an ordinary project config file opens no
+        // hidden tree; the name is benign as the final component only.
+        ".dockerignore/notes.md",
+        // A name without a document extension is bytes of some other kind.
+        ".codex-plugin/runtime.bin",
+    ] {
+        plant(&repo.join(document), "x\n");
+        assert!(!read(&repo.join(document), &home, &repo), "{document}");
+    }
+    // A hidden file at the leaf of the work tree is not a document below a
+    // hidden directory. It is read under `hidden_project_document`, which
+    // screens the name for a tool's login; this rule must not reach past it,
+    // and the names that screen holds stay held.
+    for document in [".mcp.json", ".claude.json"] {
+        plant(&repo.join(document), "x\n");
+        assert!(!read(&repo.join(document), &home, &repo), "{document}");
+    }
+    // A hidden directory in a plain folder that is no checkout keeps its
+    // review: the proof is the work tree, not the dot in the name.
+    let plain = home.join("plain");
+    plant(&plain.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(!read(
+        &plain.join(".codex-plugin/plugin.json"),
+        &home,
+        &plain
+    ));
+    // A sibling checkout's hidden tree is not the session's own content: the
+    // same manifest reads from the checkout the session is working in and
+    // keeps its review from the one beside it.
+    let sibling = home.join("app-fix");
+    std::fs::create_dir_all(sibling.join(".git")).unwrap();
+    plant(&sibling.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(!read(
+        &sibling.join(".codex-plugin/plugin.json"),
+        &home,
+        &repo
+    ));
+    assert!(read(
+        &sibling.join(".codex-plugin/plugin.json"),
+        &home,
+        &sibling
+    ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_does_not_borrow_the_proof_for_the_administrative_tree() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    plant(&repo.join(".git/config.toml"), "[remote]\n");
+    std::fs::create_dir_all(repo.join(".codex-plugin")).unwrap();
+    std::os::unix::fs::symlink(
+        repo.join(".git/config.toml"),
+        repo.join(".codex-plugin/plugin.json"),
+    )
+    .unwrap();
+    // The rule reads the resolved path, so a document name in a hidden
+    // directory the repository owns cannot stand in for the `.git` tree.
+    assert!(!read(&repo.join(".codex-plugin/plugin.json"), &home, &repo));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_checkout_below_a_hidden_directory_reads_its_own_documents() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join(".workspace/app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    // The work tree is the one nearest the file. A checkout kept under a
+    // hidden directory of the developer's own is still a checkout.
+    plant(&repo.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(read(&repo.join(".codex-plugin/plugin.json"), &home, &repo));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_repository_at_the_home_directory_opens_no_dotfiles() {
+    let root = fixture_root();
+    let home = root.join("home");
+    std::fs::create_dir_all(home.join(".git")).unwrap();
+    let cwd = home.join("app");
+    std::fs::create_dir_all(&cwd).unwrap();
+    // A dotfiles checkout at the home directory would make every hidden
+    // directory in it "the repository's own content". The search for a work
+    // tree stops below home, and the listing, which does reach the home
+    // directory itself, is refused there.
+    plant(&home.join(".notes/.plan.md"), "x\n");
+    assert!(!read(&home.join(".notes/.plan.md"), &home, &cwd));
+    assert!(!listed(&home.join(".notes"), &home, &cwd));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_submodule_in_the_checkout_the_session_opened_reads_its_own_documents() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    // A submodule carries its own `.git`, so the work tree nearest the file is
+    // the submodule, not the checkout the session opened. The document is
+    // still inside that checkout, and holding it would refuse a vendored
+    // manifest an agent reads while working one directory up.
+    let submodule = repo.join("vendor/lib");
+    std::fs::create_dir_all(&submodule).unwrap();
+    std::fs::write(submodule.join(".git"), "gitdir: ../../.git/modules/lib\n").unwrap();
+    plant(&submodule.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(read(
+        &submodule.join(".codex-plugin/plugin.json"),
+        &home,
+        &repo
+    ));
+    assert!(read(
+        &submodule.join(".codex-plugin/plugin.json"),
+        &home,
+        &submodule
+    ));
+    // A checkout beside the session's own still keeps its review.
+    let sibling = home.join("app-fix");
+    std::fs::create_dir_all(sibling.join(".git")).unwrap();
+    assert!(!read(
+        &submodule.join(".codex-plugin/plugin.json"),
+        &home,
+        &sibling
+    ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_nested_checkout_does_not_open_the_repository_around_it() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    // Working inside a checkout that sits under another one does not make the
+    // outer repository the session's own tree: its hidden documents are the
+    // sibling content this screen holds, and containment alone would hand them
+    // over.
+    let nested = repo.join("tools/kit");
+    std::fs::create_dir_all(nested.join(".git")).unwrap();
+    plant(&repo.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(!read(
+        &repo.join(".codex-plugin/plugin.json"),
+        &home,
+        &nested
+    ));
+    assert!(read(&repo.join(".codex-plugin/plugin.json"), &home, &repo));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn an_administrative_directory_named_by_a_gitfile_keeps_its_review() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    // `git init --separate-git-dir` puts the administrative directory inside
+    // the work tree under a name of its own, so the hook bodies and remote
+    // URLs in it are reachable by a path that never spells `.git`. The
+    // pointer names that directory, and naming it is what holds the read.
+    std::fs::create_dir_all(repo.join(".vcs-meta/hooks")).unwrap();
+    std::fs::write(repo.join(".git"), "gitdir: .vcs-meta\n").unwrap();
+    plant(&repo.join(".vcs-meta/hooks/pre-commit.sh"), "#!/bin/sh\n");
+    assert!(!read(
+        &repo.join(".vcs-meta/hooks/pre-commit.sh"),
+        &home,
+        &repo
+    ));
+    // Repository content beside it still reads quietly.
+    plant(&repo.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(read(&repo.join(".codex-plugin/plugin.json"), &home, &repo));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// A `.git` symlink points at the administrative directory just as a gitfile
+/// names it, and the canonical read path then spells the target rather than
+/// `.git`, so the component screen never sees it. Creating the link needs a
+/// POSIX symlink, so the proof is Unix-only; the rule itself resolves the link
+/// on every platform.
+#[cfg(unix)]
+#[test]
+fn an_administrative_directory_a_git_symlink_points_at_keeps_its_review() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".vcs-meta/hooks")).unwrap();
+    std::os::unix::fs::symlink(".vcs-meta", repo.join(".git")).unwrap();
+    plant(&repo.join(".vcs-meta/hooks/pre-commit.sh"), "#!/bin/sh\n");
+    assert!(!read(
+        &repo.join(".vcs-meta/hooks/pre-commit.sh"),
+        &home,
+        &repo
+    ));
+    // Repository content beside it still reads quietly.
+    plant(&repo.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(read(&repo.join(".codex-plugin/plugin.json"), &home, &repo));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// A `.git` symlink this rule cannot resolve names an unknown administrative
+/// directory, and an unknown one holds the read.
+#[cfg(unix)]
+#[test]
+fn an_unresolvable_git_symlink_holds_a_hidden_read() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let repo = home.join("app");
+    std::fs::create_dir_all(repo.join(".codex-plugin")).unwrap();
+    std::os::unix::fs::symlink("nowhere", repo.join(".git")).unwrap();
+    plant(&repo.join(".codex-plugin/plugin.json"), "{}\n");
+    assert!(!read(&repo.join(".codex-plugin/plugin.json"), &home, &repo));
+    std::fs::remove_dir_all(root).unwrap();
+}

@@ -17,7 +17,6 @@ from codex_plugin_scanner.guard.native_command_model import _canonical_command_f
 from codex_plugin_scanner.guard.runtime.command_evaluation import (
     CommandEvaluationInput,
     evaluate_command,
-    evaluate_commands_batch,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -36,9 +35,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     _layer_payload,
-    current_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.runtime.native_command_evaluation import NativeCommandEvaluation
+from tests.native_command_effect_batch import evaluate_commands_batch
 
 ROOT = Path(__file__).resolve().parents[1]
 _NATIVE_TEST_GUARD_HOME: Path | None = None
@@ -142,7 +141,6 @@ def real_native_command_evaluation(
 ) -> NativeCommandEvaluation:
     if controls is not None and extension_control_layers is not None:
         raise ValueError("provide controls or extension control layers, not both")
-    active_snapshot = current_extension_control_snapshot()
     global_lockdown = False
     managed_global_lockdown = False
     if extension_control_layers is not None:
@@ -164,34 +162,8 @@ def real_native_command_evaluation(
         managed_global_lockdown = any(
             layer.global_lockdown for layer in extension_control_layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
         )
-    elif controls is None:
-        global_lockdown = active_snapshot is not None and any(
-            layer.global_lockdown for layer in active_snapshot.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN
-        )
-        managed_global_lockdown = active_snapshot is not None and any(
-            layer.global_lockdown for layer in active_snapshot.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
-        )
-        controls = (
-            tuple(
-                (control.target.kind.value, control.target.target_id, control.state.value)
-                for layer in active_snapshot.layers
-                if layer.kind is ControlLayerKind.LOCAL_ADMIN
-                for control in layer.controls
-            )
-            if active_snapshot is not None
-            else ()
-        )
-        managed_controls = (
-            tuple(
-                (control.target.kind.value, control.target.target_id, control.state.value)
-                for layer in active_snapshot.layers
-                if layer.kind is ControlLayerKind.SIGNED_CLOUD
-                for control in layer.controls
-            )
-            if active_snapshot is not None
-            else ()
-        )
     else:
+        controls = () if controls is None else controls
         managed_controls = ()
     fixture = real_native_review_fixture(
         command,
@@ -201,7 +173,7 @@ def real_native_command_evaluation(
         managed_controls=managed_controls,
         global_lockdown=global_lockdown,
         managed_global_lockdown=managed_global_lockdown,
-        health=active_snapshot.health if active_snapshot is not None else AuthorityHealth.PROTECTED,
+        health=AuthorityHealth.PROTECTED,
     )
     return project_native_review_fixture(
         fixture,
@@ -283,7 +255,7 @@ def inspect_command_native_test(command: str, **kwargs: object) -> dict[str, obj
     assert home_dir is None or isinstance(home_dir, Path)
     reviewed = real_native_command_evaluation(command, cwd=cwd, home_dir=home_dir)
     projected = reviewed
-    if reviewed.native_minimum_action == "block" and reviewed.evaluation.minimum_action != "block":
+    if reviewed.payload["minimum_action"] == "block" and reviewed.evaluation.minimum_action != "block":
         projected = None
     with patch(
         "codex_plugin_scanner.guard.runtime.command_inspection.review_command_native",

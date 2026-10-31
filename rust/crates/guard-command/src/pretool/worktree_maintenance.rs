@@ -58,7 +58,24 @@ pub(super) fn exact_safe_command(
     match maintenance {
         Maintenance::Prune => true,
         Maintenance::Remove(target) => {
-            let Some(worktree) = fs::canonicalize(repository.join(target)).ok() else {
+            let placed = repository.join(target);
+            if absent(&placed) {
+                // Nothing stands at the named path, so the removal takes away no
+                // checkout: Git either refuses outright or drops the
+                // administrative entry of a worktree whose files are already
+                // gone, which is what the agent asked for. It reaches a real
+                // checkout only by reading the argument as the trailing part of
+                // a registered worktree's path, so a target any registration
+                // ends with keeps its review, and so does a registry this route
+                // cannot read.
+                let Some(registered) = registered_worktrees(&repository) else {
+                    return false;
+                };
+                return !registered
+                    .iter()
+                    .any(|path| git_reads_as_suffix(path, target));
+            }
+            let Ok(worktree) = fs::canonicalize(placed) else {
                 return false;
             };
             let Some(admin) = super::git_routes::linked_worktree_admin(&worktree, &repository)
@@ -128,6 +145,68 @@ fn parse<'a>(
     Some((leading, maintenance))
 }
 
+/// Whether nothing stands at the path. Only a proven absence counts: any other
+/// error leaves the path unknown, and an unknown path is not a proof.
+fn absent(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+}
+
+/// How many registrations this route reads before it stops understanding the
+/// registry.
+const REGISTERED_WORKTREE_LIMIT: usize = 256;
+
+/// Every linked worktree this repository registers, read from its own
+/// administrative directory. `None` means the registry could not be read, which
+/// is not a proof that it is empty.
+fn registered_worktrees(repository: &Path) -> Option<Vec<PathBuf>> {
+    let registry = repository.join(".git").join("worktrees");
+    let entries = match fs::read_dir(&registry) {
+        Ok(entries) => entries,
+        // A repository that has never had a linked worktree has no registry.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Some(Vec::new()),
+        Err(_) => return None,
+    };
+    let mut paths = Vec::new();
+    for entry in entries {
+        if paths.len() == REGISTERED_WORKTREE_LIMIT {
+            return None;
+        }
+        let pointer = entry.ok()?.path().join("gitdir");
+        // A registration too large to be a path is a registry this route does
+        // not understand, so it stops reading rather than ignoring the entry,
+        // and it stops at the bound rather than after taking the whole file in.
+        let gitdir = super::git_routes::bounded_git_metadata(&pointer)?;
+        let gitdir = Path::new(gitdir.trim_end());
+        // Git 2.48 writes the backlink relative to the registration under
+        // `worktree.useRelativePaths`, and resolves it against that directory
+        // before it matches a removal's argument. This route compares the
+        // registration as it stands, so a relative pointer names a path it
+        // cannot compare and leaves the registry unread.
+        if !gitdir.is_absolute() {
+            return None;
+        }
+        // The file points at the worktree's own `.git`; the worktree is its
+        // parent.
+        paths.push(gitdir.parent()?.to_path_buf());
+    }
+    Some(paths)
+}
+
+/// Whether Git would resolve the argument as the trailing part of this
+/// registered worktree's path. Git matches at a directory boundary, so `fix`
+/// matches `/w/fix` but not `/w/prefix`, and it compares the way the filesystem
+/// does, so a target differing only in case still counts.
+fn git_reads_as_suffix(registered: &Path, target: &str) -> bool {
+    let registered = registered.to_string_lossy();
+    let registered = registered.as_bytes();
+    let target = target.as_bytes();
+    let Some(head) = registered.len().checked_sub(target.len()) else {
+        return false;
+    };
+    registered[head..].eq_ignore_ascii_case(target)
+        && (head == 0 || matches!(registered[head - 1], b'/' | b'\\'))
+}
+
 /// The directory Git runs in after the leading `-C` routes, canonical.
 fn routed_directory(leading: &[String], cwd: &Path) -> Option<PathBuf> {
     let mut directory = cwd.to_path_buf();
@@ -136,3 +215,7 @@ fn routed_directory(leading: &[String], cwd: &Path) -> Option<PathBuf> {
     }
     fs::canonicalize(directory).ok()
 }
+
+#[cfg(test)]
+#[path = "worktree_maintenance_absence_tests.rs"]
+mod absence_tests;

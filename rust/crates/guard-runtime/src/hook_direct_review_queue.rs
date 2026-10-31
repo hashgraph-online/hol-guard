@@ -12,7 +12,7 @@
 //!   `add_native_review_approval_request` store operation under the shared
 //!   storage gate;
 //! - `render_pre_tool_review` (`hook_fail_closed.py`), with the approval link
-//!   `native_review_reason` (`approval_link_output.py`) signs;
+//!   the resident's `paused_review` signs;
 //! - the `prompted` and `approval_center_url` marks the daemon records the
 //!   activity with;
 //! - for Claude Code, the permission notice the daemon worker then records
@@ -35,20 +35,17 @@
 //! A package review is queued only when `native_package_review_response`
 //! provably leaves it to the queue (`hook_direct_review_package.rs`).
 //!
-//! A paused Cursor review is queued only when its link reaches the agent
-//! unchanged: Cursor's hook client signs a loopback link itself, and only
-//! when its interpreter can import Guard (`_cursor_reason`).
-//!
 //! Every other shape defers, so the daemon still answers the hook: a missing
 //! fact, a package review the daemon may settle, a Claude Code notice the
-//! bound key cannot sign, a Cursor pause whose link its client may sign, and
-//! any request or write the resident could not reproduce.
+//! bound key cannot sign, and any request or write the resident could not
+//! reproduce.
 
 use super::consume::{repair_store_permissions, storage_gate};
 use super::review_request::{build, ExactKeys, RequestInput};
 use super::{Context, HookDirectDefer, ENVELOPE_BYTES, ESCAPE_FACTOR};
 use crate::guard_store_approval_request::rewrite_approval_url;
 use crate::local_store_read::STORE_FILE_NAME;
+use crate::native_review_link::{canonical_harness, now_micros};
 use guard_command::hook_responses::{pre_tool_review, Object};
 use guard_contracts::{
     GuardStoreRequestV1, NativeExactActionQueryV1, GUARD_STORE_REQUEST_SCHEMA,
@@ -65,14 +62,9 @@ const CLAUDE_WRITE_METHOD: &str = "add_claude_native_review_approval_request";
 const ASK_MODE: &str = "ask";
 /// The harness whose paused review also records a permission notice.
 const CLAUDE_CODE: &str = "claude-code";
-/// The harness whose hook client rewrites the approval link itself.
-const CURSOR: &str = "cursor";
-/// The mode the daemon records a silent block with.
-const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
-/// The silent block's reason when the review gave none.
-const BLOCKED_REASON: &str = "HOL Guard blocked this action.";
-/// `_REVIEW_DEFAULT_REASON` (`hook_fail_closed.py`).
-const DEFAULT_REASON: &str = "HOL Guard requires review before this action can execute.";
+/// The harness whose native bridge can hold a paused hook open.
+const CODEX: &str = "codex";
+use crate::hook_decision_review_response::REVIEW_DEFAULT_REASON as DEFAULT_REASON;
 /// A hook waits this long for a busy store before the daemon takes over.
 const BUSY_TIMEOUT_MS: u64 = 250;
 
@@ -142,17 +134,6 @@ pub(super) fn answer(
         .and_then(Value::as_str)
         .ok_or(HookDirectDefer::ReviewQueue)?
         .to_owned();
-    // Cursor's hook client signs a loopback link with Guard's Python only
-    // when it can import it, which its bridge cannot know; such a pause stays
-    // with the daemon so the bridge never has to hand a queued hook back.
-    if canonical_harness(context.harness) == CURSOR
-        && !crate::native_review_link::review_url_stays_unsigned(
-            &approval_url,
-            Path::new(context.guard_home),
-        )
-    {
-        return Err(HookDirectDefer::ReviewQueue);
-    }
     let exact_action_allowable = token.is_ok();
     let auth_token =
         crate::daemon_policy_authority::load_guard_daemon_auth_token(Path::new(context.guard_home));
@@ -216,6 +197,28 @@ pub(super) fn answer(
     Ok((response, notice))
 }
 
+/// The facts of the wait a Codex hook's native bridge holds open on the
+/// request it pauses for (`_codex_live_wait` in
+/// `hook_native_review_approval.py`). The queue write proves the bridge live
+/// and links its wait, so an approval releases the original call; a bridge
+/// that is gone leaves the request a manual retry.
+fn live_wait_facts(context: &Context<'_>) -> Option<Value> {
+    if canonical_harness(context.harness) != CODEX {
+        return None;
+    }
+    let payload = context.recorded_payload;
+    let process = payload.get(crate::codex_hook_bridge::BROWSER_WAIT_PROCESS_KEY);
+    let timeout_seconds = payload.get(crate::codex_hook_bridge::BROWSER_WAIT_TIMEOUT_KEY);
+    if process.is_none() && timeout_seconds.is_none() {
+        return None;
+    }
+    Some(json!({
+        "process": process,
+        "timeout_seconds": timeout_seconds,
+        "workspace": (!context.workspace.is_empty()).then_some(context.workspace),
+    }))
+}
+
 /// How a silent block may point at its row.
 struct Flags {
     /// `asks_for_approval`.
@@ -261,6 +264,7 @@ fn queued_request(
 /// The store operation that queues an `ask` review, with its other
 /// arguments. The daemon worker records a paused Claude Code review's
 /// permission notice once it is queued; both are written in one transaction.
+/// A waiting Codex hook's wait is linked in the same write.
 fn store_method(
     context: &Context<'_>,
     result: &Object,
@@ -277,6 +281,9 @@ fn store_method(
     } else {
         CLAUDE_WRITE_METHOD
     };
+    if let Some(facts) = live_wait_facts(context) {
+        extra.insert(crate::codex_live_wait_build::FACTS_KEY.to_owned(), facts);
+    }
     Ok((method, extra))
 }
 
@@ -286,12 +293,7 @@ fn falsy_or_text<'a>(
     value: Option<&'a Value>,
     fallback: &'a str,
 ) -> Result<&'a str, HookDirectDefer> {
-    match value {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => Ok(fallback),
-        Some(Value::String(text)) if text.is_empty() => Ok(fallback),
-        Some(Value::String(text)) => Ok(text),
-        Some(_) => Err(HookDirectDefer::ReviewQueue),
-    }
+    crate::blocked_request_mode::falsy_or_text(value, fallback).ok_or(HookDirectDefer::ReviewQueue)
 }
 
 /// The published facts for a review the resident may queue.
@@ -300,7 +302,7 @@ fn facts<'a>(context: &Context<'a>, result: &Object) -> Option<Facts<'a>> {
     let review = &binding.review;
     let mode = review.blocked_request_mode.as_deref()?;
     // `native_package_review_response` may settle a package review first.
-    if !package::left_to_queue(cfg!(windows), context.recorded_payload, result) {
+    if !package::left_to_queue(context.recorded_payload, result) {
         return None;
     }
     // `_native_review_artifact_id` names the notice's artifact with the
@@ -319,7 +321,8 @@ fn facts<'a>(context: &Context<'a>, result: &Object) -> Option<Facts<'a>> {
 
 /// `add_approval_request` through the daemon's store operation: the stored
 /// request id, which is an earlier pending request's for the same action.
-/// `extra` holds the method's other arguments.
+/// `extra` holds the method's other arguments. A queue write that linked a
+/// Codex wait answers the id with the wait's `live_wait` status.
 fn write(
     context: &Context<'_>,
     method: &str,
@@ -353,10 +356,17 @@ fn write(
     let written = crate::guard_store_op::evaluate(&store_request).map(|(payload, _)| payload);
     forget_key(store_request.args);
     repair_store_permissions(guard_home);
-    match written {
-        Ok(Value::String(request_id)) if !request_id.is_empty() => Ok(request_id),
-        _ => Err(HookDirectDefer::ReviewQueue),
-    }
+    let stored_id = match written {
+        Ok(Value::String(request_id)) => Some(request_id),
+        Ok(Value::Object(mut reply)) => match reply.remove("request_id") {
+            Some(Value::String(request_id)) => Some(request_id),
+            _ => None,
+        },
+        _ => None,
+    };
+    stored_id
+        .filter(|request_id| !request_id.is_empty())
+        .ok_or(HookDirectDefer::ReviewQueue)
 }
 
 /// Wipe the bound key a Claude notice carried to the store operation.
@@ -396,13 +406,6 @@ fn respond(
     Some(Value::Object(response))
 }
 
-/// `canonical_harness` (`hook_fail_closed.py`).
-fn canonical_harness(harness: &str) -> String {
-    crate::guard_store_json::py_strip(harness)
-        .to_lowercase()
-        .replace('_', "-")
-}
-
 /// `uuid.uuid4().hex`.
 fn request_id() -> Option<String> {
     let mut bytes = [0u8; 16];
@@ -412,23 +415,15 @@ fn request_id() -> Option<String> {
     Some(hex::encode(bytes))
 }
 
-fn now_micros() -> Option<i64> {
-    let micros = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_micros();
-    i64::try_from(micros).ok()
-}
-
 #[path = "hook_direct_review_silent.rs"]
 mod blocked;
 use blocked::silent;
 
 #[path = "hook_direct_review_connector.rs"]
-mod connector;
+pub(crate) mod connector;
 
 #[path = "hook_direct_review_notice.rs"]
-mod notice;
+pub(crate) mod notice;
 
 #[path = "hook_direct_review_package.rs"]
 mod package;

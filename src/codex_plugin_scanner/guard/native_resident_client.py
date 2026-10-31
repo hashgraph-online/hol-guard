@@ -17,16 +17,12 @@ from collections.abc import Mapping
 from contextvars import ContextVar
 from pathlib import Path
 
-from .codex_hook_launch_runtime import (
-    BoundedHookProcessResult,
-)
-from .codex_hook_launch_runtime import (
-    run_isolated_hook_process as _legacy_run_isolated_hook_process,
-)
+from .codex_hook_launch_runtime import run_isolated_hook_process
 from .fork_safety import forget_in_child
-from .native_approval_errors import FINITE_FAILURE_CODES, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
+from .native_approval_errors import FINITE_FAILURE_CODES
 from .native_resident_revival import (
     RESTART_BLOCKED_CODE,
+    HoldKey,
     arm_restart_hold,
     clear_restart_hold,
     is_restart_blocked_frame,
@@ -35,10 +31,6 @@ from .native_resident_revival import (
 )
 from .native_resident_stream import _PersistentNativeClient, _StreamFailure
 from .path_resolution_cache import cached_realpath
-
-# Retain the old runner name as a test seam. Production always leaves this
-# binding untouched and uses the persistent Rust client below.
-run_isolated_hook_process = _legacy_run_isolated_hook_process
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _RESIDENT_REQUEST_LOG = "HOL_GUARD_RESIDENT_REQUEST_LOG"
@@ -115,6 +107,13 @@ _LAST_FAILURE_CODE: ContextVar[str | None] = ContextVar(
     "native_resident_client_failure_code",
     default=None,
 )
+# The pool whose restart hold produced the current context's refusal. A caller
+# deciding whether to wait out that hold needs the key it was armed under, not
+# whichever runtime happens to hold the longest one.
+_LAST_HOLD_KEY: ContextVar[HoldKey | None] = ContextVar(
+    "native_resident_client_failure_hold_key",
+    default=None,
+)
 _RESIDENTS_LOCK = threading.Lock()
 _RESIDENTS: dict[tuple[Path, Path], Mapping[str, str]] = {}
 forget_in_child(_RESIDENTS)
@@ -125,9 +124,19 @@ def native_resident_client_failure_code() -> str | None:
     return _LAST_FAILURE_CODE.get()
 
 
+def native_resident_client_failure_hold_key() -> HoldKey | None:
+    """Return the hold key behind the current context's restart refusal."""
+    return _LAST_HOLD_KEY.get()
+
+
 def record_native_resident_client_failure_code(code: str | None) -> None:
     """Record a privacy-safe failure code for the current native client request."""
     _LAST_FAILURE_CODE.set(code)
+
+
+def record_native_resident_client_failure_hold_key(key: HoldKey | None) -> None:
+    """Record the restart hold the current native client request was refused under."""
+    _LAST_HOLD_KEY.set(key)
 
 
 def record_native_resident_error_frame(decoded: Mapping[str, object]) -> None:
@@ -139,33 +148,6 @@ def record_native_resident_error_frame(decoded: Mapping[str, object]) -> None:
     code = decoded.get("error")
     if isinstance(code, str) and len(code) <= _MAX_FAILURE_CODE_LENGTH and code in FINITE_FAILURE_CODES:
         _LAST_FAILURE_CODE.set(code)
-
-
-def _allowlisted_failure_code(stderr: str) -> str | None:
-    for line in stderr.splitlines():
-        if len(line) <= _MAX_FAILURE_CODE_LENGTH and line in NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES:
-            return line
-    return None
-
-
-def _classify_failure(result: BoundedHookProcessResult) -> str:
-    if result.containment_failed:
-        return "native_client_containment_failed"
-    if result.timed_out:
-        return "native_client_timed_out"
-    if result.output_limit_exceeded:
-        return "native_client_output_limit_exceeded"
-    if result.returncode is None:
-        return "native_client_status_missing"
-    if result.returncode != 0:
-        return "native_client_exit_nonzero"
-    if not result.stdout:
-        return "native_client_output_missing"
-    return "native_client_process_failed"
-
-
-def _record_failure_code(result: BoundedHookProcessResult) -> None:
-    _LAST_FAILURE_CODE.set(_allowlisted_failure_code(result.stderr) or _classify_failure(result))
 
 
 def _is_resident_startup_error(response: bytes) -> bool:
@@ -244,11 +226,23 @@ class _PersistentNativeClientPool:
         _LAST_FAILURE_CODE.set("native_client_pool_exhausted")
         return None
 
-    def request(self, payload: bytes, *, deadline_monotonic: float) -> bytes | None:
+    def request(
+        self,
+        payload: bytes,
+        *,
+        deadline_monotonic: float,
+        diagnostic: bool = False,
+    ) -> bytes | None:
+        """Send one request. ``diagnostic`` asks a question about the resident
+        rather than giving it work: the answer must not arm or clear the hold
+        that gates hook execution, and the stream it borrows is retired rather
+        than parked, so the question leaves no lease of its own behind.
+        """
         if restart_hold_active(self._hold_key) and not self.has_idle_client():
             # The Rust client just refused to respawn a crash-looping resident.
             # Answer the same bounded refusal instead of spawning a client per call.
             _LAST_FAILURE_CODE.set(RESTART_BLOCKED_CODE)
+            _LAST_HOLD_KEY.set(self._hold_key)
             return restart_blocked_frame()
         client = self._lease(deadline_monotonic=deadline_monotonic)
         if client is None:
@@ -257,10 +251,11 @@ class _PersistentNativeClientPool:
         try:
             _record_resident_request(payload)
             response = client.request(payload, deadline_monotonic=deadline_monotonic)
-            if response is not None:
+            if response is not None and not diagnostic:
                 if is_restart_blocked_frame(response):
                     arm_restart_hold(self._hold_key)
                     _LAST_FAILURE_CODE.set(RESTART_BLOCKED_CODE)
+                    _LAST_HOLD_KEY.set(self._hold_key)
                 else:
                     clear_restart_hold(self._hold_key)
             return response
@@ -269,7 +264,7 @@ class _PersistentNativeClientPool:
             with self._condition:
                 if client not in self._clients:
                     close_client = True
-                elif self._closed or response is None or _is_resident_startup_error(response):
+                elif self._closed or diagnostic or response is None or _is_resident_startup_error(response):
                     self._retiring.add(client)
                     close_client = True
                 else:
@@ -334,6 +329,7 @@ class _PersistentNativeClientPool:
                     self._condition.notify_all()
 
     def close(self, *, deadline_monotonic: float | None = None) -> bool:
+        clear_restart_hold(self._hold_key)
         with self._condition:
             self._closed = True
             clients = tuple(self._clients)
@@ -636,69 +632,6 @@ def close_native_residents(guard_home: Path | None = None, *, deadline_monotonic
     return all_contained
 
 
-def _legacy_native_resident_client_request(
-    *,
-    executable: Path,
-    guard_home: Path,
-    environment: Mapping[str, str],
-    payload: bytes,
-    timeout_seconds: float | None,
-    raw_hook_envelope: bool,
-    deadline_monotonic: float | None,
-) -> bytes | None:
-    """Exercise the former one-shot seam for isolated unit-test fakes only."""
-    try:
-        input_text = payload.decode("utf-8")
-    except UnicodeDecodeError:
-        _LAST_FAILURE_CODE.set("native_client_request_invalid")
-        return None
-    state_dir = guard_home / "native-runtime"
-    command = "hook-client" if raw_hook_envelope else "resident-client"
-    try:
-        if deadline_monotonic is not None:
-            result = run_isolated_hook_process(
-                (str(executable), command, "--stdin", str(state_dir)),
-                input_text=input_text,
-                cwd=executable.parent,
-                environment=dict(environment),
-                timeout_seconds=None,
-                deadline_monotonic=deadline_monotonic,
-                output_limit=_MAX_RESPONSE_BYTES,
-                windows_kill_on_job_close=False,
-            )
-        else:
-            assert timeout_seconds is not None
-            result = run_isolated_hook_process(
-                (str(executable), command, "--stdin", str(state_dir)),
-                input_text=input_text,
-                cwd=executable.parent,
-                environment=dict(environment),
-                timeout_seconds=timeout_seconds,
-                output_limit=_MAX_RESPONSE_BYTES,
-                windows_kill_on_job_close=False,
-            )
-    except (OSError, RuntimeError, ValueError):
-        _LAST_FAILURE_CODE.set("native_client_launcher_failed")
-        return None
-    if (
-        result.returncode != 0
-        or result.timed_out
-        or result.output_limit_exceeded
-        or result.containment_failed
-        or not result.stdout
-    ):
-        _record_failure_code(result)
-        return None
-    _track_resident(executable=executable, state_dir=state_dir, environment=environment)
-    return result.stdout.encode("utf-8")
-
-
-def native_resident_client_transport() -> str:
-    """Which transport the next request takes: ``"pool"`` or the legacy seam."""
-
-    return "legacy" if run_isolated_hook_process is not _legacy_run_isolated_hook_process else "pool"
-
-
 def native_resident_client_request(
     *,
     executable: Path,
@@ -708,17 +641,19 @@ def native_resident_client_request(
     timeout_seconds: float | None = None,
     raw_hook_envelope: bool = False,
     deadline_monotonic: float | None = None,
+    diagnostic: bool = False,
 ) -> bytes | None:
-    """Send bounded bytes through a persistent Rust client stream."""
-    _LAST_FAILURE_CODE.set(None)
-    if not payload or (deadline_monotonic is None and (timeout_seconds is None or timeout_seconds <= 0)):
-        _LAST_FAILURE_CODE.set("native_client_request_invalid")
-        return None
-    if len(payload) > _MAX_REQUEST_BYTES:
-        _LAST_FAILURE_CODE.set("native_client_request_invalid")
-        return None
-    if run_isolated_hook_process is not _legacy_run_isolated_hook_process:
-        return _legacy_native_resident_client_request(
+    """Send bounded bytes through a persistent Rust client stream.
+
+    ``diagnostic`` marks a question about the resident rather than work for it.
+    A diagnostic leaves the hook path exactly as it found it: the restart hold
+    is neither armed nor cleared, and the failure code and hold key a hook
+    request left behind are restored before returning.
+    """
+    previous_failure = _LAST_FAILURE_CODE.get() if diagnostic else None
+    previous_hold_key = _LAST_HOLD_KEY.get() if diagnostic else None
+    try:
+        return _resident_client_request(
             executable=executable,
             guard_home=guard_home,
             environment=environment,
@@ -726,7 +661,35 @@ def native_resident_client_request(
             timeout_seconds=timeout_seconds,
             raw_hook_envelope=raw_hook_envelope,
             deadline_monotonic=deadline_monotonic,
+            diagnostic=diagnostic,
         )
+    finally:
+        if diagnostic:
+            # Every path above, the rejections included, writes these. Restore
+            # them whichever one ran, so a question answers only its caller.
+            _LAST_FAILURE_CODE.set(previous_failure)
+            _LAST_HOLD_KEY.set(previous_hold_key)
+
+
+def _resident_client_request(
+    *,
+    executable: Path,
+    guard_home: Path,
+    environment: Mapping[str, str],
+    payload: bytes,
+    timeout_seconds: float | None,
+    raw_hook_envelope: bool,
+    deadline_monotonic: float | None,
+    diagnostic: bool,
+) -> bytes | None:
+    _LAST_FAILURE_CODE.set(None)
+    _LAST_HOLD_KEY.set(None)
+    if not payload or (deadline_monotonic is None and (timeout_seconds is None or timeout_seconds <= 0)):
+        _LAST_FAILURE_CODE.set("native_client_request_invalid")
+        return None
+    if len(payload) > _MAX_REQUEST_BYTES:
+        _LAST_FAILURE_CODE.set("native_client_request_invalid")
+        return None
     try:
         payload.decode("utf-8")
     except UnicodeDecodeError:
@@ -740,6 +703,7 @@ def native_resident_client_request(
     return _client_pool_for(executable, guard_home / "native-runtime", environment).request(
         payload,
         deadline_monotonic=deadline,
+        diagnostic=diagnostic,
     )
 
 
@@ -749,10 +713,11 @@ __all__ = [
     "close_native_resident_clients",
     "close_native_residents",
     "native_resident_client_failure_code",
+    "native_resident_client_failure_hold_key",
     "native_resident_client_ready",
     "native_resident_client_request",
-    "native_resident_client_transport",
     "record_native_resident_client_failure_code",
+    "record_native_resident_client_failure_hold_key",
     "record_native_resident_error_frame",
     "resident_state_files",
     "retire_native_resident_for_update",

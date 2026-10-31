@@ -15,6 +15,8 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GuardTrustAttestationVerificationKey,
+)
+from tests.trust_attestation_verify_support import (
     GuardTrustAttestationVerificationPolicy,
     verify_trust_attestation,
 )
@@ -91,6 +93,11 @@ def test_the_fixture_keeps_an_envelope_that_overrides_the_payloads_signing_time(
 
 
 @pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
+# Replaying a recorded decision means asking the native verifier for it, so
+# this case needs a provisioned resident; `native_context_digest` supplies one
+# and skips where no runtime was built. The two fixture-shape tests above read
+# the recording alone and stay runnable everywhere.
+@pytest.mark.usefixtures("native_context_digest")
 def test_a_recorded_attestation_is_verified_the_way_the_fixture_records(case: dict[str, Any]) -> None:
     if "replay_key" in case:
         assert _verify(case) == case["replay_key"]

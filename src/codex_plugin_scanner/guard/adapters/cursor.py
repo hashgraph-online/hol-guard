@@ -66,6 +66,9 @@ class CursorHarnessAdapter(HarnessAdapter):
     fallback_hint = "Resolve package-level trust in Guard and let Cursor keep its built-in tool approval flow."
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
+    # The editor runs Guard's hooks on its own, so a missing `cursor-agent` says
+    # nothing about whether Cursor is installed.
+    command_absence_proves_uninstalled = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path) -> str:

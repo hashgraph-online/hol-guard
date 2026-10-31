@@ -1,7 +1,7 @@
 {
   "batch": 7,
   "evidence": [
-    "src/codex_plugin_scanner/guard/managed_controls/atomic_apply.py",
+    "tests/managed_controls/atomic_apply.py",
     "tests/managed_controls/test_atomic_apply.py"
   ],
   "repository": "hashgraph-online/hol-guard",

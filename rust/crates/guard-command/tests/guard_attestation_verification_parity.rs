@@ -61,7 +61,13 @@ fn verification_policy(value: &Value) -> TrustAttestationVerificationPolicy {
                     .collect()
             })
             .unwrap_or_default(),
-        minimum_sequence: value.get("minimum_sequence").and_then(Value::as_i64),
+        minimum_sequence: value
+            .get("minimum_sequence")
+            .and_then(|minimum| match minimum {
+                Value::Number(number) => Some(number.to_string()),
+                Value::String(digits) => Some(digits.clone()),
+                _ => None,
+            }),
         seen_replay_keys: strings("seen_replay_keys"),
         now: text(value, "now"),
         require_nonce: value

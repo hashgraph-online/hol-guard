@@ -124,7 +124,10 @@ def test_native_contract_rejects_changed_immutable_source_identity(
 
 
 @pytest.fixture(scope="module")
-def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
+def native_samples(
+    _native_context_home: Path,
+) -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
+    from codex_plugin_scanner.guard.native_context import bound_context_digest_home
     from codex_plugin_scanner.guard.runtime import package_protect_projection
     from tests import native_github_capability_support
     from tests.guard_command_corpus_native import evaluate_native_corpus_batch
@@ -139,7 +142,12 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
         if len(selected) == 58:
             break
     assert len(selected) == 58
-    with pytest.MonkeyPatch.context() as attribution:
+    # This module fixture runs before the function-scoped autouse home binding,
+    # so bind the session home here.  The extension control snapshot digest is a
+    # resident answer, and that resident only serves a home whose verifier key is
+    # already provisioned; the ambient home has none, and provisioning one needs
+    # a native launch the ambient mode does not permit.
+    with pytest.MonkeyPatch.context() as attribution, bound_context_digest_home(_native_context_home):
         for marker in HARNESS_ENV_MARKERS:
             attribution.delenv(marker, raising=False)
         attribution.setenv("__CFBundleIdentifier", "com.apple.Terminal")

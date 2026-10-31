@@ -14,20 +14,12 @@ import json
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from ..native_context import _UNBOUND_PREFIX
 from .extension_control_runtime import current_extension_control_binding_digest
 
 APPROVAL_CONTEXT_TOKEN_PREFIX = "guard-approval-context:v1:"
-
-ApprovalContextValidationFailure = Literal[
-    "approval_reuse_identity_changed",
-    "approval_reuse_content_changed",
-    "approval_reuse_capability_changed",
-    "approval_reuse_policy_changed",
-    "approval_reuse_sandbox_changed",
-]
 
 
 class NativeContextDigestUnavailableError(RuntimeError):
@@ -39,9 +31,8 @@ def _unbound_context_digest(label: str, *, material: object) -> str:
 
     Builders degrade to this when the native digest authority is unreachable
     (``HOL_GUARD_NATIVE=off``, missing runtime, unprovisioned home).  The
-    ``guard-context-unbound:`` prefix is rejected by token parsing and by
-    ``is_unbound_context_digest`` call sites, so equality between two degraded
-    values can never mint approval reuse or an unchanged-context claim.
+    ``guard-context-unbound:`` prefix is rejected by token parsing, so
+    equality between two degraded values can never mint approval reuse or an unchanged-context claim.
     Determinism over the caller's canonical ``material`` maps identical
     degraded inputs to one sentinel, so restrictive stored rows (saved
     blocks) keyed by artifact hash stay reachable, while validation still
@@ -100,14 +91,6 @@ def _require_json_component(name: str, value: object) -> None:
         json.dumps(value, ensure_ascii=True, allow_nan=False)
     except (TypeError, ValueError) as exc:
         raise TypeError(f"approval context component {name!r} must be JSON-compatible") from exc
-
-
-def _json_serializable(value: object) -> bool:
-    try:
-        json.dumps(value, ensure_ascii=True, allow_nan=False)
-    except (TypeError, ValueError):
-        return False
-    return True
 
 
 def build_approval_context_token(
@@ -189,57 +172,6 @@ def approval_context_token_is_well_formed(token: object, *, keep_prefixed_when_u
     except (NativeContextDigestUnavailableError, TypeError):
         return keep_prefixed_when_unavailable
     return result.get("approval_context_token_well_formed") is True
-
-
-def approval_context_tokens_validation_reason(
-    saved_token: object,
-    current_token: object,
-) -> ApprovalContextValidationFailure | None:
-    """Compare opaque saved/current tokens without requiring their raw context.
-
-    Legacy artifact hashes and malformed tokens cannot prove that all context
-    dimensions are unchanged, so they fail closed as changed content.
-    """
-
-    if not (_json_serializable(saved_token) and _json_serializable(current_token)):
-        return "approval_reuse_content_changed"
-    try:
-        result = _context_digest_result(
-            "validate_approval_context_tokens",
-            {"saved_token": saved_token, "current_token": current_token},
-        )
-    except (NativeContextDigestUnavailableError, TypeError):
-        return "approval_reuse_content_changed"
-    return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
-
-
-def build_runtime_executable_identity(
-    command: object,
-    *,
-    search_path: str | None = None,
-    cwd: Path | None = None,
-    home_dir: Path | None = None,
-    require_executable: bool = True,
-) -> dict[str, object]:
-    """Resolve and content-bind an executable without launching it.
-
-    Resolution, hashing, symlink-chain snapshotting, and per-evaluation
-    nonce semantics live in the native ``runtime_executable_identity``
-    context-digest kind; this wrapper only transports the call. Files that
-    cannot be safely and completely hashed receive a per-evaluation nonce —
-    that deliberately disables approval reuse instead of treating an
-    incomplete executable identity as stable.
-    """
-
-    from ..native_context import context_runtime_executable_identity
-
-    return context_runtime_executable_identity(
-        command,
-        search_path=search_path,
-        cwd=cwd,
-        home_dir=home_dir,
-        require_executable=require_executable,
-    )
 
 
 def build_runtime_launch_identity(

@@ -21,6 +21,9 @@ from .native_runtime_resilience import native_record_resident_failure
 from .native_store_policy import _payload
 
 LOCAL_CLI_HELP_PARSE_FEATURE = "local-cli-help-parse-v1"
+# A resident that reads options and script sources. Older ones refuse the
+# `script_source` field, so it is sent only to a resident that advertises this.
+LOCAL_CLI_HELP_VARIATIONS_FEATURE = "local-cli-help-variations-v1"
 _REQUEST_SCHEMA = "guard-local-cli-help-parse-request.v1"
 _RESULT_SCHEMA = "guard-local-cli-help-parse-result.v1"
 _TIMEOUT_SECONDS = 5.0
@@ -35,8 +38,13 @@ def native_local_cli_help_commands(
     text: str,
     parent_id: str | None,
     invocation: Sequence[str],
+    script_source: bool = False,
 ) -> tuple[dict[str, object], ...] | None:
-    """The commands the resident read out of ``text``; None when it cannot say."""
+    """The commands the resident read out of ``text``; None when it cannot say.
+
+    ``script_source`` marks ``text`` as a script's own source rather than its
+    help output: the resident then reads only its comments and help text.
+    """
 
     home = Path(guard_home)
     try:
@@ -51,13 +59,15 @@ def native_local_cli_help_commands(
         "parent_id": parent_id,
         "invocation": [str(word) for word in invocation],
     }
+    if script_source:
+        wire["script_source"] = True
     try:
         response = _resident_request(
             operation="local_cli_help_parse",
             request=wire,
             guard_home=home,
             timeout_seconds=_TIMEOUT_SECONDS,
-            required_feature=LOCAL_CLI_HELP_PARSE_FEATURE,
+            required_feature=LOCAL_CLI_HELP_VARIATIONS_FEATURE if script_source else LOCAL_CLI_HELP_PARSE_FEATURE,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,

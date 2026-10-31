@@ -17,9 +17,8 @@ from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.mdm import policy as policy_module
 from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, MachinePaths
-from codex_plugin_scanner.guard.mdm.policy import apply_managed_policy, load_managed_policy
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import policy_bundle_key_fingerprint
-from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring
+from codex_plugin_scanner.guard.mdm.policy import load_managed_policy
+from tests.policy_bundle_signing_helpers import policy_bundle_key_fingerprint, policy_bundle_test_keyring
 
 
 def _policy(**overrides: object) -> dict[str, object]:
@@ -357,56 +356,6 @@ def test_policy_is_size_bounded(tmp_path: Path) -> None:
     assert load_managed_policy(policy_path=path).status == "invalid"
 
 
-def test_locked_values_override_local_and_actions_only_strengthen(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(json.dumps(_policy()))
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-
-    composed = apply_managed_policy(
-        {"mode": "monitor", "actions": {"shell": "allow", "read": "block", "write": "review"}},
-        state.policy,
-    )
-
-    assert composed == {
-        "mode": "enforce",
-        "actions": {"shell": "block", "read": "block", "write": "review"},
-    }
-
-
-def test_managed_value_replaces_invalid_local_type(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(json.dumps(_policy()))
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-
-    assert apply_managed_policy({"mode": True}, state.policy)["mode"] == "enforce"
-
-
-def test_partial_managed_nested_policy_preserves_local_strengthening(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(
-        json.dumps(
-            _policy(
-                settings={"risk_actions": {"network_egress": "block"}},
-                lockedSettings=["risk_actions.network_egress"],
-            )
-        )
-    )
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-
-    composed = apply_managed_policy(
-        {"risk_actions": {"network_egress": "review", "credential_access": "block"}},
-        state.policy,
-    )
-
-    assert composed["risk_actions"] == {
-        "network_egress": "block",
-        "credential_access": "block",
-    }
-
-
 def test_nested_managed_lock_rejects_persisted_weakening(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "policy.json"
     path.write_text(
@@ -475,14 +424,6 @@ def test_managed_policy_survives_local_and_cloud_weakening(tmp_path: Path) -> No
     assert overlaid.risk_actions == {"network_egress": "block"}
     assert overlaid.harness_risk_actions == {"codex": {"network_egress": "block"}}
     assert overlaid.install_owner == "mdm"
-
-
-def test_local_policy_can_strengthen_locked_action(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(json.dumps(_policy(settings={"default_action": "warn"}, lockedSettings=["default_action"])))
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-    assert apply_managed_policy({"default_action": "block"}, state.policy)["default_action"] == "block"
 
 
 def test_invalid_machine_policy_fails_closed_in_runtime_config(tmp_path: Path) -> None:

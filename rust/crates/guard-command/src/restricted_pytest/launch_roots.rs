@@ -42,28 +42,88 @@ pub(crate) fn launches_outside_exec_roots<'a>(
     let mut executable = executable_roots(workspace, roots);
     executable.extend(linked_checkout(workspace, home));
     let reaches = |path: &Path| path_is_within_any(path, &executable);
+    let shimless = without_package_shims(search_path, workspace);
     launches.into_iter().any(|(program, places)| {
         places.iter().any(|place| {
             unreachable_from(
                 program,
                 place.as_deref(),
-                (search_path, sandbox_path.as_str()),
+                (search_path, shimless.as_str(), sandbox_path.as_str()),
+                workspace,
                 &reaches,
             )
         })
     })
 }
 
+/// Whether `entry` is a package-shim directory: a `bin` below a
+/// `package-shims`, which is how Guard lays its own shims out under the guard
+/// home. The shape is read rather than the guard home compared, because the
+/// guard home is wherever this install put it. `local_mcp_stdio` reads the
+/// same shape to keep a shim from answering a server launch.
+fn is_package_shim_dir(entry: &Path) -> bool {
+    fn name(path: &Path) -> Option<&str> {
+        path.file_name().and_then(OsStr::to_str)
+    }
+    name(entry) == Some("bin") && entry.parent().and_then(name) == Some("package-shims")
+}
+
+/// Whether `entry` is Guard's shim directory, as opposed to a project
+/// directory that ends in the same two names.
+///
+/// The sandbox does not execute from Guard's shim directory, which sits
+/// outside the workspace. A project that keeps a tool under its own
+/// `package-shims/bin` is inside the workspace, and `workspace_tools` keeps
+/// that directory on the sandbox PATH. Stripping it would send a run the
+/// sandbox can already execute to review.
+fn is_guard_package_shim(entry: &Path, workspace: &Path) -> bool {
+    is_package_shim_dir(entry) && !path_is_within(entry, workspace)
+}
+
+/// `search_path` without Guard's package-shim directories. Guard's own shims
+/// sit first on the PATH of every session it supervises, so a bare `npm`
+/// resolves to a shim rather than to the Node install behind it. The sandbox
+/// refuses to execute from that directory - a shim must never answer for a
+/// tool inside it - so reading the shim as the program would make every
+/// manager the shims cover unreachable, and ordinary work such as `npm run
+/// build` would be reviewed on every machine the shims are installed on.
+/// Resolving past them asks the question the sandbox actually faces: which
+/// program the run reaches once the shim layer is gone. A `package-shims/bin`
+/// inside the workspace is left in place: that is a project path, not the
+/// shim layer.
+fn without_package_shims(search_path: &str, workspace: &Path) -> String {
+    search_path
+        .split(':')
+        .filter(|entry| !is_guard_package_shim(Path::new(entry), workspace))
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 /// Whether `program`, started from `place`, is one the sandbox could not run.
-/// `paths` are the session `PATH` and the one the sandbox accepted.
+/// `paths` are the session `PATH`, the same list without the package-shim
+/// directories, and the one the sandbox accepted.
 fn unreachable_from(
     program: &str,
     place: Option<&Path>,
-    paths: (&str, &str),
+    paths: (&str, &str, &str),
+    workspace: &Path,
     reaches: &impl Fn(&Path) -> bool,
 ) -> bool {
-    let (search_path, sandbox_path) = paths;
+    let (search_path, shimless_path, sandbox_path) = paths;
     let found = match locate(program, search_path, place) {
+        Lookup::Found(path)
+            if path
+                .parent()
+                .is_some_and(|dir| is_guard_package_shim(dir, workspace)) =>
+        {
+            match locate(program, shimless_path, place) {
+                Lookup::Found(path) => path,
+                // A shim is the only answer this session has, so there is
+                // nothing behind it for the sandbox to run, and containing
+                // the command would trade a review for a failure.
+                Lookup::Missing | Lookup::Unresolved => return true,
+            }
+        }
         Lookup::Found(path) => path,
         Lookup::Missing => return false,
         Lookup::Unresolved => return true,
@@ -111,6 +171,57 @@ fn unreachable_from(
 /// as they already are in `/usr/bin`.
 pub(super) const MAC_PROGRAM_ROOTS: &[&str] = &["/bin", "/usr/bin", "/usr/sbin", "/sbin"];
 
+/// Where macOS keeps its own frameworks. Nothing executes this tree whole:
+/// it is only where `mac_framework_program_directories` looks.
+pub(super) const MAC_FRAMEWORK_ROOT: &str = "/System/Library/Frameworks";
+
+/// More `usr/bin` directories than any macOS install ships, so a tree that is
+/// not the one this expects cannot turn the walk into an unbounded one.
+const MAX_FRAMEWORK_PROGRAM_DIRECTORIES: usize = 64;
+
+/// The sealed directories holding the interpreters macOS ships inside its own
+/// frameworks: `/System/Library/Frameworks/*.framework/Versions/*/usr/bin`.
+/// `/usr/bin/rake`, `/usr/bin/irb` and `/usr/bin/tclsh` are short scripts
+/// whose shebang names a program under one of them, so the interpreter a
+/// command as ordinary as `rake spec` runs on resolved outside every root the
+/// containment check knows and the run was reviewed instead of contained.
+/// Those directories sit on the signed system volume: they are read-only even
+/// for root, the profile already reads all of `/System`, and the capabilities
+/// this sandbox withholds - no writable path outside the workspace, no mach
+/// service but the user-database lookup, no root - stop a machine change
+/// wherever the program it runs happens to sit.
+///
+/// Only the `bin` directories are named, one by one. A framework's `Support`,
+/// `Helpers`, `XPCServices` and `MachServices` trees sit beside them and carry
+/// privileged helpers the interpreters are not, so a subpath of the frameworks
+/// directory would reach every one of them and the literal privilege denials
+/// name only `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`.
+pub(super) fn mac_framework_program_directories() -> Vec<PathBuf> {
+    let Ok(frameworks) = std::fs::read_dir(MAC_FRAMEWORK_ROOT) else {
+        return Vec::new();
+    };
+    let mut directories = Vec::new();
+    for framework in frameworks.filter_map(Result::ok) {
+        let Ok(versions) = std::fs::read_dir(framework.path().join("Versions")) else {
+            continue;
+        };
+        for version in versions.filter_map(Result::ok) {
+            let programs = version.path().join("usr/bin");
+            if programs.is_dir() {
+                directories.push(programs);
+            }
+            if directories.len() >= MAX_FRAMEWORK_PROGRAM_DIRECTORIES {
+                directories.sort();
+                return directories;
+            }
+        }
+    }
+    // The order two `read_dir` calls answer in is the filesystem's, and the
+    // profile these directories are written into is compared byte for byte.
+    directories.sort();
+    directories
+}
+
 /// The canonical form of a session `PATH` entry that is one of the system
 /// program directories above, which the sandbox executes from on every
 /// platform. The toolchain roots the sandbox PATH otherwise accepts leave out
@@ -142,6 +253,9 @@ pub(super) fn executable_roots(workspace: &Path, exec_roots: Vec<PathBuf>) -> Ve
             .map(PathBuf::from)
             .filter(|root| root.exists()),
     );
+    if cfg!(target_os = "macos") {
+        roots.extend(mac_framework_program_directories());
+    }
     roots.extend(exec_roots);
     roots
 }

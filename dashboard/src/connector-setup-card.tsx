@@ -10,6 +10,7 @@ import {
 import { GUARD_REVIEW_INTENT_COPY } from "./guard-action";
 import type { GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import { fetchLocalCliList, type LocalCliItem } from "./local-cli-api";
+import { allowedEarlierVersion } from "./protection-center/custom-extension-profile";
 import { queueItemPreview } from "./review-queue-item";
 
 const SETUP_COPY = GUARD_REVIEW_INTENT_COPY.setup;
@@ -103,6 +104,8 @@ export function ConnectorSetupCard(props: {
   const name = connectorName(group);
   const surface = connectorSurfaceLabel(group.cli?.surface ?? null);
   const gateReady = approvalGateProofReady(props.approvalGate);
+  // An allow recorded for an earlier version of the file no longer applies; say so rather than "not set up".
+  const changed = group.cli !== null && allowedEarlierVersion(group.cli);
   const doing = group.latest.trigger_summary ?? group.latest.why_now ?? null;
   const titleId = `connector-setup-${group.identityHash}`;
   const tone = group.caution
@@ -129,8 +132,10 @@ export function ConnectorSetupCard(props: {
             <span className="text-xs font-medium text-muted-foreground">{callCountCopy(group.callCount)}</span>
           </div>
           <p className="text-sm leading-relaxed text-brand-dark/80">
-            Guard does not recognise this {surface.toLowerCase()} and it is not set up on this device, so its calls
-            are paused. {SETUP_COPY.scope}
+            {changed
+              ? `You allowed an earlier version of this ${surface.toLowerCase()}. Its file has changed since, so its calls are paused until you allow this version.`
+              : `Guard does not recognise this ${surface.toLowerCase()} and it is not set up on this device, so its calls are paused.`}{" "}
+            {SETUP_COPY.scope}
           </p>
           <dl className="grid gap-3 sm:grid-cols-2">
             <Block label="What it is">
@@ -171,7 +176,7 @@ export function ConnectorSetupCard(props: {
           <div className="flex flex-wrap items-center gap-2">
             {gateReady ? (
               <ActionButton href={group.setupHref} variant={group.caution ? "outline" : "primary"}>
-                Set up
+                {changed ? "Review this version" : "Set up"}
               </ActionButton>
             ) : (
               <ActionButton href="/settings?section=approval" variant="outline">

@@ -7,7 +7,7 @@ import json
 import urllib.request
 from collections.abc import Mapping
 
-from .guarded_repository_registration import _github_oidc_token
+from .guarded_repository_registration import HOL_REGISTRATION_USER_AGENT, _github_oidc_token
 
 DEFAULT_ENDPOINT = "https://hol.org/api/guard/plugins/releases/attestations"
 
@@ -54,6 +54,7 @@ def register_plugin_release_evidence(
             "Authorization": f"Bearer {oidc_token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": HOL_REGISTRATION_USER_AGENT,
         },
     )
     with urllib.request.urlopen(request, timeout=15) as response:

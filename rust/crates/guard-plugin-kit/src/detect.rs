@@ -7,13 +7,14 @@
 //! Registry `server.json`.
 
 mod servers;
-mod skill;
+pub(crate) mod skill;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
 use serde_json::Value;
 
+use crate::config::Excludes;
 use crate::model::{Diagnostic, Marketplace, Plugin, Source, SourceKind};
 use crate::walk;
 
@@ -26,10 +27,14 @@ pub struct Detection {
     /// `(server, variable, is_literal)` for each MCP env entry. Values are
     /// never kept; only whether one is a literal rather than a reference.
     pub raw_env: Vec<(String, String, bool)>,
+    /// Paths `[plugin_kit] exclude_paths` leaves out, which packaging honours
+    /// when it copies whole skill and hooks folders.
+    pub(crate) excludes: Excludes,
 }
 
 pub fn detect(root: &Path) -> Result<Detection, String> {
-    let files = walk::files(root)?;
+    let excludes = Excludes::load(root)?;
+    let files = walk::files(root, "", &excludes)?;
     let mut sources = Vec::new();
     for file in &files {
         if let Some(kind) = classify(file) {
@@ -51,6 +56,9 @@ pub fn detect(root: &Path) -> Result<Detection, String> {
             Some(Ok(value @ Value::Object(_))) => {
                 documents.insert(source.path.clone(), value);
             }
+            // Other tools use plugin.json and mcp.json too; only files that
+            // name an Agent Plugins schema are sources.
+            _ if agent_plugins_candidate(source.kind) => {}
             _ => diagnostics.push(Diagnostic::error(
                 "manifest_invalid_json",
                 &source.path,
@@ -59,6 +67,14 @@ pub fn detect(root: &Path) -> Result<Detection, String> {
         }
     }
 
+    sources.retain(|source| {
+        !agent_plugins_candidate(source.kind)
+            || documents
+                .get(&source.path)
+                .and_then(|document| document.get("$schema"))
+                .and_then(Value::as_str)
+                .is_some_and(|schema| schema.starts_with(AGENT_PLUGINS_SCHEMAS))
+    });
     let base = plugin_base(&sources);
     let mut plugin = Plugin {
         base: base.clone(),
@@ -88,7 +104,10 @@ pub fn detect(root: &Path) -> Result<Detection, String> {
             continue;
         };
         match source.kind {
-            SourceKind::McpConfig | SourceKind::ClaudePlugin | SourceKind::GeminiExtension
+            SourceKind::McpConfig
+            | SourceKind::AgentPluginMcp
+            | SourceKind::ClaudePlugin
+            | SourceKind::GeminiExtension
                 if source_base(source) == base =>
             {
                 servers::collect_servers(
@@ -96,6 +115,7 @@ pub fn detect(root: &Path) -> Result<Detection, String> {
                     &mut raw_env,
                     document.get("mcpServers"),
                     source.kind == SourceKind::GeminiExtension,
+                    source.kind == SourceKind::AgentPluginMcp,
                 );
             }
             SourceKind::McpServer if source_base(source) == base => {
@@ -114,6 +134,7 @@ pub fn detect(root: &Path) -> Result<Detection, String> {
     plugin
         .skills
         .sort_by(|left, right| left.dir.cmp(&right.dir));
+    servers::resolve_bundles(&root.join(&base), &base, &files, &mut plugin.mcp_servers);
 
     let join = |name: &str| {
         if base.is_empty() {
@@ -159,7 +180,7 @@ pub fn detect(root: &Path) -> Result<Detection, String> {
     }
     if plugin.repository.is_none() {
         plugin.repository =
-            package_repository(root, &base, &mut inputs).or_else(|| git_origin(root));
+            package_repository(root, &base, &known, &mut inputs).or_else(|| git_origin(root));
     }
     if plugin.name.is_none() && plugin.base.is_empty() && !plugin.skills.is_empty() {
         plugin.name = root
@@ -174,6 +195,7 @@ pub fn detect(root: &Path) -> Result<Detection, String> {
         diagnostics,
         inputs,
         raw_env,
+        excludes,
     })
 }
 
@@ -194,6 +216,8 @@ fn classify(file: &Path) -> Option<SourceKind> {
         ("plugin.json", ".claude-plugin") => Some(SourceKind::ClaudePlugin),
         ("marketplace.json", ".claude-plugin") => Some(SourceKind::ClaudeMarketplace),
         ("plugin.json", ".codex-plugin") => Some(SourceKind::CodexPlugin),
+        ("plugin.json", _) => Some(SourceKind::AgentPlugin),
+        ("mcp.json", _) => Some(SourceKind::AgentPluginMcp),
         ("marketplace.json", "plugins") if grandparent == ".agents" => {
             Some(SourceKind::CodexMarketplace)
         }
@@ -203,6 +227,14 @@ fn classify(file: &Path) -> Option<SourceKind> {
         ("SKILL.md", _) => Some(SourceKind::AgentSkill),
         _ => None,
     }
+}
+
+const AGENT_PLUGINS_SCHEMAS: &str = "https://agent-plugins.org/schemas/";
+
+/// Kinds classified by file name alone, kept only when the file names an
+/// Agent Plugins schema.
+fn agent_plugins_candidate(kind: SourceKind) -> bool {
+    matches!(kind, SourceKind::AgentPlugin | SourceKind::AgentPluginMcp)
 }
 
 /// The directory a source's manifest describes ("" for the repository root).
@@ -352,8 +384,17 @@ fn marketplace(
 
 /// The `repository` of a `package.json` beside the plugin root, which npm
 /// packaged MCP servers and extensions usually set.
-fn package_repository(root: &Path, base: &str, inputs: &mut Vec<PathBuf>) -> Option<String> {
+fn package_repository(
+    root: &Path,
+    base: &str,
+    known: &BTreeSet<String>,
+    inputs: &mut Vec<PathBuf>,
+) -> Option<String> {
     let path = Path::new(base).join("package.json");
+    // An excluded or unwalked package.json is not part of the plugin.
+    if !known.contains(&walk::display(&path)) {
+        return None;
+    }
     let document: Value = serde_json::from_str(&walk::read_text(&root.join(&path))?).ok()?;
     let url = match document.get("repository")? {
         Value::String(url) => url.clone(),

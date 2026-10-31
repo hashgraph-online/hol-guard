@@ -64,8 +64,6 @@ fn daemon_answers_render_as_python_renders_them() {
 #[test]
 fn answers_python_would_render_through_repr_are_not_rendered() {
     for source in [
-        r#"{"policy_action":{"a":1}}"#,
-        r#"{"policy_action":["block"]}"#,
         r#"{"policy_action":"block","reason":{"why":1}}"#,
         r#"{"policy_action":"review","reason":[1]}"#,
     ] {

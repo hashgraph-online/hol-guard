@@ -112,3 +112,44 @@ def test_report_case_needs_the_exact_report_output(identifier):
 
     assert command_outputs_match(scenario, [call(report_output())])
     assert not command_outputs_match(scenario, [call("report: 0 files\n")])
+
+
+def test_plugin_manifest_oracle_reads_the_checkout_the_agent_started_in(tmp_path):
+    """The oracle finds the committed manifest in the fixture's linked worktree, not in ``home/project``.
+
+    A native-tools case gets a realistic fixture, so the agent starts in a linked
+    worktree beside the main checkout and the manifest is committed only there.
+    """
+    import os
+
+    from ci.gauntlet.fixtures import filesystem_checks, remove_scratch_checkout, scratch_checkout
+    from ci.gauntlet.plugin_manifest_fixtures import (
+        PLUGIN_MANIFEST,
+        PLUGIN_MANIFEST_CASE,
+        PLUGIN_MANIFEST_CHECK,
+        PLUGIN_MANIFEST_TEXT,
+    )
+
+    fixture = create_fixture(tmp_path / "manifest", realistic=True, scenario_id=PLUGIN_MANIFEST_CASE)
+    stage_script_cases(fixture.workspace, PLUGIN_MANIFEST_CASE, fixture.home, fixture.canary)
+    assert fixture.workspace != fixture.home / "project"
+    scratch = scratch_checkout(fixture.root)
+    environment = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ}
+    environment.update(HOME=str(fixture.home), USERPROFILE=str(fixture.home), GIT_CONFIG_NOSYSTEM="1")
+    try:
+        subprocess.run(
+            ["git", "-C", str(fixture.workspace), "worktree", "add", "-q", "--detach", str(scratch), "HEAD"],
+            env=environment,
+            check=True,
+            capture_output=True,
+            timeout=15,
+        )
+        manifest = scratch / PLUGIN_MANIFEST
+        assert filesystem_checks(fixture, "native-tools", PLUGIN_MANIFEST_CASE)[PLUGIN_MANIFEST_CHECK] is False
+        manifest.write_text(PLUGIN_MANIFEST_TEXT.replace('"Example"', '"Sample"'), encoding="utf-8", newline="\n")
+        assert filesystem_checks(fixture, "native-tools", PLUGIN_MANIFEST_CASE)[PLUGIN_MANIFEST_CHECK] is True
+        # Editing the starting checkout as well is not the requested change.
+        (fixture.workspace / PLUGIN_MANIFEST).write_text(manifest.read_text(encoding="utf-8"), encoding="utf-8")
+        assert filesystem_checks(fixture, "native-tools", PLUGIN_MANIFEST_CASE)[PLUGIN_MANIFEST_CHECK] is False
+    finally:
+        remove_scratch_checkout(fixture.root)

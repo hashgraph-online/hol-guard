@@ -9,13 +9,12 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
+from ci.native_runtime.post_tool_review import HookReviewResponse, parity_signature
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_status,
-    parity_signature,
 )
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewResponse
 
 
 def test_native_mode_defaults_auto(monkeypatch: pytest.MonkeyPatch) -> None:

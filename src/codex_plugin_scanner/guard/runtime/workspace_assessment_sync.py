@@ -1,9 +1,10 @@
 """Workspace assessment summary for the receipts sync context.
 
 Guard Cloud gets one bounded summary per admitted worktree: its status, the
-latest assessed run's coverage, and package-coordinate findings. Local keys are
-plain digests of absolute paths, so every identifier that leaves the machine is
-re-keyed with the per-install secret; roots, commits and file names never do.
+latest assessed run's coverage, and the package-coordinate findings that run
+observed. Local keys are plain digests of absolute paths, so every identifier
+that leaves the machine is re-keyed with the per-install secret; roots,
+commits and file names never do.
 The summary is sent again only when it changes or a day has passed.
 """
 
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Final
 
+from ..workspace_runtime_findings import RUNTIME_SOURCE_KIND
 from .fleet_posture_common import keyed_digest, load_hash_key
 
 if TYPE_CHECKING:
@@ -60,7 +62,9 @@ def build_workspace_assessment_sync(store: GuardStore, *, now: str) -> Workspace
     from .. import workspace_assessment_reads as reads
     from ..workspace_assessment_store import WorktreeKeys
 
-    worktrees = reads.list_worktrees(store)[:MAX_WORKTREES]
+    # Worktrees whose install admission ended keep their records, but they never
+    # take a summary slot from one Guard still watches.
+    worktrees = sorted(reads.list_worktrees(store), key=lambda item: bool(item["ended"]))[:MAX_WORKTREES]
     if not worktrees:
         return None
     hash_key = load_hash_key(store, now)
@@ -195,7 +199,14 @@ def _worktree_entry(
         "startedAt": _iso(assessed_run.get("started_at_ms")),
         "finishedAt": _iso(assessed_run.get("finished_at_ms")),
     }
-    findings = [item for item in _list(assessed_run.get("findings")) if isinstance(item, dict)]
+    # A finding carried from an earlier run was not observed by this one. Cloud
+    # already holds it from the run that did, and a partial run never closes it,
+    # so sending it again would only make it look freshly seen.
+    findings = [
+        item
+        for item in _list(assessed_run.get("findings"))
+        if isinstance(item, dict) and not item.get("carried_from_run_id")
+    ]
     entry["findings"] = [_finding(item, hash_key) for item in findings[:MAX_FINDINGS_PER_WORKTREE]]
     entry["findingsTruncated"] = len(findings) > MAX_FINDINGS_PER_WORKTREE or "finding_cap" in _list(
         coverage.get("reasons")
@@ -210,6 +221,12 @@ def _finding(item: dict[str, object], hash_key: bytes) -> dict[str, object]:
     for source, target in _FINDING_FIELDS:
         value = item.get(source)
         finding[target] = value[:256] if isinstance(value, str) else None
+    path = item.get("path")
+    if item.get("source_kind") == RUNTIME_SOURCE_KIND and isinstance(path, str) and path:
+        # The digest fleet posture reports for the same runtime path, so Cloud can
+        # match the two. It is keyed like every other identifier here; the path
+        # itself stays on this machine.
+        finding["locationHash"] = keyed_digest(hash_key, path)
     finding["ruleIds"] = [str(value)[:128] for value in _list(item.get("rule_ids"))][:32]
     finding["advisoryIds"] = [str(value)[:256] for value in _list(item.get("advisory_ids"))][:32]
     return finding

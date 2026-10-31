@@ -200,15 +200,18 @@ def check_kimi_manifest_shapes(package: NormalizedPackage) -> CheckResult:
     findings: list[Finding] = []
     interface = manifest.get("interface")
     interface_mapping = string_keyed_mapping(interface)
+    # Kimi Work adds structured metadata; only the documented display fields are strings.
+    display_fields = ("displayName", "shortDescription", "longDescription", "developerName", "websiteURL")
     if interface is not None and (
-        interface_mapping is None or not all(isinstance(value, str) for value in interface_mapping.values())
+        interface_mapping is None
+        or any(key in interface_mapping and not isinstance(interface_mapping[key], str) for key in display_fields)
     ):
         findings.append(
             _finding(
                 "KIMI_INTERFACE_INVALID",
                 "Kimi interface metadata is invalid",
-                "interface must be an object containing string display metadata.",
-                "Use string values for Kimi interface metadata.",
+                "interface must be an object with string values for documented display fields.",
+                "Use strings for displayName, shortDescription, longDescription, developerName and websiteURL.",
                 package,
                 Severity.LOW,
             )

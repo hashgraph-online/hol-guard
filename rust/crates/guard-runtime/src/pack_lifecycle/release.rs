@@ -3,6 +3,9 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+// The resident's own bound, which admits a Gauntlet development wheel's runtime.
+const MAX_RUNTIME_BYTES: u64 = 512 * 1024 * 1024;
+
 pub(super) fn identity(input: &Value) -> Result<Identity, String> {
     let runtime = &input["runtime_manifest"];
     let compiler = &input["compiler_manifest"];
@@ -35,7 +38,7 @@ pub(super) fn identity(input: &Value) -> Result<Identity, String> {
     }
     let path = std::env::current_exe().map_err(|_| "pack_lifecycle_executable_unavailable")?;
     let binary = std::fs::read(path).map_err(|_| "pack_lifecycle_executable_unavailable")?;
-    if binary.len() > 128 * 1024 * 1024 {
+    if binary.len() as u64 > MAX_RUNTIME_BYTES {
         return Err("pack_lifecycle_executable_invalid".into());
     }
     let digest = hex::encode(Sha256::digest(&binary));

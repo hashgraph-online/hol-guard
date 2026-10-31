@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.managed_controls.capabilities import (
+from tests.managed_controls.capabilities import (
     MANAGED_CONTROL_CAPABILITIES,
 )
-from codex_plugin_scanner.guard.managed_controls.compatibility import (
+from tests.managed_controls.compatibility import (
     CompatibilityState,
     DeviceCompatibility,
     evaluate_compatibility,
 )
-from codex_plugin_scanner.guard.managed_controls.migration import (
+from tests.managed_controls.migration import (
     map_legacy_rule,
     preserve_legacy_policy_document,
 )

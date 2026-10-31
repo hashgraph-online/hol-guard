@@ -2,8 +2,8 @@
 //! without starting them.
 //!
 //! For each path the probe follows symlinks, hashes the file it finds, reads
-//! the header for operating system and architecture, and takes family and
-//! version from the install layout. It never executes the file, so an
+//! the header for operating system and architecture, and takes family,
+//! version and, for known installers, vendor from the install layout. It never executes the file, so an
 //! executable that prints a version, or does anything else when launched, is
 //! never launched. Layout and name claims are `self_reported` at most; the
 //! probe cannot produce a locally trusted or vendor verified identity.
@@ -18,7 +18,12 @@
 //! the same rules as explicit paths. The reply's `launches` says what each spec
 //! resolved to, and `candidate_limit_reached` whether the candidate cap dropped any.
 //!
-//! The reply's `artifacts` and `locations` are valid input for
+//! A request that sets `instances` also gets the running processes launched
+//! from the identified paths (see `runtime_identity_instances`), passing back
+//! the earlier reply's instances as `known_instances` so a replaced file keeps
+//! its old processes bound to the old artifact.
+//!
+//! The reply's `artifacts`, `locations` and `instances` are valid input for
 //! `runtime-identity-assess`; `observations` carries the paths for display.
 
 use std::collections::BTreeMap;
@@ -30,6 +35,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use crate::runtime_identity_instances::{self as instances, KnownInstance, Probed};
 use crate::runtime_identity_launch::{
     self as launch, Environment, LaunchSpec, DEFAULT_CANDIDATE_LIMIT, MAX_LAUNCHES,
 };
@@ -59,6 +65,10 @@ struct Request {
     environment: BTreeMap<String, String>,
     #[serde(default)]
     candidate_limit: Option<usize>,
+    #[serde(default)]
+    instances: bool,
+    #[serde(default)]
+    known_instances: Vec<KnownInstance>,
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Result<Value, String> {
@@ -105,6 +115,10 @@ fn probe(request: &Request) -> Result<Value, String> {
     {
         return Err("runtime_identity_probe_launch_invalid".to_owned());
     }
+    if !request.known_instances.is_empty() && !request.instances {
+        return Err("runtime_identity_probe_request_invalid".to_owned());
+    }
+    instances::validate_known(&request.known_instances)?;
     let collected = launch::collect(&request.launches, &Environment(&request.environment), limit);
     let mut requested_paths: Vec<&String> = request.paths.iter().collect();
     requested_paths.extend(&collected.paths);
@@ -115,6 +129,7 @@ fn probe(request: &Request) -> Result<Value, String> {
     let mut locations: Vec<Value> = Vec::new();
     let mut observations: Vec<Value> = Vec::new();
     let mut seen: BTreeMap<String, ()> = BTreeMap::new();
+    let mut identified: Vec<(String, String, String)> = Vec::new();
     let mut hashing = Hashing::default();
     for requested in requested_paths {
         let location_id = location_id(requested);
@@ -128,6 +143,7 @@ fn probe(request: &Request) -> Result<Value, String> {
                     .unwrap_or_default()
                     .to_owned();
                 artifacts.entry(id.clone()).or_insert(*artifact);
+                identified.push((location_id.clone(), resolved.clone(), id.clone()));
                 ("present", Some(id), Some(resolved), None)
             }
             Outcome::Missing => ("missing", None, None, None),
@@ -142,14 +158,48 @@ fn probe(request: &Request) -> Result<Value, String> {
             "artifact_id": artifact_id,
         }));
     }
-    Ok(json!({
+    let running = request.instances.then(|| {
+        let probed: Vec<Probed<'_>> = identified
+            .iter()
+            .map(|(location_id, resolved, artifact_id)| Probed {
+                location_id,
+                resolved,
+                artifact: &artifacts[artifact_id],
+            })
+            .collect();
+        let location_ids = seen.keys().map(String::as_str).collect();
+        instances::enumerate(&probed, &location_ids, &request.known_instances)
+    });
+    let mut reply = json!({
         "schema": RESULT_SCHEMA,
-        "artifacts": artifacts.into_values().collect::<Vec<_>>(),
         "locations": locations,
         "observations": observations,
         "launches": collected.launches,
         "candidate_limit_reached": collected.truncated,
-    }))
+    });
+    if let Some(running) = running {
+        for artifact in running.artifacts {
+            let id = artifact["artifact_id"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned();
+            artifacts.entry(id).or_insert(artifact);
+        }
+        reply["instances"] = json!(running.instances);
+        reply["unbound_processes"] = json!(running.unbound_processes);
+        reply["instance_limit_reached"] = json!(running.limit_reached);
+    }
+    reply["artifacts"] = json!(artifacts.into_values().collect::<Vec<_>>());
+    Ok(reply)
+}
+
+/// One executable for launch admission: its resolved path and artifact, or
+/// `None` when it cannot be identified, which stays unknown and never clears.
+pub(crate) fn probe_one(path: &Path) -> Option<(String, Value)> {
+    match observe(&path.to_string_lossy(), &mut Hashing::default()) {
+        Outcome::Present { resolved, artifact } => Some((resolved, *artifact)),
+        Outcome::Missing | Outcome::Unknown { .. } => None,
+    }
 }
 
 fn location_id(requested: &str) -> String {
@@ -305,6 +355,7 @@ fn artifact(resolved: &str, sha256: &str, format: &Format) -> Value {
         sha256,
         family,
         hint.version.as_deref().unwrap_or(""),
+        hint.vendor.unwrap_or(""),
         format.os,
         format.arch,
     ];
@@ -313,7 +364,7 @@ fn artifact(resolved: &str, sha256: &str, format: &Format) -> Value {
         hex::encode(Sha256::digest(fields.join("\0").as_bytes()))
     );
     json!({
-        "artifact_id": id, "family": family, "vendor": null, "version": hint.version,
+        "artifact_id": id, "family": family, "vendor": hint.vendor, "version": hint.version,
         "build_id": null, "os": format.os, "arch": format.arch,
         "executable_sha256": sha256, "component_identity_sha256": null,
         "identity_assurance": assurance,

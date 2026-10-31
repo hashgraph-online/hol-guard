@@ -19,8 +19,8 @@ use std::path::{Component, Path, PathBuf};
 /// Segments that print, filter or copy a file. None changes directory,
 /// renames a file or creates a link.
 const CHAIN_PEERS: &[&str] = &[
-    "cat", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg", "sort",
-    "tail", "tr", "true", "uniq", "wc",
+    "cat", "cmp", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg",
+    "sort", "tail", "tr", "true", "uniq", "wc",
 ];
 
 /// Scratch editors that may also share a chain. Each segment is still proven

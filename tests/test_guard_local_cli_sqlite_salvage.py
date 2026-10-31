@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliComman
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.sqlite_recovery import _copy_allowlisted_table, salvage_local_cli_state
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_store_support import upsert_local_cli_command_states
 
 
 def _identity() -> UnlistedCliIdentity:
@@ -46,7 +47,7 @@ def _grant_store(home: Path, *, with_commands: bool = False) -> GuardStore:
     )
     if with_commands:
         store.replace_local_cli_commands(identity.cli_id, _commands())
-        store.upsert_local_cli_command_states(identity.cli_id, {"navigate": "block"})
+        upsert_local_cli_command_states(store, identity.cli_id, {"navigate": "block"})
     return store
 
 
@@ -166,7 +167,7 @@ def test_copy_keeps_rows_read_before_source_failure(tmp_path: Path) -> None:
 
 def test_copy_rejects_command_grant_insert_error(tmp_path: Path) -> None:
     source = _grant_store(tmp_path / "src", with_commands=True)
-    source.upsert_local_cli_command_states(_identity().cli_id, {"navigate": "block", "other": "block"})
+    upsert_local_cli_command_states(source, _identity().cli_id, {"navigate": "block", "other": "block"})
     destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
     with sqlite3.connect(source.path) as src, sqlite3.connect(destination.path) as dst:
         original = dst.execute
@@ -185,7 +186,7 @@ def test_copy_rejects_command_grant_insert_error(tmp_path: Path) -> None:
 
 def test_copy_rejects_partial_command_grant_scan(tmp_path: Path) -> None:
     source = _grant_store(tmp_path / "src", with_commands=True)
-    source.upsert_local_cli_command_states(_identity().cli_id, {"navigate": "block", "other": "block"})
+    upsert_local_cli_command_states(source, _identity().cli_id, {"navigate": "block", "other": "block"})
     destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
     with sqlite3.connect(source.path) as src, sqlite3.connect(destination.path) as dst:
         assert (
