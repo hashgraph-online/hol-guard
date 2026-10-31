@@ -133,6 +133,58 @@ def test_the_daemon_submits_the_receipt_only_when_the_edge_did_not_queue_it(
     assert writer.receipts == ([] if recorded else [receipt])
 
 
+@pytest.mark.parametrize("recorded", [True, False, None])
+def test_the_daemon_records_a_post_tool_activity_only_when_the_edge_did_not_queue_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: bool | None
+) -> None:
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('mode = "observe"\nprotection_posture = "watch"\n', encoding="utf-8")
+
+    def edge(*_args: object, **_kwargs: object) -> dict[str, object]:
+        answer: dict[str, object] = {
+            "event_name": "PostToolUse",
+            "harness": "codex",
+            "result": {
+                "authority": "rust",
+                "decision": "allow",
+                "minimum_action": "allow",
+                "policy_action": "allow",
+                "reason_code": "native_post_tool_observed",
+                "reason": "HOL Guard recorded the completed tool call.",
+                "explicitly_benign": False,
+            },
+            "harness_response": {"decision": "allow", "policy_action": "allow"},
+            "receipt": _valid_native_receipt(),
+            "receipt_recorded": True,
+        }
+        if recorded is not None:
+            answer["activity_recorded"] = recorded
+        return answer
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", edge)
+    worker = HookWorker(store=GuardStore(guard_home), activity_writer=_ReceiptWriter())  # pyright: ignore[reportArgumentType]
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
+    activities: list[object] = []
+    monkeypatch.setattr(worker, "_record_post_tool_activity", lambda **kwargs: activities.append(kwargs["harness"]))
+    try:
+        worker.review_http_payload(
+            payload={"hook_event_name": "PostToolUse", "tool_input": {"command": "pwd"}},
+            params={},
+            default_harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=guard_home,
+            workspace=tmp_path / "workspace",
+        )
+    finally:
+        worker.close()
+    # An edge that queued the activity behind its receipt says so; the daemon
+    # records it otherwise, including for an older resident that never says.
+    assert activities == ([] if recorded else ["codex"])
+
+
 @pytest.mark.parametrize(
     ("harness", "id_field", "input_field"),
     [

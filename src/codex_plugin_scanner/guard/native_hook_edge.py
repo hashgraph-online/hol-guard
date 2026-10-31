@@ -31,6 +31,7 @@ _SELF_CHECK_FEATURE = "edge-self-check-v1"
 # The resident records the CLI an answered PreToolUse launches, off the answer path.
 _LOCAL_CLI_OBSERVATION_FEATURE = "edge-local-cli-observation-v1"
 _RECEIPT_RECORD_FEATURE = "edge-receipt-record-v1"
+_ACTIVITY_RECORD_FEATURE = "edge-activity-record-v1"
 # The edge answers the Oh My Pi / Pi structured-output mediation itself when
 # the envelope carries the daemon's managed-policy view.
 STRUCTURED_OUTPUT_FEATURE = "edge-structured-output-v1"
@@ -89,6 +90,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "local_cli_rule",
         "review_evidence",
         "receipt_recorded",
+        "activity_recorded",
         "exact_command_block",
     }
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
@@ -108,6 +110,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not isinstance(payload.get("result"), dict)
         or not isinstance(payload.get("harness_response"), dict)
         or not isinstance(payload.get("receipt_recorded", False), bool)
+        or not isinstance(payload.get("activity_recorded", False), bool)
         or not isinstance(payload.get("exact_command_block", False), bool)
     ):
         return None
@@ -164,6 +167,7 @@ def _encode_hook_envelope(
     local_cli_rules: Mapping[str, object] | None = None,
     observe_local_cli: bool = False,
     record_receipt: bool = False,
+    record_activity: bool = False,
     structured_output_config: Mapping[str, object] | None = None,
     containment_sink: Sequence[str] | None = None,
     native_sink: bool = False,
@@ -204,6 +208,8 @@ def _encode_hook_envelope(
         envelope["observe_local_cli"] = True
     if record_receipt:
         envelope["record_receipt"] = True
+        if record_activity:
+            envelope["record_activity"] = True
     if structured_output_config is not None:
         envelope["structured_output_config"] = dict(structured_output_config)
     if containment_sink is not None:
@@ -337,6 +343,9 @@ def review_raw_hook_native(
         local_cli_rules=local_cli_rules,
         observe_local_cli=observe_local_cli and _LOCAL_CLI_OBSERVATION_FEATURE in status.capabilities.features,
         record_receipt=record_receipt and _RECEIPT_RECORD_FEATURE in status.capabilities.features,
+        # The caller that asks for its receipt also skips a PostToolUse
+        # activity the edge says it queued.
+        record_activity=_ACTIVITY_RECORD_FEATURE in status.capabilities.features,
         structured_output_config=structured_output_config,
         containment_sink=sink_command,
         native_sink=harness == "cursor" and _CURSOR_NATIVE_SINK_FEATURE in status.capabilities.features,

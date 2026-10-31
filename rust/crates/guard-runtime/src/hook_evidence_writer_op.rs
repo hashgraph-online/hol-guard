@@ -343,8 +343,9 @@ fn with_live<T>(guard_home: &Path, act: impl FnOnce(&ResidentWriter) -> T) -> Op
 }
 
 /// Encode an edge answer that says its receipt was recorded, then queue
-/// `receipt` with the live writer for `guard_home`, holding that writer the
-/// whole time so it cannot exit or start draining between the two.
+/// `receipt` with the live writer for `guard_home` and hand that writer to
+/// `then` for the evidence that follows the receipt, holding the writer the
+/// whole time so it cannot exit or start draining in between.
 ///
 /// `None` means nothing was queued and the answer must say so: no live writer
 /// runs for the home, its slot is busy starting one (a journal replay) or
@@ -355,6 +356,7 @@ pub(crate) fn record_edge_receipt<E>(
     guard_home: &Path,
     receipt: &NativeHookDecisionReceiptV1,
     encode: impl FnOnce() -> Result<Vec<u8>, E>,
+    then: impl FnOnce(&RuntimeHookEvidenceWriter),
 ) -> Option<Result<Vec<u8>, E>> {
     let Ok(Value::Object(receipt)) = serde_json::to_value(receipt) else {
         return None;
@@ -364,10 +366,11 @@ pub(crate) fn record_edge_receipt<E>(
             Ok(encoded) => encoded,
             Err(error) => return Some(Err(error)),
         };
-        resident
-            .writer
-            .submit_native_decision_receipt(&receipt)
-            .then_some(Ok(encoded))
+        if !resident.writer.submit_native_decision_receipt(&receipt) {
+            return None;
+        }
+        then(resident.writer.as_ref());
+        Some(Ok(encoded))
     })
     .flatten()
 }

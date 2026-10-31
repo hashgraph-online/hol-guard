@@ -20,7 +20,9 @@
 //! the rest of that record's evidence but not the receipt. For a tool answer
 //! it queues the command activity behind that receipt as well, after a
 //! post-tool call's Composio discovery, and marks the record for that too,
-//! which saves the drain another writer request per hook.
+//! which saves the drain another writer request per hook. An edge
+//! `PostToolUse` answer whose envelope asked queues its activity behind the
+//! receipt the same way, and says so with `activity_recorded`.
 
 use std::path::Path;
 use std::time::Instant;
@@ -34,6 +36,8 @@ use crate::hook_evidence_writer_op as writer_op;
 
 /// The resident feature under which an envelope may ask for this.
 pub(crate) const EDGE_RECEIPT_RECORD_FEATURE: &str = "edge-receipt-record-v1";
+/// The resident queues an edge `PostToolUse` answer's activity when asked.
+pub(crate) const EDGE_ACTIVITY_RECORD_FEATURE: &str = "edge-activity-record-v1";
 /// The field of a direct answer's evidence record that says the resident
 /// already queued its receipt with the writer.
 const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
@@ -53,16 +57,27 @@ pub(crate) fn encode(
 ) -> Result<Vec<u8>, String> {
     let mut edge = crate::edge_structured::attached(envelope, edge, started);
     if resident && envelope.record_receipt {
+        let activity = envelope
+            .raw_payload
+            .as_object()
+            .filter(|_| envelope.record_activity && edge.event_name == "PostToolUse");
         edge.receipt_recorded = true;
+        edge.activity_recorded = activity.is_some();
         let recorded = writer_op::record_edge_receipt(
             Path::new(&envelope.source.guard_home),
             &edge.receipt,
             || crate::encode_response(&edge),
+            |writer| {
+                if let Some(payload) = activity {
+                    queue_post_tool_activity(writer, &edge.harness, payload);
+                }
+            },
         );
         if let Some(encoded) = recorded {
             return encoded;
         }
         edge.receipt_recorded = false;
+        edge.activity_recorded = false;
     }
     crate::encode_response(&edge)
 }
@@ -125,6 +140,17 @@ fn submit_post_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value)
     ) else {
         return false;
     };
+    queue_post_tool_activity(writer, harness, payload);
+    true
+}
+
+/// Queue a post-tool call's Composio discovery, when it succeeded, and then
+/// its command activity, as the daemon's `_record_post_tool_activity` does.
+fn queue_post_tool_activity(
+    writer: &RuntimeHookEvidenceWriter,
+    harness: &str,
+    payload: &serde_json::Map<String, Value>,
+) {
     let succeeded = post_succeeded(payload);
     let tool_name = payload.get("tool_name").and_then(Value::as_str);
     if let Some(tool_name) = tool_name.filter(|_| succeeded) {
@@ -140,7 +166,6 @@ fn submit_post_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value)
         false,
         "not-applicable",
     );
-    true
 }
 
 /// `hook_post_succeeded("PostToolUse", payload)`: only bounded failure

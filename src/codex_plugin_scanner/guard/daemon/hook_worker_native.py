@@ -502,11 +502,12 @@ class HookWorkerNativeMixin:
                 ),
                 True,
             )
-        self._record_post_tool_activity(
-            harness=native_harness,
-            payload=payload,
-            succeeded=hook_post_succeeded(native_event, payload),
-        )
+        if edge.get("activity_recorded") is not True:
+            self._record_post_tool_activity(
+                harness=native_harness,
+                payload=payload,
+                succeeded=hook_post_succeeded(native_event, payload),
+            )
         response = _edge_harness_response(edge)
         if structured_view is not None:
             edge_result = edge.get("result")

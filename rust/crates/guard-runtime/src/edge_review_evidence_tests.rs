@@ -51,6 +51,7 @@ fn envelope(digest: Option<&str>, recording_only: bool) -> GuardHookEnvelopeV2 {
         }),
         observe_local_cli: false,
         record_receipt: false,
+        record_activity: false,
         structured_output_config: None,
         containment_sink: None,
     }

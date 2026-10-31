@@ -157,6 +157,61 @@ fn a_writer_slot_busy_starting_or_draining_leaves_the_receipt_to_the_daemon() {
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
 }
 
+/// An allowed `PostToolUse` answer and the envelope it answers, which names
+/// `home`, asks for the receipt and, with `activity`, for the activity.
+fn post_tool_answered(home: &Path, activity: bool) -> (GuardHookEnvelopeV2, GuardHookEdgeResultV2) {
+    let mut envelope = crate::edge::tests::envelope(
+        "PostToolUse",
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"}, "exit_code": 0}),
+    );
+    let bytes = crate::edge::tests::evaluate_isolated(envelope.clone()).unwrap();
+    let edge: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+    assert!(!edge.activity_recorded);
+    envelope.source.guard_home = home.to_string_lossy().into_owned();
+    envelope.record_receipt = true;
+    envelope.record_activity = activity;
+    (envelope, edge)
+}
+
+#[test]
+fn a_post_tool_edge_that_asks_queues_its_activity_behind_the_receipt() {
+    let home = store_home("edge-activity-recorded");
+    start_writer(&home);
+    let (envelope, edge) = post_tool_answered(&home, true);
+    let answer = encoded(&envelope, true, edge);
+    assert_eq!(answer["receipt_recorded"], json!(true));
+    assert_eq!(answer["activity_recorded"], json!(true));
+    assert_eq!(receipts_accepted(&home), json!(1));
+    // The writer was started with one activity; the edge queued the second.
+    assert_eq!(activities_accepted(&home), json!(2));
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
+#[test]
+fn the_edge_leaves_the_activity_to_the_daemon_unless_it_can_record_it() {
+    let home = store_home("edge-activity-unasked");
+    start_writer(&home);
+    let (envelope, edge) = post_tool_answered(&home, false);
+    let answer = encoded(&envelope, true, edge);
+    assert_eq!(answer["receipt_recorded"], json!(true));
+    assert!(answer.get("activity_recorded").is_none());
+    // A `PreToolUse` activity cites what the daemon renders, so it stays there.
+    let (mut envelope, edge) = answered(&home, true);
+    envelope.record_activity = true;
+    assert!(encoded(&envelope, true, edge)
+        .get("activity_recorded")
+        .is_none());
+    assert_eq!(activities_accepted(&home), json!(1));
+    // Without a running writer neither is recorded, and the answer says so.
+    let (envelope, edge) = post_tool_answered(&home, true);
+    let answer =
+        crate::hook_evidence_writer_op::while_slot_busy(&home, || encoded(&envelope, true, edge));
+    assert!(answer.get("receipt_recorded").is_none());
+    assert!(answer.get("activity_recorded").is_none());
+    assert_eq!(activities_accepted(&home), json!(1));
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
 #[test]
 fn the_resident_advertises_that_its_edge_records_receipts() {
     assert!(
