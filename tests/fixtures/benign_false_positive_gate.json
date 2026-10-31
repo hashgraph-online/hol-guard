@@ -29407,6 +29407,113 @@
       "expect": "allow"
     },
     {
+      "id": "shell-rg-listing-xargs-counts-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l TODO src | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-grep-listing-xargs-counts-lines",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rl TODO src | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rg-replace-option-shifts-root",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "rg -l --null -r app src | xargs -0 wc -l" },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-bare-color-shifts-root",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "grep -rlZ --color TODO .. --include=*.py src | xargs -0 cat" },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rg-union-glob-reads-every-name",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "rg -l --null --hidden -g '*.ts' -g '*.env*' KEY src | xargs -0 cat" },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rg-listing-xargs-removes-matches",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l TODO src | xargs rm"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rg-listing-without-root-xargs",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l TODO | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rg-listing-follows-symlinks-xargs",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -L -l TODO src | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "shell-sort-uniq-count-imports",
       "fix_area": "shell",
       "harnesses": [

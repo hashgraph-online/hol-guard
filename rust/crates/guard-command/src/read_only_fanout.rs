@@ -23,6 +23,8 @@ use crate::CommandSegmentV1;
 
 #[path = "read_only_fanout_fd.rs"]
 pub(crate) mod fd;
+#[path = "read_only_fanout_listing.rs"]
+pub(crate) mod listing;
 
 /// Placeholder operand the child proof stands in for the unknown file names.
 pub(crate) const PLACEHOLDER: &str = "guard-fanout-result";
@@ -484,6 +486,9 @@ mod tests {
             "find src -type f -exec cat {} +",
             "find src -type f -print0 | xargs -0 cat",
             "find src -type f | xargs grep -n x",
+            "rg -l TODO src | xargs wc -l",
+            "grep -rl TODO src | xargs wc -l",
+            "rg -l --null TODO src | xargs -0 cat",
         ] {
             assert_eq!(confidence(command), "exact", "{command}");
         }
@@ -495,6 +500,10 @@ mod tests {
             "echo a | xargs cat",
             "xargs cat",
             "find src -type f | sort | xargs cat",
+            "rg -l TODO | xargs wc -l",
+            "rg -n TODO src | xargs wc -l",
+            "rg -l TODO src | xargs rm",
+            "rg -l TODO src | sort | xargs wc -l",
         ] {
             assert_eq!(confidence(command), "uncertain", "{command}");
         }
