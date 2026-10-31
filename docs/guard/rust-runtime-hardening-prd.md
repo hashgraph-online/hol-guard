@@ -45,7 +45,7 @@ During Python daemon failure:
 ## Target architecture
 
 - **Harness adapters:** authenticate the daemon and enforce daemon-unavailable fail-safe behavior.
-- **Python daemon:** policy, approvals, receipts, containment, durable correlation, health orchestration, and explicit differential-test oracle support.
+- **Python daemon:** policy, approvals, receipts, durable correlation, health orchestration, and explicit differential-test oracle support. Containment has left this list: the route that decides a contained run, the sandbox argv it launches and the copy back are `guard-runtime`'s `hook_decision_containment_route.rs` and `contained_workspace_sink_launch.rs`, and `runtime/restricted_workspace.py`'s overlay is now only the fallback for the shapes the native shape refuses.
 - **Rust resident runtime:** bounded parsing, output traversal, secret and prompt-injection fast paths, secure source reads, hashing, effect extraction, and eligible decisions.
 - **Native supervisor:** child identity, health, prewarm, restart, rotation, circuit breaking, and fallback budgeting.
 - **Authenticated policy snapshot:** immutable, versioned native inputs bound to package/rule/policy identity.
