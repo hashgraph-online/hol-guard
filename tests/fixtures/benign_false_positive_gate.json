@@ -22248,6 +22248,38 @@
       "expect": "allow"
     },
     {
+      "id": "session-kill-liveness-probe-process-id",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kill -0 4821"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "session-kill-liveness-probe-signal-word",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kill -s 0 4821"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-toolchain-npx-pinned-remote-tsc",
       "fix_area": "negative",
       "harnesses": [
@@ -22659,6 +22691,22 @@
       "tool": "shell",
       "tool_input": {
         "command": "kill -9 4821"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-kill-liveness-probe-every-process",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kill -0 -1"
       },
       "cwd": "worktree",
       "expect": "not_allow"

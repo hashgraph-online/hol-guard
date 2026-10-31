@@ -282,7 +282,8 @@ pub(crate) fn command_shape(
         }
         if PRIVILEGE_DENY.contains(&name)
             && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
-            && !(name == "kill" && kill::jobs_only(&segment.arguments))
+            && !(name == "kill"
+                && (kill::jobs_only(&segment.arguments) || kill::liveness_only(&segment.arguments)))
         {
             return None;
         }

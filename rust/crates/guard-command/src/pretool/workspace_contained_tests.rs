@@ -66,6 +66,12 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "kill -SIGTERM %1",
         "kill -- %1",
         "kill %+ %-",
+        // Signal 0 delivers nothing, so these ask whether a process is still
+        // there and leave every process they name running.
+        "kill -0 4821",
+        "kill -s 0 4821",
+        "kill -n 0 4821 7312",
+        "kill -0 %1",
         "rm -f init_repo.py",
         "rm a.py && rm -rf __pycache__",
         "echo hi > scratch.txt && rm scratch.txt",
@@ -216,6 +222,14 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "kill -9 -4821 %1",
         "kill -s TERM -1 %1",
         "kill -- -1 %1",
+        // The exception is signal 0 with an operand that names a process:
+        // a negative operand asks about every process the user can reach,
+        // and a signal that is only spelled like 0 is a different signal.
+        "kill -0 -1",
+        "kill -0 -4821",
+        "kill -00 4821",
+        "kill -s SIGNULL 4821",
+        "kill -0",
         "echo $(x)",
         "echo hi > ../out",
         "git reset --hard",
