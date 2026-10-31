@@ -498,6 +498,7 @@
       "src/pretool/redirect_stdin.rs",
       "src/pretool/redirect_targets.rs",
       "src/pretool/redirect_tee.rs",
+      "src/pretool/ref_name_words.rs",
       "src/pretool/repo_create_reason.rs",
       "src/pretool/restricted_test_commands.rs",
       "src/pretool/root_removal.rs",
