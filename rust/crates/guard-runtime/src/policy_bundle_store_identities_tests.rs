@@ -125,6 +125,15 @@ fn an_identity_is_keyed_the_way_the_store_saves_the_row() {
     );
 }
 
+#[cfg(any(unix, windows))]
+#[test]
+fn the_host_name_a_generic_label_yields_to_is_read() {
+    // Off Unix this was unknown, which left the bundle's identities to the
+    // Python store.
+    let name = device_display_name(&store(), "localhost").expect("host name");
+    assert!(!name.is_empty());
+}
+
 #[test]
 fn a_generic_label_yields_to_the_host_name() {
     assert_eq!(
@@ -203,11 +212,11 @@ fn policy_row(connection: &Connection, source: &str) {
 fn a_lookup_derives_identities_only_for_a_store_with_bundle_rows() {
     let connection = store();
     sync_state(&connection, "policy_bundle", "not json");
-    assert_eq!(lookup_bundle_identities(&connection, NOW), Ok(None));
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Ok(None));
     policy_row(&connection, "local");
-    assert_eq!(lookup_bundle_identities(&connection, NOW), Ok(None));
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Ok(None));
     policy_row(&connection, "policy-bundle");
-    assert_eq!(lookup_bundle_identities(&connection, NOW), Err(()));
+    assert_eq!(lookup_bundle_authority(&connection, NOW), Err(()));
 }
 
 #[cfg(unix)]
@@ -220,5 +229,8 @@ fn a_bundle_that_authorizes_nothing_ships_no_identities() {
         "policy_bundle",
         r#"{"bundleVersion": 1, "decisions": [{"harness": "codex"}]}"#,
     );
-    assert_eq!(lookup_bundle_identities(&connection, NOW), Ok(None));
+    assert_eq!(
+        lookup_bundle_authority(&connection, NOW),
+        Ok(Some((Vec::new(), None)))
+    );
 }

@@ -42,6 +42,7 @@ from tests.conftest import guard_commands_module
 from tests.daemon_control_patching import patch_daemon_global
 from tests.daemon_hook_test_client import open_authenticated_claude_request
 from tests.dashboard_bundle_support import dashboard_chunk
+from tests.native_store_shims import list_guard_operation_items
 from tests.support.network import urlopen_json
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -3175,7 +3176,7 @@ class TestGuardSurfaceServer:
 
         sessions = store.list_guard_sessions()
         operations = store.list_guard_operations(session_id=str(session["session_id"]))
-        items = store.list_guard_operation_items(str(operation["operation_id"]))
+        items = list_guard_operation_items(store, str(operation["operation_id"]))
 
         assert session["status"] == "active"
         assert operation["status"] == "started"
@@ -3658,7 +3659,7 @@ class TestGuardSurfaceServer:
         assert json.loads(item_error.read().decode("utf-8")) == {
             "error": "Unknown guard operation: missing-operation",
         }
-        assert store.list_guard_operation_items("missing-operation") == []
+        assert list_guard_operation_items(store, "missing-operation") == []
 
     def test_guard_daemon_operation_start_rejects_unknown_session_with_json_error(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -3875,7 +3876,7 @@ class TestGuardSurfaceServer:
 
         first_operation = store.get_guard_operation(str(first_block_response["operation"]["operation_id"]))
         assert first_operation is not None
-        first_items = store.list_guard_operation_items(str(first_block_response["operation"]["operation_id"]))
+        first_items = list_guard_operation_items(store, str(first_block_response["operation"]["operation_id"]))
         assert first_block_response["operation"]["status"] == "waiting_on_approval"
         assert len(first_block_response["approval_requests"]) == 1
         assert first_items[0]["item_type"] == "approval_requested"

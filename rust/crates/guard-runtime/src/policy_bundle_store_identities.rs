@@ -94,15 +94,16 @@ pub(crate) fn cached_bundle_authority(
     Some((identities, Some(validated)))
 }
 
-/// The identities a lookup Python sent without them reads `policy-bundle` rows
-/// under, derived from the store that lookup reads. `Ok(None)` when the bundle
-/// authorizes nothing or no such row exists, so a store without bundle rules
-/// never pays for the bundle's signature checks; `Err` when the resident cannot derive them the way the
-/// Python store would, which the lookup reports instead of dropping the rows.
-pub(crate) fn lookup_bundle_identities(
+/// The bundle authority a lookup Python sent no identities for reads
+/// `policy-bundle` rows under, derived from the store that lookup reads.
+/// `Ok(None)` when no such row exists, so a store without bundle rules never
+/// pays for the bundle's signature checks; `Err` when the resident cannot
+/// derive it the way the Python store would, which the lookup reports instead
+/// of dropping the rows.
+pub(crate) fn lookup_bundle_authority(
     connection: &Connection,
     now: &str,
-) -> Result<Option<Vec<Identity>>, ()> {
+) -> Result<Option<BundleAuthority>, ()> {
     if !table_exists(connection, "policy_decisions").map_err(|_| ())? {
         return Ok(None);
     }
@@ -117,8 +118,7 @@ pub(crate) fn lookup_bundle_identities(
     if bundle_row.is_none() {
         return Ok(None);
     }
-    let (identities, _bundle) = cached_bundle_authority(connection, now).ok_or(())?;
-    Ok((!identities.is_empty()).then_some(identities))
+    cached_bundle_authority(connection, now).map(Some).ok_or(())
 }
 
 /// `cached_policy_bundle_validation`: the payload rules are read from, or
@@ -336,11 +336,16 @@ fn host_name() -> Option<String> {
     nix::unistd::gethostname().ok()?.into_string().ok()
 }
 
-/// Off Unix, `platform.node()` is the DNS host name, which `COMPUTERNAME`
-/// (the upper-cased, 15-character NetBIOS name) does not match. The resident
-/// cannot read it yet, so the device name is unknown and the bundle's
-/// identities are left to the store.
-#[cfg(not(unix))]
+/// On Windows `platform.node()` is the DNS host name, which `COMPUTERNAME`
+/// (the upper-cased, 15-character NetBIOS name) does not match.
+#[cfg(windows)]
+fn host_name() -> Option<String> {
+    guard_runtime_windows_process::dns_host_name()?
+        .into_string()
+        .ok()
+}
+
+#[cfg(not(any(unix, windows)))]
 fn host_name() -> Option<String> {
     None
 }
