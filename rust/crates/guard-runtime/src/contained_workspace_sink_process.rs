@@ -26,8 +26,6 @@ use super::denial::{denial_note, loopback_denied};
 use super::output::Shaping;
 use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
 
-const OUTPUT_LIMIT: usize = 1024 * 1024;
-const TRUNCATED: &str = "\n[HOL Guard truncated restricted pytest output]\n";
 const CEILING_BUDGET: Duration = Duration::from_secs(5);
 /// The launcher's `CEILING` for a host step, which runs without limits.
 pub(super) const HOST_STEP: &str = "host";
@@ -182,12 +180,8 @@ pub(super) fn run_backend(
         .stderr(clone(if merge { &stdout } else { &stderr })?);
     let (status, timed_out) = run_tracked(&mut command, signals, timeout_seconds, true)
         .map_err(|error| not_started(&error))?;
-    let mut shown = Vec::new();
-    let stdout_text = replay(stdout, &mut shown);
-    signals.output.out(&shown);
-    shown.clear();
-    let stderr_text = replay(stderr, &mut shown);
-    signals.output.err(&shown);
+    let stdout_text = signals.output.replay_out(stdout);
+    let stderr_text = signals.output.replay_err(stderr);
     if timed_out {
         return Err(Failure::with_exit(
             "pytest_restricted_timeout",
@@ -303,41 +297,6 @@ pub(super) fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
 
 fn clone(file: &File) -> Outcome<File> {
     file.try_clone().map_err(|error| not_started(&error))
-}
-
-/// Write up to `OUTPUT_LIMIT` bytes of `file` to `out` as display text;
-/// the raw bytes read, for the denial check.
-fn replay(mut file: File, out: &mut impl Write) -> Vec<u8> {
-    let mut raw = Vec::new();
-    if file.seek(SeekFrom::Start(0)).is_ok() {
-        let limit = u64::try_from(OUTPUT_LIMIT).unwrap_or(u64::MAX);
-        let _ = (&mut file).take(limit + 1).read_to_end(&mut raw);
-    }
-    let truncated = raw.len() > OUTPUT_LIMIT;
-    raw.truncate(OUTPUT_LIMIT);
-    let mut text = display_text(&raw);
-    if truncated {
-        text.push_str(TRUNCATED);
-    }
-    let _ = out.write_all(text.as_bytes());
-    let _ = out.flush();
-    raw
-}
-
-/// Output as text a terminal shows safely: CRLF folded, and control
-/// characters other than newline and tab replaced.
-fn display_text(raw: &[u8]) -> String {
-    String::from_utf8_lossy(raw)
-        .replace("\r\n", "\n")
-        .chars()
-        .map(|character| {
-            if character == '\n' || character == '\t' || u32::from(character) >= 32 {
-                character
-            } else {
-                '\u{fffd}'
-            }
-        })
-        .collect()
 }
 
 /// The shell's view of `status`: the code, or 128 plus the signal.

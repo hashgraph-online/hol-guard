@@ -38,8 +38,8 @@ const FILTER_TIMEOUT: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(10);
 const FILTER_FAILED: &str = "contained_output_filter_failed";
 
-/// Write `captured` as `output` keeps it, and the chain's own status for a
-/// `pipe`. A matcher's diagnostics go to standard error first.
+/// Write `captured` as `output` keeps it, as display text, and the chain's
+/// own status for a `pipe`. A matcher's diagnostics go to standard error first.
 pub(super) fn emit(
     output: &ContainedOutput,
     captured: &[u8],
@@ -50,11 +50,11 @@ pub(super) fn emit(
         if !diagnostics.is_empty() {
             shaping.err(&diagnostics);
         }
-        shaping.out(&text);
+        shaping.show(&text);
         return Ok(Some(status));
     }
     let count = usize::try_from(output.count).unwrap_or(usize::MAX);
-    shaping.out(&keep(&lines(captured), output.kind, count).concat());
+    shaping.show(&keep(&lines(captured), output.kind, count).concat());
     Ok(None)
 }
 
