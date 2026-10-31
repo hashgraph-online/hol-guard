@@ -90,6 +90,7 @@ mod fanout_reads;
 mod filter_pattern_text;
 mod find_reads;
 mod for_loop_unroll;
+mod gem_reads;
 pub(crate) mod git_apply_check;
 pub(crate) mod git_branch_listing;
 pub(crate) mod git_clean_preview;

@@ -458,6 +458,7 @@ pub(super) fn exact_safe_segment_with_context(
         "helm" => super::helm_usage::safe_helm_segment(model, segment),
         "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),
+        "gem" => super::gem_reads::safe_gem_segment(model, segment),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
         "psql" => super::postgres_reads::safe_psql_arguments(&segment.arguments, context),
         "npm" => {
