@@ -13,6 +13,7 @@ import logging
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -255,6 +256,7 @@ def test_claim_refuses_local_evidence_shipped_without_a_binding(
 def test_bundle_binding_is_read_before_the_identities_it_binds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A source that moves while the identities are derived must differ from the binding."""
 
+    monkeypatch.setattr(store_policy, "_RESIDENT_DERIVES_BUNDLE_IDENTITIES", False)
     store, selected = _bundle_store(tmp_path)
     real = store._cached_policy_bundle_decision_identities
 
@@ -267,6 +269,28 @@ def test_bundle_binding_is_read_before_the_identities_it_binds(tmp_path: Path, m
 
     assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is False
     assert _claim_events(store) == 0
+
+
+@pytest.mark.skipif(not store_policy._RESIDENT_DERIVES_BUNDLE_IDENTITIES, reason="off Unix the caller ships them")
+def test_the_resident_derives_the_bundle_identities_it_claims_against(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The claim ships the binding but not the identities; the resident derives them after it."""
+
+    store, selected = _bundle_store(tmp_path)
+    shipped: list[dict[str, object]] = []
+    real = store_policy.native_claim_approval_reuse_decisions
+
+    def capture(*, evidence: native_store_policy.IntegrityEvidence, **kwargs: Any) -> bool:
+        shipped.append(dict(evidence))
+        return real(evidence=evidence, **kwargs)
+
+    monkeypatch.setattr(store_policy, "native_claim_approval_reuse_decisions", capture)
+
+    assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is True
+    assert "evidence_binding" in shipped[0]
+    assert "policy_bundle_decision_identities" not in shipped[0]
+    assert _claim_events(store) == 1
 
 
 def _record_saved_rows(store: GuardStore) -> None:

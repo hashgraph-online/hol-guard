@@ -8,11 +8,7 @@ from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from .runtime.composio_contract import composio_tool_role
-from .runtime.composio_discovery import ComposioActionSchema
-from .runtime.composio_workflows import ComposioWorkflowProposal
 from .runtime.local_cli_identity import UnlistedCliIdentity
-from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .store_local_cli_retention import LocalCliReplaySkippedError, utc_now_iso
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_provider_catalog import describe_provider_actions
@@ -127,62 +123,6 @@ class StoreLocalMcpMixin:
         if digest is not None and not isinstance(digest, str):
             raise sqlite3.DatabaseError("native_mcp_provider_authority_invalid")
         return digest
-
-    def record_composio_discovery(
-        self,
-        source: ObservedMcpTool,
-        actions: tuple[ComposioActionSchema, ...],
-        *,
-        seen_at: str,
-        proposals: tuple[ComposioWorkflowProposal, ...] = (),
-    ) -> str:
-        if observed_mcp_tool(source.harness, source.qualified_name) != source or (
-            composio_tool_role(source.qualified_name) != "discovery"
-        ):
-            raise ValueError("invalid provider discovery source")
-        server = source.server_identity
-        cli_id = self.ensure_local_mcp_observation(
-            source.identity,
-            seen_at=seen_at,
-            server_identity_hash=server.identity_hash,
-            server_command=server.command,
-            server_args_hash=server.args_hash,
-            source_label=f"{source.harness.title()} · observed provider metadata",
-        )
-        args: dict[str, object] = {
-            "cli_id": cli_id,
-            "identity_hash": server.identity_hash,
-            "server_command": server.command,
-            "source_tool": source.qualified_name,
-            "seen_at": seen_at,
-            "actions": [
-                {
-                    "toolkit": action.toolkit,
-                    "tool_slug": action.tool_slug,
-                    "description": action.description,
-                    "input_schema": action.input_schema,
-                    "full_schema": bool(action.full_schema),
-                }
-                for action in actions
-            ],
-            "proposals": [
-                {
-                    "primary": list(proposal.primary),
-                    "supporting": list(proposal.supporting),
-                    "guidance_present": proposal.guidance_present,
-                }
-                for proposal in proposals
-            ],
-        }
-        result = self._native_store_call("record_composio_discovery", args)
-        if isinstance(result, dict) and result.get("need_barrier") is True:
-            # This batch moves the provider authority, which the native policy
-            # barrier has to bracket. The resident cannot reach the publishers
-            # that barrier notifies, so it wrote nothing and asked for one:
-            # close it and run the same write inside it.
-            with _notify_legacy_mcp_denial(cast("GuardStore", self).guard_home):
-                self._native_store_call("record_composio_discovery", {**args, "barrier_closed": True})
-        return cli_id
 
     def read_local_mcp_workflows(self, cli_id: str, *, offset: int = 0) -> dict[str, object]:
         return self._native_mcp_read(

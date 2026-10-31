@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.store_review_event_outbox_schema import (
     ensure_review_event_outbox_schema,
 )
 from tests.guard_review_event_outbox_test_support import _all_events, _connect, _request, as_int
+from tests.native_store_shims import refresh_review_event_outbox_binding
 
 # pyright: reportMissingImports=false
 
@@ -299,7 +300,7 @@ def test_same_subject_refresh_updates_machine_binding_without_confirmation(tmp_p
     store.add_approval_request(_request("request-1"), _NOW)
     new_binding = _connect(store, machine_id="machine-new")
 
-    assert store.refresh_review_event_outbox_binding() == 1
+    assert refresh_review_event_outbox_binding(store) == 1
     assert store.list_ready_review_events(now=_NOW, limit=10, **old_binding) == []
     rows = store.list_ready_review_events(now=_NOW, limit=10, **new_binding)
     assert len(rows) == 1

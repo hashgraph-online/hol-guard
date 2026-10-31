@@ -15,13 +15,6 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _aware_instant(now: str) -> str:
-    """Validate an ISO instant; a naive one means host-local time, as `datetime.timestamp()` reads it."""
-
-    parsed = datetime.fromisoformat(now)
-    return now if parsed.tzinfo is not None else parsed.astimezone().isoformat()
-
-
 def _guard_session_row(row: Mapping[str, Any]) -> dict[str, object]:
     return {
         "session_id": str(row["session_id"]),
@@ -193,54 +186,6 @@ class StoreSessionsMixin:
             },
         )
         return _guard_item_row(row)
-
-    def list_guard_operation_items(self, operation_id: str) -> list[dict[str, object]]:
-        rows = self._native_store_call("list_guard_operation_items", {"operation_id": operation_id})
-        return [_guard_item_row(row) for row in rows]
-
-    def attach_guard_client(
-        self,
-        *,
-        client_id: str,
-        surface: str,
-        session_id: str | None,
-        metadata: dict[str, object],
-        lease_seconds: int,
-        now: str,
-    ) -> dict[str, object]:
-        now = _aware_instant(now)
-        row = self._native_store_call(
-            "attach_guard_client",
-            {
-                "client_id": client_id,
-                "surface": surface,
-                "session_id": session_id,
-                "metadata_json": json.dumps(metadata),
-                "lease_id": uuid4().hex,
-                "lease_seconds": lease_seconds,
-                "now": now,
-            },
-        )
-        return _guard_attachment_row(row)
-
-    def renew_guard_client_attachment(
-        self,
-        *,
-        client_id: str,
-        lease_id: str,
-        lease_seconds: int,
-        now: str,
-    ) -> dict[str, object] | None:
-        now = _aware_instant(now)
-        row = self._native_store_call(
-            "renew_guard_client_attachment",
-            {"client_id": client_id, "lease_id": lease_id, "lease_seconds": lease_seconds, "now": now},
-        )
-        return None if row is None else _guard_attachment_row(row)
-
-    def get_guard_client_attachment(self, client_id: str) -> dict[str, object] | None:
-        row = self._native_store_call("get_guard_client_attachment", {"client_id": client_id})
-        return None if row is None else _guard_attachment_row(row)
 
     def list_guard_client_attachments(
         self,
