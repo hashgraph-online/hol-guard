@@ -7,7 +7,7 @@
 //! read against the rules [`super::curl_reads`] already applies and nothing
 //! here widens them.
 //!
-//! Four limits keep this reading narrower than curl's.
+//! Five limits keep this reading narrower than curl's.
 //!
 //! The method is `GET` or `HEAD`, named or left to the default. HTTPie takes
 //! the method as the first word and assumes `GET` when the first word is a
@@ -25,12 +25,21 @@
 //! An option this reading does not know could be any of them, so an unknown
 //! one keeps the review.
 //!
+//! A public host is read only when the line says the request carries nothing
+//! else. Both programs take a redirected stdin as the request body, and with
+//! no method written they send it as a `POST`, so a command run with the
+//! harness's own stdin attached can carry away something the text never
+//! names. `--ignore-stdin` is how both programs say they will not, and it is
+//! asked for wherever the answer could leave this machine. A loopback
+//! destination is read without it: the body stays on the host, and the ports
+//! this reading reaches are already held to dev servers.
+//!
 //! The `https` and `xhs` aliases are absent. They differ from the names here
 //! only in the scheme they assume for a URL written without one, which is a
 //! guess this module would have to make for itself rather than take from
 //! curl's reading of the same spelling.
 
-use super::curl_reads::{expands, readable_url, safe_header};
+use super::curl_reads::{expands, loopback_read_url, readable_url, safe_header};
 
 /// Flags that change only what is printed or how a failing status is reported.
 const PLAIN_FLAGS: [&str; 7] = [
@@ -66,24 +75,13 @@ pub(super) fn safe_http_segment(
         && read_request(&segment.arguments, context)
 }
 
-/// A whole `http` or `xh` segment that the native proof accepts as a `GET` or
-/// `HEAD`. None of its allowed options or request items opens a local file, so
-/// the compatibility layer does not read it as an upload inside a pipeline.
-pub(crate) fn proven_read_segment(
-    model: &crate::CanonicalCommandV1,
-    segment: &crate::CommandSegmentV1,
-    context: super::PathContext<'_>,
-) -> bool {
-    matches!(segment.executable.as_deref(), Some("http" | "xh"))
-        && super::segment_proof::exact_safe_segment_with_context(model, segment, false, context)
-}
-
 fn read_request(arguments: &[String], context: super::PathContext<'_>) -> bool {
     if arguments.iter().any(|argument| expands(argument)) {
         return false;
     }
     let mut words = Vec::new();
     let mut options = true;
+    let mut ignores_stdin = false;
     let mut index = 0;
     while index < arguments.len() {
         let argument = arguments[index].as_str();
@@ -100,6 +98,7 @@ fn read_request(arguments: &[String], context: super::PathContext<'_>) -> bool {
         let Some(consumed) = option_consumed(arguments, index) else {
             return false;
         };
+        ignores_stdin |= argument == "--ignore-stdin";
         index += consumed;
     }
     let Some((first, rest)) = words.split_first() else {
@@ -119,7 +118,7 @@ fn read_request(arguments: &[String], context: super::PathContext<'_>) -> bool {
     } else {
         (*first, rest)
     };
-    readable(url, context) && items.iter().all(|item| header_item(item))
+    readable(url, context, ignores_stdin) && items.iter().all(|item| header_item(item))
 }
 
 /// The URL as these programs read it.
@@ -128,16 +127,19 @@ fn read_request(arguments: &[String], context: super::PathContext<'_>) -> bool {
 /// `:3000/health` is `localhost:3000/health` and `:/health` is
 /// `localhost/health`. Writing the host back in is all this does; the result
 /// is then read by [`readable_url`], which decides what the request may reach.
-fn readable(url: &str, context: super::PathContext<'_>) -> bool {
-    let Some(rest) = url.strip_prefix(':') else {
-        return readable_url(url, context);
+///
+/// Off this host the reading also asks for `--ignore-stdin`, because without
+/// it the body is whatever the harness left on stdin rather than what the
+/// line names.
+fn readable(url: &str, context: super::PathContext<'_>, ignores_stdin: bool) -> bool {
+    let spelled = match url.strip_prefix(':') {
+        None => std::borrow::Cow::Borrowed(url),
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
+            std::borrow::Cow::Owned(format!("localhost{rest}"))
+        }
+        Some(rest) => std::borrow::Cow::Owned(format!("localhost:{rest}")),
     };
-    let spelled = if rest.is_empty() || rest.starts_with('/') {
-        format!("localhost{rest}")
-    } else {
-        format!("localhost:{rest}")
-    };
-    readable_url(&spelled, context)
+    loopback_read_url(&spelled, context) || (ignores_stdin && readable_url(&spelled, context))
 }
 
 /// A request item that only sets a header.

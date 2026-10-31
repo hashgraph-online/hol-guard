@@ -306,6 +306,16 @@ pub(in crate::pretool) fn readable_url(raw: &str, context: super::PathContext<'_
     public_url(&raw) || loopback_url(&raw, context.home_dir)
 }
 
+/// The same reading, held to a destination on this host.
+///
+/// A program that can pick up a request body the command never names carries
+/// away whatever that body holds, so its reading of a public host asks for
+/// more than the URL screen above. A loopback request cannot leave the
+/// machine, which is what [`super::http_reads`] leans on.
+pub(in crate::pretool) fn loopback_read_url(raw: &str, context: super::PathContext<'_>) -> bool {
+    as_curl_reads_it(raw).is_some_and(|raw| loopback_url(&raw, context.home_dir))
+}
+
 /// Names whose prefix picks curl a protocol other than HTTP when the URL is
 /// written without one. curl matches them case-insensitively.
 const OTHER_PROTOCOL_PREFIXES: [&str; 6] = ["ftp.", "dict.", "ldap.", "imap.", "smtp.", "pop3."];

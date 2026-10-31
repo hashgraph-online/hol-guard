@@ -42905,7 +42905,18 @@
       "expect": "allow"
     },
     {
-      "id": "queue-http-public-read",
+      "id": "queue-http-public-read-carries-no-stdin",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http --ignore-stdin https://example.com/api/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-http-public-read-may-send-inherited-stdin",
       "fix_area": "queue",
       "harnesses": ["codex", "zcode", "claude-code", "omp"],
       "tool": "shell",
@@ -42913,7 +42924,7 @@
         "command": "http https://example.com/api/health"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
     },
     {
       "id": "queue-xh-loopback-read",

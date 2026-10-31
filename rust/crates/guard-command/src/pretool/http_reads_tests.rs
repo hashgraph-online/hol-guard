@@ -37,9 +37,9 @@ fn a_read_of_a_local_or_public_service_is_proven() {
         "http --pretty=none --style=monokai http://127.0.0.1:8080/health",
         "http --timeout 5 --check-status http://127.0.0.1:8080/health",
         "http --ignore-stdin http://127.0.0.1:8080/health",
-        "http https://example.com/api/health",
-        "http -- https://example.com/api/health",
-        "http https://api.example.com/v1/status Accept:application/json",
+        "http --ignore-stdin https://example.com/api/health",
+        "http --ignore-stdin -- https://example.com/api/health",
+        "http --ignore-stdin https://api.example.com/v1/status Accept:application/json",
     ] {
         assert!(proven(command), "{command}");
     }
@@ -80,6 +80,10 @@ fn a_body_a_file_a_credential_or_another_destination_stays_reviewed() {
         "http -f http://127.0.0.1:8080/items name=value",
         "http --default-scheme https example.com",
         "http --print ../../etc/passwd http://127.0.0.1:8080/health",
+        // A public host with no word about what stdin carries.
+        "http https://example.com/api/health",
+        "http -- https://example.com/api/health",
+        "xh https://example.com/api/health",
         // Destinations the curl reading already refuses.
         "http http://127.0.0.1:9222/json",
         "http http://169.254.169.254/latest/meta-data/",
@@ -103,9 +107,36 @@ fn the_local_shorthand_names_the_local_host_only() {
     assert!(!super::header_item("file@notes.txt"));
 
     let context = crate::pretool::PathContext::default();
-    assert!(super::readable(":3000/health", context));
-    assert!(super::readable(":/health", context));
+    assert!(super::readable(":3000/health", context, false));
+    assert!(super::readable(":/health", context, false));
     // The shorthand writes the host in; it never reaches another one.
-    assert!(!super::readable(":9222/json", context));
-    assert!(!super::readable("::3000/health", context));
+    assert!(!super::readable(":9222/json", context, false));
+    assert!(!super::readable("::3000/health", context, false));
+}
+
+/// Both programs take a redirected stdin as the request body, so a read whose
+/// answer could leave this machine says on the line that it carries none.
+#[test]
+fn a_public_read_says_what_it_carries_and_a_local_one_need_not() {
+    let context = crate::pretool::PathContext::default();
+    assert!(!super::readable(
+        "https://example.com/api/health",
+        context,
+        false
+    ));
+    assert!(super::readable(
+        "https://example.com/api/health",
+        context,
+        true
+    ));
+    assert!(super::readable(
+        "http://127.0.0.1:8080/health",
+        context,
+        false
+    ));
+    // The flag is read as an option, not as a word the request names.
+    assert!(proven("http --ignore-stdin https://example.com/api/health"));
+    assert!(!proven(
+        "http -- --ignore-stdin https://example.com/api/health"
+    ));
 }
