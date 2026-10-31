@@ -185,22 +185,5 @@ def _verified(response: Mapping[str, object], summary: object) -> VerifiedSupply
     cached = {name: response.get(name) for name in ("bundle", "payloadHash", "signature", "signatureAlgorithm")}
     cached["verificationKeys"] = [key.to_dict() for key in keys]
     if not isinstance(summary, dict):
-        # A resident older than the summary reply: read the same fields from
-        # the bundle it has just verified.
-        summary = _bundle_summary(response.get("bundle"))
+        raise SupplyChainBundleUnavailableError
     return VerifiedSupplyChainBundle(response=cached, verification_keys=keys, summary=summary)
-
-
-def _bundle_summary(bundle: object) -> dict[str, object]:
-    fields = bundle if isinstance(bundle, dict) else {}
-    advisories = fields.get("advisories")
-    packages = fields.get("packages")
-    return {
-        "bundle_version": fields.get("bundleVersion"),
-        "key_id": fields.get("keyId"),
-        "policy_hash": fields.get("policyHash"),
-        "tier": fields.get("tier"),
-        "feed_snapshot_hash": fields.get("feedSnapshotHash"),
-        "advisory_count": len(advisories) if isinstance(advisories, list) else 0,
-        "package_count": len(packages) if isinstance(packages, list) else 0,
-    }

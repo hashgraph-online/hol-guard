@@ -89,7 +89,7 @@ def test_verify_provisions_the_resident_against_the_caller_s_own_store(
 
     monkeypatch.setattr(bridge, "ensure_resident_prerequisite", _record)
     monkeypatch.setattr(bridge, "_resident_request", lambda **kwargs: None)
-    monkeypatch.setattr(bridge, "_payload", lambda *args, **kwargs: {"outcome": "verified"})
+    monkeypatch.setattr(bridge, "_payload", lambda *args, **kwargs: {"outcome": "verified", "summary": {}})
     sentinel = object()
 
     bridge.native_verify_supply_chain_bundle_response({}, guard_home=tmp_path, store=sentinel)
@@ -126,11 +126,9 @@ def test_verify_returns_the_cache_form_with_the_resident_summary(tmp_path, monke
     assert [item.to_dict() for item in verified.verification_keys] == [key]
     assert verified.summary == summary
 
-    # A resident older than the summary reply: the same fields come from the bundle.
+    # A verified reply without the parsed summary is not trusted for one
+    # counted from the raw bundle, which the parser would have merged.
     monkeypatch.setattr(bridge, "_payload", lambda *args, **kwargs: {"outcome": "verified"})
 
-    fallback = bridge.native_verify_supply_chain_bundle_response(response, guard_home=tmp_path).summary
-
-    assert fallback["bundle_version"] == "v1"
-    assert fallback["package_count"] == 2
-    assert fallback["advisory_count"] == 1
+    with pytest.raises(bridge.SupplyChainBundleUnavailableError):
+        bridge.native_verify_supply_chain_bundle_response(response, guard_home=tmp_path)
