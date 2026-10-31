@@ -36548,9 +36548,9 @@
       }
     },
     {
-      "id": "ref-name-branch-create-force-credential-word",
+      "id": "ref-name-branch-create-force-still-reviews",
       "cwd": "worktree",
-      "expect": "allow",
+      "expect": "not_allow",
       "fix_area": "git",
       "harnesses": [
         "codex",
@@ -36564,9 +36564,9 @@
       }
     },
     {
-      "id": "ref-name-push-refspec-credential-word",
+      "id": "ref-name-push-refspec-still-reviews",
       "cwd": "worktree",
-      "expect": "allow",
+      "expect": "not_allow",
       "fix_area": "git",
       "harnesses": [
         "codex",
@@ -36592,7 +36592,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "git --no-pager checkout -b fix/secret-scan-gate"
+        "command": "git --no-pager log --oneline origin/add-secret-blast-radius -5"
       }
     },
     {
