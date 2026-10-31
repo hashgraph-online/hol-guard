@@ -485,6 +485,12 @@ impl<'a> super::PathContext<'a> {
         // prepended to every request, and each takes a variable that moves
         // the directory it is read from. A stamped environment carries names
         // without values, so any name counts.
+        //
+        // `XDG_CONFIG_HOME` moves the same file: HTTPie reads its directory
+        // under that base before falling back to `~/.config`, and `xh` reaches
+        // the platform directory through it on Linux. Its value is stamped
+        // rather than only named, so the session that spells out the default
+        // path keeps the reading and every other directory loses it.
         let http_config_absent = match execution_environment {
             Some(environment) => {
                 environment.has_valid_shape()
@@ -493,10 +499,20 @@ impl<'a> super::PathContext<'a> {
                             .iter()
                             .any(|known| name.eq_ignore_ascii_case(known))
                     })
+                    && xdg_config_is_default(
+                        environment.xdg_config_home.as_deref(),
+                        environment.home.as_deref(),
+                    )
             }
-            None => HTTP_CONFIG_NAMES
-                .iter()
-                .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty())),
+            None => {
+                HTTP_CONFIG_NAMES
+                    .iter()
+                    .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty()))
+                    && xdg_config_is_default(
+                        std::env::var("XDG_CONFIG_HOME").ok().as_deref(),
+                        std::env::var("HOME").ok().as_deref(),
+                    )
+            }
         };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
@@ -540,6 +556,29 @@ const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
 /// The variables HTTPie and `xh` read their configuration directory from.
 const HTTP_CONFIG_NAMES: [&str; 2] = ["HTTPIE_CONFIG_DIR", "XH_CONFIG_DIR"];
 
+/// Whether an inherited `XDG_CONFIG_HOME` still names the directory
+/// [`super::http_reads`] opens.
+///
+/// An absent or empty value leaves both programs on `~/.config`, and a value
+/// that spells that same directory out names it too. Anywhere else is a
+/// configuration this proof never read, and a home it cannot place leaves
+/// nothing to compare the value against.
+fn xdg_config_is_default(value: Option<&str>, home: Option<&str>) -> bool {
+    let Some(value) = value.filter(|value| !value.is_empty()) else {
+        return true;
+    };
+    let Some(home) = home else {
+        return false;
+    };
+    let default = std::path::Path::new(home).join(".config");
+    let value = std::path::Path::new(value);
+    value == default
+        || std::fs::canonicalize(value)
+            .ok()
+            .zip(std::fs::canonicalize(&default).ok())
+            .is_some_and(|(value, default)| value == default)
+}
+
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
 }
@@ -572,7 +611,7 @@ fn npm_selector(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{drive_separators, shell_alters_backslash};
+    use super::{drive_separators, shell_alters_backslash, xdg_config_is_default};
 
     #[test]
     fn repeated_drive_separators_spell_one_backslash() {
@@ -638,6 +677,32 @@ mod tests {
         assert!(!absent_tail("Code/not-cloned-yet"));
 
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_moved_xdg_base_is_not_the_directory_the_http_proof_reads() {
+        let home = tempfile::tempdir().expect("temp home");
+        let home_text = home.path().to_str().expect("utf-8 home");
+        let default = home.path().join(".config");
+        std::fs::create_dir_all(&default).expect("default directory");
+
+        assert!(xdg_config_is_default(None, Some(home_text)));
+        assert!(xdg_config_is_default(Some(""), Some(home_text)));
+        assert!(xdg_config_is_default(default.to_str(), Some(home_text)));
+        // The same directory reached through a trailing component the shell
+        // leaves in the value.
+        assert!(xdg_config_is_default(
+            default.join("..").join(".config").to_str(),
+            Some(home_text)
+        ));
+
+        let moved = tempfile::tempdir().expect("temp config");
+        assert!(!xdg_config_is_default(
+            moved.path().to_str(),
+            Some(home_text)
+        ));
+        // A home the stamp does not carry leaves nothing to compare against.
+        assert!(!xdg_config_is_default(default.to_str(), None));
     }
 
     #[test]
