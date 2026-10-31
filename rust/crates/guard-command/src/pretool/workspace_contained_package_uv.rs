@@ -82,6 +82,9 @@ struct UvCommand {
     project: PathBuf,
     discovered: bool,
     operand: Option<usize>,
+    /// Whether a lock assertion flag stood on its own rather than being read
+    /// as another option's value.
+    asserts: bool,
 }
 
 /// Read `arguments` as far as the verb's first operand. `--directory` moves
@@ -93,6 +96,7 @@ fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<
     let mut named: Option<&str> = None;
     let mut verb: Option<usize> = None;
     let mut operand = None;
+    let mut asserts = false;
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         let separator = *argument == "--";
@@ -117,6 +121,7 @@ fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<
             let known = UV_GLOBAL_FLAGS.contains(&name)
                 || (verb.is_some() && UV_VERB_FLAGS.contains(&name));
             if known {
+                asserts = asserts || UV_LOCK_ASSERTIONS.contains(&name);
                 index += 1;
                 continue;
             }
@@ -150,6 +155,7 @@ fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<
         project,
         discovered: named.is_none(),
         operand,
+        asserts,
     })
 }
 
@@ -176,10 +182,10 @@ pub(super) fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Pa
     // of the project `uv tree` already makes. `--dry-run` is absent because
     // it resolves the dependencies afresh to report what would change, which
     // is the fetch the sandbox has no network for.
-    let asserts_the_lock = verb == "lock"
-        && arguments[uv.verb + 1..]
-            .iter()
-            .any(|argument| UV_LOCK_ASSERTIONS.contains(argument));
+    // The flag has to stand on its own: `uv lock --env-file --check` reads
+    // `--check` as the file's name, so uv still resolves and rewrites the
+    // lockfile.
+    let asserts_the_lock = verb == "lock" && uv.asserts;
     if !UV_LOCAL_VERBS.contains(&verb.as_str()) && !asserts_the_lock {
         return false;
     }

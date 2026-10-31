@@ -373,6 +373,9 @@ fn the_lock_assertion_reads_the_lockfile_the_project_already_holds() {
         // something else.
         "uv lock --check-url https://example.test/simple",
         "uv add --check requests",
+        // `--env-file` takes the next word as the file's name, so the lock
+        // carries no assertion and uv resolves and rewrites it.
+        "uv lock --env-file --check",
     ] {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, _) = outcome(harness, command, &ws);
