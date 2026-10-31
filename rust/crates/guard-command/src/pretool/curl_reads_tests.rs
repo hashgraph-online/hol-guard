@@ -94,6 +94,9 @@ fn local_dev_server_reads_are_proven() {
     for command in [
         "curl http://localhost:3000/",
         "curl http://127.0.0.1/",
+        // The same host and the same default port, written as the literal
+        // a server listening on `::1` is reached by.
+        "curl http://[::1]/",
         "curl -fsS http://127.0.0.1:4173/game.js",
         "curl -sI https://localhost:8443/health",
         "curl -s -o /dev/null -w '%{http_code}' http://LOCALHOST:3001/",
@@ -279,7 +282,6 @@ fn local_admin_ports_and_other_loopback_spellings_stay_reviewed() {
 #[test]
 fn local_and_reserved_destinations_stay_reviewed() {
     for command in [
-        "curl http://[::1]/",
         "curl http://[fd00::1]/",
         "curl http://169.254.169.254/latest/meta-data/",
         "curl http://2852039166/",
