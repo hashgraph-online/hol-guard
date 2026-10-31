@@ -289,8 +289,7 @@ def _try_proxy_running_desktop_bootstrap() -> bool:
 def _record_extraction_owner() -> None:
     """Stamp a onefile extraction dir so a hard-killed launch can be reclaimed.
 
-    Mirrors ``onefile_extraction.record_extraction_owner`` but stays
-    stdlib-only: this runs before the daemon bridge fast path, which must not
+    The only owner-marker writer, and stdlib-only: this runs before the daemon bridge fast path, which must not
     pay for the Guard package import graph. The filename and schema literals
     must match ``OWNER_MARKER_NAME`` / ``_OWNER_MARKER_SCHEMA`` in
     ``codex_plugin_scanner.guard.onefile_extraction`` (asserted by test).

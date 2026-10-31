@@ -12,7 +12,7 @@ import pytest
 from codex_plugin_scanner.guard.store_local_cli_context import (
     CONTEXT_COLUMNS,
     FIRST_BLOCKED_CAUSES,
-    validated_first_blocked_cause,
+    note_capability_cause,
 )
 from codex_plugin_scanner.guard.store_local_cli_regroup import (
     NON_RECOGNITION_RISK_SUMMARIES,
@@ -170,19 +170,14 @@ def test_a_store_without_an_approval_table_still_migrates(tmp_path: Path) -> Non
     connection.close()
 
 
-@pytest.mark.parametrize("cause", FIRST_BLOCKED_CAUSES)
-def test_every_known_first_blocked_cause_is_accepted(cause: str) -> None:
-    assert validated_first_blocked_cause(cause) == cause
-
-
 @pytest.mark.parametrize("cause", ["", "Exec_Outside_Roots", "exec_outside_roots ", "network", 7, b"x"])
 def test_an_unknown_first_blocked_cause_is_refused(cause: object) -> None:
-    with pytest.raises(ValueError, match="invalid_first_blocked_cause"):
-        validated_first_blocked_cause(cause)
-
-
-def test_the_absent_cause_is_none() -> None:
-    assert validated_first_blocked_cause(None) is None
+    connection = sqlite3.connect(":memory:")
+    try:
+        with pytest.raises(ValueError, match="invalid_first_blocked_cause"):
+            note_capability_cause(connection, cli_id="cli", identity_hash="hash", cause=cause)  # pyright: ignore[reportArgumentType]
+    finally:
+        connection.close()
     assert len(FIRST_BLOCKED_CAUSES) == 5
 
 
