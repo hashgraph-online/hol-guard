@@ -5,7 +5,8 @@ fn arguments(text: &str) -> Vec<String> {
 }
 
 fn shape(text: &str) -> (Vec<String>, bool, Vec<String>, Vec<String>) {
-    let exec = fd_exec(&arguments(text)).unwrap_or_else(|| panic!("{text}"));
+    let words = arguments(text);
+    let exec = fd_exec(&words).unwrap_or_else(|| panic!("{text}"));
     (
         exec.shape
             .roots
