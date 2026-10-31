@@ -361,6 +361,186 @@ pub(crate) fn xargs_follows_object_names(
         && xargs_git(arguments).is_some()
 }
 
+/// A search that prints the names of the files it matched.
+///
+/// `rg -l TODO src | xargs wc -l` is the shape, and the words the child
+/// receives are the paths the search printed. Two properties keep them inside
+/// the walk: the search is given a root of its own, so every printed path
+/// carries that root as its prefix and no word can begin with a dash, and a
+/// path component cannot hold a separator, so a name with a space splits into
+/// fragments that are still relative to the same working directory.
+///
+/// `-l` is what makes the output a list of names rather than matching lines.
+/// Symlink following (`rg -L`, `grep -R`), a pattern read from a file and a
+/// pattern given with `-e` are not part of the shape, and every option outside
+/// the lists below keeps the uncertain model.
+///
+/// Whether the names are separated by NUL (`--null`) is recorded rather than
+/// required, because the two readers that ask about this shape want different
+/// answers. A contained harness runs the whole pipeline inside the workspace
+/// sandbox, where a name split on a space is one more relative path the run
+/// could already read, so the shape is enough to stop reading `xargs` as an
+/// executor of unknown commands. The pretool proof allows the pipeline with no
+/// sandbox around it, and a space in a name there hands the child a word that
+/// was never proven -- a planted `x --files0-from=...` is the shape of it -- so
+/// that reader asks for NUL separation on both halves, as it already does for
+/// `find -print0`.
+pub(crate) struct ListingShape<'a> {
+    pub roots: Vec<&'a str>,
+    pub patterns: Vec<&'a str>,
+    pub null_separated: bool,
+}
+
+/// Options of a listing search that take their value in the next word.
+const LISTING_VALUE_OPTIONS: [&str; 16] = [
+    "-g",
+    "--glob",
+    "--iglob",
+    "-t",
+    "--type",
+    "-T",
+    "--type-not",
+    "-m",
+    "--max-count",
+    "--max-depth",
+    "-j",
+    "--threads",
+    "--color",
+    "--include",
+    "--exclude",
+    "--exclude-dir",
+];
+
+/// Options of a listing search that stand alone.
+const LISTING_FLAG_OPTIONS: [&str; 28] = [
+    "-l",
+    "--files-with-matches",
+    "-i",
+    "--ignore-case",
+    "-s",
+    "--case-sensitive",
+    "-S",
+    "--smart-case",
+    "-F",
+    "--fixed-strings",
+    "-E",
+    "--extended-regexp",
+    "-G",
+    "--basic-regexp",
+    "-P",
+    "--perl-regexp",
+    "-w",
+    "--word-regexp",
+    "-x",
+    "--line-regexp",
+    "-r",
+    "--recursive",
+    "-Z",
+    "--null",
+    "--hidden",
+    "--no-ignore",
+    "--no-ignore-vcs",
+    "--no-messages",
+];
+
+/// Short options of a listing search that may appear in one cluster.
+///
+/// `grep -rl` is how the recursive listing is written, so the cluster has to
+/// be read. A short option that takes a value never joins one: its value would
+/// be the rest of the cluster.
+const LISTING_CLUSTER_FLAGS: [char; 12] =
+    ['l', 'i', 's', 'S', 'F', 'E', 'G', 'P', 'w', 'x', 'r', 'Z'];
+
+/// Whether the word names only short flags this reading carries.
+fn listing_cluster(word: &str) -> bool {
+    word.len() > 2
+        && !word.starts_with("--")
+        && word.starts_with('-')
+        && word[1..]
+            .chars()
+            .all(|flag| LISTING_CLUSTER_FLAGS.contains(&flag))
+}
+
+/// `rg -l PATTERN ROOT...` or `grep -rl PATTERN ROOT...`, read as the roots it
+/// walks and the name globs that bound it.
+pub(crate) fn listing_shape(arguments: &[String]) -> Option<ListingShape<'_>> {
+    let arguments = without_stderr_merge(arguments);
+    let mut positionals: Vec<&str> = Vec::new();
+    let mut patterns: Vec<&str> = Vec::new();
+    let mut lists_names = false;
+    let mut null_separated = false;
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index).map(String::as_str) {
+        index += 1;
+        if !argument.starts_with('-') || argument == "-" {
+            positionals.push(argument);
+            continue;
+        }
+        if listing_cluster(argument) {
+            lists_names = lists_names || argument.contains('l');
+            null_separated = null_separated || argument.contains('Z');
+            continue;
+        }
+        let (name, inline) = match argument.split_once('=') {
+            Some((name, value)) => (name, Some(value)),
+            None => (argument, None),
+        };
+        if LISTING_FLAG_OPTIONS.contains(&name) && inline.is_none() {
+            lists_names = lists_names || matches!(name, "-l" | "--files-with-matches");
+            null_separated = null_separated || matches!(name, "-Z" | "--null");
+            continue;
+        }
+        if !LISTING_VALUE_OPTIONS.contains(&name) {
+            return None;
+        }
+        let value = match inline {
+            Some(value) => value,
+            None => {
+                let value = arguments.get(index)?.as_str();
+                index += 1;
+                value
+            }
+        };
+        if matches!(name, "-g" | "--glob" | "--iglob" | "--include") {
+            patterns.push(value);
+        }
+    }
+    let (_, roots) = positionals.split_first()?;
+    if !lists_names || roots.is_empty() || roots.len() > MAX_ROOTS {
+        return None;
+    }
+    Some(ListingShape {
+        roots: roots.to_vec(),
+        patterns,
+        null_separated,
+    })
+}
+
+/// A search segment whose printed names another segment may fan out over.
+pub(crate) fn listing_producer(segment: &CommandSegmentV1) -> bool {
+    segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && segment
+            .executable
+            .as_deref()
+            .is_some_and(|name| matches!(executable_basename(name), "rg" | "grep"))
+        && listing_shape(&segment.arguments).is_some()
+}
+
+/// A `xargs` segment fed directly by a listing search of the same pipeline.
+pub(crate) fn xargs_follows_listing(
+    previous: &CommandSegmentV1,
+    pipeline_index: usize,
+    execution_context: &str,
+    arguments: &[String],
+) -> bool {
+    previous.pipeline_index + 1 == pipeline_index
+        && previous.execution_context == execution_context
+        && listing_producer(previous)
+        && xargs(arguments).is_some()
+}
+
 /// A `xargs` segment fed directly by a `find` segment of the same pipeline.
 pub(crate) fn xargs_follows_find(
     previous: &CommandSegmentV1,
@@ -447,6 +627,42 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_listing_search_is_read_as_its_roots_and_globs() {
+        let shape = listing_shape(&args(&["-l", "TODO", "src"])).unwrap();
+        assert_eq!(shape.roots, ["src"]);
+        assert!(!shape.null_separated);
+        let shape = listing_shape(&args(&["-rlZ", "TODO", "src", "docs"])).unwrap();
+        assert_eq!(shape.roots, ["src", "docs"]);
+        assert!(shape.null_separated);
+        let shape = listing_shape(&args(&["-l", "--glob", "*.ts", "TODO", "src"])).unwrap();
+        assert_eq!(shape.patterns, ["*.ts"]);
+        let shape = listing_shape(&args(&["-l", "--include=*.rs", "TODO", "."])).unwrap();
+        assert_eq!(shape.patterns, ["*.rs"]);
+        assert!(listing_shape(&args(&["--files-with-matches", "TODO", "src"])).is_some());
+        assert!(listing_shape(&args(&["-l", "--max-count", "1", "TODO", "src"])).is_some());
+        for case in [
+            // No root, so the printed names carry no prefix of their own.
+            &["-l", "TODO"][..],
+            // Matching lines, not names.
+            &["-rn", "TODO", "src"],
+            // Symlinks leave the walk.
+            &["-l", "-L", "TODO", "src"],
+            &["-Rl", "TODO", "src"],
+            &["-l", "--dereference-recursive", "TODO", "src"],
+            // The pattern comes from somewhere this reading never saw.
+            &["-l", "-e", "TODO", "src"],
+            &["-l", "-f", "patterns.txt", "src"],
+            // Null-separated input is a different reading of the search itself.
+            &["-l", "-z", "TODO", "src"],
+            // Options this reading does not carry.
+            &["-l", "--pre", "decode", "TODO", "src"],
+            &["-l", "--files", "src"],
+        ] {
+            assert!(listing_shape(&args(case)).is_none(), "{case:?}");
+        }
+    }
+
     fn confidence(command: &str) -> String {
         crate::parse_command(&crate::CommandModelRequestV1 {
             command: command.to_owned(),
@@ -464,6 +680,9 @@ mod tests {
             "find src -type f -exec cat {} +",
             "find src -type f -print0 | xargs -0 cat",
             "find src -type f | xargs grep -n x",
+            "rg -l TODO src | xargs wc -l",
+            "grep -rl TODO src | xargs wc -l",
+            "rg -l --null TODO src | xargs -0 cat",
         ] {
             assert_eq!(confidence(command), "exact", "{command}");
         }
@@ -475,6 +694,10 @@ mod tests {
             "echo a | xargs cat",
             "xargs cat",
             "find src -type f | sort | xargs cat",
+            "rg -l TODO | xargs wc -l",
+            "rg -n TODO src | xargs wc -l",
+            "rg -l TODO src | xargs rm",
+            "rg -l TODO src | sort | xargs wc -l",
         ] {
             assert_eq!(confidence(command), "uncertain", "{command}");
         }

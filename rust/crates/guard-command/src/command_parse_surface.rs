@@ -360,6 +360,11 @@ pub(crate) fn parse_posix_command(
                     raw_segment.pipeline_index,
                     &context,
                     &arguments,
+                ) || read_only_fanout::xargs_follows_listing(
+                    previous,
+                    raw_segment.pipeline_index,
+                    &context,
+                    &arguments,
                 ) || read_only_fanout::xargs_follows_object_names(
                     previous,
                     raw_segment.pipeline_index,

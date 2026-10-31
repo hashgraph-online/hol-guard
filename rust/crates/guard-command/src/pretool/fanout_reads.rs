@@ -48,6 +48,10 @@ fn plain_extension_pattern(pattern: &str) -> bool {
 }
 
 fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
+    roots_inside_workspace(shape.roots, context)
+}
+
+fn roots_inside_workspace<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool {
     let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
         return false;
     };
@@ -69,7 +73,8 @@ fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
     // directory as the relative spelling. Where it resolves, links and `..`
     // included, is what decides, so an absolute root has to land inside the
     // workspace as well.
-    shape.roots.iter().all(|root| {
+    roots.iter().all(|root| {
+        let root = root.as_ref();
         !root.starts_with(['\\', '~'])
             && bounded_read_target(root, Some(home), Some(cwd), true)
             && std::fs::canonicalize(std::path::Path::new(cwd).join(root))
@@ -216,6 +221,66 @@ pub(super) fn safe_xargs(
         && shape.print0
         && producer_allowed(&shape, xargs.child, context)
         && child_proven(model, segment, xargs.child, context)
+}
+
+/// `rg -l --null PATTERN ROOT | xargs -0 CHILD` with a contained root and a
+/// proven child.
+///
+/// The search prints the paths of the files it matched, each one beginning
+/// with a root this proof resolved inside the workspace, so the child receives
+/// names from the same walk `find` would have produced. NUL separation is
+/// required on both halves: a name holding a space would otherwise reach the
+/// child as words that were never proven.
+///
+/// A child that reads file contents asks for the same extension bound a `find`
+/// producer asks for, through `-g` or `--include`, because a listing search
+/// walks every file under its root whatever its name.
+pub(super) fn safe_listing_xargs(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    let (true, Some(previous), Some(xargs)) = (
+        plain(segment) && words_as_written(segment),
+        previous_listing(model, segment),
+        fanout::xargs(&segment.arguments),
+    ) else {
+        return false;
+    };
+    let Some(shape) = fanout::listing_shape(&previous.arguments) else {
+        return false;
+    };
+    if !words_as_written(previous) {
+        return false;
+    }
+    xargs.null_separated
+        && shape.null_separated
+        && (xargs.no_run_if_empty || fanout::bounded_without_operands(xargs.child))
+        && (!fanout::child_reads_contents(xargs.child)
+            || shape
+                .patterns
+                .iter()
+                .any(|pattern| plain_extension_pattern(pattern)))
+        && roots_inside_workspace(&shape.roots, context)
+        && child_proven(model, segment, xargs.child, context)
+}
+
+fn previous_listing<'a>(
+    model: &'a CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+) -> Option<&'a CommandSegmentV1> {
+    let index = model
+        .segments
+        .iter()
+        .position(|candidate| candidate.span.start == segment.span.start)?;
+    let previous = &model.segments[index.checked_sub(1)?];
+    fanout::xargs_follows_listing(
+        previous,
+        segment.pipeline_index,
+        &segment.execution_context,
+        &segment.arguments,
+    )
+    .then_some(previous)
 }
 
 /// `git merge-base REV... | xargs git ...` whose child passes the Git read
