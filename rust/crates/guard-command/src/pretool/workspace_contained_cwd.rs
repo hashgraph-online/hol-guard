@@ -8,15 +8,18 @@ const MAX_STATES: usize = 64;
 /// One shell the command could be running in by the time a segment is read.
 ///
 /// `succeeded` is how the segment before it ended, which is what `&&` and
-/// `||` select on. `descent_failed` records that this directory is the one a
-/// `cd` left behind when the walk modelled it as failing, and `left` that a
-/// later climb from such a branch stepped above the workspace. A branch that
+/// `||` select on. `prev` is the directory this shell moved out of last,
+/// which is what `cd -` returns to, and is unset until the walk has seen a
+/// move. `descent_failed` records that this directory is the one a `cd` left
+/// behind when the walk modelled it as failing, and `left` that a later move
+/// from such a branch reached somewhere the walk never bounded. A branch that
 /// only exists because a descent failed may spend its climb outside, since
 /// nothing the command actually runs is read from there; the walk gives up as
 /// soon as such a shell would execute a segment.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Shell {
     cwd: PathBuf,
+    prev: Option<PathBuf>,
     succeeded: bool,
     descent_failed: bool,
     left: bool,
@@ -62,6 +65,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
     let root = workspace.canonicalize().ok()?;
     let mut states = vec![Shell {
         cwd: workspace.to_path_buf(),
+        prev: None,
         succeeded: true,
         descent_failed: false,
         left: false,
@@ -115,6 +119,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
             }
             let Shell {
                 cwd,
+                prev,
                 descent_failed,
                 ..
             } = shell;
@@ -123,7 +128,11 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 let [target] = segment.arguments.as_slice() else {
                     return None;
                 };
-                if target.starts_with(['-', '~', '+']) {
+                // `cd -` is the directory this shell moved out of last, which
+                // the walk followed and so can follow back. Every other
+                // stand-in names a place the walk never joined.
+                let returning = name == "cd" && target == "-";
+                if !returning && target.starts_with(['-', '~', '+']) {
                     return None;
                 }
                 // bash's `lastpipe` and zsh's default both run the last
@@ -151,15 +160,25 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 // is what its next `..` is spent on; where that spelling
                 // points has to stay inside the workspace too, so a link out
                 // of it is still refused.
-                let moved = logical_join(&cwd, target)?;
-                if !moved.is_dir() {
+                //
+                // A shell whose descent failed never moved, so its `-` is the
+                // `OLDPWD` the run inherited: a directory the walk never
+                // bounded, carried exactly like a climb out of such a branch.
+                let moved = if returning {
+                    prev.clone()
+                } else {
+                    logical_join(&cwd, target)
+                };
+                if moved.as_deref().is_some_and(|moved| !moved.is_dir()) {
                     return None;
                 }
-                let inside = moved.starts_with(workspace)
-                    && moved
-                        .canonicalize()
-                        .ok()
-                        .is_some_and(|real| real.starts_with(&root));
+                let inside = moved.as_deref().is_some_and(|moved| {
+                    moved.starts_with(workspace)
+                        && moved
+                            .canonicalize()
+                            .ok()
+                            .is_some_and(|real| real.starts_with(&root))
+                });
                 // `cd app && work; cd ..` climbs back to the workspace root on
                 // every branch the command really takes. The one branch that
                 // would land above it is the one where the first `cd` failed,
@@ -174,13 +193,15 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 // state; a later semicolon resumes both, rather than guessing.
                 next.extend([
                     Shell {
-                        cwd: moved,
+                        cwd: moved.unwrap_or_else(|| cwd.clone()),
+                        prev: Some(cwd.clone()),
                         succeeded: true,
                         descent_failed,
                         left: !inside,
                     },
                     Shell {
                         cwd,
+                        prev,
                         succeeded: false,
                         descent_failed: true,
                         left: false,
@@ -192,12 +213,14 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 next.extend([
                     Shell {
                         cwd: cwd.clone(),
+                        prev: prev.clone(),
                         succeeded: true,
                         descent_failed,
                         left: false,
                     },
                     Shell {
                         cwd,
+                        prev,
                         succeeded: false,
                         descent_failed,
                         left: false,

@@ -170,3 +170,36 @@ fn a_climb_that_only_leaves_where_the_descent_failed_stays_contained() {
         assert!(!shaped(command, &ws), "{command}");
     }
 }
+
+/// `cd app && npm test && cd -` is the same visit with the return spelled as
+/// the shell's own shorthand for where it came from. The walk carries that
+/// directory, so the return is as bounded as the descent was; a `-` the walk
+/// never saw a move for is the inherited `OLDPWD` and stays refused.
+#[test]
+fn a_return_to_the_previous_directory_follows_the_move_the_walk_saw() {
+    let ws = workspace("cwd-previous-directory", true);
+    std::fs::create_dir_all(ws.join("app/sub")).unwrap();
+    for command in [
+        "cd app && ls && cd -",
+        "cd app && cat package.json && cd -",
+        "cd app/sub && ls && cd -",
+        "cd app && ls && cd - && ls",
+        "cd app && cd - && cd app",
+        "pushd app && ls && cd -",
+        "cd app && ls; cd -",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    for command in [
+        // Nothing moved, so `-` is whatever directory the run was started
+        // from, which the walk never bounded.
+        "cd -",
+        "ls && cd -",
+        // The branch whose descent failed never moved either, and this time
+        // something runs from the directory its `-` would reach.
+        "cd app && ls; cd -; ls",
+        "cd app && ls; cd -; cat package.json",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
