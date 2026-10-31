@@ -2277,6 +2277,81 @@
       "expect": "allow"
     },
     {
+      "id": "pkgdir-pnpm-workspace-root-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-long-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --workspace-root run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-script-build",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-script-test",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-run-build-tail",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w run build 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "pkgdir-npm-prefix-exec-vitest",
       "fix_area": "package",
       "harnesses": [
