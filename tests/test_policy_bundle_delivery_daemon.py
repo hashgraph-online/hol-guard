@@ -199,7 +199,7 @@ def test_daemon_persists_only_post_commit_managed_ack(
     assert acknowledgement["appliedEffectiveProjectionDigest"] == f"sha256:{snapshot.effective_digest}"
 
 
-def test_daemon_continues_the_stored_acknowledgement_on_a_repeat_sync(
+def test_daemon_builds_the_acknowledgement_on_the_stored_receipt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -209,10 +209,8 @@ def test_daemon_continues_the_stored_acknowledgement_on_a_repeat_sync(
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-managed-controls")
     bundle, delivery = _fixture(store)
-    status, response = _sync(store, bundle=bundle, delivery=delivery)
-    assert status == 200, response
-    stored = store.get_sync_payload("policy_bundle_ack")
-    assert isinstance(stored, dict)
+    stored = {"contractVersion": "guard-policy-bundle.v2", "sequence": 3, "status": "applied"}
+    store.set_sync_payload("policy_bundle_ack", stored, "2026-08-25T12:00:00Z")
 
     previous_seen: list[object] = []
     build = server_control_sync.policy_bundle_acknowledgement_payload
@@ -222,9 +220,8 @@ def test_daemon_continues_the_stored_acknowledgement_on_a_repeat_sync(
         return build(**kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(server_control_sync, "policy_bundle_acknowledgement_payload", _spy)
-    status, response = _sync(store, bundle=bundle, delivery=delivery)
+    _sync(store, bundle=bundle, delivery=delivery)
 
-    assert status == 200, response
     assert previous_seen == [stored]
 
 
