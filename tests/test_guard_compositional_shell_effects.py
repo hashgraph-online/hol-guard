@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-    _runtime_artifact_command_action_floor,
-)
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.developer_inspection import (
     DeveloperShellEffect,
     _compound_developer_effect_graph,
+)
+from tests.runtime_artifact_policy_support import (
+    _runtime_artifact_command_action_floor,
 )
 
 

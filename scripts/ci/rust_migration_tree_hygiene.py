@@ -37,6 +37,9 @@ RETIRED_PATHS = (
     "tests/test_command_source_backlog.py",
     "tests/test_command_source_backlog_expansion_bounds.py",
     "tests/test_command_source_migration.py",
+    # Test-only native bridges that moved under tests/.
+    "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifact_policy.py",
+    "src/codex_plugin_scanner/guard/native_hook_artifact_facts.py",
     # Unreferenced Python helpers whose corresponding semantics now run in Rust.
     "src/codex_plugin_scanner/guard/runtime/command_candidate_common.py",
     "src/codex_plugin_scanner/guard/runtime/command_segment_parsing.py",

@@ -1,4 +1,4 @@
-"""Resident bridge for the ``hook_artifact_facts`` op.
+"""Test bridge for the ``hook_artifact_facts`` resident op.
 
 The native configured-policy action reads a small set of per-artifact facts:
 whether the prompt asks to bypass Guard, the command-action floor, whether an
@@ -21,10 +21,10 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
-from .native_context import _resolve_digest_home, ensure_resident_prerequisite
-from .native_execution import _resident_request
-from .native_hook_artifact_compose import HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE
-from .native_store_policy import _payload
+from codex_plugin_scanner.guard.native_context import _resolve_digest_home, ensure_resident_prerequisite
+from codex_plugin_scanner.guard.native_execution import _resident_request
+from codex_plugin_scanner.guard.native_hook_artifact_compose import HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE
+from codex_plugin_scanner.guard.native_store_policy import _payload
 
 # The facts answer ``skip_native_floor`` only once the policy-stack tail is
 # served, so the facts are asked for under that feature: a runtime without it

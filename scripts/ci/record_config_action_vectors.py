@@ -289,9 +289,9 @@ def _recorded_risk_classes(artifact) -> list[str]:  # type: ignore[no-untyped-de
 def record() -> list[dict[str, object]]:
     import codex_plugin_scanner.guard.cli.commands  # noqa: F401  (wires the shared command namespace)
     from codex_plugin_scanner.guard import protection_events
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifact_policy as policy
     from codex_plugin_scanner.guard.cli.commands_support_prompts import _prompt_requires_hard_block
     from codex_plugin_scanner.guard.harness_posture import harness_posture_override
+    from tests import runtime_artifact_policy_support as policy
 
     events: list[dict[str, object]] = []
     protection_events.record_protection_event = lambda _home, _name, payload: events.append(dict(payload))
