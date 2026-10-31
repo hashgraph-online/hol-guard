@@ -136,7 +136,16 @@ fn the_sandbox_roots_only_at_the_workspace_or_a_sibling_root() {
     assert!(!rootable(&home.join("x"), workspace, home));
     // A folder below the workspace runs through the `cd` form, which keeps
     // the workspace root and so its protected folders.
-    for folder in ["sub", ".git", ".git/hooks", ".claude", ".vscode"] {
+    // A nested repository is below the workspace too.
+    std::fs::create_dir_all(workspace.join("vendor/lib/.git")).unwrap();
+    for folder in [
+        "sub",
+        ".git",
+        ".git/hooks",
+        ".claude",
+        ".vscode",
+        "vendor/lib",
+    ] {
         std::fs::create_dir_all(workspace.join(folder)).unwrap();
         assert!(
             !rootable(&workspace.join(folder), workspace, home),

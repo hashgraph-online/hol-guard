@@ -156,8 +156,11 @@ fn rootable(root: &Path, workspace: &Path, home: &Path) -> bool {
         );
         std::fs::canonicalize(plan.project_root?).ok()
     };
-    std::fs::canonicalize(workspace).is_ok_and(|workspace| root == workspace)
-        || sibling().as_deref() == Some(root)
+    let Ok(workspace) = std::fs::canonicalize(workspace) else {
+        return false;
+    };
+    // A nested repository inside the workspace is still below it.
+    root == workspace || (!root.starts_with(&workspace) && sibling().as_deref() == Some(root))
 }
 
 fn with_directory(
