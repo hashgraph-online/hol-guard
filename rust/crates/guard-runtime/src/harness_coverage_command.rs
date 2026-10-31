@@ -1,5 +1,6 @@
 //! `harness-coverage --stdin`: verify, register or unregister managed user
-//! harnesses in the machine registry for the Python MDM surfaces.
+//! harnesses in the machine registry, and write or register from the coverage
+//! request a user leaves in their Guard home, for the Python MDM surfaces.
 //!
 //! `harness_coverage` does the work; this command frames the request and
 //! writes the answer back as JSON. A refused registry change is an answer,
@@ -12,7 +13,9 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::harness_coverage::{register, unregister, verify, CoverageError, Verification};
+use crate::harness_coverage::{
+    register, register_requested, unregister, verify, write_request, CoverageError, Verification,
+};
 
 const SCHEMA: &str = "harness-coverage.v1";
 // A user's coverage request is bounded well below this by the caller.
@@ -73,6 +76,14 @@ fn respond(request: Request) -> Option<Value> {
             &PathBuf::from(home),
             &installs,
         ))),
+        ("register-request", None, Some(home), None) => Some(change_json(register_requested(
+            state_root,
+            owner_uid,
+            &PathBuf::from(home),
+        ))),
+        ("write-request", None, Some(home), Some(installs)) => {
+            Some(change_json(write_request(&PathBuf::from(home), &installs)))
+        }
         ("unregister", None, Some(home), None) => {
             Some(change_json(unregister(state_root, owner_uid, &home)))
         }
