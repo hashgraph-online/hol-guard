@@ -645,7 +645,23 @@ fn stages_are_plain(item: &str) -> bool {
     // the `[` test it asks, of less: inside `[[ ]]` the shell splits no word
     // and expands no glob. An unclosed `[[` is some other shape and keeps the
     // construct on the unmodeled path with every other keyword.
-    for (index, stage) in item.split('|').enumerate() {
+    //
+    // `||` writes two `|` characters in a row, so splitting on the single
+    // character leaves an empty run between them where the shell has a list
+    // separator rather than a pipeline stage. That gap carries no command
+    // word of its own, and the two commands it separates are each checked as
+    // the stage before and after it, so an empty run between two other runs
+    // is stepped over. A leading or trailing empty run is some other shape --
+    // a pipeline that starts or ends on `|` -- and keeps the construct on the
+    // unmodeled path.
+    let stages: Vec<&str> = item.split('|').collect();
+    for (index, stage) in stages.iter().copied().enumerate() {
+        if stage.is_empty() {
+            if index > 0 && index + 1 < stages.len() {
+                continue;
+            }
+            return false;
+        }
         // A `!` in front of a pipeline inverts the exit status it reports and
         // runs nothing of its own, so the command word this check reads is
         // the word written after it. The shell accepts that `!` only where

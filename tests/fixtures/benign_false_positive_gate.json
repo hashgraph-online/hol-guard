@@ -22440,6 +22440,54 @@
       "expect": "not_allow"
     },
     {
+      "id": "control-flow-for-loop-subshell-alternative",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for p in dashboard web; do (cd \"$p\" && npm test || echo failed); done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "control-flow-branch-subshell-alternative",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "if true; then (npm test || echo failed); fi"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "control-flow-for-loop-subshell-open-pipe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for p in dashboard web; do (echo \"$p\" |); done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "control-flow-for-loop-subshell-package-tests",
       "fix_area": "shell",
       "harnesses": [

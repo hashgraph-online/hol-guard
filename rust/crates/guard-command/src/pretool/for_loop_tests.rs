@@ -391,3 +391,48 @@ fn a_group_outside_the_command_list_grammar_keeps_its_review() {
         assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
     }
 }
+
+/// `||` is a list separator between two commands, not a pipeline stage. The
+/// group grammar reads each command beside it, so `(npm test || echo failed)`
+/// — a loop step that reports its own failure and carries on — is written out
+/// like every other list the group holds.
+#[test]
+fn a_group_in_the_body_reads_an_alternative_between_its_commands() {
+    for (looped, unrolled) in [
+        (
+            "for p in a b; do (cd \"$p\" && npm test || echo failed); done",
+            "(cd \"a\" && npm test || echo failed); (cd \"b\" && npm test || echo failed)",
+        ),
+        (
+            "for p in a b; do (echo \"$p\" || ls); done",
+            "(echo \"a\" || ls); (echo \"b\" || ls)",
+        ),
+        (
+            "for p in a b; do (cat \"$p\" | sort || echo empty); done",
+            "(cat \"a\" | sort || echo empty); (cat \"b\" | sort || echo empty)",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped}"
+        );
+    }
+}
+
+/// A pipeline that starts or ends on `|` is not that alternative, and keeps
+/// its review with every other shape the grammar cannot read.
+#[test]
+fn a_group_opening_or_closing_on_a_pipe_keeps_its_review() {
+    for command in [
+        "for p in a b; do (| echo \"$p\"); done",
+        "for p in a b; do (echo \"$p\" |); done",
+        "for p in a b; do (echo \"$p\" | | ls); done",
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(command),
+            None,
+            "{command}"
+        );
+    }
+}
