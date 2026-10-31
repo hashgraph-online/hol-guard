@@ -23,19 +23,59 @@ pub(crate) fn read_form(arguments: &[String]) -> bool {
     }
 }
 
-/// `stash list` with at most a count limit. Git runs it as `git log -g
-/// refs/stash`; other log options can ask for patches whose diff drivers the
-/// proof below does not clear.
+/// `stash list` with a count limit and the options that only choose how the
+/// listing is laid out. Git runs it as `git log -g refs/stash`, so it reads
+/// the log options; the ones admitted here bound the count or pick a text
+/// layout. The options that render each entry's diff stay out, so a listing
+/// asking for patches keeps the review it has.
 pub(super) fn list(rest: &[&str]) -> bool {
-    match rest {
-        [] => true,
-        ["-n" | "--max-count", value] => count(value),
-        [flag] => flag
+    let mut counts = 0;
+    let mut index = 0;
+    while let Some(word) = rest.get(index) {
+        if listing_layout(word) {
+            index += 1;
+            continue;
+        }
+        if matches!(*word, "-n" | "--max-count") {
+            let Some(value) = rest.get(index + 1) else {
+                return false;
+            };
+            if !count(value) {
+                return false;
+            }
+            counts += 1;
+            index += 2;
+            continue;
+        }
+        let limit = word
             .strip_prefix("--max-count=")
-            .or_else(|| flag.strip_prefix('-').filter(|_| !flag.starts_with("--")))
-            .is_some_and(count),
-        _ => false,
+            .or_else(|| word.strip_prefix('-').filter(|_| !word.starts_with("--")));
+        if !limit.is_some_and(count) {
+            return false;
+        }
+        counts += 1;
+        index += 1;
     }
+    counts <= 1
+}
+
+/// Whether the word only chooses how a listed entry reads. A date or pretty
+/// format is a layout string: it names no file, renders no diff and starts
+/// no program, which is why `git log` reads the same options the same way.
+fn listing_layout(word: &str) -> bool {
+    matches!(
+        word,
+        "--oneline"
+            | "--abbrev-commit"
+            | "--no-abbrev-commit"
+            | "--graph"
+            | "--reverse"
+            | "--no-color"
+            | "--color=never"
+            | "--pretty"
+    ) || word.starts_with("--date=")
+        || word.starts_with("--format=")
+        || word.starts_with("--pretty=")
 }
 
 /// `stash show` with the diff options that only choose how the entry's diff

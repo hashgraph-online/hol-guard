@@ -13284,6 +13284,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-stash-list-layout-oneline",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "zcode",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git stash list --oneline"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-stash-list-layout-date-with-count",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "zcode",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git stash list --date=short -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-stash-list-patch-still-reviews",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "zcode",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git stash list --patch"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-cd-git-stash-list-worktree-list",
       "fix_area": "queue",
       "harnesses": [
