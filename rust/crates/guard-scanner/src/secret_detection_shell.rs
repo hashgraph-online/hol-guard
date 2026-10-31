@@ -76,7 +76,8 @@ pub(super) const SHELL_RULE_DESCRIPTION: &str =
 /// `Authorization: <scheme> <credential>`, as a header line, a `curl -H`
 /// argument or a quoted JSON field. The quote either side of the name is
 /// optional because all three spellings occur, and the value's alphabet stops
-/// it at the closing quote.
+/// it at the closing quote. Name, scheme and value share one physical line:
+/// a scheme word that ends a line introduces nothing.
 ///
 /// Only schemes whose own word says what the value is are read. `Basic` is
 /// not one of them: its value is an encoding rather than a credential.
@@ -85,8 +86,8 @@ static AUTHORIZATION_HEADER: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 const AUTHORIZATION_HEADER_SOURCE: &str = concat!(
-    r#"(?i)\b(?:proxy-)?authorization["']?\s*:\s*["']?"#,
-    r"(?:bearer|token|apikey|api-key)\s+",
+    r#"(?i)\b(?:proxy-)?authorization["']?[^\S\r\n]*:[^\S\r\n]*["']?"#,
+    r"(?:bearer|token|apikey|api-key)[^\S\r\n]+",
     r"(?P<secret>[A-Za-z0-9+/=._~-]{12,512})",
 );
 
@@ -96,8 +97,20 @@ const AUTHORIZATION_HEADER_SOURCE: &str = concat!(
 /// The space after the name is what keeps `--password-stdin`,
 /// `--password-file` and `--token-file` out: each names a source for the
 /// credential rather than the credential, and the character after the name is
-/// a hyphen rather than a space. The value stops at a shell metacharacter, so
-/// a redirection or a pipe following the option is not read as its value.
+/// a hyphen rather than a space.
+///
+/// A quoted value runs to the quote that closes it, so the `;` or `|` a
+/// password is free to contain stays inside the credential. It is still one
+/// word: a quoted sentence is prose rather than a password. An unquoted value
+/// stops at that same character, because there the shell stops the command
+/// too and a redirection or a pipe is not part of the value. A value whose
+/// opening quote never closes on the line is not read at all rather than read
+/// as far as the line happens to go: half a password reported is half a
+/// password redacted.
+///
+/// The space either side of the value is horizontal. A flag that ends its
+/// line carries no credential, and the text beginning the line below belongs
+/// to another command.
 static CREDENTIAL_OPTION: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(CREDENTIAL_OPTION_SOURCE).expect("CREDENTIAL_OPTION is a static literal")
 });
@@ -107,8 +120,10 @@ const CREDENTIAL_OPTION_SOURCE: &str = concat!(
     r"(?:admin-password|registry-password|client-secret|signing-secret|webhook-secret",
     r"|session-token|refresh-token|access-token|private-token|auth-token|api-token",
     r"|secret-key|access-key|api-key|password|passwd|apikey|token|secret)",
-    r#"\s+["']?"#,
-    r#"(?P<secret>[^\s"'`,;|&<>()$\\]{12,256})"#,
+    r"[^\S\r\n]+",
+    r#"(?:"(?P<double>[^\s"'`$\\]{12,256})""#,
+    r#"|'(?P<single>[^\s"'`$\\]{12,256})'"#,
+    r#"|(?P<secret>[^\s"'`,;|&<>()$\\]{12,256}))"#,
 );
 
 /// The credentials the command lines in `text` carry.
@@ -129,16 +144,36 @@ pub(super) fn shell_credential_findings(
     if remaining == 0 {
         return findings;
     }
+    // The same value can be written twice on one line, and a header and an
+    // option can carry it between them. Counting either spelling a second
+    // time would spend the caller's budget on a finding it goes on to drop,
+    // leaving a later, different credential on the line unread.
+    let mut read: HashSet<CandidateDigest> = HashSet::new();
     for (pattern, reason) in [
         (&*AUTHORIZATION_HEADER, AUTHORIZATION_HEADER_REASON),
         (&*CREDENTIAL_OPTION, CREDENTIAL_OPTION_REASON),
     ] {
         for captures in pattern.captures_iter(text) {
+            // A quoted value is held whole by the quote that closes it, so
+            // the shell metacharacter a password may contain stays inside the
+            // credential rather than cutting it short.
             let matched = captures
                 .name("secret")
-                .expect("secret group always present");
+                .or_else(|| captures.name("double"))
+                .or_else(|| captures.name("single"))
+                .expect("one of the credential groups always matches");
             let candidate = matched.as_str();
-            if claimed.contains(&candidate_digest(candidate)) {
+            // A value spelled as a long option is the next flag on the line.
+            // `--password --registry-password` names two options and hands
+            // over no credential at all.
+            if candidate.starts_with("--") {
+                continue;
+            }
+            let digest = candidate_digest(candidate);
+            if claimed.contains(&digest) {
+                continue;
+            }
+            if !read.insert(digest) {
                 continue;
             }
             // The value is an argument the shell handed over whole, so it is

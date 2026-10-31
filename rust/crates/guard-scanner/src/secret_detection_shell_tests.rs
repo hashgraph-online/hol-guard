@@ -171,3 +171,71 @@ fn the_catalog_names_the_command_rule_before_the_entry_python_published() {
     assert_eq!(added.severity, "high");
     assert!(!added.strong_format);
 }
+
+#[test]
+fn a_quoted_password_is_read_past_the_metacharacter_it_contains() {
+    // Redaction replaces the span a finding names. A value cut short at the
+    // `;` inside it would be half replaced, and the half left behind in the
+    // file is still the password.
+    let value = format!("{};{}", "hq8NdPvK2rTw", "Q5mZxL7Bc4Jy");
+    let script = format!("mysql --user ci --password \"{value}\" --host db.internal\n");
+    let findings = scan(&script, "deploy/publish.sh");
+    let read = on_a_command_line(&findings);
+    assert_eq!(read.len(), 1, "{findings:#?}");
+    assert_eq!(read[0].candidate, value);
+}
+
+#[test]
+fn a_value_whose_quote_never_closes_is_not_read_in_part() {
+    // The quote says where the value ends. Without the one that closes it the
+    // rule cannot tell, and reporting as far as the line happens to go would
+    // name a prefix as the whole credential.
+    let value = issued_value();
+    let script = format!("mysql --user ci --password \"{value}\n");
+    assert!(on_a_command_line(&scan(&script, "deploy/publish.sh")).is_empty());
+}
+
+#[test]
+fn a_flag_following_a_credential_option_is_not_its_value() {
+    // A credential option written with its argument missing leaves the next
+    // flag sitting where the value would be. That word is long and varied
+    // enough to clear the plausibility bar in a file this sensitive, so what
+    // keeps it out is that it spells an option rather than a value.
+    let script = concat!(
+        "#!/bin/sh\n",
+        "aws codeartifact login --tool npm --password --registry-password \"$@\"\n",
+    );
+    assert!(on_a_command_line(&scan(script, ".aws/login.sh")).is_empty());
+}
+
+#[test]
+fn a_flag_or_a_scheme_ending_a_line_does_not_reach_the_line_below() {
+    // The text below belongs to the next command, not to the option or the
+    // scheme that ran out of line above it.
+    let value = issued_value();
+    let script =
+        format!("gh auth login --token\n{value}\ncurl -H 'Authorization: Bearer'\n{value}\n");
+    assert!(on_a_command_line(&scan(&script, ".aws/login.sh")).is_empty());
+}
+
+#[test]
+fn a_value_written_twice_does_not_spend_the_budget_meant_for_the_next_one() {
+    // The caller drops the second copy of a value it has already reported, so
+    // counting that copy would end the pass one credential early.
+    let header = issued_value();
+    let option = second_issued_value();
+    let compose = format!(
+        "    command: curl -H \"Authorization: Bearer {header}\" -H \"Authorization: Bearer {header}\" --password {option} https://registry.internal\n"
+    );
+    let findings = scan_secret_text(&compose, "deploy/bootstrap.yaml", "text", None, 2).findings;
+    let read = on_a_command_line(&findings);
+    let named: Vec<&str> = read
+        .iter()
+        .map(|finding| finding.candidate.as_str())
+        .collect();
+    assert_eq!(
+        named,
+        vec![header.as_str(), option.as_str()],
+        "{findings:#?}"
+    );
+}
