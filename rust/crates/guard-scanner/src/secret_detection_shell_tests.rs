@@ -158,10 +158,16 @@ fn an_option_that_does_not_say_what_it_carries_is_left_alone() {
 }
 
 #[test]
-fn the_catalog_names_the_command_rule_last() {
+fn the_catalog_names_the_command_rule_before_the_entry_python_published() {
+    // The secrets CLI vectors pin Python's own contextual entry as the last
+    // row the `rules` command prints, so this rule takes the place before it.
     let catalog = secret_rule_catalog();
-    let last = catalog.last().expect("the catalog is never empty");
-    assert_eq!(last.rule_id, "credential-command");
-    assert_eq!(last.severity, "high");
-    assert!(!last.strong_format);
+    assert_eq!(
+        catalog.last().expect("the catalog is never empty").rule_id,
+        "credential-assignment"
+    );
+    let added = &catalog[catalog.len() - 2];
+    assert_eq!(added.rule_id, "credential-command");
+    assert_eq!(added.severity, "high");
+    assert!(!added.strong_format);
 }

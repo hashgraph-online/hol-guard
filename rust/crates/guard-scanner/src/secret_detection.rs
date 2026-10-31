@@ -1356,20 +1356,20 @@ pub fn secret_rule_catalog() -> Vec<SecretRuleCatalogEntry> {
         })
         .collect();
     entries.push(SecretRuleCatalogEntry {
-        rule_id: "credential-assignment",
-        family: "Contextual credential assignment",
-        severity: "high",
-        validation: "none",
-        strong_format: false,
-        description: "High-entropy credential assignment accepted only with contextual evidence.",
-    });
-    entries.push(SecretRuleCatalogEntry {
         rule_id: SHELL_RULE_META.rule_id,
         family: SHELL_RULE_META.family,
         severity: SHELL_RULE_META.severity,
         validation: SHELL_RULE_META.validation,
         strong_format: SHELL_RULE_META.strong_format,
         description: SHELL_RULE_DESCRIPTION,
+    });
+    entries.push(SecretRuleCatalogEntry {
+        rule_id: "credential-assignment",
+        family: "Contextual credential assignment",
+        severity: "high",
+        validation: "none",
+        strong_format: false,
+        description: "High-entropy credential assignment accepted only with contextual evidence.",
     });
     entries
 }
@@ -2360,9 +2360,10 @@ mod tests {
     #[test]
     fn catalog_keeps_the_python_entries_in_python_order() {
         let catalog = secret_rule_catalog();
-        // The provider rules Python published lead, later ones follow, and the
-        // synthetic contextual entries close the list in the order they were
-        // added, however many provider rules are appended before them.
+        // The provider rules Python published lead and later ones follow. The
+        // contextual entry Python published closes the list, because the CLI
+        // vectors pin it there; a contextual rule added since sits ahead of
+        // it, however many provider rules are appended before them.
         assert!(catalog.len() > PYTHON_ERA_PROVIDER_RULES);
         assert_eq!(
             catalog
@@ -2397,23 +2398,23 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&catalog[catalog.len() - 2]).unwrap(),
             serde_json::json!({
-                "rule_id": "credential-assignment",
-                "family": "Contextual credential assignment",
-                "severity": "high",
-                "validation": "none",
-                "strong_format": false,
-                "description": "High-entropy credential assignment accepted only with contextual evidence.",
-            })
-        );
-        assert_eq!(
-            serde_json::to_value(catalog.last().unwrap()).unwrap(),
-            serde_json::json!({
                 "rule_id": "credential-command",
                 "family": "Contextual credential on a command line",
                 "severity": "high",
                 "validation": "none",
                 "strong_format": false,
                 "description": "Credential written as an authorization header or as the value of a credential-naming option.",
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(catalog.last().unwrap()).unwrap(),
+            serde_json::json!({
+                "rule_id": "credential-assignment",
+                "family": "Contextual credential assignment",
+                "severity": "high",
+                "validation": "none",
+                "strong_format": false,
+                "description": "High-entropy credential assignment accepted only with contextual evidence.",
             })
         );
     }
