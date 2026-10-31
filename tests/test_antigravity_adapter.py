@@ -1,7 +1,8 @@
-"""Focused Antigravity adapter skill-identity tests."""
+"""Focused Antigravity adapter skill-identity and discovery tests."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -99,3 +100,85 @@ def test_antigravity_incomplete_skill_identity_warns_without_external_path_discl
     assert result.warnings
     assert all(str(outside) not in warning for warning in result.warnings)
     assert any("approval reuse is disabled" in warning for warning in result.warnings)
+
+
+def test_antigravity_policy_path_workspace_and_global(tmp_path: Path) -> None:
+    adapter = AntigravityHarnessAdapter()
+    global_context = _context(tmp_path, workspace=False)
+    assert adapter.policy_path(global_context) == global_context.home_dir / ".gemini" / "antigravity" / "mcp_config.json"
+
+    workspace_context = _context(tmp_path, workspace=True)
+    assert workspace_context.workspace_dir is not None
+    assert adapter.policy_path(workspace_context) == workspace_context.workspace_dir / ".gemini" / "antigravity" / "mcp_config.json"
+
+
+def test_antigravity_detect_xdg_lowercase_settings(tmp_path: Path) -> None:
+    context = _context(tmp_path, workspace=False)
+    settings_path = context.home_dir / ".config" / "antigravity" / "user" / "settings.json"
+    _write_text(settings_path, '{"mcpServers": {"demo_server": {"command": "demo"}}}\n')
+
+    detection = AntigravityHarnessAdapter().detect(context)
+    assert any(item.artifact_type == "mcp_server" and item.name == "demo_server" for item in detection.artifacts)
+    assert any("antigravity" in path.lower() and "settings.json" in path for path in detection.config_paths)
+
+
+def test_antigravity_detect_plugin_skills(tmp_path: Path) -> None:
+    context = _context(tmp_path, workspace=False)
+    plugin_skill = (
+        context.home_dir / ".gemini" / "config" / "plugins" / "my-plugin" / "skills" / "custom" / "SKILL.md"
+    )
+    _write_text(plugin_skill, "---\nname: custom\n---\nCustom plugin skill.\n")
+
+    detection = AntigravityHarnessAdapter().detect(context)
+    skill_artifact = next(
+        (item for item in detection.artifacts if item.artifact_type == "skill" and "custom" in item.name),
+        None,
+    )
+    assert skill_artifact is not None
+    assert skill_artifact.source_scope == "global"
+    identity_metadata = skill_artifact.metadata.get("skillDirectoryIdentity")
+    assert isinstance(identity_metadata, dict)
+    assert identity_metadata.get("reusable") is True
+
+
+def test_antigravity_detect_workspace_agent_skills(tmp_path: Path) -> None:
+    context = _context(tmp_path, workspace=True)
+    assert context.workspace_dir is not None
+    agent_skill = context.workspace_dir / ".agents" / "skills" / "team-helper" / "SKILL.md"
+    _write_text(agent_skill, "---\nname: team-helper\n---\nTeam agent skill.\n")
+
+    detection = AntigravityHarnessAdapter().detect(context)
+    skill_artifact = next(
+        (item for item in detection.artifacts if item.artifact_type == "skill" and "team-helper" in item.name),
+        None,
+    )
+    assert skill_artifact is not None
+    assert skill_artifact.source_scope == "project"
+    identity_metadata = skill_artifact.metadata.get("skillDirectoryIdentity")
+    assert isinstance(identity_metadata, dict)
+    assert identity_metadata.get("reusable") is True
+
+
+def test_antigravity_detect_mcp_config_and_extensions(tmp_path: Path) -> None:
+    context = _context(tmp_path, workspace=False)
+    ext_index = context.home_dir / ".antigravity" / "extensions" / "extensions.json"
+    ext_pkg = context.home_dir / "ext" / "corp_tool" / "package.json"
+    _write_text(
+        ext_index,
+        json.dumps(
+            [
+                {
+                    "identifier": {"id": "corp.tool"},
+                    "location": {"path": str(ext_pkg.parent)},
+                    "metadata": {"publisherDisplayName": "Corp"},
+                }
+            ]
+        ),
+    )
+    _write_text(ext_pkg, json.dumps({"displayName": "Corp Tool", "description": "Helper"}))
+    mcp_path = context.home_dir / ".gemini" / "antigravity" / "mcp_config.json"
+    _write_text(mcp_path, json.dumps({"mcpServers": {"remote": {"url": "https://mcp.corp.internal"}}}))
+
+    detection = AntigravityHarnessAdapter().detect(context)
+    assert any(item.artifact_type == "extension" and item.name == "Corp Tool" for item in detection.artifacts)
+    assert any(item.artifact_type == "mcp_server" and item.name == "remote" for item in detection.artifacts)
