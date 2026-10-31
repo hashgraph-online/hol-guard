@@ -45,19 +45,6 @@ DEFAULT_MAX_UNMARKED_RECLAIMS = 250
 DEFAULT_UNMARKED_TIME_BUDGET = timedelta(minutes=2)
 
 
-def is_onefile_extraction_dir(path: Path, temp_root: Path) -> bool:
-    """Return True only for a real ``_MEI*`` directory directly under temp_root."""
-
-    if not _EXTRACTION_DIR_NAME.fullmatch(path.name):
-        return False
-    try:
-        if path.is_symlink() or not path.is_dir():
-            return False
-        return path.resolve(strict=True).parent == temp_root.resolve(strict=True)
-    except OSError:
-        return False
-
-
 def _pid_alive(pid: int) -> bool:
     """Fail closed: a pid that cannot be proven dead counts as alive."""
 

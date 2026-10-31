@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import (
     RestrictedPytestError,
     RestrictedPytestPlan,
 )
+from tests import restricted_vitest_ops
 from tests.restricted_native_clients import is_inline_eval
 
 pytestmark = [
@@ -147,7 +148,7 @@ def test_node_tsx_entrypoint_must_be_the_local_package(tmp_path, monkeypatch):
     ],
 )
 def test_other_tsx_forms_are_not_test_scripts(command):
-    assert vitest.tsx_test_invocation(command) is None
+    assert restricted_vitest_ops.tsx_test_invocation(command) is None
 
 
 @pytest.mark.parametrize("problem", ["no-loader", "outside-script"])
