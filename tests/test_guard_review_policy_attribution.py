@@ -182,3 +182,74 @@ def test_failed_lookup_records_nothing_so_the_next_claim_can_answer(
     assert "policyRuleId" not in first
     assert second["policyRuleId"] == _RULE_ID
     assert datetime.now(timezone.utc) >= _created(row)
+
+
+def test_claim_names_the_rule_from_a_signed_bundle_through_the_native_lookup(tmp_path: Path) -> None:
+    """No fakes: a signed review rule reaches the store and the real lookup credits it."""
+
+    from dataclasses import replace
+
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+    from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+    from tests.policy_store_support import replace_remote_policies, resolve_policy
+
+    store = connected_exact_review_store(tmp_path)
+    rules: list[dict[str, object]] = [
+        {
+            "ruleId": "mcp-review",
+            "action": "review",
+            "reason": "Review MCP server calls.",
+            "matcherFamilies": ["mcp"],
+            "scope": {
+                "agents": [],
+                "devices": [],
+                "ecosystems": [],
+                "environments": ["development"],
+                "harnesses": ["codex"],
+                "locations": [],
+            },
+        }
+    ]
+    bundle: dict[str, object] = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-01-01.1",
+        "issuedAt": "2026-01-01T00:00:00Z",
+        "expiresAt": None,
+        "verifier": {},
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "block",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "block",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": rules,
+        "acknowledgements": [],
+    }
+    decisions = guard_runner_module._build_policy_bundle_decisions(
+        bundle,
+        device_id=guard_runner_module._guard_device_metadata(store)[0],
+        device_name="Test device",
+    )
+    replace_remote_policies(store, decisions, "2026-01-01T00:00:01+00:00", remote_write_authorized=True)
+    store.set_sync_payload(
+        "policy_bundle_keyring", policy_bundle_test_keyring(workspace_id="workspace-1"), "2026-01-01T00:00:00Z"
+    )
+    store.set_sync_payload(
+        "policy_bundle", sign_policy_bundle(bundle, workspace_id="workspace-1"), "2026-01-01T00:00:00Z"
+    )
+    assert resolve_policy(store, "codex", "codex:project:mcp:shell", "hash") == "review"
+
+    request = replace(review_request("req-native-rule"), artifact_id="codex:project:mcp:shell", policy_action="review")
+    add_review_request(store, request)
+    row = store.get_raw_approval_request_snapshot("req-native-rule")
+    assert isinstance(row, dict)
+
+    claim = build_local_review_request_claim(request_row=row, oauth=_oauth_metadata(store), store=store)
+
+    assert claim["policyRuleId"] == "mcp-review"
+    assert claim["policyBundleVersion"] == "policy-2026-01-01.1"
