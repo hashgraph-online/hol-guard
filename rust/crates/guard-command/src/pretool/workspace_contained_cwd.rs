@@ -37,26 +37,60 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
     matches!(executable, Some("cd") | Some("pushd"))
 }
 
-/// The builtin a segment really runs, with every `builtin` keyword spent.
+/// The builtin a segment really runs, with every wrapper keyword spent.
 ///
-/// The parser leaves `builtin` where it stands, so `builtin cd app` arrives
-/// with `builtin` as the executable and `cd` as its first argument. The shell
-/// still moves, and reading only the executable would leave the walk tracking
-/// a directory the shell has left: a later `..` would then be credited to a
-/// descent the walk never saw, and a later `cd -` would return to a `prev`
-/// the shell no longer holds. `command cd` is not this shape -- `command`
-/// runs an external program, which cannot move its parent.
-fn spends_builtin_keyword<'a>(name: &'a str, arguments: &'a [String]) -> (&'a str, &'a [String]) {
+/// The parser leaves `builtin`, `command` and `time` where they stand, so
+/// `builtin cd app` arrives with `builtin` as the executable and `cd` as its
+/// first argument. All three still run the builtin in this shell -- `command`
+/// only skips shell functions -- so the shell moves, and reading only the
+/// executable would leave the walk tracking a directory the shell has left: a
+/// later `..` would be credited to a descent the walk never saw, and a later
+/// `cd -` would return to a `prev` the shell no longer holds. The same
+/// spellings move the shell in `script_content`'s jobs analysis, which reads
+/// `command -p cd`, `time -p cd` and `builtin -- cd` as moves.
+///
+/// `None` where a wrapper has no word left to run, which is no move the walk
+/// can read and so no walk at all.
+fn spends_wrapper_keywords<'a>(
+    name: &'a str,
+    arguments: &'a [String],
+) -> Option<(&'a str, &'a [String])> {
     let mut name = name;
     let mut arguments = arguments;
-    while name == "builtin" {
-        let Some((first, rest)) = arguments.split_first() else {
-            return (name, arguments);
-        };
+    while matches!(name, "builtin" | "command" | "time") {
+        // The wrapper's own options come before the word it runs, and `--`
+        // ends them: `command -p cd ..` and `builtin -- cd ..` both move.
+        let mut rest = arguments;
+        loop {
+            let (first, tail) = rest.split_first()?;
+            if first == "--" {
+                rest = tail;
+                break;
+            }
+            if first.starts_with('-') {
+                rest = tail;
+                continue;
+            }
+            break;
+        }
+        let (first, tail) = rest.split_first()?;
         name = first.as_str();
-        arguments = rest;
+        arguments = tail;
     }
-    (name, arguments)
+    Some((name, arguments))
+}
+
+/// Whether this segment moves the shell, wrappers spent.
+///
+/// The gates in front of the walk read the segment list before `locations`
+/// does, so they have to spend the same keywords: a gate that reads only the
+/// executable sees no `cd` in `builtin cd app && ls ..` and hands back the
+/// root's zero, which would leave the walk's reading of that move unused.
+fn segment_moves_the_shell(segment: &crate::CanonicalCommandSegmentV1) -> bool {
+    segment.executable.as_deref().is_some_and(|name| {
+        spends_wrapper_keywords(name, segment.arguments.as_slice())
+            .is_some_and(|(name, _)| moves_the_shell(Some(name)))
+    })
 }
 
 /// Whether this run names `OLDPWD` anywhere once the shell's quoting is gone.
@@ -142,7 +176,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
             connector
         };
         let name = segment.executable.as_deref()?;
-        let (name, arguments) = spends_builtin_keyword(name, segment.arguments.as_slice());
+        let (name, arguments) = spends_wrapper_keywords(name, segment.arguments.as_slice())?;
         let mut executing = Vec::new();
         let mut next = Vec::new();
         for shell in states {
@@ -305,10 +339,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
 /// does not join it, or the walk cannot read a move at all, this is false and
 /// the stricter literal reading of each operand decides on its own.
 pub(super) fn moves_stay_inside(model: &CanonicalCommandV1, workspace: &Path) -> bool {
-    model
-        .segments
-        .iter()
-        .any(|segment| moves_the_shell(segment.executable.as_deref()))
+    model.segments.iter().any(segment_moves_the_shell)
         && !model
             .normalized_text
             .to_ascii_lowercase()
@@ -340,7 +371,7 @@ pub(super) fn depths(model: &CanonicalCommandV1, workspace: &Path) -> Vec<usize>
         || !model
             .segments
             .iter()
-            .any(|segment| moves_the_shell(segment.executable.as_deref()))
+            .any(segment_moves_the_shell)
     {
         return zeros;
     }

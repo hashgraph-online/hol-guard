@@ -306,3 +306,42 @@ fn a_return_after_a_builtin_move_follows_the_move_that_happened() {
         assert!(!shaped(command, &ws), "{command}");
     }
 }
+
+/// `command cd` and `builtin -- cd` run the builtin too. `command` only skips
+/// shell functions, so every one of these spellings moves this shell, and a
+/// walk that spends only the bare `builtin` keyword would read the move out
+/// of a descent as no move at all.
+#[test]
+fn a_wrapped_move_is_still_a_move() {
+    let ws = workspace("cwd-wrapped", true);
+    std::fs::create_dir_all(ws.join("build")).unwrap();
+    std::fs::create_dir_all(ws.join("build/sub")).unwrap();
+    for command in [
+        // The descent is real whichever wrapper spells it.
+        "command cd build && ls ..",
+        "command -p cd build && ls ..",
+        "builtin -- cd build && ls ..",
+        "command cd build/sub && cat ../../package.json",
+        // A move away and back, the return reading the move that happened.
+        "command cd build && ls && cd - && ls",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    for command in [
+        // No descent at all: the wrapper must not buy one.
+        "command cd . && ls ..",
+        "builtin -- cd . && ls ..",
+        // One descent, two steps.
+        "command cd build && ls ../..",
+        // The wrapper hid the move out, so the step after it leaves.
+        "cd build && command cd .. && ls ..",
+        "cd build && builtin -- cd .. && ls ..",
+        "cd build && command -p cd .. && ls ..",
+        // A descent the file system does not confirm proves no depth.
+        "command cd absent && ls ..",
+        // A wrapper with no word left to run is no move the walk can read.
+        "cd build && command && ls ..",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
