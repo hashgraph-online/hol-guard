@@ -433,9 +433,7 @@ fn scan_into(
                         &excluded_files,
                         &excluded_directories,
                         true,
-                    ) || proven_glob(target, context)
-                        // An include opens only the files its globs select.
-                        || includes.narrows(target, context)))
+                    ) || proven_glob(target, context)))
                     // A sensitive file the pattern cannot match prints nothing.
                     || clearance.as_ref().is_some_and(|clearance| {
                         tree::safe_recursive_target_cleared(
@@ -447,6 +445,10 @@ fn scan_into(
                             clearance,
                         )
                     })
+                    // An include opens only the files its globs select. This
+                    // walks the tree again, so it is asked last: every reading
+                    // above answers the same question without it.
+                    || (!dereference && includes.narrows(target, context))
             };
             recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
         })
