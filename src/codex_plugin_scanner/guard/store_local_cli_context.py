@@ -52,16 +52,6 @@ def ensure_local_cli_context_columns(connection: sqlite3.Connection) -> None:
             connection.execute(f"alter table local_cli_observation add column {column} text")
 
 
-def validated_first_blocked_cause(raw: object) -> str | None:
-    """The cause when it is one of the known causes, ``None`` for an absent one."""
-
-    if raw is None:
-        return None
-    if not isinstance(raw, str) or raw not in FIRST_BLOCKED_CAUSES:
-        raise ValueError("invalid_first_blocked_cause")
-    return raw
-
-
 def note_capability_cause(connection: sqlite3.Connection, *, cli_id: str, identity_hash: str, cause: str) -> int:
     """Keep that an allowed CLI's contained run was denied what ``cause`` names.
 
@@ -96,5 +86,4 @@ __all__ = [
     "MAX_SUMMARY_CHARS",
     "ensure_local_cli_context_columns",
     "note_capability_cause",
-    "validated_first_blocked_cause",
 ]
