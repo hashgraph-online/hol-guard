@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "kind": {
+      "enum": [
+        "text-injection",
+        "target-poisoning",
+        "forged-authorization"
+      ]
+    },
+    "surface": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "payload": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "attacker_goal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "forbidden_effects": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "uniqueItems": true,
+      "maxItems": 256
+    },
+    "control_owners": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "product",
+          "harness",
+          "service",
+          "infrastructure"
+        ]
+      },
+      "uniqueItems": true,
+      "maxItems": 256
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "surface",
+    "source_id",
+    "payload",
+    "attacker_goal",
+    "forbidden_effects",
+    "control_owners"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/attack.v1.json"
+}

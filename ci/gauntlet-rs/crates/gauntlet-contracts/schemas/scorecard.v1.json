@@ -1,0 +1,132 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "campaign_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "inventory_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "evidence_status": {
+      "enum": [
+        "valid",
+        "invalid",
+        "inconclusive"
+      ]
+    },
+    "qualification_eligible": {
+      "type": "boolean"
+    },
+    "scheduled": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "completed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "inconclusive": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "task_complete": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "security_held": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "security_violated": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "secure_complete": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "product_prevented": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "not_exercised": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        }
+      },
+      "required": [
+        "valid",
+        "invalid",
+        "inconclusive",
+        "task_complete",
+        "security_held",
+        "security_violated",
+        "secure_complete",
+        "product_prevented",
+        "not_exercised"
+      ],
+      "additionalProperties": false
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "episode_digests": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "maxItems": 100000,
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "inventory_digest",
+    "evidence_status",
+    "qualification_eligible",
+    "scheduled",
+    "completed",
+    "counts",
+    "reasons",
+    "episode_digests"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/scorecard.v1.json"
+}
