@@ -74,11 +74,24 @@ fn registry_query(arguments: &[String]) -> bool {
                 }
             }
             value if value.starts_with(['-', '+']) => return false,
-            value if value.is_empty() || value.contains(['$', '`', '\n', '\r']) => return false,
+            value if !word_stays_one_word(value) => return false,
             _ => {}
         }
     }
     true
+}
+
+/// Whether the shell hands Cargo this word as written.
+///
+/// A search term is read as a term because it carries no leading dash, but
+/// the shell decides what Cargo actually receives. `{--config,evil.toml}`
+/// is one word here and two words -- an option and its value -- by the time
+/// Cargo parses them, which is how a workspace file would be loaded and its
+/// credential provider started. A pathname wildcard is the same story
+/// wherever a matching name begins with a dash. Both spellings, and the
+/// expansions this proof never resolves, keep their review.
+fn word_stays_one_word(value: &str) -> bool {
+    !value.is_empty() && !value.contains(['$', '`', '\n', '\r', '{', '}', '*', '?', '[', ']', '~'])
 }
 
 /// The value `--limit` accepts: Cargo refuses anything outside 1..=100.
@@ -324,6 +337,13 @@ mod tests {
             "search --index https://example.invalid serde",
             "search -Z unstable-options serde",
             "search +nightly serde",
+            // The shell turns each of these into words Cargo reads as
+            // options, so neither is the query this proof read.
+            "search {--config,evil.toml} serde",
+            "search *",
+            "search ?erde",
+            "search [a-z]erde",
+            "search ~/serde",
             "install serde",
             "test",
         ] {
