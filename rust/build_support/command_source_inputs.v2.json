@@ -160,6 +160,7 @@
       "src/hook_responses/containment.rs",
       "src/hook_responses/hermes.rs",
       "src/hook_responses/mod.rs",
+      "src/hook_responses/muse.rs",
       "src/hook_responses/prompt_risk.rs",
       "src/inline_shell_quoting.rs",
       "src/install_time_event.rs",

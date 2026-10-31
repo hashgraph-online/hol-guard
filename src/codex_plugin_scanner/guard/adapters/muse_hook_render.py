@@ -41,6 +41,11 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 _MUSE_WAITABLE_ACTIONS = frozenset({"review", "require-reapproval"})
+# Only these events decide whether something runs. The rest report on work
+# that already happened or on the session itself, so a resident that cannot
+# answer has nothing to refuse there -- and exit 2 on ``Stop`` would keep the
+# agent from stopping.
+_DECIDING_EVENTS = frozenset({"pretooluse", "permissionrequest", "userpromptsubmit"})
 _UNAVAILABLE_REASON = "HOL Guard blocked this action."
 
 
@@ -58,13 +63,16 @@ def muse_bridge_response(
     """Print the resident's Muse document for this daemon answer.
 
     Reading an answer is a verdict about a verdict, so the resident does it
-    and this returns what it rendered. A resident that cannot answer leaves
-    the call blocked: Muse reads exit 2 with a reason on stderr as a refusal
-    on every deciding event.
+    and this returns what it rendered. A resident that cannot answer leaves a
+    deciding call blocked: Muse reads exit 2 with a reason on stderr as a
+    refusal. An observation event has nothing to refuse, so it stays silent;
+    the event name comes from the caller, not from the unread answer.
     """
 
     rendered = native_muse_bridge(daemon_response, event_name=event_name, guard_home=guard_home, deadline=deadline)
     if rendered is None:
+        if _compact(event_name) not in _DECIDING_EVENTS:
+            return "", "", 0
         return "", _UNAVAILABLE_REASON, 2
     document, exit_code = rendered
     if document is None:
