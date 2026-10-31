@@ -665,7 +665,9 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
     let exec = "sed -i '' 's/1/2/e' src/a.ts";
     assert_ne!(reason(exec), "native_exact_safe_command", "{exec}");
     // A tracked or unknown tree may hold uncommitted work the sandbox would
-    // write back as deleted.
+    // write back as deleted. `truncate` rewrites one file in place the way
+    // `sed -i` above does, so it reaches the sandbox instead; see
+    // `truncating_a_workspace_file_runs_in_the_workspace_sandbox`.
     for command in [
         "rm -rf src",
         "rm -rf src 2>&1",
@@ -675,7 +677,6 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         "cd src && rm -rf .",
         "rm -rf $DIR",
         "shred -u src/a.ts",
-        "truncate -s 0 src/a.ts",
         "rm --no-preserve-root -rf dist",
         "GLOBIGNORE=x rm -rf dist",
         "sed --follow-symlinks -i 's/1/2/' src/a.ts",
@@ -721,6 +722,57 @@ fn a_timeout_clock_keeps_the_command_it_wraps_in_the_sandbox() {
         "timeout 30 curl https://example.com",
         "timeout 30 cat /Users/nobody/.ssh/id_rsa",
         "timeout 30 git push origin main",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+/// `truncate -s 0 log` empties a file the way `> log` does, and `truncate -s
+/// 1M blob` grows one the way a write does. Both are the sandbox's ordinary
+/// workspace write, so they reach it like the removal they stand next to,
+/// while a target outside the workspace is refused for the target.
+#[test]
+fn truncating_a_workspace_file_runs_in_the_workspace_sandbox() {
+    let ws = workspace("truncate", true);
+    std::fs::create_dir_all(ws.join("logs")).unwrap();
+    std::fs::write(ws.join("logs/app.log"), "old\n").unwrap();
+    for command in [
+        "truncate -s 0 logs/app.log",
+        "truncate -s0 logs/app.log",
+        "truncate --size 0 logs/app.log",
+        "truncate --size=0 logs/app.log",
+        "truncate -c -s 0 logs/app.log",
+        "truncate -s 1M data/blob.bin",
+        "truncate -r logs/app.log logs/copy.log",
+        "truncate -s 0 -- logs/app.log",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+    for command in [
+        "truncate -s 0 /etc/hosts",
+        "truncate -s 0 ../outside.txt",
+        "truncate -s 0 ~/.bashrc",
+        "truncate -s 0 $HOME/.bashrc",
+        "truncate -s 0 .git/config",
+        // A reference attached to its own option is skipped by the reach
+        // check, so the spelling is refused instead of read as a bare size.
+        "truncate -r/etc/passwd logs/app.log",
+        "truncate --reference=/etc/passwd logs/app.log",
+        // The shell picks what a pattern names, and these select inside
+        // `.git` while their literal spelling does not say so.
+        "truncate -s 0 .*/*",
+        "truncate -s 0 logs/*.log",
+        // An option neither spelling documents could mean anything.
+        "truncate -z 0 logs/app.log",
+        "truncate --follow logs/app.log",
+        // With no operand there is no target to hold to the workspace.
+        "truncate -s 0",
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }
