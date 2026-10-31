@@ -994,6 +994,7 @@
                       "--root"
                     ],
                     "options_with_values": [
+                      "--root",
                       "--agent",
                       "--scope"
                     ],
@@ -1035,6 +1036,7 @@
                       "--root"
                     ],
                     "options_with_values": [
+                      "--root",
                       "--agent",
                       "--scope"
                     ],
