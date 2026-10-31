@@ -189,24 +189,78 @@ const IDENTITY_FIELDS: [&str; 7] = [
     "target",
 ];
 
-fn every_value_is_a_figure(value: &Value, path: &str) {
+/// The names a reply is allowed to spell at each of its objects.
+///
+/// The reply is a fixed struct, so its field names are known exactly and an
+/// unknown one can only have come from somewhere other than the struct. A
+/// counter keyed by the work served — a command, a path, a caller — reads back
+/// as an object whose keys are that work, and keys are text wherever they are
+/// put, so they are held to the same rule the values are.
+fn allowed_keys(path: &str) -> &'static [&'static str] {
+    match path {
+        "" => &[
+            "build_sha",
+            "control",
+            "counters",
+            "evaluation",
+            "overloaded_requests",
+            "protocol_version",
+            "request_id",
+            "request_sha256",
+            "runtime_version",
+            "schema",
+            "status",
+            "target",
+            "uptime_ms",
+        ],
+        "evaluation" | "control" => &["queue_capacity", "queued", "queued_max", "workers"],
+        "counters" => &[
+            "auth_failures",
+            "deadline_exceeded",
+            "digest_mismatches",
+            "frame_errors",
+            "panics",
+            "request_bytes_max",
+            "request_bytes_total",
+            "served_requests",
+            "service_micros_max",
+            "service_micros_total",
+        ],
+        _ => &[],
+    }
+}
+
+/// Read a reply the way a diagnostic would and say what in it carries text.
+///
+/// Returns the path of the first thing that does, so a fixture standing in for
+/// a reply the runtime does not produce can be checked without the assertion
+/// itself having to fail.
+fn figures_only(value: &Value, path: &str) -> Result<(), String> {
     match value {
         Value::Object(fields) => {
+            let allowed = allowed_keys(path);
             for (key, field) in fields {
                 let child = if path.is_empty() {
                     key.clone()
                 } else {
                     format!("{path}.{key}")
                 };
-                every_value_is_a_figure(field, &child);
+                if !allowed.contains(&key.as_str()) {
+                    return Err(format!("{child} (name)"));
+                }
+                figures_only(field, &child)?;
+            }
+            Ok(())
+        }
+        Value::Number(_) => Ok(()),
+        Value::String(_) => {
+            if !path.contains('.') && IDENTITY_FIELDS.contains(&path) {
+                Ok(())
+            } else {
+                Err(path.to_owned())
             }
         }
-        Value::Number(_) => {}
-        Value::String(_) => assert!(
-            !path.contains('.') && IDENTITY_FIELDS.contains(&path),
-            "`{path}` carries text; a reply may only spell its own identity"
-        ),
-        other => panic!("`{path}` is {other}; a reply carries objects and figures"),
+        _ => Err(path.to_owned()),
     }
 }
 
@@ -220,34 +274,31 @@ fn every_value_outside_the_replys_own_identity_is_a_figure() {
     // string added inside the counters is caught as well.
     let encoded = evaluate_resident_health(&request("req-figures")).unwrap();
 
-    every_value_is_a_figure(&serde_json::from_slice::<Value>(&encoded).unwrap(), "");
+    let value: Value = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(figures_only(&value, ""), Ok(()));
 }
 
 #[test]
-fn a_request_that_carried_a_credential_leaves_none_of_it_in_the_reply() {
-    // Assembled from pieces so no file in this repository holds a whole token
-    // of a shape a credential scanner recognises.
-    let secret = format!("{}{}{}", "AKIA", "QYLPT3K7", "R4FXM2WD");
-    let payload = format!("AWS_ACCESS_KEY_ID={secret}");
+fn a_counter_keyed_by_the_work_served_is_read_as_text_as_well() {
+    // A count is a figure wherever it is put, so a per-command or per-path
+    // table would pass a reading that only looked at values while spelling the
+    // work in its keys. These are the two shapes such a counter takes: a map
+    // under a known field, and a field of its own.
+    let mut keyed: Value =
+        serde_json::from_slice(&evaluate_resident_health(&request("req-keyed")).unwrap()).unwrap();
+    keyed["counters"]["served_requests"] = serde_json::json!({ "/private/etc/credentials": 1u64 });
 
-    // Charge every counter from a request carrying that credential. What the
-    // resident keeps of a payload it read is a length and a duration; a
-    // diagnostic reading the reply afterwards must not be able to recover the
-    // bytes from any of it.
-    crate::resident_health_counters::record_served(std::time::Instant::now(), payload.len());
-    crate::resident_health_counters::record_auth_failure();
-    crate::resident_health_counters::record_frame_error();
-    crate::resident_health_counters::record_deadline_exceeded();
-    crate::resident_health_counters::record_digest_mismatch();
-    crate::resident_health_counters::record_panic();
-    record_overload();
+    assert_eq!(
+        figures_only(&keyed, ""),
+        Err("counters.served_requests./private/etc/credentials (name)".to_owned())
+    );
 
-    let reply = String::from_utf8(evaluate_resident_health(&request("req-credential")).unwrap())
-        .expect("the reply is JSON text");
+    let mut added: Value =
+        serde_json::from_slice(&evaluate_resident_health(&request("req-added")).unwrap()).unwrap();
+    added["counters"]["slowest_command"] = serde_json::json!(12u64);
 
-    assert!(!reply.contains(&secret), "the reply repeats the credential");
-    assert!(
-        !reply.contains("AWS_ACCESS_KEY_ID"),
-        "the reply names the field the credential was read from"
+    assert_eq!(
+        figures_only(&added, ""),
+        Err("counters.slowest_command (name)".to_owned())
     );
 }
