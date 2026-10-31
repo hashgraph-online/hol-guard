@@ -428,6 +428,30 @@ const PNPM_REPORTING_FLAGS: &[&str] = &[
 /// pnpm reporting options that take a value, in either spelling.
 const PNPM_REPORTING_VALUES: &[&str] = &["--reporter", "--loglevel"];
 
+/// npm's output options. The workspace options (`--workspace`, `-w`,
+/// `--workspaces`, `--ws`) are absent because they choose which packages the
+/// run reaches, and `--prefix` and `-C` are absent because they move the
+/// directory it runs in; both are read where a directory or a package set is
+/// decided rather than peeled here.
+const NPM_REPORTING_FLAGS: &[&str] = &[
+    "--silent",
+    "-s",
+    "--quiet",
+    "--color",
+    "--no-color",
+    "--verbose",
+    "--no-progress",
+    "--no-update-notifier",
+    "--timing",
+    "--no-timing",
+    "-d",
+    "-dd",
+    "-ddd",
+];
+
+/// npm's one reporting option that takes a value.
+const NPM_REPORTING_VALUES: &[&str] = &["--loglevel"];
+
 /// yarn's output options. yarn classic chooses packages with a `workspace`
 /// verb rather than an option, so there is no fan-out spelling to exclude.
 const YARN_REPORTING_FLAGS: &[&str] = &[
@@ -439,8 +463,8 @@ const YARN_REPORTING_FLAGS: &[&str] = &[
     "--verbose",
 ];
 
-/// `arguments` with the leading pnpm or yarn options that only change what
-/// the run prints removed, so the `exec` behind them is read as the verb it
+/// `arguments` with the leading npm, pnpm or yarn options that only change
+/// what the run prints removed, so the `exec` behind them is read as the verb it
 /// is. A reporting option names no package and moves no directory, so
 /// `pnpm --silent exec tsc` runs the same local bin `pnpm exec tsc` does.
 ///
@@ -453,6 +477,7 @@ pub(crate) fn manager_reporting_options_peeled<'a>(
     mut arguments: &'a [String],
 ) -> &'a [String] {
     let (flags, values): (&[&str], &[&str]) = match manager {
+        "npm" => (NPM_REPORTING_FLAGS, NPM_REPORTING_VALUES),
         "pnpm" => (PNPM_REPORTING_FLAGS, PNPM_REPORTING_VALUES),
         "yarn" => (YARN_REPORTING_FLAGS, &[]),
         _ => return arguments,

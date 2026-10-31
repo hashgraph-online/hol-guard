@@ -410,7 +410,8 @@ const MANAGER_SUBCOMMANDS: &[&str] = &[
 /// option before the subcommand (`pnpm -r`, `--filter`) fans the run out past
 /// one package and keeps the review. An option that only chooses how much the
 /// manager prints names no package, so it is peeled before the subcommand is
-/// read and `pnpm --silent exec tsc` stays the local-bin run it is.
+/// read and `npm --silent exec tsc` or `pnpm --silent exec tsc` stays the
+/// local-bin run it is.
 pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],

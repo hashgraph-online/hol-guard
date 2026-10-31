@@ -21679,6 +21679,54 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-npm-silent-exec-tsc",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --silent exec tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npm-loglevel-exec-eslint",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --loglevel=error exec eslint src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npm-quiet-exec-alias",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --quiet x tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "toolchain-pnpm-silent-exec-tsc",
       "fix_area": "shell",
       "harnesses": [
