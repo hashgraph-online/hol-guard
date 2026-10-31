@@ -151,6 +151,7 @@ impl Lab {
                 pip_config_inert: true,
                 shell_home_matches: true,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
                 http_config_absent: false,
                 psql_environment: Default::default(),
                 ..PathContext::default()

@@ -24,12 +24,22 @@
 //!   `--remove` here while it spells `--remote` everywhere else.
 //! - `-u`/`--update-sources` and `--clear-sources`, which rewrite the local
 //!   source cache on a command that otherwise only prints.
+//! - `gem specification <gem> <field>` for any field outside
+//!   [`SPECIFICATION_FIELDS`]: RubyGems answers that word with `send`, so it
+//!   names a method on the specification rather than data.
 //! - every option that carries a value: `--source`, `--http-proxy`,
 //!   `--bulk-threshold`, `--config-file`, `--spec-dir`, `--platform` and the
 //!   version requirement. A screen that admitted them would have to tell a
 //!   requirement from a path, a URL or a second source.
 //! - operands that are not a plain gem name, so a path, a `.gem` or
 //!   `.gemspec` file and a URL all keep their review.
+//! - every query a session could have pointed elsewhere before it ran.
+//!   `gem` is a Ruby program that loads a configuration first, so an
+//!   inherited `GEMRC`, `RUBYOPT`, `RUBYLIB` or `RUBYGEMS_GEMDEPS`, and a
+//!   `gemrc` carrying anything but the switches [`INERT_DEFAULT_ARGUMENTS`]
+//!   lists, leave the query reviewed: both can put back the `--source`,
+//!   `--config-file` and `-u` this module refuses on the line, and `RUBYOPT`
+//!   can require a file before the query starts.
 
 /// Options every allowed query accepts.
 const OUTPUT_FLAGS: &[&str] = &[
@@ -92,6 +102,42 @@ const DEPENDENCY_FLAGS: &[&str] = &[
     "--pipe",
 ];
 
+/// The specification attributes a query may name.
+///
+/// Each reads a field the gemspec declares. Methods that act -- building an
+/// extension, activating the gem, writing a cache file -- are absent, as are
+/// the ones that re-render the whole specification, which is what the
+/// `--ruby`, `--yaml` and `--marshal` flags already print.
+const SPECIFICATION_FIELDS: &[&str] = &[
+    "authors",
+    "bindir",
+    "date",
+    "dependencies",
+    "description",
+    "development_dependencies",
+    "email",
+    "executables",
+    "extensions",
+    "extra_rdoc_files",
+    "files",
+    "full_name",
+    "homepage",
+    "licenses",
+    "metadata",
+    "name",
+    "platform",
+    "require_paths",
+    "required_ruby_version",
+    "required_rubygems_version",
+    "requirements",
+    "rubygems_version",
+    "runtime_dependencies",
+    "specification_version",
+    "summary",
+    "test_files",
+    "version",
+];
+
 const SPECIFICATION_FLAGS: &[&str] = &[
     "--all",
     "--ruby",
@@ -117,10 +163,122 @@ const ENVIRONMENT_KEYS: &[&str] = &[
 pub(super) fn safe_gem_segment(
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
 ) -> bool {
     model.dialect == "posix"
         && segment.pipeline_index == 0
         && safe_gem_arguments(&segment.arguments)
+        && context.gem_config_absent
+        && context.shell_home_matches
+        && configuration_inert(context)
+}
+
+/// Whether the `gemrc` files RubyGems loads leave the query as it was
+/// written.
+///
+/// RubyGems reads `/etc/gemrc` and then the user's `~/.gemrc`, and both
+/// carry the same two kinds of entry: settings such as `:sources:` and
+/// `:update_sources:`, and a list of default arguments under `gem:` or under
+/// a command's own name, which RubyGems adds to the line before its parser
+/// sees it. Those defaults put back exactly what this module refuses --
+/// `--source`, `--config-file`, `-u` -- so a file that carries anything but
+/// the words below leaves the query reviewed. There is no per-directory
+/// `gemrc`, so only these two paths are read, and the home is the one the
+/// shell would expand.
+fn configuration_inert(context: super::PathContext<'_>) -> bool {
+    let Some(home) = context.home_dir.map(std::path::Path::new) else {
+        return false;
+    };
+    home.is_absolute()
+        && gemrc_inert(&home.join(".gemrc"))
+        && gemrc_inert(std::path::Path::new("/etc/gemrc"))
+}
+
+/// The longest `gemrc` this screen reads.
+const MAX_GEMRC_BYTES: u64 = 64 * 1024;
+
+/// A missing file is inert. Anything unreadable, oversized or not a regular
+/// file is not.
+fn gemrc_inert(path: &std::path::Path) -> bool {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        // A path whose parent is not a directory reports `ENOTDIR` rather
+        // than "no such file", and RubyGems reads nothing there either.
+        Err(error) => {
+            return matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+            )
+        }
+    };
+    if !metadata.is_file() || metadata.len() > MAX_GEMRC_BYTES {
+        return false;
+    }
+    std::fs::read_to_string(path).is_ok_and(|text| text.lines().all(inert_gemrc_line))
+}
+
+/// Settings whose value says how much a command prints or how many
+/// connections it opens, and nothing about where it reads from or writes to.
+const INERT_SETTINGS: &[&str] = &["backtrace", "benchmark", "bulk_threshold", "verbose"];
+
+/// The default arguments a `gemrc` may carry.
+///
+/// Each one is a flag that takes no value, so none of them can name a
+/// source, a file or a directory, and none asks for the source-cache write
+/// `--update-sources` performs.
+const INERT_DEFAULT_ARGUMENTS: &[&str] = &[
+    "--backtrace",
+    "--document",
+    "--no-document",
+    "--no-rdoc",
+    "--no-ri",
+    "--norc",
+    "--no-suggestions",
+    "--suggestions",
+    "--no-user-install",
+    "--no-verbose",
+    "--quiet",
+    "--silent",
+    "--user-install",
+    "--verbose",
+    "-V",
+    "-q",
+];
+
+/// One line of a `gemrc`.
+///
+/// A key written as a Ruby symbol (`:verbose:`) and one written plainly
+/// (`gem:`) reach the same reading. An indented line belongs to a structure
+/// this screen did not read -- the items under `:sources:`, a nested mapping
+/// -- so it keeps the review, and so does any value that is not a listed
+/// scalar or a list of listed flags.
+fn inert_gemrc_line(line: &str) -> bool {
+    let trimmed = line.trim_end();
+    let body = trimmed.trim_start();
+    if body.is_empty() || body.starts_with('#') || body == "---" {
+        return true;
+    }
+    if trimmed.starts_with([' ', '\t']) {
+        return false;
+    }
+    let Some((key, value)) = body.strip_prefix(':').unwrap_or(body).split_once(':') else {
+        return false;
+    };
+    let value = value.trim();
+    if INERT_SETTINGS.contains(&key.trim().to_ascii_lowercase().as_str()) {
+        return inert_setting_value(value);
+    }
+    !value.is_empty()
+        && value
+            .split_whitespace()
+            .all(|word| INERT_DEFAULT_ARGUMENTS.contains(&word))
+}
+
+/// A setting's value is read only where it is a plain switch or a count. A
+/// key whose value names anything else is not one this screen knows.
+fn inert_setting_value(value: &str) -> bool {
+    matches!(value, "true" | "false" | "nil" | "~")
+        || (!value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 pub(super) fn safe_gem_arguments(arguments: &[String]) -> bool {
@@ -136,7 +294,7 @@ pub(super) fn safe_gem_arguments(arguments: &[String]) -> bool {
         }
         ["dependency", rest @ ..] => query(rest, &[DEPENDENCY_FLAGS, DOMAIN_FLAGS], true),
         ["specification", rest @ ..] => {
-            query(rest, &[SPECIFICATION_FLAGS, DOMAIN_FLAGS], true) && names(rest) > 0
+            query(rest, &[SPECIFICATION_FLAGS, DOMAIN_FLAGS], true) && specification_operands(rest)
         }
         ["outdated", rest @ ..] => query(rest, &[DOMAIN_FLAGS], false),
         ["environment", rest @ ..] => match rest {
@@ -147,6 +305,26 @@ pub(super) fn safe_gem_arguments(arguments: &[String]) -> bool {
         ["sources", rest @ ..] => rest
             .iter()
             .all(|word| OUTPUT_FLAGS.contains(word) || matches!(*word, "--list" | "-l")),
+        _ => false,
+    }
+}
+
+/// `gem specification <gem> [field]`.
+///
+/// RubyGems answers the optional second operand with `send` on the
+/// specification object, so that word is a method name rather than data, and
+/// a specification carries more than its fields: `build_extensions` compiles
+/// and runs the gem's own `extconf.rb`. Only the attributes that read a field
+/// are accepted, and only one gem name before them.
+fn specification_operands(words: &[&str]) -> bool {
+    let operands = words
+        .iter()
+        .copied()
+        .filter(|word| plain_name(word))
+        .collect::<Vec<_>>();
+    match operands.as_slice() {
+        [_] => true,
+        [_, field] => SPECIFICATION_FIELDS.contains(field),
         _ => false,
     }
 }

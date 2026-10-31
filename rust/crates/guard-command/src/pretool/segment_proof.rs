@@ -42,6 +42,7 @@ pub(crate) fn benign_command_segments(
         pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
+        gem_config_absent: context.gem_config_absent,
         http_config_absent: context.http_config_absent,
         psql_environment: context.psql_environment,
         creates_nothing: super::search::command_creates_nothing(model),
@@ -458,7 +459,7 @@ pub(super) fn exact_safe_segment_with_context(
         "helm" => super::helm_usage::safe_helm_segment(model, segment),
         "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),
-        "gem" => super::gem_reads::safe_gem_segment(model, segment),
+        "gem" => super::gem_reads::safe_gem_segment(model, segment, context),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
         "psql" => super::postgres_reads::safe_psql_arguments(&segment.arguments, context),
         "npm" => {

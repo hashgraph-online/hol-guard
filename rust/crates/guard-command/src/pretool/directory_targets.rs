@@ -481,6 +481,27 @@ impl<'a> super::PathContext<'a> {
             }
             None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
         };
+        // RubyGems reads a second configuration file from `GEMRC`, and `gem`
+        // is itself a Ruby program: `RUBYOPT=-r<file>` and `RUBYLIB` load
+        // code before the query starts, and `RUBYGEMS_GEMDEPS` activates the
+        // gems a dependency file names. `GEM_HOME` and `GEM_PATH` are left
+        // out on the ground the Node version managers are left out next
+        // door: every rbenv, rvm and chruby shell exports them, and the gems
+        // they select are ones the user installed. A stamped environment
+        // carries names without values, so any name counts.
+        let gem_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        GEM_CONFIG_NAMES
+                            .iter()
+                            .any(|known| name.eq_ignore_ascii_case(known))
+                    })
+            }
+            None => GEM_CONFIG_NAMES
+                .iter()
+                .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty())),
+        };
         // HTTPie and xh read a `config.json` whose `default_options` are
         // prepended to every request, and each takes a variable that moves
         // the directory it is read from. A stamped environment carries names
@@ -541,6 +562,7 @@ impl<'a> super::PathContext<'a> {
             pip_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            gem_config_absent,
             http_config_absent,
             // A session knows its environment, not the command, so the
             // proof that no step creates a filesystem entry is set where a
@@ -552,6 +574,9 @@ impl<'a> super::PathContext<'a> {
 }
 
 const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
+
+/// The variables that hand a RubyGems query configuration or code.
+const GEM_CONFIG_NAMES: [&str; 4] = ["GEMRC", "RUBYOPT", "RUBYLIB", "RUBYGEMS_GEMDEPS"];
 
 /// The variables HTTPie and `xh` read their configuration directory from.
 const HTTP_CONFIG_NAMES: [&str; 2] = ["HTTPIE_CONFIG_DIR", "XH_CONFIG_DIR"];
