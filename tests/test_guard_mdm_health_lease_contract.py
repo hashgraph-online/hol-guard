@@ -300,9 +300,11 @@ def test_outbox_rejects_malformed_snapshot_values(mutation: object) -> None:
 def test_outbox_accepts_a_bound_snapshot() -> None:
     snapshot = _snapshot()
     snapshot["generatedAt"] = "2026-07-18T14:00:00.123456Z"
-    outbox = _outbox(snapshot)
+    canonical = _outbox(snapshot).canonical_bytes()
 
-    assert HealthLeaseOutbox.parse(outbox.canonical_bytes()) == outbox
+    # Signing may yield a high-S signature that the canonical form lowers, so
+    # compare the canonical bytes rather than the signed objects.
+    assert HealthLeaseOutbox.parse(canonical).canonical_bytes() == canonical
 
 
 def test_snapshot_binding_fails_closed_without_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
