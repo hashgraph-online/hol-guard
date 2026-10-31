@@ -180,6 +180,146 @@
                         "tui"
                       ]
                     }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "subcommands": [
+                        "restore"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "forbidden_flags": [],
+                      "required_flags_anywhere": [],
+                      "interleaved_options_with_values": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "subcommands": [
+                        "undo"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "forbidden_flags": [],
+                      "required_flags_anywhere": [],
+                      "interleaved_options_with_values": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "subcommands": [
+                        "redo"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "forbidden_flags": [],
+                      "required_flags_anywhere": [],
+                      "interleaved_options_with_values": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "subcommands": [
+                        "gc"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "forbidden_flags": [],
+                      "required_flags_anywhere": [],
+                      "interleaved_options_with_values": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "subcommands": [
+                        "snap"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "forbidden_flags": [],
+                      "required_flags_anywhere": [],
+                      "interleaved_options_with_values": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "subcommands": [
+                        "watch"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "forbidden_flags": [],
+                      "required_flags_anywhere": [],
+                      "interleaved_options_with_values": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "fail_secure_unknown_options": true
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "unwreck",
+                        "unwreck.exe"
+                      ],
+                      "subcommands": [
+                        "tui"
+                      ],
+                      "options_with_values": [
+                        "--root"
+                      ],
+                      "forbidden_flags": [],
+                      "required_flags_anywhere": [],
+                      "interleaved_options_with_values": [],
+                      "forbidden_flags_before_delimiter": [],
+                      "fail_secure_unknown_options": true
+                    }
                   }
                 ]
               },
@@ -1167,9 +1307,7 @@
       "disabled_permissions": [],
       "expected_action": "review",
       "rule_id": "command.unwreck.state-change",
-      "expected_effective_segments": [
-        0
-      ]
+      "expected_effective_segments": []
     },
     {
       "id": "compound-second-segment",
@@ -1180,9 +1318,7 @@
       "disabled_permissions": [],
       "expected_action": "review",
       "rule_id": "command.unwreck.state-change",
-      "expected_effective_segments": [
-        1
-      ]
+      "expected_effective_segments": []
     },
     {
       "id": "exec-wrapper",
@@ -1193,9 +1329,7 @@
       "disabled_permissions": [],
       "expected_action": "review",
       "rule_id": "command.unwreck.state-change",
-      "expected_effective_segments": [
-        0
-      ]
+      "expected_effective_segments": []
     },
     {
       "id": "xargs-wrapper",
@@ -1241,9 +1375,7 @@
       "disabled_permissions": [],
       "expected_action": "review",
       "rule_id": "command.unwreck.state-change",
-      "expected_effective_segments": [
-        1
-      ]
+      "expected_effective_segments": []
     },
     {
       "id": "run-child-help-long",
