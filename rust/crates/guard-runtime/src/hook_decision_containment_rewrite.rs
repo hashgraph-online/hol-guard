@@ -13,18 +13,20 @@
 //! snapshot cannot be written or whose command cannot be quoted keeps its
 //! receipt, so nothing here allows a call the sink would not run.
 //!
-//! The edge holds the receipt's `reason` too, so a Claude Code or ZCode call
-//! it rewrites runs in the runtime's own sink when that sink reproduces it,
-//! as the resident's direct answer already does. Cursor keeps Guard's sink:
-//! its `beforeShellExecution` admits that argv alone.
+//! A call the runtime's own sink reproduces runs there, as the resident's
+//! direct answer already does, whether the edge or the resident rewrites it.
+//! Cursor keeps Guard's sink unless its probe's scope admits the runtime's:
+//! its `beforeShellExecution` admits that argv alone. A rewrite asked for
+//! another host than the resident's keeps Guard's sink, since the runtime's
+//! sink runs only this host's sandbox.
 
 use guard_contracts::{ContainmentRewriteInputsV1, ContainmentRewriteV1, ContainmentSinkInputsV1};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::codex_hook_bridge::contain::{discard, resolved_workspace, write_snapshot};
-use crate::hook_decision_containment_route::containment_sink;
-use crate::hook_direct::contained::{unprojected_sink_command, NativeSink};
+use crate::hook_decision_containment_route::{containment_sink, host_platform};
+use crate::hook_direct::contained::{native_sink, unprojected_sink_command, NativeSink};
 
 const REQUEST_SCHEMA: &str = "guard-contained-test-request.v1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
@@ -32,25 +34,23 @@ const ROUTED_REASON: &str = "native_contained_execution_routed";
 /// Codex on Windows may run the sink in PowerShell or Git Bash; every other
 /// harness runs it in a POSIX shell.
 const BRIDGE_HARNESS: &str = "codex";
-
-/// What lets a rewrite run the runtime's own sink: the receipt's `reason`,
-/// which names a chain whose host step that sink does not run, and the sink.
-pub(crate) struct Native<'a> {
-    pub(crate) reason: &'a Value,
-    pub(crate) sink: NativeSink,
-}
+/// Cursor's shell check admits the runtime's sink only for a probe its own
+/// scope routes, which the resident cannot see.
+const CURSOR: &str = "cursor";
 
 pub(crate) fn containment_rewrite(
     inputs: &ContainmentRewriteInputsV1,
 ) -> Result<ContainmentRewriteV1, String> {
-    containment_rewrite_with(inputs, None)
+    let native = (inputs.harness != CURSOR && inputs.platform == host_platform())
+        .then_some(native_sink as NativeSink);
+    containment_rewrite_with(inputs, native)
 }
 
 /// `containment_rewrite`, running a call the runtime's own sink reproduces
 /// there when `native` is given.
 pub(crate) fn containment_rewrite_with(
     inputs: &ContainmentRewriteInputsV1,
-    native: Option<Native<'_>>,
+    native: Option<NativeSink>,
 ) -> Result<ContainmentRewriteV1, String> {
     let sink = containment_sink(&sink_inputs(inputs))?;
     let response = match sink.profile {
@@ -86,7 +86,7 @@ fn sink_inputs(inputs: &ContainmentRewriteInputsV1) -> ContainmentSinkInputsV1 {
 
 /// The allow that runs the call in the sink, with its snapshot written, or
 /// `None` with nothing left behind.
-fn rewrite(inputs: &ContainmentRewriteInputsV1, native: Option<Native<'_>>) -> Option<Value> {
+fn rewrite(inputs: &ContainmentRewriteInputsV1, native: Option<NativeSink>) -> Option<Value> {
     let original = inputs.tool_input.as_object()?;
     if inputs.sink_command.is_empty() {
         return None;
@@ -114,13 +114,17 @@ fn rewrite(inputs: &ContainmentRewriteInputsV1, native: Option<Native<'_>>) -> O
         return None;
     };
     let digest = hex::encode(Sha256::digest(&serialized));
+    // The receipt's facts, as the direct route hands them to the sink's
+    // shape check; a read-only route is matched on all of them.
     let native = native.and_then(|native| {
         let answer = json!({
+            "decision": inputs.decision,
+            "policy_action": inputs.policy_action,
             "reason_code": inputs.reason_code,
             "required_execution_profile": inputs.required_execution_profile,
-            "reason": native.reason,
+            "observe_mode": inputs.observe_mode,
         });
-        unprojected_sink_command(&answer, original, &workspace, &inputs.home, native.sink)
+        unprojected_sink_command(&answer, original, &workspace, &inputs.home, native)
     });
     let mut command = native.unwrap_or_else(|| {
         let mut command = inputs.sink_command.clone();

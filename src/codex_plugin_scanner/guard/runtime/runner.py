@@ -1113,6 +1113,8 @@ def sync_receipts(
             except ApprovalGateError as error:
                 cloud_exception_items = []
                 remote_policy_sync_blocked = True
+                activation_last_error = _policy_bundle_rejection_payload(error.code)
+                persist_activation_rejection(store, activation_last_error, now)
                 store.add_event(
                     "approval_gate/remote_policy_sync_blocked",
                     {

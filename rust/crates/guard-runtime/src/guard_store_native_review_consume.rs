@@ -133,7 +133,11 @@ pub(crate) fn matching_block(connection: &Connection, args: &Args) -> StoreResul
 /// window before any allow is considered. Without `spend` it only reads, and
 /// the op runs it without the write lock.
 pub(crate) fn settle(connection: &Connection, args: &Args) -> StoreResult<Value> {
-    let spend = args.flag("spend")?;
+    settled(connection, args, args.flag("spend")?)
+}
+
+/// `settle` with `spend` given by the caller rather than read from `args`.
+pub(crate) fn settled(connection: &Connection, args: &Args, spend: bool) -> StoreResult<Value> {
     if matching_block(connection, args)? == Value::Bool(true) {
         return Ok(json!("blocked"));
     }

@@ -243,6 +243,14 @@ fn refused_long(word: &str, verb: &str, subcommand: &str) -> bool {
         .any(|option| option.starts_with(name))
 }
 
+/// Whether the word names a program for Git to run or a file for Git to write,
+/// for a verb this grammar screens. The workspace containment route asks the
+/// same question of the same verbs, so the screens are written once here
+/// rather than kept in step by hand in two places.
+pub(crate) fn names_helper_or_output(word: &str, verb: &str, subcommand: &str) -> bool {
+    refused_long(word, verb, subcommand) || refused_short(word, verb)
+}
+
 /// Whether a short-option word carries a refused letter in a position Git
 /// reads as a flag. `-O` names the pager `git grep` opens and the order file
 /// `git diff` reads; `-o` writes the output to a file for the verbs that have

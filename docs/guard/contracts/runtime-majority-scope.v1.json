@@ -890,7 +890,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/native_review_bound_bash.py",
           "src/codex_plugin_scanner/guard/runtime/bound_bash_review.py",
           "src/codex_plugin_scanner/guard/runtime/bound_bash_sink.py"
         ],

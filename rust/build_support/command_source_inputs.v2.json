@@ -562,6 +562,7 @@
       "src/pretool/symlink_writes.rs",
       "src/pretool/test_predicates.rs",
       "src/pretool/tool_bin_listing.rs",
+      "src/pretool/tool_inventory_reads.rs",
       "src/pretool/tracked_credential_names.rs",
       "src/pretool/trailing_group.rs",
       "src/pretool/tree_reads.rs",

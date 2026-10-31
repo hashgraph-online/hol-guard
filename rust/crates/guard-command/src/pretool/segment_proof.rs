@@ -449,6 +449,8 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::npm_reads::safe_npm_read(&segment.arguments, context)
         }
         "pip" | "pip3" => super::pip_reads::safe_pip_segment(model, segment, context),
+        "uv" => super::tool_inventory_reads::safe_uv_segment(model, segment),
+        "pipx" => super::tool_inventory_reads::safe_pipx_segment(model, segment),
         // Windows spells the same launcher with its program suffix, and the
         // install screen above already strips one before it decides, so the
         // two spellings have to reach the same proof. `hol-guard.cmd`, the

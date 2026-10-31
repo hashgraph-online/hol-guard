@@ -1446,13 +1446,17 @@ def test_ensure_guard_daemon_accepts_nonce_bound_default_launch_handoff_only_for
         launch_nonce: str,
         expected_pid: int,
         expected_port: int | None = None,
+        require_same_runtime: bool = True,
     ) -> bool:
+        # A default launch runs this runtime, so its handoff must publish it.
+        assert require_same_runtime
         observed_handoffs.append((expected_pid, launch_nonce, expected_port))
         return original_handoff_match(
             handoff_home,
             launch_nonce=launch_nonce,
             expected_pid=expected_pid,
             expected_port=expected_port,
+            require_same_runtime=require_same_runtime,
         )
 
     _disable_daemon_adoption(monkeypatch)

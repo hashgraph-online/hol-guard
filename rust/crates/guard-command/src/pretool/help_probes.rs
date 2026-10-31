@@ -97,23 +97,46 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
                 | "uninstall"
                 | "wheel"
         ),
+        // npm resolves its own aliases from a table it carries, so `add` is
+        // `install` and `info` is `view` before anything else happens. The
+        // names below are those aliases, each standing for a verb this arm
+        // already admits. The three npm aliases that name a program to run
+        // stay out with the verbs they point at: `create` is `init`, `x` is
+        // `exec`, and `run` is `run-script`.
         "npm" => matches!(
             verb,
-            "audit"
+            "add"
+                | "audit"
                 | "ci"
+                | "clean-install"
+                | "ddp"
                 | "dedupe"
+                | "explain"
                 | "i"
+                | "ic"
+                | "in"
+                | "info"
                 | "install"
+                | "la"
                 | "link"
+                | "list"
+                | "ll"
+                | "ln"
                 | "ls"
                 | "outdated"
                 | "pkg"
                 | "prune"
                 | "publish"
+                | "r"
+                | "remove"
                 | "rm"
+                | "show"
+                | "un"
                 | "uninstall"
                 | "unlink"
+                | "up"
                 | "update"
+                | "v"
                 | "view"
                 | "why"
         ),
@@ -161,6 +184,11 @@ fn configuration_inert(basename: &str, context: super::PathContext<'_>) -> bool 
 
 /// A lone help flag, or one behind at most two of the manager's own
 /// usage-only verbs.
+///
+/// npm's and pip's admission also needs the files
+/// [`configuration_inert`] reads, which no unit context names a directory
+/// for, so their verbs are proved in the benign gate's fixture home.
+/// `tests/fixtures/benign_false_positive_gate.json` carries the alias rows.
 pub(super) fn safe_help_probe(
     basename: &str,
     arguments: &[String],
@@ -258,6 +286,10 @@ mod tests {
             ("npm", vec!["run", "test", "--help"]),
             // `npm init <name>` resolves and runs a `create-*` package.
             ("npm", vec!["init", "--help"]),
+            // npm's own aliases for those three verbs point at the same
+            // programs, so they are refused with them.
+            ("npm", vec!["create", "--help"]),
+            ("npm", vec!["x", "--help"]),
             // `uvx` is `uv tool run`: the verb is a package to fetch and run.
             ("uvx", vec!["build", "--help"]),
             ("uvx", vec!["pip", "--help"]),
@@ -269,6 +301,31 @@ mod tests {
                 !safe_help_probe(tool, &args(&arguments), context()),
                 "{tool} {arguments:?}"
             );
+        }
+    }
+
+    /// npm's own admission also reads its configuration, which this unit
+    /// context names no directory for, so the shape test above cannot tell a
+    /// refused verb from a refused configuration. The verb list answers for
+    /// itself here: every word npm resolves to a package or a script stays
+    /// out of it, whatever the configuration proof later decides.
+    #[test]
+    fn npm_verbs_that_run_a_program_stay_out_of_the_usage_list() {
+        for verb in ["create", "x", "exec", "run", "run-script", "init"] {
+            assert!(!super::usage_only_verb("npm", verb), "npm {verb}");
+        }
+        // The aliases that only print usage are still in it.
+        for verb in [
+            "add",
+            "remove",
+            "un",
+            "in",
+            "up",
+            "info",
+            "ln",
+            "clean-install",
+        ] {
+            assert!(super::usage_only_verb("npm", verb), "npm {verb}");
         }
     }
 

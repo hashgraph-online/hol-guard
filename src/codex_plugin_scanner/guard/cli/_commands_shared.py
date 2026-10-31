@@ -113,7 +113,6 @@ from ..desktop_notifications import (
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     _resolve_guard_sync_auth_context,
-    apply_stored_package_policy_override,
     build_local_supply_chain_posture,
     build_supply_chain_status_payload,
     evaluate_package_request_artifact,

@@ -52,9 +52,12 @@ use crate::hook_adapter_op::review_request::{self, pre_tool_command};
 use crate::hook_decision_review_response::{paused_review, silent_review_block};
 use crate::hook_direct::saved_decision::review_hint::op::queued_hint;
 use crate::hook_direct::saved_decision::review_queue::connector::{first_blocked_cause, Connector};
+use crate::native_bash_reply_validation::queued_bound_bash;
 use crate::policy_store::PolicySnapshotStore;
 
 pub(crate) const METHOD: &str = "queue_native_review";
+/// The method a prepared native Bash review queues through.
+pub(crate) const BOUND_BASH_METHOD: &str = "queue_bound_bash_review";
 
 const INVALID: StoreError = StoreError::Invalid("native_guard_store_review_queue_invalid");
 /// The resident could not build the review's request from a well-formed
@@ -186,10 +189,11 @@ impl Drop for Delegated {
 
 /// The queue method and arguments a `queue_native_review` call stands for.
 ///
-/// `call_budget_ms` is the call's own busy budget: the hint never spends the
-/// part of it the queue write needs. `look_up` names the connector a
-/// non-recognition review's launch waits on.
+/// `method` is the call's own, `call_budget_ms` its busy budget: the hint
+/// never spends the part of it the queue write needs. `look_up` names the
+/// connector a non-recognition review's launch waits on.
 pub(crate) fn delegate(
+    method: &str,
     args: &Map<String, Value>,
     owner: Option<&PolicySnapshotStore>,
     call_budget_ms: u64,
@@ -199,6 +203,12 @@ pub(crate) fn delegate(
     let mut delegated = args.clone();
     let mut query: ReviewRequestQueryV1 =
         serde_json::from_value(delegated.remove("review").ok_or(INVALID)?).map_err(|_| INVALID)?;
+    // A prepared native Bash review queues only through its own method, and
+    // only as the reply the Bash owner prepared.
+    let bound_bash = method == BOUND_BASH_METHOD;
+    if bound_bash != query.bound_bash.is_some() || (bound_bash && !queued_bound_bash(&query)) {
+        return Err(REFUSED);
+    }
     let ask: Option<HintAsk> = take_ask(&mut delegated, "hint")?;
     let respond: Option<RespondAsk> = take_ask(&mut delegated, "respond")?;
     let lookup: Option<LookupAsk> = take_ask(&mut delegated, "connector_lookup")?;

@@ -169,7 +169,7 @@ fn a_call_the_runtime_reproduces_runs_its_own_sink() {
 }
 
 #[test]
-fn a_receipt_without_its_reason_keeps_guards_sink() {
+fn a_receipt_without_its_reason_still_runs_the_runtimes_sink() {
     let workspace = tempfile::tempdir().expect("workspace");
     let resolved = std::fs::canonicalize(workspace.path()).expect("resolved workspace");
     let request = envelope(&resolved, true);
@@ -190,16 +190,19 @@ fn a_receipt_without_its_reason_keeps_guards_sink() {
         runtime_sink,
     );
 
-    // Without the reason the edge cannot tell a chain whose host step the
-    // runtime's sink does not run, so the call keeps the sink that does.
+    // The runtime's sink reads the reason from the answer it asks for again
+    // before anything runs, and runs a worktree chain's host step itself, so
+    // the edge no longer needs the reason to offer it.
     assert_eq!(answer, Some(ROUTED));
     let response = response.expect("a response");
     let command = response["hookSpecificOutput"]["updatedInput"]["command"]
         .as_str()
         .expect("command is text");
     let argv = crate::mcp_proxy_shlex::split(command).expect("the sink command is quoted");
-    assert_eq!(argv[..3], SINK_COMMAND);
-    assert_eq!(argv[3..5], ["guard", "execute-contained-test"]);
+    assert_eq!(
+        argv[..2],
+        ["/opt/hol guard/runtime", "contained-workspace-sink"]
+    );
     discard(Path::new(argument_after(&argv, "--request-file")));
 }
 

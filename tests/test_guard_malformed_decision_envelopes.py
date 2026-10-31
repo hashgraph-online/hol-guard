@@ -7,10 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.decision_boundaries import (
-    CanonicalApprovalSurfaces,
-    canonical_approval_surfaces_batch,
-)
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.receipts.manager import build_receipt
 from codex_plugin_scanner.guard.runtime.decisions import (
@@ -18,6 +14,10 @@ from codex_plugin_scanner.guard.runtime.decisions import (
     decision_from_legacy_policy_action,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.decision_boundaries_support import (
+    CanonicalApprovalSurfaces,
+    canonical_approval_surfaces_batch,
+)
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
