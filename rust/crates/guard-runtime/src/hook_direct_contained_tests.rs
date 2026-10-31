@@ -275,6 +275,10 @@ fn only_plain_workspace_runs_take_the_native_sink() {
     assert!(shape("npm test && cargo fmt --check"));
     // A `cd` into the workspace runs whole from its root on either sink.
     assert!(shape("cd sub && pytest"));
+    // At the root itself both sinks peel the `cd` and ask about the rest
+    // again there.
+    assert!(shape("cd . && pytest"));
+    assert!(shape("cd sub/.. && pytest -q 2>&1 | tail -20"));
     assert!(shape("\tcd  sub/.  &&  pytest -q"));
     // Output filters, stderr folding and status reads run whole in the
     // sandbox, with the shell's own meaning.
@@ -322,9 +326,7 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         "pnpm -C . run build",
         "pnpm -C sub run build && git -C sub status",
         "pytest -C sub",
-        // The daemon plans a `cd` to the root, or out of it, again there.
-        "cd . && pytest",
-        "cd sub/.. && pytest",
+        // A `cd` out of the workspace into no repository.
         "cd .. && pytest",
         "cd /tmp && pytest",
         // Only `&&` after one plain, existing directory.

@@ -250,7 +250,7 @@ fn native_shape(
         && !host_split(response.get("reason"))
         && !original.contains_key("cwd")
         && (!command.trim_start().starts_with("cd")
-            || inner_directory_change(command, workspace)
+            || leading_directory_change(command, workspace, home)
             || crate::contained_workspace_sink::entered_sibling(command, workspace, home).is_some())
         && (!PACKAGE_DIRECTORY_FLAGS
             .iter()
@@ -262,14 +262,14 @@ fn native_shape(
             .any(|fragment| command.contains(fragment))
 }
 
-/// Whether a leading `cd` leaves the call as the daemon's sink runs it: a
-/// plain target naming a directory strictly inside the workspace, then `&&`.
-/// The daemon runs such a command whole, `cd` included, from the workspace
-/// root, as the native sink does. A `cd` to the root itself or to a sibling
-/// repository's root is planned again there, so it keeps the daemon's sink;
-/// one below a sibling's root runs from that root (`entered_sibling`).
+/// Whether a leading `cd` leaves the call as both sinks run it: a plain
+/// target, then `&&`, naming a directory strictly inside the workspace, the
+/// workspace root, or a sibling repository's root. A directory strictly
+/// inside runs whole, `cd` included, from the workspace root. At a root the
+/// sinks peel the `cd` and ask about the rest again from there. One below a
+/// sibling's root runs from that root (`entered_sibling`).
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
-fn inner_directory_change(command: &str, workspace: &str) -> bool {
+fn leading_directory_change(command: &str, workspace: &str, home: &str) -> bool {
     let Some(rest) = command.trim_start_matches([' ', '\t']).strip_prefix("cd") else {
         return false;
     };
@@ -288,7 +288,7 @@ fn inner_directory_change(command: &str, workspace: &str) -> bool {
     else {
         return false;
     };
-    strictly_inside(workspace, target)
+    strictly_inside(workspace, target) || projection::project_root(workspace, home, target)
 }
 
 /// Whether a package manager's directory flags (`bun --cwd web run build`,

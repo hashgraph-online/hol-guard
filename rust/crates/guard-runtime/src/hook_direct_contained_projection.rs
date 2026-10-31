@@ -1,4 +1,5 @@
-//! The text a contained call is routed and decided as.
+//! The text a contained call is routed and decided as, and the directories
+//! a leading `cd` may name for the native sink.
 
 use serde_json::{Map, Value};
 
@@ -62,6 +63,36 @@ pub(super) fn directory_input(
         std::path::Path::new(home_dir),
     )?;
     Some(projected_input(&changed, workspace, home_dir).unwrap_or(changed))
+}
+
+/// Whether `target`, from the workspace, names the workspace root or a
+/// sibling repository's root: where Guard's own sink peels a leading `cd`
+/// and asks about the rest again, as the native sink's wrapper peel does.
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
+pub(super) fn project_root(workspace: &str, home: &str, target: &str) -> bool {
+    let (Ok(root), Ok(directory)) = (
+        std::fs::canonicalize(workspace),
+        std::fs::canonicalize(std::path::Path::new(workspace).join(target)),
+    ) else {
+        return false;
+    };
+    if !directory.is_dir() {
+        return false;
+    }
+    let Some(query) = directory.to_str() else {
+        return false;
+    };
+    directory == root
+        || guard_command::pretool::contained_wrapper_plan(
+            "",
+            workspace,
+            None,
+            Some(home),
+            Some(query),
+        )
+        .project_root
+        .and_then(|sibling| std::fs::canonicalize(sibling).ok())
+            == Some(directory)
 }
 
 #[cfg(not(unix))]

@@ -1,5 +1,5 @@
-//! A leading `cd` below a sibling repository's root takes the native sink,
-//! which runs the call from that root as Guard's own sink does. A `cwd`
+//! A leading `cd` to or below a sibling repository's root takes the native
+//! sink, which runs the call from that root as Guard's own sink does. A `cwd`
 //! argument is decided as that `cd`, which the native sink writes it as.
 
 #![cfg(unix)]
@@ -9,7 +9,7 @@ use serde_json::json;
 use std::fs;
 
 #[test]
-fn a_cd_below_a_sibling_root_takes_the_native_sink() {
+fn a_cd_to_or_below_a_sibling_root_takes_the_native_sink() {
     // `/tmp`, not `$TMPDIR`, which macOS keeps below `/private/var`.
     let fixture = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
     let root = fs::canonicalize(fixture.path()).unwrap();
@@ -41,9 +41,12 @@ fn a_cd_below_a_sibling_root_takes_the_native_sink() {
     assert!(shape(format!("cd {}/web && npm test", report.display())));
     // A `cd` into the workspace still runs whole from its root.
     assert!(shape(format!("cd {}/sub && npm test", workspace.display())));
-    // The sibling's root is planned again there, so it keeps the daemon's
-    // sink, as does a directory in no repository.
-    assert!(!shape(format!("cd {} && npm test", report.display())));
+    // At the sibling's root both sinks peel the `cd` and ask about the
+    // rest again from there. A directory in no repository keeps the
+    // daemon's sink.
+    assert!(shape(format!("cd {} && npm test", report.display())));
+    assert!(shape(format!("cd {} && npm test", workspace.display())));
+    assert!(shape("cd ../report && npm test".to_owned()));
     assert!(!shape(format!("cd {}/home && npm test", root.display())));
 }
 
@@ -83,8 +86,8 @@ fn a_cwd_argument_is_decided_as_the_directory_change_the_sink_runs() {
     assert_eq!(decided(format!("{}/web", report.display())), Some(true));
     // The session directory drops the argument and runs the call as sent.
     assert_eq!(decided(String::new()), Some(true));
-    // A sibling's own root is planned again there, so it keeps the daemon's
-    // sink, as does an argument the sink refuses.
-    assert_eq!(decided(report.display().to_string()), Some(false));
+    // A sibling's own root is peeled and asked about again there by either
+    // sink. An argument the sink refuses keeps the daemon's sink.
+    assert_eq!(decided(report.display().to_string()), Some(true));
     assert_eq!(decided("@sub".to_owned()), None);
 }
