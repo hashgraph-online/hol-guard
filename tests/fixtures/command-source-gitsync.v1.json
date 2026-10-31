@@ -5445,6 +5445,32 @@
             },
             {
               "action_classes": [
+                "git workspace command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies git bisect operations.",
+              "example_command": "git bisect",
+              "family": "git-workspace",
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.59.0",
+              "label": "Git bisect",
+              "permission_id": "command.git.permission.bisect",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the current branch and working tree before changing them."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
                 "git read command"
               ],
               "baseline_floor": "allow",
@@ -7590,6 +7616,28 @@
               ],
               "severity": "high",
               "title": "Git worktree"
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies git bisect operations.",
+              "family": "git-workspace",
+              "matcher": null,
+              "native_capability": "command.git.bisect.v1",
+              "permission_id": "command.git.permission.bisect",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.git.bisect",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the current branch and working tree before changing them."
+              ],
+              "severity": "high",
+              "title": "Git bisect"
             },
             {
               "action_classes": [

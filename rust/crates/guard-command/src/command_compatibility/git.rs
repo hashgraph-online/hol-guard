@@ -15,6 +15,7 @@ pub(crate) use git_hooks_path::rooted_hooks_inert;
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
     ("worktree", "command.git.worktree"),
+    ("bisect", "command.git.bisect"),
     ("pull", "command.git.pull"),
     ("push", "command.git.push"),
     ("clone", "command.git.clone"),

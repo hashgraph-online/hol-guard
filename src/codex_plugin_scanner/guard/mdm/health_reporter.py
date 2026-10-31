@@ -73,7 +73,7 @@ def run_machine_health_cadence(
 
     resolved_system = system_name or platform.system()
     resolved_paths = paths or default_machine_paths(system_name=resolved_system)
-    policy_state = policy_loader(system_name=resolved_system)
+    policy_state = policy_loader()
     binding = _machine_binding(policy_state)
     started = time.monotonic()
     outbox = lease_issuer(resolved_paths, binding, system_name=resolved_system)

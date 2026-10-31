@@ -475,6 +475,7 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
 mod hermes_inspect;
@@ -590,6 +591,7 @@ mod managed_policy;
 mod managed_policy_file_trust;
 mod managed_policy_floor;
 mod managed_policy_load;
+mod managed_policy_load_command;
 mod managed_policy_plist;
 mod managed_policy_registry;
 mod managed_resident;
@@ -748,6 +750,8 @@ use guard_runtime_pyjson as pyjson;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;
+mod release_manifest_verify;
+mod release_manifest_verify_command;
 mod request_context_op;
 mod request_context_shell;
 mod resident_client;

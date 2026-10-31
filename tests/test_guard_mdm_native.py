@@ -290,7 +290,7 @@ def test_windows_native_verification_fails_closed_without_publisher_pin(tmp_path
 def test_windows_mdm_docs_exclude_desktop_artifact_signing_leaves() -> None:
     verify_doc = " ".join((native.verify_native_install.__doc__ or "").split())
     windows_doc = " ".join((native._verify_windows.__doc__ or "").split())
-    policy_source = Path(native.__file__).with_name("policy.py").read_text(encoding="utf-8")
+    policy_source = Path("rust/crates/guard-runtime/src/managed_policy.rs").read_text(encoding="utf-8")
 
     assert "not Desktop Artifact Signing" in verify_doc
     assert "Do not pin a rotating Azure Public Trust leaf" in verify_doc
