@@ -93,6 +93,16 @@ def test_activity_the_resident_recorded_is_not_submitted_again(tmp_path: Path, a
     assert host.activity_writer.activity == []
 
 
+def test_post_tool_activity_the_resident_recorded_is_not_submitted_again(
+    tmp_path: Path, accepted_receipts: None
+) -> None:
+    host = _host(tmp_path)
+    record = _record(event="PostToolUse", receipt_recorded=True, activity_recorded=True)
+    assert record_direct_hook_evidence(host, record)
+
+    assert host.post_tool_activity == []
+
+
 class _EventStore:
     def __init__(self) -> None:
         self.events: list[tuple[str, dict[str, object]]] = []

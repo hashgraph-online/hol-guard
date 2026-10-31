@@ -17,10 +17,10 @@
 //! A hook the resident answers directly records its receipt the same way:
 //! with a writer already running, the resident queues the receipt and marks
 //! the evidence record it queues for the daemon's drain, which then submits
-//! the rest of that record's evidence but not the receipt. For a `PreToolUse`
-//! answer it queues the command activity behind that receipt as well and
-//! marks the record for that too, which saves the drain another writer
-//! request per hook.
+//! the rest of that record's evidence but not the receipt. For a tool answer
+//! it queues the command activity behind that receipt as well, after a
+//! post-tool call's Composio discovery, and marks the record for that too,
+//! which saves the drain another writer request per hook.
 
 use std::path::Path;
 use std::time::Instant;
@@ -39,6 +39,8 @@ pub(crate) const EDGE_RECEIPT_RECORD_FEATURE: &str = "edge-receipt-record-v1";
 const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
 /// The field that says the resident queued its command activity as well.
 const DIRECT_ACTIVITY_RECORDED: &str = "activity_recorded";
+/// `hook_post_succeeded`'s compact spelling of a failed tool call's event.
+const POST_TOOL_USE_FAILURE: &str = "posttoolusefailure";
 
 /// Encode the checked `edge`, recording its receipt when the envelope asked
 /// and a writer runs for its Guard home. `resident` is false for a caller
@@ -93,7 +95,7 @@ pub(crate) fn offer_direct(
                     if !writer.submit_native_decision_receipt(receipt) {
                         return 0;
                     }
-                    1 + usize::from(record_activity && submit_pre_tool_activity(writer, record))
+                    1 + usize::from(record_activity && submit_activity(writer, record))
                 })
                 .is_ok()
         })
@@ -101,13 +103,74 @@ pub(crate) fn offer_direct(
     queued.unwrap_or_else(|| pending.is_some_and(|record| queue.offer(record)))
 }
 
-/// Queue a direct `PreToolUse` answer's command activity as the drain would,
-/// citing the receipt the writer just accepted. False leaves it to the drain,
-/// which also gets any answer whose fields the activity cannot take.
-fn submit_pre_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) -> bool {
-    if record.get("event").and_then(Value::as_str) != Some("PreToolUse") {
+/// Queue a direct tool answer's command activity as the drain would. False
+/// leaves it to the drain, which also gets any answer whose fields the
+/// activity cannot take.
+fn submit_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) -> bool {
+    match record.get("event").and_then(Value::as_str) {
+        Some("PreToolUse") => submit_pre_tool_activity(writer, record),
+        Some("PostToolUse") => submit_post_tool_activity(writer, record),
+        _ => false,
+    }
+}
+
+/// The drain's post-tool recording: the Composio discovery of a call that
+/// succeeded, then the activity. The writer refusing either drops it as it
+/// would for the drain, so once both are submitted the drain has nothing
+/// left to send.
+fn submit_post_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) -> bool {
+    let (Some(harness), Some(payload)) = (
+        record.get("harness").and_then(Value::as_str),
+        record.get("payload").and_then(Value::as_object),
+    ) else {
+        return false;
+    };
+    let succeeded = post_succeeded(payload);
+    let tool_name = payload.get("tool_name").and_then(Value::as_str);
+    if let Some(tool_name) = tool_name.filter(|_| succeeded) {
+        writer.submit_composio_discovery(harness, tool_name, payload);
+    }
+    writer.submit_command_activity(
+        harness,
+        "PostToolUse",
+        payload,
+        succeeded,
+        None,
+        None,
+        false,
+        "not-applicable",
+    );
+    true
+}
+
+/// `hook_post_succeeded("PostToolUse", payload)`: only bounded failure
+/// signals count, and their absence means the call succeeded.
+fn post_succeeded(payload: &serde_json::Map<String, Value>) -> bool {
+    for name in ["hook_event_name", "hookEventName"] {
+        if let Some(event) = payload.get(name).and_then(Value::as_str) {
+            let compact: String = event.chars().filter(|c| *c != '_' && *c != '-').collect();
+            if compact.to_lowercase() == POST_TOOL_USE_FAILURE {
+                return false;
+            }
+        }
+    }
+    let flagged = |key: &str, value: bool| payload.get(key) == Some(&Value::Bool(value));
+    if ["is_error", "isError", "failed"]
+        .into_iter()
+        .any(|key| flagged(key, true))
+        || flagged("success", false)
+    {
         return false;
     }
+    // Python's `type(code) is int`: a float or a bool is not an exit code.
+    let exit_code = payload.get("exit_code").or_else(|| payload.get("exitCode"));
+    !exit_code
+        .and_then(Value::as_number)
+        .is_some_and(|code| code.as_i64().map_or(code.is_u64(), |code| code != 0))
+}
+
+/// The `PreToolUse` activity, citing the receipt the writer just accepted.
+fn submit_pre_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) -> bool {
     let (Some(harness), Some(payload), Some(response)) = (
         record.get("harness").and_then(Value::as_str),
         record.get("payload").and_then(Value::as_object),

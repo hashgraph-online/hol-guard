@@ -344,10 +344,11 @@ fn an_activity_the_resident_cannot_record_stays_with_the_drain() {
             &edge,
             json!({"policy_action": "allow", "approval_reuse_status": 1}),
         ),
-        // The post-tool lane's activity needs the drain's tool discovery.
+        // A post-tool answer without the payload its activity records.
         {
-            let mut evidence = pre_tool_evidence(&edge, json!({"policy_action": "allow"}));
+            let mut evidence = pre_tool_evidence(&edge, json!({}));
             evidence["event"] = json!("PostToolUse");
+            evidence["payload"] = Value::Null;
             evidence
         },
     ] {
@@ -364,4 +365,50 @@ fn an_activity_the_resident_cannot_record_stays_with_the_drain() {
     }
     assert_eq!(activities_accepted(&home), json!(1));
     writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
+#[test]
+fn a_direct_post_tool_answer_queues_its_activity_behind_the_receipt() {
+    let home = store_home("direct-post-activity-recorded");
+    start_writer(&home);
+    let (_, edge) = answered(&home, true);
+    let queue = DirectEvidenceQueue::default();
+    let mut evidence = pre_tool_evidence(&edge, json!({}));
+    evidence["event"] = json!("PostToolUse");
+    evidence["payload"]["exit_code"] = json!(1);
+    assert!(offer_direct(&queue, &home, evidence, true));
+    let records = queued(&queue);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0][DIRECT_RECEIPT_RECORDED], json!(true));
+    assert_eq!(records[0][DIRECT_ACTIVITY_RECORDED], json!(true));
+    // A Bash call is no Composio tool, so only the activity was queued.
+    assert_eq!(activities_accepted(&home), json!(2));
+    writer(&home, json!({"action": "stop", "timeout_seconds": 10.0}));
+}
+
+#[test]
+fn a_post_tool_call_fails_only_on_the_signals_the_drain_reads() {
+    for (payload, succeeded) in [
+        (json!({}), true),
+        (json!({"exit_code": 0}), true),
+        (json!({"exit_code": 2}), false),
+        (json!({"exitCode": -1}), false),
+        // Python reads `exit_code` when present, even when it is null.
+        (json!({"exit_code": null, "exitCode": 1}), true),
+        (json!({"exit_code": 1.0}), true),
+        (json!({"exit_code": true}), true),
+        (json!({"is_error": true}), false),
+        (json!({"isError": "true"}), true),
+        (json!({"failed": true}), false),
+        (json!({"success": false}), false),
+        (json!({"success": 0}), true),
+        (json!({"hook_event_name": "post_tool_use-failure"}), false),
+        (json!({"hookEventName": "PostToolUseFailure"}), false),
+        (json!({"hook_event_name": "PostToolUse"}), true),
+    ] {
+        let Value::Object(payload) = payload else {
+            unreachable!("object literal");
+        };
+        assert_eq!(post_succeeded(&payload), succeeded, "{payload:?}");
+    }
 }

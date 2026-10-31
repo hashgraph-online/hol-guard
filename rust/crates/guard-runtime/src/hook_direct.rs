@@ -63,7 +63,7 @@ pub(crate) const HOOK_DIRECT_SAVED_DECISION_FEATURE: &str = "hook-direct-saved-d
 /// The resident queues a connector-setup review itself when the binding says
 /// the daemon's evidence drain raises its desktop setup notice.
 pub(crate) const HOOK_DIRECT_CONNECTOR_NOTICE_FEATURE: &str = "hook-direct-connector-notice-v1";
-/// The resident queues a direct `PreToolUse` answer's command activity behind
+/// The resident queues a direct tool answer's command activity behind
 /// its receipt when the binding says the daemon's evidence drain skips it.
 pub(crate) const HOOK_DIRECT_ACTIVITY_RECORD_FEATURE: &str = "hook-direct-activity-record-v1";
 /// The resident takes the bound managed-policy view, resolves an Oh My Pi

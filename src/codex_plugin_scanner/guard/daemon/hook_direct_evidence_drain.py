@@ -138,15 +138,17 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     if event == _USER_PROMPT_SUBMIT:
         # The daemon records no activity for a prompt it answers.
         return True
+    # A current resident queues a tool call's activity behind the receipt itself.
+    recorded = record.get("activity_recorded") is True
     if event == _POST_TOOL_USE:
-        host._record_post_tool_activity(  # pyright: ignore[reportPrivateUsage]
-            harness=harness,
-            payload=payload,
-            succeeded=hook_post_succeeded(_POST_TOOL_USE, payload),
-        )
+        if not recorded:
+            host._record_post_tool_activity(  # pyright: ignore[reportPrivateUsage]
+                harness=harness,
+                payload=payload,
+                succeeded=hook_post_succeeded(_POST_TOOL_USE, payload),
+            )
         return True
-    if record.get("activity_recorded") is not True:
-        # A current resident queues the activity behind the receipt itself.
+    if not recorded:
         _record_native_pre_activity(host, harness, payload, response, accepted)  # pyright: ignore[reportArgumentType]
     with suppress(Exception):
         _raise_connector_setup_notice(host.store, record.get(_CONNECTOR_NOTICE_FIELD))

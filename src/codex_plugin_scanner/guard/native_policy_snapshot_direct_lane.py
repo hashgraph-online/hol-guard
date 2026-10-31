@@ -39,7 +39,7 @@ DIRECT_HOOK_SAVED_DECISION_FEATURE = "hook-direct-saved-decision-v1"
 # The resident queues a connector-setup review itself once the binding says
 # the evidence drain raises its desktop setup notice.
 DIRECT_HOOK_CONNECTOR_NOTICE_FEATURE = "hook-direct-connector-notice-v1"
-# The resident queues a direct PreToolUse answer's command activity itself
+# The resident queues a direct tool answer's command activity itself
 # once the binding says the evidence drain skips what it queued.
 DIRECT_HOOK_ACTIVITY_RECORD_FEATURE = "hook-direct-activity-record-v1"
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
