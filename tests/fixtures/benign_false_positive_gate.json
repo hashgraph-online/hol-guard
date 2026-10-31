@@ -23002,6 +23002,54 @@
       "expect": "not_allow"
     },
     {
+      "id": "toolchain-go-chdir-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go -C cmd test ./..."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-go-chdir-inline-build",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go -C=cmd build ./..."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-toolchain-go-chdir-outside",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go -C ../outside test ./..."
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-toolchain-go-run-remote-module",
       "fix_area": "negative",
       "harnesses": [

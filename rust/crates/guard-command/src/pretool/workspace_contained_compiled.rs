@@ -114,6 +114,27 @@ const CARGO_COLOR_OPTION: &str = "--color";
 /// argument names is one go resolves through the module proxy, and `go
 /// list`'s `-u` and `-versions` ask the proxy what else a module has, as does
 /// `-retracted`, so each of those keeps that admission too.
+///
+/// A leading `-C` is read by the caller, which moves `directory` to the one it
+/// names before this decision, because where the run stands is what the module
+/// search below rests on.
+/// The directory go's `-C` moves to, and how many words it takes.
+///
+/// go reads this flag only as the first word of the command and chdirs before
+/// it reads anything else, in either spelling, so the verb behind it is the
+/// work `cd <dir> && go <verb>` is. go itself ignores a `-C` with nothing
+/// behind it, and so does this.
+pub(super) fn go_chdir<'a>(arguments: &[&'a str]) -> Option<(&'a str, usize)> {
+    match arguments {
+        ["-C", target, rest @ ..] if !rest.is_empty() => Some((target, 2)),
+        [first, rest @ ..] if !rest.is_empty() => first
+            .strip_prefix("-C=")
+            .filter(|target| !target.is_empty())
+            .map(|target| (target, 1)),
+        _ => None,
+    }
+}
+
 pub(super) fn local_go_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
     let Some((verb, rest)) = arguments.split_first() else {
         return false;

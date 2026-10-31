@@ -166,3 +166,47 @@ fn a_fetching_flag_keeps_its_review_however_it_is_spelled() {
         }
     }
 }
+
+#[test]
+fn the_chdir_flag_moves_the_run_the_way_a_cd_does() {
+    let ws = module("go-chdir");
+    std::fs::create_dir_all(ws.join("api")).unwrap();
+    std::fs::write(ws.join("api/go.mod"), MODULE).unwrap();
+    std::fs::create_dir_all(ws.join("docs")).unwrap();
+    // `go -C <dir>` chdirs before go reads the verb, so each of these is the
+    // local work `cd <dir> && go <verb>` is.
+    for command in [
+        "go -C api test ./...",
+        "go -C api build ./...",
+        "go -C=api test ./...",
+        "go -C docs vet ./...",
+        "go -C . test ./...",
+        "go -C api test ./... 2>&1 | tail -15",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    // A directory the sandbox cannot follow the run to, a fetching verb behind
+    // the move, and a `-C` with nothing behind it all keep their review.
+    for command in [
+        "go -C /etc test ./...",
+        "go -C ../outside test ./...",
+        "go -C api get golang.org/x/text",
+        "go -C api mod tidy",
+        "go -C",
+        "go -C api",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
