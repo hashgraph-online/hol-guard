@@ -42,9 +42,7 @@ const SOURCE_EXTENSIONS: [&str; 46] = [
 ];
 
 fn plain_extension_pattern(pattern: &str) -> bool {
-    pattern
-        .strip_prefix("*.")
-        .is_some_and(|extension| source_extension(extension))
+    pattern.strip_prefix("*.").is_some_and(source_extension)
 }
 
 fn source_extension(extension: &str) -> bool {
