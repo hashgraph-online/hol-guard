@@ -256,3 +256,49 @@ fn the_cover_tool_renders_the_profile_the_test_run_wrote() {
         }
     }
 }
+
+#[test]
+fn the_reporting_mod_subcommands_read_the_module_already_resolved() {
+    let ws = module("go-mod-reports");
+    for command in [
+        "go mod graph",
+        "go mod graph -go=1.22",
+        "go mod graph -x",
+        "go mod verify",
+        "go mod why example.com/app/internal/store",
+        "go mod why -m golang.org/x/text",
+        "go mod why -vendor ./...",
+        "go mod why ./...",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    for command in [
+        // Each of these writes the module files or fetches to fill them.
+        "go mod init example.com/app",
+        "go mod edit -require=golang.org/x/text@v0.14.0",
+        "go mod edit -json",
+        "go mod vendor",
+        // A flag the reporting subcommand does not carry.
+        "go mod graph -mod=mod",
+        "go mod verify -x",
+        "go mod why -json",
+        // A version argument is one the proxy answers.
+        "go mod why -m golang.org/x/text@latest",
+        // The bare verb runs go's own usage, not a report.
+        "go mod",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
