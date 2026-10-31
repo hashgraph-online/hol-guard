@@ -73,6 +73,8 @@ pub(crate) fn benign_command_segments(
                 "pwd"
                     | "true"
                     | "exit"
+                    | "break"
+                    | "continue"
                     | "echo"
                     | "printf"
                     | "which"
@@ -317,6 +319,7 @@ pub(super) fn exact_safe_segment_with_context(
             super::glob_words::printed_globs_listable(model, segment, context)
         }
         "exit" => super::safe_scalar::safe_exit_arguments(&segment.arguments),
+        "break" | "continue" => super::safe_scalar::safe_loop_control_arguments(&segment.arguments),
         "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
         "type" | "command" => {
             super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)

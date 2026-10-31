@@ -75,6 +75,30 @@ pub(super) fn safe_exit_arguments(arguments: &[String]) -> bool {
     }
 }
 
+/// `break` and `continue` end or restart the iteration the shell is already
+/// running and reach nothing outside it.
+///
+/// A retry writes them: `for i in 1 2 3; do curl -sf "$URL" && break; sleep 1;
+/// done` asks a question until it answers and then stops asking. The question
+/// carries its own proof, and the word that stops the loop names no program,
+/// opens no file and runs no code of its own -- outside a loop the shell
+/// either refuses it or does nothing at all.
+///
+/// The optional operand is the number of enclosing loops to leave. It is a
+/// literal count, so an expansion or any other word is some other reading.
+/// `0` is not a count: `break 0` is an error in every shell this models.
+pub(super) fn safe_loop_control_arguments(arguments: &[String]) -> bool {
+    match arguments {
+        [] => true,
+        [level] => {
+            (1..=2).contains(&level.len())
+                && level.bytes().all(|byte| byte.is_ascii_digit())
+                && !level.starts_with('0')
+        }
+        _ => false,
+    }
+}
+
 /// Parse a bounded literal `sleep` duration in seconds.
 ///
 /// A readiness loop is as often written `sleep 30s` or `sleep 5m` as
@@ -364,6 +388,35 @@ mod exit_tests {
         ] {
             assert!(
                 !super::safe_exit_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bare_or_counted_loop_control_is_inert() {
+        for values in [&[][..], &["1"], &["2"], &["99"]] {
+            assert!(
+                super::safe_loop_control_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_loop_control_operand_that_is_not_a_literal_count_stays_reviewed() {
+        for values in [
+            &["$LEVEL"][..],
+            &["$(rm -rf build)"],
+            &["0"],
+            &["01"],
+            &["-1"],
+            &["100"],
+            &[""],
+            &["1", "2"],
+        ] {
+            assert!(
+                !super::safe_loop_control_arguments(&arguments(values)),
                 "{values:?}"
             );
         }
