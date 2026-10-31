@@ -11,6 +11,7 @@ from __future__ import annotations
 import http.server
 import io
 import json
+import os
 import socket
 import threading
 import urllib.error
@@ -30,6 +31,18 @@ from codex_plugin_scanner.guard.native_package_authority import _RESULT_SCHEMA
 from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.restricted_archive_contract import RestrictedArchiveFailure
+
+# Read at import, before the autouse fixture below lifts it for this module.
+_SUITE_LOOPBACK_ONLY = os.environ.get(egress.TEST_LOOPBACK_ONLY_ENV)
+
+
+@pytest.fixture(autouse=True)
+def _module_owns_the_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests stand in for the network themselves (fakes, proxies and
+    loopback servers), so they lift the suite's loopback-only egress rule. The
+    rule's own tests turn it back on."""
+
+    monkeypatch.delenv(egress.TEST_LOOPBACK_ONLY_ENV, raising=False)
 
 
 def _exchanger(tmp_path: Path) -> egress.EgressExchanger:
@@ -568,3 +581,57 @@ def test_malformed_egress_answer_records_one_failure_and_blocks(
     with pytest.raises(transport.NativeSupplyChainEvalError):
         _payload_for(tmp_path)
     assert len(failures) == 1
+
+
+def test_the_suite_keeps_egress_on_loopback() -> None:
+    assert _SUITE_LOOPBACK_ONLY == "1"
+
+
+@pytest.mark.parametrize(
+    ("url", "klass"),
+    [
+        ("https://hol.org/api/guard/supply-chain/evaluate?workspaceId=workspace-alpha", "cloud"),
+        ("https://registry.npmjs.org/left-pad", "registry"),
+        ("https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz", "archive"),
+    ],
+)
+def test_under_the_suite_rule_a_public_host_is_never_reached(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, url: str, klass: str
+) -> None:
+    monkeypatch.setenv(egress.TEST_LOOPBACK_ONLY_ENV, "1")
+    _unmanaged(monkeypatch)
+    reached = _forbid_network(monkeypatch)
+    exchanger = _exchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need(url, klass=klass)]})
+    assert exchanger.supplied[0]["outcome"] == {"kind": "blocked", "code": egress.TEST_PUBLIC_HOST_REFUSED_CODE}
+    assert reached == []
+
+
+def test_under_the_suite_rule_a_redirect_off_loopback_is_not_followed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv(egress.TEST_LOOPBACK_ONLY_ENV, "1")
+    _unmanaged(monkeypatch)
+    performed: list[str] = []
+    start = "http://127.0.0.1:9/api/guard/supply-chain/evaluate"
+    routes = {start: "https://hol.org/api/guard/supply-chain/evaluate"}
+    monkeypatch.setattr(egress, "managed_urlopen", _redirecting_urlopen(performed, routes))
+    exchanger = _exchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need(start, klass="cloud", max_redirects=2)]})
+    assert performed == [start]
+    assert exchanger.supplied[0]["outcome"] == {"kind": "blocked", "code": egress.TEST_PUBLIC_HOST_REFUSED_CODE}
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "[::1]"])
+def test_under_the_suite_rule_loopback_is_still_reached(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, host: str
+) -> None:
+    monkeypatch.setenv(egress.TEST_LOOPBACK_ONLY_ENV, "1")
+    _unmanaged(monkeypatch)
+    performed: list[str] = []
+    final = f"http://{host}:9/x"
+    monkeypatch.setattr(egress, "managed_urlopen", _redirecting_urlopen(performed, {}, final=final))
+    exchanger = _exchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need(final, klass="cloud")]})
+    assert performed == [final]
+    assert exchanger.supplied[0]["outcome"]["kind"] == "response"  # type: ignore[index]

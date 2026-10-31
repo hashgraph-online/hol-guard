@@ -12,6 +12,8 @@ from typing import Protocol
 
 import pytest
 
+from codex_plugin_scanner.guard.native_supply_chain_egress import TEST_LOOPBACK_ONLY_ENV
+
 
 class _UrlopenCallback(Protocol):
     def __call__(self, request: object, timeout: float | None = None) -> object: ...
@@ -39,6 +41,9 @@ def stub_authenticated_urlopen(
         "build_opener",
         lambda *_handlers: _StubOpener(callback),
     )
+    # The double stands in for the network, so the suite's loopback-only egress
+    # rule is lifted for this test. The socket guard still refuses real egress.
+    monkeypatch.delenv(TEST_LOOPBACK_ONLY_ENV, raising=False)
 
 
 def urlopen_json(request: urllib.request.Request, *, timeout: float = 15, attempts: int = 3) -> dict[str, object]:

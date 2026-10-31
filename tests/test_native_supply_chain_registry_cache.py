@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard import native_supply_chain_egress as egress
 from codex_plugin_scanner.guard import native_supply_chain_registry_cache as registry_cache
 from codex_plugin_scanner.guard.daemon import hook_native_package_review as package_review
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
+from codex_plugin_scanner.guard.native_supply_chain_egress import TEST_LOOPBACK_ONLY_ENV
 from codex_plugin_scanner.guard.native_supply_chain_registry_cache import (
     SETTLE_SECONDS,
     TTL_SECONDS,
@@ -210,6 +211,8 @@ def test_separate_reviews_download_a_registry_document_once(monkeypatch: pytest.
         raise urllib.error.HTTPError(URL, 200, "OK", {}, io.BytesIO(b"{}"))  # type: ignore[arg-type]
 
     monkeypatch.setattr(egress, "managed_urlopen", fake_urlopen)
+    # The fake stands in for the network, so the suite's loopback-only rule is lifted.
+    monkeypatch.delenv(TEST_LOOPBACK_ONLY_ENV, raising=False)
     cache = RegistryCache()
     outcomes = []
     for _ in range(2):
