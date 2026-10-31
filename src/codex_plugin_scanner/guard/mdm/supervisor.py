@@ -1,8 +1,8 @@
 """Native machine supervisor installation and fail-honest health verification.
 
-Python reads the LaunchDaemon property list and runs ``launchctl`` or
-``schtasks``; the native runtime decides what that evidence says. Without a
-runtime that can decide, the supervisor's health is unknown.
+The native runtime reads the LaunchDaemon property list, runs ``launchctl`` or
+``schtasks`` and decides what that evidence says. Without a runtime that can
+check, the supervisor's health is unknown.
 """
 
 from __future__ import annotations
@@ -11,8 +11,6 @@ import json
 import ntpath
 import os
 import platform
-import plistlib
-import stat
 import subprocess
 import tempfile
 import time
@@ -40,6 +38,7 @@ _MAX_REGISTRATION_BYTES = 256 * 1024
 _PROBE_TIMEOUT_SECONDS = 10
 _ABSENT_HRESULTS = {2, 0x80070002, -2147024894}
 SUPERVISOR_VERDICT_FEATURE = "native-supervisor-verdict-v1"
+SUPERVISOR_PROBE_FEATURE = "native-supervisor-probe-v1"
 SUPERVISOR_VERDICT_COMMAND = "supervisor-verdict"
 SUPERVISOR_VERDICT_SCHEMA = "supervisor-verdict.v1"
 _STATUS_TIMEOUT_SECONDS = 10.0
@@ -52,44 +51,12 @@ def machine_executable(paths: MachinePaths, system_name: str) -> Path:
     return paths.runtime_root / "hol-guard" / executable
 
 
-def _bounded_regular_file(path: Path) -> bytes:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
-    try:
-        before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_REGISTRATION_BYTES:
-            raise OSError("supervisor_registration_invalid")
-        chunks: list[bytes] = []
-        remaining = _MAX_REGISTRATION_BYTES + 1
-        while remaining > 0:
-            chunk = os.read(descriptor, min(remaining, 64 * 1024))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        payload = b"".join(chunks)
-        after = os.fstat(descriptor)
-        fingerprint_before = (before.st_dev, before.st_ino, before.st_size, before.st_ctime_ns)
-        fingerprint_after = (after.st_dev, after.st_ino, after.st_size, after.st_ctime_ns)
-        if (
-            len(payload) > _MAX_REGISTRATION_BYTES
-            or len(payload) != before.st_size
-            or fingerprint_before != fingerprint_after
-        ):
-            raise OSError("supervisor_registration_changed")
-        return payload
-    finally:
-        os.close(descriptor)
-
-
-def _native_verdict(request: dict[str, object], deadline: float) -> dict[str, Any]:
-    """The runtime's verdict on one round of supervisor evidence, within the
-    verification's ``deadline`` on the monotonic clock."""
+def _native_verdict(request: dict[str, object]) -> SupervisorStatus:
+    """The runtime's verdict after it gathered the supervisor's evidence itself."""
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
-    if deadline - time.monotonic() <= 0:
-        raise OSError("supervisor_verdict_native_unavailable")
+    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
     status = native_runtime_status(deadline_monotonic=min(deadline, time.monotonic() + _STATUS_TIMEOUT_SECONDS))
     remaining = deadline - time.monotonic()
     output = None
@@ -100,16 +67,12 @@ def _native_verdict(request: dict[str, object], deadline: float) -> dict[str, An
         and status.identity is not None
         and status.capabilities is not None
         and SUPERVISOR_VERDICT_FEATURE in status.capabilities.features
+        and SUPERVISOR_PROBE_FEATURE in status.capabilities.features
     ):
         output = _run_native_process(
             status.identity.path,
             (SUPERVISOR_VERDICT_COMMAND, "--stdin"),
-            input_text=json.dumps(
-                {"schema": SUPERVISOR_VERDICT_SCHEMA, **request},
-                allow_nan=False,
-                default=lambda _value: None,
-                sort_keys=True,
-            ),
+            input_text=json.dumps({"schema": SUPERVISOR_VERDICT_SCHEMA, **request}, sort_keys=True),
             timeout_seconds=remaining,
             output_limit=_OUTPUT_LIMIT_BYTES,
         )
@@ -120,7 +83,7 @@ def _native_verdict(request: dict[str, object], deadline: float) -> dict[str, An
     if not isinstance(answer, dict) or cast(dict[str, Any], answer).get("ok") is not True:
         # A supervisor nothing could check is never reported as running.
         raise OSError("supervisor_verdict_native_unavailable")
-    return cast(dict[str, Any], answer)
+    return _status(cast(dict[str, Any], answer))
 
 
 def _status(answer: dict[str, Any]) -> SupervisorStatus:
@@ -131,51 +94,20 @@ def _status(answer: dict[str, Any]) -> SupervisorStatus:
     return SupervisorStatus(cast(SupervisorState, state), cast(IntegrityReasonCode, reason_code))
 
 
-def _run_macos_launchctl(*arguments: str) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["/bin/launchctl", *arguments],
-        check=False,
-        capture_output=True,
-        cwd="/",
-        env={"HOME": "/var/root", "LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "TMPDIR": "/var/tmp"},
-        text=True,
-        timeout=_PROBE_TIMEOUT_SECONDS,
-    )
-    if len(result.stdout.encode("utf-8")) > _MAX_REGISTRATION_BYTES or len(result.stderr.encode("utf-8")) > 4096:
-        raise OSError("supervisor_probe_output_exceeded")
-    return result
-
-
 def _verify_macos_supervisor(paths: MachinePaths, plist_path: Path) -> SupervisorStatus:
     try:
-        payload = cast(object, plistlib.loads(_bounded_regular_file(plist_path)))
-    except FileNotFoundError:
-        return SupervisorStatus("absent", "supervisor_absent")
-    except (OSError, plistlib.InvalidFileException, ValueError):
-        return SupervisorStatus("unknown", "supervisor_probe_failed")
-    request: dict[str, object] = {
-        "op": "macos",
-        "executable": str(machine_executable(paths, "Darwin")),
-        "plist": payload,
-        "plist_path": str(_MACOS_PLIST),
-        "stdout_log": str(paths.log_root / "machine-health.log"),
-        "stderr_log": str(paths.log_root / "machine-health-error.log"),
-    }
-    probes = {"disabled": ("print-disabled", "system"), "loaded": ("print", f"system/{_MACOS_LABEL}")}
-    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
-    try:
-        for _round in range(len(probes) + 1):
-            answer = _native_verdict(request, deadline)
-            probe = answer.get("next")
-            if probe is None:
-                return _status(answer)
-            if not isinstance(probe, str) or probe not in probes or probe in request:
-                break
-            result = _run_macos_launchctl(*probes[probe])
-            request[probe] = {"returncode": result.returncode, "stdout": result.stdout}
+        return _native_verdict(
+            {
+                "op": "macos-verify",
+                "executable": str(machine_executable(paths, "Darwin")),
+                "plist_file": str(plist_path),
+                "plist_path": str(_MACOS_PLIST),
+                "stdout_log": str(paths.log_root / "machine-health.log"),
+                "stderr_log": str(paths.log_root / "machine-health-error.log"),
+            }
+        )
     except (OSError, ValueError, subprocess.SubprocessError):
-        pass
-    return SupervisorStatus("unknown", "supervisor_probe_failed")
+        return SupervisorStatus("unknown", "supervisor_probe_failed")
 
 
 _windows_directory = windows_directory
@@ -213,18 +145,13 @@ def _run_schtasks(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def _verify_windows_supervisor(paths: MachinePaths) -> SupervisorStatus:
-    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
     try:
-        result = _run_schtasks("/Query", "/TN", _WINDOWS_TASK_NAME, "/XML", "/HRESULT")
-        return _status(
-            _native_verdict(
-                {
-                    "op": "windows",
-                    "executable": str(machine_executable(paths, "Windows")),
-                    "task": {"returncode": result.returncode, "stdout": result.stdout},
-                },
-                deadline,
-            )
+        return _native_verdict(
+            {
+                "op": "windows-verify",
+                "executable": str(machine_executable(paths, "Windows")),
+                "windows_directory": _windows_directory(),
+            }
         )
     except (OSError, ValueError, subprocess.SubprocessError):
         return SupervisorStatus("unknown", "supervisor_probe_failed")

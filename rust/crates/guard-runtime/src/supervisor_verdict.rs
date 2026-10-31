@@ -1,11 +1,12 @@
 //! Whether the machine health supervisor is the one Guard installs.
 //!
 //! On macOS the supervisor is a LaunchDaemon and on Windows a SYSTEM scheduled
-//! task. Python reads the property list and runs `launchctl` or `schtasks`;
-//! this module decides what that evidence says. A macOS verdict can need more
-//! evidence than the caller sent, so it answers with the next probe to run
-//! (`disabled`, then `loaded`) until it can decide, and the caller never runs
-//! a probe the registration already ruled out.
+//! task. The `macos-verify` and `windows-verify` ops read the property list
+//! and run `launchctl` or `schtasks` themselves (`supervisor_probe.rs`); the
+//! `macos` and `windows` ops decide what evidence a caller sent says. A macOS
+//! verdict can need more evidence than it has, so it answers with the next
+//! probe to run (`disabled`, then `loaded`) until it can decide, and no probe
+//! the registration already ruled out ever runs.
 
 use std::io::Read;
 use std::sync::LazyLock;
@@ -58,6 +59,13 @@ struct Request {
     plist: Value,
     #[serde(default)]
     plist_path: Option<String>,
+    /// The property list file `macos-verify` reads.
+    #[serde(default)]
+    plist_file: Option<String>,
+    /// The kernel's Windows directory, under which `windows-verify` runs
+    /// `System32\schtasks.exe`.
+    #[serde(default)]
+    windows_directory: Option<String>,
     #[serde(default)]
     stdout_log: Option<String>,
     #[serde(default)]
@@ -101,8 +109,15 @@ fn answer(bytes: &[u8]) -> Result<Value, String> {
     if request.schema != SCHEMA {
         return Err(invalid());
     }
-    match request.op.as_str() {
+    let op = request.op.clone();
+    match op.as_str() {
         "macos" => macos(&request).ok_or_else(invalid),
+        "macos-verify" => {
+            probe::macos_verify(request, &mut probe::SystemRunner).ok_or_else(invalid)
+        }
+        "windows-verify" => {
+            probe::windows_verify(&request, &mut probe::SystemRunner).ok_or_else(invalid)
+        }
         "windows" => request
             .task
             .as_ref()
@@ -515,6 +530,9 @@ fn security_descriptor_valid(descriptor: &str) -> bool {
         && normalized.iter().any(|ace| ace == system)
         && normalized.iter().any(|ace| ace == administrators)
 }
+
+#[path = "supervisor_probe.rs"]
+mod probe;
 
 #[cfg(test)]
 #[path = "supervisor_verdict_tests.rs"]
