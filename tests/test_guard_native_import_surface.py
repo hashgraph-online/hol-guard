@@ -27,7 +27,6 @@ def test_store_and_inspection_imports_keep_legacy_matchers_out() -> None:
         """
 import sys
 import codex_plugin_scanner.guard.store
-import codex_plugin_scanner.guard.runtime.command_activity_lifecycle
 import codex_plugin_scanner.guard.runtime.command_inspection
 from codex_plugin_scanner.guard.runtime.command_inspection import (
     command_extensions_payload,

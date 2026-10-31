@@ -127,7 +127,9 @@
   "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
   "src/codex_plugin_scanner/guard/runtime/command_action_risk_metadata.py",
   "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
-  "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py"
+  "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
+  "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
+  "src/codex_plugin_scanner/guard/runtime/command_activity_display.py"
  ],
  "retired_tests": [
   {

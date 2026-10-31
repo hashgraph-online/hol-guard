@@ -15,9 +15,11 @@ from contextlib import AbstractContextManager
 from typing import Any, Protocol, cast
 
 from .runtime.command_activity_contract import CommandActivityEvidence
-from .runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
 from .runtime.command_shadow_evaluation import CommandShadowObservation
 from .store_command_activity_wire import evidence_wire, shadow_wire
+
+# The resident renders the preview (`hook_evidence_preview.rs`) to this bound.
+INVOCATION_PREVIEW_MAX_CHARS = 4_096
 
 
 class _ConnectionOwner(Protocol):

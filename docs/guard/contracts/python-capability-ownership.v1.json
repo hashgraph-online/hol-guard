@@ -1900,6 +1900,33 @@
    "native_replacements": [
     "rust/crates/guard-command/src/command_reviewed_literal.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_activity_lifecycle",
+   "source_sha256": "26fa797e3fd38e385d541154e2faa262ffed4eed5b941656df579e95e846399b",
+   "forbidden_symbols": [
+    "build_correlated_post_activity",
+    "build_unpaired_post_evidence"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_decision_adapter.rs",
+    "rust/crates/guard-command/src/hook_evidence_deferred_post.rs",
+    "rust/crates/guard-runtime/src/hook_evidence_activity.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_display.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_activity_display",
+   "source_sha256": "52e2b4479f6c40e9293c184f83a50ef9f38391b9dfb1cc22666311fa682bf25b",
+   "forbidden_symbols": [
+    "build_invocation_preview",
+    "build_invocation_preview_from_payload",
+    "checked_command_from_payload"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/hook_evidence_preview.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -2509,21 +2536,6 @@
    "native_replacements": [
     "rust/crates/guard-contracts/src/decision_lattice.rs",
     "rust/crates/guard-policy-snapshot/src/lib.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
-   "source_sha256": "aa240d99aee2f85396db7a7176be2671c72aa984e34872bd3818e40d431c955b",
-   "forbidden_symbols": [
-    "_RULE_MODE_FLOOR",
-    "_SEVERITY",
-    "_UNCERTAINTY_REASON",
-    "_UNMAPPED_RISK_CLASS_EFFECTS"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/command_decision_adapter.rs",
-    "rust/crates/guard-command/src/command_model.rs",
-    "rust/crates/guard-command/src/native_command_controls_floor.rs"
    ]
   }
  ]
