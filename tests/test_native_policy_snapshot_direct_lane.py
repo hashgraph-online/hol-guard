@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane import (
     local_cli_block_rules_present,
     with_direct_hook_state,
 )
+from tests import containment_rewrite_client
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="the direct lane is Unix-only")
 
@@ -477,7 +478,7 @@ def test_the_bound_sink_command_starts_the_command_the_daemon_routes(
         "reason_code": "native_workspace_containment_required",
         "required_execution_profile": "workspace-contained-v1",
     }
-    routed = zcode_contained_tests.route_zcode_containment(
+    routed = containment_rewrite_client.route_zcode_containment(
         response,
         harness="claude-code",
         payload=payload,

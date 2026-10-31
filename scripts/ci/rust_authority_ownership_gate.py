@@ -416,11 +416,11 @@ def _assert_containment_routed_by_resident() -> None:
             raise RuntimeError(f"containment adapter keeps a Python routing table: {sorted(names)}")
         if isinstance(node, ast.FunctionDef) and node.name == "platform_contains":
             raise RuntimeError("containment adapter still decides which host runs a profile")
-    # The resident writes the request snapshot and quotes the sink command;
-    # the adapter only names the argv that starts Guard's CLI.
-    route = _top_level_function(adapter, "route_zcode_containment", _CONTAINMENT_ADAPTER)
-    if "native_containment_rewrite" not in _ordered_call_names(route):
-        raise RuntimeError("route_zcode_containment does not ask the resident to rewrite the receipt")
+    # The edge writes the request snapshot and quotes the sink command; the
+    # adapter only names the argv that starts Guard's CLI.
+    defined_adapter = {node.name for node in adapter.body if isinstance(node, ast.FunctionDef)}
+    if "route_zcode_containment" in defined_adapter:
+        raise RuntimeError("containment adapter still asks the resident to rewrite the receipt")
     imported: set[str] = set()
     for node in ast.walk(adapter):
         if isinstance(node, ast.Import):
@@ -438,31 +438,28 @@ def _assert_containment_routed_by_resident() -> None:
     if "edge_route(" not in edge:
         raise RuntimeError("the resident's PreToolUse edge does not carry its containment route")
     # The edge folds the sink rewrite into its answer only after its own
-    # self-check, and through the resident's rewrite; an edge that did not
-    # rewrite leaves the daemon to ask, failing closed to the outage.
+    # self-check, and through the resident's rewrite; a sink route the edge
+    # did not mark is the outage, never a second resident call.
     checked = edge.find("edge_result_check::check(&edge)")
     attached = edge.find("edge_containment::attach(")
     if checked < 0 or attached < checked:
         raise RuntimeError("the edge's containment rewrite is not answered after its self-check")
-    if "containment_rewrite(&inputs)" not in _read(Path("rust/crates/guard-runtime/src/edge_containment.rs")):
+    if "containment_rewrite_with(&inputs" not in _read(Path("rust/crates/guard-runtime/src/edge_containment.rs")):
         raise RuntimeError("the edge's containment rewrite is not the resident's rewrite")
-    if 'edge.get("containment_rewrite")' not in daemon or "route_zcode_containment(" not in daemon:
-        raise RuntimeError("daemon sink routing does not fall back to the resident when the edge did not rewrite")
+    if 'edge.get("containment_rewrite")' not in daemon or "_EDGE_REWRITE_UNAVAILABLE" not in daemon:
+        raise RuntimeError("daemon sink routing does not answer an unmarked edge with the outage")
+    if "route_zcode_containment" in daemon or "native_containment_rewrite(" in daemon:
+        raise RuntimeError("daemon sink routing asks the resident for a second rewrite")
     transport = ast.parse(_read(_CONTAINMENT_TRANSPORT), filename=str(_CONTAINMENT_TRANSPORT))
-    retired = {"native_containment_route", "edge_containment_route", "native_containment_sink"}
+    retired = {
+        "native_containment_route",
+        "edge_containment_route",
+        "native_containment_sink",
+        "native_containment_rewrite",
+    }
     defined = {node.name for node in transport.body if isinstance(node, ast.FunctionDef)}
     if defined & retired:
-        raise RuntimeError(f"the containment transport asks for a route again: {sorted(defined & retired)}")
-    rewrite = _top_level_function(transport, "native_containment_rewrite", _CONTAINMENT_TRANSPORT)
-    raises_outage = any(
-        isinstance(node, ast.Raise)
-        and isinstance(node.exc, ast.Call)
-        and isinstance(node.exc.func, ast.Name)
-        and node.exc.func.id == "NativeHookDecisionError"
-        for node in ast.walk(rewrite)
-    )
-    if not raises_outage:
-        raise RuntimeError("native_containment_rewrite does not fail closed to the host outage")
+        raise RuntimeError(f"the containment transport asks the resident again: {sorted(defined & retired)}")
 
 
 def _cli_gate() -> None:

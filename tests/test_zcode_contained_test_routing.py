@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import route_zcode_containment
-from codex_plugin_scanner.guard.native_hook_containment_route import ContainmentRewrite
 from codex_plugin_scanner.guard.runtime.contained_test_hook import read_contained_test_request
+from tests import containment_rewrite_client as client
+from tests.containment_rewrite_client import ContainmentRewrite, route_zcode_containment
 
 _VITEST_RECEIPT = {
     "decision": "deny",
@@ -119,12 +119,10 @@ def test_execution_sink_receives_original_containment_receipt(containment_reside
 
 
 def test_without_a_workspace_the_receipt_stands_unasked(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard.adapters import zcode_contained_tests as adapter
-
     def unexpected(*args, **kwargs):
         raise AssertionError("no snapshot can be written without a workspace")
 
-    monkeypatch.setattr(adapter, "native_containment_rewrite", unexpected)
+    monkeypatch.setattr(client, "native_containment_rewrite", unexpected)
     assert (
         route_zcode_containment(
             _VITEST_RECEIPT, harness="zcode", payload={}, guard_home=tmp_path, home_dir=tmp_path, workspace=None
@@ -198,7 +196,7 @@ def test_authority_edge_returns_routed_response_or_original(monkeypatch, tmp_pat
         assert tuple(kwargs["sink_command"]) == adapter.contained_sink_command_prefix()
         return ContainmentRewrite("vitest-readonly-v1", None, routed)
 
-    monkeypatch.setattr(adapter, "native_containment_rewrite", rewrite)
+    monkeypatch.setattr(client, "native_containment_rewrite", rewrite)
     assert route_zcode_containment(
         original, harness="zcode", payload={}, guard_home=tmp_path, home_dir=tmp_path, workspace=tmp_path
     ) is (original if routed is None else routed)
