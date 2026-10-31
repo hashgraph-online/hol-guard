@@ -1,6 +1,6 @@
 //! A credential hidden by an encoding is still the credential.
 
-use base64ct::{Base64, Encoding};
+use base64ct::{Base64, Base64Unpadded, Base64UrlUnpadded, Encoding};
 
 use super::super::{scan_secret_text, SecretFinding};
 use super::ENCODED_REASON;
@@ -266,4 +266,54 @@ fn a_fixture_marker_in_the_payload_still_marks_the_token() {
 
     assert!(decoded(&fixture).is_empty(), "{fixture:?}");
     assert_eq!(decoded(&deployed).len(), 1, "{deployed:?}");
+}
+
+#[test]
+fn equal_width_lines_in_two_alphabets_are_read_one_at_a_time() {
+    // Two values written one per line, by writers that chose different base64
+    // alphabets. They are the same width, so they look like a wrap, but their
+    // join is valid base64 in neither alphabet and decodes to nothing. The
+    // lines still hold what they held before, and the credential in one of
+    // them has to be found there.
+    let standard = Base64Unpadded::encode_string("\u{bf}rotate? deploy acct eu1".as_bytes());
+    let url_safe =
+        Base64UrlUnpadded::encode_string(format!("{}\u{a7}\u{2014}", aws_key()).as_bytes());
+    assert_eq!(
+        standard.len(),
+        url_safe.len(),
+        "the lines have to look wrapped"
+    );
+    assert!(
+        standard.contains('/') && url_safe.contains('-'),
+        "the two lines have to be written in different alphabets: {standard} {url_safe}"
+    );
+    let text = format!("{standard}\n{url_safe}\n");
+
+    let findings = scan(&text, "backup/values.b64");
+    let findings = decoded(&findings);
+
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule_id, "aws-access-key");
+    assert_eq!(findings[0].line, 2);
+}
+
+#[test]
+fn equal_width_lines_at_a_shifted_column_are_read_one_at_a_time_as_well() {
+    // Each line is a whole value of its own, at a width that is not a whole
+    // number of base64 groups. Joining them puts every line after the first
+    // out of step with the groups it was written in, so the join decodes to
+    // bytes no line holds and the credential on the second line is only there
+    // to be found in the line itself.
+    let region = Base64Unpadded::encode_string(b"AWS_DEFAULT_REGION=e");
+    let key = Base64Unpadded::encode_string(aws_key().as_bytes());
+    assert_eq!(region.len(), key.len(), "the lines have to look wrapped");
+    assert_ne!(key.len() % 4, 0, "the column has to be a shifted one");
+    let text = format!("{region}\n{key}\n");
+
+    let findings = scan(&text, "backup/values.b64");
+    let findings = decoded(&findings);
+
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule_id, "aws-access-key");
+    assert_eq!(findings[0].line, 2);
 }

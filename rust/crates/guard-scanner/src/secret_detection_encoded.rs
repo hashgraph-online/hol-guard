@@ -27,11 +27,15 @@
 //! manifest or a JSON document carries one value, and a block of consecutive
 //! whole lines of equal width, which is what every base64 writer produces when
 //! it wraps. The lines of a wrap are read only as part of it, so a credential
-//! that happens to fall inside one of them is one finding rather than two; the
-//! one wrap that is read line by line is the one too long to decode whole, and
-//! that one is never read as a payload. A
+//! that happens to fall inside one of them is one finding rather than two; a
+//! wrap too long to decode whole is read line by line instead and is never
+//! read as a payload. A
 //! run mixing the standard `+/` alphabet with the URL-safe `-_` one is valid
-//! base64 in neither, so it is skipped rather than guessed at.
+//! base64 in neither, so it is skipped rather than guessed at. Lines whose
+//! join is not one stream -- because they mix those alphabets, or because the
+//! column they stand at is not a whole number of base64 groups -- are read one
+//! at a time, so a credential inside one of them is found whether or not the
+//! writer was wrapping.
 
 use regex::Regex;
 use std::sync::LazyLock;
@@ -219,11 +223,11 @@ fn walk_payloads(text: &str, read: &mut impl FnMut(&Payload<'_>) -> bool) {
     close(open, read);
 }
 
-/// Read a wrap that outgrew the bound as the lines it was written as.
+/// Read a block as the lines it was written as.
 ///
-/// Nothing joined is reported for it, so reading its lines cannot name the same
-/// credential twice, and the lines it was already holding are given up here so
-/// that what the block carries stays bounded.
+/// The lines it was holding are given up here, so that what a block that
+/// outgrew the bound carries stays bounded, and so that a block already read
+/// as a join cannot be read as one again.
 fn spill(block: &mut OpenBlock, read: &mut impl FnMut(&Payload<'_>) -> bool) -> bool {
     let held = std::mem::take(&mut block.lines);
     let joined = std::mem::replace(&mut block.joined, Zeroizing::new(String::new()));
@@ -241,8 +245,20 @@ fn spill(block: &mut OpenBlock, read: &mut impl FnMut(&Payload<'_>) -> bool) -> 
 }
 
 /// Read a block that has taken its last line.
+///
+/// The join is the stream a writer cut up, and reading it is what finds a
+/// credential written across a line break. Equal-width lines are not always
+/// that stream. Lines in different base64 alphabets join to something that is
+/// base64 in neither, and a column that is not a whole number of base64 groups
+/// shifts every line after the first, so the join decodes to bytes none of the
+/// lines hold on their own. Either way the lines are read as runs, which is
+/// the reading they had before a block was recognised at all. A shifted join
+/// is read as well, because a dump wrapped at such a column is still a wrap:
+/// where both readings find the same credential they agree on its line and its
+/// decoded bytes, so the scan's dedup collapses them, and the spans they name
+/// for a redaction nest.
 fn close(block: Option<OpenBlock>, read: &mut impl FnMut(&Payload<'_>) -> bool) -> bool {
-    let Some(block) = block else {
+    let Some(mut block) = block else {
         return true;
     };
     if block.overflowed {
@@ -252,15 +268,30 @@ fn close(block: Option<OpenBlock>, read: &mut impl FnMut(&Payload<'_>) -> bool) 
         // Never a wrap after all: the line it opened on is an ordinary run.
         return runs_in(&block.joined, block.at, read);
     }
-    read(&Payload {
-        at: block.at,
-        end: block.end,
-        body: &block.joined,
-        wrap: Some(Wrap {
-            column: block.column,
-            lines: &block.lines,
-        }),
-    })
+    let joined = {
+        let payload = Payload {
+            at: block.at,
+            end: block.end,
+            body: &block.joined,
+            wrap: Some(Wrap {
+                column: block.column,
+                lines: &block.lines,
+            }),
+        };
+        match payload.decode() {
+            Some(_) => {
+                if !read(&payload) {
+                    return false;
+                }
+                true
+            }
+            None => false,
+        }
+    };
+    if joined && block.column % 4 == 0 {
+        return true;
+    }
+    spill(&mut block, read)
 }
 
 /// Read the runs standing inside one line. A run cannot cross a line break, so
