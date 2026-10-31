@@ -426,6 +426,22 @@ fn routed_with_route<'a>(
 }
 
 #[cfg(test)]
+/// The owner a read subcommand answers to when it has no declarative rule of
+/// its own.
+///
+/// `diff-tree` and `range-diff` print the comparison `diff` owns, and `cherry`
+/// lists the commits `log` owns. Without this each would fall to the
+/// catch-all below, which leaves every git rule uncertain and sends an
+/// ordinary read to review; naming the owner instead keeps the permission a
+/// user disables working on the spelling they disabled it for.
+fn read_owner(command: &str) -> &str {
+    match command {
+        "diff-tree" | "range-diff" => "diff",
+        "cherry" => "log",
+        other => other,
+    }
+}
+
 pub(super) fn observe_with_context(
     segment: &CommandSegmentV1,
     index: usize,
@@ -517,7 +533,7 @@ pub(super) fn observe_with_contexts(
     {
         return;
     }
-    if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == command) {
+    if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == read_owner(command)) {
         // Attribution is deliberately stronger than legacy Python's inert
         // matcher=None porcelain entries: disabling a permission must work.
         result.rule(

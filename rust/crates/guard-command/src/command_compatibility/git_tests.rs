@@ -295,3 +295,26 @@ fn inert_global_options_leave_the_operation_the_proof_reads() {
         );
     }
 }
+
+/// A comparison or commit listing spelled with a plumbing name is the same
+/// read as the porcelain one beside it. Without an owner of its own each fell
+/// to the catch-all, which leaves every git rule uncertain and sends ordinary
+/// work to review; each now answers to the read permission it belongs to, and
+/// exactly that one.
+#[test]
+fn read_plumbing_answers_to_the_porcelain_owner_it_belongs_to() {
+    for (command, rule_id) in [
+        (
+            "git diff-tree --no-commit-id --name-only -r HEAD",
+            "command.git.diff",
+        ),
+        ("git diff-tree -r --stat HEAD", "command.git.diff"),
+        ("git range-diff main...HEAD", "command.git.diff"),
+        ("git cherry -v main", "command.git.log"),
+    ] {
+        let matches = observations(command).rule_matches;
+        assert_eq!(matches.len(), 1, "{command}");
+        assert_eq!(matches[0].rule_id, rule_id, "{command}");
+        assert!(!matches[0].uncertainty, "{command}");
+    }
+}
