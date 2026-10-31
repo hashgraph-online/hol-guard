@@ -482,10 +482,14 @@ fn a_redirect_with_no_command_is_read_as_the_write_it_performs() {
         );
     }
     // The target check still decides the write: a file in the home directory
-    // is no more writable without a command in front of the redirect.
-    let outside = project(&format!("> {HOME}/.bashrc"), context()).expect("home target");
-    assert_eq!(outside.command, NO_OP);
-    assert!(outside.writes_file);
-    assert!(!outside.bounded_writes);
-    assert_ne!(evaluate(&format!("> {HOME}/.bashrc")).minimum_action, "allow");
+    // is left unprojected, the same answer a redirect behind a command gets,
+    // so the review it earns is the one the sensitive target carries.
+    assert!(
+        project(&format!("> {HOME}/.bashrc"), context()).is_none(),
+        "home target"
+    );
+    assert_ne!(
+        evaluate(&format!("> {HOME}/.bashrc")).minimum_action,
+        "allow"
+    );
 }
