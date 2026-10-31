@@ -84,6 +84,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
+            let response = removal_evidence::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if harness_coverage_command::is_command(command) && flag == "--stdin" => {
             let response = harness_coverage_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -114,6 +118,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if managed_policy_load_command::is_command(command) && flag == "--stdin" => {
             let response = managed_policy_load_command::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if health_lease_state::is_command(command) && flag == "--stdin" => {
+            let response = health_lease_state::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
