@@ -21,6 +21,9 @@ use std::path::{Path, PathBuf};
 // read it are local: `add`, `tool`, `sync` and the rest reach a registry, and
 // `pip` is local for the queries [`super::super::python`] admits.
 const UV_LOCAL_VERBS: &[&str] = &["run", "tree", "export", "version", "pip"];
+// `uv lock` writes the lockfile, so it is not a local verb; the one spelling
+// that only reports on it is read below.
+const UV_LOCK_ASSERTIONS: &[&str] = &["--check", "--locked"];
 // uv options a local verb may carry: each changes what the verb reads, never
 // what it has to fetch. The list is an allowlist because uv's installing
 // options are many and grow: an option this module does not know keeps the
@@ -28,6 +31,7 @@ const UV_LOCAL_VERBS: &[&str] = &["run", "tree", "export", "version", "pip"];
 const UV_VERB_FLAGS: &[&str] = &[
     "--frozen",
     "--locked",
+    "--check",
     "--no-sync",
     "--no-dev",
     "--no-hashes",
@@ -165,7 +169,18 @@ pub(super) fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Pa
         return false;
     };
     let verb = arguments[uv.verb].to_ascii_lowercase();
-    if !UV_LOCAL_VERBS.contains(&verb.as_str()) {
+    // `uv lock` resolves the project's dependencies and rewrites `uv.lock`.
+    // `--check`, which uv spelled `--locked` first, asks the opposite: it
+    // asserts the lockfile already satisfies `pyproject.toml` and exits
+    // non-zero when it does not, writing nothing either way. That is the read
+    // of the project `uv tree` already makes. `--dry-run` is absent because
+    // it resolves the dependencies afresh to report what would change, which
+    // is the fetch the sandbox has no network for.
+    let asserts_the_lock = verb == "lock"
+        && arguments[uv.verb + 1..]
+            .iter()
+            .any(|argument| UV_LOCK_ASSERTIONS.contains(argument));
+    if !UV_LOCAL_VERBS.contains(&verb.as_str()) && !asserts_the_lock {
         return false;
     }
     if verb == "pip" {
