@@ -268,12 +268,40 @@ fn bun_runner_invocation(
 }
 
 /// True when `arguments` name a contained Node test runner and a call that
-/// runs once. Vitest needs the `run` verb that takes it out of watch mode;
-/// Jest has no verb and runs once unless the call asks it to watch.
+/// runs once. Both runners watch by default, so each one is read for the
+/// spelling that takes this call out of watch mode.
 pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
     matches!(arguments, [tool, rest @ ..]
-        if (tool == "vitest" && rest.first().is_some_and(|value| value == "run"))
+        if (tool == "vitest" && vitest_runs_once(rest))
             || (tool == "jest" && jest_contained_call(rest)))
+}
+
+/// True when a Vitest call finishes on its own.
+///
+/// The `run` verb says so by itself. Every other call Vitest keeps watching
+/// unless it carries the flag that turns the watch off: `--run`, `--no-watch`
+/// or a `watch` option set to `false`. `related` and `bench` are read with it
+/// because they run the workspace's own tests and benchmarks the way `run`
+/// does; a first word that is neither a flag nor one of those names a verb
+/// this reading does not model, such as the `init` that scaffolds a config.
+pub(crate) fn vitest_runs_once(arguments: &[String]) -> bool {
+    let rest = match arguments.split_first() {
+        Some((verb, _)) if verb == "run" => return true,
+        Some((verb, rest)) if matches!(verb.as_str(), "related" | "bench") => rest,
+        Some((verb, _)) if !verb.starts_with('-') => return false,
+        _ => arguments,
+    };
+    asked_not_to_watch(rest)
+}
+
+/// Whether a call turns a runner's watch off on the command line.
+fn asked_not_to_watch(arguments: &[String]) -> bool {
+    arguments.iter().enumerate().any(|(index, argument)| {
+        argument == "--run"
+            || option_name(argument) == "nowatch"
+            || (option_name(argument) == "watch"
+                && boolean_value(argument, arguments.get(index + 1)) == Some(false))
+    })
 }
 
 /// True when a Jest call both finishes on its own and takes everything it
@@ -287,10 +315,33 @@ pub(crate) fn jest_contained_call(arguments: &[String]) -> bool {
 /// takes a kebab spelling of every camelCase name, so the name is read with
 /// its separators removed. Watch mode has no short spelling: `-w` is Jest's
 /// `--maxWorkers`, and `--watchman` names the file crawler, not the mode.
+///
+/// The option's value decides, not its name. `--watchAll=false` is how a
+/// script or an agent says "run once" to a Jest whose project config turns
+/// watching on, so reading the name alone would send the call that asks for
+/// the contained behaviour to review while the plain `jest` beside it runs.
 pub(crate) fn jest_runs_once(arguments: &[String]) -> bool {
-    !arguments
-        .iter()
-        .any(|argument| matches!(option_name(argument).as_str(), "watch" | "watchall"))
+    !arguments.iter().enumerate().any(|(index, argument)| {
+        matches!(option_name(argument).as_str(), "watch" | "watchall")
+            && boolean_value(argument, arguments.get(index + 1)) != Some(false)
+    })
+}
+
+/// The value a boolean option carries, in the two spellings both runners'
+/// parsers read: a value joined with `=`, and the literal `true` or `false`
+/// that follows a declared boolean. Jest's yargs-parser and Vitest's CAC both
+/// compare that word exactly, so `--watch=0` names no boolean and leaves the
+/// option at its default, which is on.
+fn boolean_value(argument: &str, next: Option<&String>) -> Option<bool> {
+    let value = match argument.split_once('=') {
+        Some((_, value)) => value,
+        None => next.map(String::as_str)?,
+    };
+    match value {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
 }
 
 /// The option an argument names, lowercased and without its separators or its

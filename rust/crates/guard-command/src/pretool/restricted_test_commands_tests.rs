@@ -164,3 +164,53 @@ fn an_inert_npm_exec_option_leaves_the_run_the_tool_it_names() {
         assert_eq!(reason(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_runner_told_not_to_watch_runs_once() {
+    // Both runners watch by default, so a script or an agent that wants one
+    // pass says so on the line. Reading the option's name and ignoring its
+    // value sent exactly those calls to review, while the plain `jest` and
+    // the `vitest run` beside them were contained.
+    for command in [
+        "npx jest --watchAll=false",
+        "npx jest --watch=false",
+        "npx jest --watch-all=false",
+        "npx jest --watchAll false",
+        "npx vitest --run",
+        "npx vitest --no-watch",
+        "npx vitest --watch=false",
+        "npx vitest --watch false",
+        "npx vitest related src/a.ts --run",
+        "npx vitest bench --run",
+        "vitest --run src",
+        "node node_modules/vitest/vitest.mjs --run",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_runner_left_watching_keeps_its_review() {
+    // A watching run never finishes inside the sink, a value the parsers do
+    // not read as a boolean leaves the option at its default, and a first word
+    // that is neither a flag nor a run verb names something this reading does
+    // not model.
+    for command in [
+        "npx jest --watch",
+        "npx jest --watchAll=true",
+        "npx jest --watchAll true",
+        "npx jest --watch=0",
+        "npx vitest",
+        "npx vitest --watch",
+        "npx vitest --watch=true",
+        "npx vitest related src/a.ts",
+        "npx vitest init --run",
+        "node node_modules/vitest/vitest.mjs --watch",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
