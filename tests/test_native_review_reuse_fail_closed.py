@@ -228,20 +228,20 @@ def test_a_resident_without_the_combined_settle_is_not_asked_step_by_step(
 
     monkeypatch.setattr(store, "_native_store_call", unknown)
 
-    # The settle is never split into separate spends: the error reaches the
-    # caller, which answers the review as unavailable.
-    with pytest.raises(native_guard_store.NativeGuardStoreUnavailable):
-        native_review_settle(
-            store,
-            harness="claude-code",
-            artifact_id=_ARTIFACT,
-            tool_name="Bash",
-            launch_target="cat .env",
-            workspace=tmp_path,
-            identity=_IDENTITY,
-            spend=True,
-            claimed_saved_allow_hash=_IDENTITY,
-        )
+    # The settle is never split into separate spends: the unanswered call
+    # reads as no allow.
+    settled = native_review_settle(
+        store,
+        harness="claude-code",
+        artifact_id=_ARTIFACT,
+        tool_name="Bash",
+        launch_target="cat .env",
+        workspace=tmp_path,
+        identity=_IDENTITY,
+        spend=True,
+        claimed_saved_allow_hash=_IDENTITY,
+    )
+    assert settled is None
     assert calls == ["settle_claimed_native_review"]
 
 
