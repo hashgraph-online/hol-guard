@@ -234,6 +234,7 @@ def test_an_older_resident_settles_a_claimed_retry_one_step_at_a_time(
     methods: list[str],
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda create=False: (b"k" * 32, "key-id"))
     monkeypatch.setattr(store, "_provision_resident_verifier", lambda _key=None: None)
     calls: list[str] = []
 
