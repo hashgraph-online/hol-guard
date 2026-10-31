@@ -23,6 +23,11 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_installed_desktop_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: None)
+
+
 def _alpha_manifest(*, sha256: str, size: int, minimum: str = "0.1.0") -> dict[str, object]:
     return {
         "schema": update_desktop_core.UPDATE_SCHEMA,

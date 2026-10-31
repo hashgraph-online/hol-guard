@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from codex_plugin_scanner.guard.cli import update_desktop_core
 from codex_plugin_scanner.guard.cli.update_desktop_core import DesktopCoreUpdateError
@@ -17,6 +18,11 @@ VERSION = "3.0.0a200"
 TARGET = "aarch64-apple-darwin"
 TAG = f"alpha/v{VERSION}"
 ARTIFACT = f"hol-guard-core-{VERSION}-{TARGET}"
+
+
+@pytest.fixture(autouse=True)
+def _no_installed_desktop_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: None)
 
 
 def _v1_manifest(*, sha256: str, size: int, minimum: str = "0.1.0") -> dict[str, object]:
@@ -195,6 +201,57 @@ class TestTryApplyOnedirFallback:
             is None
         )
         assert requested == []
+
+    def test_terminal_run_reads_the_installed_desktop_app(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("HOL_GUARD_DESKTOP_VERSION", raising=False)
+        monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
+        monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: Version("3.0.145"))
+        requested: list[str] = []
+
+        def fetch(url: str, limit: int) -> bytes:
+            requested.append(url)
+            raise DesktopCoreUpdateError("desktop_core_asset_missing")
+
+        assert (
+            update_desktop_core._try_apply_onedir(
+                fetch,
+                tag=TAG,
+                artifact=ARTIFACT,
+                channel="alpha",
+                expected_version=VERSION,
+                expected_target=TARGET,
+            )
+            is None
+        )
+        assert requested == [update_desktop_core._release_url(TAG, f"{ARTIFACT}.onedir.json")]
+
+    def test_terminal_run_with_an_old_desktop_app_falls_back(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("HOL_GUARD_DESKTOP_VERSION", raising=False)
+        monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
+        monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: Version("3.0.50"))
+        archive = _onedir_zip(tmp_path)
+        manifest = _v2_manifest(
+            archive=archive,
+            launcher_sha256=update_desktop_core._sha256_hex(b"launcher-bytes"),
+            file_count=2,
+        )
+
+        def fetch(url: str, limit: int) -> bytes:
+            return json.dumps(manifest).encode("utf-8")
+
+        assert (
+            update_desktop_core._try_apply_onedir(
+                fetch,
+                tag=TAG,
+                artifact=ARTIFACT,
+                channel="alpha",
+                expected_version=VERSION,
+                expected_target=TARGET,
+            )
+            is None
+        )
 
     def test_other_download_errors_propagate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "3.0.113")
