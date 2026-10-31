@@ -145,7 +145,9 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         assert "python scripts/ci/pytest_shard.py" not in commands
         assert "--ignore" not in commands
         assert '"@$shard_file"' in commands
-        assert "-n 4 --dist loadfile --max-worker-restart 0" in commands
+        assert "--coverage-resources" in commands
+        assert "--dist loadfile --max-worker-restart 0" in commands
+        assert "-n 4" not in commands
 
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
     scheduling_job = "\n".join(step.get("run", "") for step in jobs["scheduling-sensitive"]["steps"])
@@ -195,10 +197,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "needs.sonar-rust-coverage.result == 'success'" in jobs["sonar"]["if"]
     assert "needs.native-workspace.result == 'success'" in jobs["sonar"]["if"]
     assert "needs.coverage.result == 'success'" in jobs["sonar"]["if"]
-    gate = jobs["ci-python-312"]
-    assert gate["name"] == "ci (3.12)"
+    gate = jobs["required"]
+    assert gate["name"] == "hol-guard / required"
     assert gate["if"] == "always()"
-    assert set(gate["needs"]) == {
+    assert "ci-python-312" not in jobs
+    assert {
         "quality",
         "native-command-evaluators",
         "coverage",
@@ -206,10 +209,10 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         "scheduling-sensitive",
         "native-workspace",
         "plan",
-    }
+    } <= set(gate["needs"])
 
     cache_consumers = (
-        ("compatibility", "ci-python-312", 1),
+        ("compatibility", "pi-exact-continuation", 1),
         ("cross-platform", "windows-native-runtime", 2),
         ("windows-packaged-daemon", "macos-native-runtime", 2),
         ("macos-skill-identity", "macos-gates", 2),
@@ -239,7 +242,7 @@ def test_ci_jobs_cannot_inherit_the_six_hour_default_timeout() -> None:
 def test_required_python_gate_rejects_incomplete_coverage_or_timing_proofs(failed_dependency: str, result: str) -> None:
     """Verify required Python gate rejects incomplete coverage or timing proofs."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
-    step = workflow["jobs"]["ci-python-312"]["steps"][0]
+    step = workflow["jobs"]["required"]["steps"][1]
     env = dict(os.environ, **dict.fromkeys(step["env"], "success"))
     env[failed_dependency] = result
 
@@ -276,19 +279,22 @@ def test_native_contract_preflight_is_required_without_delaying_artifact_fanout(
     producer = document["jobs"]["native-command-evaluators"]
     steps = producer["steps"]
     rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
-    assert "rustfmt" in rust["with"]["components"].split()
+    assert "components" not in rust["with"]
     formatting = next(
-        i for i, step in enumerate(steps) if step.get("name") == "Check native formatting before compilation"
+        step
+        for step in document["jobs"]["native-workspace"]["steps"]
+        if step.get("name") == "Check native formatting in the required Clippy job"
     )
-    assert 'cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check' in steps[formatting]["run"]
-    assert "if" not in steps[formatting]
+    assert 'cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check' in formatting["run"]
+    assert formatting["if"] == "matrix.check == 'clippy'"
+    assert not formatting.get("continue-on-error", False)
+    assert "native-workspace" in document["jobs"]["required"]["needs"]
     compilation = next(i for i, step in enumerate(steps) if "cargo build" in step.get("run", ""))
     verification = next(i for i, step in enumerate(steps) if "verify_native_command_program.py" in step.get("run", ""))
     uploads = [i for i, step in enumerate(steps) if step.get("uses", "").startswith("actions/upload-artifact@")]
-    assert formatting < compilation < verification < min(uploads)
-    for index in (formatting, verification):
-        assert "if" not in steps[index]
-        assert not steps[index].get("continue-on-error", False)
+    assert compilation < verification < min(uploads)
+    assert "if" not in steps[verification]
+    assert not steps[verification].get("continue-on-error", False)
 
     # Native contracts still block the required result, but do not withhold
     # already-verified compiler/runtime artifacts from the coverage fan-out.

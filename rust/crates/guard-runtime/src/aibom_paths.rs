@@ -227,7 +227,13 @@ pub(crate) const DOC_DIRECTORY_ROLES: [(&str, &str); 7] = [
     ("roadmap", "roadmap_md"),
 ];
 
-/// `instruction_role_for_path`.
+/// The instruction role a path names, or `None` when it names none.
+///
+/// The file's own name decides first - an `AGENTS.md` is an `agents_md`
+/// wherever it sits - and only a Markdown document that names no role is read
+/// for the directory it sits under. The path is read as written: the role is
+/// a statement about what a workspace calls the document, not about what is
+/// on disk where the scan ran.
 pub(crate) fn instruction_role_for_path(path: &Path) -> Option<&'static str> {
     let name = file_name_string(path).to_lowercase();
     let by_name = match name.as_str() {

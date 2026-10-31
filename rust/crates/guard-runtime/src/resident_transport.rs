@@ -1,6 +1,5 @@
-use std::io::Read;
 #[cfg(test)]
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 #[cfg(test)]
 use std::net::TcpStream;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -11,6 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::resident_diagnostics::{self, observe, Phase, Status};
+use crate::resident_health_counters::{self as counters, QueueLane};
 use sha2::{Digest, Sha256};
 #[path = "resident_control_dispatch.rs"]
 mod control;
@@ -64,18 +64,19 @@ fn authenticate_resident_stream(
         .map_err(|_| "native_resident_auth_timeout_failed".to_owned())?;
     let _ = stream.configure_low_latency();
 
+    // One deadline covers the whole handshake: a client that drips a byte
+    // before each timeout would otherwise renew the timeout for as long as it
+    // likes and hold an authentication worker the entire time.
+    let deadline = Instant::now() + crate::AUTH_TIMEOUT;
     let mut nonce = [0u8; crate::AUTH_NONCE_BYTES];
-    stream
-        .read_exact(&mut nonce)
+    crate::hardening::read_exact_by(&mut *stream, &mut nonce, deadline)
         .map_err(|_| "native_resident_auth_nonce_failed".to_owned())?;
     let server_proof = hmac_sha256(token, crate::SERVER_PROOF_LABEL, &nonce);
-    stream
-        .write_all(&server_proof)
+    crate::hardening::write_all_by(&mut *stream, &server_proof, deadline)
         .map_err(|_| "native_resident_auth_proof_failed".to_owned())?;
 
     let mut client_proof = [0u8; crate::AUTH_PROOF_BYTES];
-    stream
-        .read_exact(&mut client_proof)
+    crate::hardening::read_exact_by(&mut *stream, &mut client_proof, deadline)
         .map_err(|_| "native_resident_auth_client_failed".to_owned())?;
     let expected = hmac_sha256(token, crate::CLIENT_PROOF_LABEL, &nonce);
     if !constant_time_eq(&client_proof, &expected) {
@@ -95,9 +96,10 @@ fn read_request_header_inner(mut stream: BoxedResidentStream) -> Result<PendingR
     stream
         .set_resident_read_timeout(Some(crate::HEADER_TIMEOUT))
         .map_err(|_| "native_frame_timeout_failed".to_owned())?;
+    // The header timeout bounds the whole header, not each read of it.
+    let deadline = Instant::now() + crate::HEADER_TIMEOUT;
     let mut header = [0u8; crate::FRAME_HEADER_BYTES];
-    stream
-        .read_exact(&mut header)
+    crate::hardening::read_exact_by(&mut *stream, &mut header, deadline)
         .map_err(|_| "native_frame_header_failed".to_owned())?;
     if !constant_time_eq(&header[..4], crate::REQUEST_MAGIC) {
         return Err("native_frame_version_mismatch".to_owned());
@@ -138,6 +140,45 @@ fn write_bound_response(
     })
 }
 
+/// What a finished reply charges to the counters.
+#[derive(Debug, PartialEq, Eq)]
+enum ReplyAccounting {
+    /// The caller got its answer.
+    Served,
+    /// The reply never reached the caller: one more frame this resident could
+    /// not move.
+    FrameError,
+    /// The reply failed on a request that already recorded a broken frame. A
+    /// client that hangs up mid-payload fails the payload read and then the
+    /// reply, and that is one broken frame, not two.
+    AlreadyCounted,
+}
+
+fn reply_accounting(written: &Result<(), String>, frame_error_recorded: bool) -> ReplyAccounting {
+    match (written, frame_error_recorded) {
+        (Ok(()), _) => ReplyAccounting::Served,
+        (Err(_), false) => ReplyAccounting::FrameError,
+        (Err(_), true) => ReplyAccounting::AlreadyCounted,
+    }
+}
+
+/// Reply to one request and account for it.
+///
+/// A request counts as served only once its reply reached the caller: a write
+/// that failed served nobody, and counting it would hide a resident that had
+/// stopped answering behind a healthy served total. A failed write is one more
+/// frame this resident could not move, except when the same request already
+/// recorded a frame error - a client that hung up mid-payload fails the read
+/// and then the reply, and that is one broken frame, not two.
+fn finish_request(pending: &mut PendingRequest, response: &[u8], frame_error_recorded: bool) {
+    let written = write_bound_response(&mut *pending.stream, &pending.request_id, response);
+    match reply_accounting(&written, frame_error_recorded) {
+        ReplyAccounting::Served => counters::record_served(pending.accepted_at, pending.length),
+        ReplyAccounting::FrameError => counters::record_frame_error(),
+        ReplyAccounting::AlreadyCounted => {}
+    }
+}
+
 fn write_bound_response_inner(
     stream: &mut dyn ResidentStream,
     request_id: &[u8; crate::FRAME_REQUEST_ID_BYTES],
@@ -149,17 +190,16 @@ fn write_bound_response_inner(
     stream
         .set_resident_write_timeout(Some(crate::RESPONSE_TIMEOUT))
         .map_err(|_| "native_frame_timeout_failed".to_owned())?;
+    let deadline = Instant::now() + crate::RESPONSE_TIMEOUT;
     let digest = Sha256::digest(response);
     let mut header = Vec::with_capacity(crate::FRAME_HEADER_BYTES);
     header.extend_from_slice(crate::RESPONSE_MAGIC);
     header.extend_from_slice(request_id);
     header.extend_from_slice(&digest);
     header.extend_from_slice(&(response.len() as u32).to_be_bytes());
-    stream
-        .write_all(&header)
+    crate::hardening::write_all_by(&mut *stream, &header, deadline)
         .map_err(|error| crate::hardening::write_error(&error, "native_frame_write_failed"))?;
-    stream
-        .write_all(response)
+    crate::hardening::write_all_by(&mut *stream, response, deadline)
         .map_err(|error| crate::hardening::write_error(&error, "native_frame_write_failed"))?;
     stream
         .flush()
@@ -173,8 +213,9 @@ fn write_overload(pending: &mut PendingRequest) {
         Status::Error,
         pending.accepted_at,
     );
+    crate::resident_health_op::record_overload();
     let response = crate::resident_protocol::error_response("native_overloaded", true);
-    let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+    finish_request(pending, &response, false);
 }
 
 /// Continuation I/O can run for the caller's whole minute. Keep it off the
@@ -219,6 +260,21 @@ fn is_codex_resume_retry(request: &[u8]) -> bool {
     })
 }
 
+/// Settle one evaluation into the bytes its client is answered with. An
+/// evaluation that panicked is answered the way any other failure is — a
+/// fixed, non-retryable code and a counted panic — so the worker that ran it
+/// keeps serving instead of taking the connection, or the pool, down with it.
+fn settle_evaluation(outcome: thread::Result<Result<Vec<u8>, String>>) -> Vec<u8> {
+    match outcome {
+        Ok(Ok(response)) => response,
+        Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
+        Err(_panic) => {
+            counters::record_panic();
+            crate::resident_protocol::error_response("native_runtime_panicked", false)
+        }
+    }
+}
+
 /// The slot is already reserved. A thread that cannot be started drops the
 /// connection and releases the slot.
 fn spawn_codex_resume_retry(
@@ -229,25 +285,19 @@ fn spawn_codex_resume_retry(
     if thread::Builder::new()
         .spawn(move || {
             let slot = ContinuationSlot;
-            let response = match catch_unwind(AssertUnwindSafe(|| {
+            let response = settle_evaluation(catch_unwind(AssertUnwindSafe(|| {
                 observe(Phase::ResidentEvaluate, || {
                     crate::resident_protocol::evaluate_resident_bytes(
                         &request,
                         policy_store.as_deref(),
                     )
                 })
-            })) {
-                Ok(Ok(response)) => response,
-                Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
-                Err(_panic) => {
-                    crate::resident_protocol::error_response("native_runtime_panicked", false)
-                }
-            };
+            })));
             // Free the slot before replying so a caller that sends again on
             // receipt never sees this finished continuation as in flight.
             drop(slot);
             let mut pending = pending;
-            let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+            finish_request(&mut pending, &response, false);
         })
         .is_err()
     {
@@ -267,26 +317,41 @@ fn handle_pending_request(
         pending.accepted_at,
     );
     if expired {
+        counters::record_deadline_exceeded();
         let response =
             crate::resident_protocol::error_response("native_request_deadline_exceeded", true);
-        let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+        finish_request(&mut pending, &response, false);
         return;
     }
     let _ = pending
         .stream
         .set_resident_read_timeout(Some(crate::PAYLOAD_TIMEOUT));
+    // A payload may be megabytes, so its read ends at whichever comes first:
+    // the payload timeout or what is left of the request's total budget. The
+    // deadline is checked between reads, so a drip-feeding client cannot keep
+    // an evaluation worker past the budget it was admitted under.
+    let payload_deadline = (Instant::now() + crate::PAYLOAD_TIMEOUT)
+        .min(pending.accepted_at + crate::hardening::TOTAL_REQUEST_BUDGET);
+    let mut frame_error_recorded = false;
     let mut request = std::mem::take(&mut pending.payload_prefix);
     let prefix_length = request.len();
     request.resize(pending.length, 0);
     let response = if observe(Phase::ResidentPayloadRead, || {
-        pending.stream.read_exact(&mut request[prefix_length..])
+        crate::hardening::read_exact_by(
+            &mut *pending.stream,
+            &mut request[prefix_length..],
+            payload_deadline,
+        )
     })
     .is_err()
     {
+        counters::record_frame_error();
+        frame_error_recorded = true;
         crate::resident_protocol::error_response("native_frame_read_failed", false)
     } else {
         let digest = Sha256::digest(&request);
         if !constant_time_eq(&digest, &pending.request_digest) {
+            counters::record_digest_mismatch();
             crate::resident_protocol::error_response("native_request_digest_mismatch", false)
         } else if let Some(sender) = control_dispatch.filter(|_| control::is_request(&request)) {
             // A fragmented request is routed only after its complete frame is
@@ -302,23 +367,17 @@ fn handle_pending_request(
             }
             return;
         } else {
-            match catch_unwind(AssertUnwindSafe(|| {
+            settle_evaluation(catch_unwind(AssertUnwindSafe(|| {
                 observe(Phase::ResidentEvaluate, || {
                     request_cancellation::evaluate(&mut pending, &request, policy_store.as_deref())
                 })
-            })) {
-                Ok(Ok(response)) => response,
-                Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
-                Err(_panic) => {
-                    crate::resident_protocol::error_response("native_runtime_panicked", false)
-                }
-            }
+            })))
         }
     };
     let is_shutdown_request = crate::strict_json_value(&request).is_ok_and(|value| {
         value.get("operation").and_then(serde_json::Value::as_str) == Some("shutdown")
     });
-    let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+    finish_request(&mut pending, &response, frame_error_recorded);
     if is_shutdown_request {
         crate::managed_resident::shutdown_response_sent();
     }
@@ -367,10 +426,107 @@ fn retry_overflow_admissions(
     }
 }
 
+/// One lane's queue charge, held from before the send until the request is
+/// either in the channel or definitively not going into it.
+///
+/// The charge is taken before `try_send` because a worker can receive the
+/// request and release its charge before `try_send` returns to this thread. A
+/// release that ran ahead of its own charge saturates at zero, so the charge
+/// that followed it would never be released and the lane would read one
+/// request too deep for the rest of the process. Releasing on drop also means
+/// a new failure branch cannot forget the release.
+pub(super) struct QueueCharge(Option<QueueLane>);
+
+impl QueueCharge {
+    pub(super) fn take(lane: QueueLane) -> Self {
+        counters::enter_queue(lane);
+        Self(Some(lane))
+    }
+
+    /// The request reached the channel, so the worker that receives it owns
+    /// the release from here.
+    pub(super) fn queued(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for QueueCharge {
+    fn drop(&mut self) {
+        if let Some(lane) = self.0 {
+            counters::leave_queue(lane);
+        }
+    }
+}
+
+/// Auth workers only authenticate and read the frame header. Evaluation runs
+/// on the evaluation pool even when the whole payload arrived with the header:
+/// an auth worker held by a slow evaluation cannot answer the next caller's
+/// challenge, and that caller gives up after `AUTH_TIMEOUT` and falls back to
+/// the daemon. Concurrent hooks then miss the direct lane in bursts.
+///
+/// A full evaluation queue leaves a fully buffered request on the auth
+/// worker, as before the hand-off: answering `native_overloaded` would turn
+/// saturation into a hook failure. A fragmented request is still answered
+/// with overload so no auth worker ever waits on a client's payload.
+fn dispatch_authenticated(
+    pending: PendingRequest,
+    control_sender: &SyncSender<PendingRequest>,
+    evaluation_sender: &SyncSender<PendingRequest>,
+    policy_store: Option<&Arc<crate::policy_store::PolicySnapshotStore>>,
+) {
+    if pending.payload_prefix.len() == pending.length
+        && control::is_request(&pending.payload_prefix)
+    {
+        control::enqueue(control_sender, pending);
+        return;
+    }
+    let charge = QueueCharge::take(QueueLane::Evaluation);
+    match evaluation_sender.try_send(pending) {
+        Ok(()) => charge.queued(),
+        // A fully buffered request needs no further reads, so the auth worker
+        // evaluates it as it did before the hand-off existed. A fragmented one
+        // would hold the auth worker in a payload read, so it is answered with
+        // retryable overload instead.
+        Err(TrySendError::Full(returned)) if returned.payload_prefix.len() == returned.length => {
+            drop(charge);
+            handle_pending_request(returned, policy_store.cloned(), Some(control_sender));
+        }
+        Err(TrySendError::Full(mut returned)) => {
+            drop(charge);
+            write_overload(&mut returned);
+        }
+        Err(TrySendError::Disconnected(returned)) => {
+            drop(charge);
+            resident_diagnostics::finish_since(
+                Phase::ResidentDispatchWait,
+                Status::Error,
+                returned.accepted_at,
+            );
+        }
+    }
+}
+
+/// The worker count and queue capacity of each dispatch lane, as
+/// [`start_resident_workers`] sizes them: evaluation first, then control.
+///
+/// A caller reading a queue depth or an overload count needs the lane it was
+/// measured against, and only this module knows how the two lanes divide the
+/// evaluation budget.
+pub(crate) fn lane_shape() -> ((usize, usize), (usize, usize)) {
+    (
+        (
+            crate::evaluation_workers() - control::WORKERS,
+            crate::evaluation_queue_capacity() - control::capacity(),
+        ),
+        (control::WORKERS, control::capacity()),
+    )
+}
+
 pub(crate) fn start_resident_workers(
     token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
 ) -> ResidentAdmission {
+    crate::resident_health_op::mark_serving();
     let (control_sender, mut workers) = control::start(policy_store.clone());
     let (evaluation_sender, evaluation_receiver) =
         sync_channel::<PendingRequest>(crate::evaluation_queue_capacity() - control::capacity());
@@ -380,6 +536,7 @@ pub(crate) fn start_resident_workers(
         crate::evaluation_workers() - control::WORKERS,
         evaluation_receiver,
         move |pending| {
+            counters::leave_queue(QueueLane::Evaluation);
             handle_pending_request(
                 pending,
                 evaluation_policy_store.clone(),
@@ -399,11 +556,15 @@ pub(crate) fn start_resident_workers(
             })
             .is_err()
             {
+                counters::record_auth_failure();
                 return;
             }
             let mut pending = match read_request_header(stream) {
                 Ok(value) => value,
-                Err(_) => return,
+                Err(_) => {
+                    counters::record_frame_error();
+                    return;
+                }
             };
             pending
                 .payload_prefix
@@ -413,31 +574,18 @@ pub(crate) fn start_resident_workers(
                 .try_read_available(&mut pending.payload_prefix)
             {
                 Ok(value) => value,
-                Err(_) => return,
+                Err(_) => {
+                    counters::record_frame_error();
+                    return;
+                }
             };
             pending.payload_prefix.truncate(available);
-            if available == pending.length {
-                if control::is_request(&pending.payload_prefix) {
-                    control::enqueue(&control_sender, pending);
-                } else {
-                    handle_pending_request(pending, policy_store.clone(), Some(&control_sender));
-                }
-                return;
-            }
-            match evaluation_sender.try_send(pending) {
-                Ok(()) => {}
-                Err(TrySendError::Full(returned)) => {
-                    let mut pending = returned;
-                    write_overload(&mut pending);
-                }
-                Err(TrySendError::Disconnected(returned)) => {
-                    resident_diagnostics::finish_since(
-                        Phase::ResidentDispatchWait,
-                        Status::Error,
-                        returned.accepted_at,
-                    );
-                }
-            }
+            dispatch_authenticated(
+                pending,
+                &control_sender,
+                &evaluation_sender,
+                policy_store.as_ref(),
+            );
         },
     ));
     let overflow_primary = authentication_sender.clone();
@@ -482,3 +630,11 @@ mod tests;
 #[cfg(all(test, unix))]
 #[path = "resident_transport_continuation_tests.rs"]
 mod continuation_tests;
+
+#[cfg(test)]
+#[path = "resident_transport_hardening_tests.rs"]
+mod hardening_tests;
+
+#[cfg(test)]
+#[path = "resident_transport_panic_tests.rs"]
+mod panic_tests;

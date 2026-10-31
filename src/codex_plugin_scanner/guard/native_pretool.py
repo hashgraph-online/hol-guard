@@ -1,8 +1,8 @@
 """Mechanical Python launcher for Rust PreToolUse authority.
 
 This module validates and returns the native decision. It does not parse,
-classify, or lower the semantic result. Command-model shadow comparison stays
-in native_command_model and is not a PreToolUse authority.
+classify, or lower the semantic result. native_command_model only projects
+the Rust command model into the Python type and is not a PreToolUse authority.
 """
 
 from __future__ import annotations
@@ -13,8 +13,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .native_hook_decision import NativeHookDecisionError
-from .native_hook_pretool_floor import native_pretool_floor
 from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
@@ -104,8 +102,8 @@ _POLICY_ACTIONS = {
     "block",
 }
 _ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
-# The actions a command-string review may answer to a caller that does not ask
-# for the whole lattice: such a caller has no containment or reapproval route.
+# The actions a command-string review may answer: its callers have no
+# containment or reapproval route.
 _LEGACY_REVIEW_ACTIONS = {"allow", "review", "block"}
 
 
@@ -170,7 +168,7 @@ def _decode_generic_pre_tool(payload: object) -> dict[str, Any] | None:
     return payload if payload["decision"] == expected_decision else None
 
 
-def _decode_pre_tool(payload: object, *, command: str, full_lattice: bool = False) -> dict[str, Any] | None:
+def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
     if isinstance(payload, dict) and "action" in payload:
         return _decode_generic_pre_tool(payload)
     if not isinstance(payload, dict):
@@ -185,7 +183,7 @@ def _decode_pre_tool(payload: object, *, command: str, full_lattice: bool = Fals
         not isinstance(decision, str)
         or decision not in {"allow", "deny"}
         or not isinstance(action, str)
-        or action not in (_POLICY_ACTIONS if full_lattice else _LEGACY_REVIEW_ACTIONS)
+        or action not in _LEGACY_REVIEW_ACTIONS
         or not isinstance(reason_code, str)
         or not reason_code
         or not isinstance(reason, str)
@@ -209,7 +207,6 @@ def review_pre_tool_native(
     execution_environment: Mapping[str, object] | None = None,
     timeout_seconds: float = 0.5,
     record_health: bool = True,
-    full_lattice: bool = False,
     extension_evidence: bool = False,
 ) -> dict[str, Any] | None:
     """Return the Rust PreToolUse decision, or None when native cannot decide.
@@ -229,11 +226,6 @@ def review_pre_tool_native(
     without it, because neither this process nor the resident runtime is that
     shell. A caller that cannot name the environment leaves it out and those
     rules keep their review.
-
-    ``full_lattice=True`` admits every canonical action the review may answer,
-    ``require-reapproval`` and ``sandbox-required`` included, for a caller that
-    routes them. Other callers keep receiving only allow, review and block, so
-    an answer they cannot route stays a failed review rather than a relaxed one.
 
     ``extension_evidence=True`` asks the resident to decide under the extension
     controls of the snapshot it admitted and to return the
@@ -316,7 +308,7 @@ def review_pre_tool_native(
                 if record_health:
                     native_record_overload(status.identity.sha256, guard_home)
                 return record_native_hook_result("native_fail_safe", None)
-            decoded = _decode_pre_tool(payload, command=command, full_lattice=full_lattice)
+            decoded = _decode_pre_tool(payload, command=command)
             if decoded is not None:
                 if record_health:
                     native_record_resident_success(status.identity.sha256, guard_home)
@@ -330,35 +322,4 @@ def review_pre_tool_native(
     return record_native_hook_result("native_fail_safe", None)
 
 
-def native_pre_tool_policy_floor(
-    command: str,
-    *,
-    guard_home: Path,
-    cwd: Path | None,
-    home_dir: Path | None,
-    execution_environment: Mapping[str, object] | None = None,
-) -> str | None:
-    """The resident's PreToolUse floor for ``command``, or ``None`` for no floor.
-
-    The resident decides whether its pre-tool review floors the verdict, and at
-    which action. No review at all is a resident outage: this raises
-    ``NativeHookDecisionError`` and the hook answers with the host outage
-    response instead of a floor picked here.
-    """
-    review = review_pre_tool_native(
-        command,
-        guard_home=guard_home,
-        cwd=cwd,
-        home_dir=home_dir,
-        execution_environment=execution_environment,
-        full_lattice=True,
-    )
-    if review is None:
-        raise NativeHookDecisionError("native_pre_tool_floor_unavailable")
-    return native_pretool_floor(review, guard_home=guard_home)
-
-
-__all__ = [
-    "native_pre_tool_policy_floor",
-    "review_pre_tool_native",
-]
+__all__ = ["review_pre_tool_native"]

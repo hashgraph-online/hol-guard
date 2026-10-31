@@ -638,7 +638,7 @@ fn conflicting_request_selectors_fail_closed() {
 }
 
 #[test]
-fn observe_preserves_intrinsic_block_but_does_not_enforce_policy_only_floor() {
+fn observe_keeps_credential_block_but_does_not_enforce_policy_only_floor() {
     let request = post_request(json!({
         "tool_name": "read_file",
         "tool_response": "ok"
@@ -655,19 +655,115 @@ fn observe_preserves_intrinsic_block_but_does_not_enforce_policy_only_floor() {
     assert_eq!(policy_only.decision, "allow");
     assert_eq!(policy_only.policy_action.as_deref(), Some("block"));
 
-    let intrinsic_observed =
-        HookReviewResponseV1::deny("source_secret_match", "blocked").observed(None);
+    // Watch records an intrinsic block that the model can safely read past.
     let intrinsic = apply_post_tool_policy(
         &observed_snapshot,
         &request,
         GuardHookPayloadKindV2::Inline,
-        intrinsic_observed,
+        HookReviewResponseV1::deny("output_mismatch", "blocked").observed(None),
     )
     .unwrap();
     assert_eq!(intrinsic.decision, "allow");
     assert_eq!(intrinsic.policy_action.as_deref(), Some("block"));
     assert_eq!(intrinsic.observed_policy_action.as_deref(), Some("block"));
     assert!(intrinsic.observe_mode);
+
+    // It never hands output that may carry a credential to the model. The
+    // edge reviews output with observe off, so the join sees the scanner's
+    // own denial.
+    for code in [
+        "source_secret_match",
+        "output_secret_match",
+        "sensitive_path",
+        "scanner_budget_exhausted",
+        "output_too_large",
+        "no_output_to_review",
+    ] {
+        let credential = apply_post_tool_policy(
+            &observed_snapshot,
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::deny(code, "blocked"),
+        )
+        .unwrap();
+        assert_eq!(credential.decision, "deny", "{code}");
+        assert_eq!(credential.reason_code, code);
+        assert_ne!(credential.model_output_action, "allow_original", "{code}");
+    }
+}
+
+fn watched_post_tool(
+    snapshot: &PolicySnapshotV3,
+    request: &NativeHookRequestV1,
+    response: HookReviewResponseV1,
+    recording_only: bool,
+) -> HookReviewResponseV1 {
+    crate::policy_enforcement::apply_post_tool_policy_with_delivery(
+        &AdmittedPolicySnapshot::new(snapshot.clone()).unwrap(),
+        request,
+        GuardHookPayloadKindV2::Inline,
+        response,
+        None,
+        recording_only,
+    )
+    .unwrap()
+}
+
+#[test]
+fn harness_watch_releases_an_unknown_tool_output_review() {
+    // Oh My Pi's own Watch override leaves the snapshot in enforce mode.
+    let mut request = post_request(json!({
+        "tool_name": "context_notes",
+        "tool_input": {"text": "notes"},
+        "tool_response": "Noted."
+    }));
+    request.harness = "omp".into();
+    let enforced = snapshot(policy("allow"));
+    let protected = watched_post_tool(
+        &enforced,
+        &request,
+        HookReviewResponseV1::allow("output_scan_allow"),
+        false,
+    );
+    assert_eq!(protected.decision, "deny");
+    assert_eq!(protected.reason_code, "native_policy_review_required");
+
+    let watched = watched_post_tool(
+        &enforced,
+        &request,
+        HookReviewResponseV1::allow("output_scan_allow"),
+        true,
+    );
+    assert_eq!(watched.decision, "allow");
+    assert_eq!(watched.model_output_action, "allow_original");
+    assert_eq!(
+        watched.reviewed_output_sha256.as_deref(),
+        Some(guard_hook_core::sha256_text("Noted.").as_str())
+    );
+}
+
+#[test]
+fn harness_watch_keeps_credential_output_from_the_model() {
+    let mut request = post_request(json!({
+        "tool_name": "bash",
+        "tool_input": {"command": "cat config"},
+        "tool_response": "redacted"
+    }));
+    request.harness = "omp".into();
+    for code in [
+        "output_secret_match",
+        "source_secret_match",
+        "sensitive_path",
+    ] {
+        let watched = watched_post_tool(
+            &snapshot(policy("allow")),
+            &request,
+            HookReviewResponseV1::deny(code, "blocked"),
+            true,
+        );
+        assert_eq!(watched.decision, "deny", "{code}");
+        assert_eq!(watched.reason_code, code);
+    }
 }
 
 fn observe_post_tool(payload: Value, response: HookReviewResponseV1) -> HookReviewResponseV1 {
@@ -683,7 +779,9 @@ fn observe_post_tool(payload: Value, response: HookReviewResponseV1) -> HookRevi
 }
 
 fn native_deny() -> HookReviewResponseV1 {
-    let mut response = HookReviewResponseV1::deny("output_secret_match", "output requires review");
+    // Watch keeps credential matches blocked, so these proofs use another
+    // intrinsic denial.
+    let mut response = HookReviewResponseV1::deny("output_mismatch", "output requires review");
     response.policy_action = Some("block".to_owned());
     response
 }

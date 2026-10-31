@@ -70,6 +70,29 @@ fn an_undocumented_word_leaves_the_launcher_in_place() {
     }
 }
 
+/// A program spelled as a path is handed over. What comes out is
+/// `<program> <arguments>`, which the parser reads exactly as it reads those
+/// words written without the launcher, and `nice` and `stdbuf` change neither
+/// the user, the root nor the directory it runs in. So
+/// `nice -n 10 .venv/bin/pytest -q` reaches the route `.venv/bin/pytest -q`
+/// already reaches instead of being reviewed for the launcher alone.
+#[test]
+fn a_path_behind_the_launcher_is_read_as_the_bare_command() {
+    for (command, program) in [
+        ("nice -n 10 .venv/bin/pytest -q", 3),
+        ("stdbuf -oL .venv/bin/pytest -q", 2),
+        ("exec .venv/bin/pytest -q", 1),
+        ("nice ./node_modules/.bin/eslint src", 1),
+        ("stdbuf -oL /usr/local/bin/cargo test", 2),
+    ] {
+        assert_eq!(
+            launcher_program(&words(command), 0),
+            Some(program),
+            "{command} was not read past its launcher"
+        );
+    }
+}
+
 /// A script file or an interpreter behind the prefix is a program whose own
 /// text was never read, so the prefix stays and the command keeps the
 /// unmodelled failure the scan already gives it.
@@ -240,4 +263,48 @@ fn text_that_could_shadow_a_launcher_stays_visible() {
     let model = parse("PATH=./bin nice git status");
     assert!(model.path_overridden);
     assert!(model.segments[0].path_overridden);
+}
+
+/// `exec npm test` runs what `npm test` runs: the shell replaces itself with
+/// the program this text already names. The program behind it is the word the
+/// command runs, exactly as it is behind the scheduling prefixes.
+#[test]
+fn exec_names_the_program_that_replaces_the_shell() {
+    for (command, program) in [
+        ("exec npm test", 1),
+        ("exec npm run build", 1),
+        ("exec cargo build", 1),
+        ("exec make -j4", 1),
+        ("exec codesage install codex", 1),
+    ] {
+        assert_eq!(
+            launcher_program(&words(command), 0),
+            Some(program),
+            "{command} did not name its program"
+        );
+    }
+}
+
+/// An `exec` that carries an option of its own leaves the program unread:
+/// `-a` renames the process, `-c` empties its environment and `-l` makes it a
+/// login shell. A bare `exec` names no program at all, and an interpreter
+/// behind one reads a file this scan never opened.
+#[test]
+fn an_exec_without_a_named_program_is_not_a_launcher() {
+    for command in [
+        "exec",
+        "exec -a worker npm test",
+        "exec -c npm test",
+        "exec -l bash",
+        "exec python3 deploy.py",
+        "exec node server.js",
+        "exec ./deploy.sh",
+        "exec -",
+    ] {
+        assert_eq!(
+            launcher_program(&words(command), 0),
+            None,
+            "{command} named a program it does not run"
+        );
+    }
 }

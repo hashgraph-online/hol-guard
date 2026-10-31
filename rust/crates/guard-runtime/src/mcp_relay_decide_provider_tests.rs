@@ -1,6 +1,6 @@
 //! The provider lookups read from a seeded local CLI store.
 
-use super::{answer, PROVIDER_INVALID};
+use super::{answer, authority_hash, PROVIDER_INVALID};
 use crate::guard_store_observed_mcp::marker_source;
 use crate::local_store_read::{schema_checksum, SUPPORTED_SCHEMA_VERSION};
 use rusqlite::Connection;
@@ -178,10 +178,12 @@ fn the_authority_hash_covers_the_rows_in_order() {
         "[[\"local-cli.a\",\"{identity}\",\"digest-local-cli.a\"],\
           [\"local-cli.b\",\"{identity}\",\"digest-local-cli.b\"]]"
     );
-    assert_eq!(
-        authority(&connection),
-        Ok(json!({"hash": hex::encode(Sha256::digest(covered.as_bytes()))}))
-    );
+    let hash = hex::encode(Sha256::digest(covered.as_bytes()));
+    assert_eq!(authority(&connection), Ok(json!({ "hash": hash })));
+    // The hash a Composio wrapper's identity binds is the same one.
+    assert_eq!(authority_hash(Some(&connection)), Ok(Some(hash)));
+    assert_eq!(authority_hash(Some(&store())), Ok(None));
+    assert_eq!(authority_hash(None), Ok(None));
 }
 
 #[test]

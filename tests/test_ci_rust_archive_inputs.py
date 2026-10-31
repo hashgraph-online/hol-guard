@@ -144,10 +144,23 @@ def test_workspace_build_metadata_stays_global(workspace, name):
 
 
 @pytest.mark.parametrize("name", [".github/workflows/rust-test-cache-warm.yml", "scripts/ci/archive_rust_tests.sh"])
-def test_warm_recipe_changes_invalidate_every_archive(workspace, name):
+def test_archive_recipe_or_retired_producer_changes_invalidate_every_archive(workspace, name):
     before = keys(workspace)
     write(workspace, name, "changed build recipe")
     assert all(keys(workspace)[group] != original for group, original in before.items())
+
+
+def test_retiring_the_warmer_invalidates_its_archives_and_keeps_absence_bound(workspace):
+    name = ".github/workflows/rust-test-cache-warm.yml"
+    producer = write(workspace, name, "previous producer recipe")
+    before = keys(workspace)
+    producer.unlink()
+    after = keys(workspace)
+    assert all(after[group] != original for group, original in before.items())
+    for partition in before:
+        assert producer in Inputs(workspace).collect(partition)
+    write(workspace, name, "previous producer recipe")
+    assert keys(workspace) == before
 
 
 @pytest.mark.parametrize(

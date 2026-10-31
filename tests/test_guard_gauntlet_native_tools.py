@@ -281,7 +281,7 @@ def test_approval_rows_name_the_tool_from_the_stored_action_envelope(monkeypatch
     contract = SimpleNamespace(
         allow_scopes=["once"], exact_action_persistence_eligible=False, once_only_reason="unproven_launch"
     )
-    monkeypatch.setattr(approval_scope_support, "request_scope_observation", lambda row: (contract, None))
+    monkeypatch.setattr(approval_scope_support, "_native_scopes", lambda rows: [(contract, None)])
     stored = {
         "request_id": "r1",
         "action_envelope_json": {"tool_name": "read", "native_origin_receipt": {"reason_code": "native_x_review"}},

@@ -74,6 +74,13 @@ mod tests {
             "env NODE_ENV=test ls",
             "env -u GH_TOKEN FOO=1 ls",
             "LC_ALL=C LOG_LEVEL=debug ls src",
+            // A build or test setting the projection drops is still a value
+            // the program reads: a contained run of the projected command
+            // would stop refusing the lint, repeat the cached test or widen
+            // the failure count the caller asked for.
+            "RUSTFLAGS=-Dwarnings cargo test",
+            "GOFLAGS=-count=1 go test ./...",
+            "PYTEST_ADDOPTS=--maxfail=1 pytest",
         ] {
             assert!(removes_values(command), "{command}");
         }

@@ -10,12 +10,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
-    _codex_post_tool_command_is_read_only_source_inspection,
-)
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
-from codex_plugin_scanner.guard.native_shell_helpers import kubernetes_secret_read_source
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.live_hook_review_support import assert_secret_output_held, live_post_tool_flag
+from tests.native_shell_helpers_client import kubernetes_secret_read_source
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -332,104 +329,82 @@ def test_pi_pre_tool_use_blocks_argv_wrapped_kubectl_secret_dump(tmp_path: Path,
     assert output["decision"] == "deny"
 
 
-def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> None:
+def test_pi_post_tool_output_holds_secret_from_kubernetes_read(live_hook_root: Path) -> None:
     command = (
         "kubectl exec -n registry-broker registry-frontend-7fb9bf6b46-2fcj8 -- printenv GUARD_GITHUB_APP_PRIVATE_KEY"
     )
-    artifact = _codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         harness="pi",
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
             "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
-        config_path="~/.pi/agent/settings.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+        cwd=live_hook_root,
+        home_dir=live_hook_root,
     )
 
-    assert artifact is not None
-    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
-    assert artifact.metadata["guard_default_action"] == "require-reapproval"
-    assert artifact.metadata["secret_source_family"] == "Kubernetes pod environment"
+    assert_secret_output_held(artifact)
 
 
-def test_pi_post_tool_output_labels_argv_wrapped_kubernetes_secret_source(tmp_path: Path) -> None:
-    artifact = _codex_post_tool_output_artifact(
+def test_pi_post_tool_output_holds_secret_from_argv_wrapped_kubernetes_read(live_hook_root: Path) -> None:
+    artifact = live_post_tool_flag(
         harness="pi",
         payload={
             "tool_name": "Bash",
             "tool_input": {"argv": ["bash", "-lc", _network_secret_dump_command()]},
             "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
-        config_path="~/.pi/agent/settings.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+        cwd=live_hook_root,
+        home_dir=live_hook_root,
     )
 
-    assert artifact is not None
-    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
-    assert artifact.metadata["guard_default_action"] == "require-reapproval"
-    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+    assert_secret_output_held(artifact)
 
 
-def test_pi_post_tool_output_labels_single_item_command_args_kubernetes_secret_source(tmp_path: Path) -> None:
-    artifact = _codex_post_tool_output_artifact(
+def test_pi_post_tool_output_holds_secret_from_single_item_command_args_kubernetes_read(live_hook_root: Path) -> None:
+    artifact = live_post_tool_flag(
         harness="pi",
         payload={
             "tool_name": "Bash",
             "tool_input": {"command_args": ["kubectl get secret prod -o yaml"]},
             "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
-        config_path="~/.pi/agent/settings.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+        cwd=live_hook_root,
+        home_dir=live_hook_root,
     )
 
-    assert artifact is not None
-    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
-    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+    assert_secret_output_held(artifact)
 
 
-def test_pi_post_tool_output_labels_commands_payload_kubernetes_secret_source(tmp_path: Path) -> None:
-    artifact = _codex_post_tool_output_artifact(
+def test_pi_post_tool_output_holds_secret_from_commands_payload_kubernetes_read(live_hook_root: Path) -> None:
+    artifact = live_post_tool_flag(
         harness="pi",
         payload={
             "tool_name": "Bash",
             "tool_input": {"commands": ["kubectl get secret prod -o yaml"]},
             "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
-        config_path="~/.pi/agent/settings.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+        cwd=live_hook_root,
+        home_dir=live_hook_root,
     )
 
-    assert artifact is not None
-    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
-    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+    assert_secret_output_held(artifact)
 
 
-def test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_source(tmp_path: Path) -> None:
-    artifact = _codex_post_tool_output_artifact(
+def test_pi_post_tool_output_holds_secret_from_later_commands_payload_kubernetes_read(live_hook_root: Path) -> None:
+    artifact = live_post_tool_flag(
         harness="pi",
         payload={
             "tool_name": "Bash",
             "tool_input": {"commands": ["echo ok", "kubectl get secret prod -o yaml"]},
             "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
-        config_path="~/.pi/agent/settings.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+        cwd=live_hook_root,
+        home_dir=live_hook_root,
     )
 
-    assert artifact is not None
-    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
-    assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
+    assert_secret_output_held(artifact)
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -444,7 +419,12 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
         "tool_input": {"commands": ["kubectl get secret prod -o yaml", "rg foo src"]},
-        "stdout": "ok\n",
+        # The daemon withholds the output by what it carries, so the secret
+        # manifest the command prints is what keeps it from the model.
+        "stdout": (
+            "apiVersion: v1\ndata:\n  password: " + "c3VwZXItc2VjcmV0" + "LXZhbHVlLTEyMzQ1Njc4\n"
+            "kind: Secret\nmetadata:\n  name: prod\ntype: Opaque\n"
+        ),
         "source_scope": "project",
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -468,57 +448,39 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
     assert output["decision"] == "deny"
 
 
-def test_read_only_command_batches_stay_read_only_for_post_tool_skip(tmp_path: Path) -> None:
-    payload = {"tool_input": {"commands": ["rg foo src", "grep bar src/app.py"]}}
-
-    assert _codex_post_tool_command_is_read_only_source_inspection(
-        payload=payload,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-
-def test_pi_post_tool_output_labels_wrapped_kubernetes_secret_source(tmp_path: Path) -> None:
+def test_pi_post_tool_output_holds_secret_from_wrapped_kubernetes_read(live_hook_root: Path) -> None:
     command = (
         'bash -lc "kubectl exec -n registry-broker registry-frontend-7fb9bf6b46-2fcj8 '
         '-- printenv GUARD_GITHUB_APP_PRIVATE_KEY"'
     )
-    artifact = _codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         harness="pi",
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
             "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
-        config_path="~/.pi/agent/settings.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+        cwd=live_hook_root,
+        home_dir=live_hook_root,
     )
 
-    assert artifact is not None
-    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
-    assert artifact.metadata["secret_source_family"] == "Kubernetes pod environment"
+    assert_secret_output_held(artifact)
 
 
-def test_pi_post_tool_output_preserves_kubernetes_secret_volume_source(tmp_path: Path) -> None:
+def test_pi_post_tool_output_holds_secret_from_kubernetes_secret_volume_read(live_hook_root: Path) -> None:
     command = 'kubectl exec registry-frontend -- sh -c "cat /etc/secrets/token"'
-    artifact = _codex_post_tool_output_artifact(
+    artifact = live_post_tool_flag(
         harness="pi",
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
             "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
-        config_path="~/.pi/agent/settings.json",
-        source_scope="project",
-        cwd=tmp_path,
-        home_dir=tmp_path,
+        cwd=live_hook_root,
+        home_dir=live_hook_root,
     )
 
-    assert artifact is not None
-    assert artifact.metadata["action_class"] == "Kubernetes secret read command"
-    assert artifact.metadata["secret_source_family"] == "Kubernetes secret volume"
+    assert_secret_output_held(artifact)
 
 
 def test_local_interpreter_heredoc_after_kubectl_exec_is_not_mislabeled() -> None:

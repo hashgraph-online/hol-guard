@@ -158,7 +158,7 @@ pub(super) fn references_are_readable(paths: &[String], context: &OmpContext<'_>
         // The read proof reports a missing path only when its name is not
         // sensitive, so sensitive names keep their review.
         (result.minimum_action == "allow"
-            || result.reason_code == super::super::evaluate::MISSING_PATH)
+            || result.reason_code == super::super::read_decisions::MISSING_PATH)
             && !result.action.sensitive_target
     })
 }

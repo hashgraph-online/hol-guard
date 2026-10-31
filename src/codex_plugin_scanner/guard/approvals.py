@@ -23,14 +23,12 @@ from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
 from .approval_once_eligibility import requires_local_once_approval
-from .approval_persist_select_support import resolve_request_persistence_selection
 from .approval_resolution import require_resolvable_approval_request
+from .approval_scope_selection import resolve_request_scope_selection
 from .approval_scope_support import (
     RETRY_CANNOT_REUSE_APPROVAL,
     apply_scope_surfaces,
     package_request_portable_workspace_scope,
-    request_scope_observation,
-    resolve_request_scope_selection,
     resolve_request_workspace_scope,
     scope_payload_for_request,
 )
@@ -72,6 +70,8 @@ from .native_approval_resolution import (
 )
 from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
+from .native_package_workspace_scope import NativePackageWorkspaceScopeError
+from .native_protection_health import NativeProtectionHealthError
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .protection_capabilities import protection_capability_payloads
 from .risk import artifact_risk_profile
@@ -493,46 +493,54 @@ def apply_approval_resolution(
             target=local_tool_grant_target,
             duration=local_tool_grant_duration,
             now=resolved_at,
+            harness=str(request["harness"]),
+            reason=reason,
         )
-    contract, exact_token = (
-        request_scope_observation(request, guard_home=store.guard_home)
-        if request.get("artifact_type") == "native_bash_request"
-        else request_scope_observation(request)
-    )
+    # One resident ask settles the whole resolution: the scope the choice
+    # resolves to, whether it may be remembered against the request's exact
+    # action, and whether an allow has any binding left to run under. The
+    # contract and exact-action token it resolved against ride back with it.
     selection = resolve_request_scope_selection(
         request,
         action=action,
         requested_scope=scope,
         contract_version=scope_contract_version,
         contract_digest=scope_contract_digest,
+        persist_policy=persist_policy,
+        ask_persistence=True,
         guard_home=store.guard_home,
     )
+    if selection.contract is None:
+        raise ApprovalScopeUnavailableError
+    contract = selection.contract
+    exact_token = selection.exact_token
     requested_scope = selection.requested_scope
     scope = selection.applied_scope
-    # The resident owns both eligibility gates: whether this resolution may be
-    # remembered against the request's exact action, and whether an allow has
-    # any binding left to run under.
-    persist_policy = resolve_request_persistence_selection(
-        request,
-        action=action,
-        applied_scope=scope,
-        persist_policy=persist_policy,
-        scope_narrowed=selection.warning is not None,
-        contract_version=scope_contract_version,
-        contract_digest=scope_contract_digest,
-        guard_home=store.guard_home,
-    )
+    persist_policy = selection.persist_policy
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
-    portable_package_workspace = package_request_portable_workspace_scope(
-        artifact_id=request_artifact_id,
-        artifact_hash=request_artifact_hash,
-        artifact_type=_string_or_none(request.get("artifact_type")),
-        execution_context=package_execution_context_from_scanner_evidence(request.get("scanner_evidence")),
-    )
-    if scope == "workspace" and portable_package_workspace is not None:
-        resolved_workspace = portable_package_workspace
+    # Only a workspace-scoped decision is stored under a package workspace key,
+    # so only that scope asks the resident for one.  Every other scope ignored
+    # the answer, and asking anyway made each one depend on a resident it never
+    # needed - a shell "allow once" cannot fail because a package key could not
+    # be derived.
+    if scope == "workspace":
+        try:
+            portable_package_workspace = package_request_portable_workspace_scope(
+                artifact_id=request_artifact_id,
+                artifact_hash=request_artifact_hash,
+                artifact_type=_string_or_none(request.get("artifact_type")),
+                execution_context=package_execution_context_from_scanner_evidence(request.get("scanner_evidence")),
+                guard_home=store.guard_home,
+            )
+        except NativePackageWorkspaceScopeError as error:
+            # Every other resident scope failure here is an unavailable scope, and
+            # the callers catch it as one.  This one is a ``RuntimeError``, so left
+            # alone it would walk past those handlers and out of the CLI.
+            raise ApprovalScopeUnavailableError from error
+        if portable_package_workspace is not None:
+            resolved_workspace = portable_package_workspace
     # The resident owns the decision identity, persistence mode, local-once row
     # and sibling selector; this function only executes the plan against the store.
     from .native_policy_snapshot_constants import NativePolicySnapshotError
@@ -641,7 +649,7 @@ def apply_approval_resolution(
         )
         temporary_mcp_result, temporary_mcp_resolved_ids = store.apply_temporary_mcp_grant_resolution(
             request_id=request_id,
-            decisions=[temporary_decision],
+            decision=temporary_decision,
             selection=temporary_mcp_selection,
             reason=reason,
             resolved_at=resolved_at,
@@ -656,11 +664,7 @@ def apply_approval_resolution(
             if isinstance(error, str) and error:
                 raise ValueError(error)
     if local_tool_selection is not None:
-        local_tool_decision = local_tool_grant_decision(
-            harness=str(request["harness"]),
-            selection=local_tool_selection,
-            reason=reason,
-        )
+        local_tool_decision = local_tool_grant_decision(local_tool_selection)
         store.ensure_policy_integrity_ready_for_write(
             harness=local_tool_decision.harness,
             approval_gate_grant=resolved_gate_grant,
@@ -787,8 +791,8 @@ def _local_tool_grant_result(selection: LocalToolGrantSelection) -> dict[str, ob
         "target": selection.target,
         "duration": selection.duration,
         "expires_at": selection.expires_at,
-        "tool_name": selection.eligibility.tool_name,
-        "capability": selection.eligibility.capability,
+        "tool_name": selection.tool_name,
+        "capability": selection.capability,
     }
 
 
@@ -1295,18 +1299,29 @@ def _build_runtime_snapshot(
             health_runtime_state["approval_center_url"] = approval_center_url
     if health_runtime_state is not None and containment_health is not None:
         health_runtime_state["containment_health"] = containment_health
-    protection_health = build_runtime_protection_health(
-        store=store,
-        runtime_state=health_runtime_state,
-        managed_installs=health_managed_installs,
-        hook_verification=hook_verification,
-        trust_status=trust_status,
-        now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
-    )
+    try:
+        protection_health: dict[str, object] | None = build_runtime_protection_health(
+            store=store,
+            guard_home=store.guard_home,
+            runtime_state=health_runtime_state,
+            managed_installs=health_managed_installs,
+            hook_verification=hook_verification,
+            trust_status=trust_status,
+            now=datetime.fromisoformat(snapshot_now.replace("Z", "+00:00")),
+        )
+    except NativeProtectionHealthError as error:
+        # Only the native runtime says whether this machine is protected. With
+        # it unreachable there is no report to show and no state to claim, so
+        # the snapshot carries neither and the headline falls to degraded. The
+        # reason code is the only thing that tells a missing runtime apart from
+        # one that answered something unusable, and snapshots are polled, so it
+        # goes to the log at debug.
+        _LOGGER.debug("protection health report unavailable: %s", error)
+        protection_health = None
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,
         runtime_state=health_runtime_state,
-        protection_state=str(protection_health["state"]),
+        protection_state=str(protection_health["state"]) if protection_health is not None else "",
     )
     return {
         "generated_at": snapshot_now,
@@ -1970,17 +1985,6 @@ def _runtime_headline_detail(headline_state: str) -> str:
         "connected": "This machine is connected to Guard Cloud. Local Guard is sending the first shared proof now.",
     }
     return details.get(headline_state, "Complete local protection cannot be proven.")
-
-
-def is_bulk_allow_once_eligible(request: Mapping[str, object], *, guard_home: Path) -> bool:
-    """Whether a request can be approved once via the bulk approval flow.
-
-    The resident owns the decision; an unavailable resident raises rather than
-    approving.
-    """
-    from .native_approval_bulk_eligibility import native_bulk_allow_once_eligibility
-
-    return native_bulk_allow_once_eligibility([request], guard_home=guard_home)[0]
 
 
 def bulk_allow_read_only_once(

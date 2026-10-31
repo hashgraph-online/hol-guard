@@ -1,32 +1,22 @@
-"""Shared-vector end-to-end check of the resident archive binder and reason projection.
+"""End-to-end check of the resident archive binder against real files.
 
 ``tests/fixtures/mcp_proxy_decision/archive_signal_vectors.json`` was recorded from
 the Python proxy helpers before they moved into the resident (see its provenance
-block). The reason vectors replay through the real Python transport and the real
-resident; the archive binding is exercised end to end against real files. There
-is no Python oracle: the vectors are the contract.
+block); the resident's own tests replay its binding and reason vectors. There is
+no Python oracle: the vectors are the contract.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.native_mcp_proxy_decision import (
-    native_external_archive_bind,
-    native_package_reason_signals,
-)
+from codex_plugin_scanner.guard.native_mcp_proxy_decision import native_external_archive_bind
 from codex_plugin_scanner.guard.runtime.restricted_archive_contract import RestrictedArchiveDownload
 
-VECTORS = json.loads(
-    (Path(__file__).parent / "fixtures" / "mcp_proxy_decision" / "archive_signal_vectors.json").read_text(
-        encoding="utf-8"
-    )
-)["vectors"]
 ARCHIVE_URL = "https://example.com/pkg-1.0.0.tgz"
 
 pytestmark = pytest.mark.skipif(
@@ -72,15 +62,3 @@ def test_archive_binding_reverifies_downloads_in_the_resident(guard_home: Path, 
     download.path.write_bytes(b"substituted archive")
     download.path.chmod(0o400)
     assert native_external_archive_bind(params, (download,), requires_binding=True, guard_home=guard_home) is None
-
-
-def test_reason_signals_match_every_recorded_vector(guard_home: Path) -> None:
-    checked = 0
-    for vector in VECTORS:
-        request = vector["request"]
-        if request["check"] != "package_reason_signals":
-            continue
-        signals = native_package_reason_signals(request["reasons"], guard_home=guard_home)
-        assert list(signals) == vector["expected"]["signals"], vector["id"]
-        checked += 1
-    assert checked >= 15

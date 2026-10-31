@@ -67,6 +67,12 @@ def test_script_changes_change_the_request_identity(tmp_path: Path) -> None:
         artifact = build_tool_action_request_artifact(
             harness="claude-code", request=request, config_path=str(tmp_path / "policy.json"), source_scope="project"
         )
-        assert "local_secret_read" in artifact.metadata["risk_classes"]
+        # Discovery runs before an authenticated evaluation exists, so the
+        # artifact names no evaluated risk classes. The action class the
+        # native dispatcher produced is what carries the secret-read risk,
+        # and the resident adds that risk from the table it owns.
+        assert artifact.metadata["action_class"] == "local secret read shell command"
+        assert artifact.metadata["risk_classes"] == []
+        assert artifact.metadata["command_action_floor"] == "review"
         identities.append(artifact.artifact_id)
     assert identities[0] != identities[1]

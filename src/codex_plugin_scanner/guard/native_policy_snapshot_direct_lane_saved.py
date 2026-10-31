@@ -47,7 +47,7 @@ def _utf8_len(value: str) -> int | None:
 
 
 def _environment() -> dict[str, str] | None:
-    # ``native_exact_action`` sends every text entry of ``os.environ``.
+    # The edge's review evidence query sends every text entry of ``os.environ``.
     environment = {name: value for name, value in os.environ.items() if isinstance(value, str)}
     if len(environment) > _MAX_ENVIRONMENT_ENTRIES:
         return None
@@ -147,11 +147,19 @@ def with_saved_decision_state(
     if not saved_decision_bound(features):
         return bound
     environment = _environment()
+    if environment is None:
+        return bound
+    # The environment binds on its own, because every resident lane that
+    # resolves a command against the daemon's home and PATH needs it, not only
+    # a saved decision: without it a workspace with a custom block rule sends
+    # back every allowed PreToolUse. A saved decision still needs the control
+    # digest, the integrity state and the integrity key before the resident
+    # answers one, so publishing the environment alone allows nothing new.
+    bound["exact_action_environment"] = environment
     digest = current_extension_control_binding_digest()
     state = _integrity_state(store)
-    if environment is None or state is None or not _state_field_valid(digest):
+    if state is None or not _state_field_valid(digest):
         return bound
-    bound["exact_action_environment"] = environment
     bound["exact_action_control_digest"] = digest
     bound["policy_integrity_state"] = state
     return bound
@@ -189,10 +197,11 @@ class NativePolicySnapshotSavedStateMixin:
     def _recheck_direct_lane_saved_state(self) -> None:
         """Refresh after a database write and rebind once the state moved.
 
-        Only a write can move the state, so an unchanged database costs two
-        stats. The stamp is taken before the refresh, so a write that lands
-        during or after it is refreshed on the next reconcile. A refresh that
-        wrote the row costs one more refresh, which writes nothing.
+        On POSIX an unchanged database costs two stats. Windows can retain the
+        same last-write time and size while an open SQLite connection reuses
+        WAL pages, so its background reconcile must read the state every time.
+        The stamp is taken before the refresh, so a later write is refreshed
+        on the next reconcile. An unchanged state never queues another rebind.
         """
 
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -200,7 +209,7 @@ class NativePolicySnapshotSavedStateMixin:
         if bound is None or publisher._direct_lane_ack_target is None:
             return
         stamp = _database_stamp(publisher.guard_home)
-        if stamp == self._integrity_checked_stamp:
+        if os.name != "nt" and stamp == self._integrity_checked_stamp:
             return
         if _refresh_integrity_state(publisher.store) is None:
             return

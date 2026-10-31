@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Final
 
-_BUNDLE_MAX_AGE_SECONDS: Final[int] = 86_400 * 7
-_BUNDLE_CLOCK_SKEW_SECONDS: Final[int] = 300
 _PACKAGE_ACTION_VALUES = frozenset({"allow", "monitor", "warn", "ask", "block"})
 _SEVERITY_VALUES = frozenset({"unknown", "low", "medium", "high", "critical"})
 _EXPLOIT_LEVEL_VALUES = frozenset({"none", "elevated", "active"})

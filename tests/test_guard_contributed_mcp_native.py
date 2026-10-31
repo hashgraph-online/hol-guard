@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from functools import cache
 from pathlib import Path
@@ -11,13 +12,14 @@ import pytest
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import load_mcp_contribution_payloads, mcp_tool_state
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.temporary_mcp_approvals import temporary_mcp_grant_selector
+from tests.mcp_contribution_loader import load_mcp_contribution_payloads
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .mcp_case_batches import package_case_batches
+from .mcp_contribution_client import mcp_tool_state
 from .mcp_recorded_expectations import expected_decision, recorded
 from .test_guard_mcp_server_grants import _artifact, _AuthorityStore, _layer
 from .test_guard_temporary_mcp_approvals import _artifact as _browser_click_artifact
@@ -28,9 +30,9 @@ _LOCKDOWN_REASON = "This MCP tool is blocked by its authenticated extension auth
 _MCP_SOURCES = Path(__file__).resolve().parents[1] / "contributions" / "mcp-servers"
 
 
-def _package_cases(root: Path | None = None) -> list[tuple[str, str, str, str, str]]:
+def _cases_from(payloads) -> list[tuple[str, str, str, str, str]]:
     cases: list[tuple[str, str, str, str, str]] = []
-    for payload in load_mcp_contribution_payloads(root):
+    for payload in payloads:
         launch = payload["launch"]
         if launch["kind"] != "package-launcher":
             continue
@@ -40,8 +42,17 @@ def _package_cases(root: Path | None = None) -> list[tuple[str, str, str, str, s
     return cases
 
 
-# Collection precedes the fixtures that route authenticated native metadata.
-_SOURCE_PACKAGE_CASES = _package_cases(_MCP_SOURCES)
+def _package_cases(root: Path | None = None) -> list[tuple[str, str, str, str, str]]:
+    return _cases_from(load_mcp_contribution_payloads(root))
+
+
+# Collection precedes the fixtures that route authenticated native metadata, and
+# validating a contribution asks the resident for its URL grammar. Parametrize
+# from the source files as written; every test compares these cases with the
+# resident-validated load, so a contribution validation would change still fails.
+_SOURCE_PACKAGE_CASES = _cases_from(
+    json.loads(path.read_text(encoding="utf-8")) for path in sorted(_MCP_SOURCES.glob("mcp.*.json"))
+)
 
 
 @pytest.fixture(scope="module")

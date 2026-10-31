@@ -145,10 +145,6 @@ def pypi_desktop_core_versions(payload: object, *, include_alpha: bool) -> list[
     return versions
 
 
-def pypi_alpha_versions(payload: object) -> list[str]:
-    return pypi_desktop_core_versions(payload, include_alpha=True)
-
-
 def _release_files_are_available(files: object) -> bool:
     if not isinstance(files, list):
         return False
@@ -819,14 +815,31 @@ def _install_managed_core(staged: Path, manifest: _ParsedCoreManifest, target: s
     version_dir.mkdir(parents=True, exist_ok=True)
     for path in (root, versions_root, version_dir, installed):
         _reject_symlink(path)
-    _ = shutil.copy2(staged, installed)
+    # Stage beside the target and rename over it. Copying onto an existing
+    # executable rewrites the same inode, and macOS keeps the code signature it
+    # cached for that inode, so a reinstall of the same version is killed on
+    # its next launch even though the file on disk verifies. The candidate is
+    # a new file under a name no other install uses: a predictable name could
+    # already be a hard link to the installed binary, or another update's
+    # candidate.
+    descriptor, candidate_name = tempfile.mkstemp(prefix=f".{_executable_name()}.", suffix=".tmp", dir=version_dir)
+    candidate = Path(candidate_name)
+    try:
+        with os.fdopen(descriptor, "wb") as destination, staged.open("rb") as source:
+            shutil.copyfileobj(source, destination)
+        shutil.copystat(staged, candidate)
+        _reject_symlink(candidate)
+        _make_executable(candidate)
+        _verify_candidate(
+            candidate,
+            expected_team=_macos_signing_team(Path(sys.executable)) if sys.platform == "darwin" else None,
+            expected_sha256=manifest["sha256"],
+        )
+        _reject_symlink(installed)
+        _ = candidate.replace(installed)
+    finally:
+        candidate.unlink(missing_ok=True)
     _reject_symlink(installed)
-    _make_executable(installed)
-    _verify_candidate(
-        installed,
-        expected_team=_macos_signing_team(Path(sys.executable)) if sys.platform == "darwin" else None,
-        expected_sha256=manifest["sha256"],
-    )
     pointer = {
         "schema": INSTALL_SCHEMA,
         "version": manifest["version"],
@@ -857,7 +870,6 @@ __all__ = [
     "is_desktop_managed_runtime",
     "is_frozen_runtime",
     "platform_target",
-    "pypi_alpha_versions",
     "pypi_desktop_core_versions",
     "select_desktop_core_latest",
 ]

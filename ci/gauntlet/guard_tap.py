@@ -25,6 +25,9 @@ _PAYLOAD_KEYS = (
     "command",
     "file_path",
     "generation_id",
+    # The workspace and session a contained-run snapshot names; see codex_contained.
+    "cwd",
+    "session_id",
 )
 # How long leaving the tap waits for reviews that are still running to finish.
 _DRAIN_SECONDS = 15.0

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The warmer and required CI use identical, complete nextest build selections.
+# Required CI archives complete build selections, independently of test sharding.
 set -euo pipefail
 case "${1:?test partition required}" in
     core|test-core) packages=(--locked --workspace --exclude guard-command --exclude hol-guard-runtime --all-targets) ;;
     command|test-command) packages=(--locked --package guard-command --all-targets) ;;
-    runtime|test-runtime-1) packages=(--locked --package hol-guard-runtime --all-targets) ;;
+    runtime|test-runtime-1|test-runtime-2) packages=(--locked --package hol-guard-runtime --all-targets) ;;
     *) echo "Unsupported archive partition" >&2; exit 64 ;;
 esac
 archive="${RUNNER_TEMP:?}/runtime-test-archive.tar.zst"
@@ -19,4 +19,4 @@ if [[ -e "$archive" || -L "$archive" ]]; then
 fi
 nextest_bin="$(python3 scripts/ci/install_nextest.py)"
 PATH="$nextest_bin:$PATH" cargo nextest archive --manifest-path rust/Cargo.toml \
-    "${packages[@]}" --archive-file "$archive" --zstd-level 1
+    "${packages[@]}" --archive-file "$archive" --zstd-level 1 --timings

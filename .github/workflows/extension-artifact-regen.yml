@@ -105,7 +105,9 @@ jobs:
     needs: runtime
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # The command catalog step adds a source compiler build, and a changed
+    # engine rebuilds the legacy directory instead of reusing it.
+    timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: read
@@ -135,6 +137,7 @@ jobs:
         run: |
           chmod 0755 "$RUNNER_TEMP/delivery-runtime/hol-guard-runtime"
           echo "HOL_GUARD_NATIVE_BINARY=$RUNNER_TEMP/delivery-runtime/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install 1.88.0 --profile minimal
       - name: Cache the data-free native compiler
@@ -143,11 +146,21 @@ jobs:
           workspaces: rust
           shared-key: extension-pack-compiler
       - name: Cache integrity-checked public metadata
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: .extension-delivery-cache/metadata
           key: extension-delivery-metadata-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: extension-delivery-metadata-
+      - name: Generate the command catalog the delivery build loads
+        # Contribution checks ask the native runtime, which opens a Guard store,
+        # and a fresh store needs the generated command catalog. A rebuilt
+        # legacy directory also reads entries through the full source compiler.
+        # Without these the build fails before it can publish (#5816).
+        run: |
+          uv run --no-sync python scripts/refresh_extension_artifacts.py --trust-only
+          cargo +1.88.0 build --manifest-path rust/Cargo.toml --locked --release -p guard-command --bin guard-command-source
+          uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
       - name: Build immutable public directory and policy packs
         env:
           SOURCE_SHA: ${{ github.sha }}
@@ -233,6 +246,7 @@ jobs:
         run: |
           chmod 0755 "$RUNNER_TEMP/delivery-runtime/hol-guard-runtime"
           echo "HOL_GUARD_NATIVE_BINARY=$RUNNER_TEMP/delivery-runtime/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: extension-artifacts-${{ github.sha }}

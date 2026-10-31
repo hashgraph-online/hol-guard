@@ -37,7 +37,7 @@ def _daemon(monkeypatch: pytest.MonkeyPatch, install_fake_system_keyring) -> Non
     install_fake_system_keyring()
     monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
     monkeypatch.setattr(saved, "current_extension_control_binding_digest", lambda: "e" * 64)
-    monkeypatch.setattr(saved, "os", SimpleNamespace(environ={"HOME": "/home/dev", "PATH": "/usr/bin"}))
+    monkeypatch.setattr(saved, "os", SimpleNamespace(name="posix", environ={"HOME": "/home/dev", "PATH": "/usr/bin"}))
 
 
 def _daemon_store(guard_home: Path) -> GuardStore:
@@ -60,7 +60,10 @@ def _published(store: GuardStore) -> dict[str, object]:
 def test_a_fresh_home_binds_the_state_its_store_writes(tmp_path: Path) -> None:
     store = _daemon_store(tmp_path / "guard-home")
     assert _stored(store) is None
-    assert saved.with_saved_decision_state({}, store=store, features=FEATURES) == {}
+    # The environment binds without the state: the resident needs it to resolve
+    # a local CLI, and a saved decision still waits for the state and its key.
+    unrefreshed = saved.with_saved_decision_state({}, store=store, features=FEATURES)
+    assert unrefreshed == {"exact_action_environment": {"HOME": "/home/dev", "PATH": "/usr/bin"}}
 
     bound = _published(store)
 

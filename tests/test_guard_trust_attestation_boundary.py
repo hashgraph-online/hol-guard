@@ -14,15 +14,17 @@ from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     GuardTrustAttestationSigningConfig,
-    GuardTrustAttestationVerificationPolicy,
     apply_trust_attestation_metadata,
     build_trust_attestation_payload,
-    build_trust_attestation_verification_key,
     sign_trust_attestation,
     trust_claim_hash,
-    verify_trust_attestation,
 )
 from codex_plugin_scanner.guard.trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
+from tests.trust_attestation_verify_support import (
+    GuardTrustAttestationVerificationPolicy,
+    build_trust_attestation_verification_key,
+    verify_trust_attestation,
+)
 
 
 def _signing_config(key_id: str = "test-key") -> GuardTrustAttestationSigningConfig:
@@ -207,6 +209,11 @@ def test_stale_locally_marked_evidence_hash_is_rejected() -> None:
     assert "trustResolution" not in result
 
 
+# The verifier is the native runtime's, so this test needs a provisioned
+# resident. `native_context_digest` forces the compiled runtime against the
+# session's keyed home and skips where no binary was built, which keeps the
+# rest of this module running on the jobs that do not build Rust.
+@pytest.mark.usefixtures("native_context_digest")
 def test_attestation_schema_replay_revocation_and_monotonic_rules() -> None:
     config = _signing_config("active-key")
     verification_key = build_trust_attestation_verification_key(config)
@@ -280,6 +287,16 @@ def test_attestation_schema_replay_revocation_and_monotonic_rules() -> None:
             envelope=envelope,
             trusted_keys=(verification_key,),
             policy=GuardTrustAttestationVerificationPolicy(minimum_sequence=8),
+        )
+    with pytest.raises(ValueError, match="monotonic"):
+        # A limit wider than any fixed-width field is still a limit, and it
+        # comes back as the verifier's own refusal rather than as a runtime
+        # that could not read the request at all.
+        verify_trust_attestation(
+            payload=payload,
+            envelope=envelope,
+            trusted_keys=(verification_key,),
+            policy=GuardTrustAttestationVerificationPolicy(minimum_sequence=2**80),
         )
     with pytest.raises(ValueError, match="predates"):
         verify_trust_attestation(

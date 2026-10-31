@@ -113,6 +113,38 @@
   vertical-align: 2px;
 }
 
+/* The flat HOL mark: footers, and the corner of a hero on phones where the particle stage would push the page's work out of view */
+.guard-brand-mark {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.guard-brand-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.guard-hero-inline-mark {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 44px;
+  height: 44px;
+  opacity: 0.9;
+}
+
+@media (min-width: 1024px) {
+  .guard-hero-inline-mark {
+    display: none;
+  }
+}
+
+/* Task pages keep the mark smaller so the work under the hero stays in the first viewport */
+.guard-hero-stage--compact {
+  max-width: 260px;
+}
+
 .guard-hero-stage {
   position: relative;
   width: 100%;

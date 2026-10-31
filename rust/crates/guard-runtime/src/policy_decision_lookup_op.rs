@@ -34,10 +34,10 @@ use guard_policy_snapshot::policy_integrity::{
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
+use crate::cloud_exception_lift::{cloud_exception_covers, stored_exception_bundle, LiftTarget};
 use crate::guard_store_json::dumps_sorted;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
-const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
 /// The ceiling a non-consuming lookup stops fetching at. The document path
 /// reports the same ceiling, so both read it from the one contract constant.
 const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = guard_contracts::POLICY_DOCUMENT_MATCH_LIMIT as i64;
@@ -53,6 +53,8 @@ const APPROVAL_GATE_POLICY_SOURCE: &str = "approval-gate";
 const APPROVAL_CONTEXT_SQL_PATTERN: &str = "guard-approval-context:v1:%";
 const RUNTIME_SCOPED_EXACT_MATCH_PREFIX: &str = "runtime-exact:";
 const POLICY_BUNDLE_SOURCE: &str = "policy-bundle";
+/// Rows a v2 bundle compiles to on sync (`_build_canonical_policy_bundle_decisions`).
+const POLICY_BUNDLE_CANONICAL_SOURCE: &str = "policy-bundle-canonical";
 
 /// `_SCOPED_RUNTIME_EXACT_FAMILIES` (`store_base.py:317`) — the 5 families that
 /// get a runtime exact-match key. `mcp`/`prompt-env-read`/`prompt-file` are
@@ -469,16 +471,6 @@ fn trust_status_from_state(state: &Value) -> Value {
     })
 }
 
-/// `local_once_integrity_purpose`.
-fn local_once_integrity_purpose(authority_kind: Option<&str>) -> String {
-    match authority_kind {
-        Some(kind) if !kind.is_empty() && kind != LOCAL_ONCE_LEGACY_AUTHORITY_KIND => {
-            format!("{LOCAL_ONCE_INTEGRITY_PURPOSE}:{kind}")
-        }
-        _ => LOCAL_ONCE_INTEGRITY_PURPOSE.to_string(),
-    }
-}
-
 pub(crate) fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
     use rusqlite::types::ValueRef;
     match cell {
@@ -641,7 +633,7 @@ pub(crate) fn verify_local_once(
         &local_once_integrity(row),
         key,
         key_id,
-        &local_once_integrity_purpose(authority_kind.as_str()),
+        crate::local_once_store::local_once_integrity_purpose(authority_kind.as_str()),
     )
 }
 
@@ -830,12 +822,12 @@ pub(crate) fn claim_local_once_by_id(
         m.insert("claimed_at".into(), Value::from(now));
     }
     let authority_kind = row_value(&row, "authority_kind");
-    let purpose = local_once_integrity_purpose(authority_kind.as_str());
+    let purpose = crate::local_once_store::local_once_integrity_purpose(authority_kind.as_str());
     let signed = match sign_local_authority_payload(
         &claimed,
         integrity_key.unwrap_or(&[]),
         integrity_key_id.unwrap_or(""),
-        &purpose,
+        purpose,
         now,
     ) {
         Ok(s) => s,
@@ -882,11 +874,20 @@ pub(crate) fn materialized_policy_bundle_row_identity(row: &Value) -> Value {
     ])
 }
 
+/// A signed-bundle row (v1 or canonical v2) that blocks or asks.
+fn is_bundle_restriction(row: &Value) -> bool {
+    matches!(
+        row_value(row, "source").as_str(),
+        Some(POLICY_BUNDLE_SOURCE | POLICY_BUNDLE_CANONICAL_SOURCE)
+    ) && row_value(row, "action").as_str() != Some("allow")
+}
+
 /// `_runtime_policy_row_is_eligible`.
 #[allow(clippy::too_many_arguments)]
 fn runtime_policy_row_is_eligible(
     row: &Value,
     bundle_identities: &[Vec<Value>],
+    bundle_rules_lifted: bool,
     requested_artifact_id: Option<&str>,
     requested_artifact_hash: Option<&str>,
     runtime_exact_match_key: Option<&str>,
@@ -895,6 +896,11 @@ fn runtime_policy_row_is_eligible(
 ) -> bool {
     let source = row_value(row, "source").as_str().unwrap_or("").to_string();
     if source == "cloud-sync" || source == "team-policy" {
+        return false;
+    }
+    // An approved Cloud exception lifts the bundle's blocks and reviews for
+    // this target; its allows still apply.
+    if bundle_rules_lifted && is_bundle_restriction(row) {
         return false;
     }
     if source == POLICY_BUNDLE_SOURCE {
@@ -1650,6 +1656,22 @@ fn evaluate_in_connection(
     } else {
         Vec::new()
     };
+    // Asked per probe, so every grouped artifact and portable alias reads its
+    // own answer; the bundle itself is validated once per request.
+    let bundle_rules_lifted = rows.iter().any(is_bundle_restriction)
+        && cloud_exception_covers(
+            request
+                .cloud_exception_bundle
+                .get_or_init(|| stored_exception_bundle(conn, current_time))
+                .as_ref(),
+            &LiftTarget {
+                harness,
+                artifact_id,
+                publisher,
+                workspace: request.exception_workspace.as_deref().or(workspace),
+                now: current_time,
+            },
+        );
     let has_local_rows = rows
         .iter()
         .any(|c| !is_remote_policy_source(row_value(c, "source").as_str()));
@@ -1699,6 +1721,7 @@ fn evaluate_in_connection(
             if !runtime_policy_row_is_eligible(
                 candidate,
                 &bundle_identities,
+                bundle_rules_lifted,
                 artifact_id,
                 artifact_hash,
                 runtime_exact_match_key.as_deref(),
@@ -1796,6 +1819,7 @@ fn evaluate_in_connection(
         if !runtime_policy_row_is_eligible(
             candidate,
             &bundle_identities,
+            bundle_rules_lifted,
             artifact_id,
             artifact_hash,
             runtime_exact_match_key.as_deref(),

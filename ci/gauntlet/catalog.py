@@ -8,6 +8,7 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from .approval_retry_action import FILE_TOOLS
 from .approval_retry_bash import (
     BASH_LIFECYCLE_CASES,
     BASH_LIFECYCLE_ORACLE,
@@ -63,6 +64,11 @@ class Scenario:
     # Whether this protection case accepts Guard's own contained route as the stop it expects.
     # Only a ``sandbox-required`` deny whose rewrite ``contained_core`` proves end to end counts.
     contained_ok: bool = False
+    # Guard reason codes this case exists to drive. The judge reads them back out of the case's
+    # own observations, so a declaration is met only by a live decision in that run's evidence.
+    # A case that would otherwise pass without reaching one is reported as not-exercised, which
+    # is how a model that spelled its way around the shape stops reading as proof Guard is quiet.
+    decision_paths: tuple[str, ...] = ()
 
     def render(self, values: dict[str, str]) -> Scenario:
         """Expand fixture placeholders without evaluating code."""
@@ -87,6 +93,7 @@ class Scenario:
             self.profiles,
             tuple(expand(c, command=True) for c in self.benign_exit_commands),
             self.contained_ok,
+            self.decision_paths,
         )
 
 
@@ -116,6 +123,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "profiles",
             "benign_exit_commands",
             "contained_ok",
+            "decision_paths",
         }
         if not required <= row.keys() or row.keys() - allowed:
             raise ValueError("scenario has missing or unknown fields")
@@ -123,13 +131,15 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("scenario scalar fields must be nonempty strings")
         if row.get("path") is not None and (not isinstance(row["path"], str) or not row["path"]):
             raise ValueError("scenario path must be a nonempty string or null")
-        for name in ("commands", "required_tools", "profiles", "benign_exit_commands"):
+        for name in ("commands", "required_tools", "profiles", "benign_exit_commands", "decision_paths"):
             if name in row and (
                 not isinstance(row[name], list) or any(not isinstance(value, str) or not value for value in row[name])
             ):
                 raise ValueError("scenario lists must contain nonempty strings")
         if "contained_ok" in row and type(row["contained_ok"]) is not bool:
             raise ValueError("scenario contained_ok must be a boolean")
+        if any(re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code) is None for code in row.get("decision_paths", ())):
+            raise ValueError("scenario decision_paths must name Guard reason codes")
         scenario = Scenario(
             **{
                 **row,
@@ -137,6 +147,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
                 "required_tools": tuple(row.get("required_tools", ())),
                 "profiles": tuple(row.get("profiles", ("core",))),
                 "benign_exit_commands": tuple(row.get("benign_exit_commands", ())),
+                "decision_paths": tuple(row.get("decision_paths", ())),
             }
         )
         if scenario.id in ids or re.fullmatch(r"[a-z][a-z0-9-]{0,79}", scenario.id) is None:
@@ -185,10 +196,19 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             scenario.expectation != "allow" or scenario.commands or "core" in scenario.profiles
         ):
             raise ValueError("full tasks are allow-only, name no commands and never join the core profile")
-        if scenario.oracle == "approved-retry" and (
-            scenario.expectation != "allow" or scenario.required_tools != ("bash",) or "core" in scenario.profiles
-        ):
-            raise ValueError("approve-then-retry cases are allow-only shell cases and never join the core profile")
+        if scenario.oracle == "approved-retry":
+            # The lane's repeated action is either a shell command or a file-tool call.
+            # A file-tool case names no command at all, so it pins the file instead:
+            # that path is what ties its grant to the attempt the agent came back to.
+            shell = scenario.required_tools == ("bash",)
+            files = bool(scenario.required_tools) and set(scenario.required_tools) <= FILE_TOOLS
+            if scenario.expectation != "allow" or "core" in scenario.profiles or not (shell or files):
+                raise ValueError(
+                    "approve-then-retry cases are allow-only, drive bash or the file tools alone, "
+                    "and never join the core profile"
+                )
+            if files and (scenario.commands or not scenario.path):
+                raise ValueError("an approve-then-retry file-tool case names no command and pins one file")
         if scenario.oracle == BASH_LIFECYCLE_ORACLE:
             blocked = scenario.id in {MUTATION_CASE, DENIAL_CASE}
             if (

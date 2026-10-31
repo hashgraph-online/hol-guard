@@ -4,6 +4,7 @@ version = "3.16.3"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [[bin]]
 name = "hol-guard-runtime"
@@ -16,6 +17,9 @@ guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
+guard-policy-bundle = { path = "../guard-policy-bundle" }
+guard-plugin-kit = { path = "../guard-plugin-kit" }
+guard-plugin-telemetry = { path = "../guard-plugin-telemetry" }
 guard-rule-contract = { path = "../guard-rule-contract" }
 guard-adapter-detection = { path = "../guard-adapter-detection" }
 guard-runtime-pyjson = { path = "../guard-runtime-pyjson" }
@@ -55,7 +59,7 @@ sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount"] }
+nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount", "hostname"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 guard-seatbelt = { path = "../guard-seatbelt" }
@@ -69,6 +73,10 @@ windows-permissions.workspace = true
 seccompiler = "0.5.0"
 landlock = "=0.4.7"
 capctl = "=0.2.4"
+
+[features]
+# Exposes the parser entry points in `src/fuzz_entry.rs` to `rust/fuzz`.
+fuzzing = []
 
 [dev-dependencies]
 tempfile = "3.10"

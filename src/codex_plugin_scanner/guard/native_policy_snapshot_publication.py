@@ -18,6 +18,7 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_direct_lane import (
+    DIRECT_HOOK_CONNECTOR_NOTICE_FEATURE,
     contained_sink_command,
     direct_lane_binding,
     direct_lane_integrity_key,
@@ -264,6 +265,8 @@ class NativePolicySnapshotPublicationMixin:
                 evidence_drain=publisher.direct_evidence_bound(resident_features),
                 contained_sink_command=contained_sink_command(resident_features),
                 integrity_key=direct_lane_integrity_key(publisher.store, resident_features),
+                connector_setup_notice=publisher.direct_evidence_bound(resident_features)
+                and DIRECT_HOOK_CONNECTOR_NOTICE_FEATURE in resident_features,
             )
             direct_lane = with_saved_decision_state(direct_lane, store=publisher.store, features=resident_features)
             direct_lane = with_review_facts(

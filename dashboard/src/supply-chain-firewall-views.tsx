@@ -563,6 +563,17 @@ function activationHeadline(protection: PackageManagerProtection | null): string
   return "Fix PATH to finish activation";
 }
 
+/** One sentence on why installs are not checked yet; the shim folder stays in the drawer and tooltip. */
+function activationDetail(protection: PackageManagerProtection): string {
+  if (protection.path_status === "restart_required") {
+    return protection.shell_profile_configured
+      ? "Guard saved your shell setup. Finish activation, then open a new shell."
+      : "Guard installed its shims. Activation is still waiting in this Guard session.";
+  }
+  if (protection.path_status === "in_path") return "Guard's shims now check installs from your package managers.";
+  return "Installs skip Guard until its shim folder is on PATH.";
+}
+
 type ActivationSummaryProps = {
   activationAssistError: string | null;
   lastAuditProofAt?: string | null;
@@ -584,6 +595,24 @@ export function ActivationSummary({
     return null;
   }
   const copy = resolvePackageManagerProtectionCopy(protection);
+  // A healthy PATH gets no headline of its own, whether the status above is
+  // all clear or the recovery panel: the note itself says the shims intercept
+  // installs, and any open issue the recovery panel names is not about PATH.
+  if (protection.path_status === "in_path" && activationAssistError === null) {
+    return (
+      <p className="text-xs leading-5 text-slate-600">
+        {copy.pathDetail}
+        {lastAuditProofAt !== null ? <> Last audit proof {formatRelativeTime(lastAuditProofAt)}.</> : null}
+      </p>
+    );
+  }
+  // A missing PATH entry is already the hero's first step and a "Needs a fix"
+  // row per tool, so it gets no box of its own here.
+  if (protection.path_status !== "restart_required" && activationAssistError === null) {
+    return lastAuditProofAt !== null ? (
+      <p className="text-xs leading-5 text-slate-600">Last audit proof {formatRelativeTime(lastAuditProofAt)}.</p>
+    ) : null;
+  }
   const Icon =
     protection.path_status === "in_path"
       ? HiMiniCheckCircle
@@ -610,7 +639,9 @@ export function ActivationSummary({
         <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
         <div className="min-w-0">
           <p className="text-sm font-medium text-brand-dark">{activationHeadline(protection)}</p>
-          <p className="mt-0.5 text-xs text-slate-600">{copy.pathDetail}</p>
+          <p className="mt-0.5 text-sm text-slate-600" title={protection.shim_dir}>
+            {activationDetail(protection)}
+          </p>
           {lastAuditProofAt !== null && (
             <p className="mt-1 text-xs text-slate-500">
               Last audit proof {formatRelativeTime(lastAuditProofAt)}
@@ -629,7 +660,7 @@ export function ActivationSummary({
             </div>
           )}
           {activationAssistError !== null && (
-            <p className="mt-2 text-xs text-brand-attention">{activationAssistError}</p>
+            <p className="mt-2 text-xs text-brand-attention-text">{activationAssistError}</p>
           )}
         </div>
       </div>

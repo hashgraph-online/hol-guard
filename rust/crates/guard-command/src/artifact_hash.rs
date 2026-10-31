@@ -64,7 +64,7 @@ fn codex_hook_identity(artifact: &Map<String, Value>) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// `_hash_payload`.
+/// The payload the artifact hash is taken over.
 fn hash_payload(artifact: &Map<String, Value>) -> Value {
     if let Some(identity) = codex_hook_identity(artifact) {
         return json!({

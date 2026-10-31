@@ -10,26 +10,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
-from .windows_paths import windows_process_creation_time
+from .windows_paths import windows_process_creation_time, windows_process_owner_sid
 
 _TRUSTED_POSIX_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 CODEX_BROWSER_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY = "guard_codex_browser_wait_timeout_seconds"
-
-
-def bound_wait_timeout_seconds(
-    payload: Mapping[str, object] | None,
-    *,
-    maximum: int,
-) -> int | None:
-    """Return the authenticated bridge's bounded wait budget."""
-
-    if not isinstance(payload, Mapping):
-        return None
-    value = payload.get(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY)
-    if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
-        return None
-    return value
 
 
 def current_process_identity() -> dict[str, object] | None:
@@ -67,6 +52,16 @@ def process_start_token(pid: int, *, deadline_monotonic: float | None = None) ->
     return _process_start_token(pid, deadline_monotonic=deadline_monotonic)
 
 
+def process_owner_marker(pid: int) -> str | None:
+    """Return an OS-backed owner marker for the process currently using ``pid``."""
+
+    if type(pid) is not int or pid <= 0:
+        return None
+    if os.name == "nt":
+        return windows_process_owner_sid(pid)
+    return _posix_process_owner_marker(pid)
+
+
 def _process_start_token(pid: int, *, deadline_monotonic: float | None = None) -> str | None:
     def expired() -> bool:
         return deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
@@ -100,6 +95,35 @@ def _process_start_token(pid: int, *, deadline_monotonic: float | None = None) -
     return f"posix:{started_at}" if result.returncode == 0 and started_at and not expired() else None
 
 
+def _posix_process_owner_marker(pid: int) -> str | None:
+    try:
+        with open(f"/proc/{pid}/status", encoding="ascii") as handle:
+            for line in handle:
+                if not line.startswith("Uid:"):
+                    continue
+                fields = line.split()
+                raw_uid = fields[1] if len(fields) > 1 else ""
+                return f"uid:{int(raw_uid)}" if raw_uid.isdigit() else None
+    except (OSError, UnicodeError, ValueError):
+        pass
+    ps_path = _trusted_posix_ps_path()
+    if ps_path is None:
+        return None
+    try:
+        result = subprocess.run(
+            [ps_path, "-p", str(pid), "-o", "uid="],
+            check=False,
+            capture_output=True,
+            env={"LANG": "C", "LC_ALL": "C"},
+            text=True,
+            timeout=0.5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    raw_uid = result.stdout.strip().split(maxsplit=1)[0] if result.stdout.strip() else ""
+    return f"uid:{int(raw_uid)}" if result.returncode == 0 and raw_uid.isdigit() else None
+
+
 def _trusted_posix_ps_path() -> str | None:
     for raw_path in _TRUSTED_POSIX_PS_PATHS:
         candidate = Path(raw_path)
@@ -131,8 +155,8 @@ def _linux_proc_stat(pid: int) -> str | None:
 __all__ = [
     "CODEX_BROWSER_WAIT_PROCESS_KEY",
     "CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY",
-    "bound_wait_timeout_seconds",
     "current_process_identity",
     "process_identity_matches",
+    "process_owner_marker",
     "process_start_token",
 ]

@@ -43,12 +43,10 @@ def validate_compatibility(value, extensions, *, compiler=None):
     _native_metadata("compatibility", value=value, extensions=extensions, compiler=compiler)
 
 
-def asset_path(relative, *, source_sha):
+def asset_path(relative):
     if (
         re.fullmatch(
-            r"assets/extension-data-"
-            + re.escape(source_sha)
-            + r"-0\.0-[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
+            r"assets/[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
             relative,
         )
         is None
@@ -78,40 +76,6 @@ def _installation_root() -> Path:
 
 def _read_installed(path: Path, *, limit: int) -> bytes:
     return read_bytes(path, limit=limit, anchor=_installation_root())
-
-
-def compatibility_payloads(family: str) -> tuple[dict[str, Any], ...] | None:
-    """Explicit offline legacy API; never load the library on decision paths.
-
-    Only genuine legacy absence permits fallback. An advertised installed bundle
-    must authenticate through both release manifests before any metadata reads.
-    """
-    if family not in {"commands", "mcp"}:
-        raise ValueError("unknown compatibility metadata family")
-    if not advertised():
-        return None
-    bundle = load_installed_bundle()
-
-    # Offline traversals commonly read thousands of members; one session verifies
-    # and copies the runtime once for all of them.
-    with lifecycle.session():
-        try:
-            result = run_source_compiler(
-                "bundle-compatibility",
-                {
-                    "family": family,
-                    "source_sha": bundle.source_sha,
-                    "engine": bundle.engine,
-                    "data": bundle.data.decode("utf-8"),
-                    "max_bytes": MAX_BYTES,
-                },
-                fetch=lambda reference: bundle._fetch(
-                    cast(dict[str, Any], reference["location"]), cast(int, reference["length"])
-                ),
-            )
-        except NativeSourceCompilerError as error:
-            raise ValueError(f"installed compatibility metadata unavailable: {error}") from error
-    return tuple(cast(list[dict[str, Any]], result["payloads"])) if result["available"] else None
 
 
 _ANSWERS: dict[str, tuple[tuple[object, ...], object]] = {}
@@ -234,7 +198,7 @@ class VerifiedInstalledBundle:
             # container member by its digest; a whole asset is only resolved.
             reply = addressed(
                 "installed",
-                sources=lambda _reply: [root / target_location["tag"] / target_location["asset"]],
+                sources=lambda reply: [root / reply["directory"] / target_location["asset"]],
                 root=str(root),
                 target=target_location,
                 source=self.source_sha,
@@ -247,7 +211,8 @@ class VerifiedInstalledBundle:
             raise
         if "data" in reply:
             return base64.b64decode(reply["data"], validate=True)
-        path = base / target_location["tag"] / target_location["asset"]
+        # Native validated the tag and names its directory.
+        path = base / reply["directory"] / target_location["asset"]
         if not path.exists() and not path.is_symlink() and reply["kind"] == "pack":
             # The fixed native factory checks the installed release/executable
             # binding and constructs the public URL. No selector, caller URL,

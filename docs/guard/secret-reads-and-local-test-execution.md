@@ -44,6 +44,13 @@ or a single text `bun.lock`, the installed package metadata, the local runner
 and the manager identity. Ambiguous locks, custom reporters and unsupported
 arguments still require review.
 
+The shim sends the manager and arguments it received to the resident in one
+request. The resident reads the launch evidence itself, accepts only `npx` and
+`bunx` (only `npx` for TypeScript checks), and runs only a launch that names
+exactly one local execution. When an allowed Vitest launch from Guard's
+installed package shims cannot be contained, the resident tells the shim to
+stop instead of returning to review, so the launch never runs uncontained.
+
 The contained executor runs the pinned local Node executable and runner
 directly. It does not execute `bunx`, fetch a missing package, or inherit the
 caller's credential environment. Protected workspace paths are omitted from

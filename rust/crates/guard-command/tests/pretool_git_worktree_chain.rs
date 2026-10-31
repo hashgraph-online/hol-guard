@@ -108,7 +108,9 @@ fn assert_reviewed(home: &Path, cwd: &Path, command: &str) {
     assert_ne!(result.minimum_action, "allow", "{command}");
 }
 
-/// Without `-b` Git checks the reference out detached and creates no branch.
+/// Without `-b` Git checks the reference out detached and creates no branch,
+/// except with no reference at all, where it names a branch after the
+/// destination and starts it at `HEAD`.
 #[test]
 fn detached_worktree_add_needs_a_reference() {
     let (_cleanup, home, repository) = repository("detached");
@@ -116,12 +118,12 @@ fn detached_worktree_add_needs_a_reference() {
         "git worktree add ../app-review origin/main",
         "git worktree add ../app-review refs/heads/main",
         "git worktree add --detach ../app-review origin/main",
+        // Git names the new branch after the directory and starts it at HEAD.
+        "git worktree add ../app-review",
     ] {
         assert_allowed(&home, &repository, command);
     }
     for command in [
-        // Git names a new branch after the directory.
-        "git worktree add ../app-review",
         "git worktree add -b review --detach ../app-review origin/main",
         "git worktree add ../service origin/main",
         "git worktree add ../link/review origin/main",
@@ -129,6 +131,26 @@ fn detached_worktree_add_needs_a_reference() {
     ] {
         assert_reviewed(&home, &repository, command);
     }
+}
+
+/// The implied branch is only HEAD's tree while no branch of that name exists
+/// and `worktree.guessRemote` is off; either would check out something the
+/// proof never read.
+#[test]
+fn an_implied_branch_name_must_be_free_and_unguessed() {
+    let (_cleanup, home, repository) = repository("implied");
+    let command = "git worktree add ../app-review";
+    assert_allowed(&home, &repository, command);
+    git(&home, &repository, &["branch", "app-review"]);
+    assert_reviewed(&home, &repository, command);
+    git(&home, &repository, &["branch", "--delete", "app-review"]);
+    assert_allowed(&home, &repository, command);
+    git(
+        &home,
+        &repository,
+        &["config", "worktree.guessRemote", "true"],
+    );
+    assert_reviewed(&home, &repository, command);
 }
 
 /// Reads in the checkout the command itself creates share the repository's
@@ -172,7 +194,6 @@ fn other_work_in_the_new_worktree_stays_reviewed() {
     for command in [
         "git worktree add -b flat ../service origin/main && cd ../service && git status",
         "git worktree add -b flat ../link/flat origin/main && cd ../link/flat && git status",
-        "git worktree add -b flat ../app-flat origin/main; cd ../app-flat && git status",
         "git worktree add -b flat ../app-flat origin/main && git status && cd ../app-flat",
         "rm -rf ../app-flat && git worktree add -b flat ../app-flat origin/main && cd ../app-flat && git status",
     ] {
@@ -412,4 +433,42 @@ fn swappable_links_on_the_way_to_the_checkout_stay_reviewed() {
         &repository,
         "git worktree add -b flat ~/via/app-flat origin/main",
     );
+}
+
+/// The same reads when the add reports through a bounded pipe, when `;`
+/// joins the `cd`, and when the reads name the index or count their own
+/// output. The checkout proof read the destination and found nothing there,
+/// so entering it succeeds only once the add has created it.
+#[test]
+fn inspecting_the_new_worktree_through_a_pipe_is_allowed() {
+    let (_cleanup, home, repository) = repository("chain-pipe");
+    for command in [
+        "git worktree add ../app-flat -b flat origin/main 2>&1 | tail -3; cd ../app-flat && git rev-parse HEAD && git status --short | wc -l",
+        "git worktree add -b flat ../app-flat origin/main 2>&1 | tail -3 && cd ../app-flat && git log -1 --oneline",
+        "git worktree add -b flat ../app-flat origin/main; cd ../app-flat && git rev-parse --abbrev-ref HEAD",
+        "git worktree add -b flat ../app-flat origin/main && cd ../app-flat && git ls-files | wc -l",
+    ] {
+        assert_allowed(&home, &repository, command);
+    }
+}
+
+/// The relaxation rests on the `cd`: without one, a weaker separator proves
+/// nothing about whether the add ran. The stages stay bounded, and the two
+/// new reads keep the spellings that open a file the caller names or expand
+/// a format under review.
+#[test]
+fn a_weaker_separator_without_the_cd_stays_reviewed() {
+    let (_cleanup, home, repository) = repository("chain-pipe-reviewed");
+    let add = "git worktree add -b flat ../app-flat origin/main";
+    for tail in [
+        "; git -C ../app-flat status",
+        " 2>&1 | tail -3 && git -C ../app-flat status",
+        " | cat && cd ../app-flat && git status",
+        " && cd ../app-flat && git status --short | wc -l tracked.txt",
+        " && cd ../app-flat && git ls-files --format=%(path)",
+        " && cd ../app-flat && git ls-files -X ../exclude",
+        " && cd ../app-flat && git rev-parse --sq-quote tracked.txt",
+    ] {
+        assert_reviewed(&home, &repository, &format!("{add}{tail}"));
+    }
 }

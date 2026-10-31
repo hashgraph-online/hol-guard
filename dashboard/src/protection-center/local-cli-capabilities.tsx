@@ -41,7 +41,7 @@ type CapabilityChange = { capability: LocalCliCapability; next: LocalCliCapabili
 export function LocalCliCapabilities(props: {
   item: LocalCliItem;
   revision: number;
-  onRefresh: () => Promise<void>;
+  onRefresh: () => Promise<unknown>;
 }) {
   const { resolvedApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<CapabilityChange | null>(null);

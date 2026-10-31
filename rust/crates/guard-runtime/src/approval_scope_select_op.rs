@@ -25,6 +25,7 @@ use guard_contracts::{
 };
 use serde_json::{json, Value};
 
+use crate::approval_persist_select_op::persist_gate;
 use crate::approval_scope_contract::{contract, ScopeContract, View};
 use crate::approval_scope_material::APPROVAL_SCOPE_CONTRACT_VERSION;
 use crate::approval_scope_op::contract_value;
@@ -102,7 +103,8 @@ fn evaluate_with_owner(
     };
     if eligible.contains(&request.requested_scope.as_str()) {
         return selected(
-            &request.requested_scope,
+            request,
+            resolution_action,
             &request.requested_scope,
             None,
             &derived,
@@ -121,26 +123,51 @@ fn evaluate_with_owner(
     // A legacy client never saw the contract, so its wider choice is narrowed
     // to the one scope this request does offer, and the warning says so.
     selected(
-        &request.requested_scope,
+        request,
+        resolution_action,
         "artifact",
         Some("legacy_scope_narrowed_to_artifact"),
         &derived,
     )
 }
 
+/// The selected scope, and when the client asked, whether the decision at
+/// that scope is remembered: the same gates `ApprovalPersistSelect` answers,
+/// so one ask settles the whole resolution.
 fn selected(
-    requested_scope: &str,
+    request: &ApprovalScopeSelectRequestV1,
+    resolution_action: &str,
     applied_scope: &str,
     warning: Option<&str>,
     derived: &ScopeContract,
 ) -> Value {
-    json!({
+    let mut answer = json!({
         "outcome": "selected",
-        "requested_scope": requested_scope,
+        "requested_scope": request.requested_scope,
         "applied_scope": applied_scope,
         "warning": warning,
         "contract": contract_value(derived),
-    })
+    });
+    if let Some(persist) = &request.persist {
+        match persist_gate(
+            derived,
+            resolution_action,
+            applied_scope,
+            persist.persist_policy,
+            warning.is_some(),
+            request.contract_version.is_some(),
+        ) {
+            Ok(persist_policy) => answer["persist_policy"] = json!(persist_policy),
+            Err(reason) => {
+                // The scope was settled before persistence refused it, and
+                // the refusal names the scope it was refused at.
+                let mut refusal = refused(reason, Some(derived));
+                refusal["applied_scope"] = json!(applied_scope);
+                return refusal;
+            }
+        }
+    }
+    answer
 }
 
 fn refused(reason: &str, derived: Option<&ScopeContract>) -> Value {

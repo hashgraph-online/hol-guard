@@ -142,7 +142,52 @@ pub(super) fn with_cloud_auth_reconnect_copy_result(
         dashboard_url: evaluation.user_copy.dashboard_url.clone(),
         harness_message,
     };
-    let policy_action = decision_to_guard_action_variant(&evaluation.policy_action);
+    let policy_action = guard_action_variant(&evaluation.policy_action);
     evaluation.user_copy = normalize_package_user_copy(&candidate, policy_action);
     evaluation
+}
+
+#[cfg(test)]
+mod reconnect_copy_tests {
+    use super::super::result_models::{PackageEvalResult, SupplyChainUserCopy};
+    use super::with_cloud_auth_reconnect_copy_result;
+
+    fn evaluation_with(policy_action: &str) -> PackageEvalResult {
+        PackageEvalResult {
+            policy_action: policy_action.to_string(),
+            user_copy: SupplyChainUserCopy {
+                title: "Package request held".to_string(),
+                summary: "Guard held this install.".to_string(),
+                next_step: None,
+                dashboard_url: Some("https://hol.org/guard/workspace/abc".to_string()),
+                harness_message: "Approve this request in HOL Guard, then retry.".to_string(),
+            },
+            ..PackageEvalResult::default()
+        }
+    }
+
+    #[test]
+    fn a_terminal_policy_action_drops_the_dashboard_and_the_approval_prompt() {
+        let evaluation = with_cloud_auth_reconnect_copy_result(evaluation_with("sandbox-required"));
+        assert!(
+            evaluation.user_copy.dashboard_url.is_none(),
+            "{:?}",
+            evaluation.user_copy.dashboard_url
+        );
+        let message = evaluation.user_copy.harness_message.to_ascii_lowercase();
+        assert!(!message.contains("approve this request"), "{message}");
+        assert!(message.contains("hol-guard connect"), "{message}");
+    }
+
+    #[test]
+    fn a_locally_reviewable_policy_action_keeps_the_local_review_instruction() {
+        for action in ["review", "require-reapproval"] {
+            let evaluation = with_cloud_auth_reconnect_copy_result(evaluation_with(action));
+            let message = evaluation.user_copy.harness_message.to_ascii_lowercase();
+            assert!(
+                message.contains("review this request in hol guard, then retry."),
+                "{action}: {message}"
+            );
+        }
+    }
 }

@@ -101,6 +101,14 @@ pub(super) fn inert_loader_search_path(name: &str, windows: bool) -> bool {
             .any(|known| known.eq_ignore_ascii_case(name))
 }
 
+/// A launcher directory an installed program owns: one that sits outside the
+/// agent's reach by the same rules a loader search path has to meet, whether
+/// the installation lives below home or above it.
+pub(super) fn trusted_program_directory(directory: &Path, home: &Path, cwd: &Path) -> bool {
+    home_loader_directory(directory, home, cwd)
+        || (trusted_location(directory, home, cwd) && !agent_writable_loader_tree(directory, home))
+}
+
 fn trusted_loader_entry(entry: &Path, home: &Path, cwd: &Path) -> bool {
     if !entry.is_absolute() || process_relative_loader_prefix(entry) {
         return false;

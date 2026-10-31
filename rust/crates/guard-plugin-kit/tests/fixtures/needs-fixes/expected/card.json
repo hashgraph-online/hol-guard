@@ -1,0 +1,48 @@
+{
+  "capabilities": {
+    "agents": 0,
+    "commands": 0,
+    "hooks": false,
+    "mcpServers": [
+      {
+        "name": "api",
+        "transport": "stdio"
+      }
+    ],
+    "skills": [
+      "helper"
+    ]
+  },
+  "description": "Does things.",
+  "homepage": null,
+  "identity": {
+    "repository": null,
+    "verified": false
+  },
+  "license": null,
+  "links": {
+    "holCard": null,
+    "listing": null,
+    "repository": null
+  },
+  "name": "My Plugin",
+  "permissions": {
+    "environment": [
+      "LOG_LEVEL",
+      "SERVICE_API_KEY"
+    ],
+    "networkHosts": [],
+    "runsHooks": false,
+    "startsPrograms": [
+      "node"
+    ]
+  },
+  "runtimes": [
+    "cursor",
+    "vscode",
+    "opencode",
+    "agent-skills"
+  ],
+  "schema": "hol.plugin-card.v0-draft",
+  "version": null
+}

@@ -16,10 +16,12 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_supply_chain_archive
+from codex_plugin_scanner.guard.native_supply_chain_egress import TEST_RULE_ARCHIVE
 from codex_plugin_scanner.guard.runtime.restricted_archive_contract import (
     RestrictedArchiveDownload,
     RestrictedArchiveFailure,
 )
+from tests.support.network import lift_test_loopback_rule
 
 CLEAN_VERDICT = {
     "status": "clean",
@@ -69,6 +71,9 @@ def install_download(
         )
 
     monkeypatch.setattr(native_supply_chain_archive, "download_restricted_archive", download)
+    # The fake stands in for the download, so the suite's loopback-only rule is
+    # lifted for archives in this process. HTTP stays refused.
+    lift_test_loopback_rule(monkeypatch, TEST_RULE_ARCHIVE)
     return created
 
 
@@ -95,3 +100,4 @@ def forbid_download(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
         pytest.fail(reason)
 
     monkeypatch.setattr(native_supply_chain_archive, "download_restricted_archive", unexpected)
+    lift_test_loopback_rule(monkeypatch, TEST_RULE_ARCHIVE)

@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon as daemon
+from codex_plugin_scanner.guard.adapters import bounded_cli_hook_recovery as recovery
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
@@ -40,7 +41,7 @@ def test_bounded_bridge_unavailable_pretool_denies(
     failure: BoundedHookProcessResult,
     action: dict[str, object],
 ) -> None:
-    monkeypatch.setattr(bridge, "run_isolated_hook_process", lambda *_args, **_kwargs: failure)
+    monkeypatch.setattr(recovery, "run_isolated_hook_process", lambda *_args, **_kwargs: failure)
     monkeypatch.setattr(daemon, "try_daemon_hook", lambda **_kwargs: None)
     hook_config = config(tmp_path, harness=harness)
     config_path = Path(str(hook_config["guard_home"])) / "config.toml"
@@ -83,11 +84,13 @@ def test_legacy_continuation_flag_cannot_authorize_pretool(harness: str) -> None
 
 @pytest.mark.parametrize("harness", _HARNESSES)
 @pytest.mark.parametrize("policy", [None, "block"])
-def test_unavailable_daemon_reason_cannot_become_an_allow(harness: str, policy: str | None) -> None:
+def test_unavailable_daemon_reason_cannot_become_an_allow(
+    harness: str, policy: str | None, native_bridge_render
+) -> None:
     unavailable = {"reason_code": "native_pre_tool_unavailable", "reason": "native miss"}
     if policy is not None:
         unavailable["policy_action"] = policy
-    stdout, _stderr, _code = daemon._daemon_response_to_native(unavailable, harness=harness, event_name="PreToolUse")
+    stdout, _stderr, _code = native_bridge_render(unavailable, harness=harness, event_name="PreToolUse")
     response = json.loads(stdout)
     nested = response.get("hookSpecificOutput", {})
     decisions = [response.get("decision"), response.get("permissionDecision"), nested.get("permissionDecision")]

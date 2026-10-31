@@ -368,6 +368,7 @@ def authorize_exact_cloud_review_job(
     from .command_capability import (
         AuthorizedCommandJob,
         CommandCapabilityError,
+        CommandCapabilityUnavailableError,
         _command_job_seen,
     )
     from .native_workspace_review_queue import (
@@ -424,8 +425,18 @@ def authorize_exact_cloud_review_job(
                     raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
         if native_command is None and _command_job_seen(store, identity, now=now):
             raise ExactCloudReviewError("remote_exact_job_replayed")
-    except (ExactCloudReviewError, NativeWorkspaceReviewQueueError, KeyError) as error:
-        code = error.code if isinstance(error, ExactCloudReviewError) else "remote_exact_job_invalid"
+    except (
+        ExactCloudReviewError,
+        NativeWorkspaceReviewQueueError,
+        CommandCapabilityUnavailableError,
+        KeyError,
+    ) as error:
+        if isinstance(error, ExactCloudReviewError):
+            code = error.code
+        elif isinstance(error, CommandCapabilityUnavailableError):
+            code = error.reason
+        else:
+            code = "remote_exact_job_invalid"
         raise CommandCapabilityError(code) from error
     return AuthorizedCommandJob(
         identity=identity,

@@ -221,6 +221,74 @@ fn commit_plan_refuses_conflicts_and_replays() {
 }
 
 #[test]
+fn a_commit_a_read_finished_settles_its_grant_instead_of_being_refused_as_a_replay() {
+    let home = Home::new();
+    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    // The call that prepared revision 2 sealed the anchor over it and died
+    // before the row said so. A read met that sealed head and finished the
+    // revision for it, leaving the grant the dead call reserved unspent.
+    let head = home.commit(2, &catalog('a'), &[local(&catalog('a'))], "committed");
+    let granted = commit(2, 1);
+    home.db
+        .execute(
+            "insert into extension_control_authority_proof values (?, ?, 2, ?, null)",
+            params![
+                private_hash("proof-2", &KEY, "proof"),
+                &granted.mutation_digest,
+                AT
+            ],
+        )
+        .unwrap();
+
+    // Its own retry settles the grant rather than being told it replayed a
+    // commit that never returned to it.
+    let settled = run(&commit_request(
+        &home,
+        &head,
+        view("protected", 2),
+        commit(2, 1),
+    ));
+    assert_eq!(settled["plan"]["outcome"], json!("finish"), "{settled}");
+    assert_eq!(settled["plan"]["revision"], json!(2));
+    assert_eq!(settled["plan"]["proof_recorded"], json!(true));
+
+    // A grant already spent on that revision is the replay it always was.
+    home.db
+        .execute(
+            "update extension_control_authority_proof set consumed_at = ?",
+            params![AT],
+        )
+        .unwrap();
+    assert_eq!(
+        refusal(&run(&commit_request(
+            &home,
+            &head,
+            view("protected", 2),
+            commit(2, 1)
+        ))),
+        "extension control authority proof replay"
+    );
+
+    // An unspent grant that names another mutation never belonged to this
+    // revision, whatever state the revision is in.
+    home.db
+        .execute(
+            "update extension_control_authority_proof set mutation_digest = ?, consumed_at = null",
+            params!["m".repeat(64)],
+        )
+        .unwrap();
+    assert_eq!(
+        refusal(&run(&commit_request(
+            &home,
+            &head,
+            view("protected", 2),
+            commit(2, 1)
+        ))),
+        "extension control authority proof state conflict"
+    );
+}
+
+#[test]
 fn commit_plan_seals_only_the_approved_mutation() {
     let home = Home::new();
     let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
@@ -261,6 +329,25 @@ fn commit_plan_rereads_once_before_giving_up_on_recovery() {
     let home = Home::new();
     let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
     let mut request = commit_request(&home, &head, view("recovery-required", 1), commit(2, 1));
+    assert_eq!(run(&request)["plan"]["outcome"], json!("reread"));
+    request.rollback_attempted = true;
+    assert_eq!(
+        refusal(&run(&request)),
+        "extension control authority unavailable"
+    );
+}
+
+#[test]
+fn a_commit_waits_rather_than_take_another_requests_prepared_revision() {
+    let home = Home::new();
+    let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");
+    // The read serves the committed view while that row waits, so the health
+    // this request was handed says nothing about the revision above it. The
+    // slot itself is what holds the commit back: a read that may roll the row
+    // back runs first, and once one has, the row is a live transition this
+    // request must not take.
+    let mut request = commit_request(&home, &head, view("protected", 1), commit(3, 1));
     assert_eq!(run(&request)["plan"]["outcome"], json!("reread"));
     request.rollback_attempted = true;
     assert_eq!(
@@ -365,12 +452,16 @@ fn a_recorded_proof_for_a_committed_transition_is_a_replay() {
     let home = Home::new();
     home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
     let head = home.commit(2, &catalog('a'), &[local(&catalog('a'))], "committed");
+    // The grant names this request's own mutation and was spent on the
+    // revision that is now committed, so asking again is a second use of a
+    // commit that already returned.
+    let granted = commit(2, 1);
     home.db
         .execute(
             "insert into extension_control_authority_proof values (?, ?, 2, ?, ?)",
             params![
                 private_hash("proof-2", &KEY, "proof"),
-                "m".repeat(64),
+                &granted.mutation_digest,
                 AT,
                 AT
             ],
@@ -418,6 +509,39 @@ fn rollback_abandons_only_a_stale_unanchored_prepared_row() {
         run(&rollback_request(&home, &moved, LATER))["plan"]["outcome"],
         json!("keep")
     );
+}
+
+/// A commit that failed before anchoring its own prepared row names it, so
+/// the row goes at once instead of refusing every save for the retry window.
+#[test]
+fn rollback_abandons_the_callers_own_failed_row_without_waiting() {
+    let home = Home::new();
+    let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");
+    let own: String = home
+        .db
+        .query_row(
+            "select transition_digest from extension_control_authority_transition where revision = 2",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let outcome = |digest: &str, pin: &str| {
+        run(&ExtensionControlAuthorityRequestV1 {
+            own_transition_digest: Some(digest.to_owned()),
+            ..rollback_request(&home, pin, SOON)
+        })["plan"]["outcome"]
+            .clone()
+    };
+    assert_eq!(outcome(own.as_str(), head.as_str()), json!("abandon"));
+    // Another request's row is still kept for its own retry.
+    assert_eq!(
+        outcome("0".repeat(64).as_str(), head.as_str()),
+        json!("keep")
+    );
+    // Naming the row never abandons one the anchor already moved onto.
+    let moved = anchor(1, &snapshot_digest(&home, 1), "anchored");
+    assert_eq!(outcome(own.as_str(), moved.as_str()), json!("keep"));
 }
 
 #[test]

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.network_broker_contract import (
+from codex_plugin_scanner.guard.runtime.network_policy_contract import (
+    BackendCapability,
+    EnforcementGrade,
+    NetworkAction,
+)
+from tests.network_broker_contract import (
     BackendReceipt,
     BrokerPerformanceBudget,
     ConnectionObservation,
@@ -13,10 +18,7 @@ from codex_plugin_scanner.guard.runtime.network_broker_contract import (
     correlate_dns_connection,
     receipt_authority_current,
 )
-from codex_plugin_scanner.guard.runtime.network_policy_contract import (
-    BackendCapability,
-    EnforcementGrade,
-    NetworkAction,
+from tests.network_policy_model import (
     NetworkProtocol,
     ProcessTreeIdentity,
     canonical_digest,

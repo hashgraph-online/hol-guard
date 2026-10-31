@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_hook_auth as auth
+from scripts import daemon_hook_auth as auth
 
 
 class Response:

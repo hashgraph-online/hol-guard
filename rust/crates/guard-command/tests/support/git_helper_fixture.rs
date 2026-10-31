@@ -151,7 +151,7 @@ fn stand_ins(home: &std::path::Path, dir: &str, names: &[&str]) -> std::path::Pa
     bin
 }
 
-fn evaluate_on_path(
+pub fn evaluate_on_path(
     (harness, event): (&str, &str),
     payload: &serde_json::Value,
     (controls, deadline): (
@@ -180,7 +180,7 @@ fn evaluate_on_path(
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         harness,
@@ -198,6 +198,7 @@ fn evaluate_on_path(
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&context),
     )

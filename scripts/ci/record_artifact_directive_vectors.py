@@ -18,9 +18,7 @@ exactly which output the old routing produced:
 Each vector holds the resident's inputs (``facts``), the extra transport facts
 (``extra``), the directive fields the recorded output exhibits
 (``directive``), and the stubbed ``stdout``, ``stderr`` and ``rc``. The Rust
-``hook_decision_artifact_directive_tests`` replays the directive fields;
-``tests/test_artifact_directive_parity.py`` re-renders every vector through
-the new transport with the same stubs and compares the output.
+``hook_decision_artifact_directive_tests`` replays the directive fields.
 """
 
 from __future__ import annotations
@@ -37,13 +35,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.cli.commands_support_prompts import (
-    _claude_prompt_system_message,
-    _codex_prompt_block_system_message,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _canonical_harness_name
 from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
-from codex_plugin_scanner.guard.runtime.embedded_script_evidence import EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE
+
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.claude_prompt_oracle import _claude_prompt_system_message, _codex_prompt_block_system_message
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz")
 
@@ -100,7 +98,7 @@ CTX = "CTX approval context"
 HINT = "HINT review hint"
 WHY = "WHY now"
 RISK = "RISK headline"
-REMEDIATION = EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE
+REMEDIATION = "Put the script in a workspace file and run it by path so HOL Guard can audit it."
 GROK_EXIT = 77
 JSON_DOCUMENT_EXIT = 5
 _TAGS = {RAW: "raw (open hol guard)", CTX: "ctx", HINT: "hint", WHY: "why", RISK: "risk", REMEDIATION: "rem"}

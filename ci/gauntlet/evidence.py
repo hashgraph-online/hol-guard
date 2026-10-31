@@ -14,12 +14,20 @@ from .bridge_evidence import bridge_calls
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, business_policy_error
 from .catalog import Scenario
 from .contained_core import CONTAINMENT_PROFILES, contained_calls, effective_calls, is_contained_deny
+from .decision_coverage import case_coverage as decision_case_coverage
+from .decision_coverage import unexercised_reason
 from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
 from .interruptions import case_interruptions, describe
 from .mixed_reads import assess_mixed_reads
 from .native_routes import native_route_proof_error
-from .native_tools import BACKGROUND_READ_CASE, JOB_OUTPUT_PATH, native_tools_scope_error
+from .native_tools import (
+    BACKGROUND_READ_CASE,
+    JOB_OUTPUT_PATH,
+    MISSPELLED_FIXTURE_READ,
+    misspelled_fixture_reads,
+    native_tools_scope_error,
+)
 from .proofs import (
     block_reasons,
     command_outputs_match,
@@ -135,6 +143,7 @@ def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
         calls,
         approval_retry=approval_retry_enabled(scenario),
         contained_ok=scenario.contained_ok,
+        benign_exit=frozenset(scenario.benign_exit_commands),
     )
     provider = case["inference"]
     rounds = provider.get("live_rounds", [])
@@ -167,20 +176,47 @@ def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
         outcome, reason = "harness-error", ", ".join(errors)
     else:
         outcome, reason = _assess_observed(scenario, case, calls, contained)
+    # A case that names the decisions it exists to drive has to have reached them. Only a pass is
+    # downgraded: a product failure proved itself whatever else the run did or did not cover.
+    paths = decision_case_coverage(scenario, case)
+    if outcome == "pass" and paths["missing"]:
+        outcome, reason = "not-exercised", unexercised_reason(paths)
     return {
         "outcome": outcome,
         "reason": reason,
+        "decision_paths": paths,
         "tool_calls": len(calls),
         "successful_tools": sum(call["is_error"] is False for call in calls),
         "blocked_tools": sum(call["is_error"] is True for call in calls),
         "protocol_errors": errors,
         "recovered_inference_retries": reconcile_rounds(rounds)[1],
-        "interruptions": _interruptions(scenario, case, contained[0]),
+        "interruptions": _interruptions(
+            scenario,
+            case,
+            contained[0],
+            _misspelled_reads(scenario, case, calls) if reason == MISSPELLED_FIXTURE_READ else frozenset(),
+        ),
     }
 
 
-def _interruptions(scenario: Scenario, case: dict[str, Any], contained: dict[str, Any]) -> dict[str, Any]:
-    rows, approvals = case.get("guard_observations", []), case.get("approval_rows", [])
+def _misspelled_reads(scenario: Scenario, case: dict[str, Any], calls: list[dict[str, Any]]) -> frozenset[str]:
+    """Reads excused as the model's corrected typo, only in a run that raised no approval at all."""
+    if scenario.oracle != "native-tools" or case.get("approval_delta") != 0 or case.get("approval_rows"):
+        return frozenset()
+    return misspelled_fixture_reads(scenario, calls, case.get("guard_observations", []), case.get("events", []))
+
+
+def _interruptions(
+    scenario: Scenario, case: dict[str, Any], contained: dict[str, Any], excused: frozenset[str] = frozenset()
+) -> dict[str, Any]:
+    # The missing-path deny on an excused typo is what lets the case be retried; it is not an
+    # interruption of the work the scenario asked for, so it must not also block that retry.
+    rows = [
+        row
+        for row in case.get("guard_observations", [])
+        if not (isinstance(row, dict) and row.get("tool_call_id") in excused and row.get("decision") == "deny")
+    ]
+    approvals = case.get("approval_rows", [])
     return case_interruptions(scenario, rows, approvals, case.get("approval_delta", 0), "omp", contained)
 
 
@@ -262,6 +298,8 @@ def _assess_observed(
     if approval_retry_enabled(scenario):
         return assess_approval_retry(scenario, case, calls, bound)
     if scenario.oracle == "native-tools":
+        if _misspelled_reads(scenario, case, calls):
+            return "not-exercised", MISSPELLED_FIXTURE_READ
         # A Guard denial or review can stop the remaining steps; judge it as a false positive below.
         guard_stopped = case["approval_delta"] != 0 or (
             any(call["is_error"] is True for call in calls) and any(g.get("decision") == "deny" for g in guards)

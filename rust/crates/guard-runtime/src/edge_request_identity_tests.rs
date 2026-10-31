@@ -152,12 +152,15 @@ fn execution_intent_same_session_call_id_is_harness_scoped() {
         );
     }
     // Claude Code and Codex stamp `tool_use_id` on every tool-use block, so a
-    // retry of the same action carries a new one; their `tool_call_id` is not
-    // a transport ID and stays in the commitment, as does every other
-    // harness's call ID.
+    // retry of the same action carries a new one; Claude Code's `prompt_id`
+    // names the user turn, and the approved retry comes in a later turn.
+    // Their `tool_call_id` is not a transport ID and stays in the commitment,
+    // as does every other harness's call ID.
     for (harness, key, retried) in [
         ("claude-code", "tool_use_id", true),
+        ("claude-code", "prompt_id", true),
         ("codex", "tool_use_id", true),
+        ("codex", "prompt_id", false),
         ("claude-code", "tool_call_id", false),
         ("codex", "tool_call_id", false),
         ("cursor", "tool_use_id", false),

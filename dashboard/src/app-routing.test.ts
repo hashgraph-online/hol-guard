@@ -27,6 +27,8 @@ assert(parseAppDetail("/apps/global") === null, "global pseudo-harness route is 
 assert(parseAppDetail("/apps/") === null, "empty app route is rejected");
 assert(parseAppDetail("/apps/opencode/settings") === null, "nested app route is rejected");
 assert(resolveView("/apps/opencode") === "app-detail", "valid app route opens app detail");
+assert(resolveView("/workspaces") === "workspaces", "workspace assessments open inside the supply-chain hub");
+assert(viewTitle("workspaces") === "Workspaces", "workspace assessments have a page title");
 assert(resolveView("/apps/*") === "fleet", "wildcard app route falls back to fleet");
 assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls back to fleet");
 assert(resolveView(PROTECT_ROUTE) === "fleet", "/protect resolves to protect workspace view");
@@ -80,6 +82,8 @@ assert(isDisplayableHarness("codex"), "real app harness is displayable");
 assert(isConnectableAppHarness("codex"), "registered AI app is connectable");
 assert(isConnectableAppHarness("pi-agent"), "registered AI app alias is connectable");
 assert(isConnectableAppHarness("omp"), "Oh My Pi is a connectable app");
+assert(isConnectableAppHarness("muse"), "Muse is a connectable app");
+assert(appSetupTarget("muse") === "harness", "Muse evidence routes to AI app setup");
 assert(!isConnectableAppHarness("bunx"), "package runner is not sent to AI app setup");
 assert(!isConnectableAppHarness("bun"), "Bun package tool is not sent to AI app setup");
 assert(!isConnectableAppHarness("npm"), "npm package tool is not sent to AI app setup");

@@ -19,7 +19,8 @@ use serde::Serialize;
 
 use crate::git_read::{run_git, run_git_os, GIT_TIMEOUT_SECONDS};
 use crate::secret_detection::{
-    detector_version, scan_secret_text, EmptyFingerprintKeyError, PublicFinding, SecretFinding,
+    candidate_digest, detector_version, scan_secret_text, CandidateDigest, FingerprintError,
+    PublicFinding, SecretFinding,
 };
 
 /// `DEFAULT_MAX_FILES` from the Python module.
@@ -34,6 +35,18 @@ pub const DEFAULT_MAX_TOTAL_BYTES: usize = 128 * 1024 * 1024;
 pub const DEFAULT_MAX_FINDINGS: usize = 500;
 /// `DEFAULT_MAX_COMMITS` from the Python module.
 pub const DEFAULT_MAX_COMMITS: usize = 500;
+
+/// Most findings a caller may ask a bounded scan for.
+///
+/// The detector keeps one finding of headroom above this so a scan running at
+/// the ceiling can still probe one past its budget and notice a file that was
+/// cut. The assertion below holds that headroom open.
+pub const MAX_FINDINGS_CEILING: usize = 10_000;
+
+const _: () = assert!(
+    crate::secret_detection::MAX_FINDINGS_PER_TEXT > MAX_FINDINGS_CEILING,
+    "the detector must leave room for the one-past-budget probe the scan loops rely on"
+);
 
 /// Python `_TRUNCATION_REASON_ORDER`.
 const TRUNCATION_REASON_ORDER: [&str; 4] = [
@@ -161,9 +174,7 @@ impl RepositorySecretScanResult {
     /// Public, non-sensitive payload matching Python `to_public_dict`.
     /// Fingerprints are omitted exactly like `finding.to_public_dict()` called
     /// with no key.
-    pub fn to_public_dict(
-        &self,
-    ) -> Result<PublicRepositorySecretScanResult<'_>, EmptyFingerprintKeyError> {
+    pub fn to_public_dict(&self) -> Result<PublicRepositorySecretScanResult<'_>, FingerprintError> {
         let mut findings = Vec::with_capacity(self.findings.len());
         for finding in &self.findings {
             findings.push(finding.to_public_dict(None)?);
@@ -239,8 +250,9 @@ fn looks_binary(path: &str, data: &[u8]) -> bool {
     data[..data.len().min(8192)].contains(&0)
 }
 
-/// Python `_decode_text`.
-fn decode_text<'a>(path: &str, data: &'a [u8]) -> Option<&'a str> {
+/// Python `_decode_text`: the text of a file that is neither a known binary
+/// type nor invalid UTF-8.
+pub fn decode_text<'a>(path: &str, data: &'a [u8]) -> Option<&'a str> {
     if looks_binary(path, data) {
         return None;
     }
@@ -515,7 +527,11 @@ pub fn scan_repository_secrets(
         DEFAULT_MAX_TOTAL_BYTES,
         4 * 1024 * 1024 * 1024,
     );
-    let max_findings = bounded_positive(options.max_findings, DEFAULT_MAX_FINDINGS, 10_000);
+    let max_findings = bounded_positive(
+        options.max_findings,
+        DEFAULT_MAX_FINDINGS,
+        MAX_FINDINGS_CEILING,
+    );
 
     let (scan_root, git_repo, working_paths) = if root.is_file() {
         let scan_root = root
@@ -580,7 +596,12 @@ pub fn scan_repository_secrets(
             &normalized,
             "working_tree",
             None,
-            max_findings - findings.len(),
+            // One past what the caller allowed. The loop only notices a full
+            // budget when it starts another file, so a blob that fills it on
+            // the way through the last one would otherwise drop the rest of
+            // its findings and still report complete coverage. The extra
+            // finding is dropped by the cap below, which reports the cut.
+            max_findings - findings.len() + 1,
         );
         files_scanned += 1;
         bytes_scanned += scanned_bytes;
@@ -664,7 +685,10 @@ pub fn scan_repository_secrets(
                         &normalized,
                         "git_history",
                         Some(&commit),
-                        max_findings - findings.len(),
+                        // One past the cap, so a blob that fills the budget is
+                        // visible to the cap below instead of ending the scan
+                        // quietly. See the working-tree call above.
+                        max_findings - findings.len() + 1,
                     );
                     files_scanned += 1;
                     bytes_scanned += scanned_bytes;
@@ -680,13 +704,13 @@ pub fn scan_repository_secrets(
     // A provider rule can also be recognized by the contextual assignment
     // rule. Keep occurrences stable while preferring the stronger provider
     // format (higher confidence_score wins the dedup key).
-    let mut deduped: HashMap<(String, usize, String, Option<String>), SecretFinding> =
+    let mut deduped: HashMap<(String, usize, CandidateDigest, Option<String>), SecretFinding> =
         HashMap::new();
     for finding in findings {
         let key = (
             finding.path.clone(),
             finding.line,
-            finding.candidate.clone(),
+            candidate_digest(&finding.candidate),
             finding.commit.clone(),
         );
         match deduped.entry(key) {
@@ -943,6 +967,67 @@ mod tests {
         assert!(result.truncated);
         assert_eq!(result.files_scanned, 1);
         assert_eq!(result.truncation_reasons, ["max_files"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn max_findings_cap_inside_one_file_truncates_with_ordered_reason() {
+        // The cap used to be handed to the blob as the whole remaining
+        // budget, and the loop only noticed a full budget when it opened the
+        // next file. One file holding more secrets than the caller allowed
+        // therefore dropped the rest of them and still called the scan
+        // complete, which reads as "nothing else is in there".
+        let dir = temp_root("findingcap");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("only.env"), body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 2,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 2);
+        assert!(result.truncated);
+        assert_eq!(result.truncation_reasons, ["max_findings"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_within_the_findings_cap_is_not_reported_as_truncated() {
+        // The extra finding the scan now asks for is how it tells a cut from
+        // a complete read; a file that fits must still report coverage.
+        let dir = temp_root("findingfit");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("only.env"), body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 2,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 2);
+        assert!(!result.truncated);
+        assert!(result.truncation_reasons.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_overfills_the_budget_does_not_break_the_next_file_s_probe() {
+        // The probe is `max_findings - findings.len() + 1`, and the blob above
+        // may return one more finding than the budget allowed. Reaching that
+        // subtraction with a full tally would underflow, so the loop has to
+        // stop before opening another file. Two files and a budget of one is
+        // the smallest shape that walks into it.
+        let dir = temp_root("findingoverfill");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("first.env"), &body).unwrap();
+        fs::write(dir.join("second.env"), &body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 1,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 1);
+        assert!(result.truncated);
+        assert_eq!(result.truncation_reasons, ["max_findings"]);
         let _ = fs::remove_dir_all(&dir);
     }
 

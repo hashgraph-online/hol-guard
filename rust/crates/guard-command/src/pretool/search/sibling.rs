@@ -311,6 +311,7 @@ fn ignore_lines(path: &Path) -> Option<Vec<String>> {
 fn walk(root: &Path, operand: &Path, ignored: &mut Ignored, whitelisting: &[&str]) -> bool {
     let mut pending: Vec<(PathBuf, usize)> = vec![(operand.to_path_buf(), 0)];
     let mut inspected = 0_usize;
+    let _documents = crate::pretool::search_scope_tracked::names::document_walk();
     while let Some((directory, depth)) = pending.pop() {
         if depth > MAX_DEPTH {
             return false;
@@ -344,12 +345,11 @@ fn walk(root: &Path, operand: &Path, ignored: &mut Ignored, whitelisting: &[&str
             if ignored.prunes(name, directory == root) {
                 continue;
             }
-            // The listing already carries each entry's kind on the platforms
-            // this runs on, so this reads it instead of spending a `lstat`
-            // per entry; it falls back to one only where the filesystem
-            // leaves the kind unknown. It answers about the link itself, as
-            // `symlink_metadata` does, so a symlink is still neither a
-            // directory nor a file and still refuses the proof below.
+            // The listing already carries each entry's kind here, so this reads
+            // it instead of spending an `lstat` per entry, falling back to one
+            // only where the filesystem leaves the kind unknown. Like `lstat`,
+            // it describes a link itself, so a symlink is neither a directory
+            // nor a file and still refuses the proof below.
             let Ok(kind) = entry.file_type() else {
                 return false;
             };

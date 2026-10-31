@@ -6,30 +6,50 @@ no browser dashboard is open (e.g., CLI-only or headless environments).
 
 from __future__ import annotations
 
+import io
 import json
-import stat
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from tests.native_runtime_fixtures import patch_popen_past_native_runtime
+
+
+def _use_fake_process_identity(monkeypatch) -> None:
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "process_start_token",
+        lambda pid: f"test-start:{pid}",
+    )
+    monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:test")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "windows_process_creation_time",
+        lambda pid: 1_000_000 + pid,
+    )
 
 
 def _make_start_mock(guard_home: Path, port: int = 5700):
     """Return a Popen-compatible fake that writes a valid state file immediately."""
 
-    import os
-
-    state_dir = guard_home / ".guard"
-    state_dir.mkdir(parents=True, exist_ok=True)
-
     class FakeProcess:
         pid = 12345
-        returncode = None
+
+        def __init__(self) -> None:
+            self.returncode = None
+            self.stdin = io.BytesIO()
 
         def poll(self):
-            return None
+            return self.returncode
+
+        def terminate(self) -> None:
+            self.returncode = -15
+
+        def kill(self) -> None:
+            self.returncode = -9
 
         def wait(self, timeout=None):
-            return 0
+            del timeout
+            return self.returncode
 
         def __enter__(self):
             return self
@@ -38,16 +58,12 @@ def _make_start_mock(guard_home: Path, port: int = 5700):
             return None
 
     def _popen(*_args, **_kwargs):
-        state = {
-            "port": port,
-            "pid": FakeProcess.pid,
-            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "source_root": daemon_manager_module._current_guard_daemon_source_root(),
-            "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
-        }
-        state_path = state_dir / "daemon-state.json"
-        state_path.write_text(json.dumps(state), encoding="utf-8")
-        os.chmod(state_path, stat.S_IRUSR | stat.S_IWUSR)
+        daemon_manager_module.write_guard_daemon_state(
+            guard_home,
+            port,
+            "test-auth-token",
+            pid=FakeProcess.pid,
+        )
         return FakeProcess()
 
     return _popen
@@ -80,7 +96,8 @@ class TestNoDashboardApprovalURLWake:
         monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
-        monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", _make_start_mock(guard_home, port))
+        _use_fake_process_identity(monkeypatch)
+        patch_popen_past_native_runtime(monkeypatch, _make_start_mock(guard_home, port))
         monkeypatch.setattr(
             daemon_manager_module,
             "_wait_for_guard_daemon_url",
@@ -116,7 +133,7 @@ class TestNoDashboardApprovalURLWake:
             spawn_calls.append("spawn")
             raise AssertionError("daemon must not be spawned when already running")
 
-        monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", _boom)
+        patch_popen_past_native_runtime(monkeypatch, _boom)
 
         url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
@@ -212,7 +229,8 @@ class TestNoDashboardApprovalURLWake:
         monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
-        monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", _make_start_mock(guard_home, port))
+        _use_fake_process_identity(monkeypatch)
+        patch_popen_past_native_runtime(monkeypatch, _make_start_mock(guard_home, port))
         monkeypatch.setattr(
             daemon_manager_module,
             "_wait_for_guard_daemon_url",
@@ -242,12 +260,126 @@ class TestDaemonLifecycle:
         assert daemon_manager_module.clear_guard_daemon_state_if_current(guard_home, pid=111, port=5705) is True
         assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
 
+    def test_retiring_duplicate_daemons_rewrites_kept_state_after_old_exit(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """Old duplicate daemons may clear daemon-state.json on exit; rewrite the kept daemon state."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        _use_fake_process_identity(monkeypatch)
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5707, "token-1", pid=111)
+        killed: list[int] = []
 
-def _warm_native_runtime_status() -> None:
-    """Probe the native runtime before the fake Popen goes in; the probe shares the subprocess module."""
-    from codex_plugin_scanner.guard.native_runtime import native_runtime_status
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [(111, 5707), (222, 5708)] if not (guard_home / "retired").exists() else [(111, 5707)],
+        )
 
-    native_runtime_status()
+        def fake_retire(
+            pid: int,
+            *,
+            expected_guard_home: Path | None = None,
+            expected_start_marker: str | None = None,
+            expected_owner_marker: str | None = None,
+        ) -> bool:
+            del expected_guard_home
+            assert expected_start_marker == f"test-start:{pid}"
+            assert expected_owner_marker == "uid:test"
+            killed.append(pid)
+            daemon_manager_module.clear_guard_daemon_state(guard_home)
+            (guard_home / "retired").write_text("1", encoding="utf-8")
+            return True
+
+        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", fake_retire)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_daemon_healthz_details_payload",
+            lambda _url, _auth_token: {"guard_home": str(guard_home), "pid": 111},
+        )
+
+        daemon_manager_module._retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=5707)
+        state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+
+        assert killed == [222]
+        assert state["pid"] == 111
+        assert state["port"] == 5707
+
+    def test_retiring_duplicate_daemons_does_not_rewrite_when_retire_fails(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """A duplicate that could not be retired must block kept-state recovery."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        _use_fake_process_identity(monkeypatch)
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5709, "token-1", pid=111)
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [(111, 5709), (222, 5710)],
+        )
+
+        def fake_retire(
+            _pid: int,
+            *,
+            expected_guard_home: Path | None = None,
+            expected_start_marker: str | None = None,
+            expected_owner_marker: str | None = None,
+        ) -> bool:
+            del expected_guard_home
+            assert expected_start_marker == "test-start:222"
+            assert expected_owner_marker == "uid:test"
+            daemon_manager_module.clear_guard_daemon_state(guard_home)
+            return False
+
+        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", fake_retire)
+
+        daemon_manager_module._retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=5709)
+
+        assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
+
+    def test_retiring_duplicate_daemons_requires_kept_daemon_auth(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """Do not recover state with a token that cannot authenticate to the kept daemon."""
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir()
+        _use_fake_process_identity(monkeypatch)
+        daemon_manager_module.write_guard_daemon_state(guard_home, 5711, "token-1", pid=111)
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [(111, 5711), (222, 5712)] if not (guard_home / "retired").exists() else [(111, 5711)],
+        )
+
+        def fake_retire(
+            _pid: int,
+            *,
+            expected_guard_home: Path | None = None,
+            expected_start_marker: str | None = None,
+            expected_owner_marker: str | None = None,
+        ) -> bool:
+            del expected_guard_home
+            assert expected_start_marker == "test-start:222"
+            assert expected_owner_marker == "uid:test"
+            daemon_manager_module.clear_guard_daemon_state(guard_home)
+            (guard_home / "retired").write_text("1", encoding="utf-8")
+            return True
+
+        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_pid", fake_retire)
+        monkeypatch.setattr(daemon_manager_module, "_daemon_healthz_details_payload", lambda _url, _auth_token: None)
+
+        daemon_manager_module._retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=5711)
+
+        assert json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
 
 
 class _FakeSpawnedDaemonProcess:
@@ -452,9 +584,9 @@ class TestSpawnedDaemonStartClassification:
         monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _gh: None)
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
-        _warm_native_runtime_status()
-        monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", lambda *a, **k: process)
-        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "posix:token")
+        patch_popen_past_native_runtime(monkeypatch, lambda *a, **k: process)
+        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kw: "posix:token")
+        monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "posix:owner")
         monkeypatch.setattr(
             start_classification,
             "daemon_owner_lock_is_held",
@@ -486,7 +618,13 @@ class TestSpawnedDaemonStartClassification:
 
         assert process.terminated is False
         assert process.killed is False
-        assert not (guard_home / "daemon-launch-pending.json").is_file()
+        # The signed pending receipt now outlives a progressing spawn on every platform:
+        # it is the only record binding the escaped child's generation, so the child
+        # clears it when it hands off and nothing else may retire it until that
+        # generation is proven dead.
+        pending = daemon_manager_module.load_authenticated_guard_daemon_pending_launch(guard_home)
+        assert pending is not None
+        assert pending["pid"] == process.pid
         assert not (guard_home / ".guard" / "daemon-state.json").is_file()
 
     def test_progressing_spawn_detected_by_newer_start_requested(self, tmp_path, monkeypatch) -> None:
@@ -532,10 +670,10 @@ class TestSpawnedDaemonStartClassification:
         guard_home.mkdir()
         process = _FakeSpawnedDaemonProcess()
         self._patch_ensure_deadline(monkeypatch, guard_home, process, owner_lock_held=True)
-        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: None)
+        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kw: None)
 
-        with pytest.raises(RuntimeError, match=r"^Guard approval center did not start"):
-            # The patched readiness wait models expiry after the process spawns.
+        with pytest.raises(RuntimeError, match=r"^Guard daemon process start marker could not be recorded"):
+            # The launch identity cannot be recorded, so the spawned child is retired fail-closed.
             daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
 
         assert process.terminated is True
@@ -547,6 +685,8 @@ class TestStillStartingAdoption:
 
     def _patch_baseline(self, monkeypatch, guard_home: Path) -> dict[str, list]:
         calls: dict[str, list] = {"popen": [], "retire": []}
+        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kw: "posix:token")
+        monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "posix:owner")
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
         monkeypatch.setattr(
             daemon_manager_module,
@@ -557,10 +697,8 @@ class TestStillStartingAdoption:
         monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _gh: None)
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
-        _warm_native_runtime_status()
-        monkeypatch.setattr(
-            daemon_manager_module.subprocess,
-            "Popen",
+        patch_popen_past_native_runtime(
+            monkeypatch,
             lambda *a, **k: calls["popen"].append(a[0]) or _FakeSpawnedDaemonProcess(),
         )
         monkeypatch.setattr(

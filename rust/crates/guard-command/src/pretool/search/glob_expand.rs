@@ -91,11 +91,15 @@ fn expand(value: &str, context: ReadContext<'_>, mode: Mode) -> Option<Vec<PathB
         .split('/')
         .filter(|part| !part.is_empty() && *part != ".")
         .collect();
+    // A pattern ending in `/` matches only directories, as `src/*/` does in
+    // the shell, so its last component descends like an inner one.
+    let directories_only = scope.pattern.ends_with('/');
     let mut current = vec![scope.base.clone()];
     let mut inspected = 0_usize;
     for (index, component) in components.iter().enumerate() {
         let last = index + 1 == components.len();
         let is_pattern = component.contains(GLOB_CHARACTERS);
+        let keeps_files = last && !(directories_only && is_pattern);
         if *component == ".."
             || (component.starts_with('.') && (is_pattern || !hidden_allowed(component)))
             || (mode.refuse_ambiguous
@@ -115,7 +119,7 @@ fn expand(value: &str, context: ReadContext<'_>, mode: Mode) -> Option<Vec<PathB
                 }
                 continue;
             }
-            if !last && component.len() > 1 && component.bytes().all(|byte| byte == b'*') {
+            if !keeps_files && component.len() > 1 && component.bytes().all(|byte| byte == b'*') {
                 nested_directories(directory, &mut next, &mut inspected)?;
                 continue;
             }
@@ -130,7 +134,7 @@ fn expand(value: &str, context: ReadContext<'_>, mode: Mode) -> Option<Vec<PathB
                     continue;
                 }
                 let path = directory.join(name);
-                if last || traversable(&path)? {
+                if keeps_files || traversable(&path)? {
                     next.push(path);
                 }
             }

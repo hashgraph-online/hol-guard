@@ -19,6 +19,7 @@ _GUARD_HELP_GROUPS = (
     "  run          Enforce Guard before a harness launch\n"
     "  approvals    Inbox: approve, block, or scope requests needing judgment\n"
     "  receipts     Evidence: review local decisions and proof receipts\n"
+    "  plugin       Install a HOL plugin listing, or check and package your own plugin\n"
     "\n"
     "Team and cloud coordination:\n"
     "  connect      Pair this machine to Guard Cloud\n"

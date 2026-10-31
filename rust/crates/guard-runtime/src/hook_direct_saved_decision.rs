@@ -28,8 +28,9 @@
 //!
 //! Any other shape defers, so the daemon takes the request:
 //! portable decisions bound anywhere but the workspace's own identity,
-//! a portable identity the resident does not resolve exactly, a policy
-//! bundle with a policy-bundle row to match, an integrity state other than
+//! a portable identity the resident does not resolve exactly, a cached
+//! policy bundle the resident cannot judge the way the daemon would while a
+//! policy-bundle row is saved, an integrity state other than
 //! the published protected one, a missing or unreadable decision, and every
 //! step the daemon could answer differently.
 
@@ -39,7 +40,9 @@ use crate::connector_setup::grant_lifts;
 use crate::local_store_read::{
     open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
 };
+use crate::policy_bundle_store_identities::{cached_bundle_authority, BundleAuthority};
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
+use crate::policy_store::PolicySnapshotStore;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_command::hook_responses::{pre_tool, Object};
 use guard_contracts::{
@@ -48,7 +51,9 @@ use guard_contracts::{
 };
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Instant;
 use zeroize::Zeroizing;
 
 const REVIEW_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
@@ -81,6 +86,16 @@ pub(super) struct Context<'a> {
     pub(super) home_dir: &'a str,
     pub(super) guard_home: &'a str,
     pub(super) binding: &'a DirectLaneBinding,
+    /// What a queued review's allow hint is resolved against. Without it a
+    /// review that could carry one stays with the daemon.
+    pub(super) hint: Option<&'a HintScope<'a>>,
+}
+
+/// The admitted store and the hook's deadline, for the allow hint a queued
+/// review is stored with.
+pub(super) struct HintScope<'a> {
+    pub(super) policy_store: &'a PolicySnapshotStore,
+    pub(super) deadline: Instant,
 }
 
 /// The edge result with the daemon's response, for a review the daemon
@@ -151,7 +166,7 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
         // the daemon reads one only while the store holds a grant row.
         custom = store
             .grants()?
-            .then(|| custom_grant(context, &result))
+            .then(|| custom_grant(context, &result, &environment.0))
             .flatten();
         if let Some(ReviewVerdict::Blocked(name)) = &custom {
             // A custom block wins over any saved decision or approval.
@@ -187,21 +202,30 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             render(context.harness, &allowed, "accepted").ok_or(HookDirectDefer::SavedDecision)?;
         return Ok(parsed);
     }
-    parsed["harness_response"] =
-        match consume::answer(context, &result, &exact, receipt, &artifact_id)? {
-            Some(response) => response,
-            None if connector_setup_candidate(context, &result) => {
-                return Err(HookDirectDefer::ReviewQueue);
-            }
-            None => review_queue::answer(context, &result, receipt, &exact, &token)?,
-        };
+    let (response, notice) = match consume::answer(context, &result, &exact, receipt, &artifact_id)?
+    {
+        Some(response) => (response, None),
+        None => review_queue::answer(context, &result, receipt, &exact, &token)?,
+    };
+    parsed["harness_response"] = response;
+    // The desktop setup notice for a connector-setup review is raised by the
+    // evidence drain once the hook is answered.
+    if let Some(notice) = notice {
+        parsed[crate::hook_direct::CONNECTOR_NOTICE_FIELD] = notice;
+    }
     Ok(parsed)
 }
 
 /// `native_local_cli_grant_response` for this review: the custom rule the
 /// daemon reads before any saved decision, or `None` when none applies. The
-/// daemon reads it only for a review it holds at a review action.
-fn custom_grant(context: &Context<'_>, result: &Object) -> Option<ReviewVerdict> {
+/// daemon reads it only for a review it holds at a review action, and
+/// resolves the launch against `Path.home()` and `os.environ`, which it
+/// published as `environment`.
+fn custom_grant(
+    context: &Context<'_>,
+    result: &Object,
+    environment: &BTreeMap<String, String>,
+) -> Option<ReviewVerdict> {
     if !result
         .get("policy_action")
         .and_then(Value::as_str)
@@ -209,6 +233,7 @@ fn custom_grant(context: &Context<'_>, result: &Object) -> Option<ReviewVerdict>
     {
         return None;
     }
+    let user_home = review_request::expanded_home(environment);
     super::local_cli::review_grant(&super::local_cli::RuleCheck {
         payload: Some(context.payload),
         harness: context.harness,
@@ -217,6 +242,12 @@ fn custom_grant(context: &Context<'_>, result: &Object) -> Option<ReviewVerdict>
         guard_home: context.guard_home,
         // The daemon pauses no review in Watch, so this lane never records.
         recording_only: false,
+        launch_env: user_home
+            .as_deref()
+            .map(|user_home| super::local_cli::LaunchEnv {
+                user_home,
+                env: environment,
+            }),
     })
 }
 
@@ -249,6 +280,8 @@ fn saved_response(
     let Some(has_local_policy) = store.readable(&integrity_state)? else {
         return Err(HookDirectDefer::SavedDecision);
     };
+    let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
+    let (bundle_identities, _) = store.bundle_authority(&now)?;
     let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -262,7 +295,7 @@ fn saved_response(
         artifact_hash: Some(token.to_owned()),
         workspace: Some(context.workspace.to_owned()),
         publisher: None,
-        now: super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?,
+        now,
         runtime_exact_match_context: None,
         consume_one_shot: false,
         local_once_only: false,
@@ -275,7 +308,12 @@ fn saved_response(
         integrity_key_id: has_local_policy.then(|| key.key_id.clone()),
         local_once_integrity_key_b64: Some(key_b64.to_string()),
         local_once_integrity_key_id: Some(key.key_id.clone()),
-        policy_bundle_decision_identities: None,
+        policy_bundle_decision_identities: (!bundle_identities.is_empty())
+            .then_some(bundle_identities),
+        // The lookup lifts Cloud-excepted bundle rules itself; the local and
+        // portable probes both match exceptions on the checkout path.
+        exception_workspace: Some(context.workspace.to_owned()),
+        cloud_exception_bundle: Default::default(),
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,
@@ -358,7 +396,7 @@ fn saved_verdict(
 
 /// The rendered verdict marked with its reuse status, or `None` when the
 /// daemon's render request could exceed its size limit.
-fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
+pub(crate) fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
     let encoded = serde_json::to_vec(verdict).ok()?.len() + harness.len();
     if encoded * ESCAPE_FACTOR + ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {
         return None;
@@ -382,7 +420,7 @@ fn approvable(result: &Object) -> bool {
 }
 
 /// `_native_review_is_overridable`: a review a broad local-CLI grant may lift.
-fn overridable(result: &Object) -> bool {
+pub(super) fn overridable(result: &Object) -> bool {
     let action_type = result
         .get("action")
         .and_then(Value::as_object)
@@ -399,19 +437,6 @@ pub(crate) fn overridable_action_type(action_type: Option<&Value>) -> bool {
         Some(Value::Array(_) | Value::Object(_)) => false,
         _ => true,
     }
-}
-
-/// A review due only to non-recognition of a command that launches a local
-/// CLI (or may): the daemon reads whether this device was ever set up for the
-/// CLI and groups the row under its connector, so the resident leaves it.
-fn connector_setup_candidate(context: &Context<'_>, result: &Object) -> bool {
-    crate::connector_setup::is_non_recognition(result.get("reason_code").and_then(Value::as_str))
-        && super::local_cli::launches_local_cli(
-            context.payload,
-            context.workspace,
-            context.home_dir,
-        )
-        .unwrap_or(true)
 }
 
 /// Python truthiness of an optional JSON value.
@@ -475,22 +500,11 @@ impl StoreShape<'_> {
     }
 
     /// Whether the store holds a local decision, when the daemon's lookup
-    /// reads it under the published integrity state: no cached policy bundle
-    /// with a policy-bundle row to match, since the bundle's decision
-    /// identities come from a synced payload the resident does not validate,
-    /// and the published state still stored. `None` otherwise.
+    /// reads it under the published integrity state: the published state is
+    /// still stored. `None` otherwise.
     /// Portable decisions are read through the workspace's identity
     /// (`portable::composition`).
     fn readable(&self, integrity_state: &Value) -> Result<Option<bool>, HookDirectDefer> {
-        if self.any(
-            "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
-            &[],
-        )? && self.any(
-            "select 1 from sync_state where state_key = 'policy_bundle' limit 1",
-            &[],
-        )? {
-            return Ok(None);
-        }
         let has_local_policy = self.any(
             &format!(
                 "select 1 from policy_decisions where source not in {REMOTE_SOURCES_SQL} limit 1"
@@ -508,6 +522,26 @@ impl StoreShape<'_> {
             .map_err(|_| HookDirectDefer::SavedDecision)?;
         let stored = stored.and_then(|text| serde_json::from_str::<Value>(&text).ok());
         Ok((stored.as_ref() == Some(integrity_state)).then_some(has_local_policy))
+    }
+
+    /// The decision identities the cached signed bundle authorizes at `now`,
+    /// which keep or drop a policy-bundle row, and the bundle they came from;
+    /// empty when the store holds no such row. A bundle the resident cannot
+    /// judge as the daemon would defers.
+    fn bundle_authority(&self, now: &str) -> Result<BundleAuthority, HookDirectDefer> {
+        if !self.any(
+            "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
+            &[],
+        )? {
+            return Ok((Vec::new(), None));
+        }
+        #[cfg(test)]
+        if let Some(authority) =
+            crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|bundle| bundle.borrow().clone())
+        {
+            return Ok(authority);
+        }
+        cached_bundle_authority(self.connection, now).ok_or(HookDirectDefer::SavedDecision)
     }
 
     fn any(&self, query: &str, values: &[&str]) -> Result<bool, HookDirectDefer> {
@@ -530,10 +564,13 @@ mod portable;
 
 // Read once the direct lane queues a reviewed `PreToolUse` itself.
 #[path = "hook_direct_review_request.rs"]
-mod review_request;
+pub(crate) mod review_request;
 
 #[path = "hook_direct_review_queue.rs"]
-mod review_queue;
+pub(crate) mod review_queue;
+
+#[path = "hook_direct_review_hint.rs"]
+pub(crate) mod review_hint;
 
 #[cfg(test)]
 #[path = "hook_direct_saved_decision_tests.rs"]

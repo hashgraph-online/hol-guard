@@ -80,14 +80,27 @@ def _omp(items: object) -> dict[str, object]:
     return next(item for item in items if item["harness"] == "omp")
 
 
+def _without_records(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Bundled records are bound to one Guard release and platform, so a build
+    # of that release would judge the fixture's 18.11.2 against them. These
+    # checks are about a manifest with no OMP evidence at all.
+    empty = copy.deepcopy(FIXTURE)
+    for harness in empty["harnesses"]:  # type: ignore[union-attr]
+        harness["records"] = []
+    monkeypatch.setattr(service, "_manifest", ManifestLoad(parse_manifest(empty), None))
+
+
 @pytest.mark.skipif(os.name == "nt", reason="symlinked bun shim fixture")
-def test_harness_list_carries_additive_version_compatibility(daemon: GuardDaemonServer) -> None:
+def test_harness_list_carries_additive_version_compatibility(
+    daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _without_records(monkeypatch)
     status, payload = _call(daemon, "/v1/harnesses", token=daemon._server.auth_token)
     assert status == 200
     omp = _omp(payload["items"])
     compatibility = omp["version_compatibility"]
     assert isinstance(compatibility, dict)
-    # The bundled manifest carries no OMP evidence yet, so nothing renders as tested.
+    # With no OMP evidence, nothing renders as tested.
     assert compatibility["state"] == "coverage_unavailable"
     assert compatibility["detected_version"] == "18.11.2"
     assert compatibility["enforcement_effect"] == "none"
@@ -108,7 +121,8 @@ def test_version_writes_require_authentication(daemon: GuardDaemonServer, path: 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlinked bun shim fixture")
-def test_version_writes_with_dashboard_session(daemon: GuardDaemonServer) -> None:
+def test_version_writes_with_dashboard_session(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    _without_records(monkeypatch)
     session = _session(daemon)
     status, payload = _call(daemon, "/v1/harness-versions/refresh", {"harness": "omp"}, dashboard_session=session)
     assert status == 200
@@ -117,7 +131,7 @@ def test_version_writes_with_dashboard_session(daemon: GuardDaemonServer) -> Non
     status, payload = _call(daemon, "/v1/harness-versions/refresh", {"harness": "../omp"}, dashboard_session=session)
     assert (status, payload) == (400, {"error": "invalid_harness"})
 
-    # Without bundled evidence the version is not "untested", so it cannot be acknowledged.
+    # Without evidence the version is not "untested", so it cannot be acknowledged.
     status, payload = _call(
         daemon,
         "/v1/harness-versions/acknowledge",

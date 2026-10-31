@@ -49,15 +49,6 @@ class PackageIntentTarget:
 
         return asdict(self)
 
-    def to_fingerprint_dict(self) -> dict[str, object]:
-        """Return approval identity fields with canonical Git source spelling."""
-
-        payload = self.to_dict()
-        if self.source_kind == "git" and self.source_identity is not None:
-            for exact_field in ("raw_spec", "raw_spec_hash", "source_url", "source_url_hash"):
-                _ = payload.pop(exact_field, None)
-        return payload
-
 
 @dataclass(frozen=True, slots=True)
 class PackageExecutionFileEvidence:
@@ -358,28 +349,6 @@ def build_package_request_artifact(
         guard_home=guard_home,
         deadline_monotonic=deadline_monotonic,
     )
-
-
-def redacted_command(tokens: tuple[str, ...]) -> str:
-    redacted: list[str] = []
-    skip_hash = False
-    for token in tokens:
-        if skip_hash:
-            redacted.append("<hash>")
-            skip_hash = False
-            continue
-        if token == "--hash":
-            redacted.append(token)
-            skip_hash = True
-            continue
-        if token.startswith("--hash="):
-            redacted.append("--hash=<hash>")
-            continue
-        if _HTTP_SOURCE_IN_TOKEN_RE.search(token) is not None or token.startswith("git+"):
-            redacted.append(_sanitize_url(token))
-            continue
-        redacted.append(token)
-    return shlex.join(redacted)
 
 
 def redact_package_request_token(value: str) -> str:

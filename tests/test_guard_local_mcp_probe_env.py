@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.local_cli_commands import OTHER_COMMAND_ID, LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import McpProbeResult, probe_stdio_mcp_server
-from codex_plugin_scanner.guard.runtime.local_mcp_stdio import probe_env
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -88,24 +87,6 @@ for line in sys.stdin:
         encoding="utf-8",
     )
     return server
-
-
-def test_probe_env_merges_harness_values_without_replacing_path(tmp_path: Path) -> None:
-    env = probe_env(
-        str(tmp_path),
-        {
-            "Z_AI_API_KEY": "probe-key",
-            "PATH": "evil-path",
-            "HOME": "evil-home",
-            "BAD=NAME": "x",
-            "NULL": "a\x00b",
-        },
-    )
-    assert env["Z_AI_API_KEY"] == "probe-key"
-    assert env["PATH"] != "evil-path"
-    assert env["HOME"] == str(tmp_path)
-    assert "BAD=NAME" not in env
-    assert "NULL" not in env
 
 
 def test_probe_lists_tools_when_harness_env_is_supplied(tmp_path: Path) -> None:

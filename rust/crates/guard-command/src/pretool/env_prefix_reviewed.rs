@@ -55,6 +55,14 @@ pub(super) fn record(reviewed: &mut Reviewed, name: &str, value: &str, search_pa
 }
 
 fn plain_data(name: &str, value: &str) -> bool {
+    // A build or test setting whose value passed the closed screen carries no
+    // path, no program and no credential, so the profile keeps the same
+    // meaning whether its launcher forwards the setting or drops it: the run
+    // reports differently, repeats or refuses a lint. The option leader in
+    // `-Dwarnings` would otherwise fail the shape test below.
+    if super::inert_tool_setting(name, value) {
+        return true;
+    }
     !matches!(
         name.to_ascii_uppercase().as_str(),
         "NODE_PATH" | "TMPDIR" | "TMP" | "TEMP"
@@ -69,7 +77,7 @@ fn plain_data(name: &str, value: &str) -> bool {
 
 #[cfg(unix)]
 fn forwarded(name: &str) -> bool {
-    crate::restricted_pytest::forwarded_setting(name)
+    crate::forwarded_settings::forwarded_setting(name)
 }
 
 /// Without the restricted launchers every setting counts as forwarded.

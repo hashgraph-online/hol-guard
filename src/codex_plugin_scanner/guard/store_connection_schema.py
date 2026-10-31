@@ -73,6 +73,12 @@ from .store_workflow_capabilities_schema import (
     WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
     ensure_workflow_capability_schema,
 )
+from .store_workspace_assessment_schema import (
+    WORKSPACE_ASSESSMENT_MIGRATION_VERSION,
+    WORKSPACE_FIX_PROPOSAL_MIGRATION_VERSION,
+    ensure_workspace_assessment_schema,
+    ensure_workspace_fix_proposal_schema,
+)
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -195,6 +201,8 @@ _REQUIRED_SCHEMA_MIGRATION_VERSIONS = (  # Keep retired-index databases on the p
     BASH_OPERATION_MIGRATION_VERSION,
     BASH_REVIEW_MIGRATION_VERSION,
     BASH_INVOCATION_MIGRATION_VERSION,
+    WORKSPACE_ASSESSMENT_MIGRATION_VERSION,
+    WORKSPACE_FIX_PROPOSAL_MIGRATION_VERSION,
 )
 
 
@@ -217,6 +225,7 @@ class StoreConnectionSchemaMixin:
     )
     _startup_prefetched_policy_integrity_repair_failed = False
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
+    _policy_integrity_generation_lock_local: ClassVar[threading.local] = threading.local()
     _last_sqlite_recovery = "skipped"
     _last_sqlite_recovery_details: dict[str, bool] | None = None
 
@@ -563,6 +572,52 @@ class StoreConnectionSchemaMixin:
             timeout_message="Timed out waiting for Guard OAuth credential lock.",
         ):
             yield
+
+    @contextmanager
+    def hold_policy_integrity_generation_lock(self) -> Iterator[None]:
+        """Serialize one policy integrity generation advance against the rest.
+
+        The advance reads the trusted control state, marks the next generation
+        pending and signs the rows. Those writes no longer share a single SQLite
+        transaction, so without this lock a second advance can read the same
+        generation and stamp its pending record over a finalized one, leaving
+        saved decisions signed above the generation the store trusts.
+
+        Take it before opening the store connection. Every holder acquires it in
+        that order, so it never waits on a connection that is waiting on it. An
+        open connection scope shares a connection without sharing a transaction,
+        so it serializes nothing here; a route that advanced the generation
+        under one would race the routes that take this lock, and taking the lock
+        under it would invert the order every other holder uses. Both are
+        refused rather than silently allowed.
+        """
+
+        if store_connection_scope.owns_scope(cast("GuardStore", self)):
+            raise RuntimeError("Guard policy integrity generation cannot advance inside an open connection scope.")
+        with suppress(OSError):
+            self.guard_home.mkdir(mode=_GUARD_STORE_PRIVATE_DIR_MODE, parents=True, exist_ok=True)
+        lock_path = self.guard_home / "policy-integrity-generation.lock"
+        held = getattr(self._policy_integrity_generation_lock_local, "held", None)
+        if held is None:
+            held = set()
+            self._policy_integrity_generation_lock_local.held = held
+        key = str(lock_path)
+        if key in held:
+            # One advance reaches several routes that each take the lock; flock
+            # would not block this thread anyway, so re-entry is explicit.
+            yield
+            return
+        with self._hold_advisory_file_lock(
+            path=lock_path,
+            timeout_seconds=_POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS,
+            poll_seconds=_POLICY_INTEGRITY_GENERATION_LOCK_POLL_SECONDS,
+            timeout_message="Timed out waiting for the Guard policy integrity generation lock.",
+        ):
+            held.add(key)
+            try:
+                yield
+            finally:
+                held.discard(key)
 
     @contextmanager
     def hold_workflow_capability_authority_lock(self) -> Iterator[None]:
@@ -1093,6 +1148,8 @@ class StoreConnectionSchemaMixin:
             ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)
             ensure_bash_operation_schema(connection, applied_at=_now())
+            ensure_workspace_assessment_schema(connection, applied_at=_now())
+            ensure_workspace_fix_proposal_schema(connection, applied_at=_now())
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
             ensure_mcp_policy_request_schema(connection)

@@ -65,6 +65,7 @@ FLOATS: tuple[float, ...] = (
     5e-324,
     0.1,
     1 / 3,
+    1.2345678,
     123456789.123456789,
     2.5e-10,
 )
@@ -112,6 +113,7 @@ AGENT_TYPE_INPUTS: tuple[str, ...] = (
     "claude-code",
     "cline",
     "hermes",
+    "muse",
     "Codex",
     "claude_code",
     "",

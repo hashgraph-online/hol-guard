@@ -313,6 +313,10 @@ impl guard_adapter_detection::DetectionHost for Inventory {
         self.fs(path)
     }
 
+    fn is_dir(&self, path: &Path) -> Result<bool, &'static str> {
+        Inventory::is_dir(self, path)
+    }
+
     fn mark_found(&mut self, path: &Path) {
         self.found(path);
     }

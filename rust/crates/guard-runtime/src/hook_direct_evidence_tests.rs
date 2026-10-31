@@ -1,6 +1,6 @@
 use super::{
-    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, MAX_QUEUED_RECORDS,
-    MAX_RECORD_BYTES,
+    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, HEADROOM_RECORDS,
+    MAX_QUEUED_RECORDS, MAX_RECORD_BYTES,
 };
 use serde_json::{json, Value};
 
@@ -121,4 +121,161 @@ fn a_cursor_from_another_resident_drops_nothing() {
     }
     let page = drained_from(&restarted, None, Some(1), None);
     assert_eq!(page["records"], json!([{ "restarted": 0 }]));
+}
+
+#[test]
+fn headroom_keeps_a_worst_case_record_and_spare_slots_free() {
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.has_headroom());
+    let large = "x".repeat(MAX_RECORD_BYTES - 64);
+    for _ in 0..6 {
+        assert!(queue.offer(json!({ "payload": large.clone() })));
+    }
+    assert!(queue.has_headroom());
+    assert!(queue.offer(json!({ "payload": large })));
+    assert!(!queue.has_headroom());
+    // Headroom only gates the caller that asks; ordinary records still fit.
+    assert!(queue.offer(json!({ "small": 0 })));
+
+    let crowded = DirectEvidenceQueue::default();
+    for index in 0..MAX_QUEUED_RECORDS - HEADROOM_RECORDS {
+        assert!(crowded.offer(json!({ "index": index })));
+    }
+    assert!(crowded.has_headroom());
+    assert!(crowded.offer(json!({ "index": "one more" })));
+    assert!(!crowded.has_headroom());
+}
+
+#[test]
+fn a_page_passes_over_plain_relay_records_and_the_ack_settles_them() {
+    let plain = crate::mcp_relay_receipt::tests::record("forward", "policy", "allow");
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(json!({ "index": 0 })));
+    assert!(queue.offer(plain.clone()));
+    assert!(queue.offer(json!({ "index": 2 })));
+    assert!(queue.offer(plain.clone()));
+    let peeked = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
+    assert_eq!(
+        peeked.records,
+        [json!({ "index": 0 }), json!({ "index": 2 })]
+    );
+    assert_eq!(peeked.remaining, 0);
+    assert!(peeked.settled.is_empty());
+    let page = queue.acknowledge_and_peek(peeked.through, Some(&queue.epoch), 3);
+    assert_eq!(page.settled, [plain.clone(), plain]);
+    assert!(page.records.is_empty());
+    assert_eq!(page.remaining, 0);
+    assert_eq!(page.through, None);
+}
+
+#[test]
+fn plain_relay_records_never_leave_an_empty_page_with_more_queued() {
+    let plain = crate::mcp_relay_receipt::tests::record("forward", "policy", "allow");
+    let queue = DirectEvidenceQueue::default();
+    for _ in 0..3 {
+        assert!(queue.offer(plain.clone()));
+    }
+    for index in 0..3 {
+        assert!(queue.offer(json!({ "index": index })));
+    }
+    let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 2);
+    assert_eq!(page.records, [json!({ "index": 0 }), json!({ "index": 1 })]);
+    assert_eq!(page.remaining, 1);
+    let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 2);
+    assert_eq!(page.settled, [plain.clone(), plain.clone(), plain]);
+    assert_eq!(page.records, [json!({ "index": 2 })]);
+    assert_eq!(page.remaining, 0);
+}
+
+#[test]
+fn a_record_the_resident_cannot_write_is_still_paged() {
+    let remembered = crate::mcp_relay_receipt::tests::record("remember", "policy", "allow");
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(remembered.clone()));
+    let page = drained(&queue, None, None);
+    assert_eq!(page["records"], json!([remembered]));
+}
+
+#[test]
+fn a_receipt_the_resident_could_not_write_is_paged_to_the_daemon() {
+    let plain = crate::mcp_relay_receipt::tests::record("forward", "policy", "allow");
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(plain.clone()));
+    let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
+    assert!(page.records.is_empty());
+    let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 3);
+    assert_eq!(page.settled, [plain.clone()]);
+    queue.unwritten().requeue(page.settled);
+    let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 3);
+    assert_eq!(page.records, [plain]);
+    assert!(page.settled.is_empty());
+}
+
+#[test]
+fn a_full_queue_still_takes_back_every_receipt_the_resident_could_not_write() {
+    let plain = crate::mcp_relay_receipt::tests::record("forward", "policy", "allow");
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(plain.clone()));
+    assert!(queue.offer(plain.clone()));
+    let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
+    let page = queue.acknowledge_and_peek(page.through, Some(&queue.epoch), 3);
+    assert_eq!(page.settled.len(), 2);
+    // Hooks fill the queue while the store write is in flight.
+    for index in 0..MAX_QUEUED_RECORDS {
+        assert!(queue.offer(json!({ "index": index })));
+    }
+    assert!(!queue.offer(json!({ "index": "over" })));
+    queue.unwritten().requeue(page.settled);
+    let mut handed_back = 0;
+    let mut through = None;
+    loop {
+        let page = queue.acknowledge_and_peek(through, Some(&queue.epoch), 256);
+        assert!(page.settled.is_empty());
+        handed_back += page
+            .records
+            .iter()
+            .filter(|record| **record == plain)
+            .count();
+        if page.records.is_empty() {
+            break;
+        }
+        through = page.through;
+    }
+    assert_eq!(handed_back, 2);
+}
+
+#[test]
+fn a_drain_with_no_store_hands_the_receipt_back_to_the_daemon() {
+    let plain = crate::mcp_relay_receipt::tests::record("forward", "policy", "allow");
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(plain.clone()));
+    let first = drained(&queue, None, None);
+    assert_eq!(first["records"], json!([]));
+    drained(&queue, None, first["through"].as_u64());
+    // The writer thread finds no store under the request's home.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let page = queue.acknowledge_and_peek(None, Some(&queue.epoch), 3);
+        if !page.records.is_empty() {
+            assert_eq!(page.records, [plain]);
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "receipt never handed back"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_paged_receipt_says_whether_the_native_runtime_accepts_it() {
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(json!({ "event": "PreToolUse", "receipt": { "decision_id": "d" } })));
+    assert!(queue.offer(json!({ "event": "PreToolUse", "receipt": null })));
+    assert!(queue.offer(json!({ "event": "PreToolUse" })));
+    let records = drained(&queue, None, None)["records"].clone();
+    assert_eq!(records[0]["receipt_valid"], json!(false));
+    assert!(records[1].get("receipt_valid").is_none());
+    assert!(records[2].get("receipt_valid").is_none());
 }

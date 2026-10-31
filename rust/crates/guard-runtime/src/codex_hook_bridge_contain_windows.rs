@@ -1,8 +1,7 @@
-//! The Windows halves of the Codex contained rewrite, ported from
-//! `contained_zcode_response`: the PowerShell-quoted sink command
-//! (`windows_powershell_quote.py`), the bootstrap's forward-slash package
-//! root (`_sink_command_prefix`), and the request snapshot in the profile's
-//! own temporary directory (`_request_root`).
+//! The Windows halves of the contained rewrite: the sink command line both of
+//! Codex's shells read (`windows_powershell_quote.py`), the bootstrap's
+//! forward-slash package root (`_sink_command_prefix`), and the request
+//! snapshot in the profile's own temporary directory.
 
 use std::io::Write;
 use std::os::windows::fs::MetadataExt;
@@ -12,6 +11,9 @@ use std::time::{Duration, SystemTime};
 const BOOTSTRAP_HEAD: &str = "import sys;sys.path.insert(0, ";
 const BOOTSTRAP_TAIL: &str =
     ");from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))";
+/// The bootstrap that takes its package root from the argument after it, so
+/// the code itself holds no quote for a shell to read differently.
+const ARGV_BOOTSTRAP: &str = "import sys;sys.path.insert(0,sys.argv.pop(1));from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))";
 /// PowerShell ends a single-quoted literal at any of these.
 const SINGLE_QUOTES: [char; 5] = ['\'', '\u{2018}', '\u{2019}', '\u{201a}', '\u{201b}'];
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
@@ -22,10 +24,81 @@ const NAME_CHARACTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789_";
 const STALE_AFTER: Duration = Duration::from_secs(86_400);
 const MAX_SCANNED_ENTRIES: usize = 4096;
 
+/// `sink_command_line(argv)`: the sink command line Codex runs. Codex starts
+/// each call in the shell the model picked for it, PowerShell or Git Bash,
+/// so the line is first written in the subset both read the same way; only
+/// an argv that subset cannot carry falls back to the PowerShell form.
+pub(super) fn sink_command_line(argv: &[String]) -> Option<String> {
+    either_shell_join(argv).or_else(|| powershell_join(argv))
+}
+
+/// `either_shell_join(argv)`: the program as a bare forward-slash path and
+/// each argument a single-quoted literal with no quote inside it. Neither
+/// shell expands anything in such a literal, and a bare path needs no call
+/// operator in PowerShell, which Git Bash would read as a background `&`.
+fn either_shell_join(argv: &[String]) -> Option<String> {
+    let argv = argv_bootstrap(argv)?;
+    let (program, arguments) = argv.split_first()?;
+    let mut line = bare_program(program)?;
+    for argument in arguments {
+        if !quotable(argument) || argument.contains(SINGLE_QUOTES) {
+            return None;
+        }
+        line.push_str(" '");
+        line.push_str(argument);
+        line.push('\'');
+    }
+    Some(line)
+}
+
+/// The argv with a forward-slash bootstrap moved to `ARGV_BOOTSTRAP` and its
+/// package root passed as the next argument. A frozen Guard has no bootstrap
+/// and is returned as it is; a bootstrap of any other shape is refused.
+fn argv_bootstrap(argv: &[String]) -> Option<Vec<String>> {
+    let [program, isolated, code, bootstrap, rest @ ..] = argv else {
+        return Some(argv.to_vec());
+    };
+    if isolated != "-I" || code != "-c" {
+        return Some(argv.to_vec());
+    }
+    let root = bootstrap
+        .strip_prefix(BOOTSTRAP_HEAD)?
+        .strip_suffix(BOOTSTRAP_TAIL)?
+        .strip_prefix('\'')?
+        .strip_suffix('\'')?;
+    if root.contains(['\\', '\'']) {
+        return None;
+    }
+    let mut moved = vec![
+        program.clone(),
+        isolated.clone(),
+        code.clone(),
+        ARGV_BOOTSTRAP.to_owned(),
+        root.to_owned(),
+    ];
+    moved.extend_from_slice(rest);
+    Some(moved)
+}
+
+/// A drive-absolute program path written with forward slashes, when every
+/// character is one both shells leave alone in a bare word.
+fn bare_program(program: &str) -> Option<String> {
+    let path = program.replace('\\', "/");
+    let bytes = path.as_bytes();
+    let (drive, rest) = (bytes.get(..3)?, bytes.get(3..)?);
+    let plain = drive[0].is_ascii_alphabetic()
+        && &drive[1..] == b":/"
+        && !rest.is_empty()
+        && rest
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(byte));
+    plain.then_some(path)
+}
+
 /// `powershell_join(argv)`: each argument one single-quoted literal behind
 /// the call operator, or `None` for an argument Windows PowerShell 5.1
 /// cannot carry through to the native command line unchanged.
-pub(super) fn powershell_join(argv: &[String]) -> Option<String> {
+fn powershell_join(argv: &[String]) -> Option<String> {
     if argv.is_empty() || !argv.iter().all(|argument| quotable(argument)) {
         return None;
     }
@@ -169,7 +242,47 @@ pub(super) fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
     None
 }
 
-/// `cleanup_stale_zcode_requests` on Windows: a snapshot whose call never
+/// The snapshot at `path`, read back only from directly inside this user's
+/// temporary directory: Windows has no owner-mode bits, so the location the
+/// writer chose is what binds it. The directory comes from the profile, not
+/// `TEMP`, which the hook that wrote the snapshot and the shell that runs the
+/// sink may set differently. Neither level may be a reparse point, and the
+/// request has to be a plain file with one link.
+pub(crate) fn read_snapshot(path: &Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    let directory = path.parent()?;
+    let comparable =
+        |path: &Path| Some(plain_path(path.to_str()?).replace('/', "\\").to_lowercase());
+    if comparable(directory.parent()?)? != comparable(&trusted_local_temp()?)? {
+        return None;
+    }
+    let parent = std::fs::symlink_metadata(directory).ok()?;
+    if !plain(&parent) || !parent.is_dir() {
+        return None;
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    if !plain(&metadata)
+        || !metadata.is_file()
+        || metadata.len() > super::MAX_REQUEST_BYTES as u64
+        || !guard_runtime_windows_process::is_single_link_handle(&file).ok()?
+    {
+        return None;
+    }
+    let mut raw = Vec::new();
+    file.take(super::MAX_REQUEST_BYTES as u64 + 1)
+        .read_to_end(&mut raw)
+        .ok()?;
+    Some(raw)
+}
+
+/// Stale-snapshot cleanup on Windows: a snapshot whose call never
 /// ran is reclaimed after a full day. Only a plain directory holding a plain
 /// request file is removed; a reparse point at either level is left alone.
 fn cleanup_stale_requests(temp: &Path) {

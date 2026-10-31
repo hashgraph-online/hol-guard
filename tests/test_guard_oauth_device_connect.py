@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 import re
@@ -2062,6 +2063,416 @@ def test_exchange_guard_device_code_retries_with_dpop_nonce_challenge() -> None:
     assert result.refresh_token == "refresh-123"
 
 
+def _device_token_success_response():
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": "access-123",
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                    "grant_id": "grant-123",
+                    "machine_id": "machine-123",
+                    "workspace_id": "workspace-123",
+                }
+            ).encode("utf-8")
+
+    return _Response()
+
+
+@pytest.mark.parametrize(
+    "transient_error",
+    [
+        TimeoutError("timed out"),
+        ConnectionResetError("connection reset"),
+        urllib.error.URLError(TimeoutError("timed out")),
+        urllib.error.URLError(ConnectionRefusedError("connection refused")),
+    ],
+)
+def test_exchange_guard_device_code_keeps_polling_after_unanswered_request(transient_error: OSError) -> None:
+    attempts: list[int] = []
+    sleeps: list[float] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        attempts.append(len(attempts))
+        if len(attempts) == 1:
+            raise transient_error
+        return _device_token_success_response()
+
+    result = connect_flow.exchange_guard_device_code(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="guard-local-daemon",
+        device_code="device-code-123",
+        dpop_key_material=generate_dpop_key_pair(),
+        interval_seconds=5,
+        expires_in_seconds=600,
+        urlopen=fake_urlopen,
+        sleep=sleeps.append,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert result.access_token == "access-123"
+    assert len(attempts) == 2
+    assert sleeps == [10.0]
+
+
+def test_exchange_guard_device_code_stops_when_cloud_stays_unanswered_past_deadline() -> None:
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        raise TimeoutError("timed out")
+
+    with pytest.raises(RuntimeError, match="Guard Cloud did not answer while HOL Guard waited for approval"):
+        connect_flow.exchange_guard_device_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            device_code="device-code-123",
+            dpop_key_material=generate_dpop_key_pair(),
+            interval_seconds=5,
+            expires_in_seconds=600,
+            wait_timeout_seconds=0,
+            urlopen=fake_urlopen,
+            sleep=lambda seconds: None,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+
+def test_exchange_guard_device_code_does_not_poll_after_backoff_crosses_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [1000.0]
+    attempts: list[float] = []
+    sleeps: list[float] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        attempts.append(clock[0])
+        raise TimeoutError("timed out")
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock[0] += seconds
+
+    monkeypatch.setattr(connect_flow.time, "monotonic", lambda: clock[0])
+
+    with pytest.raises(RuntimeError, match="Guard Cloud did not answer while HOL Guard waited for approval"):
+        connect_flow.exchange_guard_device_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            device_code="device-code-123",
+            dpop_key_material=generate_dpop_key_pair(),
+            interval_seconds=5,
+            expires_in_seconds=600,
+            wait_timeout_seconds=7,
+            urlopen=fake_urlopen,
+            sleep=fake_sleep,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert attempts == [1000.0]
+    assert sleeps == [7.0]
+
+
+def test_exchange_guard_device_code_backoff_keeps_server_interval_above_cap() -> None:
+    attempts: list[int] = []
+    sleeps: list[float] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        attempts.append(len(attempts))
+        if len(attempts) == 1:
+            raise TimeoutError("timed out")
+        return _device_token_success_response()
+
+    result = connect_flow.exchange_guard_device_code(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="guard-local-daemon",
+        device_code="device-code-123",
+        dpop_key_material=generate_dpop_key_pair(),
+        interval_seconds=90,
+        expires_in_seconds=600,
+        urlopen=fake_urlopen,
+        sleep=sleeps.append,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert result.access_token == "access-123"
+    assert sleeps == [90.0]
+
+
+def test_exchange_guard_device_code_does_not_retry_non_transient_url_errors() -> None:
+    attempts: list[int] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        attempts.append(len(attempts))
+        raise urllib.error.URLError("certificate verify failed")
+
+    with pytest.raises(urllib.error.URLError, match="certificate verify failed"):
+        connect_flow.exchange_guard_device_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            device_code="device-code-123",
+            dpop_key_material=generate_dpop_key_pair(),
+            interval_seconds=5,
+            expires_in_seconds=600,
+            urlopen=fake_urlopen,
+            sleep=lambda seconds: None,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert attempts == [0]
+
+
+def _device_token_error(error_code: str) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        "https://hol.org/api/guard/oauth/token",
+        400,
+        "Bad Request",
+        {},
+        io.BytesIO(json.dumps({"error": error_code}).encode("utf-8")),
+    )
+
+
+def test_exchange_guard_device_code_reports_lost_approval_after_unanswered_poll() -> None:
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        attempts.append(len(attempts))
+        if len(attempts) == 1:
+            raise TimeoutError("timed out")
+        raise _device_token_error("invalid_grant")
+
+    attempts: list[int] = []
+    with pytest.raises(connect_flow.GuardDeviceApprovalLostError, match="answer was lost"):
+        connect_flow.exchange_guard_device_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            device_code="device-code-123",
+            dpop_key_material=generate_dpop_key_pair(),
+            interval_seconds=5,
+            expires_in_seconds=600,
+            urlopen=fake_urlopen,
+            sleep=lambda seconds: None,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert attempts == [0, 1]
+
+
+def test_exchange_guard_device_code_keeps_invalid_grant_generic_when_every_poll_answered() -> None:
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        raise _device_token_error("invalid_grant")
+
+    with pytest.raises(RuntimeError, match="token exchange failed: invalid_grant") as raised:
+        connect_flow.exchange_guard_device_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            device_code="device-code-123",
+            dpop_key_material=generate_dpop_key_pair(),
+            interval_seconds=5,
+            expires_in_seconds=600,
+            urlopen=fake_urlopen,
+            sleep=lambda seconds: None,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert not isinstance(raised.value, connect_flow.GuardDeviceApprovalLostError)
+
+
+def test_exchange_guard_device_code_keeps_invalid_grant_generic_after_pending_answer() -> None:
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        attempts.append(len(attempts))
+        if len(attempts) == 1:
+            raise TimeoutError("timed out")
+        if len(attempts) == 2:
+            raise _device_token_error("authorization_pending")
+        raise _device_token_error("invalid_grant")
+
+    attempts: list[int] = []
+    with pytest.raises(RuntimeError, match="token exchange failed: invalid_grant") as raised:
+        connect_flow.exchange_guard_device_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            device_code="device-code-123",
+            dpop_key_material=generate_dpop_key_pair(),
+            interval_seconds=5,
+            expires_in_seconds=600,
+            urlopen=fake_urlopen,
+            sleep=lambda seconds: None,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert attempts == [0, 1, 2]
+    assert not isinstance(raised.value, connect_flow.GuardDeviceApprovalLostError)
+
+
+def _lost_then_approved_device_flow():
+    device_codes: list[str] = []
+    polled_codes: list[str] = []
+
+    def fake_request(url: str, body: str) -> dict[str, object]:
+        del url, body
+        device_codes.append(f"device-code-{len(device_codes) + 1}")
+        return {
+            "device_code": device_codes[-1],
+            "user_code": f"CODE-{len(device_codes)}",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "expires_in": 600,
+            "interval": 5,
+        }
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        body = urllib.parse.parse_qs((request.data or b"").decode("utf-8"))
+        polled_codes.append(body["device_code"][0])
+        if body["device_code"][0] == "device-code-1":
+            # Guard Cloud redeems the first code, but its answer never arrives.
+            if polled_codes.count("device-code-1") == 1:
+                raise TimeoutError("timed out")
+            raise _device_token_error("invalid_grant")
+        return _device_token_success_response()
+
+    return device_codes, polled_codes, fake_request, fake_urlopen
+
+
+def test_headless_connect_requests_new_code_when_approval_answer_is_lost(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_system_keyring(monkeypatch)
+    _disable_oauth_persistence_assert(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    device_codes, polled_codes, fake_request, fake_urlopen = _lost_then_approved_device_flow()
+    announced: list[dict[str, object]] = []
+
+    payload = connect_flow.run_guard_device_connect_command(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        request_device_authorization=fake_request,
+        token_urlopen=fake_urlopen,
+        sleep=lambda seconds: None,
+        announce_copy=lambda copy: announced.append(dict(copy)),
+        now="2026-06-01T12:00:00+00:00",
+    )
+
+    assert device_codes == ["device-code-1", "device-code-2"]
+    assert polled_codes == ["device-code-1", "device-code-1", "device-code-2"]
+    assert [copy["user_code"] for copy in announced] == ["CODE-1", "CODE-2"]
+    assert "approval_lost" not in announced[0]
+    assert announced[1]["approval_lost"] is True
+    assert payload["status"] == "connected"
+    assert payload["user_code"] == "CODE-2"
+
+
+def test_headless_connect_stops_after_one_lost_approval_restart(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_system_keyring(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    requested: list[int] = []
+    polls: list[int] = []
+
+    def fake_request(url: str, body: str) -> dict[str, object]:
+        del url, body
+        requested.append(len(requested))
+        return {
+            "device_code": f"device-code-{len(requested)}",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "expires_in": 600,
+            "interval": 5,
+        }
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del request, timeout
+        polls.append(len(polls))
+        if len(polls) % 2 == 1:
+            raise TimeoutError("timed out")
+        raise _device_token_error("invalid_grant")
+
+    with pytest.raises(RuntimeError, match=r"answer was lost.*hol-guard connect --headless"):
+        connect_flow.run_guard_device_connect_command(
+            store=store,
+            connect_url="https://hol.org/guard/connect",
+            request_device_authorization=fake_request,
+            token_urlopen=fake_urlopen,
+            sleep=lambda seconds: None,
+            now="2026-06-01T12:00:00+00:00",
+        )
+
+    assert requested == [0, 1]
+    assert store.get_oauth_local_credentials() is None
+
+
+def _record_lost_approval_waits(monkeypatch, *, seconds_per_wait: float):
+    clock = [1000.0]
+    waits: list[object] = []
+    requested: list[int] = []
+    monkeypatch.setattr(connect_flow.time, "monotonic", lambda: clock[0])
+
+    def fake_exchange(**kwargs):
+        waits.append(kwargs["wait_timeout_seconds"])
+        clock[0] += seconds_per_wait
+        raise connect_flow._device_approval_lost_error()
+
+    def fake_request(url: str, body: str) -> dict[str, object]:
+        del url, body
+        requested.append(len(requested))
+        return {
+            "device_code": f"device-code-{len(requested)}",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "expires_in": 600,
+            "interval": 5,
+        }
+
+    monkeypatch.setattr(connect_flow, "exchange_guard_device_code", fake_exchange)
+    return waits, requested, fake_request
+
+
+def test_headless_connect_restart_shares_the_wait_budget(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_system_keyring(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    waits, requested, fake_request = _record_lost_approval_waits(monkeypatch, seconds_per_wait=100)
+
+    with pytest.raises(RuntimeError, match="answer was lost"):
+        connect_flow.run_guard_device_connect_command(
+            store=store,
+            connect_url="https://hol.org/guard/connect",
+            request_device_authorization=fake_request,
+            sleep=lambda seconds: None,
+            wait_timeout_seconds=180,
+            now="2026-06-01T12:00:00+00:00",
+        )
+
+    assert requested == [0, 1]
+    assert waits == [180, 80]
+
+
+def test_headless_connect_does_not_restart_once_the_wait_budget_is_spent(tmp_path: Path, monkeypatch) -> None:
+    _install_fake_system_keyring(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    waits, requested, fake_request = _record_lost_approval_waits(monkeypatch, seconds_per_wait=200)
+
+    with pytest.raises(RuntimeError, match=r"answer was lost.*hol-guard connect --headless"):
+        connect_flow.run_guard_device_connect_command(
+            store=store,
+            connect_url="https://hol.org/guard/connect",
+            request_device_authorization=fake_request,
+            sleep=lambda seconds: None,
+            wait_timeout_seconds=180,
+            now="2026-06-01T12:00:00+00:00",
+        )
+
+    assert requested == [0]
+    assert waits == [180]
+
+
 def test_revoke_guard_self_oauth_grant_retries_with_dpop_nonce_challenge() -> None:
     oauth_client = connect_flow.GuardOAuthClientConfig(
         issuer="https://hol.org",
@@ -2115,3 +2526,46 @@ def test_revoke_guard_self_oauth_grant_retries_with_dpop_nonce_challenge() -> No
     assert "nonce" not in first_claims
     assert second_claims["nonce"] == challenge_nonce
     assert captured_headers[1]["authorization"] == "Bearer oauth-access-token-1"
+
+
+def test_revoke_guard_self_oauth_grant_binds_dpop_proof_to_access_token() -> None:
+    oauth_client = connect_flow.GuardOAuthClientConfig(
+        issuer="https://hol.org",
+        authorize_endpoint="https://hol.org/api/guard/oauth/authorize",
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        device_authorization_endpoint="https://hol.org/api/guard/oauth/device",
+        jwks_endpoint="https://hol.org/api/guard/oauth/jwks",
+        client_id="guard-local-daemon",
+    )
+    captured_headers: list[dict[str, str]] = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b""
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured_headers.append({str(key).lower(): str(value) for key, value in dict(request.header_items()).items()})
+        return _Response()
+
+    connect_flow.revoke_guard_self_oauth_grant(
+        oauth_client=oauth_client,
+        access_token="oauth-access-token-1",
+        workspace_id="workspace-123",
+        revoke_cloud_grant=True,
+        dpop_key_material=generate_dpop_key_pair(),
+        urlopen=fake_urlopen,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    claims = _decode_connect_flow_dpop_claims(captured_headers[0]["dpop"])
+    access_token_digest = hashlib.sha256(b"oauth-access-token-1").digest()
+    expected_ath = base64.urlsafe_b64encode(access_token_digest).rstrip(b"=").decode("ascii")
+    assert claims["ath"] == expected_ath
+    assert claims["htu"] == "https://hol.org/api/guard/oauth/revoke/self"

@@ -42,48 +42,6 @@ _DEFAULT_FILE_BYTES = 256 * 1024 * 1024
 _DEFAULT_OPEN_FILES = 256
 _DEFAULT_PROCESSES = 64
 
-_SEALED_SYSTEM_EXECUTABLE_ROOTS = (
-    Path("/bin"),
-    Path("/System"),
-    Path("/usr/bin"),
-)
-_MACOS_READ_ROOTS = (
-    Path("/System"),
-    Path("/Library/Apple"),
-    Path("/Library/Frameworks"),
-    Path("/opt/homebrew/Cellar"),
-    Path("/opt/homebrew/opt"),
-    Path("/usr/lib"),
-    Path("/usr/local/Cellar"),
-    Path("/usr/local/opt"),
-    Path("/usr/share"),
-)
-_MACOS_READ_FILES = (
-    Path("/dev/null"),
-    Path("/dev/random"),
-    Path("/dev/urandom"),
-    Path("/private/etc/hosts"),
-    Path("/private/etc/protocols"),
-    Path("/private/etc/resolv.conf"),
-    Path("/private/etc/services"),
-)
-_LINUX_READ_ROOTS = (
-    Path("/lib"),
-    Path("/lib64"),
-    Path("/usr/lib"),
-    Path("/usr/lib64"),
-    Path("/usr/share"),
-    Path("/usr/local/lib"),
-)
-_LINUX_READ_FILES = (
-    Path("/etc/hosts"),
-    Path("/etc/ld.so.cache"),
-    Path("/etc/nsswitch.conf"),
-    Path("/etc/protocols"),
-    Path("/etc/resolv.conf"),
-    Path("/etc/services"),
-)
-
 
 class RestrictedPytestError(RuntimeError):
     """A stable fail-closed error emitted before repository code executes."""

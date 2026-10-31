@@ -139,6 +139,9 @@ impl Prober<'_> {
             local_once_integrity_key_b64: input.local_once_integrity_key_b64.clone(),
             local_once_integrity_key_id: input.local_once_integrity_key_id.clone(),
             policy_bundle_decision_identities: input.policy_bundle_decision_identities.clone(),
+            // A portable probe still matches Cloud exceptions on the checkout.
+            exception_workspace: self.subject.workspace.clone(),
+            cloud_exception_bundle: Default::default(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,

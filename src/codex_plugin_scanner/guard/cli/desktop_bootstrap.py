@@ -51,6 +51,12 @@ def run_desktop_bootstrap_cli(*, output_stream: TextIO | None = None) -> int:
             synced_policy_payload(store),
         )
     except (OSError, TimeoutError, ValueError) as error:
+        if isinstance(error, ValueError):
+            from ...cli_native_errors import report_native_unavailable
+
+            parser = argparse.ArgumentParser(prog="hol-guard", add_help=False)
+            if report_native_unavailable(parser, error, error_prefix="Error") is not None:
+                return 2
         print(f"Error: {error}", file=sys.stderr)
         return 2
     args = argparse.Namespace(guard_command="desktop", desktop_command="bootstrap", json=True)

@@ -27,7 +27,7 @@ pub(super) fn launches_as_judged(
 
 #[cfg(unix)]
 fn launcher_shape(command: &str, workspace: &std::path::Path) -> bool {
-    crate::restricted_pytest::workspace_exact_shape(command, workspace).is_some()
+    crate::pretool::workspace_exact_shape(command, workspace).is_some()
 }
 
 #[cfg(not(unix))]

@@ -46,7 +46,7 @@ runs:
     shell: bash
   - name: Run cross-version compatibility contracts
     run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_cisco_install_surfaces.py
-      tests/test_policy.py --tb=short
+      tests/test_policy.py tests/test_guard_trust_claim_parity.py --tb=short
     shell: bash
   - name: Run native-backed cross-version compatibility contracts
     env:

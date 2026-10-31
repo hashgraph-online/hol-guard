@@ -9,7 +9,6 @@ from .store_base import (
     _is_runtime_scoped_exact_match_key,
     _runtime_scoped_exact_match_key,
     runtime_tool_action_exact_match_context,
-    runtime_tool_action_policy_artifact_id,
     runtime_tool_action_portable_match_context,
 )
 from .store_approval_facade import StoreApprovalsMixin

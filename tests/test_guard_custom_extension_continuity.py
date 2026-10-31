@@ -8,13 +8,13 @@ from codex_plugin_scanner.guard.runtime.custom_extension_continuity import (
     CUSTOM_EXTENSION_CONTINUITY_FIELD,
     CUSTOM_EXTENSION_CONTINUITY_SCHEMA,
     CustomExtensionContinuityError,
-    apply_verified_custom_extension_continuity,
     continuity_state_for_local_items,
     record_local_custom_extension_mutation,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.custom_extension_continuity_client import apply_verified_custom_extension_continuity
 
 _NOW = "2026-08-25T16:00:00Z"
 _FUTURE = "2026-08-25T17:00:00Z"

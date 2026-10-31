@@ -70,13 +70,15 @@ def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str
             "stopReason": reason,
             "systemMessage": reason,
         }, 0
+    # Muse reads the JSON envelope on exit 0; exit 2 would discard it
+    # and substitute stderr, so its deny travels in the envelope.
     return {
         "hookSpecificOutput": {
             "hookEventName": event_name,
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         }
-    }, 2
+    }, (0 if harness == "muse" else 2)
 
 
 def failure_payload(

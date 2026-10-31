@@ -311,6 +311,7 @@ assert(
 const supplyChainStats = buildSupplyChainStats({
   ...freeSnapshot,
   managed_installs: [makeInstall(true), makeInstall(false)],
+  latest_receipts: [{ ...makeReceipt("block"), harness: "package-firewall" }, makeReceipt("allow")],
   supply_chain: { package_manager_protection: makeProtection(["npm"], ["pip"]) },
 });
 assert(

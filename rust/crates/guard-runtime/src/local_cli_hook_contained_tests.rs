@@ -1,4 +1,5 @@
-//! A local CLI grant never takes a sandbox-bound action out of the sandbox.
+//! A local CLI grant never takes a sandbox-bound action out of the sandbox,
+//! and lifts a review due only to non-recognition.
 
 use guard_contracts::LocalCliIdentitySourceV1;
 use serde_json::{json, Value};
@@ -29,50 +30,59 @@ fn synthetic_launch() -> Launch {
 }
 
 #[test]
-fn an_allowed_grant_widens_the_sandbox_and_never_allows() {
+fn an_allowed_grant_widens_a_sandbox_requirement_and_never_allows() {
     let fixture = Fixture::new("contained-allowed");
     let identity = fixture.identity();
     fixture.grant(&identity.cli_id, &identity.identity_hash, "allowed");
-    for request in [
-        fixture.request("npm run build", "sandbox-required", true),
-        outside_roots(&fixture, "npm run build"),
-    ] {
-        let refined = run_refined(&request).unwrap();
-        assert_eq!(refined.action, ALLOW_CONTAINED_WITH_GRANT);
-        assert_eq!(refined.connector, None);
-        let grant = refined.contained_grant.expect("the grant travels with it");
-        assert_eq!(grant["cli_id"], identity.cli_id.as_str());
-        assert_eq!(grant["identity_hash"], identity.identity_hash.as_str());
-        assert_eq!(grant["capabilities"], json!([]), "absent means none");
-        let reply: Value =
-            serde_json::from_slice(&evaluate_local_cli_hook_request(&request).unwrap()).unwrap();
-        assert_eq!(reply["payload"]["action"], ALLOW_CONTAINED_WITH_GRANT);
-        assert_eq!(reply["payload"]["contained_grant"], grant);
-        // The caller composes no part of the sandbox requirement.
-        assert_eq!(
-            reply["payload"]["contained_route"],
-            json!({
-                "decision": "deny",
-                "minimum_action": "sandbox-required",
-                "policy_action": "sandbox-required",
-                "reason_code": "native_workspace_containment_required",
-                "reason": GRANT_REASON,
-            })
-        );
-    }
-    // A generic review keeps today's refinement.
-    let generic_request = fixture.request("npm run build", "review", true);
-    let generic = run_refined(&generic_request).unwrap();
-    assert_eq!(generic.action, "allow");
-    assert_eq!(generic.contained_grant, None);
+    let request = fixture.request("npm run build", "sandbox-required", true);
+    let refined = run_refined(&request).unwrap();
+    assert_eq!(refined.action, ALLOW_CONTAINED_WITH_GRANT);
+    assert_eq!(refined.connector, None);
+    let grant = refined.contained_grant.expect("the grant travels with it");
+    assert_eq!(grant["cli_id"], identity.cli_id.as_str());
+    assert_eq!(grant["identity_hash"], identity.identity_hash.as_str());
+    assert_eq!(grant["capabilities"], json!([]), "absent means none");
     let reply: Value =
-        serde_json::from_slice(&evaluate_local_cli_hook_request(&generic_request).unwrap())
-            .unwrap();
+        serde_json::from_slice(&evaluate_local_cli_hook_request(&request).unwrap()).unwrap();
+    assert_eq!(reply["payload"]["action"], ALLOW_CONTAINED_WITH_GRANT);
+    assert_eq!(reply["payload"]["contained_grant"], grant);
+    // The caller composes no part of the sandbox requirement.
     assert_eq!(
         reply["payload"]["contained_route"],
-        Value::Null,
-        "no route without a grant to widen the sandbox"
+        json!({
+            "decision": "deny",
+            "minimum_action": "sandbox-required",
+            "policy_action": "sandbox-required",
+            "reason_code": "native_workspace_containment_required",
+            "reason": GRANT_REASON,
+        })
     );
+}
+
+#[test]
+fn an_allowed_grant_lifts_a_review_due_only_to_non_recognition() {
+    // The review an outside-roots program gets asks only whether this device
+    // trusts the program, which the grant answers. Before, it was sent into
+    // a sandbox with no network or home reads, where a script that calls
+    // `gh` or reads its own settings could not do its work.
+    let fixture = Fixture::new("contained-lifted");
+    let identity = fixture.identity();
+    fixture.grant(&identity.cli_id, &identity.identity_hash, "allowed");
+    for request in [
+        outside_roots(&fixture, "npm run build"),
+        fixture.request("npm run build", "review", true),
+    ] {
+        let refined = run_refined(&request).unwrap();
+        assert_eq!(refined.action, "allow", "{:?}", request.current_reason_code);
+        assert_eq!(refined.contained_grant, None);
+        let reply: Value =
+            serde_json::from_slice(&evaluate_local_cli_hook_request(&request).unwrap()).unwrap();
+        assert_eq!(
+            reply["payload"]["contained_route"],
+            Value::Null,
+            "no route without a grant to widen the sandbox"
+        );
+    }
 }
 
 #[test]

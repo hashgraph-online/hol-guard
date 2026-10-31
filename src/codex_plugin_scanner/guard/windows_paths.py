@@ -9,8 +9,8 @@ import os
 import stat
 import time
 import uuid
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager, suppress
+from collections.abc import Callable
+from contextlib import suppress
 from ctypes import wintypes
 from pathlib import Path
 
@@ -19,10 +19,8 @@ _WINDOWS_FILE_ATTRIBUTE_DIRECTORY = 0x00000010
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400
 _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 _WINDOWS_FILE_FLAG_SEQUENTIAL_SCAN = 0x08000000
-_WINDOWS_FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
 _WINDOWS_GENERIC_READ = 0x80000000
 _WINDOWS_FILE_SHARE_READ = 0x00000001
-_WINDOWS_FILE_SHARE_WRITE = 0x00000002
 _WINDOWS_OPEN_EXISTING = 3
 _WINDOWS_ERROR_INVALID_PARAMETER = 87
 _WINDOWS_ERROR_SHARING_VIOLATION = 32
@@ -31,6 +29,8 @@ _WINDOWS_LOCK_RETRY_SECONDS = 0.01
 _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000
 _WINDOWS_PROCESS_TERMINATE = 0x00000001
 _WINDOWS_SYNCHRONIZE = 0x00100000
+_WINDOWS_TOKEN_QUERY = 0x00000008
+_WINDOWS_TOKEN_USER = 1
 _WINDOWS_WAIT_OBJECT_0 = 0x00000000
 _WINDOWS_WAIT_TIMEOUT = 0x00000102
 _WINDOWS_WAIT_FAILED = 0xFFFFFFFF
@@ -88,30 +88,10 @@ def open_windows_locked_regular_descriptor(
         raise OSError("windows_locked_file_unavailable") from exc
 
 
-@contextmanager
-def hold_windows_locked_directory(
-    path: Path | str,
-    *,
-    expected_resolved_path: Path | str,
-) -> Iterator[None]:
-    """Pin a canonical physical directory while inspecting its children."""
-
-    handle, close_handle = _open_windows_locked_handle(
-        path,
-        expected_resolved_path=expected_resolved_path,
-        directory=True,
-    )
-    try:
-        yield
-    finally:
-        _ = close_handle(handle)
-
-
 def _open_windows_locked_handle(
     path: Path | str,
     *,
     expected_resolved_path: Path | str | None,
-    directory: bool = False,
 ) -> tuple[int, Callable[[int], object]]:
     if os.name != "nt":
         raise OSError("windows_locked_file_unavailable")
@@ -147,11 +127,10 @@ def _open_windows_locked_handle(
             handle = create_file(
                 str(path),
                 _WINDOWS_GENERIC_READ,
-                _WINDOWS_FILE_SHARE_READ | (_WINDOWS_FILE_SHARE_WRITE if directory else 0),
+                _WINDOWS_FILE_SHARE_READ,
                 None,
                 _WINDOWS_OPEN_EXISTING,
-                _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT
-                | (_WINDOWS_FILE_FLAG_BACKUP_SEMANTICS if directory else _WINDOWS_FILE_FLAG_SEQUENTIAL_SCAN),
+                _WINDOWS_FILE_FLAG_OPEN_REPARSE_POINT | _WINDOWS_FILE_FLAG_SEQUENTIAL_SCAN,
                 None,
             )
             if handle not in {None, invalid_handle}:
@@ -159,8 +138,6 @@ def _open_windows_locked_handle(
             last_error = ctypes.get_last_error()
             sharing_violation = last_error == _WINDOWS_ERROR_SHARING_VIOLATION
             handle = None
-            if directory and last_error in {2, 3}:
-                raise FileNotFoundError("windows_locked_directory_missing")
             if not sharing_violation or attempt + 1 == _WINDOWS_LOCK_OPEN_ATTEMPTS:
                 raise OSError("windows_locked_file_open_failed")
             time.sleep(_WINDOWS_LOCK_RETRY_SECONDS)
@@ -169,7 +146,7 @@ def _open_windows_locked_handle(
             raise OSError("windows_locked_file_inspection_failed")
         attributes = int(information.dwFileAttributes)
         is_directory = bool(attributes & _WINDOWS_FILE_ATTRIBUTE_DIRECTORY)
-        if attributes & _FILE_ATTRIBUTE_REPARSE_POINT or is_directory != directory:
+        if attributes & _FILE_ATTRIBUTE_REPARSE_POINT or is_directory:
             raise OSError("windows_locked_file_not_regular")
         if expected_resolved_path is not None:
             get_final_path = kernel32.GetFinalPathNameByHandleW
@@ -292,6 +269,109 @@ def windows_process_is_running(pid: int) -> bool:
     return windows_process_liveness(pid) is not False
 
 
+class _WindowsSidAndAttributes(ctypes.Structure):
+    _fields_ = [
+        ("Sid", ctypes.c_void_p),
+        ("Attributes", wintypes.DWORD),
+    ]
+
+
+class _WindowsTokenUser(ctypes.Structure):
+    _fields_ = [("User", _WindowsSidAndAttributes)]
+
+
+def windows_process_owner_sid(pid: int) -> str | None:
+    """Return the OS-owned SID for the token attached to one Windows PID."""
+
+    if os.name != "nt" or pid <= 0:
+        return None
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        return None
+    process_handle = None
+    token_handle = wintypes.HANDLE()
+    sid_string = wintypes.LPWSTR()
+    close_handle = None
+    local_free = None
+    try:
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        advapi32 = win_dll("advapi32", use_last_error=True)
+        open_process = kernel32.OpenProcess
+        open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        open_process.restype = wintypes.HANDLE
+        open_process_token = advapi32.OpenProcessToken
+        open_process_token.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.HANDLE),
+        ]
+        open_process_token.restype = wintypes.BOOL
+        get_token_information = advapi32.GetTokenInformation
+        get_token_information.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        get_token_information.restype = wintypes.BOOL
+        convert_sid = advapi32.ConvertSidToStringSidW
+        convert_sid.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.LPWSTR)]
+        convert_sid.restype = wintypes.BOOL
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+        close_handle.restype = wintypes.BOOL
+        local_free = kernel32.LocalFree
+        local_free.argtypes = [ctypes.c_void_p]
+        local_free.restype = ctypes.c_void_p
+        process_handle = open_process(_WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not process_handle or not open_process_token(
+            process_handle,
+            _WINDOWS_TOKEN_QUERY,
+            ctypes.byref(token_handle),
+        ):
+            return None
+        required_size = wintypes.DWORD()
+        _ = get_token_information(
+            token_handle,
+            _WINDOWS_TOKEN_USER,
+            None,
+            0,
+            ctypes.byref(required_size),
+        )
+        if required_size.value <= 0:
+            return None
+        token_user_buffer = ctypes.create_string_buffer(required_size.value)
+        if not get_token_information(
+            token_handle,
+            _WINDOWS_TOKEN_USER,
+            token_user_buffer,
+            required_size.value,
+            ctypes.byref(required_size),
+        ):
+            return None
+        token_user = ctypes.cast(
+            token_user_buffer,
+            ctypes.POINTER(_WindowsTokenUser),
+        ).contents
+        if not token_user.User.Sid or not convert_sid(token_user.User.Sid, ctypes.byref(sid_string)):
+            return None
+        value = sid_string.value
+        return f"sid:{value}" if value else None
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+    finally:
+        if sid_string and local_free is not None:
+            with suppress(OSError, TypeError, ValueError):
+                _ = local_free(ctypes.cast(sid_string, ctypes.c_void_p))
+        if token_handle and close_handle is not None:
+            with suppress(OSError, TypeError, ValueError):
+                _ = close_handle(token_handle)
+        if process_handle and close_handle is not None:
+            with suppress(OSError, TypeError, ValueError):
+                _ = close_handle(process_handle)
+
+
 def windows_process_creation_time(pid: int) -> int | None:
     """Return the kernel process creation timestamp used to defeat PID reuse."""
 
@@ -343,7 +423,12 @@ def windows_process_creation_time(pid: int) -> int | None:
             _ = close_handle(process_handle)
 
 
-def windows_terminate_process_if_creation_time(pid: int, expected_creation_time: int) -> bool:
+def windows_terminate_process_if_creation_time(
+    pid: int,
+    expected_creation_time: int,
+    *,
+    timeout: float | None = None,
+) -> bool:
     """Terminate the exact PID generation through the handle used to validate it."""
 
     if os.name != "nt" or pid <= 0 or expected_creation_time <= 0:
@@ -351,6 +436,14 @@ def windows_terminate_process_if_creation_time(pid: int, expected_creation_time:
     win_dll = getattr(ctypes, "WinDLL", None)
     if win_dll is None:
         return False
+    termination_deadline = None if timeout is None else time.monotonic() + max(0.0, timeout)
+
+    def wait_timeout_milliseconds() -> int:
+        if termination_deadline is None:
+            return 1000
+        remaining = max(0.0, termination_deadline - time.monotonic())
+        return min(1000, int(remaining * 1000))
+
     try:
         kernel32 = win_dll("kernel32", use_last_error=True)
         open_process = kernel32.OpenProcess
@@ -402,9 +495,13 @@ def windows_terminate_process_if_creation_time(pid: int, expected_creation_time:
         wait_result = int(wait_for_process(process_handle, 0))
         if wait_result == _WINDOWS_WAIT_OBJECT_0:
             return True
-        if wait_result != _WINDOWS_WAIT_TIMEOUT or not terminate_process(process_handle, 1):
+        if wait_result != _WINDOWS_WAIT_TIMEOUT:
             return False
-        return int(wait_for_process(process_handle, 1000)) == _WINDOWS_WAIT_OBJECT_0
+        if termination_deadline is not None and time.monotonic() >= termination_deadline:
+            return False
+        if not terminate_process(process_handle, 1):
+            return False
+        return int(wait_for_process(process_handle, wait_timeout_milliseconds())) == _WINDOWS_WAIT_OBJECT_0
     except (OSError, TypeError, ValueError):
         return False
     finally:
@@ -549,7 +646,6 @@ def _trusted_real_directory(path: Path) -> Path:
 
 
 __all__ = [
-    "hold_windows_locked_directory",
     "open_windows_locked_regular_descriptor",
     "trusted_windows_local_temp",
     "trusted_windows_roaming_appdata",
@@ -560,5 +656,6 @@ __all__ = [
     "windows_process_creation_time",
     "windows_process_is_running",
     "windows_process_liveness",
+    "windows_process_owner_sid",
     "windows_terminate_process_if_creation_time",
 ]

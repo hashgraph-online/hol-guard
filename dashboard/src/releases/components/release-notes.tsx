@@ -105,7 +105,7 @@ function CodeBlock({ block }: { block: Extract<ReleaseBlock, { kind: "code" }> }
         aria-label={copied ? "Copied" : "Copy this command"}
       >
         {copied ? (
-          <HiMiniCheck className="size-4 text-emerald-300" aria-hidden="true" />
+          <HiMiniCheck className="size-4 text-white" aria-hidden="true" />
         ) : (
           <HiMiniClipboard className="size-4" aria-hidden="true" />
         )}
@@ -140,7 +140,7 @@ function Block({ block }: { block: ReleaseBlock }) {
       );
     case "quote":
       return (
-        <blockquote className="my-4 border-l border-brand-blue/40 pl-4 text-sm italic leading-6 text-brand-dark/70">
+        <blockquote className="my-4 border-l border-brand-blue/40 pl-4 text-sm italic leading-6 text-brand-dark/75">
           <InlineNodes nodes={block.children} />
         </blockquote>
       );

@@ -181,3 +181,173 @@ fn batched_paths_replay_original_python_outcomes_in_order() {
     )
     .is_err());
 }
+
+/// The `mediate_prepare` body the daemon used to send for the recorded
+/// forwarding vector, with the callback fields the resident now supplies.
+fn mediation_body() -> Value {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/content_sensitivity_parity.json"
+    ))
+    .unwrap();
+    let mut body = fixture["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|vector| {
+            vector["query"] == "mediate" && vector["expected"]["ok"]["action"] == "forward"
+        })
+        .unwrap()["body"]
+        .clone();
+    body.as_object_mut().unwrap().remove("recheck");
+    body["required_reason_code"] = Value::Null;
+    body["cancelled"] = json!(false);
+    body["allow_observe_mode"] = json!(false);
+    body["recheck_available"] = json!(true);
+    body
+}
+
+fn mediate(query: &str, body: &Value) -> Value {
+    super::evaluate(query, body, Instant::now() + Duration::from_secs(2)).unwrap()["ok"].clone()
+}
+
+#[test]
+fn mediation_leaves_what_it_does_not_cover_to_the_native_verdict() {
+    let ordinary = mediation_body();
+    assert_eq!(
+        mediate("mediate_prepare", &ordinary),
+        json!({"recheck_required": true})
+    );
+    for (label, edit) in [
+        ("another harness", ("harness", json!("codex"))),
+        ("another event", ("event_name", json!("PreToolUse"))),
+        (
+            "a native denial",
+            (
+                "native_result",
+                json!({"decision": "deny", "model_output_action": "block"}),
+            ),
+        ),
+        (
+            "an observed result without the Watch allowance",
+            (
+                "native_result",
+                json!({
+                    "decision": "allow",
+                    "observe_mode": true,
+                    "model_output_action": "allow_original"
+                }),
+            ),
+        ),
+        ("no binding and nothing required", ("binding", Value::Null)),
+    ] {
+        let mut body = ordinary.clone();
+        body[edit.0] = edit.1;
+        assert_eq!(mediate("mediate_prepare", &body), Value::Null, "{label}");
+    }
+    // A binding for another harness than the hook's resolves nothing for it.
+    let mut body = ordinary;
+    body["binding"]["harness"] = json!("omp");
+    assert_eq!(mediate("mediate_prepare", &body), Value::Null);
+}
+
+#[test]
+fn mediation_withholds_content_it_cannot_prove_clean() {
+    let ordinary = mediation_body();
+    for (label, reason, edit) in [
+        (
+            "unreviewed output",
+            "structured_content_unproved",
+            (
+                "native_result",
+                json!({"decision": "allow", "model_output_action": "review"}),
+            ),
+        ),
+        (
+            "no receipt",
+            "structured_receipt_missing",
+            ("validated_receipt", Value::Null),
+        ),
+        (
+            "a cancelled review",
+            "structured_review_cancelled",
+            ("cancelled", json!(true)),
+        ),
+        (
+            "output that is not canonical JSON",
+            "structured_content_unproved",
+            ("structured_output_json", json!("{'note': 'ordinary'}")),
+        ),
+        (
+            "a declared protected field",
+            "structured_declared_schema_scan",
+            (
+                "structured_output_json",
+                json!(r#"{"employee":{"email":"person@example.test","id":7},"note":"x"}"#),
+            ),
+        ),
+        (
+            "no way to recheck the binding",
+            "structured_binding_recheck_missing",
+            ("recheck_available", json!(false)),
+        ),
+    ] {
+        let mut body = ordinary.clone();
+        body[edit.0] = edit.1;
+        let disposition = mediate("mediate_prepare", &body);
+        assert_eq!(disposition["action"], "withhold", "{label}: {disposition}");
+        assert_eq!(disposition["reason_code"], reason, "{label}: {disposition}");
+        assert_eq!(disposition["content_sha256"], Value::Null, "{label}");
+    }
+    // Without a binding, a required policy withholds under its own reason.
+    let mut body = ordinary;
+    body["binding"] = Value::Null;
+    body["required_reason_code"] = json!("structured_managed_authority_unavailable");
+    let disposition = mediate("mediate_prepare", &body);
+    assert_eq!(
+        disposition["reason_code"],
+        "structured_managed_authority_unavailable"
+    );
+    assert_eq!(disposition["native_decision_id"], "fixture-decision");
+}
+
+#[test]
+fn mediation_forwards_only_under_the_binding_the_scan_ran_under() {
+    let mut body = mediation_body();
+    body["refreshed_binding"] = body["binding"].clone();
+    body["recheck_error"] = json!(false);
+    let forwarded = mediate("mediate_finish", &body);
+    assert_eq!(forwarded["action"], "forward");
+    assert_eq!(forwarded["reason_code"], "structured_clean_forward");
+    let mut changed = body.clone();
+    changed["refreshed_binding"]["managed_policy_hash"] = json!("b".repeat(64));
+    let mut revoked = body.clone();
+    revoked["refreshed_binding"] = Value::Null;
+    for (label, body) in [("a changed binding", changed), ("a revoked one", revoked)] {
+        let disposition = mediate("mediate_finish", &body);
+        assert_eq!(disposition["action"], "withhold", "{label}");
+        assert_eq!(
+            disposition["reason_code"], "structured_binding_changed",
+            "{label}"
+        );
+        assert_eq!(disposition["content_sha256"], Value::Null, "{label}");
+    }
+    body["recheck_error"] = json!(true);
+    let failed = mediate("mediate_finish", &body);
+    assert_eq!(failed["action"], "withhold");
+    assert_eq!(failed["reason_code"], "structured_binding_recheck_failed");
+}
+
+#[test]
+fn mediation_withholds_once_its_deadline_has_passed() {
+    let mut body = mediation_body();
+    assert_eq!(
+        super::evaluate("mediate_prepare", &body, Instant::now()),
+        Err("content_scan_deadline_exceeded")
+    );
+    body["refreshed_binding"] = body["binding"].clone();
+    body["recheck_error"] = json!(false);
+    assert_eq!(
+        super::evaluate("mediate_finish", &body, Instant::now()),
+        Err("content_scan_deadline_exceeded")
+    );
+}

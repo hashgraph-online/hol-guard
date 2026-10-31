@@ -12,7 +12,7 @@ import pytest
 from codex_plugin_scanner.guard import native_execution, native_prompt
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
@@ -55,52 +55,6 @@ def test_real_resident_prompt_artifacts_and_reapproval(prompt_home, tmp_path):
     assert artifacts[0].artifact_id.endswith(requests[0].request_id[:24])
 
 
-def _prompt_part(artifact_id: str, request_class: str, matched: str, display: str) -> GuardArtifact:
-    return GuardArtifact(
-        artifact_id=artifact_id,
-        name=f"prompt {request_class} request",
-        harness="codex",
-        artifact_type="prompt_request",
-        source_scope="project",
-        config_path="/work/project/.codex/config.toml",
-        metadata={
-            "prompt_signals": [request_class],
-            "prompt_request_class": request_class,
-            "prompt_matched_text": matched,
-            "prompt_display_text": display,
-        },
-    )
-
-
-def test_real_resident_merges_prompt_artifacts_into_one_review(prompt_home):
-    parts = [
-        _prompt_part("codex:session:prompt:b", "secret_read", ".env", "Read .env"),
-        _prompt_part("codex:session:prompt:a", "exfiltration", "curl", "Send it out"),
-    ]
-    merged = native_prompt.merge_prompt_artifacts("codex", parts)
-    assert merged.artifact_id.startswith("codex:session:prompt:multi:")
-    assert merged.name == "prompt multi-signal request"
-    assert merged.source_scope == "project"
-    assert merged.config_path == "/work/project/.codex/config.toml"
-    assert merged.metadata["prompt_request_classes"] == ["secret_read", "exfiltration"]
-    assert merged.metadata["prompt_matched_texts"] == [".env", "curl"]
-    assert merged.metadata["request_summary"] == "Prompt matches multiple guarded request classes."
-    assert native_prompt.merge_prompt_artifacts("codex", list(reversed(parts))).artifact_id == merged.artifact_id
-
-
-def test_merged_prompt_review_cannot_fall_back_to_python(monkeypatch, tmp_path):
-    monkeypatch.setattr(native_execution, "_resident_request", lambda **_: {"result": None})
-    with pytest.raises(native_prompt.NativePromptAnalysisError):
-        native_prompt.merge_prompt_artifacts(
-            "codex",
-            [
-                _prompt_part("codex:session:prompt:a", "secret_read", ".env", "Read .env"),
-                _prompt_part("codex:session:prompt:b", "exfiltration", "curl", "Send it out"),
-            ],
-            guard_home=tmp_path,
-        )
-
-
 @pytest.mark.parametrize(
     "text,state",
     [
@@ -111,7 +65,9 @@ def test_merged_prompt_review_cannot_fall_back_to_python(monkeypatch, tmp_path):
     ],
 )
 def test_real_resident_attachment_intent(prompt_home, text, state):
-    assert native_prompt.trailing_secret_read_state(text) == state
+    result = native_prompt.analyze("trailing_secret_read_state", prompt_text=text)
+    assert isinstance(result, dict)
+    assert result["state"] == (list(state) if state is not None else None)
 
 
 @pytest.mark.parametrize("reply", [None, {}, {"result": None}, {"result": "bad"}])

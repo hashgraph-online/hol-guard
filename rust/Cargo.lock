@@ -43,6 +43,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloc-no-stdlib"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
+
+[[package]]
+name = "alloc-stdlib"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e76a019e91224d279006ff972f1e984179a6e9feb050adba6ce8274aef23195"
+dependencies = [
+ "alloc-no-stdlib",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -155,6 +170,16 @@ name = "borrow-or-share"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
+
+[[package]]
+name = "brotli-decompressor"
+version = "5.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a32acac15fe1967bc3986b2a6347dffc965602354ea6f450ad07e8bfd253583"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+]
 
 [[package]]
 name = "bumpalo"
@@ -655,6 +680,7 @@ version = "0.1.0"
 name = "guard-archive"
 version = "0.1.0"
 dependencies = [
+ "brotli-decompressor",
  "caseless",
  "flate2",
  "guard-alloc-probe",
@@ -686,6 +712,7 @@ dependencies = [
  "guard-scanner",
  "guard-secure-fs",
  "hex",
+ "hmac",
  "idna",
  "libc",
  "mailparse",
@@ -731,6 +758,7 @@ dependencies = [
  "guard-scanner",
  "guard-secure-fs",
  "hex",
+ "hmac",
  "idna",
  "libc",
  "mailparse",
@@ -818,6 +846,7 @@ dependencies = [
 name = "guard-hook-core"
 version = "0.1.0"
 dependencies = [
+ "guard-command",
  "guard-contracts",
  "guard-rules",
  "guard-scanner",
@@ -845,6 +874,44 @@ version = "0.1.0"
 dependencies = [
  "guard-command-build",
  "serde_json",
+]
+
+[[package]]
+name = "guard-plugin-kit"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "guard-plugin-telemetry"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "hmac",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "guard-policy-bundle"
+version = "0.1.0"
+dependencies = [
+ "base64ct",
+ "flate2",
+ "guard-contracts",
+ "guard-policy-snapshot",
+ "hex",
+ "ring",
+ "rsa",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -900,6 +967,7 @@ name = "guard-scanner"
 version = "0.1.0"
 dependencies = [
  "base64ct",
+ "guard-alloc-probe",
  "guard-rules",
  "hex",
  "hmac",
@@ -908,6 +976,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "zeroize",
 ]
 
 [[package]]
@@ -990,6 +1059,9 @@ dependencies = [
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
+ "guard-plugin-kit",
+ "guard-plugin-telemetry",
+ "guard-policy-bundle",
  "guard-policy-snapshot",
  "guard-rule-contract",
  "guard-runtime-pyjson",
@@ -1972,9 +2044,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -2313,7 +2385,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -3083,27 +3155,27 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zstd"
-version = "0.14.0"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf06bd8162af0734b344780deb55b42a2429ae430870d13fcc12f238e880fe6e"
+checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "8.0.0"
+version = "8.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae42c0555055784c70058d19ba8e275528e8a99a706684868ace5da4e716a4ab"
+checksum = "ded520f16b29e1a9b771c722221b2b0a0398c2316d9bb3c42b458a5414d7434b"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.1.0+zstd.1.5.7"
+version = "2.1.2+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ef0a8027ec3ee71300ab3bcbcd0393f434aa72b91ca6d635a39941deae8eea0"
+checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
 dependencies = [
  "cc",
  "pkg-config",

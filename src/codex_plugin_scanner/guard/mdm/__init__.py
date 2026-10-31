@@ -10,7 +10,7 @@ from .contracts import (
     ManagedPolicyState,
     default_machine_paths,
 )
-from .policy import apply_managed_policy, load_managed_policy
+from .policy import load_managed_policy
 
 __all__ = [
     "LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION",
@@ -20,7 +20,6 @@ __all__ = [
     "MachinePaths",
     "ManagedPolicy",
     "ManagedPolicyState",
-    "apply_managed_policy",
     "default_machine_paths",
     "load_managed_policy",
 ]

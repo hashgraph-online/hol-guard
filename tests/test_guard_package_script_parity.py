@@ -9,11 +9,9 @@ never issues a narrow receipt the sink then rejects.
 import json
 import shlex
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import restricted_node_tool as tool
 from codex_plugin_scanner.guard.runtime.restricted_package_test import (
     PACKAGE_TEST_REASON,
     is_package_test,
@@ -23,8 +21,6 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
 
 FIXTURE = Path(__file__).parent / "fixtures" / "package-script-routes.v1.json"
 CASES = json.loads(FIXTURE.read_text())["cases"]
-NODE_TOOL = "native_node_tool_readonly_containment_required"
-NODE_BUILD = "native_node_build_output_containment_required"
 
 
 def _project(root: Path, case: dict) -> Path:
@@ -38,24 +34,21 @@ def _project(root: Path, case: dict) -> Path:
     return project
 
 
-def _sink_reason(command: list[str], project: Path, monkeypatch) -> str | None:
-    if is_package_test(command):
-        try:
-            resolve_package_test(command, workspace=project, cwd=project)
-        except RestrictedPytestError:
-            return None
-        return PACKAGE_TEST_REASON
-    base = SimpleNamespace(workspace=project, cwd=project, executable="/usr/bin/node", denied_capabilities=())
-    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
-    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
+def _sink_reason(command: list[str], project: Path) -> str | None:
     try:
-        plan = tool.prepare_restricted_node_tool(command, workspace=project, cwd=project)
+        resolve_package_test(command, workspace=project, cwd=project)
     except RestrictedPytestError:
         return None
-    return NODE_BUILD if plan.profile_version == tool.NODE_BUILD_OUTPUT_PROFILE_VERSION else NODE_TOOL
+    return PACKAGE_TEST_REASON
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["name"] for case in CASES])
-def test_sink_runs_exactly_the_scripts_the_edge_routes_to_it(case, tmp_path, monkeypatch):
+def test_sink_runs_exactly_the_scripts_the_edge_routes_to_it(case, tmp_path):
     project = _project(tmp_path.resolve(), case)
-    assert _sink_reason(shlex.split(case["command"]), project, monkeypatch) == case["reason"]
+    command = shlex.split(case["command"])
+    if not is_package_test(command):
+        # The Node tool sink plans natively; `node_tool_plan_tests.rs` reads
+        # these cases against the plan it builds.
+        assert case["reason"] != PACKAGE_TEST_REASON
+        return
+    assert _sink_reason(command, project) == case["reason"]

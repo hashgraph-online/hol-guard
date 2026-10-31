@@ -5,7 +5,10 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
-const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
+// Gauntlet development wheels build every crate at opt-level 0 and ship a
+// runtime several times the published size; the resident must still identify
+// itself from one. The digest streams, so the bound only limits hashing time.
+const MAX_RUNTIME_BYTES: u64 = 512 * 1024 * 1024;
 pub(crate) fn executable_missing(path: &Path) -> bool {
     path.metadata()
         .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
@@ -190,7 +193,7 @@ pub(crate) fn durable_runtime_digest(state_base: &Path) -> Option<String> {
     durable_digest_for(&executable, state_base)
 }
 
-fn durable_digest_for(executable: &Path, state_base: &Path) -> Option<String> {
+pub(crate) fn durable_digest_for(executable: &Path, state_base: &Path) -> Option<String> {
     let directory = executable.parent()?;
     let digest = directory.file_name()?.to_str()?;
     if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {

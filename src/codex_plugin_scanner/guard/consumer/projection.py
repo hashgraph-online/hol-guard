@@ -2,12 +2,13 @@
 
 Python reads the store and the harness and sends typed evidence. The resident
 owns what that evidence means (capability delta, diff, history, provenance,
-incident copy and the result rows), so nothing here interprets it.
+incident copy, result rows and decision outcomes), so nothing here interprets
+it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -144,46 +145,23 @@ def artifact_evidence(
     )
 
 
-def artifact_result(
+def artifact_outcome(
     store: GuardStore,
     harness: str,
     artifact: GuardArtifact,
     evidence: Mapping[str, object],
     **decision: object,
 ) -> dict[str, Any]:
-    """Result row of a detected artifact."""
+    """What the composed decision means for a detected artifact."""
 
     return native_consumer_project(
-        "artifact_result",
+        "artifact_outcome",
         {"harness": harness, "artifact": wire_artifact(artifact), "evidence": dict(evidence), **decision},
         guard_home=_home(store),
     )
 
 
-def removed_result(store: GuardStore, harness: str, **fields: object) -> dict[str, Any]:
-    """Receipt strings and result row of an artifact removed from the harness."""
+def removed_outcome(store: GuardStore, harness: str, **fields: object) -> dict[str, Any]:
+    """What the composed decision means for an artifact removed from the harness."""
 
-    return native_consumer_project("removed_result", {"harness": harness, **fields}, guard_home=_home(store))
-
-
-def incident_context(
-    *,
-    harness: str,
-    artifact: GuardArtifact | None,
-    changed_fields: Sequence[str],
-    guard_home: Path | None = None,
-    **fields: object,
-) -> dict[str, str]:
-    """Incident copy for one artifact decision."""
-
-    answer = native_consumer_project(
-        "incident_context",
-        {
-            "harness": harness,
-            "artifact": wire_artifact(artifact) if artifact is not None else None,
-            "changed_fields": list(changed_fields),
-            **fields,
-        },
-        guard_home=guard_home,
-    )
-    return {key: str(value) for key, value in answer.items()}
+    return native_consumer_project("removed_outcome", {"harness": harness, **fields}, guard_home=_home(store))

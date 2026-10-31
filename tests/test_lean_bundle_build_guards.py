@@ -43,11 +43,12 @@ def test_complete_offline_asset_staging_is_explicit(tmp_path, helpers):
     rows = plan.pending
     defaults = {(core["tag"], core["asset"])}
     normal, offline = tmp_path / "normal", tmp_path / "offline"
-    assert helpers.stage_assets(source, normal, rows, defaults, offline=False)[0] == 2
-    assert helpers.stage_assets(source, offline, rows, defaults, offline=True)[0] == 3
+    assert helpers.stage_assets(source, normal, rows, defaults, source_sha="a" * 40, offline=False)[0] == 2
+    assert helpers.stage_assets(source, offline, rows, defaults, source_sha="a" * 40, offline=True)[0] == 3
     assert "member" not in core and "member" not in optional
-    assert not (normal / optional["tag"] / optional["asset"]).exists()
-    assert (offline / optional["tag"] / optional["asset"]).read_bytes() == b"optional-policy"
+    batch = optional["tag"].rsplit("-", 1)[1]
+    assert not (normal / batch / optional["asset"]).exists()
+    assert (offline / batch / optional["asset"]).read_bytes() == b"optional-policy"
 
 
 def test_immutable_pack_names_change_with_policy(tmp_path, helpers):

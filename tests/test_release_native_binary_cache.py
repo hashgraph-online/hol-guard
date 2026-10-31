@@ -13,7 +13,7 @@ import pytest
 from scripts.ci.prune_superseded_caches import cache_family
 from scripts.release.native_cache_key import build_id
 from scripts.release.prepared_native import transfer
-from tests.release_workflow_helpers import load_workflow
+from tests.release_workflow_helpers import load_workflow, native_wheel_job
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -186,7 +186,7 @@ def test_duplicate_sources_wait_without_canceling_publish_calls():
 
 @pytest.mark.parametrize("precompiled", [False, True])
 def test_publish_generates_once_for_prepared_binaries_and_before_fallback_compilation(tmp_path, precompiled):
-    job = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]
+    job = native_wheel_job()
     step = next(step for step in job["steps"] if step.get("name") == "Verify native command program is current")
     script = step["run"].replace("${{ github.event_name }}", "push")
     script = script.replace("${{ github.event.pull_request.base.sha }}", "b" * 40)

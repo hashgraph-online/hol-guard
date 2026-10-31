@@ -1,4 +1,4 @@
-"""Network protection bundle verification, sync, and the saved form the runtime reads."""
+"""Network protection bundle sync through the native verifier, and the saved form the runtime reads."""
 
 from __future__ import annotations
 
@@ -13,13 +13,10 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-from codex_plugin_scanner.guard.runtime import network_protection_bundle as npb
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.network_protection_bundle import (
     NETWORK_PROTECTION_SYNC_STATE_KEY,
-    NetworkProtectionBundleError,
     network_protection_status,
-    verify_network_protection_response,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -55,8 +52,7 @@ def _verification_key(key: RSAPrivateKey, *, key_id: str = "key-1", state: str =
     }
 
 
-def _response(
-    key: RSAPrivateKey,
+def _bundle(
     *,
     generated_at: datetime = NOW,
     version_ms: int | None = None,
@@ -80,6 +76,18 @@ def _response(
         "sources": [{"source": "urlhaus", "fetchedAt": _iso(generated_at)}],
         **overrides,
     }
+    return bundle
+
+
+def _response(
+    key: RSAPrivateKey,
+    *,
+    generated_at: datetime = NOW,
+    version_ms: int | None = None,
+    workspace_id: str = WORKSPACE_ID,
+    **overrides: object,
+) -> dict[str, object]:
+    bundle = _bundle(generated_at=generated_at, version_ms=version_ms, workspace_id=workspace_id, **overrides)
     payload = json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode("utf-8")
     signature = key.sign(
         payload,
@@ -95,19 +103,23 @@ def _response(
     }
 
 
-def _verify(response: dict[str, object], key: RSAPrivateKey, **kwargs: object) -> dict[str, object]:
-    trusted = npb.load_supply_chain_verification_keys([_verification_key(key)])
-    options: dict[str, object] = {"workspace_id": WORKSPACE_ID, "trusted_keys": trusted, "now": NOW.timestamp()}
-    options.update(kwargs)
-    return verify_network_protection_response(response, **options)
+def _saved(*, generated_at: datetime = NOW) -> dict[str, object]:
+    """The saved form the resident returns once it has verified a bundle."""
+
+    bundle = _bundle(generated_at=generated_at)
+    payload = json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {
+        "bundle": bundle,
+        "expiresAtEpoch": int((generated_at + timedelta(hours=6)).timestamp()),
+        "payloadHash": hashlib.sha256(payload).hexdigest(),
+        "keyId": "key-1",
+    }
 
 
-def test_verified_bundle_is_saved_in_the_form_the_runtime_reads(signing_key: RSAPrivateKey) -> None:
-    response = _response(signing_key)
-    saved = _verify(response, signing_key)
-    assert saved["bundle"] == response["bundle"]
-    assert saved["expiresAtEpoch"] == int((NOW + timedelta(hours=6)).timestamp())
-    status = network_protection_status(saved, now=NOW.timestamp())
+def test_saved_bundle_is_summarised_for_status() -> None:
+    status = network_protection_status(_saved(), now=NOW.timestamp())
+    assert status["configured"] is True
+    assert status["bundle_version"] == _saved()["bundle"]["bundleVersion"]
     assert status["block_rules"] == 1
     assert status["allow_rules"] == 1
     assert status["known_bad_urls"] == 1
@@ -115,63 +127,15 @@ def test_verified_bundle_is_saved_in_the_form_the_runtime_reads(signing_key: RSA
     assert status["indicators_applied"] is True
 
 
-def test_tampered_bundle_is_rejected(signing_key: RSAPrivateKey) -> None:
-    response = _response(signing_key)
-    response["bundle"]["workspaceRules"] = []
-    with pytest.raises(NetworkProtectionBundleError, match="payloadHash"):
-        _verify(response, signing_key)
-    forged = _response(signing_key)
-    forged["bundle"]["workspaceRules"] = []
-    canonical = json.dumps(forged["bundle"], sort_keys=True, separators=(",", ":")).encode("utf-8")
-    forged["payloadHash"] = hashlib.sha256(canonical).hexdigest()
-    with pytest.raises(NetworkProtectionBundleError, match="signature"):
-        _verify(forged, signing_key)
+def test_status_reports_nothing_configured_without_a_saved_bundle() -> None:
+    assert network_protection_status(None) == {"configured": False}
+    assert network_protection_status({"bundle": "not an object"}) == {"configured": False}
 
 
-def test_bundle_for_another_workspace_is_rejected(signing_key: RSAPrivateKey) -> None:
-    with pytest.raises(NetworkProtectionBundleError, match="different workspace"):
-        _verify(_response(signing_key, workspace_id="workspace-other"), signing_key)
-
-
-def test_older_bundle_cannot_replace_a_newer_saved_one(signing_key: RSAPrivateKey) -> None:
-    response = _response(signing_key, version_ms=1_000)
-    with pytest.raises(NetworkProtectionBundleError, match="older than saved"):
-        _verify(response, signing_key, cached_bundle_version="network-2000-0123456789abcdef")
-
-
-def test_expired_bundle_is_rejected(signing_key: RSAPrivateKey) -> None:
-    response = _response(signing_key, generated_at=NOW - timedelta(hours=7))
-    with pytest.raises(NetworkProtectionBundleError, match="expired"):
-        _verify(response, signing_key)
-
-
-def test_signing_key_must_be_anchored(signing_key: RSAPrivateKey) -> None:
-    other = generate_private_key(public_exponent=65537, key_size=2048)
-    response = _response(signing_key)
-    with pytest.raises(NetworkProtectionBundleError, match="not trusted"):
-        verify_network_protection_response(
-            response,
-            workspace_id=WORKSPACE_ID,
-            trusted_keys=npb.load_supply_chain_verification_keys([_verification_key(other)]),
-            now=NOW.timestamp(),
-        )
-    # Before any keyring is saved, only the pinned production key is trusted.
-    with pytest.raises(NetworkProtectionBundleError, match="not trusted"):
-        verify_network_protection_response(response, workspace_id=WORKSPACE_ID, now=NOW.timestamp())
-
-
-def test_revoked_trusted_key_no_longer_anchors(signing_key: RSAPrivateKey) -> None:
-    revoked = npb.load_supply_chain_verification_keys([_verification_key(signing_key, state="revoked")])
-    with pytest.raises(NetworkProtectionBundleError, match="not trusted"):
-        verify_network_protection_response(
-            _response(signing_key), workspace_id=WORKSPACE_ID, trusted_keys=revoked, now=NOW.timestamp()
-        )
-
-
-def test_invalid_workspace_rule_is_rejected(signing_key: RSAPrivateKey) -> None:
-    response = _response(signing_key, workspaceRules=[{"action": "ignore", "matchKind": "domain", "pattern": "x"}])
-    with pytest.raises(NetworkProtectionBundleError, match="workspace rule"):
-        _verify(response, signing_key)
+def test_stale_indicators_are_no_longer_applied() -> None:
+    saved = _saved()
+    stale = NOW.timestamp() + 8 * 24 * 60 * 60
+    assert network_protection_status(saved, now=stale)["indicators_applied"] is False
 
 
 def _connected_store(tmp_path, monkeypatch: pytest.MonkeyPatch) -> GuardStore:
@@ -224,8 +188,37 @@ def test_sync_fetches_the_derived_route_and_saves_the_verified_bundle(
     assert requested == ["https://hol.org/api/guard/network/bundle?workspaceId=workspace-alpha"]
     assert summary["status"] == "synced"
     saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+    # The verifier names the bundle by its own hash instead of sending the
+    # object back, so the saved form is only complete once the bundle this
+    # sync fetched is put back under it.
     assert saved["bundle"] == response["bundle"]
+    assert saved["payloadHash"] == response["payloadHash"]
+    assert saved["keyId"] == response["bundle"]["keyId"]
     assert isinstance(saved["expiresAtEpoch"], int)
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_sync_refuses_a_saved_keyring_it_cannot_read(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
+) -> None:
+    # A damaged keyring row is not a device that has saved no keyring: reading
+    # it as empty would put the pinned production fingerprint back in charge of
+    # what this workspace trusts.
+    store = _connected_store(tmp_path, monkeypatch)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {"workspace_id": WORKSPACE_ID},
+        "2026-10-21T00:00:00Z",
+    )
+    response = _response(signing_key, generated_at=datetime.now(timezone.utc) - timedelta(minutes=1))
+    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", lambda request: response)
+
+    failed = guard_runner.sync_network_protection_bundle_best_effort(store)
+
+    assert failed is not None
+    assert failed["status"] == "failed"
+    assert "Saved network protection keyring is malformed" in str(failed["error"])
+    assert store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY) is None
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
@@ -282,9 +275,7 @@ def test_cloud_reconnect_clears_the_network_bundle() -> None:
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
-def test_network_check_reports_the_saved_bundle_decision(
-    tmp_path, monkeypatch: pytest.MonkeyPatch, signing_key: RSAPrivateKey
-) -> None:
+def test_network_check_reports_the_saved_bundle_decision(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     import argparse
 
     from codex_plugin_scanner.guard.cli import commands_dispatch_local
@@ -292,9 +283,10 @@ def test_network_check_reports_the_saved_bundle_decision(
 
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
-    store.set_sync_payload(
-        NETWORK_PROTECTION_SYNC_STATE_KEY, _verify(_response(signing_key), signing_key), "2026-10-21T00:00:00Z"
-    )
+    # Indicators older than a week stop applying and this check reads the real
+    # clock, so the bundle is current.
+    now = datetime.now(timezone.utc)
+    store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, _saved(generated_at=now), _iso(now))
     emitted: list[dict[str, object]] = []
     monkeypatch.setattr(
         commands_dispatch_local,

@@ -3,17 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_hook import local_cli_grant_action, observe_unlisted_cli
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
-from codex_plugin_scanner.guard.runtime.local_cli_commands import resolve_command_id_for_text
 from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
     refresh_package_script_catalogs,
 )
 from codex_plugin_scanner.guard.runtime.package_json_scripts import (
-    package_script_command_tokens,
     recognize_package_json_scripts,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_command_id_client import package_script_command_tokens, resolve_command_id_for_text
+from tests.runtime_wrapper_support import local_cli_grant_action, native_local_cli_hook
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
@@ -212,7 +211,7 @@ def test_allowed_nested_script_grant_matches_live_command(tmp_path: Path) -> Non
         )
         == "guard.reddit-targeting.audit"
     )
-    observe_unlisted_cli(store=store, command=live, cwd=project, home_dir=home)
+    native_local_cli_hook(store, command=live, cwd=project, home_dir=home, current_action="allow", grant_allowed=False)
     assert (
         local_cli_grant_action(
             store=store,
@@ -253,11 +252,13 @@ def test_hook_remembers_real_package_json_path(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
     store = GuardStore(home)
-    observe_unlisted_cli(
-        store=store,
+    native_local_cli_hook(
+        store,
         command="pnpm run guard:audit",
         cwd=project,
         home_dir=home,
+        current_action="allow",
+        grant_allowed=False,
     )
     stored = store.list_local_cli_items()[0]
     assert stored["surface"] == "package-scripts"
@@ -426,21 +427,16 @@ def test_native_failure_is_reported_so_grant_callers_fail_closed(tmp_path: Path,
     monkeypatch.setattr(package_json_scripts, "native_context_digest", lambda *_args, **_kwargs: replies.pop(0))
     with track_local_cli_identity_failures() as failures:
         for _ in range(3):
-            assert (
-                package_json_scripts.identify_package_json_scripts("npm run build", cwd=project, home_dir=tmp_path)
-                is None
-            )
+            assert package_json_scripts._native_package_scripts("npm run build", cwd=project, home_dir=tmp_path) is None
     assert failures == ["native_package_json_scripts_unavailable", "native_package_json_scripts_malformed"]
 
 
 def test_command_tokens_raise_on_native_failure_instead_of_generic_argv(tmp_path: Path, monkeypatch) -> None:
     import pytest
 
-    from codex_plugin_scanner.guard.native_local_cli_identity import (
-        LocalCliIdentityUnavailableError,
-        track_local_cli_identity_failures,
-    )
+    from codex_plugin_scanner.guard.native_local_cli_identity import track_local_cli_identity_failures
     from codex_plugin_scanner.guard.runtime import package_json_scripts
+    from tests.local_cli_command_id_client import LocalCliIdentityUnavailableError
 
     project = _write_package(tmp_path / "app", scripts={"build": "vite build"})
     replies: list[object] = [None, {"status": "ok", "package_json_scripts": {"runner": "npm"}}, {"status": "ok"}]
@@ -448,8 +444,6 @@ def test_command_tokens_raise_on_native_failure_instead_of_generic_argv(tmp_path
     with track_local_cli_identity_failures() as failures:
         for _ in range(2):
             with pytest.raises(LocalCliIdentityUnavailableError):
-                package_json_scripts.package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path)
-        assert (
-            package_json_scripts.package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path) is None
-        )
+                package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path)
+        assert package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path) is None
     assert failures == ["native_package_json_scripts_unavailable", "native_package_json_scripts_malformed"]

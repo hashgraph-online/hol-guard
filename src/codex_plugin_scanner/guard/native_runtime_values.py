@@ -7,15 +7,12 @@ in the runtime bridge.
 from __future__ import annotations
 
 import functools
-import hashlib
 import importlib.metadata
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
-
-from .runtime.hook_review_types import HookReviewResponse
 
 NativeMode = Literal["auto", "force"]
 
@@ -45,11 +42,8 @@ _NATIVE_RUNTIME_EXPORTS = [
     "NativeRuntimeManifest",
     "NativeRuntimeStatus",
     "native_mode",
-    "native_output_sha256",
     "native_runtime_health",
     "native_runtime_status",
-    "parity_signature",
-    "review_post_tool_native",
 ]
 
 
@@ -240,23 +234,3 @@ def _python_package_version() -> str | None:
         return importlib.metadata.version("hol-guard")
     except importlib.metadata.PackageNotFoundError:
         return None
-
-
-def parity_signature(response: HookReviewResponse) -> tuple[object, ...]:
-    excerpt_hash = native_output_sha256(response.reviewed_excerpt) if response.reviewed_excerpt is not None else None
-    return (
-        response.decision,
-        response.model_output_action,
-        response.reason_code,
-        response.notice,
-        response.policy_action,
-        response.observed_policy_action,
-        response.reviewed_output_sha256,
-        excerpt_hash,
-    )
-
-
-def native_output_sha256(text: str) -> str:
-    """Hash bounded native-hook output for recording and parity evidence."""
-
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()

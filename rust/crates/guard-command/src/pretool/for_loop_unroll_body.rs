@@ -4,14 +4,39 @@
 
 use super::{CONTROL_WORDS, MAX_BODY_BYTES};
 
-/// Split the body into list items (with the separator that follows each) and
-/// return the text after the closing `done`. Items keep a marker where
-/// `$NAME` appeared; `substitute` expands it. Any construct outside the simple
-/// command list grammar returns `None`.
-pub(super) fn body_items<'a>(
+/// A parsed command list: its items with the separator that follows each, the
+/// keyword that closed the list, and the text after that keyword.
+pub(crate) type CommandList<'a> = (Vec<(String, &'static str)>, &'static str, &'a str);
+
+/// Split a command list into items (with the separator that follows each),
+/// stopping at whichever of `terminators` closes it, and return that keyword
+/// with the text after it. Items keep a marker where `$NAME` appeared;
+/// `substitute` expands it. An empty `name` binds nothing, and every
+/// expansion is written back as it stood, because a list that binds no name
+/// reads the same values the construct around it read. Any construct outside
+/// the simple command list grammar returns `None`.
+pub(crate) fn body_items<'a>(
     text: &'a str,
     name: &str,
-) -> Option<(Vec<(String, &'static str)>, &'a str)> {
+    terminators: &[&'static str],
+) -> Option<CommandList<'a>> {
+    body_items_at(text, name, terminators, 0)
+}
+
+/// How deep a subshell group may nest inside a command list. A group holds a
+/// command list of its own, so the list grammar reads it by reading that list;
+/// the bound keeps that reading finite.
+const MAX_GROUP_DEPTH: usize = 2;
+
+/// [`body_items`], carrying how many subshell groups already enclose this
+/// list. A `)` closes the list when `)` is one of its terminators, which is
+/// how the group's own list ends.
+fn body_items_at<'a>(
+    text: &'a str,
+    name: &str,
+    terminators: &[&'static str],
+    depth: usize,
+) -> Option<CommandList<'a>> {
     let chars: Vec<(usize, char)> = text.char_indices().collect();
     let mut items: Vec<(String, &'static str)> = Vec::new();
     let mut item = String::new();
@@ -65,6 +90,9 @@ pub(super) fn body_items<'a>(
                         ("; ", 1)
                     };
                 let trimmed = item.trim().to_owned();
+                if ends_in_an_open_escape(&trimmed) {
+                    return None;
+                }
                 if trimmed.is_empty() {
                     // Blank separators (after `do`, doubled newlines) are fine;
                     // an empty slot around && or || is not.
@@ -87,11 +115,14 @@ pub(super) fn body_items<'a>(
                 if separator == "; " {
                     let after = &text[chars.get(i).map_or(text.len(), |(b, _)| *b)..];
                     let lead = after.trim_start_matches([' ', '\t', '\n', ';']);
-                    if starts_with_done(lead) {
+                    if let Some(&closer) = terminators
+                        .iter()
+                        .find(|keyword| starts_with_keyword(lead, keyword))
+                    {
                         if items.last().is_none_or(|last| last.1 != "; ") {
                             return None;
                         }
-                        return Some((items, &lead["done".len()..]));
+                        return Some((items, closer, &lead[closer.len()..]));
                     }
                 }
             }
@@ -105,7 +136,57 @@ pub(super) fn body_items<'a>(
                 at_word_start = true;
                 i += 1;
             }
-            '`' | '(' | ')' | '{' | '}' => return None,
+            '`' | '{' | '}' => return None,
+            // A `(` in command position opens a subshell, whose body is a
+            // command list read the same way this one is. The group runs what
+            // it holds in a shell of its own, so the written-out text keeps
+            // the parentheses and the proofs below read the same work the
+            // construct ran. Anywhere else a `(` belongs to a shape outside
+            // this grammar (an array literal, a function body), which keeps
+            // its review.
+            // `((` opens an arithmetic command, not a subshell holding a
+            // subshell, and arithmetic assigns without an `=` sign. It is not
+            // a command list, so it keeps its review.
+            '(' if command_position && depth < MAX_GROUP_DEPTH && !rest.starts_with("((") => {
+                let (inner, _, after) = body_items_at(&text[byte + 1..], name, &[")"], depth + 1)?;
+                if inner.is_empty()
+                    || !inner
+                        .iter()
+                        .all(|(list_item, _)| stages_are_plain(list_item))
+                {
+                    return None;
+                }
+                item.push('(');
+                for (index, (inner_item, separator)) in inner.iter().enumerate() {
+                    item.push_str(inner_item);
+                    if index + 1 < inner.len() {
+                        item.push_str(separator);
+                    }
+                }
+                item.push(')');
+                at_word_start = false;
+                command_position = false;
+                redirect_target = false;
+                let consumed = text.len() - after.len();
+                i = chars.partition_point(|(index, _)| *index < consumed);
+            }
+            ')' if terminators.contains(&")") => {
+                let trimmed = item.trim().to_owned();
+                if ends_in_an_open_escape(&trimmed) {
+                    return None;
+                }
+                if trimmed.is_empty() {
+                    // `(ls; )` closes after a finished item; `(ls &&)` and
+                    // `()` leave an empty slot that runs nothing.
+                    if items.last().is_none_or(|last| last.1 != "; ") {
+                        return None;
+                    }
+                } else {
+                    items.push((trimmed, "; "));
+                }
+                return Some((items, ")", &text[byte + 1..]));
+            }
+            '(' | ')' => return None,
             '#' if at_word_start => return None,
             '\\' => {
                 let next = chars.get(i + 1)?.1;
@@ -181,12 +262,22 @@ pub(super) fn body_items<'a>(
     None
 }
 
+/// Whether the item ends in a backslash with nothing left for it to escape.
+/// `echo a\ ` ends in an escaped space, and trimming that space leaves the
+/// backslash to escape the separator instead: the written list runs `echo a `
+/// and then the next command, while the trimmed text would hand that command
+/// to `echo` as arguments. No command list is described by both, so the
+/// construct keeps its review.
+fn ends_in_an_open_escape(item: &str) -> bool {
+    (item.len() - item.trim_end_matches('\\').len()) % 2 == 1
+}
+
 /// Whether a body item can change the loop variable or `IFS`, so a later
 /// `$NAME` would not expand to the word written in the header. References are
 /// already placeholders here, so a remaining bare `NAME` or `IFS` is read as
 /// the name `read`, `printf -v`, `declare`, `unset` or an assignment binds. A
 /// `-NAME` flag such as `[ -f ... ]` is not a target; an attached `-vNAME` is.
-pub(super) fn rebinds(item: &str, name: &str) -> bool {
+pub(crate) fn rebinds(item: &str, name: &str) -> bool {
     // Quoting is how a rebinding hides: the shell builds one word out of
     // `o''pt=secret`, while the written text holds no run that spells the
     // name. Scanning both forms covers a name split across quotes and one
@@ -349,8 +440,8 @@ fn names_a_target(item: &str, name: &str) -> bool {
     false
 }
 
-fn starts_with_done(text: &str) -> bool {
-    text.strip_prefix("done").is_some_and(|rest| {
+fn starts_with_keyword(text: &str, keyword: &str) -> bool {
+    text.strip_prefix(keyword).is_some_and(|rest| {
         rest.is_empty() || rest.starts_with([' ', '\t', '\n', ';', '>', '<', '&'])
     })
 }
@@ -375,7 +466,7 @@ fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool)
             break;
         }
     }
-    if ident != name {
+    if ident.is_empty() {
         return None;
     }
     if braced {
@@ -384,35 +475,238 @@ fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool)
         }
         *i += 1;
     }
-    Some(MARKER.to_owned())
+    if name.is_empty() {
+        // Nothing binds a name here, so the expansion reads the same value in
+        // the rewritten list as it did inside the construct. Writing it back
+        // keeps the two the same work.
+        return Some(if braced {
+            format!("${{{ident}}}")
+        } else {
+            format!("${ident}")
+        });
+    }
+    (ident == name).then(|| MARKER.to_string())
 }
 
-const MARKER: &str = "\u{1}";
+/// Where the loop variable stood in the body, kept out of the shell's own
+/// character set so no written word can collide with it.
+const MARKER: char = '\u{1}';
 
-pub(super) fn substitute(item: &str, word: &str) -> Option<String> {
+/// Whether every reference to the loop variable is a whole unquoted word.
+///
+/// The shell splits an unquoted expansion into fields and expands what comes
+/// out as a pattern, so each name a glob matches reaches the body as its own
+/// argument. The proofs that expand a pattern own that rule, and they see it
+/// only while the reference is the whole word: `cat $f` is written out as
+/// `cat *.json`, so the glob proof reads exactly the names the loop reads,
+/// and it refuses a directory holding a name that would split.
+///
+/// Glued into a larger word the written-out text spells a different pattern.
+/// `cat bak-$f` becomes `cat bak-*.json`, whose matches are proven while the
+/// loop's own `*.json` matches never are, so a name holding whitespace splits
+/// in the body into words that pattern never matched. A reference inside a
+/// larger word keeps its review. A reference the body quotes on its own is
+/// read here as the whole word it is, because `unquote_whole_references` has
+/// already taken the quotes off.
+pub(crate) fn references_stand_alone(item: &str) -> bool {
+    let chars: Vec<char> = item.chars().collect();
+    chars.iter().enumerate().all(|(index, &current)| {
+        current != MARKER
+            || (index.checked_sub(1).is_none_or(|before| {
+                word_boundary(Some(chars[before])) && !escaped(&chars, before)
+            }) && word_boundary(chars.get(index + 1).copied()))
+    })
+}
+
+/// Whether every reference in `item` stands inside quotes of the body's own.
+///
+/// A header word that holds field separators is one field only while those
+/// quotes stay on: written out bare it would split, and the shell's own split
+/// of a quoted word never happened. An unquoted reference therefore keeps the
+/// loop unmodeled rather than guessing which of the two the writer meant.
+///
+/// The quotes have to be open where the reference stands, not merely beside
+/// it. A word such as `"a"$f"b"` closes one quoted run and opens another
+/// around an expansion the shell still splits, so reading the two neighbours
+/// alone would take that for a quoted reference.
+pub(crate) fn references_are_quoted(item: &str) -> bool {
+    let chars: Vec<char> = item.chars().collect();
+    let mut single = false;
+    let mut double = false;
+    for (index, &current) in chars.iter().enumerate() {
+        match current {
+            MARKER if !single && !double => return false,
+            '\'' if !double && (single || !escaped(&chars, index)) => single = !single,
+            '"' if !single && !escaped(&chars, index) => double = !double,
+            _ => {}
+        }
+    }
+    true
+}
+
+/// Whether the character beside a reference ends the word, counting the ends
+/// of the item itself.
+fn word_boundary(character: Option<char>) -> bool {
+    character.is_none_or(|character| character.is_whitespace() || character == '|')
+}
+
+/// Whether a backslash makes the character at `at` a literal. The shell reads
+/// `\ ` as a space stuck to the word beside it, so `cat \ $f` is one glued
+/// word rather than two, and the reference does not stand on its own after
+/// all. An even run of backslashes spells backslashes and leaves the
+/// character the boundary it looks like.
+fn escaped(chars: &[char], at: usize) -> bool {
+    chars[..at]
+        .iter()
+        .rev()
+        .take_while(|character| **character == '\\')
+        .count()
+        % 2
+        == 1
+}
+
+/// Take the quotes off a reference the body quotes as a whole word of its own.
+///
+/// Every word the loop header admits is one whitespace-free run of characters
+/// the shell does nothing with, so `"$f"` and `$f` hand the body the same
+/// single word. Writing the bare word out is what lets the glob proof read the
+/// pattern the loop expands; left inside quotes it would stand for a name the
+/// shell never matches.
+///
+/// Which `"` opens a string and which closes one decides that, so the scan
+/// carries the quote state rather than reading the two characters beside the
+/// reference. In `cat "x "$f" y"` the quote before the reference closes
+/// `"x "` and the one after opens `" y"`: taking them off would spell the one
+/// literal name `x *.md y` for a loop that reads `x a.md y` and `x b.md y`.
+pub(crate) fn unquote_whole_references(item: &str) -> String {
+    let chars: Vec<char> = item.chars().collect();
+    let mut out = String::with_capacity(item.len());
+    let mut index = 0usize;
+    let mut in_double = false;
+    while let Some(&current) = chars.get(index) {
+        if !in_double && current == '\'' {
+            out.push(current);
+            index += 1;
+            while let Some(&inner) = chars.get(index) {
+                out.push(inner);
+                index += 1;
+                if inner == '\'' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if !in_double
+            && current == '"'
+            && chars.get(index + 1) == Some(&MARKER)
+            && chars.get(index + 2) == Some(&'"')
+            && word_boundary(index.checked_sub(1).map(|before| chars[before]))
+            && word_boundary(chars.get(index + 3).copied())
+        {
+            out.push(MARKER);
+            index += 3;
+            continue;
+        }
+        if current == '\\' && index + 1 < chars.len() {
+            out.push(current);
+            out.push(chars[index + 1]);
+            index += 2;
+            continue;
+        }
+        if current == '"' {
+            in_double = !in_double;
+        }
+        out.push(current);
+        index += 1;
+    }
+    out
+}
+
+pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
+    if !stages_are_plain(item) {
+        return None;
+    }
+    Some(item.replace(MARKER, word))
+}
+
+/// Whether every pipeline stage of a body item starts with a plain command
+/// word. A subshell group's own items were read as a command list and checked
+/// here when the group was parsed.
+fn stages_are_plain(item: &str) -> bool {
     // Every pipeline stage must start with a plain word: no marker, no
     // assignment, no shell keyword. A leading redirection such as
     // `2>/dev/null $f` would hide the real command word from this check, so a
     // stage that starts with one is rejected. A glob in the command word
     // (`/usr/bin/doc?er`) could name any program, so it keeps the loop on
     // the unmodeled path.
-    for stage in item.split('|') {
-        let first = stage.split_whitespace().next()?;
+    //
+    // A stage that opens with `[[` and closes with `]]` is the one keyword
+    // that is read here, because the parse surface reads that closed pair as
+    // the `[` test it asks, of less: inside `[[ ]]` the shell splits no word
+    // and expands no glob. An unclosed `[[` is some other shape and keeps the
+    // construct on the unmodeled path with every other keyword.
+    //
+    // `||` writes two `|` characters in a row, so splitting on the single
+    // character leaves an empty run between them where the shell has a list
+    // separator rather than a pipeline stage. That gap carries no command
+    // word of its own, and the two commands it separates are each checked as
+    // the stage before and after it, so a single empty run between two
+    // non-empty runs is stepped over. Anything else is some other shape --
+    // a pipeline that starts or ends on `|`, or a run of three or more `|`
+    // the shell reads as a syntax error -- and keeps the construct on the
+    // unmodeled path.
+    let stages: Vec<&str> = item.split('|').collect();
+    for (index, stage) in stages.iter().copied().enumerate() {
+        if stage.is_empty() {
+            if index > 0
+                && index + 1 < stages.len()
+                && !stages[index - 1].is_empty()
+                && !stages[index + 1].is_empty()
+            {
+                continue;
+            }
+            return false;
+        }
+        // A `!` in front of a pipeline inverts the exit status it reports and
+        // runs nothing of its own, so the command word this check reads is
+        // the word written after it. The shell accepts that `!` only where
+        // the pipeline starts, so no later stage carries one.
+        let stage = if index == 0 {
+            negation_tail(stage)
+        } else {
+            stage
+        };
+        let Some(first) = stage.split_whitespace().next() else {
+            return false;
+        };
         let bare = first.trim_start_matches(|c: char| c.is_ascii_digit());
+        let bracket_test = first == "[[" && stage.trim_end().ends_with("]]");
         if first.contains(MARKER)
             || first.contains('=')
             || bare.starts_with(['>', '<', '&'])
-            || (first != "[" && first.contains(['*', '?', '[']))
-            || CONTROL_WORDS.contains(&first)
+            || (first != "[" && !bracket_test && first.contains(['*', '?', '[']))
+            || (CONTROL_WORDS.contains(&first) && !bracket_test)
         {
-            return None;
+            return false;
         }
     }
-    Some(item.replace(MARKER, word))
+    true
+}
+
+/// The pipeline without the `!` that inverts its exit status, where one is
+/// written as a word of its own. A `!` joined to what follows it is an
+/// ordinary word, and a bare `!` starts no pipeline, so neither is read as a
+/// negation.
+fn negation_tail(stage: &str) -> &str {
+    stage
+        .trim_start()
+        .strip_prefix('!')
+        .filter(|rest| rest.starts_with([' ', '\t']))
+        .unwrap_or(stage)
 }
 
 /// The redirect text after `done`, restricted to plain redirections.
-pub(super) fn redirect_tail(tail: &str) -> Option<String> {
+pub(crate) fn redirect_tail(tail: &str) -> Option<String> {
     // Newlines after done start new commands and must not be trimmed away.
     let tail = tail.trim_start_matches([' ', '\t']).trim_end();
     if tail.is_empty() {

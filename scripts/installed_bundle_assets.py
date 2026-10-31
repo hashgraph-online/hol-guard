@@ -4,11 +4,28 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 
 from extension_delivery_objects import entries
 from extension_delivery_policy_lookup import lookup
+
+
+def tag_directory(tag, *, source_sha):
+    """The directory under ``assets`` that holds an installed tag's assets.
+
+    Every installed tag is ``extension-data-<source>-0.0-<batch>``, so only the
+    batch varies and the directory is named for it alone. The full tag would put
+    wheel members past the 260-character path limit of a stock Windows install.
+    The native reader maps tags the same way and tells the runtime which
+    directory it read, so only the build needs this.
+    """
+    prefix = f"extension-data-{source_sha}-0.0-"
+    batch = tag[len(prefix) :] if isinstance(tag, str) and tag.startswith(prefix) else ""
+    if re.fullmatch(r"[0-9]{6}", batch) is None:
+        raise ValueError("installed bundle asset path invalid")
+    return batch
 
 
 def validate_resident_core(root):
@@ -69,7 +86,7 @@ def default_assets(policy, store):
     return result
 
 
-def stage_assets(source, destination, assets, defaults, *, offline):
+def stage_assets(source, destination, assets, defaults, *, source_sha, offline):
     """Keep metadata available offline; omit every unrelated executable archive."""
     count = total = 0
     for row in assets:
@@ -77,10 +94,9 @@ def stage_assets(source, destination, assets, defaults, *, offline):
         key = location["tag"], location["asset"]
         if not offline and location["asset"].startswith("pack-") and key not in defaults:
             continue
-        relative = Path(*key)
-        target = destination / relative
+        target = destination / tag_directory(location["tag"], source_sha=source_sha) / location["asset"]
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source / relative, target)
+        shutil.copyfile(source / Path(*key), target)
         count += 1
         total += row["length"]
     return count, total

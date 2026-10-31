@@ -21,8 +21,6 @@ from .path_resolution_cache import cached_realpath
 _MAX_HEALTH_ENTRIES = 128
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_COOLDOWN_SECONDS = 15.0
-_ONESHOT_RETRY_COOLDOWN_SECONDS = 0.05
-_GLOBAL_ONESHOT_LIMIT = 2
 _REASON_MAX_LENGTH = 96
 _REASON_CHARACTERS = frozenset("_-.")
 
@@ -61,7 +59,6 @@ class _MutableNativeRuntimeHealth:
 
 _STATE_LOCK = threading.RLock()
 _STATES: OrderedDict[str, _MutableNativeRuntimeHealth] = OrderedDict()
-_GLOBAL_ONESHOT = threading.BoundedSemaphore(_GLOBAL_ONESHOT_LIMIT)
 
 
 def _privacy_safe_key(identity_sha256: str, guard_home: Path) -> str:

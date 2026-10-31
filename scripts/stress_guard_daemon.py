@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.daemon.manager import (  # noqa: E402
 )
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status  # noqa: E402
 from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS  # noqa: E402
 from scripts.native_slo_contract import clear_proof_environment, proof_environment_violations  # noqa: E402
 from scripts.stress_guard_daemon_runtime import StressExecution as _StressExecution  # noqa: E402
 from scripts.stress_guard_daemon_runtime import finalize_stress_runtime as _finalize_stress_runtime  # noqa: E402
@@ -156,7 +157,7 @@ def _stop_native_runtime(guard_home: Path) -> None:
             ),
             check=False,
             capture_output=True,
-            timeout=2,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired):
         # The stress result is still evaluated from the daemon's observed

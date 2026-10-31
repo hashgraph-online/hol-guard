@@ -27,9 +27,12 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 from pathlib import Path
 
+from .extension_catalog_fixtures import CONTRIBUTIONS
+from .extension_catalog_fixtures import SOURCES as CATALOG_SOURCES
 from .feature_directory_fixtures import CONSOLE
 from .feature_directory_fixtures import SOURCES as FEATURE_SOURCES
 from .source_output_fixtures import PORTAL, SOURCES
@@ -71,22 +74,42 @@ CHECK_SCRIPT = "#!/bin/sh\n# Quick local check.\nset -eu\ngit status --short >/d
 DEPLOY_SCRIPT = "#!/bin/sh\n# Prints the rollout plan only.\necho 'deploy plan: dashboard'\n"
 # `id -un` resolves the user through getpwuid, which a macOS sandbox without the
 # user-database service cannot answer; the name itself is never printed.
+# The line the build prints last. A scenario that pipes the build into `tail` keeps a
+# successful status even when the build failed, so its oracle requires this line.
+VITE_BUILD_MARKER = "built in 12ms"
 VITE_STUB = (
     "#!/bin/sh\n"
     "# Synthetic stand-in for the installed vite CLI: no network, no writes.\n"
     "set -eu\n"
     'user=$(id -un)\n[ -n "$user" ]\n'
+    # Only `vite build` prints a build. Any other invocation fails the way the
+    # real CLI would, so the marker answers for a finished build and not for
+    # the entry having been reached.
+    'build=\n'
+    'for argument in "$@"; do\n'
+    '  if [ "$argument" = build ]; then build=1; fi\n'
+    'done\n'
+    '[ -n "$build" ] || { printf \'vite stand-in: expected the build command\\n\' >&2; exit 1; }\n'
     f"printf 'vite v{VITE_VERSION} building for production...\\n'\n"
     "printf 'dist/index.html  0.40 kB\\n'\n"
-    "printf 'built in 12ms\\n'\n"
+    f"printf '{VITE_BUILD_MARKER}\\n'\n"
 )
-# Windows runs the package entry with Node, as Guard's contained build does.
+# The package's own Node entry point: a second entry of the same install, beside the
+# shell CLI the `.bin` link resolves to. `bun node_modules/vite/bin/vite.js` names it
+# directly, which is the spelling the report came from, and Windows has no other one.
+# Both entries print the same build, so one output check answers for either spelling.
 VITE_STUB_NODE = (
     "// Synthetic stand-in for the installed vite CLI: no network, no writes.\n"
+    "// Only `vite build` prints a build, so the marker answers for a finished\n"
+    "// build and not for the entry having been reached.\n"
+    "if (!process.argv.slice(2).includes('build')) {\n"
+    "  process.stderr.write('vite stand-in: expected the build command\\n');\n"
+    "  process.exit(1);\n"
+    "}\n"
     "process.stdout.write(\n"
     f"  'vite v{VITE_VERSION} building for production...\\n' +\n"
     "  'dist/index.html  0.40 kB\\n' +\n"
-    "  'built in 12ms\\n'\n"
+    f"  '{VITE_BUILD_MARKER}\\n'\n"
     ");\n"
 )
 DOCTL_STUB = (
@@ -95,6 +118,7 @@ DOCTL_STUB = (
     'case "${1:-}" in\n'
     "  version) printf 'doctl version 1.110.0-release\\n' ;;\n"
     "  apps) printf 'fixture-app-id    web\\n' ;;\n"
+    "  databases) printf 'fixture-db-id    fixture-db    pg    online    nyc3\\n' ;;\n"
     "  *) printf 'doctl stand-in: unsupported command\\n' >&2; exit 2 ;;\n"
     "esac\n"
 )
@@ -106,6 +130,10 @@ DOCTL_STUB_PYTHON = (
     "    sys.stdout.buffer.write(b'doctl version 1.110.0-release\\n')\n"
     "elif command == 'apps':\n"
     "    sys.stdout.buffer.write(b'fixture-app-id    web\\n')\n"
+    "elif command == 'databases':\n"
+    "    sys.stdout.buffer.write(\n"
+    "        b'fixture-db-id    fixture-db    pg    online    nyc3\\n'\n"
+    "    )\n"
     "else:\n"
     "    sys.stderr.buffer.write(b'doctl stand-in: unsupported command\\n')\n"
     "    sys.exit(2)\n"
@@ -248,6 +276,21 @@ def activate_script(venv: Path) -> str:
 
 
 DOCKER_DIGEST = "sha256:" + "0123456789abcdef" * 4
+DOCKER_LOG_LINES = (
+    "2026-01-07T09:14:02.118374021Z listening on :8080",
+    "2026-01-07T09:14:03.402915774Z GET /healthz 200 1ms",
+    "2026-01-07T09:14:11.771206339Z GET /api/items 200 23ms",
+)
+DOCKER_CONTEXT_CURRENT = "default"
+DOCKER_CONTEXT_NAMES = ("default", "desktop-linux")
+DOCKER_CONTEXT_TABLE = (
+    "NAME            DESCRIPTION                               DOCKER ENDPOINT",
+    "default *       Current DOCKER_HOST based configuration   unix:///var/run/docker.sock",
+    "desktop-linux   Docker Desktop                            unix:///var/run/docker.sock",
+)
+DOCKER_LOG_LINES_SHELL = " ".join(shlex.quote(line) for line in DOCKER_LOG_LINES)
+DOCKER_CONTEXT_NAMES_SHELL = " ".join(shlex.quote(name) for name in DOCKER_CONTEXT_NAMES)
+DOCKER_CONTEXT_TABLE_SHELL = " ".join(shlex.quote(row) for row in DOCKER_CONTEXT_TABLE)
 DOCKER_STUB = (
     "#!/bin/sh\n"
     "# Read-only stand-in for docker: it never reaches a registry or a daemon.\n"
@@ -268,34 +311,124 @@ DOCKER_STUB = (
     f"  printf '{DOCKER_DIGEST}\\n'\n"
     "  exit 0\n"
     "fi\n"
+    'if [ "${1:-}" = container ] && [ "${2:-}" = logs ]; then\n'
+    "  shift\n"
+    "fi\n"
+    'if [ "${1:-}" = logs ]; then\n'
+    "  shift\n"
+    "  names=0\n"
+    '  while [ "$#" -gt 0 ]; do\n'
+    '    case "$1" in\n'
+    "      -t | --timestamps | --details) ;;\n"
+    "      --tail=* | --since=* | --until=*) ;;\n"
+    '      --tail | --since | --until) [ "$#" -ge 2 ] || exit 2; shift ;;\n'
+    "      -*) printf 'docker stand-in: unsupported option\\n' >&2; exit 2 ;;\n"
+    "      *) names=$((names + 1)) ;;\n"
+    "    esac\n"
+    "    shift\n"
+    "  done\n"
+    '  if [ "$names" -ne 1 ]; then\n'
+    "    printf 'docker stand-in: unsupported command\\n' >&2\n"
+    "    exit 2\n"
+    "  fi\n"
+    f"  printf '%s\\n' {DOCKER_LOG_LINES_SHELL}\n"
+    "  exit 0\n"
+    "fi\n"
+    'if [ "${1:-}" = context ]; then\n'
+    "  shift\n"
+    '  if [ "${1:-}" = show ] && [ "$#" -eq 1 ]; then\n'
+    f"    printf '{DOCKER_CONTEXT_CURRENT}\\n'\n"
+    "    exit 0\n"
+    "  fi\n"
+    '  if [ "${1:-}" = ls ]; then\n'
+    "    shift\n"
+    "    quiet=0\n"
+    '    while [ "$#" -gt 0 ]; do\n'
+    '      case "$1" in\n'
+    "        -q | --quiet) quiet=1 ;;\n"
+    "        --format=*) ;;\n"
+    '        --format) [ "$#" -ge 2 ] || exit 2; shift ;;\n'
+    "        *) printf 'docker stand-in: unsupported option\\n' >&2; exit 2 ;;\n"
+    "      esac\n"
+    "      shift\n"
+    "    done\n"
+    '    if [ "$quiet" -eq 1 ]; then\n'
+    f"      printf '%s\\n' {DOCKER_CONTEXT_NAMES_SHELL}\n"
+    "    else\n"
+    f"      printf '%s\\n' {DOCKER_CONTEXT_TABLE_SHELL}\n"
+    "    fi\n"
+    "    exit 0\n"
+    "  fi\n"
+    "fi\n"
     "printf 'docker stand-in: unsupported command\\n' >&2\n"
     "exit 2\n"
 )
-DOCKER_STUB_PYTHON = (
-    "import sys\n"
-    "args = sys.argv[1:]\n"
-    "ok = args[:3] == ['buildx', 'imagetools', 'inspect']\n"
-    "images = 0\n"
-    "index = 3\n"
-    "while ok and index < len(args):\n"
-    "    word = args[index]\n"
-    "    index += 1\n"
-    "    if word == '--raw' or word.startswith('--format='):\n"
-    "        continue\n"
-    "    if word == '--format':\n"
-    "        ok = index < len(args)\n"
-    "        index += 1\n"
-    "    elif word.startswith('-'):\n"
-    "        ok = False\n"
-    "    else:\n"
-    "        images += 1\n"
-    "if ok and images == 1:\n"
-    f"    sys.stdout.buffer.write(b'{DOCKER_DIGEST}\\n')\n"
-    "else:\n"
-    "    sys.stderr.buffer.write(b'docker stand-in: unsupported command\\n')\n"
-    "    sys.exit(2)\n"
-)
+DOCKER_STUB_PYTHON = f"""\
+import sys
 
+args = sys.argv[1:]
+
+
+def fail():
+    sys.stderr.buffer.write(b'docker stand-in: unsupported command\\n')
+    raise SystemExit(2)
+
+
+def emit(lines):
+    sys.stdout.buffer.write(('\\n'.join(lines) + '\\n').encode())
+    raise SystemExit(0)
+
+
+def operands(words, flags, valued):
+    # The non-option words, or None when an option this stand-in does not take appears.
+    names, index = [], 0
+    while index < len(words):
+        word = words[index]
+        index += 1
+        if word in flags or any(word.startswith(name + '=') for name in valued):
+            continue
+        if word in valued:
+            if index >= len(words):
+                return None
+            index += 1
+            continue
+        if word.startswith('-'):
+            return None
+        names.append(word)
+    return names
+
+
+if args[:3] == ['buildx', 'imagetools', 'inspect']:
+    images = operands(args[3:], {{'--raw'}}, {{'--format'}})
+    if images is None or len(images) != 1:
+        fail()
+    emit(['{DOCKER_DIGEST}'])
+
+if args[:2] == ['container', 'logs']:
+    args = args[1:]
+
+if args[:1] == ['logs']:
+    containers = operands(
+        args[1:],
+        {{'-t', '--timestamps', '--details'}},
+        {{'--tail', '--since', '--until'}},
+    )
+    if containers is None or len(containers) != 1:
+        fail()
+    emit({list(DOCKER_LOG_LINES)!r})
+
+if args[:2] == ['context', 'show'] and len(args) == 2:
+    emit(['{DOCKER_CONTEXT_CURRENT}'])
+
+if args[:2] == ['context', 'ls']:
+    rest = args[2:]
+    quiet = '-q' in rest or '--quiet' in rest
+    if operands([word for word in rest if word not in ('-q', '--quiet')], set(), {{'--format'}}) != []:
+        fail()
+    emit({list(DOCKER_CONTEXT_NAMES)!r} if quiet else {list(DOCKER_CONTEXT_TABLE)!r})
+
+fail()
+"""
 
 def write_windows_launcher(bin_dir: Path, name: str, source: str) -> None:
     """Give a stand-in a ``.cmd`` launcher on Windows, running a Python copy of it.
@@ -345,7 +478,7 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
     _write(main / "docs/review-notes.md", REVIEW_NOTES)
     for relative, text in SOURCES.items():
         _write(main / relative, text)
-    for relative, text in FEATURE_SOURCES.items():
+    for relative, text in {**FEATURE_SOURCES, **CATALOG_SOURCES}.items():
         _write(main / relative, text)
     _write(main / "scripts/check.sh", CHECK_SCRIPT, 0o755)
     _write(main / "scripts/release/deploy.sh", DEPLOY_SCRIPT, 0o755)
@@ -353,12 +486,11 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
     package = {"name": "vite", "version": VITE_VERSION, "bin": {"vite": "bin/vite"}}
     _write(modules / "vite/package.json", json.dumps(package) + "\n")
     _write(modules / "vite/bin/vite", VITE_STUB, 0o755)
-    if os.name == "nt":
-        _write(modules / "vite/bin/vite.js", VITE_STUB_NODE)
+    _write(modules / "vite/bin/vite.js", VITE_STUB_NODE)
     (modules / ".bin").mkdir()
     # npm links each bin relative to node_modules/.bin.
     (modules / ".bin/vite").symlink_to(Path("../vite/bin/vite"))
-    return (".gitignore", CONSOLE, DASHBOARD, PORTAL, "docs/review-notes.md", "scripts")
+    return (".gitignore", CONSOLE, CONTRIBUTIONS, DASHBOARD, PORTAL, "docs/review-notes.md", "scripts")
 
 
 def borrow_main_modules(main: Path, worktree: Path) -> None:

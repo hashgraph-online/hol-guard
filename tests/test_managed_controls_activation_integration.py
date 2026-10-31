@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
     MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY,
 )
-from codex_plugin_scanner.guard.native_extension_control import resolve_extension_controls
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -34,6 +33,7 @@ from tests.managed_controls_activation_support import CAPABILITIES as _CAPABILIT
 from tests.managed_controls_activation_support import activate_managed_bundle as _activate
 from tests.managed_controls_activation_support import managed_bundle as _bundle
 from tests.managed_controls_activation_support import parse_managed_bundle as _parsed
+from tests.native_extension_control_support import resolve_extension_controls
 
 
 def test_atomic_activation_persists_complete_projection_and_runtime_composes_it(

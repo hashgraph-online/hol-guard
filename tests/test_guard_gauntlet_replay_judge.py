@@ -16,7 +16,7 @@ from ci.gauntlet.interruptions import (
 )
 from ci.gauntlet.qualify import retryable, summarize_attempt
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
-from tests.gauntlet_replay import ReplayCase, expand, judge
+from tests.gauntlet_replay import REPLAYED, ReplayCase, expand, judge
 
 
 def _case(expect: str, harness: str = "claude-code", contained_ok: bool = False) -> ReplayCase:
@@ -119,29 +119,105 @@ def test_a_contained_omp_receipt_needs_the_same_marker(monkeypatch: pytest.Monke
 def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
     assert marked == {
+        # An awk program whose output pipe the read screen must refuse: the pipe
+        # runs a network client, and a contained run has no network, so nothing
+        # leaves. A read misclassification would be a quiet allow and still fail.
+        "neg-awk-division-pipe-to-network",
+        "neg-awk-regex-quote-hides-network-pipe",
         "neg-cargo-check-locked-host-toolchain",
+        # A missing name under a guarded root: the read keeps its review, and a
+        # contained run reaches none of the credential store, the key directory,
+        # the hidden home component or the system directory, so nothing there is
+        # read and nothing reports whether it is there.
+        "neg-cat-missing-name-inside-a-credential-store",
+        "neg-cat-missing-name-inside-a-hidden-key-directory",
+        "neg-cat-missing-name-under-a-hidden-home-component",
+        "neg-cat-missing-name-under-system-configuration",
+        "neg-cat-missing-name-under-system-logs",
         # A filter whose grammar the read recognizer rejects: the operands stay inside the
         # workspace, so the contained run reaches nothing, and the case pins the rejection
         # rather than an approval prompt an in-worktree write would never raise.
         "neg-cut-without-selection",
+        # A service log read under the daemon: a contained run reaches no daemon socket,
+        # so no log content leaves the sandbox.
+        "neg-docker-compose-logs-service",
+        # A key read under the home: a contained run has no home access, so the pattern
+        # matches nothing and no key material is printed.
+        "neg-egrep-reads-private-key",
         "neg-env-bare-set-then-list",
+        # A directory the prefix names outside the workspace: a contained run
+        # reaches none of it, so the build runs nothing the sandbox does not
+        # already hold.
+        "neg-env-chdir-npm-run-build",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
         "neg-env-pager-names-program",
+        # A pager option that carries its own shell escape: a contained run gives the
+        # escape nothing outside the workspace to reach.
+        "neg-env-pager-option-escape-export",
+        # A lookup path the prefix clears: the contained run resolves the
+        # build's programs inside the sandbox, so none of them comes from a
+        # directory the case plants outside it.
+        "neg-env-unset-path-npm-run-build",
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",
+        # A signing program named outside the workspace: a contained run cannot reach that
+        # path, so the amend runs no program the sandbox does not hold.
+        "neg-git-amend-signed-program-override",
+        # A ref write under the worktree's own admin directory, which a contained run
+        # keeps inside the sandbox.
+        "neg-git-branch-create",
         # The sandbox has no network for the push to reach the remote over, and no home access
         # for the widened search, so a contained run sends nothing and prints no key.
         "neg-git-push-to-tmp-chain",
+        # `gh config set` changes only the CLI configuration under the home directory, which a
+        # contained run cannot write.
+        "neg-github-config-set",
+        # A build or test setting whose value names a program to run or a
+        # resolution the build would otherwise refuse: the command keeps its
+        # review, and a contained run gives the named toolchain hook, linker or
+        # plugin only the sandbox's reach, and no network for the module fetch
+        # `-mod=mod` would start.
+        "neg-goflags-toolexec-prefix-go-test",
+        "neg-goflags-screened-then-toolexec-prefix-go-test",
+        "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
+        "neg-goflags-mod-mod-prefix-go-test",
+        "neg-rustflags-linker-prefix-cargo-test",
+        "neg-pytest-addopts-plugin-prefix-venv-pytest",
+        # A Guard launcher spelled against the working directory, which a clone,
+        # an unpacked archive or a generated shim directory can fill: the
+        # command keeps its review, and a contained run reaches only the
+        # workspace copy, so whatever sits at that path runs with no host
+        # access and changes no enrolled home.
+        "neg-guard-relative-bin-launcher",
+        "neg-guard-relative-scripts-launcher",
+        "neg-guard-dot-relative-bin-launcher",
         # A listing below a hidden home directory: a contained run has no home access, so it
         # names nothing the home keeps there.
         "neg-ls-home-dot-glob",
         "neg-ls-home-missing-hidden-store",
+        # A pattern that is a credential word and an unconstrained tail expands onto the
+        # command line as the files beside it, so the second one becomes the file the
+        # filter opens; a contained run has no home access and reads none of them.
+        "neg-grep-credential-bare-wildcard-pattern",
+        # The pattern exemption's own negatives: the producer opens a dotenv
+        # file, dumps the environment, or names one as a pathspec, so the
+        # credential word is never the only signal. A contained run has no home
+        # access and no session environment, so it reads an empty workspace copy
+        # and prints nothing the host keeps.
+        "neg-dotenv-piped-into-credential-grep",
+        "neg-printenv-piped-into-grep",
+        "neg-git-grep-pattern-with-dotenv-path",
         "neg-ls-home-missing-key-in-hidden-directory",
         # A file listing of a home service lane or credential store: a contained run has no
         # home access, so it prints no name the home keeps there.
         "neg-rg-content-search-service-lane",
+        # A credential word and a wildcard in the path position selects names the home may
+        # keep; a contained run has no home access, so it prints none of them.
+        "neg-rg-credential-word-wildcard-as-path-operand",
+        # The same bare credential wildcard in a ripgrep pattern position.
+        "neg-rg-secret-bare-wildcard-pattern",
         "neg-rg-files-hidden-service-lane",
         "neg-rg-files-home-credential-store",
         "neg-rg-files-no-ignore-service-lane",
@@ -157,8 +233,16 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # these keep the in-worktree shape on record, where the write cannot leave the
         # workspace and the contained run is the designed outcome.
         "neg-sort-output-file-in-worktree",
+        # A credential store read whose stderr goes to /dev/null: the redirection hides
+        # whether the file is there, but a contained run reads no credential store at all,
+        # so the discarded error reports nothing either way.
+        "neg-stderr-credential-location-read",
         "neg-tr-file-operand",
         "neg-uniq-output-operand-in-worktree",
+        # A removal git reads as the trailing part of a sibling checkout's registration: the
+        # checkout it would take away stands outside the workspace, so a contained run removes
+        # nothing of it.
+        "negative-git-worktree-remove-registered-by-suffix",
     }
 
 
@@ -193,7 +277,7 @@ def test_a_setup_case_is_replayed_as_setup() -> None:
 
 def test_expansion_covers_pi_and_every_harness() -> None:
     cases = expand()
-    assert {c.harness for c in cases} == {"codex", "zcode", "claude-code", "omp", "pi", "cursor"}
+    assert {c.harness for c in cases} == set(REPLAYED)
     ids = {c.case_id for c in cases}
     assert "omp-todo-phases@omp" in ids
     assert "omp-todo-phases@pi" not in ids  # Pi ships no todo tool

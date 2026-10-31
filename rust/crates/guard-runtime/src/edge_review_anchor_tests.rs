@@ -210,7 +210,7 @@ fn anchor_binds_every_source_field_of_the_approved_request() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     });
     assert_ne!(anchor(&environment, &published), baseline);
 }

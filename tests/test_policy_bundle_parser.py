@@ -11,28 +11,28 @@ import pytest
 
 from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicyState
 from codex_plugin_scanner.guard.mdm.policy import parse_managed_policy
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    canonical_policy_bundle_payload,
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-    policy_bundle_rejection_message,
-    validated_policy_bundle_payload,
-)
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_rejection_message
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     POLICY_BUNDLE_KEY_PURPOSE,
     POLICY_BUNDLE_KEYRING_CONTRACT_VERSION,
     PolicyBundleVerificationKey,
     load_policy_bundle_verification_keys,
     policy_bundle_keyring_payload,
-    policy_bundle_verification_key_from_public_key,
     safe_load_policy_bundle_verification_keys,
     validate_synced_policy_bundle,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_parser_support import (
+    canonical_policy_bundle_payload,
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+    validated_policy_bundle_payload,
+)
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
+    policy_bundle_verification_key_from_public_key,
     sign_policy_bundle,
 )
 
@@ -204,6 +204,18 @@ def test_policy_bundle_rejection_message_provides_actionable_guidance(
     assert message is not None
     assert expected_guidance in message
     assert "Sync again" in message
+
+
+def test_policy_bundle_rejection_message_does_not_blame_guard_version_for_downgrade() -> None:
+    message = policy_bundle_rejection_message("bundle_version_downgrade")
+
+    assert message is not None
+    assert "Update Guard" not in message
+    assert "contract or daemon version" not in message
+    assert "keeps the policy it already had" in message
+    assert "Publish the policy again in Guard Cloud" in message
+    assert "sync again" in message
+    assert "policy record on this device may be damaged" in message
 
 
 def test_policy_bundle_rejection_message_ignores_unknown_reason() -> None:

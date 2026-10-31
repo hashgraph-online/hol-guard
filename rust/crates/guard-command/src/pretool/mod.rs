@@ -26,15 +26,27 @@ pub struct PathContext<'a> {
     /// `--pre`, `--hidden` or extra search paths to an `rg` command that
     /// omits `--no-config`. Literal contexts leave this false.
     pub ripgrep_config_absent: bool,
+    /// No step of this command creates a filesystem entry, so a path with
+    /// nothing at it now still has nothing at it when a read runs and cannot
+    /// be a link a peer step planted. Literal contexts leave this false.
+    pub creates_nothing: bool,
     /// What a `psql` read inherits from the session: startup files only a
     /// read without `-X` runs, and the server libpq picks. Literal contexts
     /// leave both false.
     pub psql_environment: PsqlEnvironment,
 }
 
+mod brace_group;
 mod contained_wrapper;
+mod contained_wrapper_plan;
+pub use contained_wrapper_plan::{
+    contained_wrapper_plan, ContainedOutput, ContainedWorktreeAdd, ContainedWrapperCore,
+    ContainedWrapperPlan, CONTAINED_WORKTREE_ADD_REASON, CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
+};
 pub(crate) mod curl_reads;
 pub use curl_reads::bound_curl_read_destinations;
+#[cfg(unix)]
+mod contained_exact_shape;
 pub(crate) mod dd_reads;
 mod digest_reads;
 pub(crate) mod docker_reads;
@@ -44,10 +56,12 @@ mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
 pub(crate) mod port_probes;
+pub(crate) mod rsync_local;
 mod workspace_contained;
-/// The package firewall's extensions, whose permission marks which
-/// ecosystem's manager ran rather than a risk the run carries.
-pub(crate) use workspace_contained::package::PACKAGE_EXTENSIONS;
+#[cfg(unix)]
+pub(crate) use contained_exact_shape::{
+    exact_shape as workspace_exact_shape, runs_whole as workspace_runs_whole,
+};
 #[cfg(unix)]
 pub(crate) use workspace_contained::Shape;
 #[cfg(unix)]
@@ -65,13 +79,17 @@ mod bun_eval;
 mod chain_temporary;
 mod clone_siblings;
 mod compound_reason;
+mod control_flow_chain;
+mod control_flow_flatten;
 mod fanout_reads;
+mod filter_pattern_text;
 mod find_reads;
 mod for_loop_unroll;
 pub(crate) mod git_apply_check;
 pub(crate) mod git_branch_listing;
 pub(crate) mod git_clean_preview;
 pub(crate) mod git_clone_local;
+pub(crate) mod git_conditional_include;
 mod git_config;
 pub(crate) mod git_config_reads;
 mod git_config_trust;
@@ -85,8 +103,11 @@ mod git_reads;
 mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
+pub(crate) mod git_side_record_reads;
 pub(crate) mod git_stash_reads;
+pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;
+pub(crate) mod recoverable_removal;
 mod repo_create_reason;
 mod root_removal;
 use git_reads::safe_git_arguments;
@@ -97,13 +118,19 @@ pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_probe;
 mod git_push;
+mod git_read_after_allow;
 mod git_remote_config;
 mod git_remote_ops;
 mod git_routes;
 mod git_session_probe;
 mod git_worktree;
 pub(crate) mod github_conversation;
+mod glob_words;
 mod guard_diagnostics;
+mod guard_names;
+mod help_probes;
+mod installed_program_path;
+mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;
 mod lookup_reads;
@@ -128,35 +155,43 @@ mod apply_patch_writes;
 mod data_heredocs;
 mod lockfile_install;
 mod omp_hashline_writes;
-mod pipe_attacks;
+pub(crate) mod pipe_attacks;
 mod pure_expression;
 mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
 mod recursive_copy;
+mod ref_name_words;
 mod restricted_test_commands;
+pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_script_task};
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
+pub(crate) use safe_writes::protected_checkout_destination;
 mod script_content;
 pub(crate) use script_content::{argv_script, ArgvScript};
 mod search;
 mod search_pattern_clearance;
+mod search_pattern_text;
 mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
-mod search_scope_tracked;
+pub(crate) mod search_scope_tracked;
+mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
+pub(crate) mod shell_literal;
 mod shell_script;
+mod sink_peel;
 mod stderr_merge;
 mod stdin_filters;
 mod symlink_writes;
+mod tree_reads;
 mod version_probes;
 #[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
@@ -184,13 +219,18 @@ pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
+pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
 pub(crate) use script_content::{
-    activation_script_text, sole_program_sources, sole_sourcing_sources, sourced_program_sources,
+    activation_script_text, backgrounded_launch, models_exactly, prefixed_launch, sequential_jobs,
+    sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
+pub use search_scope_tracked::proven_project_document;
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
+pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
 
@@ -242,6 +282,12 @@ pub(super) fn normalized_haystack(value: &str) -> String {
     value.to_ascii_lowercase().replace('\\', "/")
 }
 
+/// Whether `command` runs `rm -rf` on the filesystem root, a system
+/// directory, a home or a direct child of one.
+pub(crate) fn removes_a_root(command: &str) -> bool {
+    root_removal::removes_a_root(&normalized_haystack(command))
+}
+
 /// Floors no extension permission can settle: Guard self-protection, secret
 /// exfiltration, a glob that could name a secret file, and Git configuration
 /// that runs a program Guard cannot read. An unproven model has no segments
@@ -260,7 +306,9 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
             &crate::canonical_command::CanonicalCommand::from_v1(model),
         )
         || ps::sensitive_exfiltration(model, sensitive_command, exfiltration_command)
-        || model.segments.iter().any(names_guard_outside_message)
+        || model.segments.iter().enumerate().any(|(index, segment)| {
+            names_guard_outside_message(segment, &guard_names::moved_by(&model.segments[..index]))
+        })
         || model.segments.iter().any(selects_secret_outside_message)
 }
 
@@ -271,8 +319,22 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
 /// The repository `gh` selects with `--repo` or `-R` is not such an argument:
 /// `owner/name` names a repository on the GitHub host, never a local file,
 /// program or process, so a repository called `hol-guard` keeps the Allow.
-fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+/// The same holds for the owner and name in a `gh api repos/{owner}/{name}/...`
+/// endpoint; the rest of that path is still checked. A raw `-f` field of that
+/// call is a string in the request body, so only Guard's state counts there.
+///
+/// Git and directory changes take checkout paths, pathspecs and remote URLs.
+/// Those name Guard only when they reach its state, an installed Guard
+/// program or shell text an alias could run; see [`guard_names`].
+fn names_guard_outside_message(
+    segment: &crate::CommandSegmentV1,
+    moved: &guard_names::Moved,
+) -> bool {
     let selectors = github_repository_values(segment);
+    let endpoint = github_api_endpoint(segment);
+    let raw_fields =
+        endpoint.map_or_else(Vec::new, |_| guard_names::github_api_raw_fields(segment));
+    let by_location = guard_names::judged_by_location(segment);
     arguments_outside_message(segment).any(|argument| {
         if selectors
             .iter()
@@ -280,11 +342,64 @@ fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
         {
             return false;
         }
-        let lowered = argument.to_ascii_lowercase();
-        ["hol-guard", "plugin-guard", ".hol-guard"]
+        if endpoint.is_some_and(|endpoint| std::ptr::eq(endpoint, argument)) {
+            return names_guard(github_api_path_after_repository(argument).unwrap_or(argument));
+        }
+        if raw_fields
             .iter()
-            .any(|needle| lowered.contains(needle))
+            .any(|field| std::ptr::eq(*field, argument))
+        {
+            return guard_names::names_guard_state(argument);
+        }
+        if by_location {
+            return guard_names::names_guard_location(argument, moved);
+        }
+        names_guard(argument)
     })
+}
+
+fn names_guard(argument: &str) -> bool {
+    let lowered = argument.to_ascii_lowercase();
+    ["hol-guard", "plugin-guard", ".hol-guard"]
+        .iter()
+        .any(|needle| lowered.contains(needle))
+}
+
+/// The endpoint operand of `gh api`, found by the same parser that
+/// classifies the call. An argument list it cannot parse has no endpoint.
+fn github_api_endpoint(segment: &crate::CommandSegmentV1) -> Option<&String> {
+    if crate::command_compatibility::basename(segment) != "gh" {
+        return None;
+    }
+    let start = crate::github_command_capabilities::global_options_end(&segment.arguments)?;
+    let (first, rest) = segment.arguments[start..].split_first()?;
+    if first != "api" {
+        return None;
+    }
+    let index = crate::github_command_capabilities::api_endpoint_index(rest)?;
+    rest.get(index)
+}
+
+/// The part of a `repos/{owner}/{name}/...` endpoint after the repository,
+/// or `None` when the endpoint does not start with a valid `owner/name`.
+fn github_api_path_after_repository(endpoint: &str) -> Option<&str> {
+    let path = endpoint.strip_prefix('/').unwrap_or(endpoint);
+    let path = path.strip_prefix("repos/")?;
+    let mut parts = path.splitn(3, '/');
+    let owner = parts.next()?;
+    let name = parts.next()?;
+    let name = name.split(['?', '#']).next()?;
+    if [owner, name]
+        .iter()
+        .any(|part| part.trim_matches('.').is_empty())
+    {
+        return None;
+    }
+    let repository = format!("{owner}/{name}");
+    if !crate::command_compatibility::github_repository_selector(&repository) {
+        return None;
+    }
+    Some(&path[repository.len()..])
 }
 
 /// The `owner/name` values `gh` provably reads as its `--repo` selector.
@@ -670,6 +785,7 @@ fn exact_safe_command_with_context(
         return false;
     }
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
+        || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
     {
         return true;
@@ -764,16 +880,44 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<PreToolDecisionV1, String> {
+    evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
+}
+
+/// How many rewrites one submission may go through. A wrapper around a loop
+/// needs two - the wrapper comes off, then the loop unrolls - and the bound
+/// stops a recognizer whose output another recognizer reads from running
+/// without end.
+const MAX_REWRITE_ROUNDS: usize = 3;
+
+/// The command list a rewrite reads this text as, in the order the
+/// recognizers are tried.
+fn rewritten_command_list(command: &str) -> Option<String> {
+    for_loop_unroll::unroll(command)
+        .or_else(|| control_flow_flatten::flatten(command))
+        .or_else(|| control_flow_chain::spliced(command))
+        .or_else(|| list_wrapper::unwrapped(command))
+}
+
+fn evaluate_rewritten(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    deadline: Option<std::time::Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    round: usize,
+) -> Result<PreToolDecisionV1, String> {
     let decision =
         evaluate_single_command(request, home_dir, cwd, deadline, execution_environment)?;
     if request.dialect != "posix" || decision.minimum_action != "review" {
         return Ok(decision);
     }
-    // A loop over literal words is its unrolled command list. The unrolled
-    // form goes through the same proofs and replaces the loop's decision: an
-    // allow there admits the loop, a block is never softened, and a review
-    // carries the unrolled model so later layers judge modeled commands.
-    let Some(unrolled) = for_loop_unroll::unroll(&request.command) else {
+    // A loop over literal words is its unrolled command list, a conditional
+    // or a `while` loop is the lists written inside it, and a `!`-negated or
+    // `&`-backgrounded list is that list on its own. Each rewrite goes
+    // through the same proofs and replaces the construct's decision: an allow
+    // there admits the construct, a block is never softened, and a review
+    // carries the rewritten model so later layers judge modeled commands.
+    let Some(rewritten) = rewritten_command_list(&request.command) else {
         return Ok(ungrouped_decision(
             request,
             decision,
@@ -783,32 +927,74 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             execution_environment,
         ));
     };
-    let unrolled_request = CommandModelRequestV1 {
-        command: unrolled,
+    let rewritten_request = CommandModelRequestV1 {
+        command: rewritten,
         ..request.clone()
     };
-    match evaluate_single_command(
-        &unrolled_request,
-        home_dir,
-        cwd,
-        deadline,
-        execution_environment,
-    ) {
-        Ok(unrolled)
+    // What a rewrite leaves behind can be a construct of its own:
+    // `for f in a b; do echo "$f"; done &` is the loop once the wrapper is
+    // gone, and `! (cat Cargo.toml)` is a group. Reading the rewritten text
+    // through this same pass gives it every proof its bare spelling has,
+    // rather than only the proofs that read one plain command list.
+    let rewritten = if round + 1 < MAX_REWRITE_ROUNDS {
+        evaluate_rewritten(
+            &rewritten_request,
+            home_dir,
+            cwd,
+            deadline,
+            execution_environment,
+            round + 1,
+        )
+    } else {
+        evaluate_single_command(
+            &rewritten_request,
+            home_dir,
+            cwd,
+            deadline,
+            execution_environment,
+        )
+    };
+    match rewritten {
+        Ok(rewritten)
             if matches!(
-                unrolled.minimum_action.as_str(),
+                rewritten.minimum_action.as_str(),
                 "allow" | "review" | "block"
             ) =>
         {
-            Ok(unrolled)
+            Ok(rewritten)
         }
         _ => Ok(decision),
     }
 }
 
-/// A trailing subshell group is its command list. Only an allow or a block
-/// for that list replaces the grouped review, so an approval still binds the
-/// exact text the agent sent.
+/// The command list a trailing group runs, for the grouping forms whose
+/// list is the same as the command: a subshell `( ... )` and a brace group
+/// `{ ...; }`. `None` leaves the command exactly as it was submitted.
+pub(crate) fn ungrouped_command_list(command: &str) -> Option<String> {
+    trailing_group::unwrap(command).or_else(|| brace_group::unwrap(command))
+}
+
+/// The command list a trailing group runs, when that list run in the group's
+/// place executes exactly the same commands. `ungrouped_command_list` may
+/// flatten a conditional subshell into a list that runs more than the group
+/// does, which a decision can read but a sink cannot execute.
+pub(crate) fn runnable_ungrouped_command_list(command: &str) -> Option<String> {
+    trailing_group::unwrap_for_execution(command).or_else(|| brace_group::unwrap(command))
+}
+
+/// A trailing subshell or brace group is its command list, so that list's
+/// decision is the group's. A review for the list replaces the grouped review
+/// too: the group's own text models no command at all, and a decision with no
+/// modeled command cannot be contained or settled by an extension permission,
+/// so `(cd web && npm run build)` and `{ npm run build; npm test; }` went to
+/// the user while `cd web && npm run build` ran in the workspace sandbox. The
+/// ungrouped model carries the same commands, and later layers judge those
+/// rather than an unmodeled string.
+///
+/// An approval taken on the reviewed group therefore binds the command list
+/// the group runs, not the grouped spelling. That is the same identity
+/// an allow or a block for the list already carried, and the group runs
+/// exactly that list, so the two spellings settle together on purpose.
 fn ungrouped_decision(
     request: &CommandModelRequestV1,
     decision: PreToolDecisionV1,
@@ -817,7 +1003,7 @@ fn ungrouped_decision(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolDecisionV1 {
-    let Some(command) = trailing_group::unwrap(&request.command) else {
+    let Some(command) = ungrouped_command_list(&request.command) else {
         return decision;
     };
     let ungrouped = CommandModelRequestV1 {
@@ -825,7 +1011,7 @@ fn ungrouped_decision(
         ..request.clone()
     };
     match evaluate_single_command(&ungrouped, home_dir, cwd, deadline, execution_environment) {
-        Ok(plain) if matches!(plain.minimum_action.as_str(), "allow" | "block") => plain,
+        Ok(plain) if matches!(plain.minimum_action.as_str(), "allow" | "review" | "block") => plain,
         _ => decision,
     }
 }
@@ -1031,6 +1217,14 @@ fn evaluate_single_command(
     {
         return Ok(pretool_decision(model, "allow", reason_code, reason));
     }
+    if recoverable_removal::exact_safe_command(&model, context, deadline, execution_environment) {
+        return Ok(pretool_decision(
+            model,
+            "allow",
+            "native_exact_safe_recoverable_removal",
+            "The Rust command authority proved every target of this recursive removal holds only committed, unmodified files in the session's Git work tree, so Git can restore it.",
+        ));
+    }
     if worktree_maintenance::exact_safe_command(&model, context, deadline, execution_environment) {
         return Ok(pretool_decision(
             model,
@@ -1059,10 +1253,9 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if git_search_text::sensitive_beyond_patterns(
-        &data_heredocs::without_data_bodies(normalized),
-        git_search_text::command_without_patterns(&model),
-    ) || secret_aliases::names_secret_alias(&model, context)
+    if search_pattern_text::command_sensitive(&model, normalized, context.cwd)
+        || secret_aliases::names_secret_alias(&model, context)
+        || glob_words::names_hidden_glob(&model, context)
     {
         return Ok(pretool_decision(
             model,
@@ -1122,19 +1315,31 @@ fn evaluate_single_command(
             "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`.",
         ));
     }
+    // Advice to split the command only helps a command with steps to split. A
+    // construct the parser could not flatten has no segments at all, and may
+    // still hold several commands, so only a single modeled step drops it.
+    let generic = if model.segments.len() != 1 {
+        "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review."
+    } else {
+        "HOL Guard requires review because this command could not be confirmed read-only."
+    };
     Ok(pretool_decision(
         model,
         "review",
         "native_command_review_required",
-        reason.as_deref().unwrap_or(
-            "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review.",
-        ),
+        reason.as_deref().unwrap_or(generic),
     ))
 }
 
 #[cfg(test)]
+#[path = "control_flow_tests.rs"]
+mod control_flow_tests;
+#[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;
+#[cfg(test)]
+#[path = "guard_named_repository_tests.rs"]
+mod guard_named_repository_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

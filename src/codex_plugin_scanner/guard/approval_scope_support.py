@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, cast
 
 from .models import DECISION_SCOPE_VALUES, DecisionScope
-from .package_execution_context import PACKAGE_EXECUTION_CONTEXT_VERSION, PackageExecutionContext
+from .native_package_workspace_scope import native_package_workspace_scopes
+from .package_execution_context import PackageExecutionContext
 from .temporary_mcp_approvals import temporary_mcp_approval_payload
 from .trusted_local_tools import local_tool_approval_payload
 
@@ -51,13 +50,6 @@ class IneligibleApprovalScopeError(ValueError):
         self.contract = contract
         self.action = action
         self.requested_scope = requested_scope
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalScopeSelection:
-    requested_scope: DecisionScope
-    applied_scope: DecisionScope
-    warning: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,90 +292,6 @@ def request_scope_contract_payload(
     return request_scope_contract_payloads([request], guard_home=guard_home)[0]
 
 
-def request_scope_observation(
-    request: Mapping[str, object],
-    *,
-    guard_home: Path | None = None,
-) -> tuple[ApprovalScopeContract, str | None]:
-    """Derive one request's contract and exact-action token in one resident call."""
-
-    scopes = _native_scopes([request]) if guard_home is None else _native_scopes([request], guard_home=guard_home)
-    return scopes[0]
-
-
-def resolve_request_scope_selection(
-    request: Mapping[str, object],
-    *,
-    action: str,
-    requested_scope: str,
-    contract_version: str | None,
-    contract_digest: str | None,
-    guard_home: Path | None = None,
-) -> ApprovalScopeSelection:
-    """Ask the resident what a chosen approval scope actually resolves to.
-
-    The resident derives the contract itself and decides whether the chosen
-    scope is one the request offers for this action, whether a client that
-    never read a contract has its wider choice narrowed to the artifact, and
-    whether a client resolving against a superseded contract is refused. This
-    function only translates that answer into the exceptions its callers
-    already handle, so no scope can be honoured here that the request does not
-    offer.
-    """
-
-    from .native_approval_scope import ApprovalScopeUnavailableError
-    from .native_approval_scope_select import native_approval_scope_selection
-
-    answer = native_approval_scope_selection(
-        _scope_item(request),
-        action=action,
-        requested_scope=requested_scope,
-        contract_version=contract_version,
-        contract_digest=contract_digest,
-        guard_home=guard_home,
-    )
-    native_contract = answer.get("contract")
-    contract = _contract_from_native(native_contract) if isinstance(native_contract, Mapping) else None
-    outcome = answer.get("outcome")
-    if outcome == "selected":
-        applied_scope = answer.get("applied_scope")
-        warning = answer.get("warning")
-        if (
-            not isinstance(applied_scope, str)
-            or applied_scope not in DECISION_SCOPE_VALUES
-            or not (warning is None or isinstance(warning, str))
-        ):
-            raise ApprovalScopeUnavailableError
-        return ApprovalScopeSelection(
-            requested_scope=_decision_scope(requested_scope),
-            applied_scope=_decision_scope(applied_scope),
-            warning=warning,
-        )
-    if outcome != "refused":
-        raise ApprovalScopeUnavailableError
-    reason = answer.get("reason")
-    if reason == "unsupported_resolution_action":
-        raise ValueError("unsupported_resolution_action")
-    if reason == "unsupported_approval_scope":
-        raise ValueError(f"Unsupported approval scope: {requested_scope}")
-    # Every remaining refusal reports what the request does offer, so a caller
-    # that cannot see the contract has nothing to tell the user.
-    if contract is None:
-        raise ApprovalScopeUnavailableError
-    if reason == "incomplete_scope_contract":
-        raise ValueError("incomplete_scope_contract")
-    if reason == "stale_scope_contract":
-        raise StaleApprovalScopeContractError(contract)
-    if reason in ("ineligible_request_scope", "request_action_not_overridable"):
-        raise IneligibleApprovalScopeError(
-            reason,
-            contract,
-            action=cast(ResolutionAction, action),
-            requested_scope=requested_scope,
-        )
-    raise ApprovalScopeUnavailableError
-
-
 def resolve_request_workspace_scope(
     request: Mapping[str, object],
     selected_workspace: str | None,
@@ -405,24 +313,24 @@ def package_request_portable_workspace_scope(
     artifact_hash: str | None,
     artifact_type: str | None = None,
     execution_context: PackageExecutionContext | None = None,
+    guard_home: Path | None = None,
 ) -> str | None:
-    if not _is_package_request_artifact(artifact_id=artifact_id, artifact_type=artifact_type):
-        return None
-    if artifact_hash is None or not artifact_hash.strip() or artifact_hash == "unknown":
-        return None
-    if execution_context is None or not execution_context.portable:
-        return None
-    if execution_context.version != PACKAGE_EXECUTION_CONTEXT_VERSION:
-        return None
-    material = {
-        "artifact_hash": artifact_hash.strip(),
-        "artifact_id": artifact_id.strip() if artifact_id is not None else None,
-        "execution_context": execution_context.digest,
-        "scope": "package-request-workspace",
-        "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
-    }
-    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return f"package-request-workspace:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
+    """Return the resident's portable workspace scope, or ``None``.
+
+    The scope is the key a saved package approval is stored and matched under.
+    The resident owns its derivation; deriving it here as well would let the
+    two drift, and a drifted key silently stops a saved "Always allow" from
+    matching.
+    """
+
+    portable, _ = native_package_workspace_scopes(
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        artifact_type=artifact_type,
+        execution_context=execution_context,
+        guard_home=guard_home,
+    )
+    return portable
 
 
 def package_request_runtime_workspace_scope(
@@ -431,37 +339,23 @@ def package_request_runtime_workspace_scope(
     artifact_hash: str | None,
     artifact_type: str | None = None,
     execution_context: PackageExecutionContext | None,
+    guard_home: Path | None = None,
 ) -> str | None:
     """Return the only workspace identity valid for a package-policy lookup.
 
     Non-portable contexts receive an exact, context-bound sentinel.  It keeps
     artifact-once decisions functional while ensuring legacy path-only and v1
-    workspace approvals cannot match.
+    workspace approvals cannot match.  The resident derives both.
     """
 
-    if not _is_package_request_artifact(artifact_id=artifact_id, artifact_type=artifact_type):
-        return None
-    if artifact_hash is None or not artifact_hash.strip() or artifact_hash == "unknown":
-        return None
-    portable = package_request_portable_workspace_scope(
+    _, runtime = native_package_workspace_scopes(
         artifact_id=artifact_id,
         artifact_hash=artifact_hash,
         artifact_type=artifact_type,
         execution_context=execution_context,
+        guard_home=guard_home,
     )
-    if portable is not None:
-        return portable
-    if execution_context is None or execution_context.version != PACKAGE_EXECUTION_CONTEXT_VERSION:
-        return None
-    material = {
-        "artifact_hash": artifact_hash.strip(),
-        "artifact_id": artifact_id.strip() if artifact_id is not None else None,
-        "execution_context": execution_context.digest,
-        "scope": "package-request-workspace-exact",
-        "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
-    }
-    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return f"package-request-workspace-exact:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
+    return runtime
 
 
 def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None:
@@ -478,12 +372,6 @@ def _derived_workspace_scope_target(request: Mapping[str, object]) -> str | None
     parent = config_file.parent
     workspace_root = parent.parent if parent.name.startswith(".") else parent
     return str(workspace_root)
-
-
-def _is_package_request_artifact(*, artifact_id: str | None, artifact_type: str | None) -> bool:
-    if artifact_type == "package_request":
-        return True
-    return isinstance(artifact_id, str) and ":package-request:" in artifact_id
 
 
 def _json_boundary_value(value: object) -> object:

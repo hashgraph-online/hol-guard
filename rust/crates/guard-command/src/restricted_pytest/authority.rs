@@ -30,7 +30,11 @@ struct Input {
 
 pub fn evaluate(operation: &str, input: &Value) -> Value {
     if let Some(result) = crate::contained_argv::evaluate(operation, input)
+        .or_else(|| crate::vite_output::evaluate(operation, input))
+        .or_else(|| crate::node_build_output::evaluate(operation, input))
         .or_else(|| super::contained::evaluate(operation, input))
+        .or_else(|| super::node_tool_plan::evaluate(operation, input))
+        .or_else(|| super::git_plan::evaluate(operation, input))
         .or_else(|| super::profiles::evaluate(operation, input))
         .or_else(|| super::workspace::evaluate(operation, input))
         .or_else(|| super::workspace_linux::evaluate(operation, input))

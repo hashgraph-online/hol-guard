@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-import inspect
 import types
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,11 +10,11 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_policy_snapshot as snapshot_module
-import codex_plugin_scanner.guard.native_policy_snapshot_storage as storage_module
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_acl as windows_acl
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_atomic as windows_atomic
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_state as windows_state
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_support as windows_support
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES
 
 from .native_policy_snapshot_test_fixtures import _fake_windows_snapshot_kernel
 
@@ -76,7 +75,7 @@ def test_windows_cache_reader_accepts_explicit_authority_budget(
 
     payload = snapshot_module._windows_read_snapshot_bytes(
         Path("C:/Guard/policy-snapshot-v3.json"),
-        maximum_bytes=storage_module.POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
+        maximum_bytes=POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES,
     )
 
     assert payload == data
@@ -426,13 +425,6 @@ def test_windows_commit_rejects_foreign_owner_before_acl_or_rename(
         )
 
     assert events == ["verify-dacl-source", "verify-owner", "close-target"]
-
-
-def test_windows_storage_writer_has_no_path_replace_in_native_branch() -> None:
-    source = inspect.getsource(storage_module._write_v3_snapshot_file)
-    native_branch = source.split('if os.name == "nt":', maxsplit=1)[1].split("return payload", maxsplit=1)[0]
-    assert "os.replace" not in native_branch
-    assert "_windows_write_private_file_atomic" in native_branch
 
 
 def test_windows_atomic_writer_cleans_temp_on_precommit_failure(

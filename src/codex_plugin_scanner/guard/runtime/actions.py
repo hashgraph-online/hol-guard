@@ -16,8 +16,6 @@ from typing import Literal, TypeGuard
 from ..action_lattice import is_action_bearing_key
 from ..native_hook_adapter import (
     native_action_envelope,
-    native_apply_patch_paths,
-    native_command_detail,
     native_command_text,
     native_workspace_label,
 )
@@ -265,43 +263,6 @@ def command_text_from_tool_payload(tool_name: object, tool_input: object) -> str
     return native_command_text(tool_name, tool_input)
 
 
-def _command_detail(command: str | None, *, home_dir: Path | str | None) -> str | None:
-    if command is None:
-        return None
-    return native_command_detail(command, home_dir=home_dir)
-
-
-def apply_patch_target_paths(tool_input: Mapping[str, object]) -> tuple[str, ...]:
-    """Return the target paths named by an apply-patch tool input."""
-
-    return native_apply_patch_paths(tool_input)
-
-
-_HARNESS_NAMES = (
-    "codex",
-    "claude",
-    "claude-code",
-    "opencode",
-    "copilot",
-    "gemini",
-    "hermes",
-    "openclaw",
-    "cursor",
-    "grok",
-    "kimi",
-    "pi",
-    "omp",
-    "zcode",
-    "zai",
-    "devin",
-    "devin-cli",
-    "cognition-devin",
-    "cline",
-    "cline-cli",
-    "cline-vscode",
-)
-
-
 def _envelope_from_native(payload: Mapping[str, object]) -> GuardActionEnvelope:
     """Bind the resident's ``to_dict`` answer to the DTO without re-normalizing it."""
 
@@ -397,13 +358,10 @@ normalize_opencode_payload = _harness_normalizer("opencode", "Normalize an OpenC
 normalize_copilot_payload = _harness_normalizer("copilot", "Normalize a Copilot payload.")
 normalize_gemini_payload = _harness_normalizer("gemini", "Normalize a Gemini payload.")
 normalize_hermes_payload = _harness_normalizer("hermes", "Normalize a Hermes payload.")
-normalize_openclaw_payload = _harness_normalizer("openclaw", "Normalize an OpenClaw payload.")
 normalize_cursor_hook_payload = _harness_normalizer("cursor", "Normalize a Cursor IDE hook payload.")
 normalize_grok_hook_payload = _harness_normalizer("grok", "Normalize a Grok Build CLI hook payload.")
 normalize_zcode_hook_payload = _harness_normalizer("zcode", "Normalize a z.ai ZCode hook payload.")
 normalize_devin_hook_payload = _harness_normalizer("devin", "Normalize a Devin CLI hook payload.")
-normalize_pi_payload = _harness_normalizer("pi", "Normalize a Pi extension event payload.")
-normalize_omp_payload = _harness_normalizer("omp", "Normalize an OMP extension event payload.")
 normalize_kimi_payload = _harness_normalizer("kimi", "Normalize a Kimi Code native-hook payload.")
 
 

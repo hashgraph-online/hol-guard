@@ -15,6 +15,8 @@ use targets::{
 pub(super) mod git_chain;
 #[path = "redirect_leading_chain.rs"]
 mod leading_chain;
+#[path = "redirect_stdin.rs"]
+mod stdin;
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -65,7 +67,9 @@ pub(super) fn project(
     let mut quote = Quote::None;
     let mut escaped = false;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
-    let mut saw_heredoc = false;
+    let mut saw_stdin_data = false;
+    // The single file a plain `< path` redirect feeds the first command.
+    let mut input_source: Option<String> = None;
     let mut removed = false;
     let mut targets: Vec<String> = Vec::new();
     let mut bounded_writes = true;
@@ -134,9 +138,20 @@ pub(super) fn project(
                 removed = true;
                 continue;
             }
-            '<' => {
+            '<' if chars.get(index + 1) == Some(&'<') && chars.get(index + 2) == Some(&'<') => {
+                index = stdin::remove_here_string(&chars, index, &mut out)?;
+                saw_stdin_data = true;
+                removed = true;
+                continue;
+            }
+            '<' if chars.get(index + 1) == Some(&'<') => {
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
-                saw_heredoc = true;
+                saw_stdin_data = true;
+                removed = true;
+                continue;
+            }
+            '<' => {
+                index = remove_input_redirect(&chars, index, &out, separated, &mut input_source)?;
                 removed = true;
                 continue;
             }
@@ -160,14 +175,16 @@ pub(super) fn project(
     if same_command_aside_from_descriptor_spacing(raw, &command) {
         return None;
     }
+    // `cmd < file` reads `file` and hands its bytes to `cmd` on standard
+    // input, which is what `cat file | cmd` does. Modelling it that way keeps
+    // the read under the proof `cat` already gets and leaves `cmd` an
+    // operand-free filter, the shape it actually runs in.
+    let command = match &input_source {
+        Some(source) => format!("cat {source} | {command}"),
+        None => command,
+    };
     let command = relative_saved_reads(command, &targets, context.cwd);
-    let model = crate::parse_command(&CommandModelRequestV1 {
-        command: command.clone(),
-        dialect: "posix".to_owned(),
-        transport: "shell_string".to_owned(),
-        extraction_provenance: "pre-tool-generic".to_owned(),
-    })
-    .ok()?;
+    let model = projected_model(&command)?;
     // An earlier segment could cd or create a symlink before the shell opens
     // a target, so a chain may only write absolute temp files beside peers.
     let temporary_chain =
@@ -192,22 +209,18 @@ pub(super) fn project(
     {
         return None;
     }
-    // A heredoc body is stdin. Only `cat` is known to treat it as data.
-    if saw_heredoc
-        && !(model.segments.len() == 1
-            && model.segments[0].wrapper_chain.is_empty()
-            && model.segments[0].environment_names.is_empty()
-            && model.segments[0].executable.as_deref() == Some("cat")
-            && model.segments[0].arguments.is_empty())
-    {
+    // A heredoc body and a here-string word are both stdin, so the command
+    // has to be one that reads them as data rather than running them.
+    if saw_stdin_data && !stdin::reads_data(&model) {
         return None;
     }
-    // A quoted heredoc is literal data, but the bare `cat` that remains reads
+    // Literal standard input leaves a bare `cat` that still reads
     // standard input, which only the workspace sandbox bounds. A plan note in
     // the harness home and a repository beside the session's directory lie
     // outside that sandbox, so the write checked above is all that is left to
     // prove, and a no-op stands in for the command.
-    let command = if saw_heredoc
+    let command = if saw_stdin_data
+        && stdin::is_bare_cat(&model)
         && bounded_writes
         && writes_file
         && targets.iter().all(|target| {
@@ -226,6 +239,39 @@ pub(super) fn project(
         init_chain,
         written: targets,
     })
+}
+
+/// The command model of the projected text, reading the shell control flow
+/// the parser does not model on its own.
+///
+/// `if cmd >/dev/null; then ...; fi` projects to an `if` the parser calls
+/// compound shell, so the structural checks below would lose the command
+/// they are meant to read and the projection would fail closed on a command
+/// the flattened list allows. The envelope runs the same rewrite when it
+/// evaluates the projected text, so flattening here only decides what those
+/// checks see; the text this projection returns is still the one the shell
+/// runs.
+fn projected_model(command: &str) -> Option<crate::CanonicalCommandV1> {
+    let parse = |text: &str| {
+        crate::parse_command(&CommandModelRequestV1 {
+            command: text.to_owned(),
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "pre-tool-generic".to_owned(),
+        })
+        .ok()
+    };
+    let mut text = command.to_owned();
+    let mut model = parse(&text)?;
+    let mut rounds = 0usize;
+    while (model.confidence != "exact" || model.uncertainty_reason.is_some())
+        && rounds < super::super::MAX_REWRITE_ROUNDS
+    {
+        text = super::super::rewritten_command_list(&text)?;
+        model = parse(&text)?;
+        rounds += 1;
+    }
+    Some(model)
 }
 
 /// `$(` or a backquote: a command substitution runs before the redirect
@@ -272,6 +318,16 @@ pub(super) fn package_profile(reason: &str) -> bool {
             | "native_node_test_readonly_containment_required"
             | "native_node_build_output_containment_required"
     )
+}
+
+/// The read-only profiles a plain output redirect disqualifies and the
+/// workspace sandbox may take in their place. The package and Node tool
+/// profiles run a project's own tool; the pytest profile runs the suite the
+/// same workspace holds, and a chain as short as `pytest -q && echo done`
+/// already reaches the sandbox, because two segments earn no profile of their
+/// own. The single command belongs there for the same reason.
+pub(super) fn redirected_profile(reason: &str) -> bool {
+    package_profile(reason) || reason == "native_pytest_readonly_containment_required"
 }
 
 pub(super) fn join(
@@ -464,6 +520,54 @@ fn remove_output_redirect(
     );
     targets.push(target);
     out.push(' ');
+    Some(index)
+}
+
+/// Remove a plain `< path` input redirect, recording the file it reads.
+///
+/// Only the first command's own redirect is modelled: once a separator,
+/// pipe, group or substitution has been seen, the redirect belongs to a
+/// later command and prefixing a reader would misplace the read. `<<`,
+/// `<<<`, `<&` and `<>` are other forms and keep the fail-closed path, as
+/// does a second redirect or a target the shell would expand.
+fn remove_input_redirect(
+    chars: &[char],
+    start: usize,
+    out: &str,
+    separated: bool,
+    input_source: &mut Option<String>,
+) -> Option<usize> {
+    if separated
+        || input_source.is_some()
+        || matches!(chars.get(start + 1), Some('&' | '>'))
+        || !trailing_word(out).is_empty()
+    {
+        return None;
+    }
+    let mut index = start + 1;
+    while matches!(chars.get(index), Some(' ' | '\t')) {
+        index += 1;
+    }
+    let target_start = index;
+    while chars
+        .get(index)
+        .is_some_and(|value| !value.is_whitespace() && !matches!(value, ';' | '|' | '&' | ')'))
+    {
+        index += 1;
+    }
+    let target: String = chars[target_start..index].iter().collect();
+    if target.is_empty()
+        || target.len() > 4096
+        || target.starts_with('-')
+        || !target
+            .chars()
+            .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=:~".contains(value))
+    {
+        return None;
+    }
+    // The guard above leaves `out` empty or ended by its own separator, so
+    // the removed redirect needs none of its own.
+    *input_source = Some(target);
     Some(index)
 }
 

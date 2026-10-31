@@ -1,23 +1,20 @@
 """Queue-time hint: which configurable extension permissions would allow a reviewed command.
 
-The hint is advisory. The native resident decides it (``extension_allow_hint``):
-it re-evaluates the command against its own admitted controls with hypothetical
-enabled permissions, so nothing is mutated and the answer carries only catalog
-identifiers (no command text). This module builds the query, asks, and
-shape-checks what comes back; with no resident there is no hint. Enabling a
-permission still requires the normal proof-bound extension-control mutation.
+The hint is advisory. The native resident decides it (``extension_review_hint``,
+``extension_allow_hint``): it re-evaluates the command against its own admitted
+controls with hypothetical enabled permissions, so nothing is mutated and the
+answer carries only catalog identifiers (no command text). This module
+shape-checks a stored or answered hint, the connector setup hint included.
+Enabling a permission still requires the normal proof-bound extension-control
+mutation.
 """
 
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import cast
 from urllib.parse import quote
 
-from ..native_extension_allow_hint import native_extension_allow_hint
-from .command_evaluation import CommandEvaluationInput
-from .command_evaluation_types import CompositeCommandEvaluation
 from .extension_control_runtime import ExtensionControlRuntimeSnapshot
 
 EXTENSION_ALLOW_HINT_SCHEMA = "guard.extension-allow-hint.v1"
@@ -25,7 +22,6 @@ EXTENSION_ALLOW_HINT_SCHEMA = "guard.extension-allow-hint.v1"
 # (the client enforces that on its reply) and reports at most twelve relied-on
 # ones; a stored hint keeps the wider bound it has always had.
 _MAX_HINT_IDS = 12
-_EXTENSION_REVIEW_REASON = "native_command_review_required"
 
 
 def _valid_hint_ids(items: object, *, allow_empty: bool) -> list[str] | None:
@@ -33,56 +29,6 @@ def _valid_hint_ids(items: object, *, allow_empty: bool) -> list[str] | None:
         return None
     ids = [item for item in items if isinstance(item, str) and item.startswith("command.") and len(item) <= 256]
     return ids if len(ids) == len(items) else None
-
-
-def compute_extension_allow_hint(
-    evaluation: CompositeCommandEvaluation,
-    *,
-    command_text: str,
-    snapshot: ExtensionControlRuntimeSnapshot,
-    native_evidence: object,
-    cwd: Path | None = None,
-    home_dir: Path | None = None,
-    guard_home: Path | None = None,
-    deadline: float | None = None,
-) -> dict[str, object] | None:
-    """Return permission ids whose Allow state would let this command run, or None.
-
-    ``deadline`` (``time.monotonic()``) bounds the optional reduction pass: once
-    it passes, the already verified full permission set is returned as-is.
-    """
-
-    # The resident decides everything; this only spares it a round trip for a
-    # command that already runs, is held by a fixed authority failure, or is held
-    # by a fixed PreTool floor (sensitive access, Guard self-protection, ...) that
-    # no extension Allow can settle. A device that never enrolled is not held:
-    # the resident answers what enrolling and allowing would change. The local
-    # evaluation of such a device answers its authority failure, so only the
-    # resident's once-enrolled evaluation can say whether review applies.
-    if not hint_authority_admitted(snapshot):
-        return None
-    if not snapshot.awaiting_enrollment and evaluation.decision_plane.action not in (
-        "review",
-        "require-reapproval",
-    ):
-        return None
-    if isinstance(native_evidence, dict) and (
-        native_evidence.get("minimum_action") == "block"
-        or native_evidence.get("reason_code") != _EXTENSION_REVIEW_REASON
-    ):
-        return None
-    return native_extension_allow_hint(
-        CommandEvaluationInput(
-            command_text=command_text,
-            canonical_command=evaluation.command,
-            native_extension_evidence=native_evidence,
-            extension_control_snapshot=snapshot,
-            cwd=cwd,
-            home_dir=home_dir,
-        ),
-        guard_home=guard_home,
-        deadline=deadline,
-    )
 
 
 def hint_authority_admitted(snapshot: ExtensionControlRuntimeSnapshot) -> bool:
@@ -149,37 +95,6 @@ def connector_setup_deep_link(cli_id: str) -> str:
     """Dashboard-relative Protect path for one connector; never carries a host."""
 
     return f"/extensions/local-cli/{quote(cli_id, safe='')}"
-
-
-def connector_setup_hint(
-    *,
-    cli_id: str,
-    identity_hash: str,
-    display_name: str,
-    surface: str,
-    risk_classes: object = None,
-) -> dict[str, object] | None:
-    """The connector analogue of the allow hint, recorded when a review is a setup decision.
-
-    It names only the connector and the advisory card recommendation. Setting
-    the connector up still goes through the proof-bound local-CLI write.
-    """
-
-    candidates = cast("list[object]", list(risk_classes)) if isinstance(risk_classes, list | tuple) else []
-    classes = sorted({item for item in candidates if isinstance(item, str) and _RISK_CLASS.fullmatch(item)})
-    return validated_connector_setup_hint(
-        {
-            "schema": CONNECTOR_SETUP_HINT_SCHEMA,
-            "identity_hash": identity_hash,
-            "cli_id": cli_id,
-            "surface": surface,
-            "display_name": display_name,
-            "deep_link": connector_setup_deep_link(cli_id),
-            # Advisory only: the live recommendation is recomputed on every read.
-            "card_recommendation": {"state": "allowed", "capabilities": []},
-            "risk_classes": classes[:_MAX_RISK_CLASSES],
-        }
-    )
 
 
 def validated_connector_setup_hint(value: object) -> dict[str, object] | None:

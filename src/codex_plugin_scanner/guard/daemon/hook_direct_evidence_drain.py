@@ -3,12 +3,14 @@
 A direct answer skips the daemon's post-allow recording. The resident queues
 the inputs that recording needs, and this drain pulls them over the resident
 channel and records them exactly as the daemon path does. After a
-``PreToolUse`` allow that is the decision receipt, the binding capture, the
-command activity, and the command-line observation; after a reviewed
-``PostToolUse`` it is the receipt, the binding capture, and the post-tool
-command activity; after a ``UserPromptSubmit`` it is the receipt and the
+``PreToolUse`` allow that is the decision receipt, the binding capture, and
+the command activity, plus the desktop setup notice for a connector-setup
+review the resident queued; the resident records the command-line observation
+itself. After a reviewed ``PostToolUse`` it is the receipt, the binding
+capture, and the post-tool command activity; after a ``UserPromptSubmit`` it is the receipt and the
 binding capture alone. A tool call the native MCP relay decided is recorded
-by ``mcp_relay_evidence_drain`` as the proxy records it, and one its package
+by ``mcp_relay_evidence_drain`` as the proxy records it, unless the resident
+wrote its receipt itself, and one its package
 lane answered by ``mcp_relay_package_evidence_drain``. The publisher advertises the drain in the
 direct-lane binding only while it runs, so a resident never answers directly
 for a daemon that would leave the evidence behind. A page from a current
@@ -51,11 +53,14 @@ _DIRECT_HARNESSES = frozenset(
         "grok",
         "pi",
         "omp",
+        "muse",
     }
 )
 _PRE_TOOL_USE = "PreToolUse"
 _POST_TOOL_USE = "PostToolUse"
 _USER_PROMPT_SUBMIT = "UserPromptSubmit"
+# The desktop notice for a connector-setup review the resident queued.
+_CONNECTOR_NOTICE_FIELD = "connector_setup_notice"
 
 
 class _DrainHost(Protocol):
@@ -76,7 +81,6 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     from ..cli.commands_support_command_activity import hook_post_succeeded
     from ..native_decision_receipt import validate_native_decision_receipt
     from .hook_managed_install_state import _hook_harness_is_unmanaged
-    from .hook_native_cli_observer import observe_native_pre_tool_cli
     from .hook_worker_native import _record_native_pre_activity
     from .mcp_relay_evidence_drain import is_mcp_relay_evidence, record_mcp_relay_evidence
     from .mcp_relay_package_evidence_drain import (
@@ -115,10 +119,15 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
         return True
     # A hook the resident held through a policy update's fence reports its wait.
     record_direct_fence_wait(host.store, record.get("fence_wait_ms"))
-    accepted = validate_native_decision_receipt(receipt) if receipt is not None else None
+    # Activity may cite only a receipt the store will accept, which the resident checks on its page.
+    checked = record.get("receipt_valid")
+    if not isinstance(checked, bool):  # An older resident's page carries no check.
+        checked = validate_native_decision_receipt(receipt, guard_home=host.guard_home) is not None
+    accepted = dict(receipt) if checked and isinstance(receipt, dict) else None
     if accepted is not None:
         submit = getattr(host.activity_writer, "submit_native_decision_receipt", None)
-        if callable(submit):
+        # A current resident queues the receipt with a running writer itself.
+        if callable(submit) and record.get("receipt_recorded") is not True:
             with suppress(Exception):
                 submit(receipt=accepted)
         capture = getattr(getattr(host, "capture_writer", None), "submit_native_capture", None)
@@ -136,10 +145,34 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
             succeeded=hook_post_succeeded(_POST_TOOL_USE, payload),
         )
         return True
-    with suppress(Exception):
-        observe_native_pre_tool_cli(host.store, payload=payload, workspace=Path(workspace), home_dir=Path(home_dir))
     _record_native_pre_activity(host, harness, payload, response, accepted)  # pyright: ignore[reportArgumentType]
+    with suppress(Exception):
+        _raise_connector_setup_notice(host.store, record.get(_CONNECTOR_NOTICE_FIELD))
     return True
+
+
+def _raise_connector_setup_notice(store: object, notice: object) -> None:
+    """The desktop notice for a connector-setup review the resident queued.
+
+    The resident names the stored row and the CLI; the notice is raised from
+    the stored row, as ``raise_connector_setup_notice`` raises it.
+    """
+
+    if not isinstance(notice, Mapping):
+        return
+    request_id = notice.get("request_id")
+    connector_name = notice.get("connector_name")
+    if not isinstance(request_id, str) or not request_id or not isinstance(connector_name, str) or not connector_name:
+        return
+    lookup = getattr(store, "get_approval_request", None)
+    if not callable(lookup):
+        return
+    queued = lookup(request_id)
+    if not isinstance(queued, dict):
+        return
+    from ..approvals import notify_connector_setup
+
+    notify_connector_setup(store, queued, connector_name=connector_name)
 
 
 def _decode_page(

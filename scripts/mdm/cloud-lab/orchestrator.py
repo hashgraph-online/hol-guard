@@ -8,13 +8,12 @@ import json
 import os
 from pathlib import Path
 
+from cloud_control import iso, utcnow
 from lab_common import NATIVE_CERTIFICATION_GATES, http_request
 from orchestrator_initial_remediation import run_remediation_and_evidence
 from orchestrator_initial_resilience import run_resilience_and_repair_setup
 from orchestrator_initial_rollout import run_enrollment_and_rollout
 from orchestrator_support import ALPHA, Recorder, _device_fault, _publish, _state, _sync
-
-from codex_plugin_scanner.guard.mdm.cloud_control import iso, utcnow
 
 
 def _run_initial(

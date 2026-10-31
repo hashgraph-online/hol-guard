@@ -53,7 +53,7 @@ fn shell_with(home: &Path, command: &str, names: &[&str]) -> String {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let project = home.join("project");
     let [omp, zcode] = ["omp", "zcode"].map(|harness| {
@@ -73,6 +73,7 @@ fn shell_with(home: &Path, command: &str, names: &[&str]) -> String {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&environment),
         )

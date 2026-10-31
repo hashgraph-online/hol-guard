@@ -116,6 +116,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             request.execution_environment.as_ref(),
         );
@@ -283,7 +284,7 @@ mod tests {
     #[test]
     fn a_never_enrolled_device_keeps_packaged_protection_instead_of_a_global_block() {
         let mut input: Value = serde_json::from_slice(&request(serde_json::json!([
-            {"id":"context","command":"docker context ls"}
+            {"id":"context","command":"docker context use staging"}
         ])))
         .unwrap();
         input["health"] = serde_json::json!("unenrolled");

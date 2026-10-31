@@ -66,7 +66,8 @@ pub(super) fn check(value: &Value, digest: &str, kind: &str) -> Result<(), Strin
 }
 
 /// Resolve the asset a fetch names. `release` is the public release transport;
-/// `installed` is the packaged bundle, which also binds the tag to its source.
+/// `installed` is the packaged bundle, which also binds the tag to its source
+/// and names the directory the tag's assets sit in.
 pub(super) fn asset(input: &Value) -> Outcome {
     let installed = match input["profile"].as_str() {
         Some("release") => false,
@@ -94,12 +95,20 @@ pub(super) fn asset(input: &Value) -> Outcome {
     let (kind, digest) = data_name(name).ok_or(naming)?;
     check(target, digest, kind)?;
     let tag = map["tag"].as_str().unwrap_or_default();
+    let mut directory = Value::Null;
     if installed {
         let source = input["source"].as_str().filter(|s| lower_hex(s, 40));
         let bound = format!("extension-data-{}-0.0-", source.ok_or_else(request)?);
-        if !tag.starts_with(&bound) {
-            return Err("installed bundle asset source differs".into());
+        let batch = tag
+            .strip_prefix(&bound)
+            .ok_or("installed bundle asset source differs")?;
+        if !digits(batch, 6, 6) {
+            return Err(shape.into());
         }
+        // Only the batch varies between installed tags, so the bundle names
+        // each tag's directory for it alone. The full tag would put wheel
+        // members past the 260-character path limit of a stock Windows install.
+        directory = json!(batch);
     }
     let asset = map["asset"].as_str().unwrap_or_default();
     let bound = map
@@ -110,6 +119,7 @@ pub(super) fn asset(input: &Value) -> Outcome {
         "digest": digest,
         "kind": kind,
         "tag": tag,
+        "directory": directory,
         "asset": asset,
         "bound": bound.flatten(),
     }))

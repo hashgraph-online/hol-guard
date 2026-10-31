@@ -6,9 +6,12 @@
 //! existing review behavior.
 
 #[path = "for_loop_unroll_body.rs"]
-mod body;
+pub(super) mod body;
 
-use body::{body_items, rebinds, redirect_tail, substitute};
+use body::{
+    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone, substitute,
+    unquote_whole_references,
+};
 
 const MAX_WORDS: usize = 32;
 const MAX_WORD_BYTES: usize = 256;
@@ -56,15 +59,48 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     }
     let rest = rest.trim_start_matches([' ', '\t', '\n', ';']);
     let rest = keyword(rest, "do")?;
-    let (items, tail) = body_items(rest, name)?;
+    let (items, _, tail) = body_items(rest, name, &["done"])?;
     let tail = redirect_tail(tail)?;
     if items.is_empty() || items.iter().any(|(text, _)| rebinds(text, name)) {
         return None;
     }
+    // A glob reaches the body as the names the shell expanded it to, one
+    // argument each, while the unrolled text hands the body the pattern. The
+    // two are the same work only while the body reads the loop variable as a
+    // whole word of its own, and only while the pattern reaches the unrolled
+    // text bare, which is why a reference the body quotes on its own loses its
+    // quotes first.
+    // Taking those quotes off is only faithful while every word is a single
+    // field, so a header that mixes a pattern with a word holding separators
+    // has no written form that is both and keeps its review.
+    let patterned = words.iter().any(|word| word.contains(['*', '?', '[']));
+    let spaced = words.iter().any(|word| word.contains([' ', '\t']));
+    if patterned && spaced {
+        return None;
+    }
+    let items = if patterned {
+        let items: Vec<(String, &'static str)> = items
+            .into_iter()
+            .map(|(text, separator)| (unquote_whole_references(&text), separator))
+            .collect();
+        if !items.iter().all(|(text, _)| references_stand_alone(text)) {
+            return None;
+        }
+        items
+    } else {
+        if spaced && !items.iter().all(|(text, _)| references_are_quoted(text)) {
+            return None;
+        }
+        items
+    };
     let mut out = prefix;
     for word in &words {
         for (text, separator) in &items {
-            let step = substitute(text, word)?;
+            // The unrolled list runs the items the loop ran. A leading `!`
+            // only inverts an item's exit status, so it is dropped wherever
+            // the separator after it shows nothing reads that outcome.
+            let step =
+                super::control_flow_flatten::unnegated_part(&substitute(text, word)?, separator);
             out.push_str(&step);
             if !tail.is_empty() {
                 out.push(' ');
@@ -112,7 +148,7 @@ fn next_word(text: &str) -> Option<(&str, &str)> {
     (end > 0).then(|| (&text[..end], &text[end..]))
 }
 
-fn valid_identifier(name: &str) -> bool {
+pub(super) fn valid_identifier(name: &str) -> bool {
     // Loop variables also modify the environment seen by commands in the
     // body. Rebinding PATH, HOME, IFS, Git configuration variables, or other
     // exported uppercase names can change which commands actually execute.
@@ -140,29 +176,62 @@ fn safe_value(value: &str) -> bool {
         })
 }
 
-/// A glob pattern that names paths under a directory the pattern itself spells
-/// out, such as `src/*.ts` or `packages/*/`.
+/// A quoted word whose text holds the field separators the quotes protect,
+/// such as `for spec in "1 first" "2 second"`.
 ///
-/// Every name such a pattern matches begins with that directory, so unrolling
-/// the loop over the pattern puts the same directory in front of the ordinary
-/// path proofs as the names it expands into, and a pattern that matches
-/// nothing is the word the shell passes on. A pattern with no directory in it
-/// is a bare word that need not be a path at all — `for id in PRRT_example*`
-/// walks identifiers the shell never expands — so it keeps its review. So does
-/// a pattern that starts with a metacharacter: it can match a name beginning
-/// with `-`, which the body's program reads as an option rather than as a path.
+/// The word is written back where the expansion stood, and the body keeps its
+/// own quotes around that place, so a quoted reference becomes the quoted word
+/// and stays the one field the loop passed it. Every field has to be a literal
+/// word of its own, so the text written out can hold no operator, expansion or
+/// pattern the loop never ran.
+fn spaced_value(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_WORD_BYTES
+        && value.contains([' ', '\t'])
+        && value
+            .split([' ', '\t'])
+            .all(|field| field.is_empty() || safe_value(field))
+}
+
+/// A glob pattern the shell expands against the directory the loop runs in,
+/// such as `*.ts`, `src/*.ts` or `packages/*/`.
+///
+/// Unrolling the loop over the pattern hands the body the same word the shell
+/// expands there, so the ordinary proofs decide the matches exactly as they
+/// decide them in the command the unrolled text spells out, and a pattern that
+/// matches nothing is the word the shell passes on. That parity is the point:
+/// `wc -l *.ts` and a loop that runs `wc -l` over `*.ts` are the same work, so
+/// the loop must not keep a review the written-out command does not get.
+///
+/// A pattern that starts at the root or reaches above the working directory
+/// names matches outside the directory the loop runs in, so it keeps its
+/// review. So does one that opens with `-`, which the body's program reads as
+/// an option when the pattern matches nothing and the shell passes the word
+/// on, and one that opens with `[`, whose bracket expression is a character
+/// set the text itself does not spell out.
+///
+/// A pattern without a directory in it only reads as a path when its own text
+/// says so, by naming a directory or a file type. `for id in PRRT_example*`
+/// walks identifiers the shell never expands, and the body then runs its
+/// program over the pattern itself, so a bare word keeps its review however
+/// the loop is written.
 ///
 /// The body reads the loop variable unquoted, so each name the pattern matches
-/// has to be a single field once the shell splits it. The proof that expands
-/// the pattern owns that rule: `read_globs` admits a match only when its name
-/// holds no whitespace.
+/// has to be a single field once the shell splits it. The proofs that expand
+/// the pattern own that rule: `read_globs` admits a match only when its name
+/// holds no whitespace, and refuses a match of a directoryless pattern that
+/// begins with `-` or holds the `name=value` an operand would read as an
+/// assignment rather than as a file. Those proofs read the pattern the body
+/// is handed, so the body has to read the loop variable as a whole word of
+/// its own; `references_stand_alone` holds it to that.
 fn pattern_value(value: &str) -> bool {
     value.len() <= MAX_WORD_BYTES
         && value.contains(['*', '?', '['])
-        && value.contains('/')
-        && value.starts_with(|c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.'))
-        // `..` reaches above that directory, so the matches would sit outside it.
+        && !value.starts_with(['/', '-', '['])
+        // `..` reaches above the working directory, so the matches would sit
+        // outside it.
         && !value.split('/').any(|segment| segment == "..")
+        && (value.contains('/') || names_a_file_type(value))
         && value.chars().all(|c| {
             c.is_ascii_alphanumeric()
                 || matches!(
@@ -173,11 +242,27 @@ fn pattern_value(value: &str) -> bool {
         })
 }
 
+/// A pattern with no directory in it whose own text reads as a path: a
+/// directory glob such as `*/`, or a name carrying a literal file type such
+/// as `*.ts`.
+///
+/// The extension has to be spelled out, because the text is all the loop says
+/// about what the pattern will match.
+fn names_a_file_type(value: &str) -> bool {
+    if let Some(stem) = value.strip_suffix('/') {
+        return !stem.is_empty();
+    }
+    value.rsplit_once('.').is_some_and(|(stem, extension)| {
+        !stem.is_empty() && !extension.is_empty() && !extension.contains(['*', '?', '[', ']'])
+    })
+}
+
 /// Literal words, and glob patterns, up to the first unquoted `;` or newline.
 ///
 /// A quoted word is the text itself rather than a pattern, so it keeps the
 /// literal rule: writing it back out unquoted would otherwise hand the body a
-/// pattern the loop never expanded.
+/// pattern the loop never expanded. Its text may hold the separators the
+/// quotes protect, which [`spaced_value`] admits.
 fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
     let mut words: Vec<(String, bool)> = Vec::new();
     let mut current = String::new();
@@ -199,7 +284,11 @@ fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
                 }
                 return words
                     .iter()
-                    .all(|(word, quoted)| safe_value(word) || (!quoted && pattern_value(word)))
+                    .all(|(word, quoted)| {
+                        safe_value(word)
+                            || (*quoted && spaced_value(word))
+                            || (!quoted && pattern_value(word))
+                    })
                     .then(|| {
                         (
                             words.into_iter().map(|(word, _)| word).collect(),
@@ -243,6 +332,6 @@ fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
 /// `valid_identifier` already limits loop variables to lowercase names. The
 /// `*_proxy` names are lowercase environment variables, and the zsh specials
 /// change shell state, so binding either changes what the body would run.
-fn ordinary_loop_name(name: &str) -> bool {
+pub(super) fn ordinary_loop_name(name: &str) -> bool {
     !name.ends_with("_proxy") && !SHELL_SPECIAL_NAMES.contains(&name)
 }

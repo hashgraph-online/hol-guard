@@ -2,7 +2,7 @@
 //!
 //! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
 //! branch listings, `show-ref`, `for-each-ref`, `rev-list` commit walks, `hash-object`, `config`,
-//! `ls-tree` and `cat-file` reads. Diff-style reads that can run a configured helper need the
+//! `ls-tree`, `cat-file` and `sparse-checkout list` reads. Diff-style reads that can run a configured helper need the
 //! helper-context probe or both `--no-ext-diff` and `--no-textconv`.
 
 #[path = "git_log_names.rs"]
@@ -13,6 +13,20 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
         exact.contains(&argument.as_str())
             || prefixes.iter().any(|prefix| argument.starts_with(prefix))
     })
+}
+
+/// Whether `value`, a `git grep` target, is a tracked document whose name
+/// only reads like a credential, such as a committed
+/// `command.kubernetes-secrets.json`. A leading option other than the pager
+/// switch can move Git elsewhere, so a relative target is proven only
+/// without one.
+fn tracked_target(value: &str, leading: &[String], context: super::PathContext<'_>) -> bool {
+    (std::path::Path::new(value).is_absolute()
+        || leading
+            .iter()
+            .all(|option| matches!(option.as_str(), "--no-pager" | "-P")))
+        && !super::sensitive_path_argument(value)
+        && super::search_scope_tracked::names::resolves_to_tracked(value, context.cwd)
 }
 
 pub(super) fn safe_git_arguments(
@@ -47,8 +61,16 @@ pub(super) fn safe_git_arguments(
                 return leading_safe
                     && allow_helper_context
                     && super::git_grep::targets(rest).is_some_and(|targets| {
+                        // The tracked proof reads the working-tree file, so it
+                        // covers only pathspecs Git searches there: after a
+                        // `--` with no revision before it, and without
+                        // `--cached`, which searches the index instead.
+                        let working_tree = targets.first().is_some_and(|first| first == "--")
+                            && !rest.iter().any(|argument| argument == "--cached");
                         !targets.iter().any(|value| {
-                            value.starts_with(':') || super::sensitive_read_path_argument(value)
+                            value.starts_with(':')
+                                || (super::sensitive_read_path_argument(value)
+                                    && !(working_tree && tracked_target(value, leading, context)))
                         })
                     });
             }
@@ -113,8 +135,11 @@ pub(super) fn safe_git_arguments(
         return allow_helper_context
             && super::git_history_reads::read_form(subcommand, &arguments[1..]);
     }
-    if matches!(subcommand, "shortlog" | "check-ignore") {
-        // A shortlog pages (pager.shortlog) and both run under the
+    if matches!(
+        subcommand,
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout"
+    ) {
+        // A shortlog pages (pager.shortlog) and all of them run under the
         // repository's configuration, so the probe clears them first.
         return allow_helper_context
             && super::git_listing_reads::read_form(subcommand, &arguments[1..]);
@@ -129,6 +154,22 @@ pub(super) fn safe_git_arguments(
         // configuration probe has to clear those helpers first. Every stash
         // spelling that moves work keeps its own review.
         return allow_helper_context && super::git_stash_reads::read_form(&arguments[1..]);
+    }
+    if subcommand == "submodule" {
+        // A status line is printed from the superproject, whose index it
+        // reads, so a configured `core.fsmonitor` there can start and the
+        // configuration probe has to clear it first. The recursive walk,
+        // which reads each submodule's own configuration, and every verb
+        // that moves work keep their own review.
+        return allow_helper_context && super::git_submodule_reads::read_form(&arguments[1..]);
+    }
+    if matches!(subcommand, "bisect" | "notes") {
+        // A bisect log and a note print through the pager (core.pager), so
+        // the configuration probe has to clear it first. Every spelling of
+        // either subcommand that moves a ref, runs a program or opens the
+        // editor keeps its own review.
+        return allow_helper_context
+            && super::git_side_record_reads::read_form(subcommand, &arguments[1..]);
     }
     if subcommand == "rev-list" {
         // A commit walk honors pager.rev-list and can fetch from a partial

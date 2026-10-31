@@ -1,22 +1,17 @@
 """Read grants of the workspace sandbox plan: scratch scripts outside the workspace.
 
-`grant_script_roots` mirrors Rust `contained_workspace_grant_plan` exactly; both
-are pinned by `tests/fixtures/workspace_grant_plan/parity_vectors.json`.
+Whether a plan's grant fields match the grant the resident decided is native
+authority's reading too, through `workspace_grant_script_roots`. What is left
+here is the filesystem check over the roots that reading returns.
 """
 
 from __future__ import annotations
 
 import os
-import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
-from itertools import pairwise
 from pathlib import Path
 
-_BASE_PROFILE = "workspace-contained-v1"
-_GRANT_PROFILE = "workspace-contained-grant-v1"
-_GRANT_CAPABILITIES = ("loopback-network", "state-dir-read", "state-dir-write")
-_STATE_CAPABILITIES = frozenset({"state-dir-read", "state-dir-write"})
 PLAN_FIELDS = frozenset(
     {
         "profile_version",
@@ -44,16 +39,31 @@ PLAN_FIELDS = frozenset(
 _SCRIPT_SUFFIXES = frozenset({".py", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"})
 
 
+def _absolute_words(command: str) -> list[str]:
+    """Ask native authority for the absolute words the command spells.
+
+    Native authority read this text when it admitted the run and drew the plan
+    whose grant is being checked here. Reading it again in Python is a second
+    grammar deciding the same thing: whether `;`, `>` or `|` ends the word that
+    names the script, and whether `#` starts a comment or spells a directory.
+    A plan a grant is admitted against has to be read by the reading that drew
+    it.
+
+    An answer that is not a list of words is no reading at all, so it raises
+    rather than passing for a command that names nothing.
+    """
+    from ..native_restricted_pytest import restricted_native
+    from .restricted_pytest_model import PYTEST_INVALID_COMMAND_REASON_CODE, RestrictedPytestError
+
+    words = restricted_native("command_absolute_words", {"command_text": command}, list)
+    if type(words) is not list or not all(type(word) is str for word in words):
+        raise RestrictedPytestError(PYTEST_INVALID_COMMAND_REASON_CODE, "Invalid restricted execution request.")
+    return list(words)
+
+
 def _launched(path: Path, command: str) -> bool:
     """The command carries an absolute word that names exactly this file."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    try:
-        words = list(lexer)
-    except ValueError:
-        return False
-    return any(word.startswith("/") and os.path.realpath(word) == str(path) for word in words)
+    return any(os.path.realpath(word) == str(path) for word in _absolute_words(command))
 
 
 def read_grants_valid(value: object, command: str) -> bool:
@@ -89,47 +99,32 @@ class ExpectedGrant:
     state_dir: str | None
 
 
-def _canonical(items: list[object]) -> list[str] | None:
-    names: list[str] = []
-    for item in items:
-        if not isinstance(item, str) or item not in _GRANT_CAPABILITIES:
-            return None
-        names.append(item)
-    if any(left >= right for left, right in pairwise(names)):
-        return None
-    return names
-
-
 def grant_script_roots(plan: Mapping[str, object], expected: ExpectedGrant | None) -> list[object] | None:
-    """The plan's script read roots once its grant fields check out; `None` refuses.
+    """The plan's script read roots once native authority admits its grant; `None` refuses.
 
-    A base plan carries no grant. A grant plan must match the decided grant: same
-    identity, a canonical subset of its capabilities and, with a state
-    capability, the CLI state directory as the last read root.
+    The resident decided this grant and drew this plan; whether the two agree —
+    the profile the plan claims, the identity it carries, that its capabilities
+    are a canonical subset of the decided ones, and where the state directory
+    sits among the read roots — is that decision read back, not a judgement made
+    here a second time.
+
+    An answer that is not a list of roots is no reading at all, so the plan is
+    refused rather than run with the roots it asked for.
     """
-    roots = plan.get("read_only_roots")
-    raw = plan.get("capabilities")
-    if not isinstance(roots, list) or not isinstance(raw, list):
+    from ..native_restricted_pytest import restricted_native
+    from .restricted_pytest_model import RestrictedPytestError
+
+    grant = (
+        None
+        if expected is None
+        else {
+            "identity_hash": expected.identity_hash,
+            "capabilities": list(expected.capabilities),
+            "state_dir": expected.state_dir,
+        }
+    )
+    try:
+        roots = restricted_native("workspace_grant_script_roots", {"plan": dict(plan), "expected": grant}, list)
+    except RestrictedPytestError:
         return None
-    capabilities = _canonical(raw)
-    profile = plan.get("profile_version")
-    if capabilities is None or not isinstance(profile, str) or "grant_identity_hash" not in plan:
-        return None
-    identity = plan["grant_identity_hash"]
-    if expected is None:
-        if profile == _BASE_PROFILE and identity is None and not capabilities:
-            return list(roots)
-        return None
-    if (
-        profile != _GRANT_PROFILE
-        or not isinstance(identity, str)
-        or identity != expected.identity_hash
-        or any(name not in expected.capabilities for name in capabilities)
-    ):
-        return None
-    if not _STATE_CAPABILITIES.intersection(capabilities):
-        return list(roots)
-    if not roots or expected.state_dir is None:
-        return None
-    last = roots[-1]
-    return list(roots[:-1]) if isinstance(last, str) and last == expected.state_dir else None
+    return list(roots) if type(roots) is list else None

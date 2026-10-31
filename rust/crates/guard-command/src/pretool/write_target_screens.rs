@@ -146,6 +146,14 @@ const GUARDED_DOT_PREFIXES: &[&str] = &[
     ".zcode",
 ];
 
+/// Whether a lowercased path component is a guarded hidden name.
+pub(super) fn guarded_dot_part(lowered: &str) -> bool {
+    GUARDED_DOT_NAMES.contains(&lowered)
+        || GUARDED_DOT_PREFIXES
+            .iter()
+            .any(|prefix| lowered.starts_with(prefix))
+}
+
 /// Hidden directories a write may pass through. Any other dot directory can
 /// be configuration some tool loads on its own, such as a new agent's rules
 /// folder, so it stays reviewed.
@@ -204,10 +212,7 @@ pub(super) fn plain_dot_scratch_target(path: &Path, home_dir: Option<&str>) -> b
                     .is_some_and(|last| last == "node_modules");
                 if home.starts_with(&parent)
                     || (directory && !regenerated_dot_directory(&lowered, in_node_modules))
-                    || GUARDED_DOT_NAMES.contains(&lowered.as_str())
-                    || GUARDED_DOT_PREFIXES
-                        .iter()
-                        .any(|prefix| lowered.starts_with(prefix))
+                    || guarded_dot_part(&lowered)
                 {
                     return false;
                 }

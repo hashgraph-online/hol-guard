@@ -36,6 +36,9 @@ DIRECT_HOOK_PERMISSION_NOTICE_FEATURE = "hook-direct-permission-notice-v1"
 # The resident answers a reviewed PreToolUse from an exact-action decision
 # the user saved, verified with the bound policy-integrity key.
 DIRECT_HOOK_SAVED_DECISION_FEATURE = "hook-direct-saved-decision-v1"
+# The resident queues a connector-setup review itself once the binding says
+# the evidence drain raises its desktop setup notice.
+DIRECT_HOOK_CONNECTOR_NOTICE_FEATURE = "hook-direct-connector-notice-v1"
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
 DIRECT_LANE_ACK_FILE_NAME = "ack.json"
 DIRECT_LANE_ACK_SCHEMA = "guard-direct-lane-ack.v1"
@@ -233,6 +236,7 @@ def with_direct_hook_state(
     evidence_drain: bool,
     contained_sink_command: Sequence[str] | None = None,
     integrity_key: tuple[bytes, str] | None = None,
+    connector_setup_notice: bool = False,
 ) -> dict[str, object] | None:
     """Add the daemon state a direct hook needs beyond the snapshot.
 
@@ -242,6 +246,9 @@ def with_direct_hook_state(
     Without ``contained_sink_command`` a Claude Code sandbox requirement
     defers to this daemon, which routes it. Without ``integrity_key`` a
     Claude PermissionRequest with a pending notice defers to this daemon.
+    ``connector_setup_notice`` is true only while the evidence drain raises
+    the setup notice of a connector review the resident queued; without it
+    such a review defers to this daemon.
     """
 
     if binding is None:
@@ -262,6 +269,8 @@ def with_direct_hook_state(
         bound["contained_sink_command"] = list(contained_sink_command)
     if integrity_key is not None and (fields := _integrity_key_fields(integrity_key)) is not None:
         bound.update(fields)
+    if connector_setup_notice:
+        bound["connector_setup_notice"] = True
     return bound
 
 

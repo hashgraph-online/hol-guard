@@ -2,9 +2,11 @@ import { GuardHarnessActionError } from "./guard-api";
 import {
   isApprovalGateRequiredError,
   isGuardHarnessActionError,
+  isPackageFirewallOperationInProgressError,
   isSupplyChainSyncConnectError,
   isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
+  readPackageFirewallActionFailure,
   resolveApprovalGateSyncFailure,
 } from "./harness-action-errors";
 
@@ -175,4 +177,33 @@ assert(
   "failed to fetch maps to daemon connection guidance",
 );
 
+assert(
+  readPackageFirewallActionFailure(new TypeError("Failed to fetch")).includes("lost connection to the local daemon"),
+  "a dropped daemon connection reads as connection guidance for package actions, not the raw browser error",
+);
+assert(
+  !readPackageFirewallActionFailure(new TypeError("NetworkError when attempting to fetch resource.")).includes("NetworkError"),
+  "Firefox network errors are rewritten too",
+);
+assert(
+  readPackageFirewallActionFailure(new Error("Package shim install is blocked.")) === "Package shim install is blocked.",
+  "daemon-supplied failure messages pass through unchanged",
+);
+assert(readPackageFirewallActionFailure("boom") === "Action failed.", "non-Error throws fall back to a generic message");
+
 console.log("harness-action-errors.test.ts: all assertions passed");
+
+assert(
+  isPackageFirewallOperationInProgressError(
+    makeHarnessError(409, {
+      error: "operation_in_progress",
+      message: "Guard is still finishing a package protection change. Check its status before retrying.",
+      operation: "sync",
+    }),
+  ),
+  "a sync that is still running in the daemon is recognized",
+);
+assert(
+  !isPackageFirewallOperationInProgressError(makeHarnessError(409, { error: "folder_picker_busy" })),
+  "other conflicts are not mistaken for a running sync",
+);

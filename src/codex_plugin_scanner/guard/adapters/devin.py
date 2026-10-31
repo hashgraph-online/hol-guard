@@ -131,7 +131,7 @@ class DevinHarnessAdapter(HarnessAdapter):
         if not config_dir.is_absolute() and "cwd" not in request:
             request["cwd"] = os.getcwd()
         artifacts, found_paths, warnings = native_adapter_detection_with_warnings("devin_detect", request)
-        command_available = _command_available(self.executable)
+        command_available = _command_available(self.executable, context.home_dir)
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or command_available,

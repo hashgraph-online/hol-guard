@@ -32,7 +32,18 @@ fn value_type_name(value: &Value) -> &'static str {
     match value {
         Value::Null => "NoneType",
         Value::Bool(_) => "bool",
-        Value::Number(_) => "int",
+        // `json.loads` builds an `int` unless the literal carries a fraction or
+        // an exponent, however many digits it has, so a 31-digit integer is
+        // still an `int`. `arbitrary_precision` keeps the literal's own text,
+        // so read that rather than asking whether the value fits an i64.
+        Value::Number(number) => {
+            let text = number.to_string();
+            if text.contains(['.', 'e', 'E']) {
+                "float"
+            } else {
+                "int"
+            }
+        }
         Value::String(_) => "str",
         Value::Array(_) => "list",
         Value::Object(_) => "dict",

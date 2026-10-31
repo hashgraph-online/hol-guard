@@ -106,7 +106,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
   );
 
   const checkboxLabel = canSelect
-    ? `Select ${preview} for bulk approval`
+    ? `Select ${preview}`
     : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
 
   const rowClassName = (() => {

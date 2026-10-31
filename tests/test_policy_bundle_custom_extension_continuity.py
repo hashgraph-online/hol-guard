@@ -9,13 +9,13 @@ from typing import cast
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from codex_plugin_scanner.guard.policy_bundle_v2 import validated_policy_bundle_v2_payload
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import CustomExtensionContinuityError
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_v2_support import validated_policy_bundle_v2_payload
 from tests.support.network import stub_authenticated_urlopen
 from tests.test_policy_bundle_v2 import _signed_bundle, _verification_key
 

@@ -439,9 +439,10 @@ pub(in crate::pretool) fn project_skill_document(
 }
 
 /// Agent planning and memory notes in the verified user home:
-/// `~/.codex/plans/**`, `~/.codex/memories/**` and `~/.claude/plans/**`.
-/// Notes are Markdown, plain text or JSON evidence. Auth material, config and
-/// sessions live elsewhere under `.codex` and `.claude` and stay guarded, and
+/// `~/.codex/plans/**`, `~/.codex/memories/**`, `~/.claude/plans/**` and
+/// `~/.grok/memory-v2/**`. Notes are Markdown, plain text or JSON evidence.
+/// Auth material, config and sessions live elsewhere under `.codex`, `.claude`
+/// and `.grok` and stay guarded, and
 /// the caller has already refused credential names and sensitive families.
 pub(in crate::pretool) fn codex_notes_document(
     canonical: &std::path::Path,
@@ -458,14 +459,18 @@ pub(in crate::pretool) fn codex_notes_document(
     {
         return false;
     }
-    [".codex/plans", ".codex/memories", ".claude/plans"]
-        .iter()
-        .any(|name| {
-            let root = under(&home, name);
-            crate::runtime_read_paths::canonicalize_text(&root)
-                .is_ok_and(|resolved| resolved == root)
-                && canonical.strip_prefix(&root).is_ok_and(|relative| {
-                    visible_components(relative).is_some_and(|parts| !parts.is_empty())
-                })
-        })
+    [
+        ".codex/plans",
+        ".codex/memories",
+        ".claude/plans",
+        ".grok/memory-v2",
+    ]
+    .iter()
+    .any(|name| {
+        let root = under(&home, name);
+        crate::runtime_read_paths::canonicalize_text(&root).is_ok_and(|resolved| resolved == root)
+            && canonical.strip_prefix(&root).is_ok_and(|relative| {
+                visible_components(relative).is_some_and(|parts| !parts.is_empty())
+            })
+    })
 }

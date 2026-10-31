@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
 
@@ -21,6 +21,87 @@ from .codex_hook_owner_commands import has_codex_harness_tokens, python_codex_ho
 from .codex_hook_owner_message import owner_conflict_message
 from .codex_hook_self_binding import codex_hook_binds_guard_home
 from .frozen_runtime_commands import frozen_codex_bridge_tokens_are_live
+
+
+def remove_unlaunchable_guard_hook_events(
+    hooks: dict[str, object],
+    *,
+    legacy_status_messages: Collection[str],
+    windows: bool | None = None,
+) -> tuple[dict[str, object], bool]:
+    """Remove legacy Guard handlers whose launcher cannot run on this machine.
+
+    A pre-manifest registration spelled a Guard hook as a plain command plus
+    its ``--harness codex`` arguments (or as a native bridge launcher) and
+    carried one of the status messages Guard wrote for that generation. When
+    the program such a handler names no longer exists, the registration is a
+    leftover from an install that is gone: folding it into the active config
+    would leave the harness running a command that cannot start on every
+    matching tool call. Removal is limited to that exact shape - a managed
+    event, the legacy status message, Guard's own codex hook arguments, and a
+    first program token that does not exist. User handlers, handlers Guard
+    cannot attribute to itself, and handlers naming a program that exists are
+    all left alone.
+    """
+
+    updated_hooks = deepcopy(hooks)
+    changed = False
+    for event_name in MANAGED_CODEX_HOOK_EVENTS:
+        groups = updated_hooks.get(event_name)
+        if not isinstance(groups, list):
+            continue
+        remaining_groups: list[object] = []
+        for group in groups:
+            if not isinstance(group, dict):
+                remaining_groups.append(group)
+                continue
+            handlers = group.get("hooks")
+            if not isinstance(handlers, list):
+                remaining_groups.append(group)
+                continue
+            remaining_handlers = [
+                handler
+                for handler in handlers
+                if not _is_unlaunchable_legacy_guard_handler(
+                    handler, legacy_status_messages=legacy_status_messages, windows=windows
+                )
+            ]
+            if len(remaining_handlers) != len(handlers):
+                changed = True
+            if remaining_handlers:
+                updated_group = dict(group)
+                updated_group["hooks"] = remaining_handlers
+                remaining_groups.append(updated_group)
+        if remaining_groups:
+            updated_hooks[event_name] = remaining_groups
+        else:
+            updated_hooks.pop(event_name, None)
+    return updated_hooks, changed
+
+
+def _is_unlaunchable_legacy_guard_handler(
+    handler: object,
+    *,
+    legacy_status_messages: Collection[str],
+    windows: bool | None,
+) -> bool:
+    if not isinstance(handler, Mapping):
+        return False
+    if handler.get("statusMessage") not in legacy_status_messages:
+        return False
+    command = handler.get("command")
+    if not isinstance(command, str):
+        return False
+    if hook_commands_use_windows_syntax(windows) != (os.name == "nt"):
+        return False
+    tokens = hook_command_tokens(command, windows=windows)
+    arguments = handler.get("args")
+    argument_tokens = [str(argument) for argument in arguments] if isinstance(arguments, list) else []
+    if not has_codex_harness_tokens([*tokens, *argument_tokens]):
+        return False
+    program = tokens[0] if tokens else ""
+    path = Path(program)
+    return path.is_absolute() and not path.exists()
 
 
 def remove_manifest_bound_hook_events(

@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard import native_guard_store, store_review_event_ou
 from codex_plugin_scanner.guard.cli.connect_flow import build_connect_status_payload
 from codex_plugin_scanner.guard.daemon.cloud_review_settings import cloud_review_settings_status
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
-from codex_plugin_scanner.guard.runtime.cloud_review_sync import cloud_review_sync_status
 from codex_plugin_scanner.guard.store import GuardStore
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
@@ -61,16 +60,6 @@ def test_cloud_review_settings_status_flags_unavailable_outbox(tmp_path: Path, m
     assert status["pending_uploads"] == 0
 
 
-def test_cloud_review_sync_status_reports_unavailable_outbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _unavailable_native(monkeypatch)
-    status = cloud_review_sync_status(store)
-    outbox = status["outbox"]
-    assert isinstance(outbox, dict)
-    assert outbox["outbox_available"] is False
-    assert outbox["unavailable_reason"] == "native_guard_store_prerequisite_unavailable"
-
-
 def test_unavailable_error_is_never_swallowed_by_non_status_callers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -94,7 +83,7 @@ def test_invalid_reason_from_the_resident_is_surfaced() -> None:
 def _patch_transport(
     monkeypatch: pytest.MonkeyPatch, clock: list[float], seen: dict[str, Any], on_request: Callable[[], None]
 ) -> None:
-    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home, **_kwargs: True)
     monkeypatch.setattr(native_guard_store.time, "monotonic", lambda: clock[0])
 
     def request(**kwargs: Any) -> None:
@@ -249,3 +238,33 @@ def test_idle_watcher_does_not_stay_alive_on_an_unavailable_outbox(
     daemon._server.last_activity_monotonic = time.monotonic() - 30
     daemon._watch_for_idle_shutdown()
     assert shutdowns == [True]
+
+
+def test_the_request_digest_never_covers_the_policy_integrity_key() -> None:
+    """The resident drops the same argument names before it digests the request.
+
+    The client checks ``request_sha256`` on every reply, so if the two lists
+    disagree every signed policy write fails as a digest mismatch.
+    """
+
+    request: dict[str, Any] = {
+        "schema": "guard-store-request.v1",
+        "request_id": "digest",
+        "store_path": "/guard-home/guard.db",
+        "guard_home": "/guard-home",
+        "method": "upsert_policy",
+        "source": "guard",
+        "busy_timeout_ms": 5000,
+        "args": {"harness": "codex", "scope": "artifact", "integrity_key_id": "key-1"},
+    }
+    bare = native_guard_store._canonical_request_sha256(native_guard_store._digest_material(request))
+
+    keyed = {**request, "args": {**request["args"], "integrity_key_b64": "c2VjcmV0"}}
+    other_key = {**request, "args": {**request["args"], "integrity_key_b64": "ZGlmZmVyZW50"}}
+    assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(keyed)) == bare
+    assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(other_key)) == bare
+
+    renamed = {**request, "args": {**request["args"], "integrity_key_id": "key-2"}}
+    assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(renamed)) != bare
+    assert "integrity_key_b64" not in native_guard_store._digest_material(keyed)["args"]
+    assert keyed["args"]["integrity_key_b64"] == "c2VjcmV0"

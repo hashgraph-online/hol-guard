@@ -15,6 +15,91 @@ fn observations(command: &str) -> CompatibilityObservations {
     result
 }
 
+fn observations_in(command: &str, cwd: &std::path::Path) -> CompatibilityObservations {
+    let model = crate::parse_command(
+        &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+    )
+    .unwrap();
+    let mut result = CompatibilityObservations::default();
+    let cwd = cwd.to_string_lossy().into_owned();
+    observe_with_context(
+        &model.segments[0],
+        0,
+        &mut result,
+        crate::pretool::PathContext {
+            cwd: Some(cwd.as_str()),
+            ..crate::pretool::PathContext::default()
+        },
+    );
+    result
+}
+
+/// `git diff --cached web/package.json` is the same staged read as
+/// `git diff --cached -- web/package.json`, which the diff proof already
+/// admits. Narrowing it to a file that is already there must not raise the
+/// index owner, while an operand that names a branch or writes a file still
+/// does.
+#[test]
+fn present_pathspec_operands_do_not_raise_the_index_owner() {
+    let worktree = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(worktree.path().join("web")).unwrap();
+    std::fs::write(worktree.path().join("web/package.json"), "{}").unwrap();
+    std::fs::write(worktree.path().join("test_calc.py"), "").unwrap();
+    std::fs::create_dir_all(worktree.path().join("docs")).unwrap();
+
+    let owns_index = |command: &str| {
+        observations_in(command, worktree.path())
+            .rule_matches
+            .iter()
+            .any(|item| item.rule_id == "command.git.index-inspection")
+    };
+    for command in [
+        "git diff --cached web/package.json",
+        "git diff --staged test_calc.py web/package.json",
+        "git diff --cached docs",
+        "git diff --cached .",
+        "git diff --cached --stat web/package.json",
+        "git diff --cached ':!web/package.json'",
+    ] {
+        assert!(!owns_index(command), "{command}");
+    }
+    for command in [
+        // A branch is not a file in the worktree, so git reads it as a
+        // revision and the staged read proof does not cover it.
+        "git diff --cached origin/main",
+        "git diff --cached ../service-api",
+        "git diff --cached missing/report.json",
+        "git diff --cached --output=/tmp/staged.diff web/package.json",
+        "git diff --cached web/package.json --ext-diff",
+    ] {
+        assert!(owns_index(command), "{command}");
+    }
+}
+
+#[test]
+fn a_routed_staged_read_proves_its_operands_where_git_enters() {
+    let worktree = tempfile::tempdir().unwrap();
+    // A `-C` route is only admitted into a checkout, so the working directory
+    // has to look like one.
+    std::fs::create_dir_all(worktree.path().join(".git")).unwrap();
+    std::fs::create_dir_all(worktree.path().join("web")).unwrap();
+    std::fs::write(worktree.path().join("web/report.json"), "{}").unwrap();
+    std::fs::create_dir_all(worktree.path().join("release")).unwrap();
+
+    let owns_index = |command: &str| {
+        observations_in(command, worktree.path())
+            .rule_matches
+            .iter()
+            .any(|item| item.rule_id == "command.git.index-inspection")
+    };
+    // `report.json` is in the directory git enters, so the route reads the
+    // index it proved.
+    assert!(!owns_index("git -C web diff --cached report.json"));
+    // `release` is only beside the shell's own working directory. In `web` git
+    // reads it as a revision and diffs the index against it.
+    assert!(owns_index("git -C web diff --cached release"));
+}
+
 #[test]
 fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
     for command in [
@@ -129,6 +214,36 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         "git apply --check -",
         "git apply --check --whitespace=fix change.patch",
         "git apply --check --index change.patch",
+    ] {
+        let result = observations(command);
+        assert!(!result.rule_matches.is_empty(), "{command}");
+        assert!(
+            result.rule_matches.iter().all(|item| item.uncertainty),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_submodule_status_listing_invents_no_unrelated_git_owners() {
+    for command in [
+        "git submodule",
+        "git submodule status",
+        "git submodule status -q",
+        "git submodule status --quiet",
+        "git submodule status vendor/lib",
+    ] {
+        assert!(observations(command).rule_matches.is_empty(), "{command}");
+    }
+    for command in [
+        "git submodule status --cached",
+        "git submodule status --cached -- vendor/lib",
+        "git submodule status --recursive",
+        "git submodule update",
+        "git submodule update --init --recursive",
+        "git submodule foreach git status",
+        "git submodule add https://example.invalid/lib vendor/lib",
+        "git submodule deinit vendor/lib",
     ] {
         let result = observations(command);
         assert!(!result.rule_matches.is_empty(), "{command}");

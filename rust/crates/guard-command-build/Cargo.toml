@@ -36,6 +36,7 @@ fs2 = "0.4.3"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.143", features = ["raw_value"] }
 sha2 = "0.10.9"
+hmac = "0.12.1"
 hex = "0.4.3"
 idna = "1.0.3"
 percent-encoding = "2.3.1"

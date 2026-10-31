@@ -428,6 +428,7 @@ class _HeadlessRoutes:
         }
 
     def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
+        from .approval_extension_coverage import with_approval_extension_coverage
         from .approval_extension_recommendation import with_approval_extension_recommendation
 
         include = not self._is_hosted_dashboard_origin()
@@ -436,23 +437,31 @@ class _HeadlessRoutes:
             return with_approval_extension_recommendation(approval, registry=None, snapshot=None, include=False)
         registry, snapshot = api.recommendation_inputs()
         store = self._daemon_server().store
-        hint = store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
-        if hint is None:
-            from .native_review_allow_hint import live_approval_extension_allow_hint
+        from .native_review_allow_hint import recovered_approval_extension_hint
 
-            hint = live_approval_extension_allow_hint(approval, guard_home=store.guard_home, snapshot=snapshot)
+        # Rows queued before the hints existed, and rows whose queue-time
+        # re-review ran out of budget or stored coverage alone, still get what
+        # one read-time review can recover.
+        hint = recovered_approval_extension_hint(
+            store.get_approval_extension_allow_hint(str(approval.get("request_id", ""))),
+            approval,
+            guard_home=store.guard_home,
+            snapshot=snapshot,
+        )
+        hinted = {**approval, "extension_allow_hint": hint}
         payload = with_approval_extension_recommendation(
-            {**approval, "extension_allow_hint": hint},
+            hinted,
             registry=registry,
             snapshot=snapshot,
             include=True,
             guard_home=store.guard_home,
         )
+        payload = with_approval_extension_coverage(payload, hinted, registry=registry, include=True)
         from ..approval_gate import public_config
         from .approval_connector_recommendation import safe_connector_recommendation
 
         connector = safe_connector_recommendation(
-            {**approval, "extension_allow_hint": hint},
+            hinted,
             store=store,
             snapshot=snapshot,
             approval_gate_configured=lambda: (gate := public_config(store.guard_home)).configured and gate.enabled,

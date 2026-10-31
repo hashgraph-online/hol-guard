@@ -30,10 +30,10 @@ pub const MCP_STDIO_PROBE_FEATURE: &str = "mcp-stdio-probe-v1";
 // Schema strings — one stable pair per op.
 // ---------------------------------------------------------------------------
 
-pub const CONTAINED_NODE_EXECUTE_REQUEST_SCHEMA: &str = "guard-contained-node-execute-request.v1";
-pub const CONTAINED_NODE_EXECUTE_RESULT_SCHEMA: &str = "guard-contained-node-execute-result.v1";
+pub const CONTAINED_NODE_EXECUTE_REQUEST_SCHEMA: &str = "guard-contained-node-execute-request.v2";
+pub const CONTAINED_NODE_EXECUTE_RESULT_SCHEMA: &str = "guard-contained-node-execute-result.v2";
 pub const CONTAINED_TYPESCRIPT_EXECUTE_REQUEST_SCHEMA: &str =
-    "guard-contained-typescript-execute-request.v1";
+    "guard-contained-typescript-execute-request.v2";
 pub const CONTAINED_TYPESCRIPT_EXECUTE_RESULT_SCHEMA: &str =
     "guard-contained-typescript-execute-result.v1";
 pub const CONTAINED_PACKAGE_SCRIPT_EXECUTE_REQUEST_SCHEMA: &str =
@@ -55,25 +55,21 @@ pub const CONTAINMENT_HEALTH_PROBE_RESULT_SCHEMA: &str = "guard-containment-heal
 // ---------------------------------------------------------------------------
 // Contained execution — per-op request/result pairs.
 //
-// `command_text` is the raw shell text the shim received. `manager` + `argv`
-// carry the caller's pre-parsed invocation so the resident never has to
-// `shlex`-join an argv back into text. `evidence` is the caller-built
-// `LocalPackageExecutionEvidence` serialized via `to_dict`; the resident
-// re-validates it against `argv`/`manager` before use.
+// `manager` + `argv` carry the invocation the shim received. The node and
+// TypeScript runners (v2) parse the launch intent from them in the resident,
+// so the caller sends no evidence of its own. The package-script request keeps
+// its v1 shape; its `command_text` and `evidence` are accepted but unused.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ContainedNodeExecuteRequestV1 {
+pub struct ContainedNodeExecuteRequestV2 {
     pub schema: String,
     #[serde(default)]
     pub request_id: Option<String>,
     pub workspace: String,
     pub manager: String,
     pub argv: Vec<String>,
-    #[serde(default)]
-    pub command_text: String,
-    pub evidence: Option<Value>,
     /// Shim bin directory (PATH pin target); the resident scrubs it from PATH.
     #[serde(default)]
     pub shim_directory: Option<String>,
@@ -88,23 +84,25 @@ pub struct ContainedNodeExecuteRequestV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ContainedNodeExecuteResultV1 {
+pub struct ContainedNodeExecuteResultV2 {
     pub schema: String,
     pub result: Option<Value>,
+    /// Set only when `result` is `null` and the launch must stop instead of
+    /// returning to Guard review: an allowed Vitest handoff from Guard's
+    /// installed package shims that could not be contained. The caller exits
+    /// with this message.
+    pub refusal: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ContainedTypescriptExecuteRequestV1 {
+pub struct ContainedTypescriptExecuteRequestV2 {
     pub schema: String,
     #[serde(default)]
     pub request_id: Option<String>,
     pub workspace: String,
     pub manager: String,
     pub argv: Vec<String>,
-    #[serde(default)]
-    pub command_text: String,
-    pub evidence: Option<Value>,
     /// Shim bin directory (PATH pin target); the resident scrubs it from PATH.
     #[serde(default)]
     pub shim_directory: Option<String>,
@@ -303,27 +301,73 @@ mod wire_tests {
 
     #[test]
     fn contained_node_request_without_optional_fields() {
-        // _contained_request sends only the base set — no command_text.
+        // _contained_request sends only the base set: no command text and no
+        // caller evidence, since the resident parses the launch itself.
         let raw = serde_json::json!({
-            "schema": "guard-contained-node-execute-request.v1",
+            "schema": "guard-contained-node-execute-request.v2",
             "request_id": "n-1",
             "workspace": "/repo",
             "manager": "npx",
             "argv": ["npx", "vitest"],
             "guard_home": "/home/.hol-guard",
-            "evidence": null,
         });
-        let req: ContainedNodeExecuteRequestV1 =
+        let req: ContainedNodeExecuteRequestV2 =
             serde_json::from_value(raw).expect("node request must deserialize");
         assert_eq!(req.manager, "npx");
-        assert!(req.command_text.is_empty());
+        assert!(req.shim_directory.is_none());
+    }
+
+    #[test]
+    fn contained_node_and_typescript_requests_refuse_caller_evidence() {
+        for schema in [
+            "guard-contained-node-execute-request.v2",
+            "guard-contained-typescript-execute-request.v2",
+        ] {
+            for (field, value) in [
+                ("evidence", serde_json::json!({})),
+                ("command_text", serde_json::json!("npx vitest")),
+            ] {
+                let mut raw = serde_json::json!({
+                    "schema": schema,
+                    "workspace": "/repo",
+                    "manager": "npx",
+                    "argv": ["vitest"],
+                    "guard_home": "/home/.hol-guard",
+                });
+                raw[field] = value;
+                if schema.contains("node") {
+                    assert!(serde_json::from_value::<ContainedNodeExecuteRequestV2>(raw).is_err());
+                } else {
+                    assert!(
+                        serde_json::from_value::<ContainedTypescriptExecuteRequestV2>(raw).is_err()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn contained_node_result_always_carries_refusal() {
+        let result = ContainedNodeExecuteResultV2 {
+            schema: CONTAINED_NODE_EXECUTE_RESULT_SCHEMA.to_owned(),
+            result: None,
+            refusal: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&result).unwrap(),
+            serde_json::json!({
+                "schema": "guard-contained-node-execute-result.v2",
+                "result": null,
+                "refusal": null,
+            })
+        );
     }
 
     #[test]
     fn contained_runner_requests_carry_launch_context() {
         for schema in [
-            "guard-contained-node-execute-request.v1",
-            "guard-contained-typescript-execute-request.v1",
+            "guard-contained-node-execute-request.v2",
+            "guard-contained-typescript-execute-request.v2",
             "guard-contained-package-script-execute-request.v1",
         ] {
             let raw = serde_json::json!({
@@ -333,17 +377,16 @@ mod wire_tests {
                 "manager": "npx",
                 "argv": ["vitest"],
                 "guard_home": "/home/.hol-guard",
-                "evidence": null,
                 "shim_directory": "/home/.hol-guard/package-shims/bin",
                 "environment": {"PATH": "/usr/bin"},
                 "timeout_seconds": 300.0,
             });
             if schema.contains("node") {
-                let req: ContainedNodeExecuteRequestV1 = serde_json::from_value(raw).unwrap();
+                let req: ContainedNodeExecuteRequestV2 = serde_json::from_value(raw).unwrap();
                 assert_eq!(req.timeout_seconds, Some(300.0));
                 assert_eq!(req.environment.unwrap()["PATH"], "/usr/bin");
             } else if schema.contains("typescript") {
-                let req: ContainedTypescriptExecuteRequestV1 = serde_json::from_value(raw).unwrap();
+                let req: ContainedTypescriptExecuteRequestV2 = serde_json::from_value(raw).unwrap();
                 assert_eq!(req.timeout_seconds, Some(300.0));
             } else {
                 let req: ContainedPackageScriptExecuteRequestV1 =

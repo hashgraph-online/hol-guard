@@ -24,7 +24,6 @@ if str(_REPO_ROOT) not in sys.path:
 
 import codex_plugin_scanner
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,
@@ -36,17 +35,41 @@ from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_health,
     native_runtime_status,
-    review_post_tool_native,
 )
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from scripts.native_probe_receipts import (
     receipt_corpus_is_complete,
     wait_for_receipt_corpus,
     wait_for_route_corpus,
 )
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 from scripts.native_slo_adapter import is_allowed
 from scripts.native_slo_contract import MAX_READINESS_P95_MS, proof_environment_violations
+
+# Loaded by path like the hook client: when a script under `scripts/` loads
+# this probe, `scripts/ci` shadows the top-level `ci` package.
+_POST_TOOL_REVIEW_SPEC = importlib.util.spec_from_file_location(
+    "hol_guard_post_tool_review",
+    Path(__file__).with_name("post_tool_review.py"),
+)
+if _POST_TOOL_REVIEW_SPEC is None or _POST_TOOL_REVIEW_SPEC.loader is None:
+    raise RuntimeError("native_default_auto_probe_failed: PostToolUse review client could not be loaded")
+_POST_TOOL_REVIEW_MODULE = importlib.util.module_from_spec(_POST_TOOL_REVIEW_SPEC)
+# Dataclasses resolve their annotations through sys.modules while the module loads.
+sys.modules[_POST_TOOL_REVIEW_SPEC.name] = _POST_TOOL_REVIEW_MODULE
+_POST_TOOL_REVIEW_SPEC.loader.exec_module(_POST_TOOL_REVIEW_MODULE)
+review_post_tool_native = _POST_TOOL_REVIEW_MODULE.review_post_tool_native
+HookReviewRequest = _POST_TOOL_REVIEW_MODULE.HookReviewRequest
+_POLICY_SUPPORT_SPEC = importlib.util.spec_from_file_location(
+    "hol_guard_native_policy_test_support",
+    Path(__file__).with_name("native_policy_test_support.py"),
+)
+if _POLICY_SUPPORT_SPEC is None or _POLICY_SUPPORT_SPEC.loader is None:
+    raise RuntimeError("native_default_auto_probe_failed: native policy test support could not be loaded")
+_POLICY_SUPPORT_MODULE = importlib.util.module_from_spec(_POLICY_SUPPORT_SPEC)
+sys.modules[_POLICY_SUPPORT_SPEC.name] = _POLICY_SUPPORT_MODULE
+_POLICY_SUPPORT_SPEC.loader.exec_module(_POLICY_SUPPORT_MODULE)
+native_policy_snapshot = _POLICY_SUPPORT_MODULE.native_policy_snapshot
 
 _HOOK_CLIENT_SPEC = importlib.util.spec_from_file_location(
     "hol_guard_installed_hook_client",
@@ -146,7 +169,7 @@ def _stop_native_process(runtime: Path, guard_home: Path) -> bool:
             (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
             check=False,
             capture_output=True,
-            timeout=2,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         print("native_default_auto_probe_cleanup_timeout", file=sys.stderr)

@@ -222,3 +222,88 @@ fn credential_helper_shapes_are_narrow() {
         vec!["osxkeychain", "!gh auth git-credential"]
     );
 }
+
+#[test]
+fn a_repository_reaches_only_origin_when_nothing_else_names_a_remote() {
+    for entries in [
+        &[(
+            "remote.origin.url",
+            "https://github.com/example-org/app.git",
+        )][..],
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("branch.main.remote", "origin"),
+            ("branch.main.merge", "refs/heads/main"),
+            ("remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"),
+        ],
+        // `remote.pushdefault` has no subsection, so it configures no remote.
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("remote.pushdefault", "origin"),
+        ],
+    ] {
+        assert!(only_origin_remote(&config(entries)), "{entries:?}");
+    }
+}
+
+#[test]
+fn another_remote_or_another_branch_remote_reaches_past_origin() {
+    for entries in [
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("remote.upstream.url", "https://github.com/other/app.git"),
+        ][..],
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("branch.main.remote", "upstream"),
+        ],
+        &[("branch.main.remote", "https://example.invalid/app.git")],
+        // Git builds a remote from any key in the subsection. With no URL it
+        // takes the name as a local path and runs the program these name, so
+        // `--all` would start it.
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("remote.x.uploadpack", "/tmp/payload"),
+        ],
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("remote.x.vcs", "payload"),
+        ],
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("remote.x.fetch", "+refs/heads/*:refs/remotes/x/*"),
+        ],
+        // Git keeps a subsection's case, so this is a second remote, and
+        // `--all` fetches a URL the origin proof never read.
+        &[
+            (
+                "remote.origin.url",
+                "https://github.com/example-org/app.git",
+            ),
+            ("remote.Origin.url", "https://example.invalid/app.git"),
+        ],
+    ] {
+        assert!(!only_origin_remote(&config(entries)), "{entries:?}");
+    }
+}

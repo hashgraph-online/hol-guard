@@ -91,7 +91,7 @@ fn action(session: &Session, command: &str) -> String {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let controls = git_helper_fixture::github_controls("enabled");
     let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
@@ -110,6 +110,7 @@ fn action(session: &Session, command: &str) -> String {
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&environment),
     );

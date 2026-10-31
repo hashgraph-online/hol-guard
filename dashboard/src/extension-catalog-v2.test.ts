@@ -48,7 +48,7 @@ function summary(id: string, name: string, extra: Record<string, unknown> = {}) 
     required: false,
     trust_class: "first-party",
     catalog_defaults: { enabled: true, activation: "default-on" },
-    publisher: { id: "hol", displayName: "Hashgraph Online" },
+    publisher: { id: "hol", displayName: "HOL" },
     icon: { kind: "none" },
     source: "built-in",
     version: "1.0.0",

@@ -205,6 +205,31 @@ fn strip_prefixes(
 ) -> Option<usize> {
     let mut stripped = false;
     let mut required = Vec::new();
+    // A bare `exec` hands the shell's process to the command that follows, so
+    // the program the rest of the words run, and the arguments it runs with,
+    // are the ones the bare spelling runs. Read past it so a setting behind it
+    // is projected the way the bare spelling's is; without this the loop below
+    // stops at the first word and `exec env -u NODE_OPTIONS npm test` carries
+    // a floor that `env -u NODE_OPTIONS npm test` does not. `exec -c` runs
+    // with an empty environment and `exec -a` renames the program, so only the
+    // option-less spelling is transparent.
+    //
+    // Only an `env` wrapper may follow. A shell recognizes an assignment word
+    // only in front of the command word, and here `exec` is that word, so the
+    // `LC_ALL=C` of `exec LC_ALL=C ls src` is the program `exec` is asked to
+    // run, not a setting in front of `ls`. Reading past `exec` there would
+    // strip the word the shell actually executes and hand the reviewer a
+    // command the caller never wrote.
+    let launcher = (tokens[index].value == "exec"
+        && literal_word(chars, &tokens[index])
+        && index + 1 < tokens.len()
+        && !tokens[index + 1].is_control
+        && matches!(tokens[index + 1].value.as_str(), "env" | "/usr/bin/env"))
+    .then(|| {
+        let at = index;
+        index += 1;
+        at
+    });
     while index < tokens.len() && !tokens[index].is_control {
         let token = &tokens[index];
         if let Some((name, value)) = shell_assignment(chars, token) {
@@ -249,6 +274,11 @@ fn strip_prefixes(
     }
     if !required.is_empty() && !search_path::admits(&required, &tokens[index].value) {
         return None;
+    }
+    // The launcher only leaves the text when a setting behind it did. On its
+    // own it is the command the caller wrote, and nothing here has read it.
+    if let (Some(at), true) = (launcher, stripped) {
+        removed[at] = true;
     }
     Some(index)
 }
@@ -398,6 +428,15 @@ fn inert_assignment(name: &str, value: &str) -> bool {
     {
         return true;
     }
+    // The same `NODE_OPTIONS` the runtime already treats as inert when a
+    // developer's shell exports it: only flags that size the engine or change
+    // what it prints. Written in front of the command it is the same setting,
+    // so reading it differently would block `NODE_OPTIONS=--max-old-space-size=4096 npm test`
+    // while the identical inherited value passes. A preload, a loader or an
+    // inspector is not inert, and those keep failing closed below.
+    if upper == "NODE_OPTIONS" && guard_contracts::node_options_inert(value) {
+        return true;
+    }
     // Clearing a credential only removes authority from the command.
     if value.is_empty()
         && CREDENTIAL_MARKERS
@@ -422,8 +461,25 @@ fn inert_assignment(name: &str, value: &str) -> bool {
 /// endpoint — out of this branch, and a plain scalar cannot spell a path or
 /// an option for the program to act on. A reviewed projection still names
 /// such a setting, so this widening belongs to the proof side alone.
+///
+/// A build or test setting whose name says "options" or "flags" while the
+/// value only chooses how the run reports or how often it repeats belongs
+/// here rather than with the inert settings. The name alone cannot tell
+/// `GOFLAGS=-count=1` from `GOFLAGS=-toolexec=./x`, so that module reads the
+/// value against a closed list; but `-count=1` is still a value `go` reads,
+/// and a contained run of the projected command would repeat a cached test
+/// the caller asked to rerun. Keeping it on the proof side leaves the
+/// value screen in `env_prefix_values` free to say so.
 fn ordinary_project_setting(name: &str, value: &str) -> bool {
-    plain_scalar(value) && crate::command_compatibility::environment::ordinary_setting_name(name)
+    inert_tool_setting(name, value)
+        || plain_scalar(value)
+            && crate::command_compatibility::environment::ordinary_setting_name(name)
+}
+
+/// [`super::inert_tool_settings::inert_tool_setting`], reachable from the
+/// `reviewed` child module beside this one.
+pub(super) fn inert_tool_setting(name: &str, value: &str) -> bool {
+    super::inert_tool_settings::inert_tool_setting(name, value)
 }
 
 fn plain_scalar(value: &str) -> bool {
@@ -464,6 +520,15 @@ fn inert_unset(name: &str) -> bool {
 /// A setting that may change behavior but leaves the program, its loader and
 /// its credentials alone, so a human can review the command it prefixes.
 fn reviewable_assignment(name: &str, value: &str, context: PathContext<'_>) -> bool {
+    // `GOFLAGS`, `RUSTFLAGS` and `PYTEST_ADDOPTS` are spelled like loader
+    // settings, so the name test below refuses them outright and the command
+    // keeps no reviewable form at all. Their values are read against a closed
+    // list first, and one that passes it only chooses how the run reports,
+    // how often it repeats or which lint it refuses -- nothing a reviewer
+    // could not read off the command as written.
+    if inert_tool_setting(name, value) {
+        return true;
+    }
     let upper = name.to_ascii_uppercase();
     if upper == "NODE_PATH" {
         return trusted_node_path(value, context);
@@ -529,46 +594,35 @@ fn code_loading_name(upper: &str) -> bool {
     crate::command_compatibility::code_or_redirect_environment_name(upper)
 }
 
-/// The first leading setting of any simple command that can load other code,
-/// as a shape-checked name a reason may echo.
+/// The first leading setting of any simple command that can load other code
+/// and whose value this module does not read as inert, as a shape-checked
+/// name a reason may echo. A setting the projection removes stopped nothing,
+/// so naming it would send the agent after the wrong word.
 pub(super) fn code_loading_setting(command: &str) -> Option<String> {
-    leading_setting(command, |upper| {
-        crate::command_compatibility::code_or_redirect_environment_name(upper)
+    leading_setting(command, |name, value| {
+        crate::command_compatibility::code_or_redirect_environment_name(&name.to_ascii_uppercase())
+            && !inert_assignment(name, value)
     })
 }
 
 /// The first leading setting of any simple command named for a credential
 /// (`API_KEY`, `GH_TOKEN`), as a shape-checked name a reason may echo.
 pub(super) fn credential_setting(command: &str) -> Option<String> {
-    leading_setting(
-        command,
-        crate::command_compatibility::credential_routing_environment_name,
-    )
+    leading_setting(command, |name, _| {
+        crate::command_compatibility::credential_routing_environment_name(
+            &name.to_ascii_uppercase(),
+        )
+    })
 }
 
-/// The heap size when the first code-loading setting is `NODE_OPTIONS` and it
-/// holds only `--max-old-space-size=<MiB>`. That option loads no code, and
-/// `node --max-old-space-size=<MiB> <script>` is a form the read-only sandbox
-/// accepts, so a reason may point the agent to it.
-pub(super) fn node_heap_only_setting(command: &str) -> Option<String> {
-    let (name, value) = leading_assignment(command, |upper| {
-        crate::command_compatibility::code_or_redirect_environment_name(upper)
-    })?;
-    let size = value.strip_prefix("--max-old-space-size=")?;
-    (name.eq_ignore_ascii_case("NODE_OPTIONS")
-        && (1..=6).contains(&size.len())
-        && size.bytes().all(|byte| byte.is_ascii_digit())
-        && size
-            .parse::<u32>()
-            .is_ok_and(|mib| (16..=131072).contains(&mib)))
-    .then(|| size.to_owned())
-}
-
-fn leading_setting(command: &str, matches: impl Fn(&str) -> bool) -> Option<String> {
+fn leading_setting(command: &str, matches: impl Fn(&str, &str) -> bool) -> Option<String> {
     leading_assignment(command, matches).map(|(name, _)| name)
 }
 
-fn leading_assignment(command: &str, matches: impl Fn(&str) -> bool) -> Option<(String, String)> {
+fn leading_assignment(
+    command: &str,
+    matches: impl Fn(&str, &str) -> bool,
+) -> Option<(String, String)> {
     if command.len() > MAX_PROJECTED_CHARS {
         return None;
     }
@@ -596,10 +650,7 @@ fn leading_assignment(command: &str, matches: impl Fn(&str) -> bool) -> Option<(
             in_prefix = false;
             continue;
         };
-        if name.len() <= MAX_SETTING_CHARS
-            && assignment_name_shape(name)
-            && matches(&name.to_ascii_uppercase())
-        {
+        if name.len() <= MAX_SETTING_CHARS && assignment_name_shape(name) && matches(name, value) {
             return Some((name.to_owned(), value.to_owned()));
         }
     }

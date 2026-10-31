@@ -105,7 +105,7 @@ fn tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let controls = git_helper_fixture::github_controls("enabled");
     let action = |command: &str| {
@@ -125,6 +125,7 @@ fn tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&environment),
         )

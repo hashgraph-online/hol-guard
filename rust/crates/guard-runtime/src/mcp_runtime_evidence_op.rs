@@ -68,6 +68,22 @@ fn evaluate(request: &McpRuntimeEvidenceRequestV1) -> Result<Value, &'static str
     }
 }
 
+/// The `receipt_evidence` subop for a caller inside the resident: the
+/// displayed command and the `runtimeAction` record, with the size bound and
+/// errors the op answers a Python caller with.
+pub(crate) fn receipt_evidence(
+    request: &McpRuntimeEvidenceRequestV1,
+) -> Result<(Option<String>, Option<Value>), &'static str> {
+    request_digest(request)?;
+    if request.subop != "receipt_evidence" {
+        return Err(ERR_SUBOP);
+    }
+    let mut payload = evaluate(request)?;
+    let command_text = payload["command_text"].as_str().map(str::to_owned);
+    let runtime_action = Some(payload["runtime_action"].take()).filter(|value| !value.is_null());
+    Ok((command_text, runtime_action))
+}
+
 pub(crate) fn evaluate_mcp_runtime_evidence(
     request: &McpRuntimeEvidenceRequestV1,
 ) -> Result<Vec<u8>, String> {

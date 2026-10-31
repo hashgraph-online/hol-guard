@@ -18,13 +18,16 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .native_approval_errors import FINITE_FAILURE_CODES
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
+from .native_mode import non_production_diagnostic_enabled
 from .native_resident_client import (
     native_resident_client_failure_code,
     native_resident_client_ready,
@@ -61,6 +64,26 @@ _COLD_START_ALLOWANCE_SECONDS = 10.0
 # (no verifier key, no private state directory). They are the same answer as
 # "runtime off"; every other failure of a provisioned resident fails closed.
 _UNPROVISIONED_ERRORS = frozenset({"native_policy_verifier_key_missing", "native_resident_state_dir_create_failed"})
+# Existing Python client classifications, accepted only for diagnostic output.
+# This must not extend the native refusal or approval authority vocabulary.
+_PYTHON_CLIENT_DIAGNOSTIC_CODES = frozenset(
+    {
+        "native_client_containment_failed",
+        "native_client_timed_out",
+        "native_client_output_limit_exceeded",
+        "native_client_status_missing",
+        "native_client_exit_nonzero",
+        "native_client_output_missing",
+        "native_client_process_failed",
+        "native_client_pool_exhausted",
+        "native_client_request_invalid",
+        "native_client_launcher_failed",
+        "native_client_stdin_unavailable",
+        "native_client_stream_failed",
+        "native_client_start_failed",
+    }
+)
+_TRANSPORT_DIAGNOSTIC_CODES = FINITE_FAILURE_CODES | _PYTHON_CLIENT_DIAGNOSTIC_CODES
 _CONFIG_KEYS = frozenset(
     {
         "enabled",
@@ -303,8 +326,19 @@ def approval_gate_native(
         deadline_monotonic=deadline_monotonic,
     )
     if output is None:
-        if native_resident_client_failure_code() in _UNPROVISIONED_ERRORS:
+        failure_code = None
+        with suppress(Exception):
+            failure_code = native_resident_client_failure_code()
+        if type(failure_code) is str and failure_code in _UNPROVISIONED_ERRORS:
             return None
+        with suppress(Exception):
+            if non_production_diagnostic_enabled():
+                code = (
+                    failure_code
+                    if type(failure_code) is str and failure_code in _TRANSPORT_DIAGNOSTIC_CODES
+                    else "unknown"
+                )
+                print(f"native_approval_gate_transport_unavailable stage=request code={code}", file=sys.stderr)
         native_record_resident_failure(status.identity.sha256, guard_home, reason="native_approval_gate_unavailable")
         raise _unavailable_error()
     try:

@@ -6,11 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import native_policy_test_support as support
+from ci.native_runtime import native_policy_test_support as support
 
 
+@pytest.mark.parametrize("platform", ["linux", "darwin", "win32"])
 def test_readiness_failure_reports_only_bounded_known_worker_locations(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    platform: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     release = threading.Event()
     worker = threading.Thread(target=release.wait)
@@ -35,7 +36,7 @@ def test_readiness_failure_reports_only_bounded_known_worker_locations(
             f_locals={"secret": "private local payload"},
         )
     monkeypatch.setattr(support.sys, "_current_frames", lambda: {worker.ident: frame, -1: object()})
-    monkeypatch.setattr(support.sys, "platform", "linux")
+    monkeypatch.setattr(support.sys, "platform", platform)
     times = iter([100.0, 103.0])
     monkeypatch.setattr(support.time, "monotonic", lambda: next(times))
     monkeypatch.setattr(support, "GuardStore", lambda home: home)
@@ -44,7 +45,10 @@ def test_readiness_failure_reports_only_bounded_known_worker_locations(
         with pytest.raises(AssertionError) as failure, support.native_policy_snapshot(tmp_path):
             pytest.fail("an unready snapshot must not be yielded")
         message = str(failure.value)
-        assert calls == ["start", 103.0, "close"]
+        # The deadline is the same on every platform: the wait began at 100.0
+        # and the budget is 25 seconds. The reported wait is the time that
+        # actually passed, which is why it still reads three seconds here.
+        assert calls == ["start", 125.0, "close"]
         assert "wait_seconds=3.000 last_error=unavailable worker_alive=true" in message
         assert message.count("publish_") == 6
         assert ":11 <- " in message

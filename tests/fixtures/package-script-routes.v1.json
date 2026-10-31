@@ -124,6 +124,15 @@
       "reason": "native_package_test_readonly_containment_required"
     },
     {
+      "name": "jest-run",
+      "scripts": {
+        "test": "jest --ci"
+      },
+      "command": "pnpm run test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
       "name": "ready-pnpm-lint-bare",
       "scripts": {
         "build": "vite build",
@@ -413,12 +422,156 @@
       },
       "command": "npm test",
       "entries": [],
-      "reason": null
+      "reason": "native_package_test_readonly_containment_required"
     },
     {
       "name": "watch",
       "scripts": {
         "test": "vitest"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-watch",
+      "scripts": {
+        "test": "jest --watch"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-outside-config",
+      "scripts": {
+        "test": "jest --config /tmp/jest.outside.config.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-max-workers-short",
+      "scripts": {
+        "test": "jest -w 2"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "jest-watch-kebab",
+      "scripts": {
+        "test": "jest --watch-all"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-watch-after-separator",
+      "scripts": {
+        "test": "jest"
+      },
+      "command": "pnpm test -- --watch",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-outside-config-after-separator",
+      "scripts": {
+        "test": "jest"
+      },
+      "command": "pnpm test -- --config /tmp/jest.outside.config.js",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-attached-outside-config",
+      "scripts": {
+        "test": "jest -c/tmp/jest.outside.config.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-attached-climbing-config",
+      "scripts": {
+        "test": "jest -c../outside/jest.config.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-attached-home-config",
+      "scripts": {
+        "test": "jest -c~/elsewhere/jest.config.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-inline-json-config",
+      "scripts": {
+        "test": "jest --config '{\"setupFiles\":[\"/tmp/outside-setup.js\"]}'"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-inline-json-module-mapper",
+      "scripts": {
+        "test": "jest --moduleNameMapper '{\"app\":\"../outside/app.js\"}'"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-attached-inside-config",
+      "scripts": {
+        "test": "jest -cjest.config.ci.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "jest-grouped-outside-config",
+      "scripts": {
+        "test": "jest -ic/tmp/jest.outside.config.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-grouped-climbing-config",
+      "scripts": {
+        "test": "jest -ic../outside/jest.config.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "jest-grouped-inside-config",
+      "scripts": {
+        "test": "jest -icjest.config.ci.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "jest-json-escape-config",
+      "scripts": {
+        "test": "jest --config '{\"setupFiles\":[\"a/\\u002e\\u002e/etc/x.js\"]}'"
       },
       "command": "pnpm test",
       "entries": [],

@@ -25,6 +25,9 @@ mod pyfs;
 mod pyfs_nt;
 mod status;
 mod template;
+mod tool_dirs;
+#[cfg(all(test, unix))]
+mod tool_dirs_tests;
 mod values;
 mod winpath;
 

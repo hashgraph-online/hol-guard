@@ -103,7 +103,28 @@ pub(crate) struct ApprovalRequest {
 
 impl ApprovalRequest {
     pub(crate) fn decode(value: Option<&Value>) -> StoreResult<Self> {
-        serde_json::from_value(value.cloned().ok_or(REQUEST_INVALID)?).map_err(|_| REQUEST_INVALID)
+        let mut request: Self = serde_json::from_value(value.cloned().ok_or(REQUEST_INVALID)?)
+            .map_err(|_| REQUEST_INVALID)?;
+        request.mask_tool_call_credentials();
+        Ok(request)
+    }
+
+    /// A `tool_call` row keeps its command only to show and group it: the
+    /// approval binds `artifact_hash`, which the hook derived from the raw
+    /// command before the write. Credentials in that text are masked so the
+    /// queue never stores them. `native_bash_request` and
+    /// `tool_action_request` rows re-parse their stored command, so they keep
+    /// it as sent.
+    fn mask_tool_call_credentials(&mut self) {
+        if self.artifact_type != "tool_call" {
+            return;
+        }
+        for text in [&mut self.launch_target, &mut self.raw_command_text]
+            .into_iter()
+            .flatten()
+        {
+            *text = guard_command::redacted_command_tokens::redact_text(text).text;
+        }
     }
 
     pub(crate) fn envelope(&self) -> Value {

@@ -280,17 +280,6 @@ def schema_diagnostics_from_error(error: PolicyDocumentError, text: str | None) 
     return tuple(_schema_diagnostic(item, text) for item in error.diagnostics)
 
 
-def parse_with_diagnostics(
-    text: str,
-) -> tuple[GuardPolicyDocument | None, tuple[StructuredDiagnostic, ...]]:
-    """Parse ``text`` and report every schema problem, not only the first twenty."""
-
-    try:
-        return parse_policy_document_yaml(text, diagnostic_limit=None), ()
-    except PolicyDocumentError as error:
-        return None, schema_diagnostics_from_error(error, text)
-
-
 def validate_policy_file(path: Path, *, diagnostic_limit: int | None = None) -> PolicyValidationReport:
     """Read, parse and compile one policy file and report every problem found.
 
@@ -337,7 +326,6 @@ __all__ = [
     "file_trust_diagnostic",
     "format_json_path",
     "locate_policy_path",
-    "parse_with_diagnostics",
     "schema_diagnostics_from_error",
     "validate_policy_file",
 ]

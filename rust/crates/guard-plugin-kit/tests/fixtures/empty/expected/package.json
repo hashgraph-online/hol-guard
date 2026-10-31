@@ -1,0 +1,17 @@
+{
+  "hol.provenance.json": {
+    "files": [],
+    "generator": {
+      "name": "hol-guard plugin-kit",
+      "version": "<version>"
+    },
+    "plugin": {
+      "name": null,
+      "version": null
+    },
+    "repository": null,
+    "runtimes": [],
+    "schema": "hol.plugin-kit.provenance.v1",
+    "source_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

@@ -109,6 +109,9 @@ def _with_dynamic(entries: list[dict]) -> dict:
     return scope
 
 
+_BOTH_BRANCHES = {"pkg", "pkg.root", "pkg.plugin", "pkg.fallback"}
+
+
 def _in_scope(result: dict) -> set[str]:
     return {item["module"] for item in result["python"]["files"]}
 
@@ -118,6 +121,178 @@ def test_undeclared_non_literal_import_is_an_error(tmp_path: Path) -> None:
     _write(repo / "src" / "pkg" / "plugin.py", "p = 1\n")
     with pytest.raises(ScopeError, match=r"root\.py: 1 non-literal import site"):
         build_report(repo, scope_path)
+
+
+def _resolved(tmp_path: Path, root: str, *modules: str) -> dict:
+    """Build the report for a package whose only dynamic import is in ``root``."""
+    repo, scope_path = _repo(tmp_path, _scope(), root=root)
+    for module in modules:
+        _write(repo / "src" / "pkg" / f"{module}.py", "p = 1\n")
+    result = build_report(repo, scope_path)
+    assert result["python"]["dynamic_import_sites_unresolved"] == 0
+    return result
+
+
+def test_a_conditional_between_literals_resolves_to_both_branches(tmp_path: Path) -> None:
+    root = (
+        "from importlib import import_module\n\n\n"
+        "def load(flag):\n"
+        '    return import_module(".plugin" if flag else ".fallback", __package__)\n'
+    )
+    assert _in_scope(_resolved(tmp_path, root, "plugin", "fallback")) == _BOTH_BRANCHES
+
+
+def test_a_name_bound_to_a_conditional_resolves(tmp_path: Path) -> None:
+    root = (
+        "from importlib import import_module\n\n\n"
+        "def load(flag):\n"
+        '    module_name = ".plugin" if flag else ".fallback"\n'
+        "    return import_module(module_name, __package__)\n"
+    )
+    assert _in_scope(_resolved(tmp_path, root, "plugin", "fallback")) == _BOTH_BRANCHES
+
+
+def test_a_loop_over_a_literal_table_resolves_by_tuple_position(tmp_path: Path) -> None:
+    root = (
+        "from importlib import import_module\n\n"
+        '_SPECS: tuple[tuple[str, str], ...] = ((".plugin", "Plugin"), (".fallback", "Fallback"))\n\n\n'
+        "def build():\n"
+        "    found = []\n"
+        "    for module_name, class_name in _SPECS:\n"
+        "        found.append(getattr(import_module(module_name, __package__), class_name))\n"
+        "    return found\n"
+    )
+    assert _in_scope(_resolved(tmp_path, root, "plugin", "fallback")) == _BOTH_BRANCHES
+
+
+def test_a_comprehension_over_a_literal_table_resolves(tmp_path: Path) -> None:
+    root = (
+        "from importlib import import_module\n\n"
+        '_SPECS: tuple[str, ...] = (".plugin", ".fallback")\n\n\n'
+        "def build():\n"
+        "    return [import_module(module_name, __package__) for module_name in _SPECS]\n"
+    )
+    assert _in_scope(_resolved(tmp_path, root, "plugin", "fallback")) == _BOTH_BRANCHES
+
+
+def test_a_private_helper_resolves_from_its_literal_call_sites(tmp_path: Path) -> None:
+    root = (
+        "from importlib import import_module\n\n\n"
+        "def _load(module_name, attribute_name):\n"
+        "    return getattr(import_module(module_name, __package__), attribute_name)\n\n\n"
+        'Plugin = _load(".plugin", "Plugin")\n'
+        'Fallback = _load(".fallback", "Fallback")\n'
+    )
+    result = _resolved(tmp_path, root, "plugin", "fallback")
+    reach = {item["module"]: item["reach"] for item in result["python"]["files"]}
+    # The helper runs at import time, so its imports are import-time edges, not lazy ones.
+    assert reach["pkg.plugin"] == "eager"
+    assert reach["pkg.fallback"] == "eager"
+
+
+@pytest.mark.parametrize(
+    "helper",
+    [
+        # A public name can be called from another module with any argument.
+        'def load(module_name):\n    return import_module(module_name, __package__)\n\n\nPlugin = load(".plugin")\n',
+        # A private name that escapes as a value can be called with any argument too.
+        "def _load(module_name):\n    return import_module(module_name, __package__)\n\n\n"
+        'loader = _load\nPlugin = _load(".plugin")\n',
+        # Two assignments leave no single static value.
+        "def load_plugin(flag):\n"
+        '    module_name = ".plugin"\n'
+        '    module_name = ".fallback" if flag else module_name\n'
+        "    return import_module(module_name, __package__)\n",
+    ],
+)
+def test_an_argument_the_source_leaves_open_still_needs_a_declaration(tmp_path: Path, helper: str) -> None:
+    repo, scope_path = _repo(tmp_path, _scope(), root=f"from importlib import import_module\n\n\n{helper}")
+    _write(repo / "src" / "pkg" / "plugin.py", "p = 1\n")
+    with pytest.raises(ScopeError, match=r"root\.py: 1 non-literal import site"):
+        build_report(repo, scope_path)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # An augmented assignment replaces the name's value, so the literal the
+        # plain assignment gave it is not what the import call receives.
+        "def load():\n"
+        '    module_name = ".plug"\n'
+        '    module_name += "in"\n'
+        "    return import_module(module_name, __package__)\n",
+        # A list keeps its identity through append, so the table the loop walks
+        # is not the table the module-level statement wrote.
+        '_SPECS = [".plugin"]\n'
+        '_SPECS.append(".fallback")\n\n\n'
+        "def build():\n"
+        "    for module_name in _SPECS:\n"
+        "        import_module(module_name, __package__)\n",
+        # The function binds a name of its own, so the module-level table of
+        # that spelling is not what this loop walks.
+        '_SPECS = (".plugin",)\n\n\n'
+        "def build(values):\n"
+        "    _SPECS = values\n"
+        "    for module_name in _SPECS:\n"
+        "        import_module(module_name, __package__)\n",
+        # The enclosing function binds the name itself, so the nested loader
+        # closes over that binding and never reads the module-level literal,
+        # however the two are ordered in the source.
+        'MODULE = ".plugin"\n\n\n'
+        "def outer(values):\n"
+        "    def loader():\n"
+        "        return import_module(MODULE, __package__)\n\n"
+        "    MODULE = values[0]\n"
+        "    return loader\n",
+        # The loop rebinds the name, so the value that survives the loop is the
+        # last element it walked, not the literal assigned before it.
+        '_SPECS = (".plugin",)\n'
+        'module_name = ".fallback"\n'
+        "for module_name in _SPECS:\n"
+        "    pass\n\n"
+        "import_module(module_name, __package__)\n",
+        # A parameter shadows the module-level name it spells, and any caller
+        # anywhere can pass it anything.
+        'MODULE = ".plugin"\n\n\ndef load(MODULE):\n    return import_module(MODULE, __package__)\n',
+        # A comprehension target is the comprehension's own name, so the
+        # module-level literal spelled the same way is not what it holds.
+        'module_name = ".plugin"\n\n\n'
+        "def build(values):\n"
+        "    return [import_module(module_name, __package__) for module_name in values]\n",
+        # The same inside a generator expression, where the enclosing function
+        # rather than the module supplies the literal of that spelling.
+        "def build(values):\n"
+        '    module_name = ".plugin"\n'
+        "    return tuple(import_module(module_name, __package__) for module_name in values)\n",
+        # A later generator walks a name an earlier one bound, so the module
+        # table of that spelling is not the table it iterates.
+        '_SPECS = ((".plugin",),)\n\n\n'
+        "def build(rows):\n"
+        "    return [import_module(name, __package__) for _SPECS in rows for name in _SPECS]\n",
+    ],
+)
+def test_a_name_the_source_can_point_elsewhere_still_needs_a_declaration(tmp_path: Path, source: str) -> None:
+    repo, scope_path = _repo(tmp_path, _scope(), root=f"from importlib import import_module\n\n\n{source}")
+    for module in ("plugin", "fallback", "plug"):
+        _write(repo / "src" / "pkg" / f"{module}.py", "p = 1\n")
+    with pytest.raises(ScopeError, match=r"root\.py: 1 non-literal import site"):
+        build_report(repo, scope_path)
+
+
+def test_a_loader_built_at_import_time_still_imports_when_it_is_called(tmp_path: Path) -> None:
+    root = (
+        "from importlib import import_module\n\n\n"
+        "def _make(module_name):\n"
+        "    def loader():\n"
+        "        return import_module(module_name, __package__)\n\n"
+        "    return loader\n\n\n"
+        'plugin_loader = _make(".plugin")\n'
+    )
+    result = _resolved(tmp_path, root, "plugin")
+    reach = {item["module"]: item["reach"] for item in result["python"]["files"]}
+    # ``_make`` runs at import time, but the import it builds runs only when the
+    # loader it returned is called.
+    assert reach["pkg.plugin"] == "lazy"
 
 
 def test_follow_adds_declared_targets_and_unfollowed_does_not(tmp_path: Path) -> None:
@@ -170,14 +345,19 @@ def test_dynamic_import_sites_outside_the_closure_need_no_declaration(tmp_path: 
     assert _in_scope(build_report(repo, scope_path)) == {"pkg", "pkg.root"}
 
 
-def test_shipped_scope_declares_every_dynamic_import_with_the_registry_decision() -> None:
+def test_the_shipped_scope_needs_no_dynamic_import_declarations() -> None:
+    """Every dynamic import the shipped closure reaches is resolved from the source."""
     scope = load_scope(REPO_ROOT / DEFAULT_SCOPE)
-    entries = {entry["path"]: entry for entry in scope["python"]["dynamic_imports"]}
-    registry = entries["src/codex_plugin_scanner/guard/adapters/__init__.py"]
-    assert registry["resolution"] == "follow"
-    assert ".cursor" in registry["targets"]
-    assert "Decision" in registry["evidence"]
-    assert all(entry["evidence"].strip() for entry in entries.values())
+    assert scope["python"]["dynamic_imports"] == []
+    result = build_report(REPO_ROOT, REPO_ROOT / DEFAULT_SCOPE, top=1)
+    assert result["python"]["dynamic_import_sites_unresolved"] == 0
+    # The adapter registry table, the cli lazy-export helper and the runtime package
+    # __getattr__ are the registries that used to need a hand-written declaration.
+    assert {
+        "codex_plugin_scanner.guard.adapters.cursor",
+        "codex_plugin_scanner.guard.daemon",
+        "codex_plugin_scanner.guard.runtime.wrapper_run",
+    } <= _in_scope(result)
 
 
 def test_shipped_rust_exclusions_carry_evidence_and_unwired_is_reported() -> None:
@@ -400,5 +580,7 @@ def test_binary_crate_with_own_library_links_the_library_tree(tmp_path: Path) ->
     result = build_report(repo, scope_path)
     wired = {item["path"].rsplit("/", 1)[1] for item in result["rust"]["files"]}
     assert {"main.rs", "lib.rs", "inside.rs"} <= wired
-    unlinked = {item["path"].rsplit("/", 1)[1] for item in result["exclusions"] if item["category"] == "not_in_module_tree"}
+    unlinked = {
+        item["path"].rsplit("/", 1)[1] for item in result["exclusions"] if item["category"] == "not_in_module_tree"
+    }
     assert "inside.rs" not in unlinked

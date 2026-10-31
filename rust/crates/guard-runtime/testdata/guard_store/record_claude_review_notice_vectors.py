@@ -10,8 +10,13 @@ stores whatever it is sent, so these vectors pin what Python sends: the op,
 its clock, the session, the tool name and the notice payload.
 
 The review binding comes from the resident's exact-action op and is supplied
-per scenario. The clock and the random approval code are pinned. Run from a
-checkout; no native runtime is needed:
+per scenario. The clock and the random approval code are pinned.
+
+The resident now builds this notice itself (`add_claude_approval_request`), so
+the Python functions this script drives are retired. The vectors stay the
+reference for that port; to re-record them, run from a checkout that still
+has those functions (before `add_claude_approval_request`). No native runtime
+is needed:
 
     cd <checkout>
     PYTHONPATH=$PWD/src python3 <this-file> <output claude_review_notice_vectors.json>

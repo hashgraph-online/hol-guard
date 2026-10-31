@@ -776,6 +776,110 @@
           "Use a dry run and verify affected nodes, tolerations, and eviction consequences first."
         ],
         "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Kubernetes destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Pauses or resumes changes to a workload rollout.",
+        "example_command": "kubectl rollout pause deployment/api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Kubernetes rollout pause or resume",
+        "permission_id": "command.kubernetes-operations.permission.rollout-pause-resume",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Check rollout status and verify the affected workload before pausing or resuming it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Kubernetes destructive command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Changes saved cluster connections, credentials, or the active context.",
+        "example_command": "kubectl config use-context development",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Kubernetes client configuration change",
+        "permission_id": "command.kubernetes-operations.permission.config-write",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect the current context and the exact configuration entry before changing it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Kubernetes security administration command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Creates or updates role and role-binding permissions from a manifest.",
+        "example_command": "kubectl auth reconcile -f roles.yaml",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Kubernetes access reconciliation",
+        "permission_id": "command.kubernetes-operations.permission.auth-reconcile",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Review the requested roles, subjects, and bindings before changing access."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Kubernetes network tunnel command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Opens a local proxy that provides access to the configured cluster API.",
+        "example_command": "kubectl proxy --port=8001",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "Kubernetes API proxy",
+        "permission_id": "command.kubernetes-operations.permission.api-proxy",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Verify the bind address, request filters, and intended cluster before opening the proxy."
+        ],
+        "typed_capabilities": []
       }
     ],
     "project_markers": [],
@@ -6403,6 +6507,757 @@
         ],
         "severity": "low",
         "title": "Kubernetes resource reads"
+      },
+      {
+        "action_classes": [
+          "Kubernetes destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Pauses or resumes changes to a workload rollout.",
+        "family": null,
+        "matcher": {
+          "op": "executable-path-set.v1",
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "kubectl",
+              "kubectl.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--disable-compression",
+              "--insecure-skip-tls-verify",
+              "--match-server-version",
+              "--storage-driver-secure",
+              "--warnings-as-errors"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--as",
+              "--as-group",
+              "--as-uid",
+              "--as-user-extra",
+              "--cache-dir",
+              "--certificate-authority",
+              "--client-certificate",
+              "--client-key",
+              "--cluster",
+              "--context",
+              "--kubeconfig",
+              "--kuberc",
+              "--log-flush-frequency",
+              "--namespace",
+              "--password",
+              "--profile",
+              "--profile-output",
+              "--proxy-url",
+              "--request-timeout",
+              "--server",
+              "--storage-driver-buffer-duration",
+              "--storage-driver-db",
+              "--storage-driver-host",
+              "--storage-driver-password",
+              "--storage-driver-table",
+              "--storage-driver-user",
+              "--tls-server-name",
+              "--token",
+              "--user",
+              "--username",
+              "--v",
+              "--vmodule",
+              "-n",
+              "-s",
+              "-v"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "paths": [
+              [
+                "rollout",
+                "pause"
+              ],
+              [
+                "rollout",
+                "resume"
+              ]
+            ]
+          }
+        },
+        "native_capability": null,
+        "permission_id": "command.kubernetes-operations.permission.rollout-pause-resume",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.kubernetes-operations.rollout-pause-resume",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "op": "executable-path-set.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kubectl",
+                  "kubectl.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--disable-compression",
+                  "--insecure-skip-tls-verify",
+                  "--match-server-version",
+                  "--storage-driver-secure",
+                  "--warnings-as-errors"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--as",
+                  "--as-group",
+                  "--as-uid",
+                  "--as-user-extra",
+                  "--cache-dir",
+                  "--certificate-authority",
+                  "--client-certificate",
+                  "--client-key",
+                  "--cluster",
+                  "--context",
+                  "--kubeconfig",
+                  "--kuberc",
+                  "--log-flush-frequency",
+                  "--namespace",
+                  "--password",
+                  "--profile",
+                  "--profile-output",
+                  "--proxy-url",
+                  "--request-timeout",
+                  "--server",
+                  "--storage-driver-buffer-duration",
+                  "--storage-driver-db",
+                  "--storage-driver-host",
+                  "--storage-driver-password",
+                  "--storage-driver-table",
+                  "--storage-driver-user",
+                  "--tls-server-name",
+                  "--token",
+                  "--user",
+                  "--username",
+                  "--v",
+                  "--vmodule",
+                  "-n",
+                  "-s",
+                  "-v"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "paths": [
+                  [
+                    "rollout",
+                    "pause",
+                    "--help"
+                  ],
+                  [
+                    "rollout",
+                    "resume",
+                    "--help"
+                  ]
+                ]
+              }
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Check rollout status and verify the affected workload before pausing or resuming it."
+        ],
+        "severity": "high",
+        "title": "Kubernetes rollout pause or resume"
+      },
+      {
+        "action_classes": [
+          "Kubernetes destructive command"
+        ],
+        "default_mode": "review",
+        "description": "Changes saved cluster connections, credentials, or the active context.",
+        "family": null,
+        "matcher": {
+          "op": "executable-path-set.v1",
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "kubectl",
+              "kubectl.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--disable-compression",
+              "--insecure-skip-tls-verify",
+              "--match-server-version",
+              "--storage-driver-secure",
+              "--warnings-as-errors"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--as",
+              "--as-group",
+              "--as-uid",
+              "--as-user-extra",
+              "--cache-dir",
+              "--certificate-authority",
+              "--client-certificate",
+              "--client-key",
+              "--cluster",
+              "--context",
+              "--kubeconfig",
+              "--kuberc",
+              "--log-flush-frequency",
+              "--namespace",
+              "--password",
+              "--profile",
+              "--profile-output",
+              "--proxy-url",
+              "--request-timeout",
+              "--server",
+              "--storage-driver-buffer-duration",
+              "--storage-driver-db",
+              "--storage-driver-host",
+              "--storage-driver-password",
+              "--storage-driver-table",
+              "--storage-driver-user",
+              "--tls-server-name",
+              "--token",
+              "--user",
+              "--username",
+              "--v",
+              "--vmodule",
+              "-n",
+              "-s",
+              "-v"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "paths": [
+              [
+                "config",
+                "set"
+              ],
+              [
+                "config",
+                "set-cluster"
+              ],
+              [
+                "config",
+                "set-context"
+              ],
+              [
+                "config",
+                "set-credentials"
+              ],
+              [
+                "config",
+                "use-context"
+              ],
+              [
+                "config",
+                "unset"
+              ],
+              [
+                "config",
+                "delete-cluster"
+              ],
+              [
+                "config",
+                "delete-context"
+              ],
+              [
+                "config",
+                "delete-user"
+              ],
+              [
+                "config",
+                "rename-context"
+              ]
+            ]
+          }
+        },
+        "native_capability": null,
+        "permission_id": "command.kubernetes-operations.permission.config-write",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.kubernetes-operations.config-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "op": "executable-path-set.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kubectl",
+                  "kubectl.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--disable-compression",
+                  "--insecure-skip-tls-verify",
+                  "--match-server-version",
+                  "--storage-driver-secure",
+                  "--warnings-as-errors"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--as",
+                  "--as-group",
+                  "--as-uid",
+                  "--as-user-extra",
+                  "--cache-dir",
+                  "--certificate-authority",
+                  "--client-certificate",
+                  "--client-key",
+                  "--cluster",
+                  "--context",
+                  "--kubeconfig",
+                  "--kuberc",
+                  "--log-flush-frequency",
+                  "--namespace",
+                  "--password",
+                  "--profile",
+                  "--profile-output",
+                  "--proxy-url",
+                  "--request-timeout",
+                  "--server",
+                  "--storage-driver-buffer-duration",
+                  "--storage-driver-db",
+                  "--storage-driver-host",
+                  "--storage-driver-password",
+                  "--storage-driver-table",
+                  "--storage-driver-user",
+                  "--tls-server-name",
+                  "--token",
+                  "--user",
+                  "--username",
+                  "--v",
+                  "--vmodule",
+                  "-n",
+                  "-s",
+                  "-v"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "paths": [
+                  [
+                    "config",
+                    "set",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "set-cluster",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "set-context",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "set-credentials",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "use-context",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "unset",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "delete-cluster",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "delete-context",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "delete-user",
+                    "--help"
+                  ],
+                  [
+                    "config",
+                    "rename-context",
+                    "--help"
+                  ]
+                ]
+              }
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect the current context and the exact configuration entry before changing it."
+        ],
+        "severity": "high",
+        "title": "Kubernetes client configuration change"
+      },
+      {
+        "action_classes": [
+          "Kubernetes security administration command"
+        ],
+        "default_mode": "review",
+        "description": "Creates or updates role and role-binding permissions from a manifest.",
+        "family": null,
+        "matcher": {
+          "op": "executable-path-set.v1",
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "kubectl",
+              "kubectl.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--disable-compression",
+              "--insecure-skip-tls-verify",
+              "--match-server-version",
+              "--storage-driver-secure",
+              "--warnings-as-errors"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--as",
+              "--as-group",
+              "--as-uid",
+              "--as-user-extra",
+              "--cache-dir",
+              "--certificate-authority",
+              "--client-certificate",
+              "--client-key",
+              "--cluster",
+              "--context",
+              "--kubeconfig",
+              "--kuberc",
+              "--log-flush-frequency",
+              "--namespace",
+              "--password",
+              "--profile",
+              "--profile-output",
+              "--proxy-url",
+              "--request-timeout",
+              "--server",
+              "--storage-driver-buffer-duration",
+              "--storage-driver-db",
+              "--storage-driver-host",
+              "--storage-driver-password",
+              "--storage-driver-table",
+              "--storage-driver-user",
+              "--tls-server-name",
+              "--token",
+              "--user",
+              "--username",
+              "--v",
+              "--vmodule",
+              "-n",
+              "-s",
+              "-v"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "paths": [
+              [
+                "auth",
+                "reconcile"
+              ]
+            ]
+          }
+        },
+        "native_capability": null,
+        "permission_id": "command.kubernetes-operations.permission.auth-reconcile",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.kubernetes-operations.auth-reconcile",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "op": "executable-path-set.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kubectl",
+                  "kubectl.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--disable-compression",
+                  "--insecure-skip-tls-verify",
+                  "--match-server-version",
+                  "--storage-driver-secure",
+                  "--warnings-as-errors"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--as",
+                  "--as-group",
+                  "--as-uid",
+                  "--as-user-extra",
+                  "--cache-dir",
+                  "--certificate-authority",
+                  "--client-certificate",
+                  "--client-key",
+                  "--cluster",
+                  "--context",
+                  "--kubeconfig",
+                  "--kuberc",
+                  "--log-flush-frequency",
+                  "--namespace",
+                  "--password",
+                  "--profile",
+                  "--profile-output",
+                  "--proxy-url",
+                  "--request-timeout",
+                  "--server",
+                  "--storage-driver-buffer-duration",
+                  "--storage-driver-db",
+                  "--storage-driver-host",
+                  "--storage-driver-password",
+                  "--storage-driver-table",
+                  "--storage-driver-user",
+                  "--tls-server-name",
+                  "--token",
+                  "--user",
+                  "--username",
+                  "--v",
+                  "--vmodule",
+                  "-n",
+                  "-s",
+                  "-v"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "paths": [
+                  [
+                    "auth",
+                    "reconcile",
+                    "--help"
+                  ]
+                ]
+              }
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Review the requested roles, subjects, and bindings before changing access."
+        ],
+        "severity": "high",
+        "title": "Kubernetes access reconciliation"
+      },
+      {
+        "action_classes": [
+          "Kubernetes network tunnel command"
+        ],
+        "default_mode": "review",
+        "description": "Opens a local proxy that provides access to the configured cluster API.",
+        "family": null,
+        "matcher": {
+          "op": "executable-path-set.v1",
+          "config": {
+            "allow_leading_options": true,
+            "executables": [
+              "kubectl",
+              "kubectl.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [
+              "--disable-compression",
+              "--insecure-skip-tls-verify",
+              "--match-server-version",
+              "--storage-driver-secure",
+              "--warnings-as-errors"
+            ],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [
+              "--as",
+              "--as-group",
+              "--as-uid",
+              "--as-user-extra",
+              "--cache-dir",
+              "--certificate-authority",
+              "--client-certificate",
+              "--client-key",
+              "--cluster",
+              "--context",
+              "--kubeconfig",
+              "--kuberc",
+              "--log-flush-frequency",
+              "--namespace",
+              "--password",
+              "--profile",
+              "--profile-output",
+              "--proxy-url",
+              "--request-timeout",
+              "--server",
+              "--storage-driver-buffer-duration",
+              "--storage-driver-db",
+              "--storage-driver-host",
+              "--storage-driver-password",
+              "--storage-driver-table",
+              "--storage-driver-user",
+              "--tls-server-name",
+              "--token",
+              "--user",
+              "--username",
+              "--v",
+              "--vmodule",
+              "-n",
+              "-s",
+              "-v"
+            ],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "paths": [
+              [
+                "proxy"
+              ]
+            ]
+          }
+        },
+        "native_capability": null,
+        "permission_id": "command.kubernetes-operations.permission.api-proxy",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.kubernetes-operations.api-proxy",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "op": "executable-path-set.v1",
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "kubectl",
+                  "kubectl.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--disable-compression",
+                  "--insecure-skip-tls-verify",
+                  "--match-server-version",
+                  "--storage-driver-secure",
+                  "--warnings-as-errors"
+                ],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--as",
+                  "--as-group",
+                  "--as-uid",
+                  "--as-user-extra",
+                  "--cache-dir",
+                  "--certificate-authority",
+                  "--client-certificate",
+                  "--client-key",
+                  "--cluster",
+                  "--context",
+                  "--kubeconfig",
+                  "--kuberc",
+                  "--log-flush-frequency",
+                  "--namespace",
+                  "--password",
+                  "--profile",
+                  "--profile-output",
+                  "--proxy-url",
+                  "--request-timeout",
+                  "--server",
+                  "--storage-driver-buffer-duration",
+                  "--storage-driver-db",
+                  "--storage-driver-host",
+                  "--storage-driver-password",
+                  "--storage-driver-table",
+                  "--storage-driver-user",
+                  "--tls-server-name",
+                  "--token",
+                  "--user",
+                  "--username",
+                  "--v",
+                  "--vmodule",
+                  "-n",
+                  "-s",
+                  "-v"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--help"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "paths": [
+                  [
+                    "proxy",
+                    "--help"
+                  ]
+                ]
+              }
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Verify the bind address, request filters, and intended cluster before opening the proxy."
+        ],
+        "severity": "high",
+        "title": "Kubernetes API proxy"
       }
     ],
     "safer_alternatives": [

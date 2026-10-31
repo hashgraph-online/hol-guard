@@ -1,11 +1,12 @@
-//! The relay's direct-lane probe and the one retry a deferred call gets.
+//! The relay's direct-lane probe and the retries a deferred call gets.
 //!
 //! The probe asks the resident's `mcp_relay_ready` whether the lane is bound
 //! for the session's workspace and harness. A call the lane deferred for a
-//! reason the daemon can clear asks the daemon to prepare the workspace once,
-//! within the retry budget, and is decided once more; a deferral that remains
-//! is refused as before. A deferred decision queues nothing, so the retry
-//! never records a call twice.
+//! reason the daemon can clear asks the daemon to prepare the workspace, at
+//! most once per kick interval, and is decided again until the lane takes it
+//! or the retry budget is spent; a deferral that remains is refused as
+//! before. A deferred decision queues nothing, so a retry never records a
+//! call twice.
 //!
 //! A session that started before its lane was ready stays native, and its
 //! first call waits for the lane before it is decided: the probe repeats
@@ -35,6 +36,9 @@ use crate::mcp_relay_ready::MCP_RELAY_READY_SCHEMA;
 
 /// The pause between probes while the first call waits for the lane.
 const WARM_UP_POLL: Duration = Duration::from_millis(100);
+/// The pause before a deferred call is decided again while the daemon,
+/// already asked, clears the lane.
+const RETRY_POLL: Duration = Duration::from_millis(25);
 
 impl ResidentRelayAuthority {
     /// Ask the daemon to prepare the lane for a deferred call.
@@ -70,7 +74,7 @@ impl ResidentRelayAuthority {
                 Err(_) => {}
             }
             if let Some(kick) = self.kick.as_mut() {
-                // The kick rate-limits itself (`Kick::Skipped`), so this asks
+                // The kick rate-limits itself (`Kick::Pending`), so this asks
                 // the daemon at most once per kick interval.
                 let deadline = (Instant::now() + RETRY_BUDGET).min(deadline);
                 if kick.kick(deadline) == Kick::Refused {
@@ -152,17 +156,32 @@ impl ResidentRelayAuthority {
         }
     }
 
-    /// Whether a call deferred with `output` gets its one retry: the lane
-    /// deferred it for a reason the daemon can clear, and the daemon took
-    /// the request to prepare the workspace.
-    pub(super) fn rekick(&mut self, output: Option<&[u8]>) -> bool {
+    /// Whether a call deferred with `output` is decided again: the lane
+    /// deferred it for a reason the daemon can clear, and either the daemon
+    /// took the request to prepare the workspace, or it took one within the
+    /// kick interval and `deadline` leaves room for a pause. A daemon that
+    /// refused or could not be reached is not waited on. The lane also
+    /// closes for the tens of milliseconds the daemon takes to republish its
+    /// policy snapshot and reopens without being asked; a hook defers to the
+    /// daemon over that window, while the relay has nobody to defer to.
+    pub(super) fn rekick(&mut self, output: Option<&[u8]>, deadline: Instant) -> bool {
         let Some(code) = output.and_then(defer::defer_code) else {
             return false;
         };
         let Some(kick) = self.kick.as_mut() else {
             return false;
         };
-        kickable(&code) && kick.kick(Instant::now() + RETRY_BUDGET) == Kick::Requested
+        if !kickable(&code) {
+            return false;
+        }
+        match kick.kick(deadline) {
+            Kick::Requested => true,
+            Kick::Pending if remaining(deadline) >= RETRY_POLL => {
+                std::thread::sleep(RETRY_POLL);
+                true
+            }
+            _ => false,
+        }
     }
 }
 

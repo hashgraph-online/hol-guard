@@ -12,7 +12,7 @@ fn environment(names: &[&str]) -> guard_contracts::GuardExecutionEnvironmentV1 {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     }
 }
 
@@ -82,16 +82,23 @@ fn dotted_relative_cd_skips_cdpath_and_keeps_the_target_checks() {
 }
 
 #[test]
-fn parent_directory_cd_is_never_proved() {
-    // The shell resolves `..` against its logical $PWD, which can differ
-    // from the reported cwd when the session was entered through a symlink.
+fn parent_directory_cd_is_proved_only_as_a_leading_climb() {
+    // From a canonical cwd the lexical parent is the physical one, the same
+    // directory its absolute spelling names. A `..` after a name, a hidden
+    // name and a missing directory stay reviewed.
     let root = crate_root().join("src");
     let clean = environment(&["HOME", "PATH"]);
+    for command in ["cd .. && ls", "cd ../tests && ls", "cd ../ && ls"] {
+        assert!(allowed_in(&root, command, Some(&clean)), "{command}");
+    }
     for command in [
-        "cd .. && ls",
-        "cd ../tests && ls",
         "cd ./pretool/.. && ls",
         "cd pretool/.. && ls",
+        "cd ../tests/.. && ls",
+        "cd ../.hidden && ls",
+        "cd ../missing && ls",
+        "cd ../Cargo.toml && ls",
+        "cd .. && cat ../.ssh/id_rsa",
     ] {
         assert!(!allowed_in(&root, command, Some(&clean)), "{command}");
     }
@@ -109,12 +116,18 @@ fn relative_cd_through_a_symlink_is_not_proved() {
     std::fs::create_dir_all(root.join("real")).unwrap();
     std::os::unix::fs::symlink(root.join("real"), root.join("link")).unwrap();
     let clean = environment(&["HOME", "PATH"]);
+    std::fs::create_dir_all(root.join("real/inner")).unwrap();
     let outcome = (
         allowed_in(&root, "cd real && ls", Some(&clean)),
         allowed_in(&root, "cd link && ls", Some(&clean)),
         allowed_in(&root, "cd ./link && ls", Some(&clean)),
+        allowed_in(&root.join("real/inner"), "cd ../.. && ls", Some(&clean)),
+        allowed_in(&root.join("real"), "cd ../link && ls", Some(&clean)),
+        // A cwd reached through a link has a logical parent that differs
+        // from its physical one.
+        allowed_in(&root.join("link/inner"), "cd .. && ls", Some(&clean)),
     );
     std::fs::remove_dir_all(&root).unwrap();
-    assert!(outcome.0);
-    assert!(!outcome.1 && !outcome.2);
+    assert!(outcome.0 && outcome.3);
+    assert!(!outcome.1 && !outcome.2 && !outcome.4 && !outcome.5);
 }

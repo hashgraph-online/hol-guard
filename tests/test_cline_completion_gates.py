@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cli
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
-from codex_plugin_scanner.guard.product_model import CANONICAL_HARNESS_VALUES, SUPPORTED_HARNESS_VALUES
+from codex_plugin_scanner.guard.product_model import SUPPORTED_HARNESS_VALUES
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -97,7 +97,6 @@ def test_cline_is_in_static_supported_contracts() -> None:
     assert contract_for("cline-cli") is contract
     assert contract_for("cline-vscode") is contract
     assert contract.surface_capabilities == ("auto", "hooks", "plugin", "cli", "all")
-    assert "cline" in CANONICAL_HARNESS_VALUES
     assert "cline" in SUPPORTED_HARNESS_VALUES
 
 
@@ -303,12 +302,14 @@ def test_real_guard_policy_blocks_cline_env_read_without_prompt_by_default(tmp_p
         timeout=30,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert response["policy_action"] == "block"
-    assert "safe, permitted alternative" in response["blocked_request_guidance"]
-    assert response["artifact_id"].startswith("cline:project:file-read:")
-    assert response["policy_composition"]["current_config_action"] == "require-reapproval"
+    assert response["reason_code"] == "native_policy_reapproval_required"
+    assert response["blocked_request_mode"] == "safe-alternative"
+    assert response["prompted"] is False
+    assert secret_value not in result.stdout
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -350,12 +351,9 @@ def test_real_guard_policy_withholds_cline_credential_output(tmp_path: Path) -> 
         timeout=30,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     response = json.loads(result.stdout)
-    assert response["policy_action"] == "block"
-    assert "safe, permitted alternative" in response["blocked_request_guidance"]
-    assert ":tool-output:" in response["artifact_id"]
-    assert response["policy_composition"]["current_config_action"] == "require-reapproval"
+    assert response == {"decision": "deny", "model_output_action": "block", "policy_action": "block"}
     serialized = json.dumps(response)
     assert credential not in serialized
 

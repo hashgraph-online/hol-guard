@@ -78,7 +78,7 @@ pub(super) fn controls_for_binding(
             )
             .unwrap();
             let mut trust = json!({"schemaVersion":"guard.extension-trust-class-map.v1","publishers":{
-                "hol":{"id":"hol","displayName":"Hashgraph Online"},"hol-curated":{"id":"hol-curated","displayName":"HOL curated library"}},
+                "hol":{"id":"hol","displayName":"HOL"},"hol-curated":{"id":"hol-curated","displayName":"HOL curated library"}},
                 "classes":{"first-party":[],"trusted-library":[],"external":[]}});
             trust["classes"][reviewed["trustClass"].as_str().unwrap()] = json!([id]);
             sources.push((json!({"kind":kind,"trust":trust}), bytes));

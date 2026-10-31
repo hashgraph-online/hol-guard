@@ -117,6 +117,8 @@ export type LocalCliMutationPayload = {
   previous_revision: number;
   session_nonce: string;
   commands?: Array<{ command_id: string; state: LocalCliCommandState }>;
+  /** The MCP catalog revision these choices were made against; saving reviews its new and changed tools. */
+  mcp_catalog_revision?: number;
   provider_actions?: Array<{ tool_slug: string; state: "review" | "block"; revision: number }>;
   approval_password?: string;
   approval_totp_code?: string;
@@ -133,6 +135,12 @@ export class LocalCliApiError extends Error {
 
 export function addedCustomExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
   return items.filter((item) => item.state !== "unset");
+}
+
+/** Tools new or changed since the last listing that no saved choice has reviewed yet. */
+export function unreviewedToolChangeCount(item: LocalCliItem): number {
+  const changes = item.mcp_catalog?.changes;
+  return (changes?.added.length ?? 0) + (changes?.changed.length ?? 0);
 }
 
 /** True when the connector needs a decision: not enrolled yet, stale, or its tool inventory changed. */
@@ -434,6 +442,25 @@ export async function refreshMcpInventory(
   await waitForMcpDiscoveryJob(cliId, initialJob, signal);
 }
 
+/**
+ * Reads a recorded command-line tool's --help. A script is found by the full
+ * `path` the operator gives, since Guard records no location for it; the
+ * daemon runs it only when that file is still the one it recorded.
+ */
+export async function loadLocalCliCommands(cliId: string, signal: AbortSignal, path?: string): Promise<void> {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal,
+      body: JSON.stringify({
+        cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId, ...(path === undefined ? {} : { path }),
+      }),
+    },
+  )));
+  if (initialJob === null) return;
+  await waitForMcpDiscoveryJob(cliId, initialJob, signal);
+}
+
 export async function refreshCodexHostInventory(signal: AbortSignal, forceRefresh = false): Promise<void> {
   if (signal.aborted) return;
   const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
@@ -494,6 +521,7 @@ export async function fetchMcpProviderActions(
   });
   const nextOffset = body.next_offset;
   if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset)
-    || nextOffset !== options.offset + 50 || nextOffset > 10_000)) throw new Error("Invalid provider inventory page");
+    || nextOffset <= options.offset || nextOffset > options.offset + 50
+    || nextOffset > 10_000)) throw new Error("Invalid provider inventory page");
   return { actions, nextOffset, catalogToken: body.catalog_token };
 }

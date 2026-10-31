@@ -100,6 +100,13 @@ from .update_subprocess import (
     UpdateSubprocessError,
     build_trusted_update_context,
 )
+from .windows_arm64_python import REASON_CODE as WINDOWS_ARM64_REASON_CODE
+from .windows_arm64_python import (
+    native_windows_arm64_python,
+    wheel_less_dependency_build_failed,
+    x64_python_candidates,
+    x64_python_route_message,
+)
 
 _TRUSTED_UPDATE_FAILURE_MESSAGES = {
     "update_native_resident_lock_failed": (
@@ -1076,6 +1083,15 @@ def _run_guard_update_unlocked(
                 )
                 payload.pop("retry_command", None)
                 return payload, 0
+            if native_windows_arm64_python() and wheel_less_dependency_build_failed(installer_output):
+                payload["status"] = "blocked"
+                payload["changed"] = False
+                payload["reason_code"] = WINDOWS_ARM64_REASON_CODE
+                payload["message"] = x64_python_route_message(installer, x64_python_candidates())
+                payload.pop("retry_command", None)
+                if trusted_wheel is not None:
+                    _retain_local_wheel_staging(payload)
+                return finish_update((payload, 1))
             conflict_message = _dependency_conflict_message(
                 installer_output,
             )
@@ -1418,6 +1434,66 @@ def _shell_command(command: list[str]) -> str:
     return shlex.join(command)
 
 
+def _account_free_path(path: str) -> str:
+    """``path`` with the user's home directory written as ``~``.
+
+    The install-surface diagnostics are facts a reader pastes into an issue or
+    a support request, and an install under the home directory spells out the
+    account name of whoever ran it. Unlike the manual install command in the
+    native runtime report, nothing here is meant to be run, so there is no
+    shell that has to expand the result and the same spelling works on every
+    platform: ``~`` names the home directory to a reader without naming the
+    account. A path outside the home directory, and a host that will not name
+    a home at all, are left exactly as they are.
+    """
+
+    if not path:
+        return path
+    try:
+        home = Path.home()
+    except Exception:
+        return path
+    # A caller may hand us a resolved path while the home directory is reached
+    # through a symlink, so the account name only disappears when the resolved
+    # home is a candidate prefix too.
+    candidates: list[str] = []
+    for candidate in (home, _resolved_home(home)):
+        if candidate is None:
+            continue
+        spelling = str(candidate).rstrip("/\\")
+        if spelling and spelling not in candidates:
+            candidates.append(spelling)
+    if not candidates:
+        return path
+    # Windows paths differ from their home prefix in case and separator alone,
+    # so compare normalised and slice the spelling that matched. ``normcase``
+    # leaves redundant separators in place, so ``/home//harriet-example/bin``
+    # would miss the prefix and keep the account name; the lexically collapsed
+    # spelling is tried as well so that path is redacted too.
+    spellings = [path]
+    collapsed = os.path.normpath(path)
+    if collapsed != path:
+        spellings.append(collapsed)
+    for spelling in spellings:
+        normalised = os.path.normcase(spelling)
+        for candidate in candidates:
+            normalised_home = os.path.normcase(candidate)
+            if normalised == normalised_home:
+                return "~"
+            for separator in ("/", "\\"):
+                prefix = normalised_home + os.path.normcase(separator)
+                if normalised.startswith(prefix):
+                    return "~" + separator + spelling[len(prefix) :]
+    return path
+
+
+def _resolved_home(home: Path) -> Path | None:
+    try:
+        return home.resolve()
+    except Exception:
+        return None
+
+
 def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]:
     resolved_binary = shutil.which("hol-guard")
     installer_binary = command[0] if command else ""
@@ -1434,9 +1510,11 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
     else:
         path_status = "path_mismatch"
     return {
-        "resolved_hol_guard": resolved_binary,
-        "installer_binary": installer_binary,
-        "expected_script_dir": str(expected_script_dir) if expected_script_dir is not None else None,
+        "resolved_hol_guard": _account_free_path(resolved_binary) if resolved_binary is not None else None,
+        "installer_binary": _account_free_path(installer_binary),
+        "expected_script_dir": (
+            _account_free_path(str(expected_script_dir)) if expected_script_dir is not None else None
+        ),
         "path_status": path_status,
     }
 
@@ -1458,7 +1536,7 @@ def build_guard_install_surface_payload() -> dict[str, object]:
         return {
             "installer": "desktop",
             "binary_diagnostics": {
-                "resolved_hol_guard": str(Path(sys.executable).resolve()),
+                "resolved_hol_guard": _account_free_path(str(Path(sys.executable).resolve())),
                 "installer_binary": None,
                 "expected_script_dir": None,
                 "path_status": "bundled",

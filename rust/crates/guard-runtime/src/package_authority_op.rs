@@ -34,11 +34,11 @@ use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest, GuardSyncRunnerApi,
     JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
-    PackageIdentityApi, RestrictedArchiveApi,
+    PackageEvalResult, PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, SavedPolicyProbe, StoreExtrasApi,
     SupplyChainBundleApi, SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps,
-    WorkspaceIoApi,
+    WorkspaceIoApi, REVIEW_SETTLEMENT_KEY,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
@@ -65,7 +65,7 @@ pub(crate) use supply_chain_eval_op::evaluate_supply_chain_eval_with_seams;
 // Shared result helpers
 // ---------------------------------------------------------------------------
 
-fn err_result(request_id: &str, request_sha256: &str, code: &str) -> Value {
+pub(crate) fn err_result(request_id: &str, request_sha256: &str, code: &str) -> Value {
     json!({
         "schema": PACKAGE_AUTHORITY_RESULT_SCHEMA,
         "request_id": request_id,
@@ -1093,6 +1093,8 @@ impl SupplyChainStore for ResidentSupplyChainStore {
             local_once_integrity_key_b64: key_b64.as_ref().map(|k| k.to_string()),
             local_once_integrity_key_id: key_id,
             policy_bundle_decision_identities: None,
+            exception_workspace: None,
+            cloud_exception_bundle: Default::default(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,
@@ -1560,11 +1562,13 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
         request: &GuardSyncRequest,
         timeout_seconds: u64,
         retry_timeout_seconds: u64,
+        budget: &guard_command::guard_sync_transport::SyncBudget,
     ) -> EvalResult<Map<String, Value>> {
-        let payload = guard_command::guard_sync_transport::urlopen_json_with_timeout_retry(
+        let payload = guard_command::guard_sync_transport::urlopen_json_within_budget(
             request,
             timeout_seconds as f64,
             retry_timeout_seconds as f64,
+            budget,
         )?;
         match payload {
             Value::Object(map) => Ok(map),
@@ -2529,7 +2533,7 @@ pub(crate) fn request_digest_with_limit<T: serde::Serialize>(
     ))
 }
 
-fn string_environment(value: Option<&Value>) -> Option<BTreeMap<String, String>> {
+pub(crate) fn string_environment(value: Option<&Value>) -> Option<BTreeMap<String, String>> {
     let Value::Object(object) = value? else {
         return None;
     };
@@ -2566,6 +2570,16 @@ pub(crate) fn evaluate_package_intent_parse(
         None,
         environment.as_ref(),
     );
+    package_intent_parse_result(&request.request_id, request_sha256, intent)
+}
+
+/// The parse answer for `intent`: the public intent, and the exact targets and
+/// argv on the private channel ephemeral enforcement reads them from.
+pub(crate) fn package_intent_parse_result(
+    request_id: &str,
+    request_sha256: String,
+    intent: Option<PackageIntent>,
+) -> Result<Vec<u8>, String> {
     let (payload, runtime_private_metadata) = match intent {
         Some(intent) => {
             let mut private_metadata = Map::new();
@@ -2586,7 +2600,7 @@ pub(crate) fn evaluate_package_intent_parse(
     };
     let result = PackageIntentParseResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
+        request_id: request_id.to_owned(),
         request_sha256,
         status: "ok".to_owned(),
         code: "ok".to_owned(),

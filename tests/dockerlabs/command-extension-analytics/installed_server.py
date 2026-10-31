@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.approval_scope_support import request_scope_cont
 from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 
 GUARD_HOME = Path("/guard-home")
@@ -38,6 +39,24 @@ _KEYRING_FIXTURE = Path(__file__).with_name("keyring_fixture.py")
 def _safe_hook_diagnostic(value: str) -> str:
     redacted = re.sub(r"([#&?]guard-token=)[^\s\"'&]+", r"\1[REDACTED]", value.replace(SENTINEL, "[REDACTED]"))
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
+
+
+def _scrub_hook_detail(value: object) -> object:
+    """Put every string a hook response carries through the same scrub.
+
+    The fields below are the daemon's own prose, and the daemon quotes the
+    command it decided on. That command is the lab's sentinel in one case and
+    the workflow fixture in another, so a field copied straight out of the
+    response would print what `_safe_hook_diagnostic` exists to keep out of the
+    log.
+    """
+    if isinstance(value, str):
+        return _safe_hook_diagnostic(value)
+    if isinstance(value, Mapping):
+        return {_scrub_hook_detail(key): _scrub_hook_detail(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scrub_hook_detail(item) for item in value]
+    return value
 
 
 def _safe_hook_response_summary(value: str) -> str:
@@ -64,6 +83,7 @@ def _safe_hook_response_summary(value: str) -> str:
         if isinstance(scanner_evidence, list)
         else None
     )
+    hook_output = payload.get("hookSpecificOutput")
     return json.dumps(
         {
             "keys": sorted(payload),
@@ -85,8 +105,47 @@ def _safe_hook_response_summary(value: str) -> str:
             }
             if isinstance(post_claim, dict)
             else None,
+            # What decided the hook, so a failed canary names its cause.
+            "decision_details": _scrub_hook_detail(
+                {
+                    "decision": payload.get("decision"),
+                    "reason": payload.get("reason"),
+                    "risk_summary": payload.get("risk_summary"),
+                    "terminal_action": payload.get("terminal_action"),
+                    "hook_output": {
+                        key: hook_output.get(key) for key in ("permissionDecision", "permissionDecisionReason")
+                    }
+                    if isinstance(hook_output, dict)
+                    else None,
+                    "artifact_type": payload.get("artifact_type"),
+                    "artifact_name": payload.get("artifact_name"),
+                    "operation": payload.get("operation"),
+                    "native_edge_decision": payload.get("native_edge_decision"),
+                    "native_edge_reason_code": payload.get("native_edge_reason_code"),
+                    "risk_signals": payload.get("risk_signals"),
+                    "policy_composition": composition,
+                    "scanner_evidence": [
+                        {k: v for k, v in item.items() if isinstance(v, (str, int, bool)) or v is None}
+                        for item in scanner_evidence
+                        if isinstance(item, dict)
+                    ]
+                    if isinstance(scanner_evidence, list)
+                    else None,
+                    "approval_requests": [
+                        {
+                            k: item.get(k)
+                            for k in ("artifact_type", "artifact_name", "policy_action", "reason_code", "source")
+                        }
+                        for item in payload.get("approval_requests") or []
+                        if isinstance(item, dict)
+                    ],
+                    "trigger_summary": payload.get("trigger_summary"),
+                    "why_now": payload.get("why_now"),
+                }
+            ),
         },
         sort_keys=True,
+        default=str,
     )
 
 
@@ -247,16 +306,6 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
     }
 
 
-_WORKFLOW_OUTAGE_REASON = "native_github_workflow_evaluation_unavailable"
-_WORKFLOW_EVIDENCE: dict[str, object] = {
-    "activity_proof": "drift-rejected-unenrolled-retry-unclaimed",
-    "capability_claimed": 0,
-    "capability_issued": 1,
-    "drift_claimed": 0,
-    "request_flow": "authenticated-daemon-api",
-}
-
-
 def _await_exact_allow(store: GuardStore, request_id: str) -> None:
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
@@ -303,20 +352,25 @@ def _complete_workflow_authorization(store: GuardStore, request_id: str) -> dict
         raise RuntimeError("executable drift depleted the one-shot capability")
     _ = _GH_EXECUTABLE.write_bytes(original)
     _GH_EXECUTABLE.chmod(0o700)
-    # The hook reviews the command in the native runtime before it claims the
-    # capability, and that review needs an enrolled extension-control
-    # authority. Enrolling one needs a local confirmation this lab home never
-    # gives, so the restored retry gets the outage response and the one-shot
-    # capability stays unclaimed.
     retry = {**drift, "tool_call_id": "codex_lab_workflow_retry_0003"}
-    retry_response = json.loads(_run_installed_hook("codex", retry, expect_denial=True))
-    reasons = {retry_response.get("reason_code"), retry_response.get("decision_reason_code")}
-    if _WORKFLOW_OUTAGE_REASON not in reasons:
-        raise RuntimeError(f"restored workflow retry was not held as an evaluation outage (response={retry_response})")
-    if store.list_events(event_name="workflow_capability.claimed"):
-        raise RuntimeError("an unenrolled workflow retry claimed the one-shot capability")
+    retry_response = _run_installed_hook("codex", retry)
+    claimed = store.list_events(event_name="workflow_capability.claimed")
+    if len(claimed) != 1:
+        authority = store.read_extension_control_authority(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        )
+        raise RuntimeError(
+            "restored workflow retry did not claim exactly once; "
+            + f"claimed={len(claimed)} authority={authority.health.value} response={retry_response}"
+        )
     _assert_capability_event_privacy(store)
-    return _WORKFLOW_EVIDENCE
+    return {
+        "activity_proof": "drift-rejected-restored-one-shot-reuse",
+        "capability_claimed": 1,
+        "capability_issued": 1,
+        "drift_claimed": 0,
+        "request_flow": "authenticated-daemon-api",
+    }
 
 
 def _prepare_workspace() -> None:
@@ -366,14 +420,16 @@ def _prepare_workspace() -> None:
 def _completed_workflow_evidence(store: GuardStore) -> dict[str, object] | None:
     if len(store.list_events(event_name="workflow_capability.issued")) != 1:
         return None
-    if store.list_events(event_name="workflow_capability.claimed"):
-        raise RuntimeError("an unenrolled workflow retry claimed the one-shot capability")
-    # Issuance alone also describes an approval whose retry never ran; the
-    # harness activities recorded after the retry mark a completed run.
-    if store.count_command_activities() == 0:
+    if len(store.list_events(event_name="workflow_capability.claimed")) != 1:
         return None
     _assert_capability_event_privacy(store)
-    return _WORKFLOW_EVIDENCE
+    return {
+        "activity_proof": "drift-rejected-restored-one-shot-reuse",
+        "capability_claimed": 1,
+        "capability_issued": 1,
+        "drift_claimed": 0,
+        "request_flow": "authenticated-daemon-api",
+    }
 
 
 def _assert_seeded_activity(store: GuardStore) -> None:
@@ -387,6 +443,8 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             order by harness, execution_status, activity_id
             """
         ).fetchall()
+    # The daemon enrolls the extension-control authority at startup, so each
+    # hook records the built-in extension matches that shaped its decision.
     expected = [
         (
             "claude-code",
@@ -405,25 +463,26 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             "prevented",
             "pre_hook",
             "require-reapproval",
-            "policy",
-            0,
+            "extension_match",
+            2,
             1,
             "not-applicable",
         ),
+        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 1, 0, "accepted"),
         (
             "codex",
             "post_success",
             "confirmed_success",
             "post_hook",
             "warn",
-            "policy",
-            0,
+            "extension_match",
+            1,
             0,
             "not-applicable",
         ),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "not-applicable"),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "rejected"),
-        ("cursor", "pre", "prevented", "pre_hook", "block", "policy", 0, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "rejected"),
+        ("cursor", "pre", "prevented", "pre_hook", "block", "extension_match", 2, 1, "not-applicable"),
     ]
     if sorted(rows) != sorted(expected):
         raise RuntimeError(f"installed hook activity mismatch: {rows!r}")

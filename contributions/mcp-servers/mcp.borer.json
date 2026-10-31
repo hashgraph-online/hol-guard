@@ -1,0 +1,212 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.borer",
+  "version": "1.0.0",
+  "name": "borer MCP",
+  "description": "Reviews borer's tools that write files, use the network, read another process's memory or restart the server; analysis and session-only naming keep Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.imjustprism",
+    "displayName": "imjustprism",
+    "url": "https://github.com/imjustprism/borer"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B0C0E"
+  },
+  "homepage": "https://borer.lol",
+  "license": "AGPL-3.0-only",
+  "launch": {
+    "kind": "direct-command",
+    "command": "borer"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "local-data-access",
+    "local-process-memory-read",
+    "local-process-restart",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "annotations",
+      "state": "inherit"
+    },
+    {
+      "name": "binary_info",
+      "state": "inherit"
+    },
+    {
+      "name": "callgraph",
+      "state": "inherit"
+    },
+    {
+      "name": "cfg",
+      "state": "inherit"
+    },
+    {
+      "name": "class_layout",
+      "state": "inherit"
+    },
+    {
+      "name": "decompile",
+      "state": "inherit"
+    },
+    {
+      "name": "decompile_batch",
+      "state": "review"
+    },
+    {
+      "name": "disassemble",
+      "state": "inherit"
+    },
+    {
+      "name": "disassemble_function",
+      "state": "inherit"
+    },
+    {
+      "name": "entropy",
+      "state": "inherit"
+    },
+    {
+      "name": "fetch_pdb",
+      "state": "review"
+    },
+    {
+      "name": "find_crypto_constants",
+      "state": "inherit"
+    },
+    {
+      "name": "find_function_by_string",
+      "state": "inherit"
+    },
+    {
+      "name": "function",
+      "state": "inherit"
+    },
+    {
+      "name": "function_strings",
+      "state": "inherit"
+    },
+    {
+      "name": "function_summary",
+      "state": "inherit"
+    },
+    {
+      "name": "functions",
+      "state": "inherit"
+    },
+    {
+      "name": "hexdump",
+      "state": "inherit"
+    },
+    {
+      "name": "live_attach",
+      "state": "review"
+    },
+    {
+      "name": "live_detach",
+      "state": "inherit"
+    },
+    {
+      "name": "live_instances",
+      "state": "review"
+    },
+    {
+      "name": "live_modules",
+      "state": "review"
+    },
+    {
+      "name": "live_object",
+      "state": "review"
+    },
+    {
+      "name": "live_read",
+      "state": "review"
+    },
+    {
+      "name": "live_watch",
+      "state": "review"
+    },
+    {
+      "name": "load_binary",
+      "state": "inherit"
+    },
+    {
+      "name": "load_project",
+      "state": "inherit"
+    },
+    {
+      "name": "query",
+      "state": "inherit"
+    },
+    {
+      "name": "reaches",
+      "state": "inherit"
+    },
+    {
+      "name": "read",
+      "state": "inherit"
+    },
+    {
+      "name": "reload",
+      "state": "review"
+    },
+    {
+      "name": "save_project",
+      "state": "review"
+    },
+    {
+      "name": "script",
+      "state": "inherit"
+    },
+    {
+      "name": "search",
+      "state": "inherit"
+    },
+    {
+      "name": "set_comment",
+      "state": "inherit"
+    },
+    {
+      "name": "set_name",
+      "state": "inherit"
+    },
+    {
+      "name": "set_type",
+      "state": "inherit"
+    },
+    {
+      "name": "strings",
+      "state": "inherit"
+    },
+    {
+      "name": "symbols",
+      "state": "inherit"
+    },
+    {
+      "name": "types",
+      "state": "inherit"
+    },
+    {
+      "name": "xrefs",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/imjustprism/borer",
+    "https://borer.lol/docs"
+  ],
+  "saferAlternatives": [
+    "Names, comments and types live in borer's session and never touch the binary; the naming and typing tools preview until called with dry_run=false.",
+    "fetch_pdb downloads from Microsoft's symbol server, or from BORER_SYMBOL_SERVER when set; set it only to a server you trust, and keep the PDB cache local.",
+    "Live tools read memory of a running process of the loaded binary (Windows), never writing it; leave BORER_LIVE_ANY unset so no other process can be read.",
+    "Point BORER_OUTPUT_DIR at a scratch folder: every project or C file a tool writes lands under it, and an existing one is replaced only when the call says overwrite."
+  ]
+}

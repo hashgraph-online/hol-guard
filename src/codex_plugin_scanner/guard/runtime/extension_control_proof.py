@@ -26,6 +26,8 @@ from ..approval_gate import (
     require_extension_control,
 )
 from ..native_extension_control import NativeExtensionControlError, enrollment_digest, mutation_digest
+from ..native_extension_control_terminal import native_extension_control_terminal_verdict
+from ..native_resident_decision import ResidentCallError
 from .extension_control_contract import ExtensionControlLayer
 
 EXTENSION_CONTROL_PROOF_ACTION = "commit-layers"
@@ -35,10 +37,19 @@ _INVALID_REVISION = "native_extension_control_invalid_revision"
 _INVALID_CATALOG_DIGEST = "native_extension_control_invalid_catalog_digest"
 _INVALID_IDENTITY = "native_extension_control_invalid_identity"
 _ENROLLMENT_CONFIRMATION_PREFIX = "ENROLL EXTENSION CONTROL"
+_REMOTE_TERMINAL_REFUSAL = "extension control enrollment requires a local terminal"
+_INTERACTIVE_TERMINAL_REFUSAL = "extension control enrollment requires an interactive local terminal"
+_SINGLE_TERMINAL_REFUSAL = "extension control enrollment requires one interactive local terminal"
+_RUNTIME_TERMINAL_REFUSAL = "extension control enrollment could not reach the Guard runtime"
+# The resident names the refusal it reached; this module only renders it.
+_TERMINAL_REFUSALS = {
+    "remote_terminal": _REMOTE_TERMINAL_REFUSAL,
+    "interactive_local_terminal": _INTERACTIVE_TERMINAL_REFUSAL,
+    "single_terminal": _SINGLE_TERMINAL_REFUSAL,
+}
 _REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "MOSH_CONNECTION")
 _WINDOWS_SM_REMOTESESSION = 0x1000
 _WINDOWS_WTS_CLIENT_PROTOCOL_TYPE = 16
-_WINDOWS_REMOTE_SESSION_NAME_PREFIXES = ("rdp-tcp", "ica-", "pcoip-", "blast-")
 
 
 class ExtensionControlProofError(PermissionError):
@@ -134,21 +145,31 @@ def _current_login_name() -> str | None:
         return None
 
 
-def _normalized_terminal_id(name: str) -> str:
-    """Return the device path relative to ``/dev`` (``pts/7``, ``ttys020``)."""
+def _login_records(output: str | None, login_name: str | None) -> str | None:
+    """``who``'s lines for ``login_name``, in the order it printed them.
 
-    return name.removeprefix("/dev/")
+    A shared host prints a record per login, and the whole table has to fit the
+    resident's request bound. The resident reads only the records whose first
+    column is this login name, and none at all without one, so dropping the
+    rest bounds the request without deciding anything.
+    """
+
+    if output is None:
+        return None
+    if login_name is None:
+        return ""
+    return "".join(f"{line}\n" for line in output.splitlines() if line.split()[:1] == [login_name])
 
 
-def _terminal_session_is_local(terminal_name: str) -> bool:
-    """Accept a local login record or a user-owned desktop PTY."""
+def _probe_output(command: tuple[str, ...]) -> str | None:
+    """What ``command`` printed, or ``None`` when it could not be run.
 
-    expected_user = _current_login_name()
-    if expected_user is None:
-        return False
+    The output is forwarded to the resident verbatim; nothing here reads it.
+    """
+
     try:
         completed = subprocess.run(
-            ("/usr/bin/who",),
+            command,
             check=True,
             capture_output=True,
             text=True,
@@ -156,54 +177,74 @@ def _terminal_session_is_local(terminal_name: str) -> bool:
             env={"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
         )
     except (OSError, subprocess.SubprocessError):
-        completed = None
-    # Linux ``who`` prints ``pts/7`` while macOS prints ``ttys020``; compare the
-    # ``/dev``-relative form and keep the bare basename for single-segment names.
-    terminal_ids = {_normalized_terminal_id(terminal_name), Path(terminal_name).name}
-    if completed is not None:
-        for line in completed.stdout.splitlines():
-            fields = line.split()
-            if len(fields) < 2 or fields[0] != expected_user or _normalized_terminal_id(fields[1]) not in terminal_ids:
-                continue
-            return not (fields[-1].startswith("(") and fields[-1].endswith(")"))
-    # GNOME and other desktop terminal emulators often do not create utmp
-    # records. systemd-logind provides the session origin independently of
-    # mutable child-process environment variables.
-    try:
-        session = subprocess.run(
-            ("/usr/bin/loginctl", "show-session", "self", "--property=Remote", "--value"),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=2,
-            env={"LANG": "C", "LC_ALL": "C", "PATH": "/usr/bin:/bin"},
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    if session.stdout.strip().lower() != "no":
-        return False
-    try:
-        terminal = os.stat(terminal_name, follow_symlinks=True)
-    except OSError:
-        return False
-    return terminal.st_uid == os.geteuid() and stat.S_ISCHR(terminal.st_mode)
+        return None
+    return completed.stdout
 
 
-def _terminal_descriptors_share_session(control_descriptor: int, input_descriptor: int) -> bool:
-    """Confirm that stdin belongs to the foreground controlling-terminal session.
+def _terminal_descriptors_share_session(control_descriptor: int, input_descriptor: int) -> bool | None:
+    """Whether stdin belongs to the foreground controlling-terminal session.
 
-    Linux exposes ``/dev/tty`` as a character-device alias while stdin names
-    the concrete PTY, so their device numbers are expected to differ.
+    ``None`` when the question could not be answered. Linux exposes
+    ``/dev/tty`` as a character-device alias while stdin names the concrete
+    PTY, so their device numbers are expected to differ.
     """
 
     try:
         return os.tcgetpgrp(control_descriptor) == os.tcgetpgrp(input_descriptor)
     except OSError:
-        return False
+        return None
+
+
+def _posix_terminal_signals(descriptor: int | None) -> dict[str, object]:
+    """Every POSIX signal the resident reads to place this session.
+
+    All of them are collected, because the resident decides which one settles
+    the question. A probe that could not run contributes ``None``.
+    """
+
+    signals: dict[str, object] = {
+        "controlling_terminal_opened": descriptor is not None,
+        "controlling_terminal_is_tty": False,
+        "stdin_is_tty": False,
+        "descriptors_share_session": None,
+        "terminal_name": "",
+        "login_name": None,
+        "who_output": None,
+        "logind_remote": None,
+        "terminal_owner_uid": None,
+        "terminal_is_char_device": None,
+        "effective_uid": os.geteuid(),
+    }
+    if descriptor is None:
+        return signals
+    terminal_name = os.ttyname(descriptor)
+    stdin_is_tty = sys.stdin.isatty()
+    signals["stdin_is_tty"] = stdin_is_tty
+    if stdin_is_tty:
+        stdin_descriptor = sys.stdin.fileno()
+        shared = _terminal_descriptors_share_session(descriptor, stdin_descriptor)
+        signals["descriptors_share_session"] = shared
+        if shared:
+            terminal_name = os.ttyname(stdin_descriptor)
+    signals["terminal_name"] = terminal_name
+    signals["controlling_terminal_is_tty"] = os.isatty(descriptor)
+    login_name = _current_login_name()
+    signals["login_name"] = login_name
+    signals["who_output"] = _login_records(_probe_output(("/usr/bin/who",)), login_name)
+    signals["logind_remote"] = _probe_output(
+        ("/usr/bin/loginctl", "show-session", "self", "--property=Remote", "--value")
+    )
+    try:
+        terminal = os.stat(terminal_name, follow_symlinks=True)
+    except OSError:
+        return signals
+    signals["terminal_owner_uid"] = terminal.st_uid
+    signals["terminal_is_char_device"] = stat.S_ISCHR(terminal.st_mode)
+    return signals
 
 
 def _windows_console_descriptor_is_interactive(descriptor: int) -> bool:
-    """Require a descriptor backed by a Windows console, not a redirected pipe."""
+    """Whether a descriptor is backed by a Windows console, not a redirected pipe."""
 
     try:
         import ctypes
@@ -226,31 +267,28 @@ def _windows_console_descriptor_is_interactive(descriptor: int) -> bool:
         return False
 
 
-def _windows_session_is_local() -> bool:
-    """Require native Windows session APIs to identify a direct local session."""
+def _windows_session_probe() -> tuple[bool | None, int | None]:
+    """The Windows remote-session metric and the session's client protocol type.
+
+    ``None`` for either reading means the API did not answer it, which the
+    resident treats as a session it cannot place locally.
+    """
 
     if os.name != "nt":
-        return False
-    session_name = os.environ.get("SESSIONNAME", "").strip().lower()
-    if session_name.startswith(_WINDOWS_REMOTE_SESSION_NAME_PREFIXES):
-        return False
-    # RDP and several other remote-terminal providers expose CLIENTNAME even
-    # when they do not use the standard RDP-Tcp session name.
-    if os.environ.get("CLIENTNAME", "").strip():
-        return False
+        return None, None
     try:
         import ctypes
         from ctypes import wintypes
 
         win_dll = getattr(ctypes, "WinDLL", None)
         if win_dll is None:
-            return False
+            return None, None
         user32 = win_dll("user32", use_last_error=True)
         get_system_metrics = user32.GetSystemMetrics
         get_system_metrics.argtypes = [ctypes.c_int]
         get_system_metrics.restype = ctypes.c_int
         if get_system_metrics(_WINDOWS_SM_REMOTESESSION):
-            return False
+            return True, None
 
         kernel32 = win_dll("kernel32", use_last_error=True)
         process_id_to_session_id = kernel32.ProcessIdToSessionId
@@ -258,7 +296,7 @@ def _windows_session_is_local() -> bool:
         process_id_to_session_id.restype = wintypes.BOOL
         session_id = wintypes.DWORD()
         if not process_id_to_session_id(wintypes.DWORD(os.getpid()), ctypes.byref(session_id)):
-            return False
+            return False, None
 
         wtsapi32 = win_dll("wtsapi32", use_last_error=True)
         query_session_information = wtsapi32.WTSQuerySessionInformationW
@@ -284,71 +322,98 @@ def _windows_session_is_local() -> bool:
                 ctypes.byref(buffer),
                 ctypes.byref(bytes_returned),
             ):
-                return False
+                return False, None
             if not buffer.value or bytes_returned.value < ctypes.sizeof(ctypes.c_ushort):
-                return False
-            protocol_type = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ushort)).contents.value
-            # WTSClientProtocolType is zero for the local console and nonzero
-            # for RDP/ICA/other remote session protocols.
-            return protocol_type == 0
+                return False, None
+            return False, ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ushort)).contents.value
         finally:
             if buffer.value:
                 with suppress(OSError, TypeError, ValueError):
                     free_wts_memory(buffer)
     except (AttributeError, ImportError, OSError, TypeError, ValueError, OverflowError):
-        return False
+        return None, None
 
 
-def _require_windows_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
-    """Confirm through the current Windows console without accepting redirected input."""
+def _windows_terminal_signals() -> dict[str, object]:
+    """Every Windows signal the resident reads to place this session."""
 
     try:
-        if not sys.stdin.isatty() or not sys.stdout.isatty():
-            raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
-        input_descriptor = sys.stdin.fileno()
-        output_descriptor = sys.stdout.fileno()
-    except (AttributeError, OSError, ValueError) as exc:
-        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
-    if not _windows_session_is_local():
-        raise ExtensionControlProofError("extension control enrollment requires a local terminal")
-    if not (
-        _windows_console_descriptor_is_interactive(input_descriptor)
-        and _windows_console_descriptor_is_interactive(output_descriptor)
-    ):
-        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+        stdio_is_tty = bool(sys.stdin.isatty() and sys.stdout.isatty())
+        descriptors = (sys.stdin.fileno(), sys.stdout.fileno()) if stdio_is_tty else ()
+    except (AttributeError, OSError, ValueError):
+        stdio_is_tty = False
+        descriptors = ()
+    remote_session_metric, wts_protocol_type = _windows_session_probe()
+    return {
+        "stdio_is_tty": stdio_is_tty,
+        "console_descriptors_interactive": bool(descriptors)
+        and all(_windows_console_descriptor_is_interactive(descriptor) for descriptor in descriptors),
+        "session_name": os.environ.get("SESSIONNAME", ""),
+        "client_name": os.environ.get("CLIENTNAME", ""),
+        "remote_session_metric": remote_session_metric,
+        "wts_protocol_type": wts_protocol_type,
+    }
+
+
+def _require_resident_local_terminal(
+    guard_home: Path,
+    *,
+    posix: dict[str, object] | None,
+    windows: dict[str, object] | None,
+) -> None:
+    """Refuse unless the resident places this session at the local keyboard."""
+
+    try:
+        verdict = native_extension_control_terminal_verdict(
+            remote_environment=tuple(name for name in _REMOTE_TERMINAL_ENVIRONMENT if os.environ.get(name)),
+            posix=posix,
+            windows=windows,
+            guard_home=guard_home,
+        )
+    except ResidentCallError as outage:
+        # An outage placed the session nowhere, so the enrollment is still
+        # refused. Naming the runtime keeps an operator who is at the keyboard
+        # from being told they are somewhere else.
+        raise ExtensionControlProofError(f"{_RUNTIME_TERMINAL_REFUSAL} ({outage})") from outage
+    if verdict == "local":
+        return
+    raise ExtensionControlProofError(_TERMINAL_REFUSALS.get(verdict, _REMOTE_TERMINAL_REFUSAL))
+
+
+def _require_windows_local_terminal_confirmation(
+    guard_home: Path,
+    enrollment: ExtensionControlEnrollment,
+) -> None:
+    """Confirm through the current Windows console without accepting redirected input."""
+
+    _require_resident_local_terminal(guard_home, posix=None, windows=_windows_terminal_signals())
     expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
     try:
         sys.stdout.write(f'Type "{expected}" to confirm first enrollment: ')
         sys.stdout.flush()
         entered = sys.stdin.readline().rstrip("\r\n")
     except (EOFError, OSError, UnicodeError, ValueError) as exc:
-        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
+        raise ExtensionControlProofError(_INTERACTIVE_TERMINAL_REFUSAL) from exc
     if not hmac.compare_digest(entered, expected):
         raise ExtensionControlProofError("extension control enrollment confirmation did not match")
 
 
-def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment) -> None:
-    if any(os.environ.get(name) for name in _REMOTE_TERMINAL_ENVIRONMENT):
-        raise ExtensionControlProofError("extension control enrollment requires a local terminal")
+def _require_local_terminal_confirmation(guard_home: Path, enrollment: ExtensionControlEnrollment) -> None:
     if os.name == "nt":
-        _require_windows_local_terminal_confirmation(enrollment)
+        _require_windows_local_terminal_confirmation(guard_home, enrollment)
         return
+    descriptor: int | None
     try:
         descriptor = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY | getattr(os, "O_CLOEXEC", 0))
-    except OSError as exc:
-        raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal") from exc
+    except OSError:
+        descriptor = None
     try:
-        terminal_name = os.ttyname(descriptor)
-        if sys.stdin.isatty():
-            # Opening /dev/tty can preserve that alias rather than returning
-            # the concrete /dev/pts or /dev/ttys device. stdin identifies the
-            # same controlling terminal for an interactive CLI invocation.
-            stdin_descriptor = sys.stdin.fileno()
-            if not _terminal_descriptors_share_session(descriptor, stdin_descriptor):
-                raise ExtensionControlProofError("extension control enrollment requires one interactive local terminal")
-            terminal_name = os.ttyname(stdin_descriptor)
-        if not os.isatty(descriptor) or not _terminal_session_is_local(terminal_name):
-            raise ExtensionControlProofError("extension control enrollment requires an interactive local terminal")
+        _require_resident_local_terminal(guard_home, posix=_posix_terminal_signals(descriptor), windows=None)
+        if descriptor is None:
+            # Unreachable through the resident's verdicts; a closed controlling
+            # terminal is never local. Keep the refusal rather than prompt
+            # through a descriptor that does not exist.
+            raise ExtensionControlProofError(_INTERACTIVE_TERMINAL_REFUSAL)
         expected = f"{_ENROLLMENT_CONFIRMATION_PREFIX} {enrollment.actor_id}"
         with os.fdopen(os.dup(descriptor), "w", encoding="utf-8") as terminal_output:
             terminal_output.write(f'Type "{expected}" to confirm first enrollment: ')
@@ -358,7 +423,8 @@ def _require_local_terminal_confirmation(enrollment: ExtensionControlEnrollment)
         if not hmac.compare_digest(entered, expected):
             raise ExtensionControlProofError("extension control enrollment confirmation did not match")
     finally:
-        os.close(descriptor)
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def issue_extension_control_enrollment_proof(
@@ -371,7 +437,7 @@ def issue_extension_control_enrollment_proof(
 ) -> ExtensionControlEnrollmentProof:
     """Issue a one-shot enrollment proof after direct local-terminal confirmation."""
 
-    _require_local_terminal_confirmation(enrollment)
+    _require_local_terminal_confirmation(guard_home, enrollment)
     if not session_nonce.strip() or len(session_nonce) > _MAX_IDENTITY_LENGTH:
         raise ExtensionControlProofError("invalid proof session nonce")
     digest = enrollment.canonical_digest

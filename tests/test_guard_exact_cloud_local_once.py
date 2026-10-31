@@ -7,13 +7,16 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.codex_live_decision as live_decision_module
-from codex_plugin_scanner.guard.codex_live_decision import complete_codex_live_decision
+from codex_plugin_scanner.guard.codex_live_decision import (
+    complete_codex_live_decision,
+    resolve_codex_live_allow_authority,
+)
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
-from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import enable_exact_cloud_review
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_apply import apply_exact_cloud_review
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
 from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store,
     remote_approval,
@@ -148,7 +151,7 @@ def test_live_completion_consumes_only_original_exact_cloud_request(tmp_path: Pa
         fresh_allow_authorized=True,
     )
     assert sibling_result == {"completed": False, "error": "exact_approval_authority_missing"}
-    assert store.peek_exact_cloud_local_once_approval(request_id="exact-live-original", now=resolved_at) is not None
+    assert _live_authority(store, "exact-live-original", resolved_at) is not None
 
     original_result = complete_codex_live_decision(
         store,
@@ -158,70 +161,296 @@ def test_live_completion_consumes_only_original_exact_cloud_request(tmp_path: Pa
     )
     assert original_result["completed"] is True
     assert original_result["action"] == "allow"
-    assert store.peek_exact_cloud_local_once_approval(request_id="exact-live-original", now=resolved_at) is None
+    assert _live_authority(store, "exact-live-original", resolved_at) is None
     resume = store.get_request_resume("exact-live-original")
     assert resume is not None and resume["status"] == "sent"
 
 
-def test_live_completion_fails_closed_when_authority_revision_changes_before_claim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    store = connected_exact_review_store(tmp_path)
-    store, _ = _seed_waiting_request(
-        tmp_path,
-        request_id="exact-live-revision-race",
-        store=store,
-    )
-    enable_exact_cloud_review(store)
-    resolution = apply_exact_cloud_review(
-        store,
-        remote_approval=remote_approval(store, "exact-live-revision-race", receipt_id="exact-race-receipt"),
-    )
-    resolved_at = str(resolution.resolved_request["resolved_at"])
-    original_record = live_decision_module.record_live_hook_completion
+def _live_authority(store: GuardStore, request_id: str, now: str) -> dict[str, object] | None:
+    request = store.get_approval_request(request_id)
+    assert request is not None
+    return resolve_codex_live_allow_authority(store, request=request, request_id=request_id, now=now)
 
-    def mutate_authority_then_record(
-        completion_store: GuardStore,
+
+class _Evidence:
+    def __init__(self, degraded: bool) -> None:
+        self.degraded_trust_status = {"status": "degraded"} if degraded else None
+
+
+def _unavailable(reason: str) -> NativeGuardStoreUnavailable:
+    error = NativeGuardStoreUnavailable(reason)
+    error.reason = reason
+    return error
+
+
+_NO_PUBLISHED_EVIDENCE = _unavailable("native_guard_store_codex_live_evidence_required")
+
+
+class _OneCallStore(StoreExactCloudLocalOnceMixin):
+    def __init__(
+        self,
         *,
-        request_id: str,
-        action: str,
-        now: str,
-        approval_decision: Mapping[str, object] | None = None,
-    ) -> dict[str, object] | None:
-        completion_store.replace_remote_policies(
-            [
-                PolicyDecision(
-                    harness="codex",
-                    scope="artifact",
-                    action="block",
-                    artifact_id="codex:project:unrelated-authority-mutation",
-                    artifact_hash="hash-unrelated-authority-mutation",
-                    workspace="/workspace/project",
-                    source="team-policy",
-                )
-            ],
-            now,
-            remote_write_authorized=True,
-        )
-        return original_record(
-            completion_store,
-            request_id=request_id,
-            action=action,
-            now=now,
-            approval_decision=approval_decision,
-        )
+        key: bool = True,
+        degraded: bool = False,
+        evidence_error: Exception | None = None,
+        reply: object = None,
+        replies: list[object] | None = None,
+        native: object = _NO_PUBLISHED_EVIDENCE,
+    ) -> None:
+        self.key = key
+        self.degraded = degraded
+        self.evidence_error = evidence_error
+        self.reply = reply
+        self.replies = replies or []
+        self.native = native
+        self.steps: list[object] = []
 
-    monkeypatch.setattr(live_decision_module, "record_live_hook_completion", mutate_authority_then_record)
-    result = complete_codex_live_decision(
-        store,
-        request_id="exact-live-revision-race",
-        now=resolved_at,
-        fresh_allow_authorized=True,
+    def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+        assert create is False
+        return (b"k" * 32, "key-1") if self.key else (None, None)
+
+    def _provision_resident_verifier(self, key: bytes | None = None) -> None:
+        self.steps.append(("provision", key))
+
+    def policy_lookup_evidence(self, *, now: str | None = None) -> _Evidence:
+        self.steps.append(("evidence", now))
+        if self.evidence_error is not None:
+            raise self.evidence_error
+        return _Evidence(self.degraded)
+
+    def policy_decision_lookup_request(
+        self,
+        evidence: object,
+        *,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        runtime_exact_match_context: str | None,
+        consume_one_shot: bool,
+    ) -> dict[str, object]:
+        self.steps.append(("lookup", {"workspace": workspace, "consume_one_shot": consume_one_shot}))
+        return {
+            "schema": "guard-policy-decision-lookup-request.v1",
+            "integrity_key_b64": "a2V5",
+            "integrity_key_id": "key-1",
+            "local_once_integrity_key_b64": "a2V5",
+            "local_once_integrity_key_id": "key-1",
+        }
+
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
+        if method == "codex_live_allow_authority" and args.get("native_evidence") is True:
+            # The call on the evidence the daemon published.
+            self.steps.append((f"native:{method}", dict(args)))
+            if isinstance(self.native, Exception):
+                raise self.native
+            return self.native
+        self.steps.append((method, dict(args)))
+        if self.replies:
+            return self.replies.pop(0)
+        if self.reply is None:
+            raise NativeGuardStoreUnavailable("dropped")
+        return self.reply
+
+
+def _authority(store: _OneCallStore) -> dict[str, object] | None:
+    request = {
+        "request_id": "r1",
+        "harness": "codex",
+        "artifact_id": "codex:bash",
+        "artifact_hash": "sha256:abc",
+        "workspace": "/work/a",
+    }
+    return store.codex_live_allow_authority(request, now="2026-10-30T00:00:00+00:00")
+
+
+def test_live_authority_asks_the_resident_once_with_a_non_consuming_lookup() -> None:
+    store = _OneCallStore()
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _authority(store)
+
+    native = store.steps[0]
+    assert isinstance(native, tuple) and native[0] == "native:codex_live_allow_authority"
+    assert store.steps[1] == ("evidence", "2026-10-30T00:00:00+00:00")
+    lookup = store.steps[2]
+    assert isinstance(lookup, tuple) and lookup[0] == "lookup"
+    assert store.steps[3] == ("provision", b"k" * 32)
+    assert lookup[1]["consume_one_shot"] is False
+    assert lookup[1]["workspace"] == "/work/a"
+    calls = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert len(calls) == 1
+    args = calls[0][1]
+    assert args["request_id"] == "r1"
+    assert args["integrity_key_id"] == "key-1"
+    # Key bytes stay out of the digested lookup; only their ids remain.
+    assert args["lookup"] == {
+        "schema": "guard-policy-decision-lookup-request.v1",
+        "integrity_key_id": "key-1",
+        "local_once_integrity_key_id": "key-1",
+    }
+
+
+def test_live_authority_without_trusted_evidence_reads_only_the_exact_cloud_allow() -> None:
+    store = _OneCallStore(key=False, degraded=True)
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _authority(store)
+
+    (call,) = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert "lookup" not in call[1]
+    assert "integrity_key_b64" not in call[1]
+    assert not any(isinstance(step, tuple) and step[0] in {"provision", "lookup"} for step in store.steps)
+
+
+def test_live_authority_reads_the_exact_cloud_allow_when_evidence_fails() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(evidence_error=OSError("policy store unreadable"), reply=allow)
+
+    assert _authority(store) == allow
+    (call,) = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert "lookup" not in call[1]
+
+
+def test_live_authority_without_an_exact_allow_reports_the_evidence_failure() -> None:
+    store = _OneCallStore(evidence_error=OSError("policy store unreadable"), reply=[])
+
+    with pytest.raises(OSError, match="policy store unreadable"):
+        _authority(store)
+    assert sum(1 for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority") == 1
+
+
+def _complete(store: _OneCallStore, *, action: str, fresh: bool) -> dict[str, object]:
+    request = {
+        "request_id": "r1",
+        "harness": "codex",
+        "artifact_id": "codex:bash",
+        "artifact_hash": "sha256:abc",
+        "workspace": "/work/a",
+        "resolution_action": action,
+    }
+    return store.complete_codex_live_decision(request, now="2026-10-30T00:00:00+00:00", fresh_allow_authorized=fresh)
+
+
+_EVIDENCE_REQUIRED = {"completed": False, "error": "codex_live_evidence_required"}
+_BASE_ARGS = {"request_id", "now", "cwd", "fresh_allow_authorized", "native_evidence"}
+
+
+def _completion_calls(store: _OneCallStore) -> list[dict[str, object]]:
+    return [step[1] for step in store.steps if isinstance(step, tuple) and step[0] == "complete_codex_live_decision"]
+
+
+def _completion_call(store: _OneCallStore) -> dict[str, object]:
+    (call,) = _completion_calls(store)
+    return call
+
+
+def test_live_completion_of_a_fresh_allow_carries_its_authority_lookup() -> None:
+    store = _OneCallStore(replies=[_EVIDENCE_REQUIRED, {"completed": True, "action": "allow"}])
+
+    assert _complete(store, action="allow", fresh=True) == {"completed": True, "action": "allow"}
+    first, args = _completion_calls(store)
+    assert set(first) == _BASE_ARGS
+    assert args["fresh_allow_authorized"] is True
+    assert args["authority_gathered"] is True
+    assert args["integrity_key_id"] == "key-1"
+    assert args["lookup"] == {
+        "schema": "guard-policy-decision-lookup-request.v1",
+        "integrity_key_id": "key-1",
+        "local_once_integrity_key_id": "key-1",
+    }
+
+
+def test_live_completion_of_a_block_sends_no_authority() -> None:
+    store = _OneCallStore(reply={"completed": True, "action": "block"})
+
+    _complete(store, action="block", fresh=True)
+    args = _completion_call(store)
+    assert set(args) == _BASE_ARGS
+    assert not any(isinstance(step, tuple) and step[0] in {"evidence", "lookup", "provision"} for step in store.steps)
+
+
+def test_a_replayed_allow_reads_no_authority_evidence() -> None:
+    replay = {"completed": True, "action": "allow", "replayed": True}
+    store = _OneCallStore(key=False, evidence_error=OSError("policy store unreadable"), reply=replay)
+
+    assert _complete(store, action="allow", fresh=True) == replay
+    assert set(_completion_call(store)) == _BASE_ARGS
+    assert not any(isinstance(step, tuple) and step[0] in {"evidence", "lookup", "provision"} for step in store.steps)
+
+
+def test_live_completion_without_an_exact_allow_reports_the_evidence_failure() -> None:
+    store = _OneCallStore(
+        evidence_error=OSError("policy store unreadable"),
+        replies=[_EVIDENCE_REQUIRED, {"completed": False, "error": "exact_approval_authority_missing"}],
     )
 
-    assert result == {"completed": False, "error": "continuation_not_recorded"}
-    assert (
-        store.peek_exact_cloud_local_once_approval(request_id="exact-live-revision-race", now=resolved_at) is not None
+    with pytest.raises(OSError, match="policy store unreadable"):
+        _complete(store, action="allow", fresh=True)
+    assert len(_completion_calls(store)) == 2
+
+
+def test_live_completion_without_a_resident_reply_is_not_recorded() -> None:
+    store = _OneCallStore(reply=[])
+
+    assert _complete(store, action="allow", fresh=False) == {"completed": False, "error": "continuation_not_recorded"}
+
+
+def test_live_authority_reads_the_published_evidence_first() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(native={"native_evidence": allow})
+
+    assert _authority(store) == allow
+    (step,) = store.steps
+    assert isinstance(step, tuple) and step[0] == "native:codex_live_allow_authority"
+    assert set(step[1]) == {"request_id", "now", "cwd", "native_evidence"}
+
+
+def test_live_authority_with_published_evidence_and_no_allow_answers_none() -> None:
+    store = _OneCallStore(native={"native_evidence": None})
+
+    assert _authority(store) is None
+    assert len(store.steps) == 1
+
+
+def test_live_authority_gathers_the_evidence_for_a_resident_that_predates_it() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(native=None, reply=allow)
+
+    assert _authority(store) == allow
+    calls = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert len(calls) == 1
+    assert "lookup" in calls[0][1]
+
+
+def test_live_authority_takes_an_exact_allow_from_a_resident_that_predates_native_evidence() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(native=allow)
+
+    assert _authority(store) == allow
+    assert len(store.steps) == 1
+
+
+def test_live_authority_never_retries_a_resident_that_did_not_answer() -> None:
+    store = _OneCallStore(native=_unavailable("native_guard_store_unavailable"), reply={"action": "allow"})
+
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _authority(store)
+    assert len(store.steps) == 1
+
+
+def test_live_completion_on_published_evidence_gathers_nothing() -> None:
+    store = _OneCallStore(
+        key=False, evidence_error=OSError("policy store unreadable"), reply={"completed": True, "action": "allow"}
     )
-    resume = store.get_request_resume("exact-live-revision-race")
-    assert resume is not None and resume["status"] == "pending"
+
+    assert _complete(store, action="allow", fresh=True) == {"completed": True, "action": "allow"}
+    assert _completion_call(store)["native_evidence"] is True
+    assert not any(isinstance(step, tuple) and step[0] in {"evidence", "lookup", "provision"} for step in store.steps)
+
+
+def test_live_completion_never_retries_a_resident_that_did_not_answer() -> None:
+    store = _OneCallStore()
+
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _complete(store, action="allow", fresh=True)
+    assert len(store.steps) == 1

@@ -9,6 +9,9 @@
 //! grammar refuses. Timestamp spellings outside `YYYY-MM-DD[T ]HH:MM[:SS[.f]]`
 //! plus `Z` or a numeric offset are refused too (fail closed).
 //!
+//! `settle_native_review_reuse` runs the block check and the spend together,
+//! so a retry pays for one store transaction instead of two.
+//!
 //! Parity vectors recorded from the original Python implementation live in
 //! `testdata/guard_store/native_review_consume_vectors.json`.
 
@@ -122,6 +125,24 @@ pub(crate) fn matching_block(connection: &Connection, args: &Args) -> StoreResul
     matching_decision(connection, args, "block", false)
 }
 
+/// `settle_native_review_reuse` — a retry's block check and, when the caller
+/// may spend one, its approve-once spend, in the one write transaction the
+/// `guard_store` op holds: `"blocked"`, `"allowed"` or `null`.
+///
+/// A matching block always wins, so a refusal keeps answering the retry
+/// window before any allow is considered. Without `spend` it only reads, and
+/// the op runs it without the write lock.
+pub(crate) fn settle(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let spend = args.flag("spend")?;
+    if matching_block(connection, args)? == Value::Bool(true) {
+        return Ok(json!("blocked"));
+    }
+    if spend && consume(connection, args)? == Value::Bool(true) {
+        return Ok(json!("allowed"));
+    }
+    Ok(Value::Null)
+}
+
 fn matching_decision(
     connection: &Connection,
     args: &Args,
@@ -141,18 +162,23 @@ fn matching_decision(
     if !binding_pattern().is_match(artifact_hash) {
         return Ok(json!(false));
     }
+    // `tool_call` rows store the launch target with credentials masked; a row
+    // written before masking still holds it as sent, so either form matches.
+    // The exact binding is `artifact_hash`.
+    let masked_target = guard_command::redacted_command_tokens::redact_text(launch_target).text;
     let rows = query_all(
         connection,
         "select request_id, resolved_at, resolution_action, resolution_scope \
          from approval_requests \
          where status = 'resolved' and harness = ? and artifact_id = ? and artifact_name = ? \
-           and artifact_hash = ? and launch_target = ? and workspace is ?",
+           and artifact_hash = ? and launch_target in (?, ?) and workspace is ?",
         &[
             Value::from(harness),
             Value::from(artifact_id),
             Value::from(artifact_name),
             Value::from(artifact_hash),
             Value::from(launch_target),
+            Value::from(masked_target),
             workspace.map_or(Value::Null, Value::from),
         ],
     )?;

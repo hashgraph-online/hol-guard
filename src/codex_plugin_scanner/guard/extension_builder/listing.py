@@ -7,7 +7,6 @@ import json
 import re
 from functools import lru_cache
 from importlib.resources import files
-from pathlib import Path
 from typing import cast
 from urllib.parse import urlsplit
 
@@ -15,7 +14,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
 
 from .errors import BuilderError
-from .io import canonical_json, checked_path, parse_json, read_bytes
+from .io import canonical_json
 from .models import Metadata
 
 LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
@@ -161,13 +160,6 @@ def validate_listing(payload: object, *, expected_id: str | None = None) -> dict
     if len(canonical_json(row).encode("utf-8")) > MAX_LISTING_BYTES:
         raise BuilderError("listing_limit", "Listing exceeds its byte budget.")
     return row
-
-
-def load_listing(path: Path, *, expected_id: str) -> dict[str, object]:
-    path = checked_path(path)
-    if path.name != f"{expected_id}.json":
-        raise BuilderError("listing_identity", "Listing filename must match the native contribution ID.")
-    return validate_listing(parse_json(read_bytes(path, limit=MAX_LISTING_BYTES)), expected_id=expected_id)
 
 
 def listing_template(metadata: Metadata) -> str:

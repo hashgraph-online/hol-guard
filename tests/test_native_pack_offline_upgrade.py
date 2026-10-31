@@ -226,6 +226,12 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
                     evidence[field] = None
                     with pytest.raises(ExtensionControlAuthorityError, match="not authorized"):
                         _migrate(action, **{**kwargs, "installed_upgrade": evidence})
+                # The resident recomputes the managed policy the candidate
+                # was prepared against and refuses evidence that claims another.
+                evidence = copy.deepcopy(kwargs["installed_upgrade"])
+                evidence["managed"] = {"revision": 7, "layers": []}
+                with pytest.raises(ExtensionControlAuthorityError, match="managed policy changed"):
+                    _migrate(action, **{**kwargs, "installed_upgrade": evidence})
                 assert activation_store.read(store).engine == _old
                 return _migrate(action, **kwargs)
 
@@ -240,6 +246,16 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
                 with pytest.raises(RuntimeError, match="fixture interrupted after anchored upgrade"):
                     store.migrate_installed_command_pack_authority()
             assert activation_store.read(store).engine == old.engine
+        with store._connect() as connection:
+            head = connection.execute(
+                "select snapshot_json from extension_control_authority_snapshot where singleton = 1"
+            ).fetchone()
+        # Every upgrade reads a bound head. A catalog migration commits no pack
+        # record of its own, so it carries forward the binding the head already
+        # had; a runtime that dropped it stranded this install on an unbound
+        # head the upgrade refused, and the authority stayed stale with every
+        # hook closed until the next release.
+        assert "command_pack_record_digest" in json.loads(head[0])
         store.migrate_installed_command_pack_authority()
         recovered = activation_store.read(store)
         # Startup must recover without asking the user to reapprove unchanged

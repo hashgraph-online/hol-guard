@@ -1,0 +1,49 @@
+{
+  "capabilities": {
+    "agents": 0,
+    "commands": 0,
+    "hooks": false,
+    "mcpServers": [
+      {
+        "name": "notes",
+        "transport": "stdio"
+      }
+    ],
+    "skills": []
+  },
+  "description": "Search and edit notes.",
+  "homepage": null,
+  "identity": {
+    "repository": "acme/notes",
+    "verified": false
+  },
+  "license": null,
+  "links": {
+    "holCard": "https://hol.org/registry/plugins/acme%2Fnotes/.well-known/card.json",
+    "listing": "https://hol.org/registry/plugins/acme%2Fnotes",
+    "repository": "https://github.com/acme/notes"
+  },
+  "name": "notes",
+  "permissions": {
+    "environment": [
+      "NOTES_TOKEN"
+    ],
+    "networkHosts": [],
+    "runsHooks": false,
+    "startsPrograms": [
+      "npx"
+    ]
+  },
+  "runtimes": [
+    "claude-code",
+    "codex",
+    "gemini-cli",
+    "cursor",
+    "vscode",
+    "opencode",
+    "mcp-registry",
+    "agent-plugins"
+  ],
+  "schema": "hol.plugin-card.v0-draft",
+  "version": "2.0.1"
+}

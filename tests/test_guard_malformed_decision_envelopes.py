@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.decision_boundaries import (
-    canonical_approval_surfaces,
-    canonical_receipt_decision,
+    CanonicalApprovalSurfaces,
+    canonical_approval_surfaces_batch,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.receipts.manager import build_receipt
@@ -24,84 +24,37 @@ pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 _MALFORMED_BLOCK_ENVELOPE = '{"pre_execution_result":"block"'
 
 
-def test_approval_boundary_rejects_contradictory_exact_decision_action() -> None:
+def _project(action: object, decision: object) -> CanonicalApprovalSurfaces:
+    (projected,) = canonical_approval_surfaces_batch([(action, decision, None)])
+    return projected
+
+
+def test_approval_boundary_recovers_contradictory_exact_decision_action_fail_closed() -> None:
     payload = decision_from_legacy_policy_action("block", reason="exact-block").to_dict()
     payload["action"] = "ask"
 
-    with pytest.raises(ValueError, match=AUTHORITATIVE_DECISION_INCONSISTENT):
-        canonical_approval_surfaces(
-            "review",
-            payload,
-            None,
-            reject_contradiction=True,
-        )
-
-    recovered = canonical_approval_surfaces(
-        "review",
-        payload,
-        None,
-        reject_contradiction=False,
-    )
+    recovered = _project("review", payload)
     assert recovered.policy_action == "block"
     assert recovered.decision_v2_json["guard_action"] == "block"
     assert recovered.contract_error == AUTHORITATIVE_DECISION_INCONSISTENT
 
 
-def test_decision_v2_hidden_action_alias_is_rejected_or_recovered_fail_closed() -> None:
+def test_decision_v2_hidden_action_alias_is_recovered_fail_closed() -> None:
     payload = decision_from_legacy_policy_action("allow", reason="exact-allow").to_dict()
     payload["final_action"] = "block"
 
-    with pytest.raises(ValueError, match=AUTHORITATIVE_DECISION_INCONSISTENT):
-        canonical_approval_surfaces("allow", payload, None, reject_contradiction=True)
-
-    recovered = canonical_approval_surfaces("allow", payload, None, reject_contradiction=False)
+    recovered = _project("allow", payload)
     assert recovered.policy_action == "block"
     assert recovered.decision_v2_json["guard_action"] == "block"
     assert recovered.contract_error == AUTHORITATIVE_DECISION_INCONSISTENT
 
 
-def test_action_envelope_hidden_action_alias_is_rejected_or_recovered_fail_closed() -> None:
-    envelope = {
-        "pre_execution_result": "allow",
-        "final_action": "block",
-    }
-
-    with pytest.raises(ValueError, match=AUTHORITATIVE_DECISION_INCONSISTENT):
-        canonical_receipt_decision("allow", envelope, reject_contradiction=True)
-
-    recovered = canonical_receipt_decision("allow", envelope, reject_contradiction=False)
-    assert recovered.policy_decision == "block"
-    assert recovered.action_envelope_json == {"pre_execution_result": "block"}
-    assert recovered.contract_error == AUTHORITATIVE_DECISION_INCONSISTENT
-
-
-def test_action_envelope_documented_camel_alias_must_match_the_canonical_action() -> None:
-    envelope = {
-        "pre_execution_result": "allow",
-        "preExecutionResult": "block",
-    }
-
-    with pytest.raises(ValueError, match=AUTHORITATIVE_DECISION_INCONSISTENT):
-        canonical_receipt_decision("allow", envelope, reject_contradiction=True)
-
-    recovered = canonical_receipt_decision("allow", envelope, reject_contradiction=False)
-    assert recovered.policy_decision == "block"
-    assert recovered.action_envelope_json == {
-        "pre_execution_result": "block",
-        "preExecutionResult": "block",
-    }
-    assert recovered.contract_error == AUTHORITATIVE_DECISION_INCONSISTENT
-
-
-def test_legacy_ask_has_one_exact_review_projection_across_persistence_boundaries() -> None:
-    approval = canonical_approval_surfaces("ask", None, None, reject_contradiction=False)
-    receipt = canonical_receipt_decision("ask", None, reject_contradiction=False)
+def test_legacy_ask_has_one_exact_review_projection() -> None:
+    approval = _project("ask", None)
 
     assert approval.policy_action == "review"
     assert approval.decision_v2_json["guard_action"] == "review"
     assert approval.contract_error is None
-    assert receipt.policy_decision == "review"
-    assert receipt.contract_error is None
 
 
 def _allow_approval_request(tmp_path: Path, *, request_id: str) -> GuardApprovalRequest:

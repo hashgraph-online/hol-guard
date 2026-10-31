@@ -14,7 +14,7 @@ import {
 } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import { useDiscoveryFeed, useJoinedDiscovery } from "./extensions-discovery-feed";
-import { inFeedSlotIndexes, MIN_ORGANIC_ROWS_BEFORE_IN_FEED, orderFeaturedFirst } from "./extensions-discover-model";
+import { inFeedSlotIndexes, MIN_ORGANIC_ROWS_BEFORE_IN_FEED, orderCatalogRows } from "./extensions-discover-model";
 import { CatalogSlotRow, ExtensionsSpotlight } from "./extensions-spotlight";
 import {
   CATALOG_SLOT_PRODUCTS,
@@ -24,6 +24,7 @@ import {
 } from "./extensions-spotlight-model";
 import { useExtensionPopularity } from "./use-extension-popularity";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
+import { PluginUpdatesSection } from "../plugin-updates/plugin-updates-section";
 import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
 import { CustomExtensionsSection } from "./custom-extensions-section";
@@ -205,7 +206,8 @@ export function ExtensionsOverview(props: {
     ),
     [joinedDiscovery.featured, joinedDiscovery.sponsored],
   );
-  // Featured rows lead in server order (all-day before time windows).
+  // Featured rows lead in server order (all-day before time windows), then
+  // sponsored rows, Guard's own coverage, and free external contributions.
   const orderedCatalog = useMemo(() => {
     const visibleIds = new Set(visibleCatalog.map((extension) => extension.extension_id));
     const featuredVisible = joinedDiscovery.featured
@@ -221,7 +223,7 @@ export function ExtensionsOverview(props: {
         .map((entry) => entry.placement.extensionId)
         .filter((extensionId) => !featuredIds.has(extensionId)),
     );
-    const rest = orderFeaturedFirst(
+    const rest = orderCatalogRows(
       visibleCatalog.filter((extension) => !featuredIds.has(extension.extension_id)),
       sponsoredIds,
     );
@@ -484,6 +486,7 @@ export function ExtensionsOverview(props: {
           {/* Inspect-only sources sit below the catalog: they inform, they do not change protection. */}
           <CodexHostConnectors inventory={props.hostInventory} />
           <LocalSkillsWorkspace />
+          <PluginUpdatesSection />
         </>
       )}
       </div>

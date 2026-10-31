@@ -22,6 +22,7 @@ from .base import (
     _owned_adapter_mutation,
     _run_command_probe,
     _shell_command,
+    _which_from_user_directories,
 )
 
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = _hook_config.CLAUDE_GUARD_DAEMON_HOOK_MARKER
@@ -102,11 +103,14 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         if not context.home_dir.is_absolute() or (workspace is not None and not workspace.is_absolute()):
             request["cwd"] = os.getcwd()
         artifacts, found_paths, _warnings = native_adapter_detection_with_warnings("claude_code_detect", request)
-        resolved_executable = self.resolved_executable(context)
+        command_available = (
+            self.resolved_executable(context) is not None
+            or _which_from_user_directories(self.executable, context.home_dir) is not None
+        )
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or resolved_executable is not None,
-            command_available=resolved_executable is not None,
+            installed=bool(found_paths) or command_available,
+            command_available=command_available,
             config_paths=found_paths,
             artifacts=artifacts,
             warnings=(),

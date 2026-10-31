@@ -41,11 +41,41 @@ fn read_only_loops_match_their_unrolled_form() {
             "echo src/*.ts; echo tests/*.ts",
         ),
         ("for d in src/*/; do echo $d; done", "echo src/*/"),
+        // A pattern with no directory in it names the directory the loop
+        // runs in, which is the directory the written-out command names, as
+        // long as the pattern's own text reads as a path.
+        ("for f in *.ts; do echo $f; done", "echo *.ts"),
+        ("for d in */; do echo $d; done", "echo */"),
+        // Double quotes round a whole reference stop the shell splitting the
+        // name into fields; they do not change which names the loop reads, so
+        // the written-out text spells the same pattern without them.
+        ("for f in *.md; do head -5 \"$f\"; done", "head -5 *.md"),
+        ("for f in *.md; do wc -l \"$f\"; done", "wc -l *.md"),
+        ("for d in */; do echo \"$d\"; done", "echo */"),
         // The body talks about the name without binding it, so the loop
         // variable still holds the header word.
         (
             "for pkg in core cli; do echo \"pkg: $pkg\"; done",
             "echo \"pkg: core\"; echo \"pkg: cli\"",
+        ),
+        // Quotes in the header protect the separators inside a word. The body
+        // keeps its own quotes around the place the expansion stood, so a
+        // quoted reference stays the one field the loop passed it.
+        (
+            "for spec in \"1 aaaa\" \"2 bbbb\"; do echo \"$spec\"; done",
+            "echo \"1 aaaa\"; echo \"2 bbbb\"",
+        ),
+        // A `!` in front of a body item only inverts the exit status that
+        // item reports. The `;` after it runs the next item either way, so
+        // the written-out list runs the same work without it.
+        ("for f in a b; do ! wc -l $f; done", "wc -l a; wc -l b"),
+        (
+            "for f in a b; do echo $f; ! wc -l $f; done",
+            "echo a; wc -l a; echo b; wc -l b",
+        ),
+        (
+            "for flag in \"-l one\" \"-l two\"; do echo \"$flag\"; done",
+            "echo \"-l one\"; echo \"-l two\"",
         ),
         (
             "for f in a b; do wc -l \"$f\" && echo checked f; done",
@@ -104,14 +134,51 @@ fn unsafe_loop_bodies_keep_their_unrolled_verdict() {
 fn unsupported_loops_fall_back_to_review() {
     for command in [
         "for f in $(ls); do echo $f; done",
-        "for f in *.ts; do echo $f; done",
+        // A bracket expression is a character set the text does not spell
+        // out, and the rest start at the root or reach above the directory
+        // the loop runs in.
         "for f in [ab]*.ts; do echo $f; done",
-        "for f in build*; do echo $f; done",
+        "for f in -*.ts; do echo $f; done",
+        // A directoryless pattern that names no file type is an identifier the
+        // shell leaves alone, so the body runs its program over the pattern
+        // itself rather than over the names of files.
+        "for id in PRRT_example*; do echo $id; done",
+        "for d in disk*; do echo $d; done",
+        "for f in *; do echo $f; done",
         "for f in ../*.ts; do echo $f; done",
         "for f in /etc/*.conf; do echo $f; done",
         "for f in src/../../*.ts; do echo $f; done",
         "for f in \"src/*.ts\"; do echo $f; done",
+        // A word that holds separators is one field only while the body's own
+        // quotes stay on, so a body that reads it bare, or a pattern in the
+        // same header, which needs those quotes off, keeps the loop unmodeled.
+        "for m in \"hello world\"; do echo $m; done",
+        "for x in \"a b\" *.ts; do echo \"$x\"; done",
+        // Quotes protect the separators, not the operators: writing the word
+        // out would spell a command the loop never ran.
+        "for s in \"a; rm -rf b\"; do echo \"$s\"; done",
+        "for s in \"a | tee out\"; do echo \"$s\"; done",
+        // Quotes beside a reference are not quotes around it: this word closes
+        // one quoted run and opens another around an expansion the shell still
+        // splits into fields of its own.
+        "for s in \"a b\"; do echo \"x\"$s\"y\"; done",
         "for f in 'src/*.ts'; do echo $f; done",
+        // A glob glued into a larger word writes out a pattern the loop never
+        // expanded, so the names the loop's own pattern matches are never
+        // proven: with a file named `x secret.pem .json` beside it,
+        // `cat bak-$f` reads `secret.pem` while `cat bak-*.json` does not.
+        "for f in *.json; do cat bak-$f; done",
+        // A backslash sticks the space to the reference, so `cat \ $f` is the
+        // one glued word ` *.json` and the loop's own matches go unproven.
+        "for f in *.json; do cat \\ $f; done",
+        // The quote before the reference closes a string and the one after
+        // opens the next, so taking them off would spell a name the loop
+        // never reads.
+        "for f in *.md; do cat \"x \"$f\" y\"; done",
+        "for f in *.json; do cat \"bak-$f\"; done",
+        "for f in *.md; do head -5 \"$f.bak\"; done",
+        "for f in src/*.ts; do cat $f.bak; done",
+        "for f in *.ts; do echo ${f}x; done",
         "for f in a b; do $f; done",
         "for f in a b; do echo hi > $f; done",
         "for f in a b; do f=x; echo $f; done",
@@ -264,4 +331,109 @@ fn environment_and_shell_special_loop_variables_are_not_unrolled() {
         super::for_loop_unroll::unroll("for file_1 in a b; do echo \"$file_1\"; done").as_deref(),
         Some("echo \"a\"; echo \"b\"")
     );
+}
+
+/// A subshell group is a command list of its own, so the body grammar reads
+/// it as one and the written-out text keeps the parentheses around the same
+/// work. `(cd "$p" && npm test)` is how a loop runs a step in each package
+/// without leaving the shell in the last one.
+#[test]
+fn a_subshell_group_in_the_body_keeps_its_parentheses() {
+    for (looped, unrolled) in [
+        (
+            "for p in packages/core packages/web; do (cd \"$p\" && npm test); done",
+            "(cd \"packages/core\" && npm test); (cd \"packages/web\" && npm test)",
+        ),
+        (
+            "for p in a b; do (cd \"$p\"; ls); done",
+            "(cd \"a\"; ls); (cd \"b\"; ls)",
+        ),
+        (
+            "for p in a b; do echo \"$p\"; (cd \"$p\" && ls); done",
+            "echo \"a\"; (cd \"a\" && ls); echo \"b\"; (cd \"b\" && ls)",
+        ),
+        (
+            "for p in a b; do ( cd \"$p\" && ls ); done",
+            "(cd \"a\" && ls); (cd \"b\" && ls)",
+        ),
+        (
+            "for d in packages/*/; do (cd \"$d\" && npm test); done",
+            "(cd packages/*/ && npm test)",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped}"
+        );
+    }
+}
+
+/// What the group grammar still refuses: a list it cannot read, a shape that
+/// only looks like a group, and a parenthesis standing on its own.
+#[test]
+fn a_group_outside_the_command_list_grammar_keeps_its_review() {
+    for command in [
+        // A keyword inside the group is not a plain command word.
+        "for p in a b; do (cd \"$p\" && if true; then ls; fi); done",
+        // Arithmetic, not a subshell inside a subshell.
+        "for p in a b; do (( count++ )); done",
+        // An array literal: `(` here is not in command position.
+        "for p in a b; do seen=(1 2); echo \"$p\"; done",
+        // A group that never closes, and a `)` that opens nothing.
+        "for p in a b; do (cd \"$p\" && ls; done",
+        "for p in a b; do echo )x; done",
+        // A group that runs nothing.
+        "for p in a b; do (); done",
+        // The group backgrounds itself, which the flat list does not say.
+        "for p in a b; do (cd \"$p\" && ls) & done",
+    ] {
+        assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
+    }
+}
+
+/// `||` is a list separator between two commands, not a pipeline stage. The
+/// group grammar reads each command beside it, so `(npm test || echo failed)`
+/// — a loop step that reports its own failure and carries on — is written out
+/// like every other list the group holds.
+#[test]
+fn a_group_in_the_body_reads_an_alternative_between_its_commands() {
+    for (looped, unrolled) in [
+        (
+            "for p in a b; do (cd \"$p\" && npm test || echo failed); done",
+            "(cd \"a\" && npm test || echo failed); (cd \"b\" && npm test || echo failed)",
+        ),
+        (
+            "for p in a b; do (echo \"$p\" || ls); done",
+            "(echo \"a\" || ls); (echo \"b\" || ls)",
+        ),
+        (
+            "for p in a b; do (cat \"$p\" | sort || echo empty); done",
+            "(cat \"a\" | sort || echo empty); (cat \"b\" | sort || echo empty)",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped}"
+        );
+    }
+}
+
+/// A pipeline that starts or ends on `|` is not that alternative, and keeps
+/// its review with every other shape the grammar cannot read.
+#[test]
+fn a_group_opening_or_closing_on_a_pipe_keeps_its_review() {
+    for command in [
+        "for p in a b; do (| echo \"$p\"); done",
+        "for p in a b; do (echo \"$p\" |); done",
+        "for p in a b; do (echo \"$p\" | | ls); done",
+        // `|||` is `||` followed by a pipeline that starts on `|`: a syntax
+        // error, not an alternative, so the two empty runs it leaves must
+        // not both be stepped over.
+        "for p in a b; do (echo \"$p\" ||| ls); done",
+        "for p in a b; do (echo \"$p\" |||| ls); done",
+    ] {
+        assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
+    }
 }

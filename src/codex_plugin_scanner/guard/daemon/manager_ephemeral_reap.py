@@ -104,7 +104,16 @@ def _reap_stale_ephemeral_guard_daemons(
             continue
         if not m._ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=elapsed_seconds):
             continue
-        if m._retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
+        retirement_identity = m._guard_daemon_pid_identity_for_retirement(pid)
+        if retirement_identity is None:
+            continue
+        expected_start_marker, expected_owner_marker = retirement_identity
+        if m._retire_guard_daemon_pid(
+            pid,
+            expected_guard_home=guard_home,
+            expected_start_marker=expected_start_marker,
+            expected_owner_marker=expected_owner_marker,
+        ):
             m.clear_guard_daemon_state(guard_home)
 
 

@@ -12,6 +12,7 @@
 //! is a fixed allowlisted origin; OAuth-specific validation lives in
 //! `validate_guard_sync_endpoint`).
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 #[cfg(test)]
 use std::time::Duration;
@@ -718,6 +719,39 @@ fn retry_after_seconds(headers: &BTreeMap<String, String>, default: f64) -> f64 
         .unwrap_or(default)
 }
 
+/// Least time worth giving one more attempt.
+const SYNC_BUDGET_MIN_ATTEMPT_SECONDS: f64 = 1.0;
+
+/// Seconds a run of Guard Cloud exchanges may take, retries and their pauses
+/// included. Each attempt is charged its whole timeout and each pause its whole
+/// wait: a brokered evaluation is replayed every round, so it cannot read the
+/// clock, but counting this way gives every replay the same answer.
+#[derive(Debug)]
+pub struct SyncBudget(Cell<f64>);
+
+impl SyncBudget {
+    pub fn new(seconds: f64) -> Self {
+        Self(Cell::new(seconds.max(0.0)))
+    }
+
+    pub fn remaining(&self) -> f64 {
+        self.0.get()
+    }
+
+    fn spend(&self, seconds: f64) {
+        self.0.set((self.0.get() - seconds).max(0.0));
+    }
+
+    /// Spends `wait` when an attempt can still follow it.
+    fn take_pause(&self, wait: f64) -> bool {
+        let affordable = self.remaining() - wait >= SYNC_BUDGET_MIN_ATTEMPT_SECONDS;
+        if affordable {
+            self.spend(wait);
+        }
+        affordable
+    }
+}
+
 /// `runner.py:_urlopen_with_sync_retries` (:5009) — the bounded retry state
 /// machine. Order: nonce fast-path → bounded 429 waits → bounded gateway
 /// retries → generic nonce-challenge retry → one timeout retry at the longer
@@ -729,14 +763,49 @@ pub fn urlopen_with_sync_retries(
     parse_json_response: bool,
     nonce_fast_path: bool,
 ) -> Result<Option<Value>, EvalError> {
+    sync_retries(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        parse_json_response,
+        nonce_fast_path,
+        None,
+    )
+}
+
+/// The retry machine, optionally held to a [`SyncBudget`]: each attempt gets at
+/// most the time left, and a retry or pause the budget cannot cover is not
+/// started, so the last response stands (or the run ends as a timeout).
+fn sync_retries(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    parse_json_response: bool,
+    nonce_fast_path: bool,
+    budget: Option<&SyncBudget>,
+) -> Result<Option<Value>, EvalError> {
     let mut current_request = request.clone();
     let mut current_timeout = timeout_seconds;
     let mut retried_timeout = false;
     let mut nonce_retry_count: u32 = 0;
     let mut rate_limit_retry_count: u32 = 0;
     let mut gateway_retry_count: u32 = 0;
+    let can_pause = |wait: f64| budget.is_none_or(|budget| budget.take_pause(wait));
     loop {
-        match execute_request(EgressClass::Cloud, &current_request, current_timeout) {
+        let attempt_timeout = match budget {
+            None => current_timeout,
+            Some(budget) => {
+                if budget.remaining() < SYNC_BUDGET_MIN_ATTEMPT_SECONDS {
+                    return Err(EvalError::Internal(
+                        "timeout: Guard Cloud ran out of time.".to_owned(),
+                    ));
+                }
+                let attempt = current_timeout.min(budget.remaining());
+                budget.spend(attempt);
+                attempt
+            }
+        };
+        match execute_request(EgressClass::Cloud, &current_request, attempt_timeout) {
             Ok(resp) => {
                 if parse_json_response {
                     let body = resp.body_bytes;
@@ -768,11 +837,15 @@ pub fn urlopen_with_sync_retries(
                         }
                     }
                 }
-                if status == 429 && rate_limit_retry_count < SYNC_RATE_LIMIT_RETRY_LIMIT {
+                let rate_limit_wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS)
+                    .min(SYNC_429_MAX_WAIT_SECONDS as f64)
+                    .max(sync_retry_poll_interval_seconds());
+                if status == 429
+                    && rate_limit_retry_count < SYNC_RATE_LIMIT_RETRY_LIMIT
+                    && can_pause(rate_limit_wait)
+                {
                     rate_limit_retry_count += 1;
-                    let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS)
-                        .min(SYNC_429_MAX_WAIT_SECONDS as f64);
-                    egress_broker::pause(wait.max(sync_retry_poll_interval_seconds()));
+                    egress_broker::pause(rate_limit_wait);
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -780,13 +853,14 @@ pub fn urlopen_with_sync_retries(
                     retried_timeout = false;
                     continue;
                 }
+                let gateway_wait =
+                    sync_retry_poll_interval_seconds().min(SYNC_GATEWAY_MAX_WAIT_SECONDS as f64);
                 if status_is_retryable_gateway(status)
                     && gateway_retry_count < SYNC_GATEWAY_RETRY_LIMIT
+                    && can_pause(gateway_wait)
                 {
                     gateway_retry_count += 1;
-                    let wait = sync_retry_poll_interval_seconds()
-                        .min(SYNC_GATEWAY_MAX_WAIT_SECONDS as f64);
-                    egress_broker::pause(wait);
+                    egress_broker::pause(gateway_wait);
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -835,6 +909,27 @@ pub fn urlopen_json_with_timeout_retry(
         .ok_or_else(|| {
             EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
         })
+}
+
+/// [`urlopen_json_with_timeout_retry`] held to `budget`, which the caller can
+/// share across several requests.
+pub fn urlopen_json_within_budget(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    retry_timeout_seconds: f64,
+    budget: &SyncBudget,
+) -> Result<Value, EvalError> {
+    sync_retries(
+        request,
+        timeout_seconds,
+        retry_timeout_seconds,
+        true,
+        false,
+        Some(budget),
+    )?
+    .ok_or_else(|| {
+        EvalError::Internal("Guard Cloud sync returned an invalid response payload.".to_owned())
+    })
 }
 
 /// `urllib.error.HTTPError` → `EvalError::HttpStatus` — carry the code so the
@@ -1271,6 +1366,119 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
             OAuthRefreshOutcome::Failed("Guard Cloud token refresh timed out.".to_owned())
         }
         Err(SyncHttpError::Other(reason)) => OAuthRefreshOutcome::Failed(reason),
+    }
+}
+
+#[cfg(test)]
+mod sync_budget_tests {
+    use guard_contracts::{EgressOutcomeV1, EgressSuppliedV1};
+
+    use super::*;
+    use crate::egress_broker::EgressScope;
+
+    const EVALUATE_URL: &str = "https://hol.org/api/guard/supply-chain/evaluate";
+
+    fn evaluate_request() -> GuardSyncRequest {
+        GuardSyncRequest {
+            url: EVALUATE_URL.to_owned(),
+            method: "POST".to_owned(),
+            headers: BTreeMap::new(),
+            body: Some(b"{}".to_vec()),
+            dpop_nonce: None,
+            retry_context: None,
+        }
+    }
+
+    fn answer(occurrence: u32, outcome: EgressOutcomeV1) -> EgressSuppliedV1 {
+        EgressSuppliedV1 {
+            class: "cloud".to_owned(),
+            method: "POST".to_owned(),
+            url: EVALUATE_URL.to_owned(),
+            body_sha256: hex::encode(Sha256::digest(b"{}")),
+            occurrence,
+            outcome,
+        }
+    }
+
+    fn status(code: u16, retry_after: Option<&str>) -> EgressOutcomeV1 {
+        EgressOutcomeV1::Response {
+            status: code,
+            headers: retry_after
+                .map(|value| BTreeMap::from([("Retry-After".to_owned(), value.to_owned())]))
+                .unwrap_or_default(),
+            body: None,
+            body_file: None,
+        }
+    }
+
+    #[test]
+    fn a_rate_limit_pause_the_budget_cannot_cover_is_not_started() {
+        let rate_limited = [answer(1, status(429, Some("60")))];
+
+        let scope = EgressScope::enter(&rate_limited, None).unwrap();
+        let unbounded = urlopen_json_with_timeout_retry(&evaluate_request(), 5.0, 5.0);
+        let needs = scope.finish();
+        assert!(unbounded.is_err());
+        assert_eq!(
+            needs.len(),
+            1,
+            "without a budget the 60-second pause is taken"
+        );
+        assert!((needs[0].delay_seconds - 60.0).abs() < f64::EPSILON);
+
+        let scope = EgressScope::enter(&rate_limited, None).unwrap();
+        let budget = SyncBudget::new(20.0);
+        let bounded = urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget);
+        assert!(scope.finish().is_empty(), "no retry is asked for");
+        assert!(matches!(bounded, Err(EvalError::HttpStatus(429, _))));
+        assert!((budget.remaining() - 15.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn an_attempt_after_a_rate_limit_only_gets_the_time_left() {
+        // The timeout retry ends in a 429, which would reset the retry; the
+        // attempt after its pause is cut to what the budget still holds.
+        let answers = [
+            answer(1, EgressOutcomeV1::Timeout),
+            answer(2, status(429, Some("1"))),
+        ];
+        let scope = EgressScope::enter(&answers, None).unwrap();
+        let budget = SyncBudget::new(12.5);
+        assert!(urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).is_err());
+        let needs = scope.finish();
+        assert_eq!(needs.len(), 1);
+        assert_eq!(needs[0].occurrence, 3);
+        assert!((needs[0].delay_seconds - 1.0).abs() < f64::EPSILON);
+        assert!((needs[0].timeout_seconds - 1.5).abs() < f64::EPSILON);
+        assert!(budget.remaining().abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_spent_budget_sends_nothing_and_reads_as_a_timeout() {
+        let scope = EgressScope::enter(&[], None).unwrap();
+        let budget = SyncBudget::new(0.5);
+        let error = urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).unwrap_err();
+        assert!(scope.finish().is_empty());
+        assert!(matches!(error, EvalError::Internal(message) if message.starts_with("timeout:")));
+    }
+
+    #[test]
+    fn one_budget_is_shared_by_the_requests_given_it() {
+        let scope = EgressScope::enter(
+            &[
+                answer(1, EgressOutcomeV1::Timeout),
+                answer(2, EgressOutcomeV1::Timeout),
+            ],
+            None,
+        )
+        .unwrap();
+        let budget = SyncBudget::new(12.0);
+        let first = urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).unwrap_err();
+        assert!(matches!(first, EvalError::Internal(message) if message.starts_with("timeout:")));
+        assert!(urlopen_json_within_budget(&evaluate_request(), 5.0, 5.0, &budget).is_err());
+        let needs = scope.finish();
+        assert_eq!(needs.len(), 1);
+        assert!((needs[0].timeout_seconds - 2.0).abs() < f64::EPSILON);
     }
 }
 

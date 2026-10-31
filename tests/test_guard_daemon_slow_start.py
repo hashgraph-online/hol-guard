@@ -14,7 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import recovery_worker, start_classification, start_heartbeat
-from codex_plugin_scanner.guard.native_daemon_lifecycle import daemon_lifecycle_deadline
+from codex_plugin_scanner.guard.native_daemon_lifecycle import _DAEMON_LIFECYCLE_DEADLINE
 
 
 class _FakeProcess:
@@ -72,6 +72,9 @@ def _patch_spawn(monkeypatch: pytest.MonkeyPatch, process: _FakeProcess, *, afte
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
     monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", lambda *_a, **_k: process)
     monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "posix:token")
+    # The fake child never exists on the host, so its generation and owner come from the stubs
+    # rather than from a real ``ps`` probe through the patched ``subprocess.Popen``.
+    monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:0")
     # No lock, no journal entry: the child is still importing Python.
     monkeypatch.setattr(start_classification, "daemon_owner_lock_is_held", lambda _gh: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _gh: [])
@@ -142,7 +145,7 @@ def test_heartbeat_from_a_foreign_process_does_not_count(tmp_path: Path, monkeyp
 
 def _deadline_bound_tree_check(pid: int, root_pid: int) -> bool:
     # Process-tree queries run under the lifecycle deadline, like the native inventory.
-    deadline = daemon_lifecycle_deadline()
+    deadline = _DAEMON_LIFECYCLE_DEADLINE.get()
     if deadline is not None and time.monotonic() >= deadline:
         raise TimeoutError("Guard daemon operation deadline exceeded.")
     return pid == root_pid

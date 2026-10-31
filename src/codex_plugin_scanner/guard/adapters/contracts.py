@@ -14,7 +14,6 @@ from .contract_capability_values import _capability
 from .contract_hook_capabilities import HOOK_EVENT_CAPABILITIES
 from .contract_models import CAPABILITY_DECLARED_ACTIONS as CAPABILITY_DECLARED_ACTIONS
 from .contract_models import CapabilityLocalHosted as CapabilityLocalHosted
-from .contract_models import HarnessCapabilityReport as HarnessCapabilityReport
 from .contract_models import HarnessCoverageSummary as HarnessCoverageSummary
 from .contract_models import HarnessEventCapability as HarnessEventCapability
 from .contract_models import HarnessProtectionContract as HarnessProtectionContract
@@ -165,27 +164,4 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
         supported_actions=contract.supported_actions,
         docs_path=contract.docs_path,
         icon_label=contract.icon_label,
-    )
-
-
-def harness_capability_report(
-    *,
-    build_id: str = "unknown",
-    commit: str = "unknown",
-    requested_host: str | None = None,
-    host_version_scope: str | None = None,
-    os_arch: str | None = None,
-    local_hosted: str | None = None,
-) -> HarnessCapabilityReport:
-    """Return the additive versioned event report for all registered harnesses."""
-
-    from .capability_report import build_capability_report
-
-    return build_capability_report(
-        build_id=build_id,
-        commit=commit,
-        requested_host=requested_host,
-        host_version_scope=host_version_scope,
-        os_arch=os_arch,
-        local_hosted=local_hosted,
     )

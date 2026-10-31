@@ -172,6 +172,25 @@ fn delivery_floor(action: &str, cause: FloorCause, verified: bool) -> &str {
     }
 }
 
+/// The configured action for one risk key, global and per-harness settings
+/// joined to the stronger. `None` when neither sets it.
+pub(crate) fn risk_action(
+    snapshot: &super::AdmittedPolicySnapshot,
+    harness: &str,
+    risk: &str,
+) -> Result<Option<String>, String> {
+    let harness = normalized_harness(harness);
+    let global = policy_map_action(&snapshot.effective_policy.risk_actions, risk)?;
+    let scoped = match snapshot.compiled.harness_risk_actions.get(&harness) {
+        Some(map) => policy_map_action(map, risk)?,
+        None => None,
+    };
+    match (global, scoped) {
+        (Some(left), Some(right)) => join_action(&left, &right).map(Some),
+        (left, right) => Ok(left.or(right)),
+    }
+}
+
 pub(super) fn action_rank(action: &str) -> Option<u8> {
     ActionFloor::parse(action).map(|floor| floor as u8)
 }

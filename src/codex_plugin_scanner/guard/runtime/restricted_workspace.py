@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -16,7 +14,9 @@ from pathlib import Path
 from ..native_restricted_pytest import restricted_native
 from .contained_authority import settled_authority
 from .contained_denial_note import denial_note
+from .contained_worktree_add import WORKTREE_ADD_REASON, run_worktree_add
 from .git_execution_safety import trusted_git_binary_for_cwd
+from .host_steps import run_on_host
 from .restricted_pytest_model import (
     _DEFAULT_TIMEOUT_SECONDS,
     PYTEST_INVALID_COMMAND_REASON_CODE,
@@ -225,6 +225,16 @@ def run_workspace_contained(
     publish = first_receipt.get("reason") == WORKSPACE_PUBLISH_REASON
     if cwd.resolve(strict=True) != workspace.resolve(strict=True):
         raise _reject("The workspace sandbox runs only from the workspace root.")
+    if first_receipt.get("reason") == WORKTREE_ADD_REASON:
+        return run_worktree_add(
+            payload,
+            workspace=workspace,
+            authorize=authorize,
+            first_receipt=first_receipt,
+            home_dir=home_dir,
+            timeout_seconds=timeout_seconds,
+            merge_stderr=merge_stderr,
+        )
     home = home_dir or Path.home()
     grant = None if publish else decided_grant(command, workspace=workspace, home=home)
     prepare: dict[str, object] = {
@@ -389,46 +399,14 @@ def _run_publish_steps(
         or response.get("observe_mode") is True
     ):
         raise _reject("Guard could not prove the Git steps again after the checks ran; they did not run.")
-    sys.stdout.flush()
-    sys.stderr.flush()
-    process = subprocess.Popen(
-        ["/bin/sh", "-c", suffix],
+    return run_on_host(
+        suffix,
         cwd=workspace,
-        env={**os.environ, "PATH": _outside_search_path(os.environ.get("PATH", ""), workspace)},
-        stdin=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT if merge_stderr else None,
-        start_new_session=True,
+        workspace=workspace,
+        timeout_seconds=timeout_seconds,
+        merge_stderr=merge_stderr,
+        label="The Git steps",
     )
-    try:
-        return_code = process.wait(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired as error:
-        with contextlib.suppress(OSError):
-            os.killpg(process.pid, signal.SIGKILL)
-        process.wait()
-        raise RestrictedPytestError(
-            "pytest_restricted_timeout",
-            f"The Git steps exceeded their {timeout_seconds}-second execution deadline.",
-            exit_code=124,
-        ) from error
-    return return_code if return_code >= 0 else 128 + abs(return_code)
-
-
-def _outside_search_path(search_path: str, workspace: Path) -> str:
-    """`search_path` without entries the contained checks could have written.
-
-    The checks could plant a `git` or `gh` in a relative or workspace entry,
-    which the Git steps would then run unsandboxed, as the sandbox's own
-    PATH filter anticipates.
-    """
-    root = workspace.resolve()
-    kept: list[str] = []
-    for entry in search_path.split(os.pathsep):
-        if not os.path.isabs(entry):
-            continue
-        resolved = Path(entry).resolve()
-        if resolved != root and not resolved.is_relative_to(root):
-            kept.append(entry)
-    return os.pathsep.join(kept)
 
 
 def _remove_overlay(root: Path) -> None:

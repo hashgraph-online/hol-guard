@@ -109,12 +109,15 @@ def installed_client():
 
 
 def provision(store: GuardStore) -> None:
+    """Enroll a new home, or keep the empty revision 0 a daemon start enrolled in it."""
     store._extension_control_authority_secret_store = EncryptedFileSecretStore(store.guard_home)
     catalog = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     with store._extension_control_authority_lock():
         before = store._read_extension_control_authority_locked(catalog)
-        require(before.health is AuthorityHealth.UNENROLLED, "fixture_not_new")
-        store._bootstrap_extension_control_authority(catalog, key=None)
+        if before.health is AuthorityHealth.UNENROLLED:
+            store._bootstrap_extension_control_authority(catalog, key=None)
+        else:
+            require(before.health is AuthorityHealth.PROTECTED and not before.revision, "fixture_not_new")
         after = store._read_extension_control_authority_locked(catalog)
         require(after.health is AuthorityHealth.PROTECTED and after.revision == 0 and not after.layers, "bootstrap")
 

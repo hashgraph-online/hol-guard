@@ -7,7 +7,7 @@ use std::io::Read;
 
 use serde_json::Value;
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::sfrs_docker_args::{
     docker_build_args_are_sensitive, docker_buildx_subcommand_index,
     docker_subcommand_help_requested, docker_subcommand_index, shell_variable_names,
@@ -134,9 +134,6 @@ impl InspectionHost for NoEnvHost {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("vector host does not run git")
     }
 }
 

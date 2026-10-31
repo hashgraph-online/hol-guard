@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
+from .artifact_native_fields import artifact_native_fields as artifact_content_hash_fields
 from .models import GuardArtifact
 from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
@@ -45,25 +46,6 @@ class ArtifactContentHashUnavailableError(RuntimeError):
     """The resident could not spell the artifact content hash."""
 
     code = "native_artifact_content_hash_unavailable"
-
-
-def artifact_content_hash_fields(artifact: GuardArtifact) -> dict[str, object]:
-    """The artifact's own fields, unredacted, as the resident reads them."""
-
-    return {
-        "artifact_id": artifact.artifact_id,
-        "name": artifact.name,
-        "harness": artifact.harness,
-        "artifact_type": artifact.artifact_type,
-        "source_scope": artifact.source_scope,
-        "config_path": artifact.config_path,
-        "command": artifact.command,
-        "args": list(artifact.args),
-        "url": artifact.url,
-        "transport": artifact.transport,
-        "publisher": artifact.publisher,
-        "metadata": dict(artifact.metadata),
-    }
 
 
 def native_artifact_content_hashes(

@@ -5,7 +5,7 @@ Guard sends it as `syncContext.fleetPosture` inside the receipt-sync request, so
 credential is involved.
 
 - `schema.json` is the JSON Schema (draft 2020-12) for the object.
-- `fixtures/` holds example payloads. `solo-macos`, `team-linux-delta` and `digest-only` are valid.
+- `fixtures/` holds example payloads. `solo-macos`, `team-linux-delta`, `digest-only` and `with-runtimes` are valid.
   `too-large` is deliberately invalid: it exceeds the 65,536-byte limit and shows what a sender must
   never emit.
 
@@ -22,6 +22,11 @@ credential is involved.
 - File paths and host names are never sent in the clear. `hostnameHash` and `pathHash` are
   `sha256:` digests computed as an HMAC-SHA-256 under a random per-install secret that never leaves the machine.
 - Timestamps are UTC and end in `Z` or `+00:00`.
+- `runtimes` is optional and observation only: it lists the runtime executables configured MCP servers
+  would launch, without running them or enumerating running processes. `coverage` is always
+  `observed_only` and `scopeComplete` is always `false`, and no runtime is reported safe. Rows carry no
+  paths, server names or command lines: `executableHash` is the executable's content digest and
+  `locationHash` a keyed digest of its path. A minimal report leaves the section out.
 
 ## Receiver behaviour
 

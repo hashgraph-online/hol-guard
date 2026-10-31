@@ -274,3 +274,40 @@ fn a_duplicate_key_in_a_text_block_is_refused() {
     ]});
     assert!(composio_discovered_actions(DISCOVERY, &pair).is_none());
 }
+
+#[test]
+fn a_shape_outside_the_inspected_contract_carries_nothing() {
+    let entry = json!({
+        "tool_slug": "GITHUB_STAR",
+        "toolkit": "github",
+        "description": "",
+        "input_schema": {},
+        "hasFullSchema": false,
+    });
+    let valid = schemas(json!({"GITHUB_STAR": entry}));
+    for response in [
+        // A result nested under another key is not the discovery response.
+        json!({"result": valid}),
+        // Only a boolean `false` clears an error flag.
+        json!({"isError": "false", "structuredContent": valid}),
+        // One malformed member refuses the whole catalog.
+        schemas(json!({"GITHUB_STAR": entry, "OTHER": {}})),
+        schemas(json!({"GITHUB_STAR": {
+            "tool_slug": "GITHUB_STAR",
+            "toolkit": "github",
+            "description": "",
+            "input_schema": [],
+            "hasFullSchema": false,
+        }})),
+    ] {
+        assert!(
+            composio_discovered_actions(DISCOVERY, &response).is_none(),
+            "{response}"
+        );
+    }
+    // A discovery that offered no guidance proposes nothing, rather than failing.
+    assert_eq!(
+        composio_workflow_proposals(DISCOVERY, &valid).map(|proposals| proposals.len()),
+        Some(0)
+    );
+}

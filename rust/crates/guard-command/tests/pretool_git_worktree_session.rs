@@ -52,7 +52,7 @@ fn evaluate_in(
         pager_disabled: false,
         xdg_config_home: xdg_config_home.map(|directory| directory.to_str().unwrap().to_owned()),
         git_config_no_system: no_system,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         "omp",
@@ -70,6 +70,7 @@ fn evaluate_in(
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&context),
     )

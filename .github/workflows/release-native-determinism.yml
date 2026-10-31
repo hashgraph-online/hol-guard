@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             suffix: ''
           # Intel binaries are cross-compiled on Apple silicon; the native

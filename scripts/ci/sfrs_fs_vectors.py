@@ -19,7 +19,6 @@ import tempfile
 from pathlib import Path
 
 from sfrs_graph_cases import graph_cases
-from sfrs_quote_cases import quote_cases
 
 from codex_plugin_scanner.guard.runtime.secret_file_request_services import source_edit_context
 
@@ -254,13 +253,18 @@ def _cases(root: Path) -> list[dict[str, object]]:
                 source_edit_context._same_workspace_file(left, right, cwd=proj),
             )
     graph_cases(root, add)
-    quote_cases(root, add)
     return cases
 
 
 # Cases recorded from Python helpers that have since been retired. Nothing can
 # regenerate them, so a refresh carries the recorded rows forward unchanged.
-_FROZEN_CASE_PREFIXES = ("pr_",)
+_FROZEN_CASE_PREFIXES = (
+    "pr_",
+    "quote_",
+    "literal_cd_context",
+    "current_workspace_edit",
+    "runner_arg_escapes",
+)
 
 
 def _frozen_cases(out: Path) -> list[dict[str, object]]:

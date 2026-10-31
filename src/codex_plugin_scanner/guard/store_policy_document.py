@@ -14,7 +14,7 @@ from .policy_document import GuardPolicyDocument, policy_document_digest
 from .policy_document_authority import policy_import_approval_binding
 from .policy_document_compile import compile_policy_document
 from .policy_document_io import CompiledPolicyRow
-from .store_base import _validate_scoped_policy_artifact_target
+from .store_base import _validate_scoped_policy_artifact_target, serialize_policy_integrity_generation
 
 PolicyImportMode = Literal["merge", "replace"]
 
@@ -114,6 +114,7 @@ class StorePolicyDocumentMixin:
             removals=tuple(sorted(removals)),
         )
 
+    @serialize_policy_integrity_generation
     def import_policy_document(
         self,
         document: GuardPolicyDocument,

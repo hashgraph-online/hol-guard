@@ -45,42 +45,6 @@ class _ControlOperationRoutes:
             response["dashboard_session_token"] = refreshed_session_token
         self._write_json(response)
 
-    def _handle_client_attach(self, payload: dict[str, object]) -> None:
-        client_id = self._optional_string(payload.get("client_id"))
-        surface = self._optional_string(payload.get("surface"))
-        if client_id is None or surface is None:
-            self._write_json({"attached": False, "error": "missing_required_fields"}, status=400)
-            return
-        try:
-            attachment = self.server.runtime.attach_client(  # type: ignore[attr-defined]
-                client_id=client_id,
-                surface=surface,
-                session_id=self._optional_string(payload.get("session_id")),
-                metadata={"title": self._optional_string(payload.get("client_title")) or surface},
-                lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
-            )
-        except ValueError as error:
-            self._write_json({"attached": False, "error": str(error)}, status=400)
-            return
-        self._write_json({"attached": True, "item": attachment})
-
-    def _handle_client_heartbeat(self, payload: dict[str, object]) -> None:
-        client_id = self._optional_string(payload.get("client_id"))
-        lease_id = self._optional_string(payload.get("lease_id"))
-        if client_id is None or lease_id is None:
-            self._write_json({"renewed": False, "error": "missing_required_fields"}, status=400)
-            return
-        try:
-            attachment = self.server.runtime.renew_client(  # type: ignore[attr-defined]
-                client_id=client_id,
-                lease_id=lease_id,
-                lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
-            )
-        except ValueError as error:
-            self._write_json({"renewed": False, "error": str(error)}, status=404)
-            return
-        self._write_json({"renewed": True, "item": attachment})
-
     def _handle_session_start(self, payload: dict[str, object]) -> None:
         harness = self._optional_string(payload.get("harness"))
         surface = self._optional_string(payload.get("surface"))

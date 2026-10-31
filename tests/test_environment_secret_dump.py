@@ -71,7 +71,7 @@ def test_python_getenv_path_is_not_secret_read() -> None:
     command = "python3 -c \"import os; print(os.getenv('PATH'))\""
     reviewed = real_native_command_evaluation(command, cwd=Path("/tmp"))
     assert not reviewed.evaluation.extension_observations
-    assert reviewed.native_minimum_action == "review"
+    assert reviewed.payload["minimum_action"] == "review"
     assert reviewed.evaluation.minimum_action == "review"
     assert not reviewed.evaluation.decision_plane.proof_routes
     # Host discovery may prove the running interpreter's harmless PATH lookup

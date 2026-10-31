@@ -158,4 +158,78 @@ AGENT_EVENT_CAPABILITIES: dict[str, tuple[HarnessEventCapability, ...]] = {
             "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups",
         ),
     ),
+    "muse": (
+        _capability(
+            "muse",
+            "PreToolUse",
+            "native_hook",
+            "blocking",
+            ("observe", "block", "approval"),
+            (
+                "Malformed payload, hook failure, or unavailable Guard authority fails closed before "
+                "tool execution. An approved call resumes unchanged inside the pending hook."
+            ),
+            "Muse must invoke the managed PreToolUse hook and honor its deny response before running the tool.",
+            ("A source declaration does not prove that a live Muse session honored a deny response.",),
+            "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "muse",
+            "PermissionRequest",
+            "native_hook",
+            "approval",
+            ("observe", "block", "approval"),
+            "Approval hook failures fail closed and leave the request pending or denied.",
+            "Muse must preserve the managed PermissionRequest hook group in its user settings.",
+            ("Native approval UX and Guard evidence still require a live host/version check.",),
+            "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "muse",
+            "UserPromptSubmit",
+            "native_hook",
+            "screening",
+            ("observe", "block", "approval"),
+            "Prompt hook failures return a bounded fail-closed response where Muse honors the hook contract.",
+            "Muse must expose UserPromptSubmit and preserve the Guard hook response schema.",
+            ("Prompt screening does not prove downstream model or host request rewriting.",),
+            "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "muse",
+            "PostToolUse",
+            "native_hook",
+            "observe",
+            ("observe",),
+            (
+                "Post-tool transport failures are surfaced as unavailable review; a completed host action "
+                "cannot be undone."
+            ),
+            "Muse must invoke the managed PostToolUse hook after the tool event.",
+            ("Post-tool observation does not block or replace model-visible output.",),
+            "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "muse",
+            "SessionStart",
+            "native_hook",
+            "observe",
+            ("observe",),
+            "Session lifecycle failures are recorded; the hook adds Guard context and cannot block the session.",
+            "Muse must invoke the managed SessionStart hook when a session starts.",
+            ("Session context does not prove that later tool calls were reviewed.",),
+            "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups",
+        ),
+        _capability(
+            "muse",
+            "Stop",
+            "native_hook",
+            "observe",
+            ("observe",),
+            "Session lifecycle failures are recorded; the hook observes the stop and cannot block it.",
+            "Muse must invoke the managed Stop hook when a session stops.",
+            ("Stop observation does not prove that earlier tool calls were reviewed.",),
+            "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups",
+        ),
+    ),
 }

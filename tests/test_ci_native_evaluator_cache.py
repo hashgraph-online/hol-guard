@@ -1,4 +1,4 @@
-"""Exact native reuse must retain formatting, source verification and both binaries."""
+"""Exact native reuse must retain source verification and both binaries."""
 
 from __future__ import annotations
 
@@ -58,15 +58,17 @@ def test_linux_cache_skips_only_compilation_and_always_verifies_current_sources(
         }:
             assert step["if"] == MISS
     stage = next(step for step in steps if step.get("name") == "Stage native build trust bindings")
-    formatting = next(step for step in steps if step.get("name") == "Check native formatting before compilation")
     binaries = next(step for step in steps if step.get("name") == "Require both executable native evaluators")
     verify = next(
         step for step in steps if step.get("name") == "Verify generated native command catalogs before pytest fan-out"
     )
-    assert all("if" not in step for step in (stage, formatting, binaries, verify))
-    assert steps.index(stage) < steps.index(restore) < steps.index(formatting) < steps.index(binaries)
+    assert all("if" not in step for step in (stage, binaries, verify))
+    assert steps.index(stage) < steps.index(restore) < steps.index(binaries)
     assert steps.index(binaries) < steps.index(verify) < steps.index(save)
-    assert 'rustup toolchain install "$toolchain" --profile minimal --component rustfmt' in formatting["run"]
+    # Required workspace validation owns formatting; a warm producer need not
+    # install a toolchain solely to recheck it before artifact fan-out.
+    assert all("cargo" not in step.get("run", "") or " fmt " not in step["run"] for step in steps)
+    assert all("rustfmt" not in str(step) for step in steps)
     assert "verify_native_command_program.py" in verify["run"]
     build = next(step for step in steps if step.get("name") == "Build native command evaluators once for pytest shards")
     timings = next(step for step in steps if step.get("name") == "Retain native compilation timings")

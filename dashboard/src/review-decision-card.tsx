@@ -51,6 +51,7 @@ import {
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
 import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 import { useReviewDecisionResolve } from "./use-review-decision-resolve";
 import { approvalLeftActionStopped } from "./evidence/approval-outcome";
@@ -355,6 +356,18 @@ export function ReviewDecisionCard(props: {
             onResolve={props.onResolve}
             onApproved={handleExtensionApproved}
             onDialogActiveChange={setExtensionDialogActive}
+          />
+        )}
+
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionCoverageCard
+            coverage={item.extension_coverage}
+            linkedPatterns={
+              item.extension_recommendation?.permissions.map((permission) => ({
+                extension_id: permission.extension_id,
+                rule_id: permission.rule_id,
+              })) ?? []
+            }
           />
         )}
 

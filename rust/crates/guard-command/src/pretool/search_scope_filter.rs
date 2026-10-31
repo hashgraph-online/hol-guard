@@ -57,6 +57,9 @@ pub(super) struct SearchFilter {
     include: Vec<String>,
     exclude: Vec<String>,
     types: &'static [&'static str],
+    /// An inclusion that holds a `/` matches the path a walk reaches an
+    /// entry by, not its name, so the walk must offer that path.
+    path_shaped: bool,
 }
 
 impl SearchFilter {
@@ -66,6 +69,7 @@ impl SearchFilter {
             include: Vec::new(),
             exclude: Vec::new(),
             types: &[],
+            path_shaped: false,
         };
         if let Some(kind) = input.get("type") {
             let kind = kind.as_str()?;
@@ -106,33 +110,57 @@ impl SearchFilter {
     }
 
     /// The inclusions of shell `rg -g` options. A shell passes each glob
-    /// whole, so only a path-shaped glob, which depends on ripgrep's match
-    /// base, or one that could select `.git` is left unmodeled. ripgrep
-    /// enters a directory an inclusion matches even when it is hidden, and
-    /// the walk always skips `.git`.
+    /// whole. A glob that holds a `/` matches against the path from the
+    /// search root, so it is modeled against that path; a glob without one
+    /// matches a name at any depth. An inclusion overrides both the hidden
+    /// and the ignore rules, so a glob that could select `.git` is modeled
+    /// only when the walk can offer `.git` the same match.
     pub(super) fn from_rg_inclusions(globs: &[&str]) -> Option<Self> {
         let mut include = Vec::new();
+        let mut path_shaped = false;
         for glob in globs {
-            if glob.starts_with('!') || glob.contains(['/', '\\']) {
+            if glob.starts_with('!') || glob.contains('\\') {
                 return None;
             }
             for pattern in expand_braces(glob).ok()? {
-                if pattern.contains('/') || glob_matches(&pattern, ".git").ok()? {
+                // A rooted glob, a directory glob and one that climbs out
+                // each match against a base this walk does not model.
+                if pattern.starts_with('/')
+                    || pattern.ends_with('/')
+                    || pattern.contains("//")
+                    || pattern.split('/').any(|component| component == "..")
+                {
                     return None;
                 }
+                // Reject a pattern the bounded matcher cannot evaluate.
+                glob_matches(&pattern, "probe").ok()?;
+                path_shaped |= pattern.contains('/');
                 include.push(pattern);
             }
+        }
+        if !path_shaped
+            && include
+                .iter()
+                .any(|pattern| glob_matches(pattern, ".git").unwrap_or(true))
+        {
+            // Without a path to match, the walk cannot model which `.git`
+            // such a glob reaches, and it always skips that directory.
+            return None;
         }
         (!include.is_empty()).then_some(Self {
             include,
             exclude: Vec::new(),
             types: &[],
+            path_shaped,
         })
     }
 
-    /// Apply glob overrides to one entry name. Directory exclusions are not
-    /// modeled, so a directory is never skipped here.
-    pub(super) fn override_for(&self, name: &str, is_directory: bool) -> Override {
+    /// Apply glob overrides to one entry. `relative` is the entry's path
+    /// from the search root, which a path-shaped inclusion matches against.
+    /// Directory exclusions are not modeled, so a directory is never
+    /// skipped by one here; a directory no path-shaped inclusion can reach
+    /// past holds nothing the search reads, so it is.
+    pub(super) fn override_for(&self, name: &str, relative: &str, is_directory: bool) -> Override {
         if !is_directory
             && self
                 .exclude
@@ -144,18 +172,60 @@ impl SearchFilter {
         if self.include.is_empty() {
             return Override::Undecided;
         }
-        if self
-            .include
-            .iter()
-            .any(|pattern| glob_matches(pattern, name).unwrap_or(true))
-        {
+        if self.includes(name, relative) {
             return Override::Searched;
         }
-        if is_directory {
+        if is_directory && (!self.path_shaped || self.reaches_past(relative)) {
             Override::Undecided
         } else {
             Override::Skipped
         }
+    }
+
+    /// Whether an inclusion can match a path below `relative`. A glob
+    /// without a `/` matches a name at any depth, so it always can.
+    fn reaches_past(&self, relative: &str) -> bool {
+        self.include.iter().any(|pattern| {
+            if !pattern.contains('/') {
+                return true;
+            }
+            let mut components = pattern.split('/');
+            for part in relative.split('/') {
+                let Some(component) = components.next() else {
+                    return false;
+                };
+                if component == "**" {
+                    return true;
+                }
+                if !glob_matches(component, part).unwrap_or(true) {
+                    return false;
+                }
+            }
+            components.next().is_some()
+        })
+    }
+
+    /// Whether an inclusion matches against the path from ripgrep's match
+    /// base rather than an entry's name.
+    pub(super) fn is_path_shaped(&self) -> bool {
+        self.path_shaped
+    }
+
+    /// Whether ripgrep's walk enters `.git` rather than passing it over as
+    /// a hidden directory: only an inclusion that matches it does that.
+    pub(super) fn selects_git(&self, name: &str, relative: &str) -> bool {
+        self.path_shaped && self.includes(name, relative)
+    }
+
+    fn includes(&self, name: &str, relative: &str) -> bool {
+        self.include.iter().any(|pattern| {
+            let text = if pattern.contains('/') {
+                relative
+            } else {
+                name
+            };
+            glob_matches(pattern, text).unwrap_or(true)
+        })
     }
 
     pub(super) fn type_allows(&self, name: &str) -> bool {

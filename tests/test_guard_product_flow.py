@@ -158,7 +158,7 @@ args = ["workspace-skill.js", "--changed"]
         )
         monkeypatch.setattr(
             store,
-            "resolve_policy",
+            "resolve_policy_decision_lookup_with_memory_pattern",
             lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("status should not resolve policy")),
         )
 

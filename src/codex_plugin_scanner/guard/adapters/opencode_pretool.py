@@ -117,8 +117,8 @@ def _native_bridge_payload(context: HarnessContext, guard_cli: GuardCliAttestati
     """The native bounded bridge the plugin starts first, or None to keep the Python launcher.
 
     The plugin fills in the interpreter and the per-workspace CLI argv when it
-    runs a hook. The native runtime answers from the daemon and runs the Python
-    bridge for everything else, so the verdict still comes from Guard's CLI.
+    runs a hook. The native runtime answers from the daemon, starts the daemon
+    once when it does not answer, and otherwise fails the hook closed.
     """
     if guard_cli.python is None:
         return None

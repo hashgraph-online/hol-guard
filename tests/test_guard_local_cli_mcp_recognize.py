@@ -339,7 +339,9 @@ def test_unavailable_refresh_never_guesses_a_launch_command(tmp_path: Path, monk
 
 
 @pytest.mark.parametrize("legacy", [False, True])
-def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(tmp_path, monkeypatch, native_mcp_probe, legacy):
+def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(
+    tmp_path, monkeypatch, native_mcp_probe, legacy
+):
     home = tmp_path / "home"
     home.mkdir()
     native_mcp_probe(home)
@@ -540,3 +542,32 @@ def test_handle_local_cli_post_rejects_non_dict_response() -> None:
 
 def test_handle_local_cli_post_ignores_incomplete_handler() -> None:
     handle_local_cli_post(object(), "/v1/local-clis/recognize", {"command": "npx"})
+
+
+def test_recognize_probes_a_direct_launch_when_the_runner_answer_is_unreadable(
+    tmp_path: Path, monkeypatch, native_mcp_probe
+) -> None:
+    """A direct launcher is not a package runner, so an unreadable runner answer cannot hide it."""
+    home = tmp_path / "home"
+    home.mkdir()
+    native_mcp_probe(home)
+    server_dir = tmp_path / "real"
+    server_dir.mkdir()
+    server = server_dir / "demo-mcp-server"
+    server.write_text(_FAKE_NPX_MCP, encoding="utf-8")
+    server.chmod(0o755)
+    monkeypatch.setenv("PATH", os.pathsep.join((str(server_dir), "/usr/bin", "/bin")))
+    # The resident cannot answer which bin a package runner would launch.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_profiles_api.native_context_digest",
+        lambda *args, **kwargs: {"status": "unavailable"},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    service = LocalCliApiService(store=GuardStore(home))
+    recognized = service.recognize({"command": "demo-mcp-server"})
+    item = recognized["item"]
+    assert isinstance(item, dict)
+    assert item["surface"] == "mcp"

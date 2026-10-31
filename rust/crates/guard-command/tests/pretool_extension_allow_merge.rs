@@ -195,6 +195,63 @@ fn an_allowed_merge_that_names_guard_outside_the_repository_still_waits_for_revi
     }
 }
 
+/// `gh api` calls whose endpoint names a repository called after Guard. The
+/// owner and name in `repos/{owner}/{name}/...` name a repository on the
+/// GitHub host, exactly like `--repo`.
+const GUARD_NAMED_REPOSITORY_API_CALLS: &[&str] = &[
+    "gh api --method POST repos/example-org/hol-guard/actions/runs/123/approve",
+    "gh api -X POST /repos/example-org/hol-guard/actions/runs/123/approve",
+    "gh api repos/example-org/hol-guard/actions/runs/123",
+    // A global option before `api` does not hide the endpoint.
+    "gh --hostname github.com api --method POST repos/example-org/hol-guard/actions/runs/123/approve",
+];
+
+#[test]
+fn an_allowed_api_call_to_a_repository_named_after_guard_runs_without_review() {
+    let (root, _cleanup) = checkout("api-guard-repository");
+    let controls = every_permission("enabled");
+    for harness in ["omp", "zcode", "codex", "claude-code"] {
+        for command in GUARD_NAMED_REPOSITORY_API_CALLS {
+            let result = decide(&root, harness, command, &controls);
+            assert_eq!(
+                result.decision,
+                "allow",
+                "{harness}: {command}: {} ({})",
+                result.reason_code,
+                observed(&result)
+            );
+        }
+    }
+}
+
+#[test]
+fn an_api_call_that_names_guard_outside_the_repository_still_waits_for_review() {
+    let (root, _cleanup) = checkout("api-guard-name");
+    let controls = every_permission("enabled");
+    for command in [
+        // The path after the repository is still checked.
+        "gh api -X PUT repos/example-org/app-portal/contents/.hol-guard/config -f message=x -f content=eA==",
+        "gh api --method POST repos/example-org/hol-guard/contents/.hol-guard/config",
+        // A dot-only owner or name is not a repository.
+        "gh api --method POST repos/example-org/../.hol-guard/approve",
+        // Only the endpoint is exempt, never a field, header or input file.
+        "gh api --method POST repos/example-org/hol-guard/issues -F body=@.hol-guard/notes.md",
+        "gh api --method POST repos/example-org/app-portal/issues -H X-Note:hol-guard",
+        "gh api --method POST repos/example-org/hol-guard/issues --input .hol-guard/body.json",
+    ] {
+        let result = decide(&root, "omp", command, &controls);
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+    let defaults = fixture::github_controls("default");
+    for command in GUARD_NAMED_REPOSITORY_API_CALLS
+        .iter()
+        .filter(|command| command.contains("POST"))
+    {
+        let result = decide(&root, "omp", command, &defaults);
+        assert_ne!(result.decision, "allow", "default: {command}");
+    }
+}
+
 #[test]
 fn a_merge_without_an_allow_still_waits_for_review() {
     let (root, _cleanup) = checkout("default");
@@ -242,7 +299,7 @@ fn decide_in_session(
         pager_disabled: live_environment,
         xdg_config_home: None,
         git_config_no_system: !live_environment,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         "omp",
@@ -260,6 +317,7 @@ fn decide_in_session(
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&context),
     )

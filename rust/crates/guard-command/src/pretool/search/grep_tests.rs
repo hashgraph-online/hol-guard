@@ -27,6 +27,12 @@ fn a_missing_root_beside_real_ones_is_proven_but_not_a_sensitive_one() {
         (format!("-rln x {r}/src {r}/missing/.env"), false),
         (format!("-rln x {r}/src {r}/missing/id_rsa"), false),
         (format!("-n x {h}/.ssh/missing"), false),
+        // A root that is not there opens nothing, on its own as much as
+        // beside a real one. With no operand `-r` walks the cwd instead.
+        (format!("-rln x {r}/missing"), true),
+        ("-rln x lib".to_owned(), true),
+        ("-rln x".to_owned(), false),
+        (format!("-rln x {h}/.ssh/missing"), false),
     ] {
         let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
         assert_eq!(
@@ -77,6 +83,15 @@ fn a_missing_operand_is_not_proven_beside_a_step_that_could_create_it() {
         (format!("touch {r}/cfg && grep -n x {r}/cfg"), false),
         (format!("echo x > {r}/cfg; grep -n x {r}/cfg"), false),
         (format!("cat {r}/src/index.ts && grep -rn x {r}/cfg"), false),
+        (format!("grep -rln x {r}/cfg"), true),
+        (format!("mkdir -p {r}/cfg; grep -rln x {r}/cfg"), false),
+        (format!("grep -rln x {r}/cfg; mkdir -p {r}/cfg"), false),
+        // A branch that only prints puts nothing at the missing root, so the
+        // probe shape agents write keeps the proof.
+        (format!("grep -rln x {r}/cfg || echo none"), true),
+        (format!("grep -rln x {r}/cfg || printf 'none\\n'"), true),
+        (format!("grep -rln x {r}/cfg || touch {r}/cfg"), false),
+        (format!("grep -rln x {r}/cfg || echo none > {r}/cfg"), false),
     ] {
         let model = crate::parse_command(&crate::CommandModelRequestV1 {
             command: command.clone(),
@@ -198,4 +213,35 @@ fn a_plain_pattern_clears_the_sensitive_files_it_cannot_match() {
         );
     }
     std::fs::remove_dir_all(root).unwrap();
+}
+
+/// A stdin filter's pattern is the text it matches, not a path, but the shell
+/// expands the word before the filter ever sees it. `grep -v .env{,.local}`
+/// leaves `.env` as the pattern and `.env.local` as an operand `grep` then
+/// opens, so the word is not matching text and the stdin proof refuses it.
+#[test]
+fn an_expandable_pattern_is_not_proven_stdin_text() {
+    for (command, proven) in [
+        ("-v .env", true),
+        ("-v .git", true),
+        ("-i secret", true),
+        ("-E ^[a-z]+[0-9]{2}$", true),
+        ("-i auth.*provider", true),
+        ("token.*expired", true),
+        ("-i credentials.*", false),
+        ("secrets.*", false),
+        ("-i token.?", false),
+        ("-v .env{,.local}", false),
+        ("-v .env*", false),
+        ("-v .en{v..v}", false),
+        ("-e .env{,.local}", false),
+        (".ssh/*", false),
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert_eq!(
+            super::safe_stdin_arguments(&arguments),
+            proven,
+            "grep {command}"
+        );
+    }
 }

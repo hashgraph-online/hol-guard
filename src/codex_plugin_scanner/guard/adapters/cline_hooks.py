@@ -205,10 +205,12 @@ def blocked(value):
     decision = value.get("decision")
     if isinstance(decision, str) and decision.lower() in {{"deny", "block", "ask"}}:
         return True
-    action = value.get("policy_action", value.get("policyAction"))
-    if isinstance(action, str):
-        if action.lower() in {{"review", "require-reapproval", "sandbox-required", "block"}}:
-            return True
+    for action in (value.get("policy_action"), value.get("policyAction")):
+        # Either spelling is read, not just the first one present: a response
+        # carrying a restrictive action under the alias still says so.
+        if isinstance(action, str):
+            if action.lower() in {{"review", "require-reapproval", "sandbox-required", "block"}}:
+                return True
     specific = value.get("hookSpecificOutput")
     if isinstance(specific, dict):
         permission = specific.get("permissionDecision")
@@ -220,6 +222,59 @@ def blocked(value):
             if isinstance(behavior, str) and behavior.lower() in {{"deny", "block", "ask"}}:
                 return True
     return False
+
+
+def explicitly_allows(value):
+    # The deny-list above names the tiers this client already knows how to
+    # place. An action outside it -- one a newer resident introduced, or a
+    # truncated or corrupted field -- is not evidence of permission, so the
+    # decision has to say "allow" in one of the shapes this client reads, and
+    # no present field may say anything else. The plugin transport of this same
+    # adapter applies the same rule.
+    if blocked(value):
+        return False
+    if "decision" in value and not isinstance(value.get("decision"), str):
+        return False
+    raw_decision = value.get("decision")
+    decision = raw_decision.lower() if isinstance(raw_decision, str) else None
+    actions = []
+    for key in ("policy_action", "policyAction"):
+        if key not in value:
+            continue
+        # A present action field that is not a word this client can read -- a
+        # null, a number, a truncated object -- is unplaceable, so it is not
+        # evidence of permission and the other spelling does not stand in for
+        # it. Every present spelling is read, not just the first one: an
+        # allowing action beside an alias naming a tier this client cannot
+        # place still names no permission.
+        if not isinstance(value.get(key), str):
+            return False
+        actions.append(value[key].lower())
+    if any(item not in {{"allow", "warn"}} for item in actions):
+        return False
+    action = actions[0] if actions else None
+    permission = None
+    nested_behavior = None
+    specific = value.get("hookSpecificOutput")
+    if isinstance(specific, dict):
+        raw_permission = specific.get("permissionDecision")
+        if isinstance(raw_permission, str):
+            permission = raw_permission.lower()
+        nested = specific.get("decision")
+        if isinstance(nested, dict) and isinstance(nested.get("behavior"), str):
+            nested_behavior = nested["behavior"].lower()
+    if decision is not None and decision != "allow":
+        return False
+    if permission is not None and permission != "allow":
+        return False
+    if nested_behavior is not None and nested_behavior != "allow":
+        return False
+    return (
+        decision == "allow"
+        or action in {{"allow", "warn"}}
+        or permission == "allow"
+        or nested_behavior == "allow"
+    )
 
 
 def command_payloads(value):
@@ -336,6 +391,10 @@ def main():
         if blocked(decision):
             denied = True
             why = reason(decision)
+            break
+        if not explicitly_allows(decision):
+            denied = True
+            why = "HOL Guard returned an ambiguous decision; this action was withheld."
             break
     if BLOCKING:
         outcome = "blocked" if denied else "allowed"

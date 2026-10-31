@@ -62,6 +62,7 @@ fn every_kind_name_is_a_contract_tag() {
         "mcp_tool_catalog_fingerprint",
         "runtime_hook_approval_context",
         "generic_hook_approval_context",
+        "package_runner_target",
     ];
     for name in names {
         // A bare tag may or may not be a complete request; it is only ever

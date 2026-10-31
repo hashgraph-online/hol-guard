@@ -105,10 +105,6 @@ def _supports_catalog_read(status: NativeRuntimeStatus) -> bool:
     return _RESIDENT_PROTOCOL_FEATURE in features and CATALOG_READ_FEATURE in features
 
 
-def native_catalog_read_available() -> bool:
-    return _supports_catalog_read(native_runtime_status())
-
-
 def native_catalog_read(
     *,
     guard_home: Path,
@@ -224,5 +220,4 @@ __all__ = [
     "MAX_CATALOG_V2_BODY_BYTES",
     "NativeCatalogReadResult",
     "native_catalog_read",
-    "native_catalog_read_available",
 ]

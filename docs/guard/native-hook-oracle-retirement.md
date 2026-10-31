@@ -34,7 +34,7 @@ src/codex_plugin_scanner/guard/runtime/hook_review_engine.py
 src/codex_plugin_scanner/guard/runtime/hook_source_read.py
 ```
 
-Extract only verified mechanical DTO/control functionality with live callers. Do not move an evaluator, source scanner, output walker, decision cache, or semantic interpreter into a new namespace. Keep `hook_review_types.py` and genuine enrichment-control services.
+Extract only verified mechanical DTO/control functionality with live callers. Do not move an evaluator, source scanner, output walker, decision cache, or semantic interpreter into a new namespace. Keep genuine enrichment-control services.
 
 ## Known dependencies to close
 

@@ -8,8 +8,10 @@ copies push out the caches the next run needs.
 A cache family is the key without the suffix that changes between saves: the
 commit, run id and attempt for CodeQL overlay databases, and the final lockfile
 hash for Rust target caches and the source digest for runtime test archives.
-Within a family on ``refs/heads/main`` only the newest entry is
-kept. Any key outside the known families is never selected this way.
+Within a family on ``refs/heads/main`` the newest entry is kept. Runtime test
+archives required by current main or active trusted main runs are also kept;
+uncertain source discovery disables archive pruning. Any key outside the known
+families is never selected this way.
 
 Rust and release-native keys also carry a compiler-environment hash ahead of
 the content suffix. A newer environment replaces that job's older caches, but
@@ -37,6 +39,7 @@ import math
 import re
 import sys
 from collections.abc import Iterable, Mapping
+from contextlib import suppress
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -52,6 +55,88 @@ RUST_PREFIXES = ("v0-rust-", "release-native-")
 RUST_GENERATION = re.compile(r"^(?P<job>.+)-[0-9a-f]{8}-[0-9a-f]{8}$")
 SCCACHE_PREFIX = "sccache/"
 IDLE_HOURS = 2.0
+ARCHIVE_PARTITION = re.compile(r"^runtime-test-archive-v[123]-(?:(core|command)-)?(.+)-([0-9a-f]{64})$")
+
+
+def protected_digests(report: Mapping[str, Any] | None) -> set[tuple[str, str]] | None:
+    """None means discovery is incomplete: retain every runtime test archive."""
+    try:
+        if (
+            report is None
+            or report.get("schema") != "hol-guard.protected-runtime-archives.v1"
+            or report.get("complete") is not True
+        ):
+            return None
+        sources = report["sources"]
+        discovery = report["discovery"]
+        shas = [source["source_sha"] for source in sources]
+        if (
+            not shas
+            or len(set(shas)) != len(shas)
+            or sorted(shas) != discovery["sources"]
+            or discovery["main_sha"] not in shas
+        ):
+            return None
+        protected = set()
+        for source in sources:
+            if re.fullmatch(r"[0-9a-f]{40}", source["source_sha"]) is None or set(source["digests"]) != {
+                "core",
+                "command",
+                "runtime",
+            }:
+                return None
+            for partition, digest in source["digests"].items():
+                if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                    return None
+                protected.add((partition, digest))
+        return protected
+    except (KeyError, TypeError, AttributeError):
+        return None
+
+
+def deletion_plan(entries, protection=None, idle_hours=IDLE_HOURS):
+    """Apply existing policies, exempting archives needed by trusted live sources."""
+    protected = protected_digests(protection)
+    reasons: dict[int, list[str]] = {}
+    for reason, selected in (
+        ("superseded", superseded(entries)),
+        ("compiler_generation", superseded_compiler_generations(entries)),
+        ("idle_compiler_object", idle_compiler_entries(entries, idle_hours)),
+        ("overlay_status", overlay_status_entries(entries)),
+    ):
+        for entry_id in selected:
+            reasons.setdefault(entry_id, []).append(reason)
+    selected, retained = {}, {}
+    for entry in entries:
+        entry_id, key = entry.get("id"), entry.get("key")
+        if entry.get("ref") != MAIN_REF or type(entry_id) is not int or entry_id <= 0 or not isinstance(key, str):
+            continue
+        record = dict(
+            id=entry_id, key=key, ref=entry["ref"], version=entry.get("version"), sizeInBytes=entry.get("sizeInBytes")
+        )
+        if key.startswith("runtime-test-archive-"):
+            match = ARCHIVE_PARTITION.fullmatch(key)
+            reason = None
+            if protected is None:
+                reason = "discovery_incomplete"
+            elif match is None:
+                reason = "unknown_key_format"
+            elif (match[1] or "runtime", match[3]) in protected:
+                reason = "protected_current_or_active_source"
+            elif entry_id not in reasons:
+                reason = "newest_in_family"
+            if reason:
+                retained[entry_id] = dict(record, reasons=[reason])
+                continue
+        if entry_id in reasons:
+            selected[entry_id] = dict(record, reasons=reasons[entry_id])
+    return dict(
+        schema="hol-guard.cache-prune-plan.v1",
+        archive_pruning_enabled=protected is not None,
+        protection=protection,
+        selected=sorted(selected.values(), key=lambda entry: entry["id"]),
+        retained_archives=sorted(retained.values(), key=lambda entry: entry["id"]),
+    )
 
 
 def cache_family(key: str) -> str | None:
@@ -189,6 +274,8 @@ def overlay_status_entries(entries: Iterable[Mapping[str, Any]]) -> list[int]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("caches", type=Path, help="JSON from `gh cache list --json id,key,ref,createdAt`")
+    parser.add_argument("--protected-archives", type=Path)
+    parser.add_argument("--report", type=Path)
     _ = parser.add_argument(
         "--idle-hours",
         type=float,
@@ -204,15 +291,15 @@ def main(argv: list[str] | None = None) -> int:
         print("cache listing must be a JSON array", file=sys.stderr)
         return 2
     objects = [entry for entry in entries if isinstance(entry, dict)]
-    for entry_id in sorted(
-        {
-            *superseded(objects),
-            *superseded_compiler_generations(objects),
-            *idle_compiler_entries(objects, args.idle_hours),
-            *overlay_status_entries(objects),
-        }
-    ):
-        print(entry_id)
+    protection = None
+    if args.protected_archives:
+        with suppress(OSError, ValueError):
+            protection = json.loads(args.protected_archives.read_text())
+    plan = deletion_plan(objects, protection, args.idle_hours)
+    if args.report:
+        args.report.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n")
+    for entry in plan["selected"]:
+        print(entry["id"])
     return 0
 
 

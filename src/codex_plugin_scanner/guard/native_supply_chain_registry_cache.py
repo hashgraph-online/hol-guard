@@ -105,6 +105,12 @@ class RegistryCache:
             raise RegistryDeadlineError("registry read still running at the hook deadline")
         return pending.result
 
+    def cached(self, key: CacheKey) -> RawResponse | None:
+        """A fresh stored response, without reading or waiting on a read."""
+
+        with self._lock:
+            return self._fresh(key)
+
     def clear(self) -> None:
         """Forget every stored response; reads already running still finish."""
 

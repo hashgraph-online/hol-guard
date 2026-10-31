@@ -39,6 +39,14 @@ jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source
   --slurpfile built source-built.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' > source-build.json
 "$runtime" compile < source-build.json > source-compiled.json
+# Gauntlet development wheels carry every workspace crate at opt-level 0 with
+# per-crate codegen, which on macOS arm64 is several times the shipped size.
+# They are installed for qualification runs and never published, so they name a
+# larger runtime bound; the published path keeps the builder's default.
+wheel_bound=()
+if [[ "${HOL_GUARD_DEV_WHEEL:-}" == "1" ]]; then
+  wheel_bound=(--max-runtime-bytes $((512 * 1024 * 1024)))
+fi
 python scripts/build_native_hol_guard_wheel.py \
   --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
   --runtime "$runtime" \
@@ -49,7 +57,8 @@ python scripts/build_native_hol_guard_wheel.py \
   --source-sha "$HOL_GUARD_BUILD_SHA" \
   --rule-digest "$RULE_DIGEST" \
   --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
-  --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+  --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)" \
+  ${wheel_bound[@]+"${wheel_bound[@]}"}
 # Gauntlet development wheels use per-crate codegen and are never published.
 # The Gauntlet driver detects development-profile support by this marker.
 if [[ "${HOL_GUARD_DEV_WHEEL:-}" == "1" ]]; then

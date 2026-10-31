@@ -61,6 +61,6 @@ def test_codex_bounded_hook_input_decodes_utf8(monkeypatch: pytest.MonkeyPatch) 
 def test_fallback_hook_payload_loader_decodes_utf8(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.stdin", _cp1252_stdin(json.dumps(_PAYLOAD, ensure_ascii=False)))
 
-    payload = load_hook_payload(None, normalize=False)
+    payload = load_hook_payload(None)
 
     assert payload == _PAYLOAD

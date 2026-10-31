@@ -24,6 +24,7 @@ class _Report:
     when: str
     nodeid: str
     duration: float
+    capstdout: str = ""
 
 
 def test_duration_report_accounts_for_fixture_setup_call_and_teardown(
@@ -77,3 +78,27 @@ def test_duration_report_rejects_invalid_values(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="invalid duration"):
         duration_report.load_duration_report(output)
+
+
+def test_offline_captured_setup_storage_reaches_controller_report_without_payloads(tmp_path, monkeypatch):
+    output = tmp_path / "durations.json"
+    monkeypatch.setenv(duration_report.OUTPUT_ENV, str(output))
+    duration_report.pytest_sessionstart()
+    node = "tests/test_native_offline_cache.py::test_complete"
+    marker = '{"offline_fixture_storage": "disk"}'
+    for report in (
+        _Report("setup", node, 1.0, "unrelated native payload\n" + marker + "\n"),
+        _Report("setup", "tests/test_other.py::test_other", 2.0, '{"offline_fixture_storage": "tmpfs"}'),
+        _Report("call", node, 3.0, '{"offline_fixture_storage": "tmpfs"}'),
+        _Report("setup", node, 4.0, '{"offline_fixture_storage": "/private/path"}'),
+        _Report("setup", node, 5.0, "x" * 65537 + '\n{"offline_fixture_storage": "tmpfs"}'),
+    ):
+        duration_report.pytest_runtest_logreport(report)
+    duration_report.pytest_sessionfinish(SimpleNamespace(config=SimpleNamespace()), 0)
+    payload = json.loads(output.read_text())
+    assert payload["fixture_storage"] == {"tests/test_native_offline_cache.py": ["disk"]}
+    assert duration_report.load_duration_report(output) == {node: 13.0, "tests/test_other.py::test_other": 2.0}
+    assert "private/path" not in output.read_text() and "native payload" not in output.read_text()
+    duration_report.pytest_sessionstart()
+    duration_report.pytest_sessionfinish(SimpleNamespace(config=SimpleNamespace()), 0)
+    assert "fixture_storage" not in json.loads(output.read_text())

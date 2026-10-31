@@ -91,12 +91,19 @@ fn classify_operands(text: &str, arguments: &[String]) -> Option<Vec<Operand>> {
         .collect()
 }
 
+/// `absent_recursive` says whether a missing operand stays missing while the
+/// listing runs: no peer segment may create a file, directory or link at that
+/// name, because a recursive listing walks whatever appears there.
 pub(super) fn safe_listing_segment(
     text: &str,
     arguments: &[String],
     context: super::PathContext<'_>,
+    absent_recursive: bool,
 ) -> bool {
     let recursive = arguments.iter().any(|argument| is_recursive_flag(argument));
+    let lists_hidden = arguments
+        .iter()
+        .any(|argument| lists_hidden_entries(argument));
     if !recursive
         && !arguments
             .iter()
@@ -125,9 +132,17 @@ pub(super) fn safe_listing_segment(
             None => &Operand::Plain,
         };
         let allowed = match kind {
+            // A name that is not there holds no tree to walk, so a recursive
+            // listing of it prints the same error a plain `ls` does. A `~` is
+            // expanded by the shell from its own `HOME`, which this screen
+            // reads as the declared home, so a walk is admitted under it only
+            // once `shell_home_matches` says the two name one directory.
             Operand::Plain if recursive => {
                 surviving += 1;
-                search::safe_recursive_target(argument, context)
+                search::safe_recursive_listing_target(argument, context, lists_hidden)
+                    || (absent_recursive
+                        && (!argument.starts_with('~') || context.shell_home_matches)
+                        && absent_listing_operand(argument, context))
             }
             // A listing without a glob admits a name that is not there, because
             // the shell prints an error and nothing else. One glob beside it
@@ -158,7 +173,16 @@ pub(super) fn safe_listing_segment(
     }
     // A recursive listing walks the working directory only when no operand
     // survives. An unmatched bracket beside a real operand does not.
-    surviving > 0 || !recursive || search::safe_recursive_target(".", context)
+    surviving > 0 || !recursive || search::safe_recursive_listing_target(".", context, lists_hidden)
+}
+
+/// A glob that a program prints instead of listing, as in `echo src/*`. The
+/// shell hands it the names a non-recursive `ls` of the same pattern prints, so
+/// the word takes that listing's proof.
+pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> bool {
+    search::safe_glob_operand(value, context, false)
+        || search::safe_unmatched_glob_operand(value, context, false)
+        || leaf_glob_operand(value, context)
 }
 
 /// `ls` of a path that does not exist prints only an error. Agents probe for
@@ -227,6 +251,10 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
 }
 
 /// The path an operand names, with `~` and a relative cwd resolved.
+///
+/// A `~` is expanded here from the declared `home_dir`, which is the home the
+/// shell reports; where a caller needs the two to be one directory it screens
+/// `shell_home_matches` itself before admitting the operand.
 fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
     if value.starts_with('~') {
         super::read_paths::expand_home_read_path(value, context.home_dir)
@@ -376,7 +404,7 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
     };
     resolved.to_str().is_some_and(|parent| {
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
-            || (!parent_steps && search::skill_listing_root(parent, context))
+            || (!parent_steps && search::skill_listing_root(parent, context, false))
     })
 }
 
@@ -403,6 +431,39 @@ fn powershell_recursion(argument: &str) -> bool {
     name == "s" || (name.len() >= 2 && ("recurse".starts_with(&name) || "depth".starts_with(&name)))
 }
 
+/// `ls` prints a hidden entry only when asked for one. Without `-a`, `-A`,
+/// `-f` or their long spellings it neither prints a hidden name nor descends
+/// into a hidden directory, so nothing hidden below the root reaches its
+/// output.
+fn lists_hidden_entries(argument: &str) -> bool {
+    if let Some(name) = argument.strip_prefix("--") {
+        let name = name.split('=').next().unwrap_or(name);
+        return !name.is_empty() && ("all".starts_with(name) || "almost-all".starts_with(name));
+    }
+    if crate::powershell_reads::windows_powershell_host() && powershell_hidden(argument) {
+        return true;
+    }
+    // GNU `ls -f` is `-aU`: it prints hidden names and descends into hidden
+    // directories, so it asks for the same reach `-a` does.
+    argument.starts_with('-')
+        && argument
+            .chars()
+            .skip(1)
+            .any(|flag| flag == 'a' || flag == 'A' || flag == 'f')
+}
+
+/// On Windows `ls` can be PowerShell's Get-ChildItem, where `-Force` is what
+/// lists a hidden entry. Any case-insensitive prefix of it counts.
+fn powershell_hidden(argument: &str) -> bool {
+    argument
+        .strip_prefix('-')
+        .filter(|name| !name.starts_with('-'))
+        .is_some_and(|name| {
+            let name = name.split(':').next().unwrap_or(name).to_ascii_lowercase();
+            !name.is_empty() && "force".starts_with(name.as_str())
+        })
+}
+
 fn follows_links(argument: &str) -> bool {
     matches!(
         argument,
@@ -413,64 +474,5 @@ fn follows_links(argument: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn a_leaf_glob_lists_hidden_names_in_a_listable_directory_only() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/listing-leaf-glob")
-            .join(std::process::id().to_string());
-        let home = root.join("home");
-        let project = home.join("work/project");
-        let run = home.join("work/run");
-        for directory in [
-            project.join("src"),
-            run.join(".cache-x"),
-            run.join("data"),
-            home.join(".ssh"),
-        ] {
-            std::fs::create_dir_all(directory).unwrap();
-        }
-        for file in [
-            run.join(".s.PGSQL.5432.lock"),
-            run.join(".env"),
-            run.join("data/notes.txt"),
-            home.join(".ssh/id_rsa"),
-        ] {
-            std::fs::write(file, "synthetic\n").unwrap();
-        }
-        let (home, project) = (
-            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
-            crate::runtime_read_paths::canonicalize_text(&project).unwrap(),
-        );
-        let context = crate::pretool::PathContext {
-            home_dir: home.to_str(),
-            cwd: project.to_str(),
-            ..Default::default()
-        };
-        let w = home.join("work").display().to_string();
-        let h = home.display().to_string();
-        for (command, allowed) in [
-            (format!("ls {w}/run/.s.PGSQL*"), true),
-            (
-                format!("ls -la {w}/run/.s.PGSQL* {w}/run/.s.MISSING*"),
-                true,
-            ),
-            (format!("ls {w}/run/d*"), true),
-            (format!("ls -R {w}/run/.s.PGSQL*"), false),
-            (format!("ls {w}/run/.c*"), false),
-            (format!("ls {w}/run/.e*"), false),
-            (format!("ls {w}/run/.*"), false),
-            (format!("ls {w}/*/.s.PGSQL*"), false),
-            (format!("ls {h}/.ssh/*"), false),
-            (format!("ls {h}/.ssh/id*"), false),
-        ] {
-            let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
-            assert_eq!(
-                super::safe_listing_segment(&command, &words[1..], context),
-                allowed,
-                "{command}"
-            );
-        }
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
+#[path = "listing_reads_tests.rs"]
+mod tests;

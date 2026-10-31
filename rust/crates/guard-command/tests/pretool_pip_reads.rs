@@ -58,7 +58,7 @@ fn decide_in(
         pager_disabled: false,
         xdg_config_home: xdg_config_home.map(str::to_owned),
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let project = home.join("project");
     let decisions: Vec<String> = ["omp", "claude-code", "codex"]
@@ -80,6 +80,7 @@ fn decide_in(
                     shell_home_matches: false,
                     ripgrep_config_absent: false,
                     psql_environment: Default::default(),
+                    creates_nothing: false,
                 },
                 Some(&environment),
             )

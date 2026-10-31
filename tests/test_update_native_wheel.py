@@ -39,8 +39,12 @@ MAC_INTEL = "macosx_13_0_x86_64"
 LINUX = "manylinux_2_17_x86_64"
 WINDOWS = "win_amd64"
 WINDOWS_ARM = "win_arm64"
+LINUX_ARM = "manylinux_2_17_aarch64"
+# A tag no release wheel matches, such as 32-bit ARM Linux.
+UNSUPPORTED = "linux_armv7l"
 WHEEL_BYTES = {
-    platform: f"native wheel for {platform}".encode() for platform in (MAC_ARM, MAC_INTEL, LINUX, WINDOWS, WINDOWS_ARM)
+    platform: f"native wheel for {platform}".encode()
+    for platform in (MAC_ARM, MAC_INTEL, LINUX, WINDOWS, WINDOWS_ARM, LINUX_ARM)
 }
 STABLE = "3.44.0"
 
@@ -579,7 +583,7 @@ def test_alpha_upgrade_on_a_platform_without_a_native_wheel_keeps_the_pypi_alpha
         latest_alpha="3.43.0a2",
         runtime_missing=True,
         release=release,
-        tags=["manylinux_2_17_aarch64"],
+        tags=[UNSUPPORTED],
     )
 
     payload, exit_code = harness.run()
@@ -643,7 +647,7 @@ def _stable_release_files(
         ]
     }
     files = {"json": json.dumps(pypi).encode(), pure_name: pure}
-    for platform in (MAC_INTEL, WINDOWS_ARM):
+    for platform in (MAC_INTEL, WINDOWS_ARM, LINUX_ARM):
         files[_wheel_name(platform, version)] = WHEEL_BYTES[platform]
     return files
 
@@ -668,23 +672,29 @@ def test_native_wheel_manifest_parses_and_rejects_bad_documents() -> None:
         sources.parse_native_wheel_manifest(b"not json", STABLE)
 
 
-def test_github_only_platforms_are_intel_mac_and_windows_arm() -> None:
+def test_github_only_platforms_are_intel_mac_and_arm64_windows_and_linux() -> None:
     assert native.github_only_platform([WINDOWS_ARM]) is True
     assert native.github_only_platform([MAC_INTEL]) is True
     assert native.github_only_platform([MAC_ARM, "macosx_10_9_universal2"]) is False
     assert native.github_only_platform([LINUX]) is False
-    assert native.github_only_platform(["manylinux_2_17_aarch64"]) is False
+    # A glibc aarch64 interpreter lists newer manylinux tags first; the 2.17 tag is the one the release ships.
+    linux_arm_host = ["manylinux_2_39_aarch64", "manylinux_2_28_aarch64", LINUX_ARM, "linux_aarch64"]
+    assert native.github_only_platform(linux_arm_host) is True
+    assert native.native_platform_supported(linux_arm_host) is True
+    assert native.github_only_platform([UNSUPPORTED]) is False
+    assert native.native_platform_supported([UNSUPPORTED]) is False
     assert native.native_platform_supported([WINDOWS_ARM]) is True
 
 
-def test_stable_repair_trusts_the_installed_manifest_and_uses_the_stable_tag(tmp_path: Path) -> None:
+@pytest.mark.parametrize("platform", [WINDOWS_ARM, LINUX_ARM])
+def test_stable_repair_trusts_the_installed_manifest_and_uses_the_stable_tag(tmp_path: Path, platform: str) -> None:
     (tmp_path / sources.NATIVE_WHEEL_MANIFEST_NAME).write_bytes(_manifest())
     release = FakeRelease(_stable_release_files())
 
-    download = native.download_native_wheel(STABLE, opener=release, tags=[WINDOWS_ARM], package_root=tmp_path)
+    download = native.download_native_wheel(STABLE, opener=release, tags=[platform], package_root=tmp_path)
     try:
-        assert download.path.read_bytes() == WHEEL_BYTES[WINDOWS_ARM]
-        assert release.requested == [sources.RELEASE_DOWNLOAD_PREFIX + f"v{STABLE}/{_wheel_name(WINDOWS_ARM, STABLE)}"]
+        assert download.path.read_bytes() == WHEEL_BYTES[platform]
+        assert release.requested == [sources.RELEASE_DOWNLOAD_PREFIX + f"v{STABLE}/{_wheel_name(platform, STABLE)}"]
     finally:
         download.cleanup()
 
@@ -723,6 +733,15 @@ def test_stable_download_fails_closed_without_pypi_backed_digests(
     assert error.value.reason_code == reason
 
 
+def test_stable_linux_arm64_download_rejects_a_wheel_the_manifest_does_not_vouch_for(tmp_path: Path) -> None:
+    files = {**_stable_release_files(), _wheel_name(LINUX_ARM, STABLE): b"tampered"}
+
+    with pytest.raises(NativeWheelError) as error:
+        native.download_native_wheel(STABLE, opener=FakeRelease(files), tags=[LINUX_ARM], package_root=tmp_path)
+
+    assert error.value.reason_code == "native_wheel_digest_mismatch"
+
+
 def test_stable_pure_wheel_without_a_manifest_is_invalid(tmp_path: Path) -> None:
     files = _stable_release_files()
     pure_name = f"hol_guard-{STABLE}-py3-none-any.whl"
@@ -754,12 +773,17 @@ def test_manual_install_command_names_the_release_wheel_for_this_host() -> None:
         f'pipx runpip hol-guard install --force-reinstall --no-deps "{url}"'
     )
     assert "alpha%2Fv3.43.0a1/" in str(native.manual_install_command(VERSION, tags=[LINUX]))
-    assert native.manual_install_command(STABLE, tags=["manylinux_2_17_aarch64"]) is None
+    linux_arm_url = sources.RELEASE_DOWNLOAD_PREFIX + f"v{STABLE}/{_wheel_name(LINUX_ARM, STABLE)}"
+    assert native.manual_install_command(STABLE, tags=[LINUX_ARM]) == (
+        f'{native._manual_installer_prefix("pip")} --force-reinstall --no-deps "{linux_arm_url}"'
+    )
+    assert native.manual_install_command(STABLE, tags=[UNSUPPORTED]) is None
     assert native.manual_install_command("../x", tags=[LINUX]) is None
 
 
+@pytest.mark.parametrize("platform", [WINDOWS_ARM, LINUX_ARM])
 def test_stable_update_on_a_github_only_platform_installs_the_release_wheel(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, platform: str
 ) -> None:
     release = FakeRelease(_stable_release_files("3.42.0"))
     harness = UpdateHarness(
@@ -769,7 +793,7 @@ def test_stable_update_on_a_github_only_platform_installs_the_release_wheel(
         latest_alpha="3.43.0a1",
         runtime_missing=False,
         release=release,
-        tags=[WINDOWS_ARM],
+        tags=[platform],
     )
 
     payload, exit_code = harness.run(include_alpha=False)
@@ -778,8 +802,8 @@ def test_stable_update_on_a_github_only_platform_installs_the_release_wheel(
     assert payload["status"] == "updated"
     assert payload["upgrade_source"] == "github_release"
     assert payload["release_channel"] == "stable"
-    assert Path(harness.commands[0][-1]).name == _wheel_name(WINDOWS_ARM, "3.42.0")
-    assert harness.installed_wheel_bytes == WHEEL_BYTES[WINDOWS_ARM]
+    assert Path(harness.commands[0][-1]).name == _wheel_name(platform, "3.42.0")
+    assert harness.installed_wheel_bytes == WHEEL_BYTES[platform]
 
 
 def test_stable_update_failure_prints_the_manual_install_command(

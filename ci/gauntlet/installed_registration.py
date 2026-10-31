@@ -63,7 +63,7 @@ def install_harness(
 ) -> dict[str, Any]:
     """Run the shipped install command for ``harness`` into a lane-owned home."""
 
-    environment = isolated_environment(home=home, guard_home=guard_home)
+    environment = isolated_environment(home=home, guard_home=guard_home, native_runtime=runtime.native_runtime)
     completed = run_guard(
         runtime,
         [

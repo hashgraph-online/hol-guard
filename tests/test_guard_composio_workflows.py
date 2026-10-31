@@ -5,72 +5,30 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.runtime.composio_workflows import composio_workflow_proposals
+from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
+from codex_plugin_scanner.guard.runtime.composio_workflows import ComposioWorkflowProposal
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
 _TOOL = "mcp__codex_apps__composio__composio_search_tools"
 _FIRST = "2026-09-27T12:00:00Z"
+_PRIMARY = ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE")
 
 
-def _result() -> dict[str, object]:
-    return {
-        "successful": True,
-        "error": None,
-        "data": {
-            "success": True,
-            "session": {"id": "PRIVATE_SESSION_NEVER_PERSIST"},
-            "results": [
-                {
-                    "use_case": "Private personal request not retained",
-                    "primary_tool_slugs": ["SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE"],
-                    "related_tool_slugs": ["SLACK_FIND_CHANNELS"],
-                    "recommended_plan_steps": ["private user text not retained"],
-                    "reference_workbench_snippets": ["do not persist code"],
-                }
-            ],
-            "tool_schemas": {
-                slug: {
-                    "toolkit": "slack",
-                    "tool_slug": slug,
-                    "description": "Synthetic",
-                    "input_schema": {"type": "object"},
-                    "hasFullSchema": True,
-                }
-                for slug in ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE")
-            },
-        },
-    }
+def _actions() -> tuple[ComposioActionSchema, ...]:
+    return tuple(ComposioActionSchema("slack", slug, "Synthetic", {"type": "object"}, True) for slug in _PRIMARY)
 
 
-def test_optional_guidance_yields_only_action_dependencies():
-    from codex_plugin_scanner.guard.runtime.composio_discovery import composio_discovered_actions
-
-    proposals = composio_workflow_proposals(_TOOL, _result())
-    assert len(proposals) == 1
-    assert proposals[0].primary == ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE")
-    assert proposals[0].supporting == ("SLACK_FIND_CHANNELS",)
-    assert proposals[0].guidance_present is True
-    assert composio_discovered_actions(_TOOL, _result()) is not None
-    without = _result()
-    without["data"]["results"][0].pop("recommended_plan_steps")
-    assert composio_workflow_proposals(_TOOL, without)[0].guidance_present is False
-    without["data"].pop("results")
-    assert composio_workflow_proposals(_TOOL, without) == ()
-    for bad in ("../OTHER", "*"):
-        corrupt = _result()
-        corrupt["data"]["results"][0]["primary_tool_slugs"] = [bad]
-        assert composio_workflow_proposals(_TOOL, corrupt) is None
+def _proposals() -> tuple[ComposioWorkflowProposal, ...]:
+    return (ComposioWorkflowProposal(_PRIMARY, ("SLACK_FIND_CHANNELS",), True),)
 
 
 def test_workflow_persistence_is_identity_bound_and_grant_neutral(tmp_path: Path):
-    from codex_plugin_scanner.guard.runtime.composio_discovery import composio_discovered_actions
-
     store = GuardStore(tmp_path / "guard-home")
     source = observed_mcp_tool("codex", _TOOL)
-    proposals = composio_workflow_proposals(_TOOL, _result())
-    actions = composio_discovered_actions(_TOOL, _result())
-    assert source and proposals and actions
+    proposals = _proposals()
+    actions = _actions()
+    assert source is not None
     cli_id = store.record_composio_discovery(source, actions, proposals=proposals, seen_at=_FIRST)
     page = store.read_local_mcp_workflows(cli_id)
     assert page["next_offset"] is None
@@ -79,8 +37,6 @@ def test_workflow_persistence_is_identity_bound_and_grant_neutral(tmp_path: Path
     assert proposal["permissions_granted"] is False
     assert proposal["account_binding"] == "unverified"
     assert [entry["state"] for entry in proposal["requirements"]] == ["ask", "ask", "unresolved"]
-    assert "PRIVATE_SESSION" not in str(page) and "private user text" not in str(page)
-    assert "tool_schemas" not in str(page) and "recommended_plan_steps" not in str(page)
     assert store.read_mcp_provider_choices() == {}
     service = LocalCliApiService(store=store)
     assert service.provider_workflows({"cli_id": cli_id})["proposals"][0]["proposal_id"] == proposal["proposal_id"]

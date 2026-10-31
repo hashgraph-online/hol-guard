@@ -3,6 +3,7 @@ use fixture::*;
 use serde_json::json;
 
 const FLOOR: &str = "native_git_execution_context_review";
+const CONTAINED: &str = "native_workspace_containment_required";
 
 fn git(repository: &std::path::Path, home: &std::path::Path, arguments: &[&str]) {
     let mut command = std::process::Command::new("git");
@@ -242,15 +243,25 @@ fn an_unproven_step_before_a_proven_git_read_is_named() {
 
     let command = "corepack pnpm --version && git status --short";
     let ordered = result(&home, &linked, command);
-    assert_eq!(ordered.reason_code, FLOOR, "{}", ordered.reason);
-    assert!(
-        ordered
-            .reason
-            .contains("Step 1 (corepack pnpm) runs before the Git read")
-            && ordered.reason.contains("run it as its own command"),
-        "{}",
-        ordered.reason
-    );
+    // macOS always has the workspace sandbox; Linux has it when the bwrap
+    // overlay probe succeeds. With it, Git in a linked worktree runs there,
+    // so the whole chain runs contained and raises no review to word.
+    // Elsewhere, Windows included, the review names the step.
+    let sandboxed_linux = cfg!(target_os = "linux") && ordered.reason_code == CONTAINED;
+    if cfg!(target_os = "macos") || sandboxed_linux {
+        assert_eq!(ordered.reason_code, CONTAINED, "{}", ordered.reason);
+        assert_eq!(ordered.minimum_action, "sandbox-required", "{command}");
+    } else {
+        assert_eq!(ordered.reason_code, FLOOR, "{}", ordered.reason);
+        assert!(
+            ordered
+                .reason
+                .contains("Step 1 (corepack pnpm) runs before the Git read")
+                && ordered.reason.contains("run it as its own command"),
+            "{}",
+            ordered.reason
+        );
+    }
     assert_ne!(reason(&home, &linked, "git status --short"), FLOOR);
 
     // A read that would launch a pager keeps the generic reason: running it

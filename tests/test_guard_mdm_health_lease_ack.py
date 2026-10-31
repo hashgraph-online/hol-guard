@@ -74,7 +74,7 @@ def test_authenticated_ack_retires_one_item_and_advances_exact_chain(
     )
 
     assert isinstance(ack, HealthLeaseAck)
-    assert health_lease.load_pending_health_lease(paths) is None
+    assert health_lease._load_pending(paths) is None
     assert (paths.state_root / "health-lease-ack.json").read_bytes() == ack.canonical_bytes()
 
     second = health_lease.issue_or_load_pending_health_lease(
@@ -111,7 +111,7 @@ def test_replayed_ack_is_idempotent_after_retirement(tmp_path: Path, monkeypatch
     )
 
     assert first == second
-    assert health_lease.load_pending_health_lease(paths) is None
+    assert health_lease._load_pending(paths) is None
     with pytest.raises(OSError, match="health_lease_outbox_absent"):
         health_lease.acknowledge_pending_health_lease(
             paths, HealthLeaseBinding("workspace-b", "device-a"), payload, system_name="Darwin"
@@ -180,7 +180,7 @@ def test_ack_durable_crash_recovers_without_backfill(tmp_path: Path, monkeypatch
             system_name="Darwin",
             crash_hook=crash,
         )
-    assert health_lease.load_pending_health_lease(paths) == first
+    assert health_lease._load_pending(paths) == first
 
     second = health_lease.issue_or_load_pending_health_lease(
         paths,

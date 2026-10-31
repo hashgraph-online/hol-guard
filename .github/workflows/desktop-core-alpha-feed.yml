@@ -109,6 +109,7 @@ jobs:
       attestations: write
     env:
       RELEASE_CHANNEL: ${{ inputs.release_channel || 'stable' }}
+      PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
       RELEASE_TARGET: aarch64-apple-darwin
       MINIMUM_DESKTOP_VERSION: 0.1.0-beta.0
       MINIMUM_DESKTOP_VERSION_ONEDIR: "3.0.113"
@@ -144,7 +145,6 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_CORE_VERSION: ${{ inputs.core_version || '' }}
-          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
           PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
         shell: bash
         run: |
@@ -198,7 +198,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
-          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
           PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
         shell: bash
         run: |
@@ -417,6 +416,7 @@ jobs:
             uv run --no-sync pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" \
               --clean --noconfirm --onefile --name hol-guard \
               --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --hidden-import sigstore._store --collect-data sigstore \
               --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
               --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
               --add-data "$SOURCE/src/codex_plugin_scanner/version.py:." \
@@ -450,6 +450,7 @@ jobs:
             uv run --no-sync pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" \
               --clean --noconfirm --onedir --name hol-guard \
               --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --hidden-import sigstore._store --collect-data sigstore \
               --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
               --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
               --add-data "$SOURCE/src/codex_plugin_scanner/version.py:." \

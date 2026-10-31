@@ -236,42 +236,10 @@ def build_native_workspace_review_context(
         return None
 
 
-def probe_native_workspace_review_context(
-    store: NativeWorkspaceReviewStore,
-    guard_home: Path,
-    request_id: str,
-    request_snapshot: Mapping[str, object] | None = None,
-    probe_state: NativeWorkspaceReviewContextProbeState | None = None,
-) -> dict[str, object] | None:
-    if probe_state is None:
-        if request_snapshot is None:
-            return build_native_workspace_review_context(store, guard_home, request_id)
-        return build_native_workspace_review_context(store, guard_home, request_id, request_snapshot)
-    cache_key = (
-        native_workspace_review_context_cache_key(request_id, request_snapshot)
-        if request_snapshot is not None
-        else None
-    )
-    if cache_key is not None and cache_key in probe_state.cache:
-        return probe_state.cache[cache_key]
-    if probe_state.remaining <= 0:
-        return None
-    probe_state.remaining -= 1
-    context = (
-        build_native_workspace_review_context(store, guard_home, request_id)
-        if request_snapshot is None
-        else build_native_workspace_review_context(store, guard_home, request_id, request_snapshot)
-    )
-    if cache_key is not None:
-        probe_state.cache[cache_key] = context
-    return context
-
-
 __all__ = [
     "NATIVE_CONTEXT_PROBE_LIMIT",
     "NATIVE_CONTEXT_TIMEOUT_SECONDS",
     "NativeWorkspaceReviewContextProbeState",
     "build_native_workspace_review_context",
     "native_workspace_review_context_cache_key",
-    "probe_native_workspace_review_context",
 ]

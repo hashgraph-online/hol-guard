@@ -35,7 +35,30 @@ def build_policy_document_from_rows(
 
 def compile_policy_document(document: GuardPolicyDocument) -> tuple[CompiledPolicyRow, ...]:
     """Present the complete native compilation; transport pages bytes only."""
-    items = policy_query("compile_dto", {"dto": asdict(document)})
+    return _compiled_rows(policy_query("compile_dto", {"dto": asdict(document)}))
+
+
+def compile_policy_bundle_document(
+    policy_bundle: Mapping[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+) -> tuple[CompiledPolicyRow, ...]:
+    """Present the bundle rules this device is in scope for, compiled natively.
+
+    Which rules a device is in scope for is part of the published policy, so
+    the selector match stays with the compiler that reads the rest of it.
+    """
+
+    return _compiled_rows(
+        policy_query(
+            "compile_bundle",
+            {"bundle": dict(policy_bundle), "device_id": device_id, "device_name": device_name},
+        )
+    )
+
+
+def _compiled_rows(items: object) -> tuple[CompiledPolicyRow, ...]:
     if not isinstance(items, list) or len(items) > 10_000:
         raise NativePolicyDocumentError("native_policy_document_rows_malformed")
     compiled = []

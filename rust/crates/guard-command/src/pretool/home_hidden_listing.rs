@@ -116,6 +116,52 @@ pub(in crate::pretool) fn home_hidden_tool_directory(
     }
 }
 
+/// How many entries of a tool directory are read before the screen below
+/// gives up. A tool keeps tens of entries at its top level; a root holding
+/// thousands is not the inventory this proof is for.
+const MAX_ROOT_ENTRIES: usize = 1_024;
+
+/// Whether a walk of `value` that prints directory paths can print one from
+/// inside a credential store the tool directory holds.
+///
+/// A `-type d` walk names directories and opens no file, so what it can
+/// disclose is the layout of what it reaches. The listing screen draws its
+/// line at printing from inside a store rather than at naming one:
+/// `~/.config` may name `gh`, and a listing may not print what `gh` holds. A
+/// tool's own directory is screened the same way here. Its entries may be
+/// named, and a store among them stops the walk, because a walk that is not
+/// depth-bounded would go on to print that store's own layout.
+///
+/// Only the root's own entries are read. Deeper names repeat the words
+/// ordinary package trees are written with -- a `credentials` directory sits
+/// inside more than one published package -- so a name screen at depth would
+/// refuse the toolchain inventories this proof exists for while proving
+/// nothing about a store a tool does not create.
+pub(in crate::pretool) fn home_hidden_walk_clears_stores(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some((canonical, relative)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let Ok(entries) = std::fs::read_dir(&canonical) else {
+        return false;
+    };
+    for (inspected, entry) in entries.enumerate() {
+        if inspected >= MAX_ROOT_ENTRIES {
+            return false;
+        }
+        let Ok(entry) = entry else {
+            return false;
+        };
+        if !clears_store_screen(&relative.join(entry.file_name())) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Whether `value` names an existing file below a hidden entry of the home
 /// directory that returns no credential.
 ///
@@ -175,6 +221,37 @@ pub(in crate::pretool) fn resolved_home_hidden_content_read(
         && !narrow_guidance_rule_owns(&lowered)
 }
 
+/// The listing screen for a path a caller has already resolved.
+///
+/// A structured read tool handed a directory lists its entries, or says it is
+/// a directory; either way it returns no file's bytes, so the question is the
+/// listing one rather than the content one. The resolved path has already
+/// followed every link, so a name below the home directory cannot stand in
+/// for a store somewhere else, and the store screen still refuses the trees
+/// whose entry names are themselves the secret.
+pub(in crate::pretool) fn resolved_home_hidden_listing(
+    canonical: &Path,
+    home_dir: Option<&str>,
+) -> bool {
+    let Some(raw_home) = home_dir else {
+        return false;
+    };
+    let Ok(home) = std::fs::canonicalize(raw_home) else {
+        return false;
+    };
+    let Ok(relative) = canonical.strip_prefix(&home) else {
+        return false;
+    };
+    let Some(first) = relative.components().next() else {
+        return false;
+    };
+    let mut names = relative.components().skip(1);
+    canonical.is_dir()
+        && first.as_os_str().to_string_lossy().starts_with('.')
+        && !names.any(|name| name.as_os_str().to_string_lossy().starts_with('.'))
+        && clears_store_screen(relative)
+}
+
 fn expanded(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
     let path = if value == "~" || value.starts_with("~/") || value.starts_with("~\\") {
         PathBuf::from(super::super::expand_home_read_path(value, home_dir)?)
@@ -188,3 +265,7 @@ fn expanded(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> Option<Pa
     };
     Some(path.components().collect())
 }
+
+#[cfg(test)]
+#[path = "home_hidden_walk_tests.rs"]
+mod walk_tests;

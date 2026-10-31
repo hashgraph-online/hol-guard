@@ -171,6 +171,9 @@ fn an_installed_target_is_bound_to_its_source() {
     let ok = ok.unwrap();
     assert_eq!(ok["bound"], 32 * 1024 * 1024);
     assert_eq!(ok["kind"], "pack");
+    assert_eq!(ok["directory"], "000007");
+    let released = asset(&json!({"profile": "release", "target": installed})).unwrap();
+    assert!(released["directory"].is_null());
     let outcome =
         asset(&json!({"profile": "installed", "target": installed, "source": "d".repeat(40)}));
     assert_eq!(message(outcome), "installed bundle asset source differs");

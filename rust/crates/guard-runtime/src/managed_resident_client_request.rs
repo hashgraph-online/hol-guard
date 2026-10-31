@@ -4,7 +4,8 @@ use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
+use super::handoff_record::Retirement;
+use super::{containment, handoff, handoff_record, lease, restart_budget, CLIENT_RETRY_DELAY};
 use crate::resident_diagnostics::{note, observe, Phase};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
@@ -34,6 +35,19 @@ fn startup_limit(payload: &[u8]) -> Duration {
         Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_START_TIMEOUT,
         _ => CLIENT_START_TIMEOUT,
     }
+}
+
+/// Operations that only observe a resident, and so must never cause one to
+/// exist. A resident that is not already serving answers nothing, and the
+/// caller reads that silence as the whole answer: starting one to produce a
+/// reply would make the diagnostic the event it is reporting on, and would
+/// spend restart budget that belongs to real work.
+fn observes_only(payload: &[u8]) -> bool {
+    crate::strict_json_value(payload)
+        .ok()
+        .as_ref()
+        .and_then(|value| value.get("operation")?.as_str())
+        .is_some_and(|operation| operation == "resident_health")
 }
 
 fn try_live_or_restart(
@@ -85,6 +99,12 @@ fn try_home_states(
             deadline,
         ) {
             note("client_state_foreign_retired", 1);
+            handoff_record::record(
+                state_base,
+                &runtime_digest,
+                &state.runtime_sha256,
+                Retirement::Orphaned,
+            );
             continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
@@ -138,6 +158,12 @@ fn try_home_states(
                 ) =>
             {
                 note("client_state_foreign_rejected", 1);
+                handoff_record::record(
+                    state_base,
+                    &runtime_digest,
+                    &state.runtime_sha256,
+                    Retirement::Rejected,
+                );
             }
             Ok(response) => return Ok(Some(response)),
             Err(error)
@@ -304,6 +330,11 @@ fn client_request_with_deadline_inner(
     })? {
         return Ok(response);
     }
+    if observes_only(payload) {
+        // Nothing is serving, which is the answer. Stop before the startup
+        // lock, the restart budget and the spawn below them.
+        return Err("native_resident_not_serving".to_owned());
+    }
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
@@ -374,6 +405,14 @@ fn client_request_with_deadline_inner(
             std::process::id(),
             overall_deadline,
         )?;
+        // There is a resident now, so this is the point where the day gains a
+        // start. Recorded without waiting for the journal's lock: the client's
+        // deadline still has the startup wait to pay for, and a lost count is
+        // worth less than the wait it would have cost.
+        super::lifecycle_journal::record_without_waiting(
+            &scope,
+            super::lifecycle_journal::Event::Started,
+        );
         Ok((generation, token, spawned))
     })?;
     let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
@@ -408,8 +447,39 @@ fn client_request_with_deadline_inner(
 
 #[cfg(test)]
 mod startup_limit_tests {
-    use super::startup_limit;
-    use std::time::Duration;
+    use super::{client_request_with_deadline, lease, observes_only, startup_limit};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn only_the_health_question_observes_without_starting_anything() {
+        assert!(observes_only(br#"{"operation":"resident_health"}"#));
+        assert!(!observes_only(br#"{"operation":"prompt_analyze"}"#));
+        assert!(!observes_only(br"{}"));
+        assert!(!observes_only(br"not json"));
+    }
+
+    #[test]
+    fn a_health_question_with_no_resident_serving_is_answered_by_the_silence() {
+        let root = std::env::temp_dir().join(format!(
+            "hol-guard-observe-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let client_lease = lease::acquire(&root).unwrap();
+        let result = client_request_with_deadline(
+            &root,
+            br#"{"operation":"resident_health"}"#,
+            Instant::now() + Duration::from_secs(4),
+            &client_lease,
+        );
+        drop(client_lease);
+        std::fs::remove_dir_all(&root).unwrap();
+        // A work request on this empty root reaches the spawn admission gate
+        // and fails there with `native_policy_verifier_key_missing`. The health
+        // question stops earlier, before the startup lock and the budget.
+        assert_eq!(result.unwrap_err(), "native_resident_not_serving");
+    }
 
     #[test]
     fn daemon_lifecycle_startup_keeps_the_cold_start_budget() {

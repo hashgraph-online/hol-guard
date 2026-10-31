@@ -136,13 +136,19 @@ fn inner(
                     break;
                 }
                 remaining_launcher_children[0] -= 1;
-                factors.extend(inner(
-                    &child,
-                    None,
-                    &[],
-                    depth + 1,
-                    remaining_launcher_children,
-                ));
+                let mut child_factors =
+                    inner(&child, None, &[], depth + 1, remaining_launcher_children);
+                // xargs and parallel append the paths they read after the
+                // operands the command shows, so their removal can reach a
+                // root none names.
+                if executable == "xargs" || executable == "parallel" {
+                    for child_factor in &mut child_factors {
+                        if child_factor.reason_code == "critical.destructive-filesystem" {
+                            child_factor.basis.action_floor = GuardAction::Block;
+                        }
+                    }
+                }
+                factors.extend(child_factors);
             }
         } else if !launcher_children.is_empty() {
             factors.push(factor(

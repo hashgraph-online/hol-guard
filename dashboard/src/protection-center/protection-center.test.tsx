@@ -432,6 +432,9 @@ const renderDetail = (item: LocalCliItem) => renderToStaticMarkup(createElement(
   onBack: () => undefined,
   onRefresh: async () => undefined,
 }));
+// A tool Guard only saw in use, with nothing listed yet, still offers to load its commands.
+const seenToolDetail = renderDetail({ ...baseCustomExtension, surface: "cli", kind: "executable", state: "unset", commands: [] });
+assert.match(seenToolDetail, />Load commands</);
 const detectedDetail = renderDetail({ ...baseCustomExtension, surface: "mcp", state: "unset" });
 assert.match(detectedDetail, /Forget this connection/);
 assert.match(detectedDetail, /Last seen /);

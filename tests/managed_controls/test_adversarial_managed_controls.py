@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.managed_controls.acknowledgement import (
+from tests.managed_controls.acknowledgement import (
     AcknowledgementError,
     ManagedControlsAcknowledgement,
     accept_acknowledgement,
 )
-from codex_plugin_scanner.guard.managed_controls.atomic_apply import (
+from tests.managed_controls.atomic_apply import (
     AppliedManagedControls,
     AtomicApplyError,
     AtomicManagedControlsStore,
     PreparedProjection,
 )
-from codex_plugin_scanner.guard.managed_controls.authority import (
+from tests.managed_controls.authority import (
     AuthorityMode,
     ControlEffect,
     ControlInstruction,

@@ -29,8 +29,10 @@ from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
-os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+# `auto` selects the runtime bundled beside the imported package and nothing
+# else, so a `HOL_GUARD_NATIVE_BINARY` left in the environment is read by
+# nothing here and needs no clearing.
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from codex_plugin_scanner.guard import (
@@ -44,15 +46,15 @@ if not hasattr(store_workflow_capability_common, "WORKFLOW_CAPABILITY_STORE_CLOC
 
 import workflow_capability_scenarios
 import workflow_capability_tamper_scenarios
+from codex_plugin_scanner.guard.workflow_capability_transitions import (
+    authority_transition_sha256,
+    decode_signed_authority_transition,
+)
 from vector_support import schema_sql_for_tables
 from workflow_capability_factories import KEY, KEY_ID, OTHER_KEY, OTHER_KEY_ID
 
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.workflow_capabilities import WorkflowCapabilityError
-from codex_plugin_scanner.guard.workflow_capability_transitions import (
-    authority_transition_sha256,
-    decode_signed_authority_transition,
-)
 
 WORKFLOW_TABLES = {
     "guard_workflow_capabilities": "capability_id",

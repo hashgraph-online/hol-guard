@@ -166,6 +166,7 @@ class ExtensionControlAuthorityCatalogMixin:
         key: bytes,
         pack_activation=None,
         installed_upgrade: Mapping[str, object] | None = None,
+        current_manifest: Mapping[str, str] | None = None,
     ) -> ExtensionControlAuthorityView:
         """Commit the rebinding the resident computed for a trusted catalog update."""
 
@@ -192,6 +193,11 @@ class ExtensionControlAuthorityCatalogMixin:
             catalog_digest=catalog_digest,
             now=_now(),
             catalog_migration=migration,
+            # An installed upgrade asks the resident to recompute the managed
+            # policy of the authority head, which needs its anchor and the
+            # manifest of the catalog that head is bound to.
+            anchor_json=self._read_anchor_json(),
+            current_manifest=dict(current_manifest) if current_manifest is not None else None,
         )
         plan = _plan_map(reply, "plan")
         if plan.get("outcome") != "migrate":

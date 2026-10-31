@@ -7,6 +7,8 @@ use sha2::{Digest, Sha256};
 
 #[path = "policy_document_bounds.rs"]
 mod bounds;
+#[path = "policy_document_bundle.rs"]
+mod bundle;
 #[path = "policy_document_command_dto.rs"]
 mod command_dto;
 #[path = "policy_document_compile.rs"]
@@ -84,6 +86,7 @@ pub fn evaluate(query: &str, input: &Value, deadline: Instant) -> Result<Value, 
                 json!({"dto":projection.dto,"mapping":projection.mapping})
             })
         }
+        "command_expressions" => Ok(command_dto::document(&input["value"])),
         "canonical" => canonical(&input["value"]).map(Value::String),
         "to_mapping" | "to_mapping_ordered" => {
             let class = input["class_name"]
@@ -129,6 +132,7 @@ pub fn evaluate(query: &str, input: &Value, deadline: Instant) -> Result<Value, 
             deadline,
         ),
         "compile_mapped" => compiler::compile(&input["document"], deadline),
+        "compile_bundle" => bundle::compile(input, deadline),
         "compile_page" => compiler::page(input, deadline),
         "diff" => {
             let before = mapping::parse("GuardPolicyDocument", &input["baseline"])?.mapping;

@@ -70,7 +70,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let controls = git_helper_fixture::github_controls("enabled");
     let action = |command: &str| {
@@ -90,6 +90,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&environment),
         )

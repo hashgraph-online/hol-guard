@@ -10,6 +10,7 @@ import secrets
 import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 
 from . import __version__
 from ._scanner_commands import _scan_with_policy
@@ -25,6 +26,7 @@ from .github_reporting import (
     should_manage_pr_comment,
     upsert_pr_comment,
 )
+from .hol_ci_report import build_ci_report_body, report_folder, send_ci_report
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, max_severity
 from .quality_artifact import build_quality_artifact, write_quality_artifact
 from .reporting import build_json_payload, format_markdown, format_sarif, should_fail_for_severity
@@ -251,6 +253,57 @@ def _build_findings_summary_lines(findings: tuple[Finding, ...]) -> tuple[str, .
     return tuple(lines)
 
 
+HOL_PLUGINS_CONNECT_URL = "https://hol.org/plugins/connect"
+HOL_PLUGINS_PREFLIGHT_URL = "https://hol.org/plugins/preflight"
+
+
+def _public_repository_for_publish_hint(*, repository: str, server_url: str, event_path: str) -> str:
+    """Return the repository name only when the event payload marks it public on github.com."""
+    if not repository or not event_path:
+        return ""
+    if server_url.rstrip("/") != "https://github.com":
+        return ""
+    try:
+        payload = json.loads(Path(event_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    event_repository = payload.get("repository")
+    if not isinstance(event_repository, dict) or event_repository.get("private") is not False:
+        return ""
+    if event_repository.get("full_name") != repository:
+        return ""
+    return repository
+
+
+def _preflight_folder(plugin_dir: str) -> str:
+    """Return the scanned folder relative to the repository root, or "" for the root or anything unusual."""
+    return report_folder(plugin_dir)
+
+
+def _build_publish_hint_lines(repository: str, plugin_dir: str = "") -> list[str]:
+    query = urlencode({"repo": repository, "utm_source": "hol-scanner-action", "utm_medium": "job-summary"})
+    preflight_params = {"repo": repository}
+    folder = _preflight_folder(plugin_dir)
+    if folder:
+        preflight_params["path"] = folder
+    preflight_params.update({"utm_source": "hol-scanner-action", "utm_medium": "job-summary"})
+    preflight_query = urlencode(preflight_params)
+    return [
+        "",
+        "### Publish on HOL Plugins",
+        "",
+        f"Find this repository's HOL Plugins listing, claim it free and add a live trust badge: "
+        f"[{HOL_PLUGINS_CONNECT_URL}]({HOL_PLUGINS_CONNECT_URL}?{query})",
+        "",
+        f"Check it against the Claude, Codex and Cursor plugin directory submission rules before you submit: "
+        f"[{HOL_PLUGINS_PREFLIGHT_URL}]({HOL_PLUGINS_PREFLIGHT_URL}?{preflight_query})",
+        "",
+        "Shown for public repositories only. Set `publish_hint: false` to hide it.",
+    ]
+
+
 def _build_step_summary_lines(
     *,
     mode: str,
@@ -268,6 +321,8 @@ def _build_step_summary_lines(
     local_plugin_count: int | None = None,
     skipped_target_count: int | None = None,
     findings: tuple[Finding, ...] = (),
+    publish_hint_repository: str = "",
+    publish_hint_plugin_dir: str = "",
 ) -> tuple[str, ...]:
     lines = ["## HOL AI Plugin Scanner", "", f"- Mode: {mode}"]
     lines.append(f"- Scope: {scope}")
@@ -295,6 +350,13 @@ def _build_step_summary_lines(
     if mode in {"scan", "lint", "submit"}:
         lines.extend(_build_findings_summary_lines(findings))
         lines.extend(contributor_review_lines(findings))
+    if publish_hint_repository and mode != "submit":
+        lines.extend(
+            _build_publish_hint_lines(
+                publish_hint_repository,
+                publish_hint_plugin_dir if scope == "plugin" else "",
+            )
+        )
     return tuple(lines)
 
 
@@ -304,6 +366,8 @@ def main() -> int:
     output_format = _read_env("FORMAT", "text")
     output_path = _read_env("OUTPUT")
     write_step_summary = _read_bool_env("WRITE_STEP_SUMMARY", default=True)
+    publish_hint = _read_bool_env("PUBLISH_HINT", default=True)
+    report_to_hol = _read_bool_env("REPORT_TO_HOL")
     registry_payload_output = _read_env("REGISTRY_PAYLOAD_OUTPUT")
     upload_sarif = _read_bool_env("UPLOAD_SARIF")
     profile = _read_env("PROFILE", "default")
@@ -334,6 +398,15 @@ def main() -> int:
     github_token = _read_env("GITHUB_TOKEN")
     github_event_name = _read_env("GITHUB_EVENT_NAME")
     github_event_path = _read_env("GITHUB_EVENT_PATH")
+    pr_comment_listing_repository = (
+        _public_repository_for_publish_hint(
+            repository=github_repository,
+            server_url=github_server_url,
+            event_path=github_event_path,
+        )
+        if publish_hint
+        else ""
+    )
     pr_comment_mode, pr_comment_style, pr_comment_max_findings = _resolve_pr_comment_settings(
         plugin_dir=plugin_dir,
         config_path=config,
@@ -438,6 +511,8 @@ def main() -> int:
                     local_plugin_count=local_plugin_count,
                     skipped_target_count=skipped_target_count,
                     findings=summary_findings,
+                    publish_hint_repository=pr_comment_listing_repository,
+                    publish_hint_plugin_dir=plugin_dir,
                 ),
             )
         output_values["action_exit_code"] = str(return_code)
@@ -497,6 +572,7 @@ def main() -> int:
                 policy_pass=policy_eval.policy_pass,
                 style=pr_comment_style,
                 max_findings_to_render=pr_comment_max_findings,
+                listing_hint_repository=pr_comment_listing_repository,
             )
         elif mode == "lint":
             rendered = _render_lint_output(
@@ -511,6 +587,7 @@ def main() -> int:
                 policy_pass=policy_eval.policy_pass,
                 style=pr_comment_style,
                 max_findings_to_render=pr_comment_max_findings,
+                listing_hint_repository=pr_comment_listing_repository,
             )
         else:
             if scan_scope != "plugin":
@@ -560,6 +637,32 @@ def main() -> int:
                 "findings_total": str(sum(result.severity_counts.values())),
             }
         )
+
+        if report_to_hol and mode == "scan" and scan_scope == "plugin":
+            ci_report_repository = _public_repository_for_publish_hint(
+                repository=github_repository,
+                server_url=github_server_url,
+                event_path=github_event_path,
+            )
+            if ci_report_repository and github_sha and github_run_id:
+                ci_report_status = send_ci_report(
+                    build_ci_report_body(
+                        repository=ci_report_repository,
+                        commit_sha=github_sha,
+                        workflow_run_id=github_run_id,
+                        scanner_version=__version__,
+                        plugin_dir=plugin_dir,
+                        score=result.score,
+                        grade=result.grade,
+                        max_severity=output_values["max_severity"],
+                        severity_counts=result.severity_counts,
+                    ),
+                    request_url=_read_env("ACTIONS_ID_TOKEN_REQUEST_URL"),
+                    request_token=_read_env("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+                )
+            else:
+                ci_report_status = "skipped: only public github.com repositories can report"
+            print(f"HOL CI report: {ci_report_status}")
 
         if submission_enabled or registry_payload_output:
             metadata = resolve_submission_metadata(
@@ -666,6 +769,7 @@ def main() -> int:
             verification_payload=verification_payload,
             style=pr_comment_style,
             max_findings_to_render=pr_comment_max_findings,
+            listing_hint_repository=pr_comment_listing_repository,
         )
         rendered = _render_verify_output(verification, output_format=output_format)
         verify_pass_for_summary = verification.verify_pass

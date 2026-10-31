@@ -105,14 +105,15 @@ def _validate_receipt_decoder_and_handoff(root: Path) -> None:
     receipt = _read(root, "src/codex_plugin_scanner/guard/native_decision_receipt.py")
     _contains_all(
         receipt,
-        ("validate_native_decision_receipt", "canonical_receipt_bytes", "decision_id"),
-        "Python receipt validator",
+        ("validate_native_decision_receipt", "native_decision_receipt_validation"),
+        "Python receipt transport",
     )
-    required_start = receipt.find("_REQUIRED_FIELDS")
-    required_end = receipt.find(")", required_start)
-    required_fields = receipt[required_start:required_end] if required_start >= 0 and required_end >= 0 else ""
-    if any(f'"{field}"' in required_fields for field in FORBIDDEN_RECEIPT_FIELDS):
-        raise RuntimeError("Python receipt validator exposes a forbidden receipt field")
+    check = _read(root, "rust/crates/guard-runtime/src/edge_result_check.rs")
+    _contains_all(
+        check,
+        ("pub(crate) fn standalone_receipt", "native_decision_receipt::valid"),
+        "native receipt check",
+    )
     writer = _read(root, "rust/crates/guard-command/src/hook_evidence_writer.rs")
     _contains_all(
         writer,

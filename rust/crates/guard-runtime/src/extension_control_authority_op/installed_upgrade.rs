@@ -4,13 +4,15 @@ use super::layers::{layers_from_json, layers_from_values, layers_to_values};
 use super::records::{
     canonical, field, query_row, row_text, tampered, verify_record, Res, Row, SNAPSHOT_PURPOSE,
 };
-use super::Ctx;
+use super::{Ctx, Read, ReadMode, View, PROTECTED};
+use guard_command::extension_control::ControlLayerKind;
 use guard_command::native_command_program::{NativeCommandProgram, PackAdmissionBudget};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
 const REFUSED: &str = "installed command pack upgrade is not authorized";
+const MANAGED: &str = "managed policy changed before installed upgrade";
 
 #[path = "installed_upgrade_legacy.rs"]
 mod legacy;
@@ -33,6 +35,45 @@ fn open(value: &Value, key: &[u8], directory: &Path) -> Res<Value> {
 }
 
 impl Ctx<'_> {
+    /// The managed policy the candidate was prepared against must still be the
+    /// one the authority serves. The caller used to recompute this view and
+    /// compare it before handing the migration over; the resident derives it
+    /// from the same authenticated state instead.
+    fn managed_policy_unchanged(&self, evidence: &Value, catalog_digest: &str) -> Res<()> {
+        let expected = &evidence["managed"];
+        let Read::View(view) = self.read(
+            catalog_digest,
+            ReadMode {
+                migration: false,
+                allow_migration: false,
+            },
+        )?
+        else {
+            return Err(tampered(MANAGED));
+        };
+        if view.health != PROTECTED {
+            return Err(tampered(MANAGED));
+        }
+        let composed = self.compose_managed(view, None)?;
+        let Some(composed) = composed.get("view") else {
+            return Err(tampered(MANAGED));
+        };
+        let composed = View::from_value(Some(composed))?;
+        let managed: Vec<_> = composed
+            .layers
+            .iter()
+            .filter(|layer| layer.kind == ControlLayerKind::SignedCloud)
+            .cloned()
+            .collect();
+        if json!(composed.managed_revision) != expected["revision"]
+            || layers_to_values(&managed)
+                != layers_to_values(&layers_from_values(&expected["layers"])?)
+        {
+            return Err(tampered(MANAGED));
+        }
+        Ok(())
+    }
+
     pub(super) fn installed_upgrade_digest(&self, source: &Row) -> Res<Option<String>> {
         let migration = self
             .request
@@ -57,6 +98,7 @@ impl Ctx<'_> {
         {
             return Err(tampered(REFUSED));
         }
+        self.managed_policy_unchanged(evidence, &stored_catalog)?;
         let mut retained = layers_from_json(&stored_layers)?;
         let target = self.catalog_digest()?;
         for layer in &mut retained {

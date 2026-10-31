@@ -166,6 +166,16 @@ pub(super) fn lease_is_live(
             return lease_file_is_recent(file.modified, observed_at)
         }
     };
+    record_is_live(&record, expected_digest, observed_at)
+}
+
+/// A readable record is live while it is fresh, names `expected_digest` (when
+/// given) and its process still runs.
+pub(super) fn record_is_live(
+    record: &LeaseRecord,
+    expected_digest: Option<&str>,
+    observed_at: SystemTime,
+) -> bool {
     let Ok(age) = observed_at.duration_since(record.modified) else {
         return false;
     };

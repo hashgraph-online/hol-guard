@@ -20,7 +20,7 @@ env:
 jobs:
   privileged-workflow-policy:
     name: Privileged workflow policy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -46,7 +46,7 @@ jobs:
 
   semgrep:
     name: Semgrep
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -64,30 +64,10 @@ jobs:
 
   release-scan:
     name: Trivy release scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      - name: Verify the locked MCPB RSA backport
-        run: |
-          set -euo pipefail
-          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
-          node --test .github/tools/mcpb-cli/harden-forge.test.cjs
-          node .github/tools/mcpb-cli/harden-forge.cjs --vex-output "$RUNNER_TEMP/mcpb-forge-openvex.json"
-      - name: Scan the verified MCPB tool dependency
-        run: >
-          docker run --rm
-          -v "$PWD/.github/tools/mcpb-cli:/workdir:ro"
-          -v "$RUNNER_TEMP/mcpb-forge-openvex.json:/verified-openvex.json:ro"
-          ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
-          fs
-          --scanners vuln,misconfig,secret
-          --severity HIGH,CRITICAL
-          --skip-dirs /workdir/node_modules
-          --vex /verified-openvex.json
-          --exit-code 1
-          --quiet
-          /workdir
       - name: Run Trivy on release surfaces
         run: >
           docker run --rm
@@ -98,16 +78,14 @@ jobs:
           --severity HIGH,CRITICAL
           --ignorefile /workdir/.trivyignore
           --skip-dirs /workdir/tests/fixtures
-          --skip-dirs /workdir/.github/tools/mcpb-cli/node_modules
           --skip-files /workdir/.clusterfuzzlite/Dockerfile
-          --skip-files /workdir/.github/tools/mcpb-cli/package-lock.json
           --exit-code 1
           --quiet
           /workdir
 
   gitleaks:
     name: Gitleaks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -116,7 +94,7 @@ jobs:
           persist-credentials: false
       - name: Cache pinned Gitleaks binary
         id: gitleaks-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ runner.temp }}/gitleaks-bin
           key: gitleaks-${{ runner.os }}-${{ runner.arch }}-go1.23-v8.24.2
@@ -225,3 +203,68 @@ jobs:
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: gitleaks dir --no-banner --redact --exit-code 1 .
+
+  cargo-deny:
+    name: Cargo supply chain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      # The gate's verdict has to come from the version of cargo-deny this file
+      # names, so the binary is a pinned release asset checked against its
+      # digest rather than whatever `cargo install` resolves on the day.
+      - name: Cache pinned cargo-deny binary
+        id: cargo-deny-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ runner.temp }}/cargo-deny-bin
+          key: cargo-deny-${{ runner.os }}-${{ runner.arch }}-v0.20.2
+      - name: Install cargo-deny
+        if: steps.cargo-deny-cache.outputs.cache-hit != 'true'
+        env:
+          CARGO_DENY_VERSION: "0.20.2"
+          CARGO_DENY_SHA256: "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f"
+        run: |
+          set -euo pipefail
+          archive_name="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          download_dir="$RUNNER_TEMP/cargo-deny-download"
+          rm -rf "$download_dir"
+          mkdir -p "$download_dir" "$RUNNER_TEMP/cargo-deny-bin"
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$download_dir/$archive_name.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/${archive_name}.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $download_dir/$archive_name.tar.gz" | sha256sum --check --strict
+          tar -xzf "$download_dir/$archive_name.tar.gz" -C "$download_dir"
+          install -m 0755 "$download_dir/$archive_name/cargo-deny" "$RUNNER_TEMP/cargo-deny-bin/cargo-deny"
+          rm -rf "$download_dir"
+      - name: Add cargo-deny to PATH
+        run: echo "$RUNNER_TEMP/cargo-deny-bin" >> "$GITHUB_PATH"
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Cache the Cargo registry
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: rust
+          cache-targets: false
+          key: cargo-deny
+      # The advisory database is a git clone that grows over time. The run id
+      # makes every run write a fresh entry and the prefix restores the most
+      # recent one, so a run starts from yesterday's clone and only fetches the
+      # days since.
+      - name: Cache the RustSec advisory database
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cargo/advisory-dbs
+          key: cargo-deny-advisory-db-${{ github.run_id }}
+          restore-keys: |
+            cargo-deny-advisory-db-
+      - name: Check advisories, bans, licenses and sources
+        working-directory: rust
+        # A `bans.skip` entry that no longer matches anything is a warning by
+        # default, so a duplicate exception would outlive the duplicate it was
+        # written for and silently widen the list. Promote it to an error.
+        run: >-
+          cargo deny --workspace --locked --log-level info check
+          --deny unmatched-skip advisories bans licenses sources

@@ -2,103 +2,95 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import cast, get_args
 
+from ...models import GuardAction
+from ...native_runner_authority import NativeRunnerAuthorityError
 from ...native_shell_request_authority import shell_request_authority
-from ..github_capability_contract import GitHubCommandAssessment
-from .shell_quote_tokens import ShellTokenWithQuoteContext as _ShellTokenWithQuoteContext
+
+_GUARD_ACTIONS = frozenset(get_args(GuardAction))
+# The names ``GitHubCapability::as_str`` emits. A name outside this set means
+# the resident and this carrier disagree, so the answer is rejected.
+_CAPABILITY_NAMES = frozenset(
+    {
+        "read_local",
+        "read_remote",
+        "propose_remote",
+        "create_private_remote",
+        "routine_merge_remote",
+        "routine_review_thread_remote",
+        "routine_workflow_remote",
+        "write_local",
+        "maintain_remote",
+        "content_remote",
+        "merge_remote",
+        "admin_merge_remote",
+        "publish_remote",
+        "workflow_remote",
+        "force_remote",
+        "delete_remote",
+        "secret_remote",
+        "access_remote",
+        "mutate_remote",
+        "unknown",
+    }
+)
 
 
-def classify_github_shell_capabilities(command_text: str, *, home_dir: Path | None) -> GitHubCommandAssessment | None:
-    value = shell_request_authority("classify_github_shell_capabilities", locals())
-    return (
-        None
-        if value is None
-        else GitHubCommandAssessment(
-            value["capability"], value["reason_code"], value["detail"], tuple(value["capabilities"])
-        )
+@dataclass(frozen=True, slots=True)
+class GitHubShellAssessment:
+    """The resident's GitHub capability classification for one shell command.
+
+    The floor and workflow eligibility come from the Rust capability contract
+    (``guard-command/src/github_capability_contract.rs``); nothing here derives
+    them again.
+    """
+
+    capability: str
+    capabilities: tuple[str, ...]
+    reason_code: str
+    detail: str
+    action_floor: GuardAction
+    workflow_authorizable: bool
+
+
+def classify_github_shell_capabilities(command_text: str, *, home_dir: Path | None) -> GitHubShellAssessment | None:
+    value: object = shell_request_authority("classify_github_shell_capabilities", locals())
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise NativeRunnerAuthorityError("native_github_shell_capabilities_invalid")
+    answer = cast(dict[str, object], value)
+    capability = answer.get("capability")
+    capabilities = answer.get("capabilities")
+    reason_code = answer.get("reason_code")
+    detail = answer.get("detail")
+    action_floor = answer.get("action_floor")
+    workflow_authorizable = answer.get("workflow_authorizable")
+    if not isinstance(capabilities, list):
+        raise NativeRunnerAuthorityError("native_github_shell_capabilities_invalid")
+    classified = tuple(cast(list[object], capabilities))
+    if (
+        not isinstance(capability, str)
+        or not all(isinstance(item, str) and item in _CAPABILITY_NAMES for item in classified)
+        or capability not in classified
+        or not isinstance(reason_code, str)
+        or not isinstance(detail, str)
+        or not isinstance(action_floor, str)
+        or action_floor not in _GUARD_ACTIONS
+        or not isinstance(workflow_authorizable, bool)
+    ):
+        raise NativeRunnerAuthorityError("native_github_shell_capabilities_invalid")
+    return GitHubShellAssessment(
+        capability,
+        cast(tuple[str, ...], classified),
+        reason_code,
+        detail,
+        cast(GuardAction, action_floor),
+        workflow_authorizable,
     )
 
 
-def _github_environment_requires_review(assignments: tuple[tuple[str, str], ...]) -> bool:
-    return shell_request_authority("_github_environment_requires_review", locals())
-
-
-def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
-    return shell_request_authority("_persistent_github_environment_requires_review", locals())
-
-
-def _github_shell_has_dynamic_arguments(command_text: str) -> bool:
-    return shell_request_authority("_github_shell_has_dynamic_arguments", locals())
-
-
-def github_argument_token_has_untrusted_expansion(token: str) -> bool:
-    return shell_request_authority("github_argument_token_has_untrusted_expansion", locals())
-
-
-def _shell_token_has_expansion(token: str) -> bool:
-    return shell_request_authority("_shell_token_has_expansion", locals())
-
-
-def _github_script_requires_review(script: str) -> bool:
-    return shell_request_authority("_github_script_requires_review", locals())
-
-
-def _github_environment_name(name: str) -> bool:
-    return shell_request_authority("_github_environment_name", locals())
-
-
-def _shell_segment_is_command_builtin_lookup(segment: list[str]) -> bool:
-    return shell_request_authority("_shell_segment_is_command_builtin_lookup", locals())
-
-
-def _github_pipeline_companion_is_read_only(segment: list[str], *, home_dir: Path | None, command_text: str) -> bool:
-    return shell_request_authority("_github_pipeline_companion_is_read_only", locals())
-
-
-def _command_builtin_options_are_lookup_only(segment: list[_ShellTokenWithQuoteContext], index: int) -> bool:
-    return shell_request_authority("_command_builtin_options_are_lookup_only", locals())
-
-
-def _shell_command_substitution_payloads(command_text: str) -> tuple[str, ...]:
-    return tuple(shell_request_authority("_shell_command_substitution_payloads", locals()))
-
-
-def _read_command_substitution(command_text: str, start_index: int) -> tuple[str, int]:
-    return tuple(shell_request_authority("_read_command_substitution", locals()))
-
-
-def _read_backtick_command_substitution(command_text: str, start_index: int) -> tuple[str, int]:
-    return tuple(shell_request_authority("_read_backtick_command_substitution", locals()))
-
-
-def _iter_shell_pipelines(parts: list[str]) -> list[list[list[str]]]:
-    return shell_request_authority("_iter_shell_pipelines", locals())
-
-
-def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
-    return tuple(shell_request_authority("_env_split_string_payloads", locals()))
-
-
-def _shell_segment_env_index(segment: list[str]) -> int | None:
-    return shell_request_authority("_shell_segment_env_index", locals())
-
-
-def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
-    return tuple(shell_request_authority("_shell_command_scripts", locals()))
-
-
-__all__ = [
-    "_ShellTokenWithQuoteContext",
-    "_command_builtin_options_are_lookup_only",
-    "_env_split_string_payloads",
-    "_github_pipeline_companion_is_read_only",
-    "_iter_shell_pipelines",
-    "_read_backtick_command_substitution",
-    "_read_command_substitution",
-    "_shell_command_scripts",
-    "_shell_command_substitution_payloads",
-    "_shell_segment_env_index",
-    "_shell_segment_is_command_builtin_lookup",
-    "classify_github_shell_capabilities",
-]
+__all__ = ["GitHubShellAssessment", "classify_github_shell_capabilities"]

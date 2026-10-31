@@ -90,6 +90,7 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                     shell_home_matches: false,
                     ripgrep_config_absent: false,
                     psql_environment: Default::default(),
+                    creates_nothing: false,
                 },
             )
             .is_empty(),
@@ -110,6 +111,7 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
         ),
         vec![0, 1]
@@ -261,6 +263,7 @@ fn a_stderr_merge_does_not_invent_an_ls_target() {
         shell_home_matches: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     };
     let cover = |command: &str| {
         benign_command_segments(&parse_command(&request(command)).unwrap(), context)

@@ -140,6 +140,24 @@ fn is_prompt_tool(tool: &str) -> bool {
     )
 }
 
+/// Whether the tool's name says it collects a record of work that is already
+/// under way: `get_command_or_subagent_output`, `read_task_output`. A name
+/// that fetches a report is not a name that submits one, so these calls are
+/// bookkeeping over work whose own call carried its proof.
+fn is_result_retrieval_tool(tool: &str) -> bool {
+    let tokens = tool_tokens(tool);
+    let (Some(first), Some(last)) = (tokens.first(), tokens.last()) else {
+        return false;
+    };
+    matches!(
+        first.as_str(),
+        "get" | "read" | "fetch" | "poll" | "collect" | "await"
+    ) && matches!(
+        last.as_str(),
+        "output" | "outputs" | "result" | "results" | "status" | "log" | "logs"
+    )
+}
+
 fn is_harness_tool(tool: &str) -> bool {
     tool_matches(
         tool,
@@ -230,21 +248,40 @@ fn is_command_tool(tool: &str) -> bool {
 
 pub(super) fn package_command(model: &CanonicalCommandV1) -> bool {
     model.segments.iter().any(|segment| {
-        segment.executable.as_deref().is_some_and(is_package_tool) && !inline_eval(segment)
+        segment.executable.as_deref().is_some_and(is_package_tool) && !runs_code(segment)
     })
 }
 
-/// `bun -e <code>` runs code, not a package operation; keep the command
-/// decision so the reason names what actually needs review.
-fn inline_eval(segment: &crate::CommandSegmentV1) -> bool {
+/// Bun is a JavaScript runtime as well as a package manager. `bun -e <code>`
+/// and `bun <entry>.mjs` run code the way `node` does, not a package
+/// operation; keep the command decision so the reason names what actually
+/// needs review, and so these reach the same containment `node` reaches.
+/// `bun install`, `bun add`, `bun run <task>` and `bun test` are unchanged.
+fn runs_code(segment: &crate::CommandSegmentV1) -> bool {
     segment
         .executable
         .as_deref()
         .is_some_and(|executable| executable.rsplit(['/', '\\']).next() == Some("bun"))
-        && segment
-            .arguments
-            .first()
-            .is_some_and(|argument| matches!(argument.as_str(), "-e" | "--eval" | "-p" | "--print"))
+        && segment.arguments.first().is_some_and(|argument| {
+            matches!(argument.as_str(), "-e" | "--eval" | "-p" | "--print")
+                || script_entry(argument)
+        })
+}
+
+/// A first argument naming a JavaScript or TypeScript file. Bun runs that file
+/// directly; none of its own verbs carry one of these suffixes, so reading the
+/// suffix cannot take a package operation out of the package path.
+fn script_entry(argument: &str) -> bool {
+    !argument.starts_with('-')
+        && std::path::Path::new(argument)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                matches!(
+                    extension,
+                    "js" | "mjs" | "cjs" | "jsx" | "ts" | "mts" | "cts" | "tsx"
+                )
+            })
 }
 
 /// Whether `infer_action_type` decides this call from the tool's name alone.
@@ -284,7 +321,7 @@ pub(super) fn infer_action_type(
     if event_compact.contains("beforemcpexecution") {
         return (PreToolActionTypeV1::McpTool, PreToolOperationV1::Call);
     }
-    if is_prompt_tool(tool) {
+    if is_prompt_tool(tool) && !is_result_retrieval_tool(tool) {
         return (PreToolActionTypeV1::Prompt, PreToolOperationV1::Submit);
     }
     // Result reports need an explicit harness proof; referenced paths do not
@@ -292,8 +329,12 @@ pub(super) fn infer_action_type(
     if tool == "yield" {
         return (PreToolActionTypeV1::Harness, PreToolOperationV1::Set);
     }
-    if is_harness_tool(tool) {
-        let operation = if tool_matches(tool, &["stop", "end", "close"]) {
+    // A retrieval name reaches here only after the prompt branch declined it,
+    // so it names the harness's own records either way.
+    if is_harness_tool(tool) || is_prompt_tool(tool) {
+        let operation = if is_result_retrieval_tool(tool) {
+            PreToolOperationV1::Read
+        } else if tool_matches(tool, &["stop", "end", "close"]) {
             PreToolOperationV1::Stop
         } else {
             PreToolOperationV1::Start

@@ -57,6 +57,42 @@ fn token(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
 }
 
+/// `_FLATTENED_NAME_HARNESSES`: harnesses that present an MCP tool under a
+/// single flattened name.
+const FLATTENED_NAME_HARNESSES: [&str; 1] = ["omp"];
+
+/// `_flattened_tool`: Oh My Pi presents `mcp__<server>__<tool>` as
+/// `mcp__<server>_<tool>`, with the server's dashes turned into underscores.
+/// Nothing in the name says where the server ends, so the connector the tool
+/// was catalogued under supplies the boundary.
+fn flattened_tool(harness: &str, tool_name: &str, namespace: &str) -> Option<ObservedTool> {
+    if !FLATTENED_NAME_HARNESSES.contains(&harness)
+        || tool_name.chars().count() > MAX_TOOL_NAME_CHARS
+    {
+        return None;
+    }
+    let rest = tool_name.strip_prefix("mcp__")?;
+    if rest.contains("__") {
+        return None;
+    }
+    let server = namespace.strip_prefix("mcp__")?.strip_suffix("__")?;
+    let flat = server.replace('-', "_");
+    // A server whose flattened form already ends in `_` cannot be told apart
+    // from the same server joined to a `_`-led tool name.
+    if flat.ends_with('_') {
+        return None;
+    }
+    let name = rest.strip_prefix(&flat)?.strip_prefix('_')?;
+    if name.starts_with('_') || !token(name) {
+        return None;
+    }
+    Some(ObservedTool {
+        namespace: namespace.to_owned(),
+        qualified_name: tool_name.to_owned(),
+        harness: harness.to_owned(),
+    })
+}
+
 /// `observed_mcp_tool`: parse a fully qualified MCP name and keep the
 /// connector boundary.
 fn observed_mcp_tool(harness: &str, tool_name: &str) -> Option<ObservedTool> {
@@ -305,6 +341,30 @@ pub(crate) fn observed_mcp_tool_actions(connection: &Connection) -> StoreResult<
     Ok(Value::Object(actions))
 }
 
+/// Two flattened names can land on one selector: the connector `mcp__a__`
+/// joined to a tool `b_c`, and the connector `mcp__a-b__` joined to a tool
+/// `c`, both read as `omp:mcp__a_b_c`. A qualified name could not collide
+/// this way, because it carries the boundary itself. The runtime cannot tell
+/// the two tools apart either, so the selector keeps the strictest choice any
+/// connector made for it rather than whichever connector compiled last.
+fn record_action(actions: &mut Map<String, Value>, selector: String, state: &str) {
+    fn strictness(state: &str) -> u8 {
+        match state {
+            "block" => 3,
+            "review" => 2,
+            "allow" => 1,
+            _ => 0,
+        }
+    }
+    let kept = actions
+        .get(&selector)
+        .and_then(Value::as_str)
+        .is_some_and(|recorded| strictness(recorded) >= strictness(state));
+    if !kept {
+        actions.insert(selector, Value::from(state));
+    }
+}
+
 fn compile_item(
     connection: &Connection,
     item: &Row,
@@ -340,18 +400,28 @@ fn compile_item(
     };
     let namespace_block = format!("{harness}:{namespace}*");
     if state.as_deref() == Some("blocked") {
-        actions.insert(namespace_block, Value::from("block"));
+        record_action(actions, namespace_block, "block");
+        block_catalogued_flattened_tools(
+            connection,
+            &grant_cli_id,
+            &example,
+            namespace,
+            harness,
+            actions,
+        )?;
         return Ok(());
     }
     let states = local_cli_grants::command_states(connection, &grant_cli_id)?;
     if states.get(OTHER_COMMAND_ID).map(String::as_str) == Some("block") {
-        actions.insert(namespace_block, Value::from("block"));
+        record_action(actions, namespace_block, "block");
     }
     for (command_id, usage) in command_catalog(connection, &grant_cli_id)? {
         if command_id == OTHER_COMMAND_ID {
             continue;
         }
-        let Some(tool) = observed_mcp_tool(harness, &usage) else {
+        let Some(tool) = observed_mcp_tool(harness, &usage)
+            .or_else(|| flattened_tool(&example.harness, &usage, namespace))
+        else {
             continue;
         };
         if tool.namespace != namespace || tool.command_id() != command_id {
@@ -360,11 +430,41 @@ fn compile_item(
         if let Some(state @ ("allow" | "review" | "block")) =
             states.get(&command_id).map(String::as_str)
         {
-            actions.insert(
-                format!("{harness}:{}", tool.qualified_name),
-                Value::from(state),
-            );
+            record_action(actions, format!("{harness}:{}", tool.qualified_name), state);
         }
+    }
+    Ok(())
+}
+
+/// A flattened name carries no connector boundary, so the connector's own
+/// `<namespace>*` selector never matches one. Name each tool the operator saw
+/// when they blocked the connector, so the block reaches them too.
+fn block_catalogued_flattened_tools(
+    connection: &Connection,
+    grant_cli_id: &str,
+    example: &ObservedTool,
+    namespace: &str,
+    harness: &str,
+    actions: &mut Map<String, Value>,
+) -> StoreResult<()> {
+    if !FLATTENED_NAME_HARNESSES.contains(&example.harness.as_str()) {
+        return Ok(());
+    }
+    for (command_id, usage) in command_catalog(connection, grant_cli_id)? {
+        if command_id == OTHER_COMMAND_ID {
+            continue;
+        }
+        let Some(tool) = flattened_tool(&example.harness, &usage, namespace) else {
+            continue;
+        };
+        if tool.command_id() != command_id {
+            continue;
+        }
+        record_action(
+            actions,
+            format!("{harness}:{}", tool.qualified_name),
+            "block",
+        );
     }
     Ok(())
 }
@@ -424,3 +524,7 @@ mod vectors_tests;
 #[cfg(test)]
 #[path = "guard_store_observed_mcp_history_tests.rs"]
 mod history_tests;
+
+#[cfg(test)]
+#[path = "guard_store_observed_mcp_flattened_tests.rs"]
+mod flattened_tests;

@@ -11,6 +11,32 @@ from pathlib import Path
 _PROXY_CREDENTIAL_SERVICE = "hol-guard-enterprise-proxy-v1"
 
 
+class _CredentialAttribute(ctypes.Structure):
+    _fields_ = [
+        ("Keyword", wintypes.LPWSTR),
+        ("Flags", wintypes.DWORD),
+        ("ValueSize", wintypes.DWORD),
+        ("Value", ctypes.POINTER(ctypes.c_ubyte)),
+    ]
+
+
+class _Credential(ctypes.Structure):
+    _fields_ = [
+        ("Flags", wintypes.DWORD),
+        ("Type", wintypes.DWORD),
+        ("TargetName", wintypes.LPWSTR),
+        ("Comment", wintypes.LPWSTR),
+        ("LastWritten", wintypes.FILETIME),
+        ("CredentialBlobSize", wintypes.DWORD),
+        ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
+        ("Persist", wintypes.DWORD),
+        ("AttributeCount", wintypes.DWORD),
+        ("Attributes", ctypes.POINTER(_CredentialAttribute)),
+        ("TargetAlias", wintypes.LPWSTR),
+        ("UserName", wintypes.LPWSTR),
+    ]
+
+
 def _read_macos(account: str) -> str | None:
     try:
         completed = subprocess.run(
@@ -66,30 +92,6 @@ def _read_linux(account: str) -> str | None:
 def _read_windows(account: str) -> str | None:
     if not hasattr(ctypes, "windll"):
         return None
-
-    class _CredentialAttribute(ctypes.Structure):
-        _fields_ = [
-            ("Keyword", wintypes.LPWSTR),
-            ("Flags", wintypes.DWORD),
-            ("ValueSize", wintypes.DWORD),
-            ("Value", ctypes.POINTER(ctypes.c_ubyte)),
-        ]
-
-    class _Credential(ctypes.Structure):
-        _fields_ = [
-            ("Flags", wintypes.DWORD),
-            ("Type", wintypes.DWORD),
-            ("TargetName", wintypes.LPWSTR),
-            ("Comment", wintypes.LPWSTR),
-            ("LastWritten", wintypes.FILETIME),
-            ("CredentialBlobSize", wintypes.DWORD),
-            ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
-            ("Persist", wintypes.DWORD),
-            ("AttributeCount", wintypes.DWORD),
-            ("Attributes", ctypes.POINTER(_CredentialAttribute)),
-            ("TargetAlias", wintypes.LPWSTR),
-            ("UserName", wintypes.LPWSTR),
-        ]
 
     credential_pointer = ctypes.POINTER(_Credential)()
     advapi32 = ctypes.windll.advapi32

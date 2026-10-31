@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -26,6 +25,7 @@ from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.cursor_bridge_support import keyed_guard_home, live_cursor_daemon, run_cursor_hook
 
 PREVIOUS_OMP_BASE_SOURCE_SHA256 = "778b4830857695f9c9d1c5682f77e71c2d86baf3e0b2fb814ae7589f9f600eb2"
 
@@ -410,10 +410,10 @@ def test_resolve_default_install_workspace_ignores_cursor_dir_without_git(
     assert resolved is None
 
 
-@pytest.mark.usefixtures("native_hook_force")
 def test_install_cursor_hook_script_allows_benign_shell_command(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
 ) -> None:
     repo = tmp_path / "repo"
     home_dir = tmp_path / "home"
@@ -422,33 +422,40 @@ def test_install_cursor_hook_script_allows_benign_shell_command(
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     monkeypatch.chdir(repo)
     monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+    # Guard state follows the home this install writes into. Without the
+    # override the hook, the daemon it asks and every other worker in the
+    # run share the account's own Guard home, where one worker's resident
+    # answers another worker's hook.
+    monkeypatch.setenv("HOME", str(home_dir))
 
-    rc = main(
-        [
-            "guard",
-            "install",
-            "cursor",
-            "--home",
-            str(home_dir),
-            "--json",
-        ]
-    )
-    assert rc == 0
-    hook_script = home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
-    assert hook_script.is_file()
-    payload = json.dumps({"hook_event_name": "beforeShellExecution", "command": "echo guard-e2e"})
-    env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    completed = subprocess.run(
-        [sys.executable, str(hook_script)],
-        input=payload,
-        text=True,
-        capture_output=True,
-        cwd=repo,
-        env=env,
-        timeout=60,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
+    # Cursor runs the client behind the native bridge, which answers from a
+    # live resident when one is serving and from the daemon when none is. A
+    # resident serves only a Guard home whose policy verifier key exists, so
+    # key this one before anything can spawn a resident against it; without
+    # the key the resident comes up, refuses the hook, and the bridge fails
+    # closed on a command the harness really allows.
+    with keyed_guard_home(resolve_guard_home(str(home_dir))) as guard_home:
+        rc = main(
+            [
+                "guard",
+                "install",
+                "cursor",
+                "--home",
+                str(home_dir),
+                "--json",
+            ]
+        )
+        assert rc == 0
+        hook_script = home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+        assert hook_script.is_file()
+        payload = {"hook_event_name": "beforeShellExecution", "command": "echo guard-e2e"}
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        with live_cursor_daemon(guard_home):
+            completed = run_cursor_hook(native_hook_force, hook_script, payload, env=env, cwd=repo)
+    # A refused hook and a hook the bridge denied both exit 2, and only the
+    # answer on stdout tells them apart, so report both streams.
+    detail = f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
+    assert completed.returncode == 0, detail
     response = json.loads(completed.stdout)
-    assert response.get("permission") == "allow"
+    assert response.get("permission") == "allow", detail

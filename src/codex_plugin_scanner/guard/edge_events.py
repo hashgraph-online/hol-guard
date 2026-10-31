@@ -4,40 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from .models import GuardReceipt
-from .schemas.guard_event_v1 import HARNESS_USAGE_EVENT_TYPES, GuardEventType, GuardEventV1
-
-
-def build_receipt_event(
-    receipt: GuardReceipt,
-    *,
-    device_id: str | None = None,
-    workspace_id: str | None = None,
-) -> GuardEventV1:
-    payload: dict[str, object] = {
-        "receiptId": receipt.receipt_id,
-        "harness": receipt.harness,
-        "artifactId": receipt.artifact_id,
-        "artifactHash": receipt.artifact_hash,
-        "artifactName": receipt.artifact_name,
-        "sourceScope": receipt.source_scope,
-        "policyDecision": receipt.policy_decision,
-        "capabilitiesSummary": receipt.capabilities_summary,
-        "changedCapabilities": list(receipt.changed_capabilities),
-        "provenanceSummary": receipt.provenance_summary,
-        "userOverride": receipt.user_override,
-    }
-    event_id = f"guard-event-{_fingerprint('receipt.created', receipt.receipt_id)[:32]}"
-    return GuardEventV1(
-        event_id=event_id,
-        idempotency_key=f"receipt.created:{receipt.receipt_id}",
-        event_type="receipt.created",
-        source="edge",
-        occurred_at=receipt.timestamp,
-        workspace_id=workspace_id,
-        device_id=device_id,
-        payload=payload,
-    )
+from .schemas.guard_event_v1 import GuardEventType, GuardEventV1
 
 
 def build_memory_decision_event_envelope(
@@ -116,27 +83,6 @@ def build_access_graph_snapshot_event(
     return _build_edge_event(
         event_type="access_graph.snapshot",
         subject_id=snapshot_id,
-        occurred_at=occurred_at,
-        payload=payload,
-        device_id=device_id,
-        workspace_id=workspace_id,
-    )
-
-
-def build_harness_usage_event(
-    *,
-    event_type: GuardEventType,
-    subject_id: str,
-    occurred_at: str,
-    payload: dict[str, object],
-    device_id: str | None = None,
-    workspace_id: str | None = None,
-) -> GuardEventV1:
-    if event_type not in HARNESS_USAGE_EVENT_TYPES:
-        raise ValueError("Harness usage event type must be harness.mcp.used or harness.skill.activated")
-    return _build_edge_event(
-        event_type=event_type,
-        subject_id=subject_id,
         occurred_at=occurred_at,
         payload=payload,
         device_id=device_id,

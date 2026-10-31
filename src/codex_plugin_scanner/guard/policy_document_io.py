@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Final, final
 
 from .policy_document import GuardPolicyDocument
-from .policy_document_compile import build_policy_document_from_rows, compile_policy_document
+from .policy_document_compile import (
+    build_policy_document_from_rows,
+    compile_policy_bundle_document,
+    compile_policy_document,
+)
 from .policy_document_diff import diff_policy_documents
 from .policy_document_types import CompiledPolicyRow, PolicyCompilationError, PolicyDocumentDiff
 from .policy_document_yaml import (
@@ -200,6 +204,7 @@ __all__ = (
     "PolicyDocumentDiff",
     "PolicyFileTrustError",
     "build_policy_document_from_rows",
+    "compile_policy_bundle_document",
     "compile_policy_document",
     "diff_policy_documents",
     "load_trusted_policy_document",

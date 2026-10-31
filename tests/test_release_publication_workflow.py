@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from tests.release_workflow_helpers import native_wheel_job
 from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,19 +34,28 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     }
     native_pin = next(
         step
-        for step in jobs["build-native-guard-wheels"]["steps"]
+        for step in native_wheel_job()["steps"]
         if step.get("name") == "Verify release approval enrollment root pin"
     )
     assert "--require-release-root" in native_pin["run"]
-    assert "needs.build.outputs.channel != 'canary'" in str(native_pin.get("if", ""))
+    assert "inputs.channel != 'canary'" in str(native_pin.get("if", ""))
     alpha_needs = ["build", "reserve-alpha-tag", "assemble-native-guard-distributions", "publish-main-assets"]
     assert jobs["publish-alpha-testpypi"]["needs"] == alpha_needs
     assert jobs["publish-alpha-pypi"]["needs"] == alpha_needs
     assemble = jobs["assemble-native-guard-distributions"]
-    assert assemble["needs"] == ["build", "build-native-guard-wheels", "publish-installed-bundle-assets"]
+    assert assemble["needs"] == [
+        "build",
+        "build-native-guard-wheel-linux-x64",
+        "build-native-guard-wheel-macos-x64",
+        "build-native-guard-wheel-macos-arm64",
+        "build-native-guard-wheel-windows-x64",
+        "build-native-guard-wheel-windows-arm64",
+        "build-native-guard-wheel-linux-arm64",
+        "publish-installed-bundle-assets",
+    ]
     assert "needs.build.result == 'success'" in assemble["if"]
-    assert "needs.build-native-guard-wheels.result == 'success'" in assemble["if"]
-    native_if = jobs["build-native-guard-wheels"]["if"]
+    assert "needs.build-native-guard-wheel-linux-x64.result == 'success'" in assemble["if"]
+    native_if = jobs["build-native-guard-wheel-linux-x64"]["if"]
     assert "channel == 'stable'" in native_if
     assert "refs/heads/main" in native_if
     assemble_steps = assemble["steps"]
@@ -160,7 +170,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         < main_verify["run"].find("\ndone\n")
     )
 
-    stable_native = jobs["build-native-guard-wheels"]["if"]
+    stable_native = jobs["build-native-guard-wheel-linux-x64"]["if"]
     assert "needs.build.outputs.channel == 'stable'" in stable_native
     assert "github.ref == 'refs/heads/main'" in stable_native
     for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
@@ -385,6 +395,20 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     )
     assert "scripts/pypi_project_storage.py --fail-if-over-limit" in alpha_quota["run"]
     assert "packaging==25.0" in alpha_quota["run"]
+    scanner_quota = next(
+        step for step in alpha_steps if step.get("name") == "Skip plugin-scanner when its PyPI project is over quota"
+    )
+    assert "--project plugin-scanner" in scanner_quota["run"]
+    assert "--pending-dir dist-plugin-scanner" in scanner_quota["run"]
+    assert scanner_quota["if"] == (
+        "steps.pypi.outputs.plugin_scanner_upload == 'true' && needs.build.outputs.release_train == 'main'"
+    )
+    scanner_publish = next(step for step in alpha_publishers if step["with"]["packages-dir"] == "dist-plugin-scanner/")
+    assert scanner_publish["if"] == (
+        "steps.pypi.outputs.plugin_scanner_upload == 'true' && steps.scanner_quota.outputs.blocked != 'true'"
+    )
+    assert alpha_verify["env"]["SCANNER_QUOTA_BLOCKED"] == "${{ steps.scanner_quota.outputs.blocked }}"
+    assert '"${SCANNER_QUOTA_BLOCKED}" == "true"' in alpha_verify["run"]
 
 
 def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> None:
@@ -404,6 +428,22 @@ def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> 
     assert "refusing to publish unverified wheels" in script
     assert "Release wheel set does not match" in script
     assert script.index("gh attestation verify") < script.index('cp -f "${release_files[@]}" "$DIST_DIR/"')
+
+
+def test_pull_request_alpha_prerelease_accepts_provenance_from_the_run_on_main() -> None:
+    steps = _workflow(PUBLISH_WORKFLOW)["jobs"]["release-alpha"]["steps"]
+    script = next(step["run"] for step in steps if step.get("name") == "Create discoverable alpha prerelease")
+    verify = script[script.index('for remote_file in "$existing_dir"/hol_guard-*') :]
+    verify = verify[: verify.index("done")]
+    assert '--source-digest "$SOURCE_SHA"' in verify
+    # A normal alpha builds the commit that ran, so a mismatch there still fails.
+    assert verify.index('[[ "$SOURCE_SHA" == "$GITHUB_SHA" ]]') < verify.index('--source-digest "$GITHUB_SHA"')
+    fallback = verify[verify.index('[[ "$SOURCE_SHA" == "$GITHUB_SHA" ]]') :]
+    assert "exit 1" in fallback[: fallback.index("fi")]
+    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml"' in fallback
+    assert "--deny-self-hosted-runners" in fallback
+    # The fallback only checks provenance; the asset bytes were compared with this build first.
+    assert script.index('cmp --silent "$local_file" "$remote_file"') < script.index(verify)
 
 
 def test_stable_repair_reuses_original_plugin_scanner_files() -> None:
@@ -431,4 +471,4 @@ def test_stable_repair_reuses_original_plugin_scanner_files() -> None:
     assert build["permissions"]["statuses"] == "read"
     version_step = next(step for step in build["steps"] if step.get("id") == "version")
     assert "REPAIR_ARGS+=(--publication-unrecorded)" in version_step["run"]
-    assert 'hol-guard / published ${RELEASE_VERSION}' in version_step["run"]
+    assert "hol-guard / published ${RELEASE_VERSION}" in version_step["run"]

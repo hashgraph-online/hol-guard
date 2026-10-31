@@ -29,6 +29,7 @@ from typing import Protocol, TextIO
 
 from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
+from ..action_lattice import guard_action_severity
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..aibom_cli import (
@@ -53,7 +54,6 @@ from ..approval_gate import (
 from ..approval_gate import (
     update_settings as update_approval_gate_settings,
 )
-from ..approval_hook_copy import live_hook_approval_context
 from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
@@ -73,7 +73,6 @@ from ..bridge import (
     TelegramBackend,
     WebhookBackend,
 )
-from ..codex_app_server import codex_resume_metadata_from_hook_payload
 from ..codex_resume import inspect_codex_resume_capabilities
 from ..config import (
     DEFAULT_SECURITY_LEVEL,
@@ -88,6 +87,7 @@ from ..config import (
     resolve_risk_action,
     update_guard_settings,
 )
+from ..config_constants import VALID_GUARD_ACTIONS
 from ..consumer import (
     artifact_hash,
     detect_all,
@@ -110,8 +110,6 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..harness_usage import record_harness_usage_events
-from ..incident import build_incident_context
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     _resolve_guard_sync_auth_context,
@@ -133,7 +131,6 @@ from ..mcp_tool_calls import (
 from ..models import GUARD_ACTION_VALUES, SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
 from ..native_cisco_preflight import (
     build_cisco_deep_scan_payload,
-    cisco_risk_signal_v3_to_v2,
     policy_action_for_cisco_signals,
     scan_action_for_cisco_evidence,
 )
@@ -144,19 +141,11 @@ from ..package_firewall_entitlement import (
     PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
     package_firewall_access,
 )
-from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
+from ..policy.engine import build_decision_v2
 from ..protect import build_protect_payload
 from ..receipts import build_receipt
 from ..risk import artifact_risk_profile, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, command_text_from_tool_payload, normalize_harness_payload
-from ..runtime.false_positive_rules import (
-    SOURCE_INSPECTION_BENIGN_DOTFILES,
-    SOURCE_INSPECTION_EXTENSIONS,
-    SOURCE_INSPECTION_PARTS,
-    SOURCE_INSPECTION_SENSITIVE_PARTS,
-    fd_arg_requests_exec,
-    target_is_known_skill_doc_path,
-)
 from ..runtime.guard_run_evaluation import prompt_requests_to_artifacts
 from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.package_intent_common import build_package_request_artifact
@@ -175,14 +164,7 @@ from ..runtime.runner import (
 )
 from ..runtime.secret_file_requests import (
     build_tool_action_request_artifact,
-    extract_sensitive_file_read_request,
-    extract_sensitive_file_read_request_artifact,
-    extract_sensitive_file_read_request_artifact_from_action,
-    extract_sensitive_file_read_request_from_action,
-    extract_sensitive_file_write_request,
-    extract_sensitive_file_write_request_artifact,
     extract_sensitive_tool_action_request,
-    literal_cd_execution_context,
 )
 from ..runtime.secret_sensitivity import (
     SecretContentMatch,
@@ -190,7 +172,6 @@ from ..runtime.secret_sensitivity import (
     classify_secret_content,
     classify_secret_path,
 )
-from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime.wrapper_run import guard_run
@@ -242,21 +223,8 @@ class GuardBrowserOpener(Protocol):
 _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
 _NAMED_SECURITY_LEVELS = {"relaxed", "balanced", "strict", "gentle", "paranoid"}
-_HOOK_DAEMON_UNREACHABLE_REASON_MARKER = "daemon was unreachable"
-_CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS = 8
 
 
-def _hook_command_text(payload: Mapping[str, object]) -> str | None:
-    tool_input = payload.get("tool_input")
-    return command_text_from_tool_payload(payload.get("tool_name"), tool_input)
-
-
-_CLAUDE_GUARD_APPROVAL_HEADER = "HOL Guard"
-_CLAUDE_GUARD_APPROVAL_OPTIONS = (
-    "Allow once",
-    "Allow during this session",
-    "Keep blocked",
-)
 _SETTINGS_POLICY_RISK_ACTIONS: dict[str, dict[str, dict[str, str]]] = {
     "mcp": {
         "allow-known": {"mcp_dangerous_tool": "warn"},
@@ -305,7 +273,7 @@ CopilotMcpGuardProxy = _load_lazy_export("..proxy", "CopilotMcpGuardProxy")
 CursorMcpGuardProxy = _load_lazy_export("..proxy", "CursorMcpGuardProxy")
 OpenCodeMcpGuardProxy = _load_lazy_export("..proxy", "OpenCodeMcpGuardProxy")
 RemoteGuardProxy = _load_lazy_export("..proxy", "RemoteGuardProxy")
-StdioGuardProxy = _load_lazy_export("..proxy", "StdioGuardProxy")
+ElicitationMcpGuardProxy = _load_lazy_export("..proxy", "ElicitationMcpGuardProxy")
 add_approval_parser = _load_lazy_export(".approval_commands", "add_approval_parser")
 run_approval_command = _load_lazy_export(".approval_commands", "run_approval_command")
 run_approval_open_command = _load_lazy_export(".approval_commands", "run_approval_open_command")

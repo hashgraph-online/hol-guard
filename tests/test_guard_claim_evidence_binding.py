@@ -289,7 +289,7 @@ def test_native_diagnostic_without_a_resident_raises_the_typed_value_error(
     monkeypatch.setattr(native_store_policy, "_resident_request", lambda **_kwargs: None)
 
     with pytest.raises(ValueError, match="native_approval_reuse_diagnostic_unavailable") as raised:
-        native_store_policy.native_approval_reuse_diagnostic(
+        native_store_policy.native_approval_reuse_miss(
             store_path=tmp_path / "guard.db",
             guard_home=tmp_path,
             harness="codex",
@@ -299,6 +299,7 @@ def test_native_diagnostic_without_a_resident_raises_the_typed_value_error(
             publisher=None,
             now=_NOW,
             evidence_provider=lambda _policy, _local_once: {},
+            current_action=None,
         )
     assert isinstance(raised.value, native_store_policy.ApprovalReuseDiagnosticUnavailableError)
 

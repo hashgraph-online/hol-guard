@@ -150,6 +150,16 @@ def test_guard_config_loads_security_level_and_risk_action_overrides(tmp_path):
     assert resolve_risk_action(config, "data_flow_exfiltration", harness="codex") == "block"
 
 
+def test_load_guard_config_reads_the_workspace_assessment_switch(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+
+    assert load_guard_config(guard_home).workspace_assessment_enabled is True
+
+    _write_text(guard_home / "config.toml", "workspace_assessment_enabled = false\n")
+
+    assert load_guard_config(guard_home).workspace_assessment_enabled is False
+
+
 def test_load_guard_config_parses_hidden_runtime_detector_registry(tmp_path):
     guard_home = tmp_path / ".hol-guard"
     _write_text(
@@ -260,6 +270,7 @@ def test_dashboard_settings_switch_to_custom_carries_forward_effective_risk_map(
         "package_custom_registry": "allow",
         "package_install": "allow",
         "low_trust_artifact": "require-reapproval",
+        "runtime_known_vulnerable": "block",
     }
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
 

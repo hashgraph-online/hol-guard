@@ -40,9 +40,9 @@ const MAX_HOOK_INPUT_BYTES: usize = 1_000_000;
 const HOOK_TIMEOUT_GRACE_SECONDS: i64 = 2;
 const RPC_TIMEOUT: Duration = Duration::from_secs(4);
 const PROMPT_RPC_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_APPROVAL_WAIT_SECONDS: i64 = 600;
-const BROWSER_WAIT_PROCESS_KEY: &str = "guard_codex_browser_wait_process";
-const BROWSER_WAIT_TIMEOUT_KEY: &str = "guard_codex_browser_wait_timeout_seconds";
+pub(crate) const MAX_APPROVAL_WAIT_SECONDS: i64 = 600;
+pub(crate) const BROWSER_WAIT_PROCESS_KEY: &str = "guard_codex_browser_wait_process";
+pub(crate) const BROWSER_WAIT_TIMEOUT_KEY: &str = "guard_codex_browser_wait_timeout_seconds";
 const STATE_FILE: &str = "daemon-state.json";
 const START_FAILED_MARKER: &str = "daemon-start-failed.json";
 const DAEMON_PROCESS_FAILURE_PREFIX: &str = "daemon_hook_process_";
@@ -451,7 +451,7 @@ mod approval;
 #[path = "codex_hook_bridge_client.rs"]
 mod client;
 #[path = "codex_hook_bridge_contain.rs"]
-mod contain;
+pub(crate) mod contain;
 #[path = "codex_hook_bridge_handoff.rs"]
 mod handoff;
 #[path = "codex_hook_bridge_observation.rs"]

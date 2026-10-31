@@ -4,9 +4,14 @@ use std::time::Instant;
 
 #[path = "worktree_add_chain.rs"]
 pub(super) mod chain;
+#[path = "worktree_add_chain_route.rs"]
+mod chain_route;
+pub(crate) use chain::entered_checkouts;
 pub(crate) use chain::new_checkout_route;
 #[path = "worktree_add_destination.rs"]
 mod destination;
+#[path = "worktree_add_links.rs"]
+mod links;
 #[path = "worktree_add_names.rs"]
 mod names;
 
@@ -67,6 +72,7 @@ pub(super) fn exact_safe_command(
             .as_ref()
             .map(|proof| proof.cwd.as_str())
             .or(context.cwd),
+        creates_nothing: false,
     };
     let mut worktree_seen = false;
     let mut fetch_before = false;
@@ -294,20 +300,22 @@ pub(super) fn separator_between(
     )
 }
 
-/// The checkout a proven `git worktree add` segment creates, and the `-C`
-/// directory it runs in when one is given.
+/// The checkout a proven `git worktree add` segment creates, the `-C`
+/// directory it runs in when one is given, and the commit it checks out
+/// when the proof read it.
 fn proven_checkout(
     segment: &CommandSegmentV1,
     reference_may_move: bool,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> Option<(PathBuf, Option<String>)> {
+) -> Option<(PathBuf, Option<String>, Option<String>)> {
     let (spec, destination, chdir_cwd) = planned_checkout(segment, context)?;
     let context = super::PathContext {
         cwd: chdir_cwd.as_deref().or(context.cwd),
         ..context
     };
+    let mut commit = None;
     super::git_worktree::worktree_add_execution_free(
         segment.executable.as_deref().unwrap_or("git"),
         &spec.leading,
@@ -319,9 +327,10 @@ fn proven_checkout(
         context,
         deadline,
         execution_environment,
+        &mut commit,
     )
     .unwrap_or(false)
-    .then_some((destination, chdir_cwd))
+    .then_some((destination, chdir_cwd, commit))
 }
 
 /// The checkout `git worktree add` would create, with the directory its
@@ -347,6 +356,32 @@ fn planned_checkout<'a>(
         MissingParents::Created,
     )?;
     Some((spec, destination, chdir_cwd))
+}
+
+/// Whether Git would take the destination's last component as the branch name
+/// it creates for `git worktree add <path>`. `valid_destination_text` has
+/// already ruled out a backslash, so `/` is the only separator left to read.
+fn implied_branch(destination: &str) -> bool {
+    destination
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .is_some_and(valid_branch_name)
+}
+
+/// The canonical checkout a `git worktree add` segment creates and the
+/// canonical directory its `-C` enters, as the proof plans them.
+pub(in crate::pretool) fn planned(
+    segment: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> Option<(PathBuf, Option<String>)> {
+    planned_checkout(segment, context).map(|(_, checkout, chdir)| (checkout, chdir))
+}
+
+/// The checkout a `git worktree add` segment creates, as the proof reads it,
+/// and whether a `-C` moves where a relative checkout lands.
+pub(in crate::pretool) fn destination(segment: &CommandSegmentV1) -> Option<(&str, bool)> {
+    parse(segment).map(|spec| (spec.destination, spec.chdir.is_some()))
 }
 
 fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
@@ -418,17 +453,19 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
             _ => return None,
         }
     }
-    // With neither a reference nor `--detach` Git would create a branch
-    // named after the destination, which stays reviewed.
-    match branch {
-        Some(value) if detach || !valid_branch_name(value) => return None,
-        None if !detach && reference.is_none() => return None,
-        _ => {}
-    }
     let destination = destination.filter(|value| valid_destination_text(value))?;
     // A quoted or escaped `~` stays a literal directory name.
     if destination.starts_with('~') && !super::directory_targets::home_targets_unquoted(segment) {
         return None;
+    }
+    // With neither a reference nor `--detach` Git checks out `HEAD` and names
+    // the branch it creates after the destination's last component. Git would
+    // munge a name it cannot use as written, so a name it would not take
+    // keeps review; the proof reads the name Git would write.
+    match branch {
+        Some(value) if detach || !valid_branch_name(value) => return None,
+        None if !detach && reference.is_none() && !implied_branch(destination) => return None,
+        _ => {}
     }
     // A bare name such as `main` or `feat/x` is accepted in every form.
     // Without `-b` and `--detach` Git checks out the existing branch of that

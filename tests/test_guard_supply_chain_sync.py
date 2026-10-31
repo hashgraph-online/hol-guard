@@ -810,10 +810,8 @@ def test_sync_supply_chain_bundle_refetches_full_bundle_for_tampered_cached_sign
     )
 
 
-def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _seed_cached_bundle_refetch_fallback(tmp_path: Path) -> tuple[GuardStore, dict[str, object]]:
+    """A valid partition cache beside a tampered full bundle, so sync refetches the full bundle."""
     private_key_pem, public_key_pem = _generate_key_pair()
     npm_partition = _partition_bundle_response(
         private_key_pem,
@@ -873,6 +871,14 @@ def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch
         },
         "2026-05-19T00:00:00Z",
     )
+    return store, index_payload
+
+
+def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, index_payload = _seed_cached_bundle_refetch_fallback(tmp_path)
 
     def fake_fetch(request: object) -> dict[str, object]:
         request_url = getattr(request, "full_url", "")
@@ -884,3 +890,22 @@ def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch
 
     with pytest.raises(RuntimeError, match="Guard supply-chain bundle sync failed: simulated network failure"):
         sync_supply_chain_bundle(store)
+
+
+def test_sync_supply_chain_bundle_keeps_retryable_unavailable_when_cached_bundle_refetch_cannot_connect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, index_payload = _seed_cached_bundle_refetch_fallback(tmp_path)
+
+    def fake_fetch(request: object) -> dict[str, object]:
+        request_url = getattr(request, "full_url", "")
+        if isinstance(request_url, str) and request_url.endswith("/index?workspaceId=workspace-alpha"):
+            return index_payload
+        raise guard_runner.GuardSyncNotAvailableError("Guard Cloud could not be reached.", retryable=True)
+
+    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", fake_fetch)
+
+    with pytest.raises(guard_runner.GuardSyncNotAvailableError) as exc_info:
+        sync_supply_chain_bundle(store)
+    assert exc_info.value.retryable is True

@@ -117,10 +117,20 @@ class TestVersions:
 
 
 class TestManifestValidation:
-    def test_bundled_manifest_loads_and_claims_nothing_for_omp(self) -> None:
+    def test_bundled_manifest_loads_with_an_omp_entry(self) -> None:
+        # Records are promoted per release, so what they claim is not pinned here.
         load = load_manifest()
         assert load.error is None and load.manifest is not None
-        assert load.manifest.harnesses["omp"].records == ()
+        assert "omp" in load.manifest.harnesses
+
+    def test_bundled_manifest_links_to_how_coverage_works(self) -> None:
+        # Where no record applies, the card's links are the only guidance it gives.
+        load = load_manifest()
+        assert load.manifest is not None
+        link = load.manifest.harnesses["omp"].remediation[0]
+        prefix = "https://github.com/hashgraph-online/hol-guard/blob/main/"
+        assert link.url.startswith(prefix)
+        assert (Path(__file__).resolve().parents[1] / link.url.removeprefix(prefix)).is_file()
 
     @pytest.mark.parametrize("version", ["18.x", "^18.4.12", ">=18.4.12 <19", "18.4.12 - 18.8.3", "*"])
     def test_rejects_ranges(self, version: str) -> None:
@@ -248,7 +258,7 @@ class TestDecision:
     def test_missing_manifest_and_empty_records_are_unavailable(self) -> None:
         missing = _decide(_observed("18.8.3"), ManifestLoad(None, "manifest_missing"))
         assert (missing["state"], missing["reason"]) == (STATE_COVERAGE_UNAVAILABLE, "manifest_missing")
-        empty = _decide(_observed("18.8.3"), load_manifest())
+        empty = _decide(_observed("18.8.3"), _load(_manifest()))
         assert (empty["state"], empty["reason"]) == (STATE_COVERAGE_UNAVAILABLE, "harness_not_covered")
 
     def test_acknowledgement_key_changes_with_every_binding(self) -> None:

@@ -7,7 +7,7 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -50,6 +50,7 @@ from ..runtime.local_cli_commands import (
 from ..runtime.local_cli_help import (
     discover_local_cli_commands,
     help_invocation_for_command,
+    run_cli_help,
 )
 from ..runtime.local_cli_identity import (
     LocalCliKind,
@@ -74,7 +75,7 @@ from ..runtime.local_skill_index import (
     public_skill_page,
 )
 from ..runtime.mcp_protection import build_mcp_server_identity
-from ..runtime.observed_local_clis import backfill_observed_local_clis
+from ..runtime.observed_local_clis import backfill_observed_local_clis, paused_launch_paths
 from ..runtime.observed_mcp_tools import discover_observed_mcp_tools
 from ..runtime.package_json_script_memory import (
     operator_working_directory,
@@ -103,6 +104,7 @@ from .local_cli_profiles_api import (
     seeded_profile_items,
 )
 from .local_cli_registry_setup import registry_setup as reviewed_registry_setup
+from .local_cli_reload import load_cli_commands, verified_cli_for_reload
 from .mcp_discovery_jobs import DiscoveryJobError, DiscoveryStageError, McpDiscoveryJobs
 from .mcp_registry_undo import RegistrySetupUndo
 
@@ -436,6 +438,8 @@ class LocalCliApiService:
                     "Confirm starting this configured server to list tools.",
                 )
             item = next((item for item in self._store.list_local_cli_items() if item.get("cli_id") == cli_id), None)
+            if item is not None and item.get("surface") == "cli":
+                return self._start_cli_reload(item, payload)
             if item is None or item.get("surface") != "mcp":
                 raise LocalCliApiError(404, "mcp_refresh_unavailable")
 
@@ -459,6 +463,31 @@ class LocalCliApiService:
                 "discovery_unavailable": "Guard is stopping. Reopen Guard to try discovery again.",
             }
             raise LocalCliApiError(status, code, messages.get(code, "Could not start discovery.")) from error
+
+    def _start_cli_reload(self, item: dict[str, object], payload: dict[str, object]) -> dict[str, object]:
+        home_dir = Path.home()
+        target = verified_cli_for_reload(
+            item,
+            home_dir=home_dir,
+            path=payload.get("path"),
+            launched_paths=lambda: paused_launch_paths(self._store, item, home_dir=home_dir),
+        )
+
+        def reload(cancel: threading.Event) -> None:
+            load_cli_commands(
+                self._store,
+                target,
+                discover=_discover_from_command,
+                home_dir=home_dir,
+                guard_home=self._store.guard_home,
+                cancel=cancel,
+            )
+
+        return self._discovery_jobs.start(
+            target.identity.cli_id,
+            reload,
+            requested_job_id=_client_discovery_job_id(payload),
+        )
 
     def close_discovery(self) -> bool:
         return self._discovery_jobs.close()
@@ -686,7 +715,9 @@ class LocalCliApiService:
             )
         if identity is None:
             raise LocalCliApiError(400, code, message)
-        commands, help_status, source_path = _discover_from_command(command, identity, operator_cwd, home_dir)
+        commands, help_status, source_path = _discover_from_command(
+            command, identity, operator_cwd, home_dir, self._store.guard_home
+        )
         commands = merge_profile_commands(identity.name, commands)
         self._store.record_local_cli_observation(
             identity,
@@ -734,7 +765,11 @@ class LocalCliApiService:
             server_identity_hash=stored_server_hash if isinstance(stored_server_hash, str) else None,
             source_label=stored_source_label if isinstance(stored_source_label, str) else None,
         )
-        if selected_server is None and stored_observation is None and profiled_cli_package_launch(tokens):
+        if (
+            selected_server is None
+            and stored_observation is None
+            and profiled_cli_package_launch(tokens, guard_home=self._store.guard_home)
+        ):
             return None
         # A known connection remains MCP even when its script no longer exists.
         if selected_server is None and not looks_like_mcp_launch(
@@ -978,7 +1013,7 @@ class LocalCliApiService:
             code = reason if reason in HOST_FAILURE_CODES else "codex_host_invalid"
             record_discovery_stage_failure(code, error)
             raise DiscoveryStageError(code) from None
-        except (OSError, RuntimeError, TypeError, KeyError, UnicodeError, sqlite3.Error) as error:
+        except (OSError, RuntimeError, TypeError, KeyError, sqlite3.Error) as error:
             record_discovery_stage_failure("codex_host_unavailable", error)
             raise DiscoveryStageError("codex_host_unavailable") from None
 
@@ -1164,6 +1199,7 @@ class LocalCliApiService:
                 provider_updates=provider_updates,
                 catalog_seed=catalog_seed,
                 capabilities=capabilities,
+                reviewed_catalog_revision=self._optional_revision(payload, "mcp_catalog_revision"),
             )
         except LocalCliCapabilityError as exc:
             raise capability_api_error(exc) from exc
@@ -1298,6 +1334,14 @@ class LocalCliApiService:
             raise LocalCliApiError(400, f"missing_{key}")
         return value
 
+    def _optional_revision(self, payload: dict[str, object], key: str) -> int | None:
+        value = payload.get(key)
+        if value is None:
+            return None
+        if type(value) is not int or value < 0:
+            raise LocalCliApiError(400, f"invalid_{key}")
+        return value
+
 
 def _preview_summary(name: str, state: str) -> str:
     if state == "allowed":
@@ -1348,20 +1392,44 @@ def _discover_from_command(
     identity: UnlistedCliIdentity,
     cwd: Path,
     home_dir: Path,
+    guard_home: Path,
+    *,
+    cancel: threading.Event | None = None,
 ) -> tuple[tuple[LocalCliCommand, ...], str, str | None]:
+    """Discover ``identity``'s commands through ``guard_home``'s own resident.
+
+    ``guard_home`` is the daemon's store home, not the operator's home
+    directory. A daemon started on an overridden home must read help text
+    through the resident that home runs; the default home's resident may not
+    exist, and provisioning one there would touch an install this daemon does
+    not serve.
+
+    Once ``cancel`` is set, no further --help process starts.
+    """
+
+    def probe(argv: Sequence[str]) -> str:
+        return "" if cancel is not None and cancel.is_set() else run_cli_help(argv)
+
     source_path: str | None = None
     for candidate in local_cli_recognition_candidates(command, cwd=cwd, home_dir=home_dir):
         invocation = help_invocation_for_command(candidate, cwd=cwd, home_dir=home_dir)
         if invocation is None:
             continue
         matched, argv = invocation
-        if matched.cli_id != identity.cli_id:
+        if (
+            matched.cli_id != identity.cli_id
+            or matched.identity_hash != identity.identity_hash
+            or matched.kind != identity.kind
+            or matched.runner != identity.runner
+        ):
+            # Only the program the caller verified is run; one replaced since
+            # then shares its id but not its identity hash.
             continue
         tool_path = next(iter(argv), None)
         if tool_path is None:
             continue
         source_path = argv[1] if matched.kind == "script" and len(argv) >= 2 else tool_path
-        commands, help_status = discover_local_cli_commands(matched, argv)
+        commands, help_status = discover_local_cli_commands(matched, argv, runner=probe, guard_home=guard_home)
         return commands, help_status, source_path
     return default_local_cli_commands(identity.name), "failed", source_path
 

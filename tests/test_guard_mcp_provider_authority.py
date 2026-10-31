@@ -6,7 +6,6 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_gate import update_settings
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
-from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _copilot_runtime_tool_call
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact, build_tool_call_hash, evaluate_tool_call
@@ -30,28 +29,6 @@ def _setup(tmp_path: Path):
         source, (ComposioActionSchema("slack", "SLACK_SEND_MESSAGE", "Send", {"type": "object"}, True),), seen_at=_TIME
     )
     return store, source, cli_id
-
-
-def test_copilot_composio_artifact_binds_current_provider_authority(tmp_path: Path):
-    store, _, _ = _setup(tmp_path)
-    authority_hash = store.read_mcp_provider_authority_hash()
-    assert authority_hash is not None
-    resolved = _copilot_runtime_tool_call(
-        payload={"tool_name": "composio/COMPOSIO_MULTI_EXECUTE_TOOL", "tool_input": {"tools": []}},
-        home_dir=tmp_path,
-        workspace=None,
-        store=store,
-    )
-    assert resolved is not None
-    assert resolved[0].metadata["mcp_provider_catalog_hash"] == authority_hash
-    unrelated = _copilot_runtime_tool_call(
-        payload={"tool_name": "other/read", "tool_input": {}},
-        home_dir=tmp_path,
-        workspace=None,
-        store=store,
-    )
-    assert unrelated is not None
-    assert "mcp_provider_catalog_hash" not in unrelated[0].metadata
 
 
 def _save(store, source, state="allowed", updates=(("SLACK_SEND_MESSAGE", "block", 1),)):

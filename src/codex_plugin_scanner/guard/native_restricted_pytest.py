@@ -27,7 +27,15 @@ _REASONS = {
     "vitest_restricted_invalid_command",
     "vitest_restricted_dependency_unavailable",
     "inline_eval_invalid_command",
+    "node_tool_invalid_command",
+    "node_tool_dependency_unavailable",
+    "node_build_invalid_output",
+    "package_test_invalid_command",
+    "git_restricted_invalid_command",
+    "git_restricted_invalid_metadata",
+    "git_restricted_sandbox_unavailable",
     "linux_mapping_unavailable",
+    "contained_run_authorization_failed",
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
     PYTEST_INVALID_COMMAND_REASON_CODE,
     PYTEST_INVALID_WORKSPACE_REASON_CODE,
@@ -50,7 +58,8 @@ def restricted_native(operation: str, fields: Mapping[str, Any], expected: type 
     # existence, symlink, workspace and executable admission.
     inputs = dict(fields)
     if operation == "approved_node" or (
-        operation in {"prepare_node", "prepare_vitest", "prepare_inline"} and inputs.get("home") is None
+        operation in {"prepare_node", "prepare_node_tool", "prepare_vitest", "prepare_inline"}
+        and inputs.get("home") is None
     ):
         inputs["home"] = Path.home()
     if operation.startswith("prepare") and inputs.get("command") and inputs["command"][0].startswith("~"):
@@ -153,16 +162,17 @@ def _request(operation: str, wire_input: Mapping[str, Any], expected: type | tup
     )
 
 
-def venv_activation_target(command: str, *, cwd: Path | None = None, home_dir: Path | None = None) -> str | None:
-    """The command a virtualenv activation hands its verdict to, as the pre-tool pass read it.
+def contained_target(command: str, *, cwd: Path | None = None, home_dir: Path | None = None) -> str | None:
+    """The command the pre-tool pass answered for, when it read through the call's own wrapping.
 
-    The native scan owns the reading: the activation has to resolve to a
-    marked environment's own script, its text has to bound the programs it can
-    run, and only then does the command after it carry the verdict.
+    The native scan owns the reading: a trailing subshell or brace group is the
+    command list inside it, and an activation has to resolve to a marked
+    environment's own script, its text has to bound the programs it can run,
+    and only then does the command after it carry the verdict.
     """
     try:
         value = restricted_native(
-            "venv_activation_target",
+            "contained_target",
             {"text": command, "cwd": cwd, "home": home_dir},
             (str, type(None)),
         )
@@ -204,6 +214,12 @@ def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
 
     scalars = {"profile_version", "backend", "backend_executable", "workspace", "cwd", "executable"}
     arrays = {"command", "allowed_executables", "denied_capabilities"}
+    # Only a Git plan grants read-only roots: its linked worktree metadata.
+    if result.get("profile_version") == "git-readonly-v1":
+        arrays.add("read_only_roots")
+    # Only a native build plan names the directories it may write.
+    if result.get("profile_version") == "node-build-output-v1" and "output_roots" in result:
+        arrays.add("output_roots")
     if (
         set(result) != scalars | arrays
         or any(not isinstance(result[key], str) for key in scalars)
@@ -242,4 +258,6 @@ def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
         command=tuple(result["command"]),
         allowed_executables=tuple(Path(v) for v in result["allowed_executables"]),
         denied_capabilities=tuple(result["denied_capabilities"]),
+        read_only_roots=tuple(Path(v) for v in result.get("read_only_roots", ())),
+        output_roots=tuple(Path(v) for v in result.get("output_roots", ())),
     )

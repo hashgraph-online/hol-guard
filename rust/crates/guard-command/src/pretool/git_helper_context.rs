@@ -12,7 +12,7 @@ pub(super) fn git_helper_context_required(
     let rest = super::segment_proof::after_read_prefix(model, context);
     let model = rest.as_ref().unwrap_or(model);
     // A relative `-C` after a verified `cd` resolves against the destination.
-    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let destination = super::segment_proof::git_read_cwd_compound_context(model, context);
     let context = PathContext {
         cwd: destination.as_deref().or(context.cwd),
         ..context
@@ -125,15 +125,27 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // A stash listing is a log that pages under
                         // pager.stash, and `stash show` runs the diff drivers.
                         "stash" => true,
-                        // A shortlog pages under pager.shortlog, and both
-                        // listings read the repository's configuration.
-                        "shortlog" | "check-ignore" => true,
+                        // A shortlog pages under pager.shortlog, a count and
+                        // an attribute check page under their own pager.<name>,
+                        // and every listing reads the repository's
+                        // configuration.
+                        "shortlog" | "check-ignore" | "count-objects" | "check-attr"
+                        | "sparse-checkout" => true,
+                        // A bisect log replays through the pager, and a note
+                        // prints through it too; both honor core.pager.
+                        "bisect" | "notes" => true,
                         // Finding the untracked paths refreshes the index,
                         // which starts a configured core.fsmonitor.
                         "clean" => true,
                         // Reading the files the patch names refreshes the
                         // index, which starts a configured core.fsmonitor.
                         "apply" => true,
+                        // A status line is printed from the superproject,
+                        // whose index it reads, so a configured
+                        // core.fsmonitor there can start. The read forms are
+                        // the only ones that reach here, because the proof
+                        // that admits the subcommand screens them first.
+                        "submodule" => true,
                         _ => false,
                     }
                 })
@@ -175,7 +187,7 @@ pub(super) fn git_helpers_proven_inert(
     }
     // After a verified `cd`, the Git process reads configuration from the new
     // directory, so the probe must run there rather than in the reported cwd.
-    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let destination = super::segment_proof::git_read_cwd_compound_context(model, context);
     let context = PathContext {
         cwd: destination.as_deref().or(context.cwd),
         ..context

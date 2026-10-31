@@ -167,6 +167,9 @@ def _handle(worker: SimpleNamespace, harness: str, query: str = "workspace=/work
     )
     handler = SimpleNamespace(
         request=object(),
+        # A real request always carries headers; the direct-miss reason is read
+        # from one.
+        headers={},
         _daemon_server=lambda: daemon,
         _optional_string=lambda value: value if isinstance(value, str) else None,
         _settled_hook_directories=lambda *candidates, **kwargs: _SettledDirectories(candidates),
@@ -237,6 +240,9 @@ def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
     )
     handler = SimpleNamespace(
         request=object(),
+        # A real request always carries headers; the direct-miss reason is read
+        # from one.
+        headers={},
         _daemon_server=lambda: daemon,
         _optional_string=lambda value: value if isinstance(value, str) else None,
         _settled_hook_directories=reject,

@@ -547,3 +547,6 @@ fn omp_glob_walks_a_virtualenv_interpreter_link() {
 
 #[path = "search_scope_feature_tests.rs"]
 mod feature_directories;
+
+#[path = "search_scope_rg_glob_tests.rs"]
+mod rg_glob_inclusions;

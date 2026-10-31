@@ -46,18 +46,18 @@ def test_extract_uses_selected_guard_home_over_ambient_home(
     assert selected.targets[0].requested_specifier == "1.3.0"
 
 
-def test_extract_resolves_every_command_in_the_environment_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_resolves_the_call_in_the_environment_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
     """A caller parsing another process's call binds that process's `PATH`."""
 
-    from codex_plugin_scanner.guard.runtime import package_intent_parser
+    from codex_plugin_scanner.guard import native_package_authority
 
-    seen: list[tuple[str, object]] = []
+    seen: list[dict[str, object]] = []
 
-    def parse(command_text: str, **kwargs: object) -> None:
-        seen.append((command_text, kwargs["environment"]))
+    def extract(tool_name: object, arguments: object, **kwargs: object) -> None:
+        seen.append({"tool_name": tool_name, "arguments": arguments, **kwargs})
         return None
 
-    monkeypatch.setattr(package_intent_parser, "parse_package_intent", parse)
+    monkeypatch.setattr(native_package_authority, "package_intent_extract_native", extract)
     environment = {"PATH": "/usr/bin:/bin"}
 
     assert (
@@ -66,12 +66,18 @@ def test_extract_resolves_every_command_in_the_environment_it_is_given(monkeypat
             {"command": "npm install left-pad"},
             action_envelope_command="pip install requests",
             environment=environment,
+            guard_home=Path("/guard-home"),
         )
         is None
     )
 
-    # Every command the call carries, the envelope's included.
-    assert seen == [("npm install left-pad", environment), ("pip install requests", environment)]
+    # The whole call, the envelope's command included, is one request.
+    assert len(seen) == 1
+    assert seen[0]["tool_name"] == "shell"
+    assert seen[0]["arguments"] == {"command": "npm install left-pad"}
+    assert seen[0]["action_envelope_command"] == "pip install requests"
+    assert seen[0]["environment"] == environment
+    assert seen[0]["guard_home"] == Path("/guard-home")
 
 
 def test_parse_package_intent_npm_install_supports_aliases_tags_versions_and_flags(tmp_path: Path) -> None:
@@ -348,9 +354,7 @@ def _package_request_artifact_for_source(source: str) -> GuardArtifact:
     ],
 )
 def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit(source: str) -> None:
-    first = _package_request_artifact_for_source(
-        f"github:Hashgraph-Online/hol-guard.git#{_GIT_COMMIT}"
-    )
+    first = _package_request_artifact_for_source(f"github:Hashgraph-Online/hol-guard.git#{_GIT_COMMIT}")
     equivalent = _package_request_artifact_for_source(source)
     different_commit = _package_request_artifact_for_source(
         "git+https://github.com/hashgraph-online/hol-guard.git#ffffffffffffffffffffffffffffffffffffffff"

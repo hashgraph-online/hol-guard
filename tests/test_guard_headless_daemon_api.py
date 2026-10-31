@@ -30,10 +30,6 @@ from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_S
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_daemon_handler import native_headless_action_error
 from codex_plugin_scanner.guard.native_hook_artifact_compose import NativeHookComposeError
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -46,10 +42,12 @@ from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_review_signing_helpers import (
     review_trusted_keyring_payload,
 )
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     sign_policy_bundle,
 )
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 from tests.test_guard_supply_chain_evaluator import WORKSPACE_ID, _bundle_response, _package
 
 
@@ -2643,7 +2641,7 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
     assert payload["bundle_version"] == "policy-2026-04-19.3"
     assert payload["bundle_hash"] == bundle["bundleHash"]
     assert store.get_sync_payload("policy_bundle")["bundleVersion"] == "policy-2026-04-19.3"
-    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
+    assert resolve_policy(store, "codex", "codex:project:package-request:abc", "hash") == "block"
     policy_bundle_ack = store.get_sync_payload("policy_bundle_ack")
     assert isinstance(policy_bundle_ack, dict)
     assert policy_bundle_ack["bundleHash"] == bundle["bundleHash"]
@@ -2740,7 +2738,7 @@ def test_headless_policy_sync_passes_approval_gate_grant_to_atomic_activation(tm
         daemon.stop()
 
     assert status == 200, payload
-    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "allow"
+    assert resolve_policy(store, "codex", "codex:project:package-request:abc", "hash") == "allow"
 
 
 @pytest.mark.parametrize("rollout_state", ["draft", "simulated", "pending_approval"])
@@ -2785,6 +2783,45 @@ def test_headless_policy_sync_rejects_authenticated_inactive_rollout(
     assert store.list_policy_decisions() == []
 
 
+def test_headless_policy_sync_explains_rejected_downgrade(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.daemon import server_control_sync as server_control_sync_module
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
+    monkeypatch.setattr(server_control_sync_module, "_policy_bundle_is_version_downgrade", lambda *_args: True)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "bundle_version_downgrade"
+    assert "keeps the policy it already had" in str(payload["message"])
+    assert "Publish the policy again in Guard Cloud" in str(payload["message"])
+    assert store.get_sync_payload("policy_bundle") is None
+
+
 def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
@@ -2793,7 +2830,8 @@ def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_p
         policy_bundle_test_keyring(),
         "2026-07-17T00:00:00Z",
     )
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",

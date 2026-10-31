@@ -10,7 +10,6 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
     COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION,
@@ -20,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     rotate_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime.command_activity_privacy import InstallationCorrelationKey
+from tests.cursor_hook_payload_support import prepare_cursor_hook_payload
 
 _STRONG_ID = "01J3ABCD9XYZ7NATIVEID"
 

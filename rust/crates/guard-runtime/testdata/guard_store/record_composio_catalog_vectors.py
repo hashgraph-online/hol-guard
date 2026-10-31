@@ -33,8 +33,10 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
-os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
+# `auto` selects the runtime bundled beside the imported package and nothing
+# else, so a `HOL_GUARD_NATIVE_BINARY` left in the environment is read by
+# nothing here and needs no clearing.
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from codex_plugin_scanner.guard import store_mcp_provider_catalog, store_mcp_workflows
@@ -175,9 +177,10 @@ def run_scenario(scenario: dict) -> dict[str, object]:
         connection = sqlite3.connect(path)
         for step in scenario["steps"]:
             source = source_for(step["kwargs"]["tool"])
-            if connection.execute(
-                "select 1 from local_cli_observation where cli_id = ?", (source.cli_id,)
-            ).fetchone() is None:
+            if (
+                connection.execute("select 1 from local_cli_observation where cli_id = ?", (source.cli_id,)).fetchone()
+                is None
+            ):
                 statement, params = observation_row(source, step["kwargs"]["seen_at"])
                 connection.execute(statement, params)
         connection.commit()

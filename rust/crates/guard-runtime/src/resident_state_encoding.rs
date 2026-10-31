@@ -29,17 +29,22 @@ pub(crate) fn decode_hex(value: &str) -> Result<Vec<u8>, String> {
     if value.len() % 2 != 0 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("native_resident_state_hex_invalid".to_owned());
     }
-    value
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|pair| {
-            let high = hex_nibble(pair[0])
-                .ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
-            let low = hex_nibble(pair[1])
-                .ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
-            Ok((high << 4) | low)
-        })
-        .collect()
+    // Collecting into a `Result` reports a lower size bound of zero, so the
+    // vector would start at a default capacity and grow as the bytes arrive,
+    // freeing a part-filled buffer at each step. When the value being decoded
+    // is the resident's authentication key, those freed buffers hold a prefix
+    // of it and are not the allocation the caller wraps in `Zeroizing`, so
+    // nothing ever clears them. Sizing the vector once leaves exactly one
+    // buffer, which is the one the caller clears.
+    let mut decoded = Vec::with_capacity(value.len() / 2);
+    for pair in value.as_bytes().chunks_exact(2) {
+        let high =
+            hex_nibble(pair[0]).ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
+        let low =
+            hex_nibble(pair[1]).ok_or_else(|| "native_resident_state_hex_invalid".to_owned())?;
+        decoded.push((high << 4) | low);
+    }
+    Ok(decoded)
 }
 
 fn hex_nibble(value: u8) -> Option<u8> {

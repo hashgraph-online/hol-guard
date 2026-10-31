@@ -52,7 +52,7 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(contained_hook_parser)
     contained_hook_parser.add_argument(
         "--harness",
-        choices=("omp", "pi", "zcode", "claude-code", "codex"),
+        choices=("omp", "pi", "zcode", "claude-code", "codex", "cursor"),
         default="omp",
     )
     contained_hook_parser.add_argument("--request-file", required=True)
@@ -113,6 +113,10 @@ def _configure_guard_local_parsers(
     network_check_parser.add_argument("url", help="URL to check, for example https://example.com/path")
     _add_guard_common_args(network_check_parser, suppress_defaults=True)
     network_check_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+
+    from .runtime_posture_command import configure_runtime_parser
+
+    configure_runtime_parser(guard_subparsers)
 
     dashboard_parser = guard_subparsers.add_parser(
         "dashboard",

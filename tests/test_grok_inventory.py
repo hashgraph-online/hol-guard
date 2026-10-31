@@ -131,7 +131,7 @@ Authorization = "Bearer redacted"
         assert baseline.metadata["versionInfo"]["contentHash"] != changed.metadata["versionInfo"]["contentHash"]
 
     def test_mcp_credential_env_emits_secret_risk_signals(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.risk import artifact_risk_signals_typed
+        from tests.artifact_risk_support import artifact_risk_signals_typed
 
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".grok" / "config.toml"

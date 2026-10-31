@@ -25,6 +25,15 @@ def verify_fixture_scope(root: Path, executable: str) -> None:
         ("additional value on fixture line", relative, fixture + " " + unexpected, True),
         ("additional value in fixture file", relative, fixture + "\n" + unexpected, True),
     )
+    binary_relative = Path("tests/test_security_binaries.py")
+    historical = "SECRET_LINE = 'const token = \"sk-proj-" + "abcdefghijklmnopqrstuvwxyz0123456789\";\\n'"
+    cases += (
+        ("historical packaged-binary fixture", binary_relative, historical, False),
+        ("packaged-binary fixture outside test", Path("src/production.py"), historical, True),
+        ("changed packaged-binary fixture", binary_relative, historical.replace("0123456789", "9876543210"), True),
+        ("credential beside packaged-binary fixture", binary_relative, historical + " " + unexpected, True),
+        ("credential after packaged-binary fixture", binary_relative, historical + "\n" + unexpected, True),
+    )
     pem_relative = Path("rust/crates/guard-contained-process/src/runtime_resources/resource_tests.rs")
     pem_lines = (root / pem_relative).read_text(encoding="utf-8").splitlines()
     framing = [index for index, line in enumerate(pem_lines) if "PRIVATE KEY" in line]
@@ -37,6 +46,31 @@ def verify_fixture_scope(root: Path, executable: str) -> None:
         ("changed private-key fixture payload", pem_relative, pem_fixture.replace("YWJjZA==", "ZWZnaA=="), True),
         ("extra credential on private-key fixture line", pem_relative, pem_fixture + " " + unexpected, True),
         ("extra credential in private-key fixture file", pem_relative, pem_fixture + "\n" + unexpected, True),
+    )
+    digest = hashlib.sha256(b"authoring-record-scope-control").hexdigest()
+    record = Path("contributions/authoring/command.secret-example/record.json")
+    digest_line = f'    "contributions/command-sources/command.secret-example.json": "{digest}",'
+    credential_line = f'  "apiSecret": "{digest}"'
+    cases += (
+        ("authoring managed-file digest", record, digest_line, False),
+        ("authoring revision digest", record, f'  "revisionDigest": "{digest}"', False),
+        ("hex credential in authoring record", record, credential_line, True),
+        ("client secret in authoring record", record, f'  "client_secret": "{digest}"', True),
+        ("digest line outside authoring record", Path("src/record.json"), digest_line, True),
+        ("digest line in nested record", record.parent / "nested/record.json", digest_line, True),
+        ("non-digest managed-file value", record, digest_line.replace(digest, digest + "a"), True),
+        ("credential beside authoring digest", record, digest_line + " " + credential_line, True),
+        ("credential after authoring digest", record, digest_line + "\n" + credential_line, True),
+    )
+    vectors = Path("rust/crates/guard-runtime/testdata/guard_store/mcp_provider_read_vectors.json")
+    fingerprint = "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd"
+    token_line = f'      "catalog_token": "{fingerprint}",'
+    cases += (
+        ("audited provider-catalog fingerprint", vectors, token_line, False),
+        ("fingerprint line outside the vectors", Path("src/production.json"), token_line, True),
+        ("changed fingerprint in the vectors", vectors, token_line.replace(fingerprint, fingerprint[::-1]), True),
+        ("credential beside the fingerprint", vectors, token_line + " " + unexpected, True),
+        ("credential after the fingerprint", vectors, token_line + "\n" + unexpected, True),
     )
     with tempfile.TemporaryDirectory(prefix="gitleaks-fixture-scope-") as temporary:
         base = Path(temporary)

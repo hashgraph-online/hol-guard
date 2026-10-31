@@ -380,3 +380,43 @@ fn stopped_daemon_of_another_version_or_host_hands_off_without_a_start() {
         assert!(output.is_err(), "gate {index} did not hand off");
     }
 }
+
+#[test]
+fn the_session_start_warms_this_home_s_resident() {
+    let guard_home = Path::new("/home/warm user/.hol-guard");
+    let text = config_text(
+        Path::new("/home/warm user/.claude"),
+        &guard_home.join("daemon-state.json"),
+        &runtime_build(),
+    );
+    let runtime = Path::new("/opt/hol guard/bin/hol-guard-runtime");
+    let command = prewarm_command(&text, runtime).expect("a configured home should be warmed");
+    assert_eq!(command.get_program(), runtime.as_os_str());
+    let arguments: Vec<_> = command.get_args().collect();
+    assert_eq!(
+        arguments,
+        vec![
+            std::ffi::OsStr::new(PREWARM_MODE),
+            std::ffi::OsStr::new("--state-dir"),
+            guard_home.join(RESIDENT_STATE_DIRECTORY).as_os_str(),
+        ],
+        "the prewarm warms the resident this session's hooks will reach"
+    );
+}
+
+#[test]
+fn a_configuration_without_a_home_warms_nothing() {
+    let relative = config_text(
+        Path::new("/home/warm user/.claude"),
+        Path::new("relative/daemon-state.json"),
+        &runtime_build(),
+    );
+    assert!(
+        prewarm_command(&relative, Path::new("/opt/hol-guard-runtime")).is_none(),
+        "a relative state path names no home to warm"
+    );
+    assert!(
+        prewarm_command("{}", Path::new("/opt/hol-guard-runtime")).is_none(),
+        "a configuration with no bridge config names no home to warm"
+    );
+}

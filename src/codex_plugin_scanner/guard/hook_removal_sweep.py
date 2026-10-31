@@ -55,6 +55,7 @@ _WORKSPACE_EXTRA_FILES = {
     "claude-code": (".claude/settings.json", ".claude/settings.local.json"),
     "cursor": (".cursor/hooks.json",),
     "devin": (".devin/hooks.v1.json",),
+    "muse": (".muse/settings.json",),
 }
 _SWEEPABLE_SUFFIXES = (".json", ".toml")
 

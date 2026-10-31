@@ -234,6 +234,11 @@ mod tests {
                 execution_environment: None,
             },
             recording_only: false,
+            local_cli_rules: None,
+            observe_local_cli: false,
+            record_receipt: false,
+            structured_output_config: None,
+            containment_sink: None,
         }
     }
 

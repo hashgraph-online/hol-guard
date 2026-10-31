@@ -68,7 +68,6 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
     assert mutation_gate.validation_errors(baseline, _counts()) == ()
     assert set(TARGETS) == {
         "command-model",
-        "secret-flow",
         "approval-reuse",
         "package-intent",
         "package-policy",
@@ -85,29 +84,29 @@ def test_mutation_gate_accepts_measured_parser_baseline_and_target_contracts(tmp
 
     output = tmp_path / "pyproject.toml"
     result = subprocess.run(
-        [sys.executable, "scripts/ci/mutation_targets.py", "--target", "secret-flow", "--output", str(output)],
+        [sys.executable, "scripts/ci/mutation_targets.py", "--target", "approval-reuse", "--output", str(output)],
         cwd=ROOT,
         check=False,
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert output.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["secret-flow"])
+    assert output.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["approval-reuse"])
     workspace = tmp_path / "workspace"
-    config_path = prepare_workspace(ROOT, TARGETS["secret-flow"], workspace)
+    config_path = prepare_workspace(ROOT, TARGETS["approval-reuse"], workspace)
     assert (workspace / "src").is_symlink()
     assert (workspace / "tests").is_symlink()
     assert (workspace / "docs/guard/contracts/guard-cloud-review.md").is_file()
-    assert config_path.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["secret-flow"])
+    assert config_path.read_text(encoding="utf-8") == render_mutmut_config(TARGETS["approval-reuse"])
     runner_result = subprocess.run(
-        [sys.executable, "scripts/ci/run_mutation_target.py", "--target", "secret-flow", "--dry-run"],
+        [sys.executable, "scripts/ci/run_mutation_target.py", "--target", "approval-reuse", "--dry-run"],
         cwd=ROOT,
         check=False,
         capture_output=True,
         text=True,
     )
     assert runner_result.returncode == 0, runner_result.stderr
-    assert '"target": "secret-flow"' in runner_result.stdout
+    assert '"target": "approval-reuse"' in runner_result.stdout
 
 
 def test_mutation_gate_reports_every_failed_constraint() -> None:

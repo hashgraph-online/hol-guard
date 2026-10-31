@@ -285,3 +285,40 @@ fn malformed_grok_fields_are_refused() {
         "a relative grok_home reads from cwd"
     );
 }
+
+/// `.gemini/extensions` that cannot be examined is a refusal, not an empty
+/// inventory. The link reaches a locked directory, so only the extension root
+/// fails its `stat`: `settings.json` and `skills` beside it stay readable.
+#[cfg(unix)]
+#[test]
+fn an_unexaminable_gemini_extension_root_is_refused_not_empty() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "guard-gemini-extension-root-{}-{nonce}",
+        std::process::id()
+    ));
+    let gemini = root.join("home/.gemini");
+    let locked = root.join("locked");
+    std::fs::create_dir_all(&gemini).unwrap();
+    std::fs::create_dir_all(locked.join("extensions")).unwrap();
+    let mut args = valid_request("gemini");
+    args["home"] = json!(root.join("home").to_string_lossy());
+    assert!(crate::gemini_detect::detect(&args).is_ok(), "absent root");
+    symlink(locked.join("extensions"), gemini.join("extensions")).unwrap();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+    // Permission bits do not bind a privileged user, who can still stat it.
+    let privileged = std::fs::metadata(gemini.join("extensions")).is_ok();
+    let result = crate::gemini_detect::detect(&args);
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::remove_dir_all(&root).unwrap();
+    if !privileged {
+        assert_eq!(
+            result.unwrap_err(),
+            "native_runner_authority_adapter_path_unexaminable"
+        );
+    }
+}

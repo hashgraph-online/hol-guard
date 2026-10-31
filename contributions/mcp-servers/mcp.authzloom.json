@@ -1,0 +1,59 @@
+{
+  "activation": "opt-in",
+  "description": "Conservative operation knowledge compiled from a contributor inventory.",
+  "homepage": "https://github.com/MrcVnz/authzloom",
+  "icon": {
+    "kind": "none"
+  },
+  "id": "mcp.authzloom",
+  "launch": {
+    "command": "uvx",
+    "kind": "package-launcher",
+    "package": "authzloom"
+  },
+  "name": "AuthzLoom MCP server",
+  "publisher": {
+    "displayName": "Marcus Vinicius",
+    "id": "github.mrcvnz"
+  },
+  "referenceUrls": [
+    "https://github.com/MrcVnz/authzloom"
+  ],
+  "riskClasses": [
+    "execution",
+    "local_secret_read",
+    "network_egress"
+  ],
+  "saferAlternatives": [
+    "Inspect the exact target and required permissions before running this operation."
+  ],
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "tools": [
+    {
+      "name": "authzloom_export",
+      "state": "allow"
+    },
+    {
+      "name": "authzloom_ingest",
+      "state": "inherit"
+    },
+    {
+      "name": "authzloom_plan",
+      "state": "allow"
+    },
+    {
+      "name": "authzloom_run",
+      "state": "review"
+    },
+    {
+      "name": "authzloom_status",
+      "state": "allow"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "trustClass": "external",
+  "version": "1.0.0"
+}

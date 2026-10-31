@@ -189,7 +189,14 @@ fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         "sudo -s rm -rf /tmp/example",
         "eval 'rm -rf /tmp/example'",
         "if true; then echo yes; fi",
-        "[[ -f Cargo.toml ]]",
+        // A closed `[[ ... ]]` pair is not here: the parse surface reads it as
+        // the `[` test it asks. An unclosed one is some other shape.
+        "[[ -f Cargo.toml",
+        // `[[ ]]` evaluates an arithmetic operand and resolves a bare name
+        // through the value it holds, so `X='a[$(id)]'` runs `id` where the
+        // `[` this would otherwise rewrite to compares two words and stops.
+        "[[ $X -eq 0 ]]",
+        "[[ 1 -gt $LIMIT ]]",
         "echo $\"locale translation\"",
         "xargs rm -rf",
         "find . -exec rm {} ;",
@@ -198,6 +205,35 @@ fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         assert_eq!(parsed.confidence, "uncertain", "{command}");
         assert!(parsed.segments.is_empty(), "{command}");
         assert!(parsed.uncertainty_reason.is_some(), "{command}");
+    }
+}
+
+/// Quote removal leaves `'[[' -f Cargo.toml ']]'` with the same words a bare
+/// `[[ ... ]]` carries, but that text runs a command named `[[`, whose
+/// operands the shell splits and globs. Only the bare reserved words are read
+/// as the `[ ... ]` test they ask; the quoted spelling keeps the review every
+/// other shell keyword gets.
+#[test]
+fn reads_only_bare_double_brackets_as_the_test_they_ask() {
+    let bare = parse_command(&request("[[ -f Cargo.toml ]]")).unwrap();
+    assert_eq!(bare.confidence, "exact");
+    assert_eq!(bare.segments[0].executable.as_deref(), Some("["));
+    assert_eq!(bare.segments[0].text, "[ -f Cargo.toml ]");
+
+    for command in [
+        "'[[' -f Cargo.toml ']]'",
+        "\"[[\" -f Cargo.toml \"]]\"",
+        "[['' -f Cargo.toml ]]",
+        "[[ -f Cargo.toml '']]",
+    ] {
+        let quoted = parse_command(&request(command)).unwrap();
+        assert_eq!(quoted.confidence, "uncertain", "{command}");
+        assert_eq!(
+            quoted.uncertainty_reason.as_deref(),
+            Some("compound_shell_not_yet_supported"),
+            "{command}"
+        );
+        assert!(quoted.segments.is_empty(), "{command}");
     }
 }
 

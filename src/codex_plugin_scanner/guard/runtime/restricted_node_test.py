@@ -24,10 +24,6 @@ def nearest_project_root(cwd: Path, workspace: Path, relative: str) -> Path:
     return Path(restricted_native("nearest_project_root", {"cwd": cwd, "workspace": workspace, "value": relative}, str))
 
 
-def _approved_node(executable: Path, workspace: Path) -> bool:
-    return restricted_native("approved_node", {"path": executable, "workspace": workspace}, bool)
-
-
 def prepare_restricted_node_test(
     command: Sequence[str],
     *,

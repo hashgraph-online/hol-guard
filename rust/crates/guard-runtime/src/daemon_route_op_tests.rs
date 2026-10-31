@@ -208,3 +208,18 @@ fn the_releases_screen_reads_are_session_paths() {
         "/v1/releases/contributors"
     ));
 }
+
+#[test]
+fn plugin_update_prompts_are_token_gated_session_paths() {
+    use crate::daemon_route_paths::{requires_header_token, session_path};
+    // The check downloads HOL's public indexes, so a page without the
+    // dashboard session must not be able to start one.
+    assert!(requires_header_token("/v1/plugins/updates"));
+    assert!(requires_header_token("/v1/plugins/updates/dismiss"));
+    assert!(session_path("GET", "/v1/plugins/updates"));
+    assert!(!session_path("POST", "/v1/plugins/updates"));
+    assert!(session_path("POST", "/v1/plugins/updates/dismiss"));
+    assert!(!session_path("GET", "/v1/plugins/updates/dismiss"));
+    // Reset stays a CLI action; the dashboard cannot clear every dismissal.
+    assert!(!session_path("POST", "/v1/plugins/updates/reset"));
+}

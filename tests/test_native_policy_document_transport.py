@@ -177,11 +177,8 @@ def test_compiled_rows_reject_invalid_native_dto_fields(monkeypatch, mutation):
         compiler.compile_policy_document(source)
 
 
-def test_native_document_dto_never_runs_python_command_normalization(monkeypatch):
-    def forbidden(*args, **kwargs):
-        raise AssertionError("Python normalization called")
-
-    monkeypatch.setattr(document.CommandCondition, "__post_init__", forbidden)
+def test_native_document_dto_never_runs_python_command_normalization():
+    assert not hasattr(document.CommandCondition, "__post_init__")
     expression = {
         "combinator": "all",
         "conditions": [{"field": "command", "operator": "exact", "value": "native value", "case_sensitive": False}],

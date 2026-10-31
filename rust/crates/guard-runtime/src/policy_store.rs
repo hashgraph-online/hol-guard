@@ -30,6 +30,8 @@ pub(crate) mod approval_v4_enrollment;
 pub(crate) mod approval_v4_secure_state;
 #[path = "native_review_origin.rs"]
 pub(crate) mod native_review_origin;
+#[path = "policy_snapshot_materialize.rs"]
+pub(crate) mod policy_snapshot_materialize;
 #[path = "policy_store_approval.rs"]
 pub(crate) mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
@@ -50,6 +52,8 @@ pub(crate) mod policy_store_direct_lane;
 mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
 mod policy_store_persistence;
+#[path = "policy_store_publisher_binding.rs"]
+mod policy_store_publisher_binding;
 #[path = "policy_store_push.rs"]
 mod policy_store_push;
 #[path = "policy_store_request.rs"]

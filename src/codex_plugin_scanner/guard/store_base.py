@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from functools import partial
+from functools import partial, wraps
 
 from .artifact_identity import artifact_family_key
 
@@ -21,8 +21,8 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from hashlib import pbkdf2_hmac, scrypt, sha256
 from pathlib import Path
@@ -34,7 +34,6 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .cli.oauth_client import resolve_guard_oauth_client_config
-from .edge_events import build_receipt_event
 from .fork_safety import forget_in_child
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
@@ -60,7 +59,6 @@ from .policy_integrity import (
 )
 from .runtime.actions import GuardActionEnvelope
 from .runtime.approval_context import approval_context_token_is_well_formed
-from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .sqlite_tuning import (
     SQLITE_BUSY_TIMEOUT_MS,
@@ -73,18 +71,6 @@ from .store_approvals import (
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
-)
-from .store_approvals import (
-    bulk_resolve_approval_requests as persist_bulk_resolution,
-)
-from .store_approvals import (
-    get_approval_request as load_approval_request,
-)
-from .store_approvals import (
-    list_approval_requests as load_approval_requests,
-)
-from .store_approvals import (
-    resolve_request_with_queue_result as persist_queue_resolution,
 )
 from .store_connect import (
     connect_request_schema_statement,
@@ -105,19 +91,7 @@ from .store_resume import (
     delete_request_resumes as purge_request_resumes,
 )
 from .store_resume import (
-    get_latest_request_resume as load_latest_request_resume,
-)
-from .store_resume import (
-    get_request_resume as load_request_resume,
-)
-from .store_resume import (
     resume_schema_statement,
-)
-from .store_resume import (
-    seed_request_resume as persist_request_resume_seed,
-)
-from .store_resume import (
-    update_request_resume as persist_request_resume_update,
 )
 from .store_supply_chain import (
     get_supply_chain_bundle as load_supply_chain_bundle,
@@ -278,6 +252,8 @@ _OAUTH_CREDENTIAL_LOCK_TIMEOUT_SECONDS = 30.0
 _OAUTH_CREDENTIAL_LOCK_POLL_SECONDS = 0.05
 _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS = 30.0
 _CLOUD_SYNC_LOCK_POLL_SECONDS = 0.05
+_POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS = 30.0
+_POLICY_INTEGRITY_GENERATION_LOCK_POLL_SECONDS = 0.05
 _GUARD_STORE_PRIVATE_DIR_MODE = 0o700
 _GUARD_STORE_PRIVATE_FILE_MODE = 0o600
 _SYSTEM_KEYRING_AVAILABILITY_CACHE_FILE = "system-keyring-availability.json"
@@ -1416,18 +1392,6 @@ def _runtime_scoped_exact_match_key(
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
 
 
-def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
-    """Return a scoped family identity for one exact runtime tool action."""
-
-    if artifact_id is None or not artifact_id.strip():
-        return None
-    family_key = _artifact_family_key(artifact_id)
-    if family_key is not None and _family_key_value(family_key) in _SCOPED_RUNTIME_EXACT_FAMILIES:
-        return artifact_id
-    digest = sha256(artifact_id.strip().encode("utf-8")).hexdigest()
-    return f"guard:runtime:tool-action:{digest}"
-
-
 def runtime_tool_action_exact_match_context(
     *,
     config_path: str | None,
@@ -1543,6 +1507,7 @@ def _mapping_int(payload: Mapping[str, object], key: str) -> int | None:
 
 
 _ChunkT = TypeVar("_ChunkT")
+_T = TypeVar("_T")
 
 
 def _chunks(values: Sequence[_ChunkT], size: int) -> Iterator[list[_ChunkT]]:
@@ -1593,6 +1558,29 @@ def _transport_value(value: object) -> TransportKind:
     if value == "hybrid":
         return "hybrid"
     return "local"
+
+
+class _PolicyIntegrityGenerationLockHolder(Protocol):
+    """A store that can serialize its policy integrity generation advances."""
+
+    def hold_policy_integrity_generation_lock(self) -> AbstractContextManager[None]: ...
+
+
+def serialize_policy_integrity_generation(method: Callable[..., _T]) -> Callable[..., _T]:
+    """Run ``method`` while holding the store's policy integrity generation lock.
+
+    Advancing the generation reads the trusted control state, marks the next one
+    pending and signs the rows. Routes that still do all of that on one store
+    connection are serialized by SQLite; the native upsert route is not, so every
+    advance takes the lock and they stay ordered against each other.
+    """
+
+    @wraps(method)
+    def wrapper(self: _PolicyIntegrityGenerationLockHolder, *args: object, **kwargs: object) -> _T:
+        with self.hold_policy_integrity_generation_lock():
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 __all__ = tuple(name for name in globals() if not (name.startswith("__") and name.endswith("__")))

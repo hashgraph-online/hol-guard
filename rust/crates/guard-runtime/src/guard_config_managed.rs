@@ -1,9 +1,9 @@
 //! Managed-policy composition for the effective Guard configuration.
 //!
-//! Mirrors `mdm/policy.py::apply_managed_policy`: a managed requirement is
-//! composed into the local payload and can only make it stricter. Action
-//! settings take the most restrictive action, mode-like strings the stronger
-//! mode, and every other managed value replaces the local one.
+//! A managed requirement is composed into the local payload and can only
+//! make it stricter. Action settings take the most restrictive action,
+//! mode-like strings the stronger mode, and every other managed value
+//! replaces the local one.
 
 use guard_command::action_lattice::{most_restrictive_guard_action, normalize_guard_action};
 use guard_command::effect_decision::GuardAction;
@@ -68,7 +68,8 @@ fn action_value(action: GuardAction) -> Value {
     Value::String(action.as_str().to_owned())
 }
 
-/// `_merge_strongest_actions`; `local` is `None` when the key is absent.
+/// The most restrictive action at every leaf; `local` is `None` when the key
+/// is absent.
 fn strongest_actions(local: Option<&Value>, managed: &Value) -> Value {
     if let Value::Object(managed_map) = managed {
         let mut merged = match local {
@@ -93,7 +94,8 @@ fn strongest_actions(local: Option<&Value>, managed: &Value) -> Value {
     }
 }
 
-/// `_strongest_security_value`.
+/// The stronger of two security values: the more restrictive action, the
+/// stronger mode, and otherwise the managed value.
 fn strongest_security_value(local: Option<&Value>, managed: &Value) -> Value {
     if let (Some(Value::String(left)), Value::String(right)) = (local, managed) {
         if is_guard_action(left) || is_guard_action(right) {
@@ -109,7 +111,7 @@ fn strongest_security_value(local: Option<&Value>, managed: &Value) -> Value {
     managed.clone()
 }
 
-/// `_is_action_setting_path`.
+/// Whether a dotted setting path names an action or a map of actions.
 fn is_action_setting_path(path: &str) -> bool {
     let parts: Vec<&str> = path.split('.').collect();
     parts
@@ -120,7 +122,7 @@ fn is_action_setting_path(path: &str) -> bool {
             .is_some_and(|last| last.ends_with("_action") || last.ends_with("Action"))
 }
 
-/// `_compose_managed_value`.
+/// Compose a managed value into the local one, recursing through objects.
 fn compose_managed_value(local: Option<&Value>, managed: &Value) -> Value {
     if let (Some(Value::Object(existing)), Value::Object(managed_map)) = (local, managed) {
         let mut composed = existing.clone();
@@ -133,7 +135,7 @@ fn compose_managed_value(local: Option<&Value>, managed: &Value) -> Value {
     strongest_security_value(local, managed)
 }
 
-/// `apply_managed_policy`.
+/// Compose `policy` into `local` without letting a managed requirement weaken.
 pub(crate) fn apply_managed_policy(
     local: &Map<String, Value>,
     policy: &ManagedInput,
@@ -163,3 +165,7 @@ pub(crate) fn apply_managed_policy(
     }
     composed
 }
+
+#[cfg(test)]
+#[path = "guard_config_managed_tests.rs"]
+mod tests;

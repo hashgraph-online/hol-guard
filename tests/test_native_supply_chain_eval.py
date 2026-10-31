@@ -12,7 +12,9 @@ from typing import ClassVar
 
 import pytest
 
+from codex_plugin_scanner.guard import native_package_authority as authority
 from codex_plugin_scanner.guard import native_supply_chain_eval as transport
+from codex_plugin_scanner.guard import native_workspace_inventory as inventory
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 from codex_plugin_scanner.guard.native_package_authority import _RESULT_SCHEMA
 
@@ -38,10 +40,24 @@ def _payload() -> dict[str, object]:
         "cache_status": "miss",
         "package_intent_hash": "sha256:" + "0" * 64,
         "policy_version": "p",
+        "bundle_version": None,
+        "workspace_fingerprint": None,
         "reasons": [],
         "packages": [],
+        "matched_rule_id": None,
+        "exception_id": None,
         "risk_summary": "ok",
-        "user_copy": {"title": "Allowed", "summary": "ok", "harness_message": "ok"},
+        "record_monitor_evidence": False,
+        "refresh_required": False,
+        "evidence_ids": [],
+        "external_archive_source_hashes": [],
+        "user_copy": {
+            "title": "Allowed",
+            "summary": "ok",
+            "next_step": None,
+            "dashboard_url": None,
+            "harness_message": "ok",
+        },
     }
 
 
@@ -90,6 +106,24 @@ def test_request_is_bound_non_retaining_and_requires_feature(monkeypatch, tmp_pa
     assert request["retain_external_archive_blob"] is False
     assert request["runtime_private_metadata"] == {"k": "v"}
     assert request["store_path"] == str(tmp_path / "guard.db")
+
+
+def test_an_answer_whose_evidence_ids_miss_a_recorded_package_blocks(monkeypatch, tmp_path: Path) -> None:
+    """The recorder writes the resident's ids, so a short list is a disagreement, not a row to invent."""
+
+    def hold_one_package(reply: dict[str, object]) -> None:
+        payload = reply["payload"]
+        payload.update(
+            decision="ask",
+            policy_action="review",
+            packages=[{"name": "left-pad", "resolvedVersion": "1.3.0", "decision": "ask"}],
+            evidence_ids=[],
+        )
+
+    _bind(monkeypatch, mutate=hold_one_package)
+    result = _evaluate(tmp_path)
+    assert result.decision == "block"
+    assert result.reasons[0]["code"] == "native_supply_chain_eval_unavailable"
 
 
 @pytest.mark.parametrize(
@@ -222,6 +256,35 @@ def test_probe_request_is_not_repeated(monkeypatch, tmp_path: Path) -> None:
     assert len(sent) == 2
 
 
+def test_an_audit_deadline_stops_an_evaluation_between_its_rounds(monkeypatch, tmp_path: Path) -> None:
+    # A slow first round must not let the evaluation start its follow-up after the deadline.
+    sent = _probe_resident(monkeypatch, ["probe", "ok"])
+    clock = [0.0]
+    resident = transport._resident_request
+
+    def slow_resident(**kwargs: object) -> object:
+        clock[0] += 4.0
+        return resident(**kwargs)
+
+    monkeypatch.setattr(transport, "_resident_request", slow_resident)
+    monkeypatch.setattr(inventory.time, "monotonic", lambda: clock[0])
+
+    with inventory.audit_deadline(3), pytest.raises(inventory.AuditDeadlineError):
+        _payload_for(tmp_path, lambda _cached: None)
+
+    assert len(sent) == 1
+
+
+def test_an_audit_deadline_is_not_turned_into_a_blocked_evaluation(monkeypatch, tmp_path: Path) -> None:
+    captured = _bind(monkeypatch)
+    monkeypatch.setattr(inventory.time, "monotonic", lambda: 10.0)
+
+    with inventory.audit_deadline(0), pytest.raises(inventory.AuditDeadlineError):
+        _evaluate(tmp_path)
+
+    assert captured == {}
+
+
 def test_probe_request_without_a_lookup_blocks(monkeypatch, tmp_path: Path) -> None:
     sent = _probe_resident(monkeypatch, ["probe"])
 
@@ -320,3 +383,30 @@ def test_well_formed_answer_records_no_failure(monkeypatch, tmp_path: Path) -> N
     assert _evaluate(tmp_path).decision == "allow"
 
     assert failures == []
+
+
+def test_settled_answer_is_read_without_a_second_resident_call(monkeypatch, tmp_path: Path) -> None:
+    _bind(monkeypatch)
+    monkeypatch.setattr(transport, "_persist_evidence", lambda **_kwargs: None)
+
+    def second_call(**_kwargs: object) -> object:
+        raise AssertionError("the settled answer was sent back to be viewed")
+
+    monkeypatch.setattr(authority, "_resident_request", second_call)
+    assert _evaluate(tmp_path).decision == "allow"
+
+
+def test_view_reply_with_a_conflicting_code_is_unavailable(monkeypatch, tmp_path: Path) -> None:
+    def resident(**kwargs: object) -> object:
+        request = kwargs["request"]
+        return {
+            "request_id": request["request_id"],
+            "request_sha256": "sha256:" + _canonical_request_sha256(request),
+            "status": "ok",
+            "code": "native_package_evaluation_view_failed",
+            "payload": _payload(),
+        }
+
+    monkeypatch.setattr(authority, "_resident_request", resident)
+    with pytest.raises(authority.NativePackageEvaluationViewUnavailableError):
+        authority.evaluation_from_native_payload(_payload(), guard_home=tmp_path)

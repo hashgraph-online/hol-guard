@@ -305,10 +305,13 @@ mod tests;
 
 /// Whether the read turns a working-tree file into its stored form, which
 /// runs the repository's clean filters and can start `core.fsmonitor`.
-/// `git blame` annotates the working-tree copy through a fake commit, and
+/// `git blame` annotates the working-tree copy through a fake commit,
+/// `git ls-files -m` hashes a file whose stat data left it undecided, and
 /// `--dirty` and `--broken` make `git describe` refresh the index first.
 pub(super) fn cleans_working_tree(subcommand: &str, rest: &[String]) -> bool {
-    subcommand == "blame" || refreshes_the_index(subcommand, rest)
+    subcommand == "blame"
+        || super::git_listing_reads::compares_working_tree(subcommand, rest)
+        || refreshes_the_index(subcommand, rest)
 }
 
 /// Whether the read refreshes the index, which runs the repository's

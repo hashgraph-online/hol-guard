@@ -16,11 +16,6 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
-    ExtensionControlAuthorityView,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_contract import (
-    ControlLayerKind,
-    ControlSurface,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -139,19 +134,6 @@ def test_incompatible_extension_schema_does_not_brick_store_open(tmp_path: Path)
     opened._extension_control_authority_secret_store = secrets
 
     assert opened.list_policy_decisions() == []
-
-
-def test_non_protected_authority_requires_exact_trusted_surface_enum() -> None:
-    digest = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    view = ExtensionControlAuthorityView(AuthorityHealth.TAMPERED, 0, digest, ())
-
-    raw = view.layers_for(cast(ControlSurface, "trusted-local-proof"))
-    trusted = view.layers_for(ControlSurface.TRUSTED_LOCAL_PROOF)
-
-    assert len(raw) == 1
-    assert raw[0].kind is ControlLayerKind.LOCAL_ADMIN
-    assert raw[0].global_lockdown is True
-    assert trusted == ()
 
 
 def test_transition_private_values_and_authority_secrets_never_enter_sqlite(tmp_path: Path) -> None:

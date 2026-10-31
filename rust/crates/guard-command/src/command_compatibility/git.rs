@@ -31,7 +31,7 @@ const RULES: &[(&str, &str)] = &[
     ("reflog", "command.git.reflog"),
 ];
 
-fn command_index(arguments: &[String]) -> Option<usize> {
+pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         let option = argument.split('=').next().unwrap_or(argument);
@@ -86,6 +86,80 @@ fn bounded_inspection(arguments: &[String]) -> bool {
         // A stash listing and a `show` of one entry print; every other
         // stash spelling moves work and keeps its workspace attribution.
         || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
+        // A submodule status prints the recorded commit of each submodule the
+        // superproject's index names; the recursive walk and every other
+        // submodule spelling move work and keep their attribution.
+        || (command == "submodule" && crate::pretool::git_submodule_reads::read_form(rest))
+        // A bisect session's log and a note's listing print; every other
+        // spelling of either moves a ref, writes the notes ref or runs a
+        // program the text names, and keeps its attribution.
+        || (matches!(command.as_str(), "bisect" | "notes")
+            && crate::pretool::git_side_record_reads::read_form(command, rest))
+}
+
+/// An option of a staged-index diff that only shapes what the command prints.
+fn bounded_cached_diff_option(option: &str) -> bool {
+    matches!(
+        option,
+        "--cached"
+            | "--staged"
+            | "HEAD"
+            | "--check"
+            | "--stat"
+            | "--numstat"
+            | "--shortstat"
+            | "--summary"
+            | "--name-only"
+            | "--name-status"
+            | "--patch"
+            | "-p"
+            | "--quiet"
+            | "--exit-code"
+            | "--no-color"
+            | "--color=never"
+            | "--no-ext-diff"
+            | "--no-textconv"
+    ) || option
+        .strip_prefix("-U")
+        .or_else(|| option.strip_prefix("--unified="))
+        .is_some_and(|lines| {
+            !lines.is_empty() && lines.len() <= 6 && lines.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+/// An operand that git reads as a pathspec rather than as a revision. A `:`
+/// prefix (`:!vendor`, `:^docs`) can only be a pathspec, because a ref name
+/// cannot carry a colon. Anything else has to name an entry that is already
+/// there, which is the only way git itself tells a path from a revision:
+/// `git diff --cached origin/main` compares against a branch and keeps the
+/// index owner, while `git diff --cached web/package.json` narrows the same
+/// staged read the `--` form already admits. Without a known working
+/// directory nothing can be shown present, so the operand is not bounded.
+fn bounded_cached_diff_pathspec(operand: &str, directory: Option<&std::path::Path>) -> bool {
+    if operand.is_empty() || operand.starts_with('-') {
+        return false;
+    }
+    if operand.starts_with(':') {
+        return true;
+    }
+    // `symlink_metadata` rather than `exists`: a broken symlink is still an
+    // entry git sees, and any other error (an unreadable parent) refuses.
+    directory.is_some_and(|directory| directory.join(operand).symlink_metadata().is_ok())
+}
+
+/// The directory git resolves a bare operand against. A `-C <dir>` route moves
+/// it there, so an operand that is present beside the shell's own working
+/// directory proves nothing about the repository git actually reads; a relative
+/// route needs that working directory to resolve at all.
+fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path::PathBuf> {
+    let Some(route) = route else {
+        return cwd.map(std::path::PathBuf::from);
+    };
+    let route = std::path::PathBuf::from(route);
+    if route.is_absolute() {
+        return Some(route);
+    }
+    cwd.map(|cwd| std::path::Path::new(cwd).join(route))
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -93,41 +167,23 @@ fn bounded_inspection(arguments: &[String]) -> bool {
 /// than the working tree beside it, so the shared read proof (configuration
 /// probe, textconv and sensitive-pathspec screens) decides it. Forms that
 /// write a file or compare against another revision keep the index owner.
-fn bounded_cached_diff(arguments: &[String]) -> bool {
-    arguments
+///
+/// Trailing pathspecs are read the same way whether or not a `--` separates
+/// them, so the bare form is bounded on the same terms: every argument up to
+/// the first operand has to shape the output, and every operand from there on
+/// has to be a present in-tree pathspec. `directory` is where git resolves
+/// those operands: where the segment's native proofs ran, or the `-C` route it
+/// entered first.
+fn bounded_cached_diff(arguments: &[String], directory: Option<&std::path::Path>) -> bool {
+    let operands: Vec<&String> = arguments
         .iter()
         .take_while(|argument| argument.as_str() != "--")
-        .all(|argument| {
-            let option = argument.as_str();
-            matches!(
-                option,
-                "--cached"
-                    | "--staged"
-                    | "HEAD"
-                    | "--check"
-                    | "--stat"
-                    | "--numstat"
-                    | "--shortstat"
-                    | "--summary"
-                    | "--name-only"
-                    | "--name-status"
-                    | "--patch"
-                    | "-p"
-                    | "--quiet"
-                    | "--exit-code"
-                    | "--no-color"
-                    | "--color=never"
-                    | "--no-ext-diff"
-                    | "--no-textconv"
-            ) || option
-                .strip_prefix("-U")
-                .or_else(|| option.strip_prefix("--unified="))
-                .is_some_and(|lines| {
-                    !lines.is_empty()
-                        && lines.len() <= 6
-                        && lines.bytes().all(|b| b.is_ascii_digit())
-                })
-        })
+        .skip_while(|argument| bounded_cached_diff_option(argument))
+        .collect();
+    operands.len() <= 16
+        && operands
+            .iter()
+            .all(|operand| bounded_cached_diff_pathspec(operand, directory))
 }
 
 fn read_only_plumbing(arguments: &[String]) -> bool {
@@ -140,9 +196,11 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
     match command.as_str() {
         "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
         "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
-        // Both listings only print, and their grammars already exclude the
+        // These listings only print, and their grammars already exclude the
         // forms that run a configured program; the read proof still decides.
-        "shortlog" | "check-ignore" => crate::pretool::git_listing_reads::read_form(command, rest),
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout" => {
+            crate::pretool::git_listing_reads::read_form(command, rest)
+        }
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
@@ -186,7 +244,7 @@ pub(super) fn inspection_arguments<'a>(
             "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
             | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
             | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
-            | "shortlog" | "check-ignore",
+            | "shortlog" | "check-ignore" | "count-objects" | "check-attr",
         ) => true,
         // A tag listing, a clean preview and a patch check only print, but the
         // same three subcommands also write a tag, remove a file and patch the
@@ -198,6 +256,17 @@ pub(super) fn inspection_arguments<'a>(
         // `stash` reaches the worktree in every spelling but the two that
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
+        Some("submodule") => crate::pretool::git_submodule_reads::read_form(&remaining[1..]),
+        // A bisect session and a commit's notes each print in one grammar and
+        // write in every other, so each is admitted only in that grammar.
+        Some(record @ ("bisect" | "notes")) => {
+            crate::pretool::git_side_record_reads::read_form(record, &remaining[1..])
+        }
+        // `sparse-checkout` prints the patterns the tree is narrowed to in one
+        // spelling and changes that narrowing in every other.
+        Some("sparse-checkout") => {
+            crate::pretool::git_listing_reads::read_form("sparse-checkout", &remaining[1..])
+        }
         _ => false,
     };
     admitted.then_some(remaining)
@@ -205,6 +274,12 @@ pub(super) fn inspection_arguments<'a>(
 
 pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
     git_fetch::origin_shaped_arguments(arguments)
+}
+
+/// Whether a refresh's operands name a reach the proof can follow, and whether
+/// that reach is every configured remote rather than `origin` alone.
+pub(super) fn fetch_reach(arguments: &[String]) -> Option<bool> {
+    git_fetch::reach(arguments).map(|reach| reach == git_fetch::Reach::EveryRemote)
 }
 
 pub(super) fn routed_arguments<'a>(
@@ -222,6 +297,18 @@ fn routed<'a>(
     context: crate::pretool::PathContext<'_>,
     inspection: bool,
 ) -> Option<&'a [String]> {
+    routed_with_route(arguments, context, inspection).map(|(rest, _)| rest)
+}
+
+/// [`routed`] plus the last `-C <dir>` the prefix entered. Git resolves a bare
+/// operand against that directory rather than against the shell's own working
+/// directory, so a proof over such an operand has to be taken there.
+fn routed_with_route<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+    inspection: bool,
+) -> Option<(&'a [String], Option<&'a str>)> {
+    let mut route = None;
     let mut index = 0;
     let mut saw_change_directory = false;
     let mut saw_git_dir = false;
@@ -313,13 +400,14 @@ fn routed<'a>(
             return None;
         }
         saw_change_directory = true;
+        route = Some(target);
         index += 1;
     }
     let rest = arguments.get(index..)?;
     if without_repository && crate::pretool::reads_without_repository(rest) {
         return None;
     }
-    Some(rest)
+    Some((rest, route))
 }
 
 #[cfg(test)]
@@ -458,8 +546,8 @@ pub(super) fn observe_with_contexts(
         // A trailing `2>&1` only merges the fetch's progress into stdout.
         let stripped = crate::pretool::without_stderr_merge(segment);
         let refresh = stripped.as_ref().unwrap_or(segment);
-        let plain = git_fetch::plain_origin_refresh(refresh, command_index)
-            || (routed_remote && git_fetch::routed_origin_refresh(refresh, command_index));
+        let plain = git_fetch::plain_refresh(refresh, command_index).is_some()
+            || (routed_remote && git_fetch::routed_refresh(refresh, command_index).is_some());
         if !(plain && crate::pretool::verified_origin_operation(refresh, proof_context)) {
             result.rule("command.git.unverified-fetch", index, !plain);
         }
@@ -469,7 +557,13 @@ pub(super) fn observe_with_contexts(
             .iter()
             .take_while(|argument| argument.as_str() != "--")
             .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
-        && !inspection.is_some_and(|remaining| bounded_cached_diff(&remaining[1..]))
+        && !inspection.is_some_and(|remaining| {
+            let route = routed_with_route(arguments, context, true).and_then(|(_, route)| route);
+            bounded_cached_diff(
+                &remaining[1..],
+                operand_directory(proof_context.cwd, route).as_deref(),
+            )
+        })
     {
         result.rule("command.git.index-inspection", index, true);
     }

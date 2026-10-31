@@ -79,7 +79,7 @@ acceptance tooling must preserve ordinary agent workflows and harmful-call prote
 Run [Guard Gauntlet](ci/gauntlet/README.md) with the actual Oh My Pi CLI, real model
 inference and the exact installed native build. Attach its verified public evidence
 through the **Guard Gauntlet evidence** workflow. Live qualification is an optional
-check, separate from the required `ci (3.12)` aggregate, and does not block merge.
+check, separate from the `hol-guard / required` aggregate, and does not block merge.
 
 A model refusal, admission-only probe, unit-test pass or prose completion is not live
 qualification. Keep failed evidence, add the relevant benign/security pair, and test

@@ -6,9 +6,10 @@ import urllib.error
 from datetime import datetime, timezone
 from typing import Any
 
-from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
+from ..config import VALID_RECEIPT_REDACTION_LEVELS, load_guard_config
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
+from ..synced_policy import validated_synced_policy_bundle
 from .cloud_request_native import cloud_error_text
 from .cloud_review_batching import (
     CloudReviewBatchLimits,
@@ -17,11 +18,10 @@ from .cloud_review_batching import (
     persisted_review_batch_limits,
     select_review_event_batch,
 )
-from .cloud_review_event_delivery import CLOUD_REVIEW_EVENT_PROTOCOL_VERSION, post_review_events
+from .cloud_review_event_delivery import post_review_events
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
 from .cloud_review_retry_recovery import recover_rejected_review_events, retry_result_message
 from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
-from .local_request_snapshots import _resolve_cloud_receipt_redaction_level
 from .native_workspace_review_context import NativeWorkspaceReviewContextProbeState
 from .native_workspace_review_replay import (
     _PROBE_STATE_ATTRIBUTE,
@@ -38,7 +38,6 @@ CLOUD_REVIEW_SYNC_STATE_KEY = "guard_cloud_review_sync_state"
 __all__ = [
     "CloudReviewSyncWorker",
     "build_cloud_review_event",
-    "cloud_review_sync_status",
     "start_cloud_sync_sync_worker",
     "stop_cloud_sync_sync_worker",
     "sync_cloud_review_events_once",
@@ -47,6 +46,21 @@ __all__ = [
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
+    policy_bundle = validated_synced_policy_bundle(store)
+    if policy_bundle is not None:
+        level = policy_bundle.get("receiptRedactionLevel")
+        if isinstance(level, str) and level in VALID_RECEIPT_REDACTION_LEVELS:
+            return level
+    try:
+        config = load_guard_config(store.guard_home)
+        if config.receipt_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+            return config.receipt_redaction_level
+    except (OSError, ValueError):
+        pass
+    return "full"
 
 
 def _redacted_error(error: BaseException) -> str:
@@ -446,42 +460,6 @@ def sync_cloud_review_events_once(
         _save_sync_state(store, state)
         _LOGGER.warning("Cloud Review sync failed: %s", error_message)
         raise
-
-
-def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
-    """Return Cloud Review outbox and delivery health."""
-    state = _load_sync_state(store)
-    profile = store.get_cloud_sync_profile()
-    workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    try:
-        binding = store.get_review_event_oauth_binding()
-        if binding is not None:
-            outbox = store.review_event_outbox_status(
-                now=_now(),
-                oauth_subject_hash=binding["oauth_subject_hash"],
-                workspace_id=binding["workspace_id"],
-                machine_id=binding["machine_id"],
-                machine_installation_id=binding["machine_installation_id"],
-            )
-        else:
-            outbox = store.review_event_outbox_status(
-                now=_now(),
-                workspace_id=workspace_id,
-            )
-    except NativeGuardStoreUnavailable as error:
-        outbox = unavailable_outbox_status(error)
-    return {
-        "state": state.get("state") or "not_configured",
-        "last_sync_at": state.get("last_sync_at"),
-        "last_success_at": state.get("last_success_at"),
-        "last_error": state.get("last_error"),
-        "synced_count": state.get("synced_count", 0),
-        "rejected_count": state.get("rejected_count", 0),
-        "outbox": outbox,
-        "oauth_source": store.guard_source,
-        "protocol_version": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
-        "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
-    }
 
 
 from .cloud_review_sync_worker import (  # noqa: E402

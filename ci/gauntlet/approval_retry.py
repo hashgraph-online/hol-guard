@@ -6,10 +6,15 @@ and the agent's own next attempt is stopped again passes the catalog cleanly. Th
 shape users report: the approval binds the exact action it was queued for, and a model that
 rewords its retry, or retries after a policy republish, needs a fresh approval.
 
-This lane closes the hole. It raises the installed policy's subprocess floor to ``review``
-so an ordinary command is reviewed, grants every review row the run creates through the
-same resolution the approval UI posts, and asks whether the agent's own next attempt got
-through on the approval the user already gave.
+This lane closes the hole. It raises the installed policy's floor so an ordinary action is
+reviewed, grants every review row the run creates through the same resolution the approval
+UI posts, and asks whether the agent's own next attempt got through on the approval the
+user already gave.
+
+A case's repeated action may be a shell command or a file-tool call. Both are reviewed by
+a configured floor and both queue the same approval row, so the lane tells them apart only
+where it has to: which floor the fixture's config raises, and how a grant resolves to the
+action it covers (``approval_retry_action``).
 """
 
 from __future__ import annotations
@@ -20,6 +25,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .approval_retry_action import decision_action, grant_action, relative_path
+
 CATALOG = Path(__file__).with_name("approval_retry.json")
 # ``subprocess_action`` is the only configured floor that reaches an ordinary shell
 # command: risk_classes() maps every Command to "execution", which is not a settable risk
@@ -27,6 +34,12 @@ CATALOG = Path(__file__).with_name("approval_retry.json")
 # resident raises its own floors as well, so the reviewed attempt a case sees may carry a
 # review reason this config did not set.
 REVIEW_CONFIG = 'mode = "enforce"\nsubprocess_action = "review"\n'
+# ``subprocess_action`` does not reach a file tool, which is neither a Command nor a
+# ProcessService, and an ordinary workspace write proves itself safe before risk_actions
+# sees it. ``default_action`` is the one configured floor left, and it is safe to raise
+# here because a benign prompt softens it to "warn" rather than stopping the task before
+# the agent ever calls a tool.
+FILE_REVIEW_CONFIG = 'mode = "enforce"\ndefault_action = "review"\n'
 # Under the default blocked_request_mode the response's own policy_action reads "block"
 # even for a review, so the reason code is the only reliable mark of a reviewed attempt.
 # The resident has a reason code per review floor — the configured policy floor, the git
@@ -38,13 +51,19 @@ USER_BLOCK_REASON = "native_review_user_block"
 GRANT_REASON = "Gauntlet operator approved the reviewed action"
 
 
-def write_review_config(guard_home: Path) -> dict[str, Any]:
-    """Raise the fixture's subprocess floor to review before its daemon starts."""
+def write_review_config(guard_home: Path, *, file_tool: bool = False) -> dict[str, Any]:
+    """Raise the fixture's review floor before its daemon starts.
+
+    ``file_tool`` picks the floor that reaches the case's own action: the default floor
+    for a case whose repeated action is a file-tool call, the subprocess floor otherwise.
+    """
     guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
-    (guard_home / "config.toml").write_text(REVIEW_CONFIG, encoding="utf-8", newline="\n")
+    setting = "default_action" if file_tool else "subprocess_action"
+    config = FILE_REVIEW_CONFIG if file_tool else REVIEW_CONFIG
+    (guard_home / "config.toml").write_text(config, encoding="utf-8", newline="\n")
     # blocked_request_mode stays at its default, so Guard denies the first attempt at once
     # and the agent, not a waiting hook, decides what to send next.
-    return {"subprocess_action": "review", "blocked_request_mode": "safe-alternative"}
+    return {setting: "review", "blocked_request_mode": "safe-alternative"}
 
 
 def is_review_reason(reason_code: str) -> bool:
@@ -59,6 +78,19 @@ def _row_target(row: dict[str, Any]) -> str:
         if isinstance(value, str) and value.strip():
             return value
     return ""
+
+
+def _row_tool(row: dict[str, Any]) -> str | None:
+    """The tool an approval row was queued for, when it carried no command text.
+
+    A shell row's action is its command, so its tool is left unrecorded and the grant
+    resolves the same way it always has. A file-tool row has no command at all, and its
+    artifact name is the tool whose call the operator is approving.
+    """
+    if str(row.get("raw_command_text") or "").strip():
+        return None
+    name = row.get("artifact_name")
+    return name if isinstance(name, str) and name.strip() else None
 
 
 def is_review_row(row: dict[str, Any]) -> bool:
@@ -222,6 +254,7 @@ class ReviewApprover:
                 {
                     "request_id": request_id,
                     "target": target,
+                    "tool": _row_tool(row),
                     "granted_at": round(time.monotonic(), 3),
                     "persist_policy": persist_policy is True,
                     "artifact_hash": artifact_hash,
@@ -317,61 +350,12 @@ class ReviewApprover:
             }
 
 
-# Options that carry their value as the next word, so that word is not the
-# subcommand. Everything else a command places before its subcommand either is
-# a flag or attaches its value with "=", both of which this skips on sight.
-VALUE_OPTIONS = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
-
-
-def _names_a_path(word: str) -> bool:
-    """Is this operand a filesystem location rather than a subcommand?
-
-    A subcommand is a bare name the program defines. A path carries a separator, a
-    leading dot or tilde, or a suffix, and none of the subcommands this lane has to tell
-    apart ("status", "config", "run") does. Judged on the word's shape rather than on a
-    list of programs, so a program this lane has never run is read the same way.
-    """
-    return word in {".", ".."} or word.startswith(("/", "./", "../", "~", ".")) or "/" in word or "." in word
-
-
-def action_key(command: str) -> tuple[str, ...]:
-    """The program and subcommand an attempt names.
-
-    A reworded retry keeps both and changes only its options, so this is what ties a
-    retry to the attempt the operator approved. Other work the review floor also stops —
-    the status and config calls an agent or its harness makes to orient itself — names a
-    different subcommand and is not counted against the approval.
-
-    Options before the subcommand are skipped rather than counted, so a retry that adds
-    one ("git -C dir status") still names the action the operator approved. So is an
-    operand that names a filesystem location, because a program whose arguments are all
-    paths has no subcommand at all: "ls -la" and "ls -la ." are one action worded twice,
-    and reading the path as a subcommand would split them into two and let a second
-    approval for the same outcome pass unseen.
-    """
-    try:
-        words = shlex.split(command)
-    except ValueError:
-        words = command.split()
-    if not words:
-        return ()
-    rest = iter(words[1:])
-    for word in rest:
-        if word in VALUE_OPTIONS:
-            next(rest, None)
-            continue
-        if word.startswith("-") or _names_a_path(word):
-            continue
-        return (words[0], word)
-    return (words[0],)
-
-
 def _granted_actions(grants: dict[str, Any]) -> list[tuple[str, ...]]:
     """The action each grant resolved, so a grant can be matched to the attempt it covers."""
     rows = grants.get("granted")
     if not isinstance(rows, list):
         return []
-    return [action_key(str(row.get("target") or "")) for row in rows if isinstance(row, dict)]
+    return [grant_action(row) for row in rows if isinstance(row, dict)]
 
 
 def _retried_actions(
@@ -385,10 +369,10 @@ def _retried_actions(
     """
     retried: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for row in stopped:
-        action = action_key(str(row["command"]))
+        action = decision_action(row)
         if action in retried:
             continue
-        later = [d for d in decisions[decisions.index(row) + 1 :] if action_key(str(d["command"])) == action]
+        later = [d for d in decisions[decisions.index(row) + 1 :] if decision_action(d) == action]
         if later:
             retried[action] = later
     return retried
@@ -412,7 +396,7 @@ def retry_assessment(case: dict[str, Any], decisions: list[dict[str, Any]] | Non
         return "harness-error", "granting a review row raised " + str(grants["errors"][0])
     if decisions is None:
         decisions = case.get("guard_decisions") or []
-    decisions = [d for d in decisions if d.get("command")]
+    decisions = [d for d in decisions if decision_action(d)]
     reviewed = [d for d in decisions if is_review_reason(str(d.get("reason_code") or ""))]
     stopped = [d for d in reviewed if d["decision"] != "allow"]
     granted = _granted_actions(grants)
@@ -420,7 +404,7 @@ def retry_assessment(case: dict[str, Any], decisions: list[dict[str, Any]] | Non
         return "not-exercised", "Guard never reviewed a command"
     if not stopped:
         return "not-exercised", "Guard allowed the first attempt, so no approval was needed"
-    if not any(action in {action_key(str(d["command"])) for d in stopped} for action in granted):
+    if not any(action in {decision_action(d) for d in stopped} for action in granted):
         return "harness-error", "the queued review row was never granted through the approval path"
     retried = _retried_actions(stopped, decisions)
     if not retried:
@@ -442,21 +426,40 @@ def retry_assessment(case: dict[str, Any], decisions: list[dict[str, Any]] | Non
     # grant refutes that claim whether or not some other action got through.
     blocked = [action for action, attempts in retried.items() if not any(d["decision"] == "allow" for d in attempts)]
     if blocked:
-        last = [d for d in stopped if action_key(str(d["command"])) == blocked[0]][-1]
+        last = [d for d in stopped if decision_action(d) == blocked[0]][-1]
         return "fail", f"the agent never got a retry past Guard after approval ({last['reason_code']})"
     return "pass", "one approval let the agent's own retry through with no second review"
 
 
-def pinned_retry_outcome(commands: tuple[str, ...], decisions: list[dict[str, Any]]) -> tuple[str, str] | None:
-    """For a case that pins its command, did an allowed retry carry exactly those bytes?
+def pinned_retry_outcome(
+    commands: tuple[str, ...],
+    decisions: list[dict[str, Any]],
+    path: str | None = None,
+    tool: str | None = None,
+) -> tuple[str, str] | None:
+    """For a case that pins its action, did an allowed retry carry exactly that action?
 
-    ``retry_assessment`` ties a retry to the approval by program and subcommand, so it
-    alone would pass a retry that changed an environment setting or an argument. A
-    pinned case claims the identical command runs, so it also needs an allowed attempt
-    whose text matches a pinned command byte for byte.
+    ``retry_assessment`` ties a retry to the approval by program and subcommand, or for a
+    file tool by tool and path, so it alone would pass a retry that changed an environment
+    setting or an argument. A pinned case claims the identical action runs, so it also
+    needs an allowed attempt that matches what the case pinned: a command byte for byte,
+    or the exact file the case named, read by the tool the case named. Without the tool,
+    an edit of the pinned file would pass a case whose point is that a read of it runs.
     """
-    if not commands:
+    if commands:
+        if any(d.get("decision") == "allow" and d.get("command") in commands for d in decisions):
+            return None
+        return "not-exercised", "no allowed retry matched the pinned command byte for byte"
+    if not path:
         return None
-    if any(d.get("decision") == "allow" and d.get("command") in commands for d in decisions):
+    wanted = relative_path(path)
+    named = tool.strip().lower() if tool else None
+    for row in decisions:
+        if row.get("decision") != "allow" or not isinstance(row.get("path"), str):
+            continue
+        if relative_path(row["path"]) != wanted:
+            continue
+        if named and str(row.get("tool") or "").strip().lower() != named:
+            continue
         return None
-    return "not-exercised", "no allowed retry matched the pinned command byte for byte"
+    return "not-exercised", "no allowed retry named the file the case pinned"

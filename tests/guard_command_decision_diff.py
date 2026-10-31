@@ -162,6 +162,7 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "tests" / "test_guard_command_corpus_native_contract.py",
     REPO_ROOT / "tests" / "test_guard_command_decision_diff.py",
     REPO_ROOT / "tests" / "native_command_test_support.py",
+    REPO_ROOT / "tests" / "native_command_effect_batch.py",
     REPO_ROOT / "tests" / "test_native_command_test_support_batch.py",
     REPO_ROOT / "tests" / "test_guard_native_classification_baseline.py",
     REPO_ROOT / "tests" / "test_guard_contained_package_script_execution.py",

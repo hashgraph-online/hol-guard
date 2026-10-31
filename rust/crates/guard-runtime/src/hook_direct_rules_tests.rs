@@ -6,9 +6,21 @@ use crate::hook_direct::cursor;
 use serde_json::{json, Value};
 use std::fs;
 
+/// The environment the daemon publishes with the binding, which the lane
+/// identifies a launch with.
+fn published_environment() -> Value {
+    json!({ "HOME": HOME, "PATH": std::env::var("PATH").unwrap() })
+}
+
 #[test]
 fn custom_rules_still_answer_a_command_that_launches_no_local_cli() {
-    let rules = allowing_lane("cli-rules", json!({ "local_cli_block_rules": true }));
+    let rules = allowing_lane(
+        "cli-rules",
+        json!({
+            "local_cli_block_rules": true,
+            "exact_action_environment": published_environment(),
+        }),
+    );
     // `pwd` launches no local CLI, so no custom rule can block it.
     assert_eq!(run(&rules, allowed_payload(&rules))["outcome"], "answer");
     // The edge reviews a launch it cannot prove benign, so the daemon
@@ -24,7 +36,10 @@ fn custom_rules_still_answer_a_command_that_launches_no_local_cli() {
 
 #[test]
 fn a_block_rule_saved_after_the_publish_still_answers_a_command_without_a_cli() {
-    let lane = allowing_lane("stored-rules", json!({}));
+    let lane = allowing_lane(
+        "stored-rules",
+        json!({ "exact_action_environment": published_environment() }),
+    );
     let store = lane.fixture.root.join("guard.db");
     let connection = rusqlite::Connection::open(&store).unwrap();
     connection
@@ -57,6 +72,80 @@ fn a_block_rule_saved_after_the_publish_still_answers_a_command_without_a_cli() 
         deferred(&run(&lane, allowed_payload(&lane))),
         "direct_hook_local_cli_rules"
     );
+}
+
+#[test]
+fn a_saved_block_on_the_exact_command_defers_a_command_the_edge_allows() {
+    let exact_id = |command: &str| {
+        crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
+            command: Some(command),
+            artifact_type: Some("shell_command"),
+            artifact_id: None,
+            artifact_name: None,
+            harness: None,
+        })
+        .exact_artifact_ids
+        .remove(0)
+    };
+    let seed = |lane: &Lane, harness: &str, command: &str, action: &str| {
+        let connection = rusqlite::Connection::open(lane.fixture.root.join("guard.db")).unwrap();
+        connection
+            .execute_batch(
+                "create table if not exists policy_decisions (
+                     harness text not null, scope text not null,
+                     artifact_id text, action text not null
+                 );
+                 delete from policy_decisions;",
+            )
+            .unwrap();
+        connection
+            .execute(
+                "insert into policy_decisions values (?1, 'artifact', ?2, ?3)",
+                rusqlite::params![harness, exact_id(command), action],
+            )
+            .unwrap();
+    };
+    let lane = allowing_lane("exact-block", json!({}));
+    assert_eq!(run(&lane, allowed_payload(&lane))["outcome"], "answer");
+    for (harness, command, action, expected_defer) in [
+        ("*", "pwd", "block", true),
+        ("codex", "pwd", "block", true),
+        // Another agent's rule, another command and an allow leave the
+        // edge's answer in place.
+        ("claude-code", "pwd", "block", false),
+        ("*", "pwd -P", "block", false),
+        ("*", "pwd", "allow", false),
+    ] {
+        seed(&lane, harness, command, action);
+        let result = run(&lane, allowed_payload(&lane));
+        if expected_defer {
+            assert_eq!(
+                deferred(&result),
+                "direct_hook_saved_decision",
+                "{harness} {command} {action}"
+            );
+        } else {
+            assert_eq!(result["outcome"], "answer", "{harness} {command} {action}");
+        }
+    }
+
+    // A tool that only carries the command text runs no shell command.
+    seed(&lane, "*", "pwd", "block");
+    let read = json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": { "file_path": "README.md", "command": "pwd" },
+        "cwd": lane.workspace,
+    });
+    assert_eq!(run(&lane, read)["outcome"], "answer");
+
+    // Watch records the call and lets it run.
+    let watch = allowing_lane(
+        "exact-block-watch",
+        json!({ "harness_postures": { "codex": "watch" } }),
+    );
+    seed(&watch, "*", "pwd", "block");
+    assert_eq!(run(&watch, allowed_payload(&watch))["outcome"], "answer");
 }
 
 #[test]

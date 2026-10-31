@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 NATIVE_BOUNDED_HOOK_COMMAND = "bounded-hook-bridge"
@@ -12,16 +12,14 @@ NATIVE_BOUNDED_HOOK_FEATURE = "bounded-hook-bridge-v1"
 _NATIVE_BOUNDED_HOOK_HARNESSES = frozenset(
     {"copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode", "grok"}
 )
-_NATIVE_ELAPSED_ENV = "HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS"
-_NATIVE_DAEMON_TRIED_ENV = "HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED"
 
 
 def bounded_python_argv(argv: Sequence[object]) -> list[object]:
     """The Python bridge argv inside a native launcher prefix, else ``argv``.
 
-    The native runtime answers a bounded hook from the daemon itself and runs
-    the Python bridge argv that follows its subcommand for everything else, so
-    a native and a Python registration of one hook name the same bridge.
+    The native runtime answers a bounded hook from the daemon itself and never
+    runs the Python bridge argv that follows its subcommand; the argv keeps a
+    native and a Python registration of one hook naming the same bridge.
     """
     values = list(argv)
     if len(values) > 2 and isinstance(values[0], str) and values[0] and values[1] == NATIVE_BOUNDED_HOOK_COMMAND:
@@ -75,31 +73,10 @@ def native_bridge_executable(harness: str, *, guard_home: Path | None = None) ->
     return native_hook_bridge_executable(NATIVE_BOUNDED_HOOK_FEATURE, guard_home=guard_home)
 
 
-def take_native_handoff_environment() -> tuple[Callable[[float], float], bool]:
-    """Read and drop what the native bridge passed, so no hook child inherits it.
-
-    Returns the time the native bridge already spent on this hook, capped at a
-    limit, and whether it already asked the daemon. The elapsed time only ever
-    shortens the deadline, and a hook the daemon already saw goes straight to
-    the isolated CLI evaluation, so neither value can loosen a decision.
-    """
-
-    raw_elapsed = os.environ.pop(_NATIVE_ELAPSED_ENV, None)
-    daemon_tried = os.environ.pop(_NATIVE_DAEMON_TRIED_ENV, None) == "1"
-
-    def elapsed_seconds(limit: float) -> float:
-        if raw_elapsed is None or not raw_elapsed.isascii() or not raw_elapsed.isdigit():
-            return 0.0
-        return min(int(raw_elapsed) / 1000.0, max(0.0, limit))
-
-    return elapsed_seconds, daemon_tried
-
-
 __all__ = [
     "NATIVE_BOUNDED_HOOK_COMMAND",
     "NATIVE_BOUNDED_HOOK_FEATURE",
     "bounded_python_argv",
     "frozen_daemon_start_command",
     "native_bridge_executable",
-    "take_native_handoff_environment",
 ]

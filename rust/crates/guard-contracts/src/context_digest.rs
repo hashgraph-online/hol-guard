@@ -255,6 +255,13 @@ pub enum ContextDigestKindV1 {
         #[serde(default)]
         request: Value,
     },
+    /// Validate a hook decision receipt; with an edge result, also require the
+    /// receipt to record exactly that pre-tool result.
+    NativeDecisionReceiptValidation {
+        receipt: Value,
+        #[serde(default)]
+        edge: Value,
+    },
     McpLaunchEnvironment {
         inherited: BTreeMap<String, String>,
         configured: BTreeMap<String, String>,
@@ -436,6 +443,12 @@ pub enum ContextDigestKindV1 {
     GenericHookApprovalContext {
         inputs: Value,
     },
+    /// The bin a package-runner command launches (`npx wrangler` names
+    /// `wrangler`). `None` for anything that is not a runner launch, and for
+    /// every selector form that runs something other than the named bin.
+    PackageRunnerTarget {
+        tokens: Vec<String>,
+    },
 }
 
 // `deny_unknown_fields` cannot combine with `flatten` (serde rejects the
@@ -500,6 +513,8 @@ pub struct ContextDigestResultV1 {
     pub mcp_redacted_value: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_bash_reply_valid: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_decision_receipt_valid: Option<bool>,
     /// `build_runtime_executable_identity` / `build_runtime_launch_identity`
     /// output — the full launch-identity object, verbatim Python dict shape.
     /// These kinds always produce it; `Option` keeps it absent on other kinds.
@@ -559,6 +574,10 @@ pub struct ContextDigestResultV1 {
     /// `memory_pattern` answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_pattern: Option<MemoryPatternVerdictV1>,
+    /// `package_runner_target` answer; absent when the tokens name no
+    /// package-runner launch of a plain bin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_runner_target: Option<String>,
 }
 
 /// A remembered decision's behavior fingerprint and lookup candidates.

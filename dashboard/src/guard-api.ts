@@ -96,6 +96,7 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
 
@@ -131,8 +132,10 @@ type RawGuardApprovalRequest = Omit<
   | "scope_restrictions"
   | "task_capability_eligibility"
   | "extension_recommendation"
+  | "extension_coverage"
 > & {
   extension_recommendation?: unknown;
+  extension_coverage?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -1115,6 +1118,13 @@ export async function fetchReleaseFeedApi(input: RequestInfo, init?: RequestInit
   return fetchWithGuardAuth(input, init);
 }
 
+export async function fetchPluginUpdatesApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  if (input !== "/v1/plugins/updates" && input !== "/v1/plugins/updates/dismiss") {
+    throw new Error("Invalid plugin updates API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -1511,9 +1521,11 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
   const {
     decision_contract_error: rawContractError,
     extension_recommendation: rawExtensionRecommendation,
+    extension_coverage: rawExtensionCoverage,
     ...baseItem
   } = item;
   const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
+  const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1614,6 +1626,7 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     ...(extensionRecommendation !== null && !hasDecisionContractError
       ? { extension_recommendation: extensionRecommendation }
       : {}),
+    ...(extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),
@@ -4257,26 +4270,33 @@ export async function runPackageAudit(input?: {
   return normalizePackageFirewallAction(payloadBody);
 }
 
+/** How long the dashboard waits for a supply-chain sync before it stops waiting and rechecks status. */
+export const SUPPLY_CHAIN_SYNC_TIMEOUT_MS = 45_000;
+
 export async function runPackageSync(credentials?: {
   approval_password?: string;
   approval_totp_code?: string;
 }): Promise<PackageFirewallActionResponse> {
-  const response = await fetchGuardApi("/v1/supply-chain/sync", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeaders(),
+  const { response, payload: payloadBody } = await fetchLocalProtectionJson(
+    "/v1/supply-chain/sync",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders(),
+      },
+      body: JSON.stringify({
+        ...(credentials?.approval_password !== undefined
+          ? { approval_password: credentials.approval_password }
+          : {}),
+        ...(credentials?.approval_totp_code !== undefined
+          ? { approval_totp_code: credentials.approval_totp_code }
+          : {}),
+      }),
     },
-    body: JSON.stringify({
-      ...(credentials?.approval_password !== undefined
-        ? { approval_password: credentials.approval_password }
-        : {}),
-      ...(credentials?.approval_totp_code !== undefined
-        ? { approval_totp_code: credentials.approval_totp_code }
-        : {}),
-    }),
-  });
-  const payloadBody = (await response.json().catch(() => null)) as unknown;
+    SUPPLY_CHAIN_SYNC_TIMEOUT_MS,
+    "Guard Cloud did not answer the intel sync in time. Guard rechecked the feed status; try syncing again if it is still out of date.",
+  );
   if (!response.ok) {
     throw new GuardHarnessActionError(
       response.status,

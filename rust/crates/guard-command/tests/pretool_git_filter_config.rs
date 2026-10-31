@@ -164,3 +164,94 @@ fn unused_global_filters_do_not_block_unrelated_repository_inspection() {
         );
     }
 }
+
+#[test]
+fn an_ls_files_modified_listing_answers_for_a_used_clean_filter() {
+    let temp = if cfg!(windows) {
+        canonical_spelling(std::env::temp_dir())
+    } else {
+        std::env::temp_dir()
+    };
+    let root = temp.join(format!("guard ls-files filters {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    std::fs::write(repository.join("ordinary.txt"), "ordinary fixture\n").unwrap();
+    let marker = root.join("filter-executed");
+    let marker_path = marker.to_string_lossy().replace('\\', "/");
+    let marker_command = format!("touch '{}'", marker_path.replace('\'', "'\\''"));
+    let config_command = serde_json::to_string(&marker_command).unwrap();
+    std::fs::write(
+        home.join(".gitconfig"),
+        format!(
+            "[filter \"synthetic\"]\n\tclean = {config_command}\n\tsmudge = {config_command}\n"
+        ),
+    )
+    .unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    let controls = github_controls("enabled");
+    // Selectors answered from the index, the directory walk and `lstat` alone,
+    // which never hash a working-tree file.
+    let listings = ["git ls-files", "git ls-files -d", "git ls-files --others"];
+    // `-m` compares each tracked file with its stored blob, and a comparison
+    // the stat data cannot settle reads the file and converts it, which runs
+    // the repository's clean filter.
+    let comparisons = [
+        "git ls-files -m",
+        "git ls-files --modified",
+        "git ls-files -cm",
+    ];
+    let judge = |command: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            home.to_str(),
+            repository.to_str(),
+        )
+    };
+    // A global filter definition no path uses executes nothing.
+    for command in listings.iter().chain(&comparisons) {
+        let result = judge(command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    std::fs::write(
+        repository.join(".gitattributes"),
+        "ordinary.txt filter=synthetic\n",
+    )
+    .unwrap();
+    for command in comparisons {
+        let result = judge(command);
+        assert_eq!(result.decision, "deny", "{command}");
+        assert_eq!(
+            result.reason_code, "native_git_execution_context_review",
+            "{command}"
+        );
+    }
+    // The attached filter changes nothing for a listing that never hashes.
+    for command in listings {
+        let result = judge(command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    assert!(
+        !marker.exists(),
+        "a listing must never execute configured filters"
+    );
+}

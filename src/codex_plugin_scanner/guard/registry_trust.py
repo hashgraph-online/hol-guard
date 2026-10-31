@@ -1,9 +1,10 @@
 """HOL Registry trust scores for new or changed skills, MCP servers and plugins.
 
 Guard asks the fixed Guard Cloud origin for an artifact's public registry trust
-score and reviews the artifact through the ``low_trust_artifact`` risk action
-when the score is below ``LOW_TRUST_THRESHOLD``. Only the artifact's kind and
-public name go on the wire: no credential, cookie, path or device identifier.
+score and sends it to the resident, which reviews the artifact through the
+``low_trust_artifact`` risk action when the score is below the threshold it
+holds. Only the artifact's kind and public name go on the wire: no credential,
+cookie, path or device identifier.
 
 A missing score never triggers a review. An unknown artifact, an unreachable
 origin, a malformed answer, an ambiguous match or a kind the origin cannot score
@@ -33,8 +34,6 @@ from ..version import __version__
 from .mdm.network_transport import managed_opener
 
 REGISTRY_TRUST_ENV = "HOL_GUARD_REGISTRY_TRUST"
-LOW_TRUST_THRESHOLD = 80
-LOW_TRUST_RISK_KEY = "low_trust_artifact"
 
 TRUST_ORIGIN = "https://hol.org"
 PLUGIN_SEARCH_PATH = "/api/guard/plugins/search"
@@ -124,10 +123,6 @@ def registry_trust_score(
     cache[key] = {"score": score, "checked_at": clock}
     _store_cache(guard_home, cache)
     return cast(int | None, score)
-
-
-def is_low_trust(score: int | None) -> bool:
-    return score is not None and score < LOW_TRUST_THRESHOLD
 
 
 _UNREACHABLE = object()
@@ -271,10 +266,7 @@ def _checked_at(entry: Mapping[str, object]) -> float:
 
 
 __all__ = [
-    "LOW_TRUST_RISK_KEY",
-    "LOW_TRUST_THRESHOLD",
     "REGISTRY_TRUST_ENV",
-    "is_low_trust",
     "registry_kind",
     "registry_trust_enabled",
     "registry_trust_score",

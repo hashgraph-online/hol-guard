@@ -22,10 +22,12 @@ use serde_json::{json, Value};
 
 use crate::claude_hook_bridge_http::remaining;
 use crate::claude_hook_bridge_render::py_strip;
+#[cfg(unix)]
 use crate::codex_hook_bridge_direct_resident::send_to_live_resident;
+use crate::codex_hook_bridge_direct_resident::{send_to_live_resident_reporting, DirectMiss};
 use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 
-const STATE_DIRECTORY: &str = "native-runtime";
+pub(crate) const STATE_DIRECTORY: &str = "native-runtime";
 const DIRECT_RESULT_SCHEMA: &str = "guard-hook-direct-result.v1";
 const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
 /// Claude Code's permission dialog, which the resident answers from the
@@ -68,7 +70,7 @@ pub(crate) const OMP: DirectHarness = DirectHarness {
 /// The bounded bridge harnesses the resident answers. The resident routes a
 /// ZCode sandbox requirement to contained execution as the daemon does.
 /// Grok runs its own client, which asks through [`grok_direct_answer`].
-const BOUNDED_DIRECT_HARNESSES: [&str; 8] = [
+pub(crate) const BOUNDED_DIRECT_HARNESSES: [&str; 8] = [
     "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode",
 ];
 const BOUNDED_DIRECT_SWITCH: &str = "HOL_GUARD_BOUNDED_DIRECT_HOOK";
@@ -76,6 +78,17 @@ const GROK: &str = "grok";
 /// A resident answers an allow well inside this. A slower resident leaves
 /// the daemon most of the hook's budget.
 const DIRECT_TIMEOUT: Duration = Duration::from_millis(1_000);
+
+/// Which answers the resident is asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Lane {
+    /// The ordinary direct lane: the resident answers the hooks it holds a
+    /// binding for and defers the rest.
+    Ordinary,
+    /// Only what the ratified emergency-safe profile continues, which a
+    /// bridge asks for after its daemon has already failed.
+    EmergencySafe,
+}
 
 /// The query parameters the daemon reads, as `parse_qs(query)[name][-1]`.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -204,6 +217,7 @@ pub(crate) fn direct_request(
         query.workspace,
         data,
         budget,
+        Lane::Ordinary,
     )
 }
 
@@ -222,6 +236,28 @@ pub(crate) fn bounded_direct_request(
     data: &str,
     budget: Duration,
 ) -> Option<Vec<u8>> {
+    bounded_request(harness, guard_home, data, budget, Lane::Ordinary)
+}
+
+/// The `hook_direct` request a bounded bridge sends once its daemon has
+/// failed: the same request, asking the resident for the emergency-safe
+/// profile alone.
+pub(crate) fn bounded_emergency_safe_request(
+    harness: &str,
+    guard_home: &Path,
+    data: &str,
+    budget: Duration,
+) -> Option<Vec<u8>> {
+    bounded_request(harness, guard_home, data, budget, Lane::EmergencySafe)
+}
+
+fn bounded_request(
+    harness: &str,
+    guard_home: &Path,
+    data: &str,
+    budget: Duration,
+    lane: Lane,
+) -> Option<Vec<u8>> {
     let name = BOUNDED_DIRECT_HARNESSES
         .iter()
         .find(|name| **name == harness)?;
@@ -229,7 +265,7 @@ pub(crate) fn bounded_direct_request(
     if resolved_guard_home.as_path() != guard_home {
         return None;
     }
-    request_body(name, &resolved_guard_home, None, None, data, budget)
+    request_body(name, &resolved_guard_home, None, None, data, budget, lane)
 }
 
 /// The `hook_direct` request for a Grok hook, which reaches the daemon with
@@ -265,6 +301,7 @@ pub(crate) fn grok_direct_request(
         None,
         data,
         budget,
+        Lane::Ordinary,
     )
 }
 
@@ -275,6 +312,7 @@ fn request_body(
     workspace: Option<String>,
     data: &str,
     budget: Duration,
+    lane: Lane,
 ) -> Option<Vec<u8>> {
     let payload: Value = serde_json::from_str(data).ok()?;
     if !payload.is_object() {
@@ -293,6 +331,12 @@ fn request_body(
     if let Some(workspace) = workspace {
         request["workspace"] = Value::String(workspace);
     }
+    // A resident that predates the profile rejects the field outright, so an
+    // install whose runtime has not been replaced answers nothing here and
+    // the hook pauses as it did before.
+    if lane == Lane::EmergencySafe {
+        request["emergency_safe_only"] = Value::Bool(true);
+    }
     serde_json::to_vec(&json!({
         "operation": "hook_direct",
         // Without a budget the resident client falls back to 750 ms.
@@ -304,18 +348,28 @@ fn request_body(
 
 /// The harness response of an `answer`, or `None` for a defer or anything
 /// that is not a well-formed `hook_direct` result.
+#[cfg(unix)]
 pub(crate) fn answered_response(output: &[u8]) -> Option<String> {
-    let result: Value = serde_json::from_slice(output).ok()?;
-    if result.get("schema")?.as_str()? != DIRECT_RESULT_SCHEMA
-        || result.get("outcome")?.as_str()? != "answer"
-    {
-        return None;
+    answered_response_reporting(output).ok()
+}
+
+/// [`answered_response`], telling a deferral from a reply it cannot use.
+fn answered_response_reporting(output: &[u8]) -> Result<String, DirectMiss> {
+    let result: Value = serde_json::from_slice(output).map_err(|_| DirectMiss::Unanswered)?;
+    if result.get("schema").and_then(Value::as_str) != Some(DIRECT_RESULT_SCHEMA) {
+        return Err(DirectMiss::Unanswered);
     }
-    let response = result.get("edge")?.get("harness_response")?;
-    if !response.is_object() {
-        return None;
+    match result.get("outcome").and_then(Value::as_str) {
+        Some("answer") => {}
+        Some("defer") => return Err(DirectMiss::Defer),
+        _ => return Err(DirectMiss::Unanswered),
     }
-    serde_json::to_string(response).ok()
+    let response = result
+        .get("edge")
+        .and_then(|edge| edge.get("harness_response"))
+        .filter(|response| response.is_object())
+        .ok_or(DirectMiss::Unanswered)?;
+    serde_json::to_string(response).map_err(|_| DirectMiss::Unanswered)
 }
 
 fn direct_enabled(switch: &str) -> bool {
@@ -326,7 +380,7 @@ fn direct_enabled(switch: &str) -> bool {
 /// tool or prompt hook it reviews, or a lifecycle hook it answers with the
 /// daemon's constant. Permission and notification hooks, and the `before*`
 /// hooks the daemon denies, go to the daemon without asking the resident;
-/// `direct_answer` asks it about Claude Code's `PermissionRequest` and
+/// `direct_answer_reporting` asks it about Claude Code's `PermissionRequest` and
 /// `Notification`, and Codex's `PermissionRequest`; `bounded_direct_answer`
 /// asks it about Copilot's, Devin's and ZCode's `PermissionRequest`.
 fn direct_event(event_name: &str) -> bool {
@@ -366,61 +420,104 @@ fn harness_event(harness: &DirectHarness, event_name: &str) -> bool {
         || (harness.name == CODEX.name && event_name == PERMISSION_REQUEST)
 }
 
-/// The harness response a live resident answered for this hook, or `None`
-/// to take the daemon path.
-pub(crate) fn direct_answer(
+/// The harness response a live resident answered for this hook, or why the
+/// hook takes the daemon path.
+pub(crate) fn direct_answer_reporting(
     harness: DirectHarness,
     guard_home: &Path,
     query: &str,
     event_name: &str,
     data: &str,
     rpc_deadline: Instant,
-) -> Option<String> {
-    if !harness_event(&harness, event_name) || !direct_enabled(harness.switch) {
-        return None;
+) -> Result<String, DirectMiss> {
+    if !direct_enabled(harness.switch) {
+        return Err(DirectMiss::Disabled);
+    }
+    if !harness_event(&harness, event_name) {
+        return Err(DirectMiss::Event);
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
-    let request = direct_request(harness, guard_home, query, data, remaining(deadline))?;
-    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
-    answered_response(&output)
+    let request = direct_request(harness, guard_home, query, data, remaining(deadline))
+        .ok_or(DirectMiss::Request)?;
+    let output =
+        send_to_live_resident_reporting(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response_reporting(&output)
 }
 
 /// The harness response a live resident answered for a bounded bridge hook,
-/// or `None` to take the daemon path.
+/// or why the hook takes the daemon path.
 pub(crate) fn bounded_direct_answer(
     harness: &str,
     guard_home: &Path,
     event_name: &str,
     data: &str,
     rpc_deadline: Instant,
-) -> Option<String> {
-    if !bounded_event(harness, event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
-        return None;
+) -> Result<String, DirectMiss> {
+    if !direct_enabled(BOUNDED_DIRECT_SWITCH) {
+        return Err(DirectMiss::Disabled);
+    }
+    if !bounded_event(harness, event_name) {
+        return Err(DirectMiss::Event);
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
-    let request = bounded_direct_request(harness, guard_home, data, remaining(deadline))?;
-    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
-    answered_response(&output)
+    let request = bounded_direct_request(harness, guard_home, data, remaining(deadline))
+        .ok_or(DirectMiss::Request)?;
+    let output =
+        send_to_live_resident_reporting(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response_reporting(&output)
 }
 
-/// The harness response a live resident answered for a Grok hook, or `None`
-/// to take the daemon path. The bridge asks for a prompt only once the
-/// daemon reports its workspace ready, with the time left stamped, as the
-/// daemon would receive it.
+/// The harness response a live resident continued a bounded bridge hook
+/// with under the ratified emergency-safe profile, or why nothing answered.
+///
+/// The bridge asks this only after its daemon has failed and it is about to
+/// pause the call. The resident alone holds the proofs the profile requires,
+/// and it continues nothing else; every other hook comes back a defer and
+/// the bridge pauses it as before. The same switch that turns the direct
+/// lane off keeps this ask off too.
+pub(crate) fn bounded_emergency_safe_answer(
+    harness: &str,
+    guard_home: &Path,
+    event_name: &str,
+    data: &str,
+    rpc_deadline: Instant,
+) -> Result<String, DirectMiss> {
+    if !direct_enabled(BOUNDED_DIRECT_SWITCH) {
+        return Err(DirectMiss::Disabled);
+    }
+    if !bounded_event(harness, event_name) {
+        return Err(DirectMiss::Event);
+    }
+    let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
+    let request = bounded_emergency_safe_request(harness, guard_home, data, remaining(deadline))
+        .ok_or(DirectMiss::Request)?;
+    let output =
+        send_to_live_resident_reporting(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response_reporting(&output)
+}
+
+/// The harness response a live resident answered for a Grok hook, or why
+/// the hook takes the daemon path. The bridge asks for a prompt with the
+/// time left stamped, as the daemon would receive it.
 pub(crate) fn grok_direct_answer(
     guard_home: &Path,
     home: &str,
     event_name: &str,
     data: &str,
     rpc_deadline: Instant,
-) -> Option<String> {
-    if !direct_event(event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
-        return None;
+) -> Result<String, DirectMiss> {
+    if !direct_enabled(BOUNDED_DIRECT_SWITCH) {
+        return Err(DirectMiss::Disabled);
+    }
+    if !direct_event(event_name) {
+        return Err(DirectMiss::Event);
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
-    let request = grok_direct_request(guard_home, home, data, remaining(deadline))?;
-    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
-    answered_response(&output)
+    let request = grok_direct_request(guard_home, home, data, remaining(deadline))
+        .ok_or(DirectMiss::Request)?;
+    let output =
+        send_to_live_resident_reporting(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response_reporting(&output)
 }
 
 /// The harness response a live resident answered for `data` as `harness`
@@ -442,6 +539,7 @@ pub(crate) fn resident_hook_answer(
         Some(workspace.to_owned()),
         data,
         remaining(deadline),
+        Lane::Ordinary,
     )?;
     let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
     answered_response(&output)

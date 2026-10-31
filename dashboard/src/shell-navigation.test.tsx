@@ -47,7 +47,8 @@ assert(
 );
 assert(
   canonicalNavigationView("audit") === "supply-chain" &&
-    canonicalNavigationView("feed-health") === "supply-chain",
+    canonicalNavigationView("feed-health") === "supply-chain" &&
+    canonicalNavigationView("workspaces") === "supply-chain",
   "Supply-chain subroutes keep their parent destination active",
 );
 assert(

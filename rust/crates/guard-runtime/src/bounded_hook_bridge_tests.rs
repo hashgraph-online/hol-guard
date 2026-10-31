@@ -15,6 +15,7 @@ use super::config::{daemon_start_command, MANAGED_MARKER};
 use super::*;
 use crate::bounded_hook_bridge_render::Rendered;
 use crate::bounded_hook_bridge_render::NATIVE_HARNESSES;
+use crate::bounded_hook_bridge_render::{failure_output_for, failure_payload};
 use crate::claude_hook_bridge_fixture::{
     read_request, write_private, write_response, GuardHome, Request,
 };
@@ -54,6 +55,7 @@ fn daemon_answers_render_as_python_renders_them() {
             &text(&case, "harness"),
             &text(&case, "event"),
             false,
+            None,
         );
         let expected = Rendered {
             stdout: text(&case, "stdout"),
@@ -317,6 +319,149 @@ fn home_with_endpoint(label: &str, host: &str, port: u16, token: bool) -> GuardH
 
 const PRE_TOOL: &[u8] = br#"{"hook_event_name":"PreToolUse","tool_name":"Bash"}"#;
 
+/// What the resident answers a bounded bridge with under the ratified
+/// emergency-safe profile: the finished harness payload, which the bridge
+/// writes as it stands.
+const CONTINUE_REASON: &str =
+    "HOL Guard is unavailable; this read-only Guard command is allowed by the emergency-safe profile.";
+
+fn pre_tool_prepared(mapped: bool, collision: bool) -> Prepared {
+    Prepared {
+        data: String::from_utf8(PRE_TOOL.to_vec()).unwrap(),
+        event_name: "PreToolUse".to_owned(),
+        mapped,
+        collision,
+    }
+}
+
+#[test]
+fn an_emergency_safe_continue_is_written_as_the_resident_sent_it() {
+    let prepared = pre_tool_prepared(false, false);
+    // The resident answers a finished harness payload. Nothing reviewed the
+    // call and there is no decision to restyle, so the bridge writes what it
+    // was sent, down to the order the keys came in. The last answer is the
+    // one the resident builds for a generic harness, serialized the way it
+    // serializes it: `serde_json` maps are sorted in this workspace, so
+    // `continue` is followed by `hookSpecificOutput` and only then by
+    // `systemMessage`.
+    for answer in [
+        r#"{"permissionDecision":"allow"}"#.to_owned(),
+        format!(r#"{{"decision":"allow","reason":"{CONTINUE_REASON}"}}"#),
+        format!(
+            concat!(
+                r#"{{"continue":true,"systemMessage":"{}","#,
+                r#""hookSpecificOutput":{{"hookEventName":"PreToolUse"}}}}"#,
+            ),
+            CONTINUE_REASON
+        ),
+        json!({
+            "continue": true,
+            "systemMessage": CONTINUE_REASON,
+            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+        })
+        .to_string(),
+    ] {
+        assert_eq!(
+            emergency_safe_response(&prepared, &answer, soon()),
+            Some(Route::Respond {
+                stdout: format!("{answer}\n"),
+                stderr: String::new(),
+                exit_code: 0,
+            }),
+            "{answer}"
+        );
+    }
+}
+
+#[test]
+fn an_emergency_safe_continue_writes_what_the_pause_would_have_written() {
+    // The payload the resident answers is the one `_emit_failure` writes for
+    // an event that does not pause. The resident builds it through
+    // `serde_json`, whose maps this workspace keeps sorted, so the bridge
+    // writes a generic harness its keys sorted rather than in the order
+    // `failure_output_for` lists them. Every harness reads the payload as
+    // JSON, where that order carries no meaning, so the two are compared as
+    // the payloads they are.
+    let prepared = pre_tool_prepared(false, false);
+    for (harness, answer) in [
+        ("copilot", json!({"permissionDecision": "allow"})),
+        (
+            "openclaw",
+            json!({"decision": "allow", "reason": CONTINUE_REASON}),
+        ),
+        (
+            "hermes",
+            json!({"decision": "allow", "reason": CONTINUE_REASON}),
+        ),
+        (
+            "kimi",
+            json!({
+                "continue": true,
+                "systemMessage": CONTINUE_REASON,
+                "hookSpecificOutput": {"hookEventName": "PostToolUse"},
+            }),
+        ),
+    ] {
+        let (_, exit_code) = failure_payload(harness, "PostToolUse", CONTINUE_REASON);
+        let (expected, _) = failure_output_for(harness, "PostToolUse", CONTINUE_REASON, false);
+        let Some(Route::Respond {
+            stdout,
+            stderr,
+            exit_code: answered_exit_code,
+        }) = emergency_safe_response(&prepared, &answer.to_string(), soon())
+        else {
+            panic!("{harness} did not continue");
+        };
+        assert_eq!(stderr, String::new(), "{harness}");
+        assert_eq!(answered_exit_code, exit_code, "{harness}");
+        assert!(stdout.ends_with('\n'), "{harness}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stdout).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&expected).unwrap(),
+            "{harness}"
+        );
+    }
+}
+
+#[test]
+fn an_answer_the_bridge_cannot_write_back_pauses_the_hook() {
+    let deadline = soon();
+    let answer = json!({"permissionDecision": "allow"}).to_string();
+    // Not a mapping, and text that is not an answer at all.
+    for other in ["[]", "\"allow\"", "42", "not json", ""] {
+        assert_eq!(
+            emergency_safe_response(&pre_tool_prepared(false, false), other, deadline),
+            None,
+            "{other}"
+        );
+    }
+    // A lone surrogate beside its mapped range cannot be written back. A
+    // genuine character from that range on its own needs no unmapping, so it
+    // is written back like any other hook.
+    assert_eq!(
+        emergency_safe_response(&pre_tool_prepared(true, true), &answer, deadline),
+        None
+    );
+    assert!(emergency_safe_response(&pre_tool_prepared(false, true), &answer, deadline).is_some());
+    // An answer that arrives past the deadline is no answer.
+    assert_eq!(
+        emergency_safe_response(&pre_tool_prepared(false, false), &answer, Instant::now()),
+        None
+    );
+    assert!(emergency_safe_response(&pre_tool_prepared(true, false), &answer, deadline).is_some());
+}
+
+#[test]
+fn only_a_hook_the_bridge_would_pause_is_asked_about() {
+    // The ask stands in for the pause, so it is made only where there is one.
+    for event_name in ["PreToolUse", "UserPromptSubmit", "PermissionRequest"] {
+        assert!(event_pauses_when_unavailable(event_name), "{event_name}");
+    }
+    for event_name in ["PostToolUse", "Stop", "SessionStart"] {
+        assert!(!event_pauses_when_unavailable(event_name), "{event_name}");
+    }
+}
+
 #[test]
 fn configs_without_a_start_command_fail_closed_when_no_daemon_answers() {
     let fail = failed("PreToolUse");
@@ -423,6 +568,7 @@ fn the_daemon_answer_is_rendered_natively() {
         "kimi",
         "PreToolUse",
         false,
+        None,
     )
     .unwrap();
     assert_eq!(
@@ -492,3 +638,32 @@ fn an_answer_the_bridge_cannot_render_fails_closed() {
 
 #[path = "bounded_hook_bridge_surrogate_tests.rs"]
 mod surrogates;
+
+/// The home the bridge was launched against travels into the recovery command
+/// an authority block carries, so a person on an install the bare command
+/// would not find repairs the one that is blocking them. The fixture's home is
+/// never `<home>/.hol-guard`, which is the case the naming exists for.
+#[test]
+fn an_authority_block_names_the_home_the_bridge_read() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let answer = r#"{"policy_action":"block","reason":"HOL Guard blocked this action under the native command extension policy."}"#;
+    let daemon = serve_once(listener, 200, answer.to_owned());
+    let home = home_with_endpoint("bounded-authority-home", "127.0.0.1", port, true);
+
+    let route = route_hook(&bridge_config(&home, "zcode"), PRE_TOOL, soon());
+
+    let Route::Respond { stderr, .. } = route else {
+        panic!("the bridge did not answer: {route:?}");
+    };
+    let named = format!(
+        "hol-guard command --guard-home {} controls recover-authority",
+        crate::bounded_hook_bridge_remediation::quote_home(
+            &home.home.to_string_lossy(),
+            cfg!(windows)
+        )
+        .expect("the fixture home renders for the shell it would be pasted into")
+    );
+    assert!(stderr.contains(&named), "{stderr}");
+    daemon.join().unwrap().unwrap();
+}

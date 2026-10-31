@@ -143,13 +143,14 @@ CONTAINED_TEST_HELPERS_SOURCE = (
         response.reason_code === "native_node_test_readonly_containment_required") ||
       (profile === "workspace-contained-v1" && response.reason_code === "native_workspace_containment_required")
     );
-    // Windows runs installed Python and Node scripts, Vite builds, and local lint,
-    // typecheck and format checks, in an AppContainer. Its sink starts from a fixed
-    // argv and reads requests from the profile's Temp directory, which does not
-    // follow the TEMP this process or the shell was given.
+    // Windows runs installed Python and Node scripts, a project's own pytest, Vite
+    // builds, and local lint, typecheck and format checks, in an AppContainer. Its
+    // sink starts from a fixed argv and reads requests from the profile's Temp
+    // directory, which does not follow the TEMP this process or the shell was given.
     const windowsSink = process.platform === "win32" &&
       (profile === "python-eval-readonly-v1" || profile === "node-eval-readonly-v1" ||
-        profile === "node-build-output-v1" || profile === "node-tool-readonly-v1") &&
+        profile === "node-build-output-v1" || profile === "node-tool-readonly-v1" ||
+        profile === "pytest-readonly-v2") &&
       GUARD_CONTAINED_SINK_COMMAND.length > 0 && GUARD_CONTAINED_REQUEST_ROOT !== "";
     if (
       response.decision !== "deny" || response.policy_action !== "sandbox-required" ||

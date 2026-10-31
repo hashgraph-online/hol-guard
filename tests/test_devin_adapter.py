@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
 from pathlib import Path
@@ -10,11 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
-from codex_plugin_scanner.guard.adapters._modules.devin.devin_hooks import (
-    devin_hook_response_from_guard,
-    emit_devin_hook_response,
-    prepare_devin_hook_payload,
-)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
 from codex_plugin_scanner.guard.adapters.devin_config import (
@@ -687,100 +681,6 @@ class TestDevinInstallUninstall:
         with pytest.raises(ValueError, match="non-object hooks"):
             DevinHarnessAdapter().install(ctx)
         assert config_path.read_text(encoding="utf-8") == original
-
-
-class TestDevinHookPayload:
-    def test_exec_maps_to_bash(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "exec",
-                "tool_input": {"command": "ls"},
-                "session_id": "s",
-                "prompt_id": "p",
-            }
-        )
-        assert normalized["hook_event_name"] == "PreToolUse"
-        assert normalized["tool_name"] == "Bash"
-        assert normalized["tool_input"] == {"command": "ls"}
-        assert normalized["session_id"] == "s"
-        assert normalized["prompt_id"] == "p"
-
-    def test_mcp_call_tool_synthesizes_canonical_name(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "mcp_call_tool",
-                "tool_input": {
-                    "server_name": "github",
-                    "tool_name": "create_issue",
-                    "arguments": {"title": "hi"},
-                },
-            }
-        )
-        assert normalized["tool_name"] == "mcp__github__create_issue"
-        assert normalized["tool_input"] == {"title": "hi"}
-        assert normalized["devin_mcp_call"] == {"server_name": "github", "tool_name": "create_issue"}
-
-    def test_direct_mcp_tool_name_preserved(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {"hook_event_name": "PreToolUse", "tool_name": "mcp__github__create_issue", "tool_input": {"x": 1}}
-        )
-        assert normalized["tool_name"] == "mcp__github__create_issue"
-
-    def test_devin_project_dir_supplies_cwd(self, monkeypatch) -> None:
-        monkeypatch.setenv("DEVIN_PROJECT_DIR", "/workspace/project-root")
-        normalized = prepare_devin_hook_payload({"hook_event_name": "PreToolUse", "tool_name": "exec"})
-        assert normalized["cwd"] == "/workspace/project-root"
-
-    def test_explicit_cwd_wins_over_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("DEVIN_PROJECT_DIR", "/workspace/project-root")
-        normalized = prepare_devin_hook_payload(
-            {"hook_event_name": "PreToolUse", "tool_name": "exec", "cwd": "/elsewhere"}
-        )
-        assert normalized["cwd"] == "/elsewhere"
-
-    def test_user_prompt_submit_event(self, monkeypatch) -> None:
-        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
-        normalized = prepare_devin_hook_payload(
-            {"hook_event_name": "UserPromptSubmit", "prompt": "hello", "session_id": "s"}
-        )
-        assert normalized["hook_event_name"] == "UserPromptSubmit"
-        assert normalized["prompt"] == "hello"
-
-
-class TestDevinHookResponses:
-    def test_block_response_has_decision_and_deny(self) -> None:
-        response = devin_hook_response_from_guard(policy_action="block", reason="no", event_name="PreToolUse")
-        assert response["decision"] == "block"
-        assert response["reason"] == "no"
-        specific = response["hookSpecificOutput"]
-        assert specific["permissionDecision"] == "deny"
-        assert specific["permissionDecisionReason"] == "no"
-
-    def test_allow_response_has_no_decision(self) -> None:
-        response = devin_hook_response_from_guard(policy_action="allow", reason="", event_name="PreToolUse")
-        assert "decision" not in response
-        assert "permissionDecision" not in response["hookSpecificOutput"]
-
-    def test_no_approve_decision_is_ever_emitted(self) -> None:
-        for action in ("allow", "review", "require-reapproval", "sandbox-required", "block"):
-            response = devin_hook_response_from_guard(policy_action=action, reason="r", event_name="PreToolUse")
-            assert response.get("decision") != "approve"
-
-    def test_prompt_block_uses_additional_context(self) -> None:
-        response = devin_hook_response_from_guard(policy_action="review", reason="check", event_name="UserPromptSubmit")
-        assert response["decision"] == "block"
-        assert response["hookSpecificOutput"]["additionalContext"] == "check"
-
-    def test_emit_writes_response_to_stream(self) -> None:
-        stream = io.StringIO()
-        emit_devin_hook_response(policy_action="block", reason="no", event_name="PreToolUse", output_stream=stream)
-        response = json.loads(stream.getvalue())
-        assert response["decision"] == "block"
 
 
 class TestDevinManagedMarker:

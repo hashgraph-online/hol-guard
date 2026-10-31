@@ -102,12 +102,6 @@
   ],
   "ownership_overlap_exceptions": [
     {
-      "path": "src/codex_plugin_scanner/guard/cli/commands_hook_native_eval.py",
-      "original_slice": "CDX-063",
-      "final_slice": "CDX-068",
-      "reason": "the installed evidence slice propagates the trusted claimed-authorization fact into command activity"
-    },
-    {
       "path": "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
       "original_slice": "CDX-063",
       "final_slice": "CDX-068",
@@ -128,24 +122,17 @@
         "src/codex_plugin_scanner/guard/approval_scope_support.py",
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-        "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_eval.py",
-        "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
-        "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py",
         "rust/crates/guard-command/src/github_workflow_operations.rs",
         "rust/crates/guard-runtime/src/github_workflow_prepare_op.rs",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
         "tests/test_guard_approval_scope_contract.py",
-        "tests/test_guard_github_workflow_authorization.py",
-        "tests/test_guard_github_workflow_privacy.py",
-        "tests/test_guard_github_workflow_runtime.py"
+        "tests/test_guard_github_workflow_authorization.py"
       ],
       "acceptance": "a bounded capability permits at most 10 exact repeated uses while binding the operation, repository, resource, actor, request, and execution context",
       "evidence_paths": [
-        "tests/test_guard_github_workflow_authorization.py",
-        "tests/test_guard_github_workflow_privacy.py"
+        "tests/test_guard_github_workflow_authorization.py"
       ]
     },
     {
@@ -218,8 +205,6 @@
       "id": "CDX-068",
       "pull_request": 1763,
       "deliverables": [
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_eval.py",
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_state.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_command_activity.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_contract.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
@@ -239,13 +224,11 @@
         "tests/dockerlabs/command-extension-analytics/runner.ts",
         "tests/dockerlabs/command-extension-analytics/session-handoff.ts",
         "tests/dockerlabs/command-extension-analytics/tcp_relay.py",
-        "tests/dockerlabs/command-extension-analytics/tsconfig.json",
-        "tests/test_guard_github_workflow_runtime_eval.py"
+        "tests/dockerlabs/command-extension-analytics/tsconfig.json"
       ],
       "acceptance": "the Bun Dockerlab exercises prompt-free, contained, workflow, review, block, persistence, and privacy paths through an installed wheel",
       "evidence_paths": [
         ".github/workflows/publish.yml",
-        "tests/test_guard_command_activity_capability.py",
         "tests/test_guard_command_activity_hook_integration.py",
         "tests/test_guard_command_activity_lifecycle.py",
         "tests/dockerlabs/command-extension-analytics/runner.test.ts"
@@ -397,7 +380,7 @@
     }
   },
   "verification": [
-    "uv run --no-sync pytest -q tests/test_guard_github_workflow_authorization.py tests/test_guard_github_workflow_privacy.py tests/test_guard_github_workflow_runtime.py tests/test_guard_command_critical_floors.py tests/test_guard_command_corpus.py tests/test_guard_command_decision_diff.py --tb=short",
+    "uv run --no-sync pytest -q tests/test_guard_github_workflow_authorization.py tests/test_guard_command_critical_floors.py tests/test_guard_command_corpus.py tests/test_guard_command_decision_diff.py --tb=short",
     "bun test tests/dockerlabs/installed-guard-package-proof.test.mjs",
     "uv run --no-sync pytest -q tests/test_installed_guard_package_origin.py --tb=short",
     "cd tests/dockerlabs/command-extension-analytics && bun run guard:test:command-extension-analytics",

@@ -34,6 +34,33 @@ fn targets_a_stricter_basename(request: &Value) -> bool {
         })
 }
 
+/// Directories the resident's classifier reads as the material they hold,
+/// whatever the file inside one is called. The retired Python recognised only
+/// the key names it knew, so a request that reaches such a directory by the
+/// directory alone — through its own path or through the workspace it runs in
+/// — is stricter here.
+const STRICTER_DIRECTORIES: [&str; 1] = [".ssh"];
+
+fn reaches_a_stricter_directory(request: &Value) -> bool {
+    let envelope = &request["action_envelope_json"];
+    let targets: &[Value] = envelope["target_paths"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    targets
+        .iter()
+        .chain(std::iter::once(&envelope["workspace"]))
+        .filter_map(Value::as_str)
+        .any(|path| {
+            path.trim()
+                .trim_matches('\'')
+                .trim_matches('"')
+                .to_lowercase()
+                .split('/')
+                .any(|segment| STRICTER_DIRECTORIES.contains(&segment))
+        })
+}
+
 #[test]
 fn verdicts_match_the_retired_python() {
     let vectors = gunzip_json(VECTORS);
@@ -61,7 +88,9 @@ fn verdicts_match_the_retired_python() {
                 }
                 if verdict != &Value::Bool(*flag) {
                     assert!(
-                        *flag && targets_a_stricter_basename(&case["request"]),
+                        *flag
+                            && (targets_a_stricter_basename(&case["request"])
+                                || reaches_a_stricter_directory(&case["request"])),
                         "case {index}: {}",
                         case["request"]
                     );

@@ -49,7 +49,9 @@ def admit_mcp_policy_home(home: Path) -> None:
         guard_home=home,
         environment=_isolated_environment(),
         payload=_policy_snapshot_push_bytes_v3(snapshot, deadline_budget_ms=9000),
-        deadline_monotonic=time.monotonic() + 10,
+        # The first push also starts the resident. A loaded Windows runner has
+        # spent ten seconds on lease, startup lock and spawn alone.
+        deadline_monotonic=time.monotonic() + 30,
     )
     assert output is not None, "MCP fixture policy admission transport failed"
     ack = json.loads(output)

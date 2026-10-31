@@ -33,6 +33,7 @@ from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedSto
 from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import encoded
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler as native
 from tests.extension_builder_support import use_installed_native_source_compiler
+from tests.installed_compatibility_support import compatibility_payloads
 
 
 @pytest.fixture(scope="module")
@@ -107,7 +108,7 @@ def selected_record(built, identity=None):
     def fetch(location, length):
         from codex_plugin_scanner.guard.catalog_delivery.containers import member
 
-        path = output / "assets" / location["tag"] / location["asset"]
+        path = output / "assets" / location["tag"].rsplit("-", 1)[1] / location["asset"]
         return member(path.read_bytes(), location["asset"], location["member"], length)
 
     store = LocatedStore(directory / "inspection", fetch=fetch)
@@ -137,7 +138,7 @@ def test_normal_inventory_and_exact_publication(built):
     identity, record = selected_record(built)
     assert identity and all("member" not in row["location"] for row in record["archives"])
     assert all(
-        not (output / "assets" / row["location"]["tag"] / row["location"]["asset"]).exists()
+        not (output / "assets" / row["location"]["tag"].rsplit("-", 1)[1] / row["location"]["asset"]).exists()
         for row in record["archives"]
     )
     assert report["installed_asset_bytes"] < report["asset_bytes"]
@@ -220,7 +221,7 @@ def test_public_legacy_records_use_metadata_without_policy_archives(built, tmp_p
 
     monkeypatch.setattr(installed_bundle, "read_bytes", metadata_only)
     for family in ("commands", "mcp"):
-        rows = installed_bundle.compatibility_payloads(family)
+        rows = compatibility_payloads(family)
         assert len(rows) == built[5]["compatibility"][family]["count"]
         assert len({row["id"] for row in rows}) == len(rows)
 

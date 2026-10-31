@@ -703,27 +703,6 @@ def mutability_validate(
     return _ask_refusal(query, guard_home)
 
 
-def resolve_extension_controls(
-    layers: Iterable[ExtensionControlLayer],
-    registry: CommandSafetyExtensionRegistry,
-    *,
-    extension_ids: tuple[str, ...],
-    permission_ids: tuple[str, ...],
-    surface: ControlSurface,
-    authority_failure: ResolverFailureCode | None = None,
-    guard_home: Path | None = None,
-) -> ControlAnswer:
-    """Resolve one set of catalog identities against ``layers``."""
-
-    scenario = ControlScenario(
-        tuple(layers),
-        (ControlItem(extension_ids, permission_ids),),
-        surface,
-        authority_failure,
-    )
-    return resolve_scenarios(registry, (scenario,), guard_home=guard_home)[0].items[0]
-
-
 def _hex_digest(value: str) -> str:
     if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
         raise _invalid()

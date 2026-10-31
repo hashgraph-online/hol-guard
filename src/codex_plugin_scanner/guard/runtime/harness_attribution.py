@@ -26,6 +26,7 @@ _CODEX_ENV_MARKERS = frozenset({"CODEX_SANDBOX", "CODEX_THREAD_ID"})
 _GROK_ENV_MARKERS = frozenset({"GROK_AGENT", "GROK_SESSION_ID"})
 _OPENCODE_ENV_MARKERS = frozenset({"OPENCODE_CONFIG_CONTENT"})
 _DEVIN_ENV_MARKERS = frozenset({"DEVIN_PROJECT_DIR"})
+_MUSE_ENV_MARKERS = frozenset({"MUSE_SESSION_ID", "MUSE_THREAD_ID"})
 ORIGIN_HARNESS_ENV = "HOL_GUARD_ORIGIN_HARNESS"
 _ORIGIN_HARNESS_VALUES = frozenset(
     {
@@ -40,6 +41,7 @@ _ORIGIN_HARNESS_VALUES = frozenset(
         "pi",
         "zcode",
         "devin",
+        "muse",
     }
 )
 
@@ -55,6 +57,8 @@ _PROCESS_HARNESSES = {
     "omp": "omp",
     "opencode": "opencode",
     "devin": "devin",
+    "muse": "muse",
+    "muse-bin": "muse",
 }
 _APP_PATH_MARKERS = (
     ("/codex.app/", "codex"),
@@ -182,6 +186,8 @@ def resolve_environment_harness(env: Mapping[str, str] | None = None) -> str | N
         return "opencode"
     if _env_marker_present(source, _DEVIN_ENV_MARKERS):
         return "devin"
+    if _env_marker_present(source, _MUSE_ENV_MARKERS):
+        return "muse"
     return None
 
 

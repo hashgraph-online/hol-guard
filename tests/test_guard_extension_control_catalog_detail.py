@@ -20,9 +20,9 @@ from codex_plugin_scanner.guard.runtime.extension_control_limits import (
     advertised_extension_control_limits,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import catalog_id_for_mcp_id
 from codex_plugin_scanner.guard.store import GuardStore
 from scripts.ci.check_extension_fixture_isolation import command_source_paths
+from tests.mcp_contribution_loader import catalog_id_for_mcp_id
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "extension-controls" / "catalog-baseline.v1.json"

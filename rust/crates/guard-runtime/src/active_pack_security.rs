@@ -289,10 +289,28 @@ pub(crate) fn evaluate(input: &Value) -> Result<Value, String> {
                 }
                 return Err("active_security_epoch_rollback".into());
             }
+            // A remote Root is kept over an installed bundle that reports the
+            // same authority and revocations: the published one is the fresher
+            // observation of the same security state. That only holds while the
+            // retained Root describes the engine the active activation names.
+            // `complete` records a floor against every extension whose Root
+            // engine differs from that header, and this build can never clear
+            // it: a publication is admitted only when its root engine equals
+            // this implementation digest, so a Root held under another engine
+            // carries no revocation this runtime could ever act on. Guard homes
+            // are shared between runtimes built from different sources -- a
+            // Desktop core beside a CLI install, or a development build that ran
+            // once -- so this is reachable without an attacker. Let the installed bundle
+            // take the Root back in exactly that case: the retained Root does
+            // not match the authenticated activation's engine and the candidate
+            // does. The revocation check below still refuses any bundle that
+            // would drop a revocation at this epoch, so the exchange cannot
+            // weaken the retained security state.
             if input["profile"] == "installed"
                 && old.identity["profile"] == "remote"
                 && epoch == old.epoch
                 && authority == old.authority
+                && (old.root["engine"] == header["engine"] || root["engine"] != header["engine"])
             {
                 return Ok(json!({"ignored":true}));
             }
@@ -357,6 +375,41 @@ pub(crate) fn evaluate(input: &Value) -> Result<Value, String> {
                     json!({"lineage_floor":lineage_floor,"lineage_source":root["source_sha"]}),
                 );
             }
+            // Desktop restores the previous runtime when an upgraded one fails
+            // to come online, after the upgraded daemon may already have
+            // observed its own bundle. The restored release re-admits its own
+            // bundle at startup, so the authenticated active activation names
+            // exactly this publication. Only that release, under the same
+            // authority and revocations, keeps its verified program; the
+            // lineage floor stays where the upgrade put it. Without this the
+            // newer engine stays the security root, and every pack carries its
+            // floor against a Root this build cannot refresh, until that
+            // upgrade comes back.
+            Err(code)
+                if code == "pack_lifecycle_version_rollback"
+                    && input["profile"] == "installed"
+                    && header["authority_profile"] == "installed"
+                    && header["engine"] == root["engine"]
+                    && header["source_sha"] == root["source_sha"]
+                    && header["root_digest"] == root_digest
+                    && header["authority_epoch"] == authority
+                    && header["revocation_epoch"] == epoch
+                    // The predecessor's profile is deliberately not required.
+                    // Once an installed bundle may take the Root back from a
+                    // remote one, a restored release can meet this arm with a
+                    // remote predecessor, and refusing it there would abandon
+                    // the whole observation instead of refreshing it. The header
+                    // equalities above already pin the restored bundle to the
+                    // authenticated activation, and the revocations must still
+                    // match, so the predecessor's profile adds no trust.
+                    && old.as_ref().is_some_and(|old| {
+                        old.authority == authority
+                            && old.epoch == epoch
+                            && old.root["policy"]["revocations"] == root["policy"]["revocations"]
+                    }) =>
+            {
+                lineage_floor.to_owned()
+            }
             Err(code) => return Err(code),
         };
         let mut state = old.unwrap_or(Security {
@@ -420,3 +473,5 @@ pub(crate) fn evaluate(input: &Value) -> Result<Value, String> {
 mod tests;
 #[cfg(test)]
 pub(crate) use tests::fixture as fixture_record;
+#[cfg(test)]
+pub(crate) use tests::floor_fixture as fixture_floor_record;
