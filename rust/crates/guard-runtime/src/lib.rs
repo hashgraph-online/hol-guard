@@ -475,6 +475,8 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+mod harness_coverage;
+mod harness_coverage_command;
 mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
@@ -564,6 +566,7 @@ mod hook_path_rules;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+mod installation_continuity;
 mod inventory_item_classification_op;
 mod inventory_scan_findings_op;
 mod inventory_scan_targets_op;
@@ -656,6 +659,7 @@ mod mcp_tool_policy_grants;
 mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
+mod mdm_integrity_snapshot;
 mod memory_pattern;
 #[cfg(target_os = "macos")]
 mod native_bash_client;
@@ -689,6 +693,7 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+mod ownership_acl_verdict;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
@@ -828,6 +833,7 @@ mod state_directory_lock;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;
+mod supervisor_verdict;
 mod supply_chain_bundle_verify_op;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;
