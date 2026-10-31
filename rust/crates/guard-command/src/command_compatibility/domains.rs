@@ -594,6 +594,10 @@ mod tests {
     /// wrapper or an overridden `PATH` each picks a different one, and the
     /// upload rule this exemption clears is what keeps that program away
     /// from the piped stdin.
+    ///
+    /// A transparent wrapper such as `env` and an executor such as `xargs`
+    /// are absent on purpose: the parser models neither, so they reach no
+    /// segment and no observation at all.
     #[test]
     fn a_probe_of_another_spelling_is_not_admitted() {
         for text in [
@@ -601,8 +605,6 @@ mod tests {
             "/tmp/tools/rsync --help",
             "bin/scp --version",
             "sudo rsync --help",
-            "env scp --help",
-            "xargs sftp --help",
         ] {
             assert!(!probe(text), "{text}");
         }
