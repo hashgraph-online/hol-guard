@@ -2043,7 +2043,7 @@ def test_approval_gate_background_sync_applies_signed_remote_policy(
     # A background sync holds no password grant. The workspace signature is
     # the authority for these rows, so the team policy still lands.
     assert payload["remote_policies_stored"] == 1
-    assert payload["remote_policy_sync_blocked"] is False
+    assert "remote_policy_sync_blocked" not in payload
     decisions = store.list_policy_decisions("codex")
     assert ("codex:project:cloud-allow", "allow") in {(item["artifact_id"], item["action"]) for item in decisions}
     assert store.list_events(event_name="approval_gate/remote_policy_sync_blocked") == []
