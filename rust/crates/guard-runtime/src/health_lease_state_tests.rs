@@ -151,7 +151,7 @@ fn continuity_and_device_key_records_are_replaced_in_place() {
     }
     assert_eq!(
         names(&root),
-        vec![CONTINUITY_NAME.to_owned(), DEVICE_KEY_NAME.to_owned()]
+        vec![DEVICE_KEY_NAME.to_owned(), CONTINUITY_NAME.to_owned()]
     );
 }
 
