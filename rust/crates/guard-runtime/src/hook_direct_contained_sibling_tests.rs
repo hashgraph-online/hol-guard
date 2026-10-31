@@ -1,6 +1,7 @@
 //! A leading `cd` to or below a sibling repository's root takes the native
-//! sink, which runs the call from that root as Guard's own sink does. A `cwd`
-//! argument is decided as that `cd`, which the native sink writes it as.
+//! sink, which runs the call from that root as Guard's own sink does, and so
+//! does a package directory flag naming that root. A `cwd` argument is
+//! decided as that `cd`, which the native sink writes it as.
 
 #![cfg(unix)]
 
@@ -48,6 +49,42 @@ fn a_cd_to_or_below_a_sibling_root_takes_the_native_sink() {
     assert!(shape(format!("cd {} && npm test", workspace.display())));
     assert!(shape("cd ../report && npm test".to_owned()));
     assert!(!shape(format!("cd {}/home && npm test", root.display())));
+}
+
+#[test]
+fn a_package_directory_at_a_sibling_root_takes_the_native_sink() {
+    let fixture = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
+    let root = fs::canonicalize(fixture.path()).unwrap();
+    for directory in ["home/app/.git", "home/report/.git", "home/report/web"] {
+        fs::create_dir_all(root.join(directory)).unwrap();
+    }
+    let (home, report) = (root.join("home"), root.join("home/report"));
+    let workspace = root.join("home/app");
+    let denial = json!({
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": WORKSPACE_PROFILE,
+    });
+    let shape = |command: String| {
+        let input = json!({ "command": command }).as_object().unwrap().clone();
+        native_shape(
+            &denial,
+            &input,
+            workspace.to_str().unwrap(),
+            home.to_str().unwrap(),
+        )
+    };
+    // Both sinks peel the flag at the sibling's root and ask about the
+    // rest again from there, as for `cd <root> &&`.
+    assert!(shape(format!("npm --prefix {} test", report.display())));
+    assert!(shape("bun --cwd ../report run build".to_owned()));
+    assert!(shape(
+        "pnpm -C ../report run lint 2>&1 | tail -5".to_owned()
+    ));
+    // Below the sibling's root, or in no repository, keeps the daemon's sink.
+    assert!(!shape("npm --prefix ../report/web test".to_owned()));
+    assert!(!shape(format!("npm --prefix {}/home test", root.display())));
 }
 
 #[test]

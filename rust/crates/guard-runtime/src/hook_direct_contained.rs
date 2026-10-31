@@ -31,7 +31,7 @@ const NATIVE_SINK_SWITCH: &str = "HOL_GUARD_NATIVE_CONTAINED_SINK";
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 const NATIVE_SINK_UNSUPPORTED: [&str; 1] = ["~"];
 /// Package manager flags that run a script in another directory. The native
-/// sink takes them only when `inner_package_directory` holds.
+/// sink takes them only when `package_directory` holds.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 const PACKAGE_DIRECTORY_FLAGS: [&str; 3] = ["--cwd", "--prefix", "--dir"];
 /// The short directory flag, which moves the working directory for every
@@ -256,7 +256,7 @@ fn native_shape(
             .iter()
             .chain([&SHORT_DIRECTORY_FLAG])
             .any(|flag| command.contains(flag))
-            || inner_package_directory(command, workspace))
+            || package_directory(command, workspace, home))
         && !NATIVE_SINK_UNSUPPORTED
             .iter()
             .any(|fragment| command.contains(fragment))
@@ -293,13 +293,13 @@ fn leading_directory_change(command: &str, workspace: &str, home: &str) -> bool 
 
 /// Whether a package manager's directory flags (`bun --cwd web run build`,
 /// `pnpm -C web run build`) all name a plain directory strictly inside the
-/// workspace. A short flag counts only as its own word right after `npm` or
-/// `pnpm`. The daemon runs
-/// such a call whole from the workspace root, as the native sink does. The
-/// root itself or a sibling repository is planned again there, so it keeps
-/// the daemon's sink, as does any other spelling of the flags.
+/// workspace, the workspace root, or a sibling repository's root. A short
+/// flag counts only as its own word right after `npm` or `pnpm`. Both sinks
+/// peel the flag as they peel a leading `cd` to the same directory
+/// (`leading_directory_change`). Any other spelling of the flags keeps the
+/// daemon's sink.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
-fn inner_package_directory(command: &str, workspace: &str) -> bool {
+fn package_directory(command: &str, workspace: &str, home: &str) -> bool {
     if command.trim_start().starts_with("cd") {
         return false;
     }
@@ -335,7 +335,10 @@ fn inner_package_directory(command: &str, workspace: &str) -> bool {
     !targets.is_empty()
         && targets.len() == mentions
         && targets.iter().all(|target| {
-            !target.starts_with('-') && plain(target) && strictly_inside(workspace, target)
+            !target.starts_with('-')
+                && plain(target)
+                && (strictly_inside(workspace, target)
+                    || projection::project_root(workspace, home, target))
         })
 }
 
