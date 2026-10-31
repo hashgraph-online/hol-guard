@@ -29,52 +29,14 @@ pub(super) struct Launch<'a> {
 impl Launch<'_> {
     pub(super) fn contained(&self, argv: &[String]) -> Outcome<i32> {
         let private_root = path_text(&self.private.path)?;
-        let mut source: Map<String, Value> = Map::new();
-        for (name, value) in environment() {
-            let value = match name.as_str() {
-                "PYTHONPATH" => value
-                    .split(':')
-                    .map(|item| {
-                        if item.is_empty() {
-                            String::new()
-                        } else {
-                            py_normal(&expand_user(item))
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(":"),
-                "VIRTUAL_ENV" => py_normal(&expand_user(&value)),
-                _ => value,
-            };
-            source.insert(name, Value::String(value));
-        }
-        let launch_environment = native(
-            "environment",
-            json!({
-                "source": source,
-                "workspace": self.workspace_text,
-                "cwd": self.workspace_text,
-                "private_home": format!("{private_root}/home"),
-                "private_tmp": format!("{private_root}/tmp"),
-                "allowed_executables": [],
-            }),
+        let mut environment = restricted_environment(
+            self.workspace_text,
+            self.workspace_text,
+            &private_root,
+            &[],
+            None,
+            &[],
         )?;
-        let mut environment: BTreeMap<String, String> = match launch_environment {
-            Value::Object(entries) => entries
-                .into_iter()
-                .map(|(name, value)| match value {
-                    Value::String(value) => Some((name, value)),
-                    _ => None,
-                })
-                .collect::<Option<_>>(),
-            _ => None,
-        }
-        .ok_or_else(|| {
-            Failure::new(
-                SANDBOX_UNAVAILABLE,
-                "Invalid native restricted environment reply.",
-            )
-        })?;
         let empty_config = self.private.path.join("gitconfig");
         std::fs::write(&empty_config, b"").map_err(|_| {
             Failure::new(
@@ -135,7 +97,7 @@ impl Launch<'_> {
             &self.private.path,
             self.signals,
             RUN_TIMEOUT_SECONDS,
-            &|| self.loopback.keep(),
+            process::Notes::Workspace(&|| self.loopback.keep()),
         )
     }
 
@@ -202,7 +164,7 @@ impl Launch<'_> {
             &self.private.path,
             self.signals,
             RUN_TIMEOUT_SECONDS,
-            &|| self.loopback.keep(),
+            process::Notes::Workspace(&|| self.loopback.keep()),
         )?;
         let mut applied = json!({
             "workspace": workspace_text,
@@ -216,6 +178,65 @@ impl Launch<'_> {
         native("apply_workspace_overlay", applied)?;
         Ok(exit_code)
     }
+}
+
+/// The environment the native filter leaves a contained run started from
+/// `cwd` in `workspace`: a private home and temporary directory under
+/// `private_root`, any linked `user_site_root`, and `settings` exported over
+/// the process environment. `PYTHONPATH` and `VIRTUAL_ENV` keep the host's
+/// spelling, `~` expanded, as Guard's own sink hands them over.
+pub(super) fn restricted_environment(
+    workspace: &str,
+    cwd: &str,
+    private_root: &str,
+    allowed_executables: &[String],
+    user_site_root: Option<&str>,
+    settings: &[(String, String)],
+) -> Outcome<BTreeMap<String, String>> {
+    let mut source: Map<String, Value> = Map::new();
+    for (name, value) in environment().into_iter().chain(settings.iter().cloned()) {
+        let value = match name.as_str() {
+            "PYTHONPATH" => value
+                .split(':')
+                .map(|item| {
+                    if item.is_empty() {
+                        String::new()
+                    } else {
+                        py_normal(&expand_user(item))
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(":"),
+            "VIRTUAL_ENV" => py_normal(&expand_user(&value)),
+            _ => value,
+        };
+        source.insert(name, Value::String(value));
+    }
+    let launch_environment = native(
+        "environment",
+        json!({
+            "source": source,
+            "workspace": workspace,
+            "cwd": cwd,
+            "private_home": format!("{private_root}/home"),
+            "private_tmp": format!("{private_root}/tmp"),
+            "allowed_executables": allowed_executables,
+            "user_site_root": user_site_root,
+        }),
+    )?;
+    match launch_environment {
+        Value::Object(entries) => entries
+            .into_iter()
+            .map(|(name, value)| Some((name, value.as_str()?.to_owned())))
+            .collect::<Option<_>>(),
+        _ => None,
+    }
+    .ok_or_else(|| {
+        Failure::new(
+            SANDBOX_UNAVAILABLE,
+            "Invalid native restricted environment reply.",
+        )
+    })
 }
 
 /// Run `git init` outside the sandbox: it rewrites the write-denied

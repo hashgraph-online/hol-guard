@@ -39,6 +39,36 @@ fn decode(data: &Value) -> Vec<u8> {
     Base64::decode_vec(data.as_str().unwrap()).unwrap()
 }
 
+/// The version string the Python detector published for its own rule set.
+const PYTHON_DETECTOR_VERSION: &str = "guard-secrets-v1:1d8dc93ef4fc2a04";
+
+/// Rewrite the `detector_version` the recorder captured to the one this build
+/// publishes.
+///
+/// The vectors pin what Python *found*: which rule fires on which line with
+/// which score. The digest beside those findings moves whenever a rule is
+/// appended, and `guard-scanner` pins its own parity separately by hashing
+/// exactly the material Python hashed. Substituting it here keeps the
+/// findings comparison meaningful instead of failing every case on one
+/// expected string.
+fn with_live_detector_version(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, item)| {
+                    if key == "detector_version" && item == PYTHON_DETECTOR_VERSION {
+                        (key.clone(), Value::String(detector_version()))
+                    } else {
+                        (key.clone(), with_live_detector_version(item))
+                    }
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(with_live_detector_version).collect()),
+        other => other.clone(),
+    }
+}
+
 #[test]
 fn the_rules_command_publishes_the_catalog_python_published() {
     let vectors = vectors();
@@ -46,10 +76,18 @@ fn the_rules_command_publishes_the_catalog_python_published() {
     assert_eq!(response["ok"], Value::Bool(true));
     // The Python CLI printed a hand-maintained literal. The same bytes now
     // come from the rule table the scan path uses, so what a user reads is
-    // what runs: a rule that is renamed, dropped or added shows up here.
-    assert_eq!(response["result"], vectors["rules"]);
-    assert_eq!(vectors["detector_version"], detector_version());
+    // what runs: a rule that is renamed, dropped or reordered shows up here.
+    let published = vectors["rules"]["rules"].as_array().unwrap();
     let listed = response["result"]["rules"].as_array().unwrap();
+    assert_eq!(response["result"]["schema"], vectors["rules"]["schema"]);
+    assert_eq!(response["result"]["detector_version"], detector_version());
+    // Python's provider rules lead and its synthetic contextual entry stays
+    // last, so every entry Python published is still checked exactly; rules
+    // added since sit between them.
+    let (python_providers, python_contextual) = published.split_at(published.len() - 1);
+    assert!(listed.len() > python_providers.len());
+    assert_eq!(&listed[..python_providers.len()], python_providers);
+    assert_eq!(&listed[listed.len() - 1..], python_contextual);
     let catalog = secret_rule_catalog();
     assert_eq!(listed.len(), catalog.len());
     for (listed, rule) in listed.iter().zip(catalog) {
@@ -86,7 +124,11 @@ fn text_scans_match_python() {
             .map_or(200, |value| value as usize);
         let summary = scan_secret_text(&text, path, source, commit, max_findings);
         let actual = serde_json::to_value(summary.to_public_dict(None).unwrap()).unwrap();
-        assert_eq!(actual, case["expected"], "text vector at {path:?}");
+        assert_eq!(
+            actual,
+            with_live_detector_version(&case["expected"]),
+            "text vector at {path:?}"
+        );
     }
 }
 
@@ -251,7 +293,11 @@ mod cli {
                 let _ = std::fs::remove_dir_all(&root);
                 continue;
             }
-            assert_eq!(actual, case["expected"], "vector {name}");
+            assert_eq!(
+                actual,
+                with_live_detector_version(&case["expected"]),
+                "vector {name}"
+            );
             if let Some(expected_hooks) = case.get("hooks_after") {
                 assert_eq!(&hooks_state(&root), expected_hooks, "hooks for {name}");
             }

@@ -2112,6 +2112,18 @@
       ]
     },
     {
+      "id": "omp-native-shell-pytest-addopts-prefix-tests",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Run the project's tests so they stop after the first failure, using the environment setting rather than a flag: run the listed command once, exactly as written, and tell me whether they passed.",
+      "commands": [
+        "PYTEST_ADDOPTS=--maxfail=1 .venv/bin/pytest -q"
+      ]
+    },
+    {
       "id": "omp-native-shell-fail-fast-inline-tests",
       "expectation": "allow",
       "oracle": "native-tools",

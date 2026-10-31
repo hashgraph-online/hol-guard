@@ -19,6 +19,8 @@ pub use env_prefix_projection::bindable_setting;
 mod cline_view;
 #[path = "generic_extract.rs"]
 mod extract;
+#[path = "inert_tool_settings.rs"]
+pub(crate) mod inert_tool_settings;
 #[path = "generic_omp.rs"]
 mod omp;
 #[path = "generic_omp_bash_cwd.rs"]

@@ -324,3 +324,46 @@ fn the_sink_plans_exactly_the_scripts_the_edge_routes_to_it() {
         assert_eq!(reason, case["reason"], "{name}: {reply}");
     }
 }
+
+fn package_test(workspace: &Path, cwd: &Path, command: &[&str]) -> Value {
+    evaluate(
+        "package_test_command",
+        &json!({ "command": command, "workspace": workspace, "cwd": cwd }),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_package_test_reads_the_nearest_manifest_into_its_runner_words() {
+    let (_directory, workspace) = project(r#"{"scripts":{"test":"vitest run"}}"#);
+    let web = workspace.join("web");
+    fs::create_dir_all(&web).unwrap();
+    fs::write(
+        web.join("package.json"),
+        r#"{"scripts":{"test":"node --test"}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        package_test(&workspace, &web, &["npm", "test", "--", "a.test.js"]),
+        json!({ "value": ["node", "--test", "a.test.js"] })
+    );
+    assert_eq!(
+        package_test(&workspace, &workspace, &["npm", "test"]),
+        json!({ "value": ["vitest", "run"] })
+    );
+}
+
+#[test]
+fn a_package_test_with_a_linked_manifest_or_lifecycle_is_refused() {
+    let (directory, workspace) =
+        project(r#"{"scripts":{"test":"node --test","pretest":"node a.js"}}"#);
+    let reply = package_test(&workspace, &workspace, &["npm", "test"]);
+    assert!(reply["message"].as_str().unwrap().contains("lifecycle"));
+    let outside = directory.path().join("manifest.json");
+    fs::write(&outside, r#"{"scripts":{"test":"node --test"}}"#).unwrap();
+    fs::remove_file(workspace.join("package.json")).unwrap();
+    std::os::unix::fs::symlink(&outside, workspace.join("package.json")).unwrap();
+    let reply = package_test(&workspace, &workspace, &["npm", "test"]);
+    assert!(reply.get("value").is_none());
+    assert!(reply["reason_code"].is_string());
+}

@@ -174,6 +174,17 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # `gh config set` changes only the CLI configuration under the home directory, which a
         # contained run cannot write.
         "neg-github-config-set",
+        # A build or test setting whose value names a program to run or a
+        # resolution the build would otherwise refuse: the command keeps its
+        # review, and a contained run gives the named toolchain hook, linker or
+        # plugin only the sandbox's reach, and no network for the module fetch
+        # `-mod=mod` would start.
+        "neg-goflags-toolexec-prefix-go-test",
+        "neg-goflags-screened-then-toolexec-prefix-go-test",
+        "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
+        "neg-goflags-mod-mod-prefix-go-test",
+        "neg-rustflags-linker-prefix-cargo-test",
+        "neg-pytest-addopts-plugin-prefix-venv-pytest",
         # A Guard launcher spelled against the working directory, which a clone,
         # an unpacked archive or a generated shim directory can fill: the
         # command keeps its review, and a contained run reaches only the

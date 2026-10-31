@@ -22,8 +22,12 @@ use serde_json::{json, Map, Value};
 
 #[path = "contained_workspace_sink_denial.rs"]
 mod denial;
+#[path = "contained_esbuild_image.rs"]
+mod esbuild_image;
 #[path = "contained_workspace_sink_grant.rs"]
 mod grant;
+#[path = "contained_node_build_sink.rs"]
+mod node_build;
 #[cfg(any(target_os = "linux", all(unix, test)))]
 #[path = "contained_workspace_sink_overlay.rs"]
 mod overlay;
@@ -33,12 +37,20 @@ mod paths;
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
 mod process;
+#[path = "contained_readonly_program.rs"]
+mod program;
+#[path = "contained_pytest_readonly_sink.rs"]
+mod pytest;
+#[path = "contained_readonly_sink.rs"]
+mod readonly;
 #[path = "contained_workspace_sink_launch.rs"]
 mod runner;
 #[path = "contained_workspace_sink_request.rs"]
 mod snapshot;
 #[path = "contained_workspace_sink_split.rs"]
 mod split;
+#[path = "contained_vitest_sink.rs"]
+mod vitest;
 
 use paths::{expand_user, py_normal, search_path, wire_path};
 use plan_check::{plan_paths, sibling_root, validated_plan};
@@ -47,6 +59,7 @@ use snapshot::read_request;
 
 pub(crate) use plan_check::entered_sibling;
 pub(crate) use process::launch;
+pub(crate) use readonly::readonly_shape;
 pub(crate) use split::host_split;
 use split::publishes;
 #[cfg(test)]
@@ -86,7 +99,7 @@ const PLAN_FIELDS: [&str; 20] = [
     "capabilities",
 ];
 /// The reasons a restricted-execution operation may fail with by name.
-const NATIVE_REASONS: [&str; 10] = [
+const NATIVE_REASONS: [&str; 17] = [
     "node_test_restricted_invalid_command",
     "node_test_restricted_sandbox_unavailable",
     "vitest_restricted_invalid_command",
@@ -97,6 +110,13 @@ const NATIVE_REASONS: [&str; 10] = [
     INVALID_COMMAND,
     "pytest_restricted_invalid_workspace",
     SANDBOX_UNAVAILABLE,
+    "git_restricted_invalid_command",
+    "git_restricted_invalid_metadata",
+    "git_restricted_sandbox_unavailable",
+    "node_tool_invalid_command",
+    "node_tool_dependency_unavailable",
+    "node_build_invalid_output",
+    "package_test_invalid_command",
 ];
 const MAX_NATIVE_MESSAGE_CHARACTERS: usize = 4096;
 const NATIVE_BUDGET_MILLISECONDS: u64 = 9_000;
@@ -229,6 +249,9 @@ fn sink(arguments: &Arguments, signals: &process::Signals) -> Outcome<i32> {
     let receipt = authority
         .authorize(&payload)
         .ok_or_else(Failure::unauthorized)?;
+    if let Some(route) = readonly::readonly_route(&receipt) {
+        return readonly::run(&payload, &workspace, &authority, route, signals);
+    }
     if !receipt_matches(&receipt) || host_split(receipt.get("reason")) {
         return Err(Failure::unauthorized());
     }

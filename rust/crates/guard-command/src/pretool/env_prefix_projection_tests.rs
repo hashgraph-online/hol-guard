@@ -507,3 +507,34 @@ fn a_heap_or_diagnostic_node_options_prefix_is_projected_away() {
         assert_eq!(project(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_screened_build_or_test_setting_is_removed_in_place() {
+    // These names are spelled like loader settings, so every name test
+    // refuses them and `GOFLAGS=-count=1 go test ./...` kept no reviewable
+    // form at all. A value the closed list holds only chooses how the run
+    // reports, how often it repeats or which lint it refuses, so the command
+    // runs what its bare spelling runs.
+    for (command, expected) in [
+        ("GOFLAGS=-count=1 go test ./...", "go test ./..."),
+        (r#"GOFLAGS="-count=1 -v" go test ./..."#, "go test ./..."),
+        ("GOFLAGS=-mod=readonly go test ./...", "go test ./..."),
+        (
+            "PYTEST_ADDOPTS=--maxfail=1 .venv/bin/pytest -q",
+            ".venv/bin/pytest -q",
+        ),
+        ("RUSTFLAGS=-Dwarnings cargo test", "cargo test"),
+        ("RUSTDOCFLAGS=-Dwarnings cargo doc", "cargo doc"),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+    // A value the list does not hold names a program, a plugin or a linker.
+    for command in [
+        "GOFLAGS=-toolexec=./x go test ./...",
+        "GOFLAGS=-mod=mod go test ./...",
+        "PYTEST_ADDOPTS=-pevil .venv/bin/pytest -q",
+        "RUSTFLAGS=-Clinker=./ld cargo test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}

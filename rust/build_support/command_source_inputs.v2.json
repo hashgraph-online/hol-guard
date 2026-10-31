@@ -437,6 +437,7 @@
       "src/pretool/home_hidden_listing.rs",
       "src/pretool/hooks_path_writes.rs",
       "src/pretool/inert_environment.rs",
+      "src/pretool/inert_tool_settings.rs",
       "src/pretool/installed_program_path.rs",
       "src/pretool/jq_filter.rs",
       "src/pretool/kubeconfig_trust.rs",
