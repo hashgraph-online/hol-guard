@@ -453,8 +453,9 @@ def test_a_soaked_daemon_process_exits_and_leaves_its_port_closed(tmp_path: Path
     """A daemon that has carried load must still die when it is told to.
 
     Threads and descriptors are measured above inside one process. This asks
-    what only a separate process can answer: once the daemon has served a soak,
-    does ending it actually end it, and does the listening socket go with it.
+    what only a separate process can answer: once the daemon has carried
+    traffic, does ending it actually end it, and does the listening socket go
+    with it.
     """
 
     guard_home = tmp_path / "guard-home"
