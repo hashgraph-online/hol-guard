@@ -8,7 +8,6 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.actions import (
     GuardActionEnvelope,
-    normalize_codex_hook_payload,
     normalize_harness_payload,
     stable_action_hash,
 )
@@ -91,7 +90,9 @@ def test_normalize_codex_package_command_extracts_package_metadata(tmp_path: Pat
     home_dir = tmp_path / "home"
     workspace = home_dir / "workspace"
 
-    envelope = normalize_codex_hook_payload(
+    envelope = normalize_harness_payload(
+        "codex",
+        "",
         _package_payload("npm install minimist@1.2.8"),
         workspace=workspace,
         home_dir=home_dir,

@@ -6,11 +6,9 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import native_workspace_snapshot as native
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
@@ -21,14 +19,8 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
     EDITOR_TASKS_COMPLETE,
-    HOOKS_COMPLETE,
-    PLUGINS_COMPLETE,
     SCANNED,
-    SECRETS_COMPLETE,
-    SKILLS_COMPLETE,
-    SNAPSHOT,
     T0,
-    WORKFLOWS_COMPLETE,
     queued_run,
 )
 
@@ -124,60 +116,6 @@ def test_a_worktree_without_editor_configuration_has_no_inputs(tmp_path: Path, m
     assert outcome.state == "completed"
     assert outcome.coverage is not None
     assert outcome.coverage["detectors"]["editor_task_v1"] == "no_inputs"
-
-
-def test_older_runtime_keeps_earlier_scans_and_reports_editor_tasks_not_run(tmp_path: Path, monkeypatch) -> None:
-    store, claimed = queued_run(tmp_path)
-    requested: list[tuple[bool, bool, bool]] = []
-
-    def snapshot(root: Path, *, secrets: bool = False, workflows: bool = False, editor_tasks: bool = False, **_):
-        requested.append((secrets, workflows, editor_tasks))
-        if editor_tasks:
-            raise native.WorkspaceSnapshotError("workspace_snapshot_editor_tasks_unavailable")
-        if secrets:
-            return replace(
-                SNAPSHOT,
-                secrets=SECRETS_COMPLETE,
-                skills=SKILLS_COMPLETE,
-                hooks=HOOKS_COMPLETE,
-                plugins=PLUGINS_COMPLETE,
-                workflows=WORKFLOWS_COMPLETE,
-            )
-        return SNAPSHOT
-
-    monkeypatch.setattr(runner, "workspace_snapshot", snapshot)
-    monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
-    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
-    # Detector snapshot with editor tasks, again without them, then the plain recheck.
-    assert requested == [(True, True, True), (True, True, False), (False, False, False)]
-    assert outcome.state == "partial"
-    assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == ["detector_not_run:editor_task_v1", "detector_not_run:instruction_file_v1"]
-    assert outcome.coverage["detectors"]["ci_workflow_v1"] == "no_inputs"
-    assert outcome.coverage["detectors"]["editor_task_v1"] == "not_run"
-
-
-def test_a_runtime_without_the_editor_task_scan_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-
-    features = (
-        native.WORKSPACE_SNAPSHOT_FEATURE,
-        native.WORKSPACE_SECRETS_FEATURE,
-        native.WORKSPACE_SKILLS_FEATURE,
-        native.WORKSPACE_HOOKS_FEATURE,
-        native.WORKSPACE_PLUGINS_FEATURE,
-        native.WORKSPACE_WORKFLOWS_FEATURE,
-    )
-    status = SimpleNamespace(
-        available=True,
-        compatible=True,
-        identity=SimpleNamespace(path=Path("/runtime/hol-guard-runtime")),
-        capabilities=SimpleNamespace(features=features),
-    )
-    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda: status)
-    with pytest.raises(native.WorkspaceSnapshotError) as raised:
-        native._native_request({}, needs_workflows=True, needs_editor_tasks=True)
-    assert raised.value.code == "workspace_snapshot_editor_tasks_unavailable"
 
 
 @pytest.mark.parametrize(

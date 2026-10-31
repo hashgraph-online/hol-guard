@@ -90,7 +90,7 @@ DETECTOR_SET: Final = (
     EDITOR_TASK_DETECTOR,
     INSTRUCTION_DETECTOR,
 )
-# The content scans in the order they reached the native runtime.
+# The content scans every snapshot runs.
 _CONTENT_SCANS: Final = ("secrets", "skills", "hooks", "plugins", "workflows", "editor_tasks", "instructions")
 DETECTOR_SET_DIGEST: Final = hashlib.sha256(
     ("guard.workspace-detectors.v1\0" + "\0".join(DETECTOR_SET)).encode("utf-8")
@@ -245,27 +245,10 @@ def execute(
 
 
 def _detector_snapshot(root: Path, secret_key: str) -> WorkspaceSnapshot:
-    """Snapshot with the content detectors, dropping each one the runtime lacks.
+    """Snapshot with every content detector."""
 
-    The run is then partial: coverage reports a dropped detector as not run.
-    """
-
-    scans = _CONTENT_SCANS
-    while True:
-        try:
-            return _content_snapshot(root, secret_key, scans)
-        except WorkspaceSnapshotError as error:
-            missing = next((scan for scan in scans if error.code == f"workspace_snapshot_{scan}_unavailable"), None)
-            if missing is None:
-                raise
-            scans = tuple(scan for scan in scans if scan != missing)
-
-
-def _content_snapshot(root: Path, secret_key: str, scans: tuple[str, ...]) -> WorkspaceSnapshot:
-    requested: dict[str, Any] = dict.fromkeys(scans, True)
-    if "secrets" in scans:
-        requested["secret_key"] = secret_key
-    return workspace_snapshot(root, mode="content", **requested)
+    requested: dict[str, Any] = dict.fromkeys(_CONTENT_SCANS, True)
+    return workspace_snapshot(root, mode="content", secret_key=secret_key, **requested)
 
 
 def _runtime_posture(store: Any, root: Path) -> dict[str, object] | None:

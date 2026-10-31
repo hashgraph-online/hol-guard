@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, TypeGuard
@@ -329,51 +329,10 @@ def normalize_harness_payload(
     return _envelope_from_native(native)
 
 
-def _harness_normalizer(harness: str, doc: str) -> Callable[..., GuardActionEnvelope]:
-    def normalize(
-        payload: Mapping[str, object],
-        *,
-        workspace: Path | str | None = None,
-        home_dir: Path | str | None = None,
-        guard_home: Path | str | None = None,
-        deadline: float | None = None,
-    ) -> GuardActionEnvelope:
-        return normalize_harness_payload(
-            harness,
-            "",
-            payload,
-            workspace=workspace,
-            home_dir=home_dir,
-            guard_home=guard_home,
-            deadline=deadline,
-        )
-
-    normalize.__doc__ = doc
-    return normalize
-
-
-normalize_codex_hook_payload = _harness_normalizer("codex", "Normalize a Codex hook payload.")
-normalize_claude_hook_payload = _harness_normalizer("claude-code", "Normalize a Claude Code hook payload.")
-normalize_opencode_payload = _harness_normalizer("opencode", "Normalize an OpenCode payload.")
-normalize_copilot_payload = _harness_normalizer("copilot", "Normalize a Copilot payload.")
-normalize_gemini_payload = _harness_normalizer("gemini", "Normalize a Gemini payload.")
-normalize_hermes_payload = _harness_normalizer("hermes", "Normalize a Hermes payload.")
-normalize_cursor_hook_payload = _harness_normalizer("cursor", "Normalize a Cursor IDE hook payload.")
-normalize_grok_hook_payload = _harness_normalizer("grok", "Normalize a Grok Build CLI hook payload.")
-normalize_zcode_hook_payload = _harness_normalizer("zcode", "Normalize a z.ai ZCode hook payload.")
-normalize_devin_hook_payload = _harness_normalizer("devin", "Normalize a Devin CLI hook payload.")
-normalize_kimi_payload = _harness_normalizer("kimi", "Normalize a Kimi Code native-hook payload.")
-
-
 __all__ = [
     "GuardActionEnvelope",
     "GuardActionType",
-    "normalize_claude_hook_payload",
-    "normalize_codex_hook_payload",
-    "normalize_copilot_payload",
-    "normalize_gemini_payload",
     "normalize_harness_payload",
-    "normalize_opencode_payload",
     "redacted_workspace_label",
     "stable_action_hash",
 ]

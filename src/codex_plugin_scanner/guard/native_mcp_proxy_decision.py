@@ -30,8 +30,7 @@ from .native_runtime_resilience import native_record_resident_failure, native_re
 MCP_PROXY_DECISION_FEATURE = "mcp-proxy-decision-v1"
 MCP_PROXY_ARCHIVE_VERIFY_FEATURE = "mcp-proxy-archive-verify-v1"
 MCP_PROXY_ARCHIVE_BINDING_REQUIRED_FEATURE = "mcp-proxy-archive-binding-required-v1"
-# The resident also classifies the answer to an inline approval prompt. An older
-# resident rejects that query as an unknown check, so a caller asks for it by name.
+# The resident also classifies the answer to an inline approval prompt.
 MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE = "mcp-proxy-inline-approval-reply-v1"
 # The resident spells the sensitive read's artifact content hash itself, from
 # the artifact fields the context query carries. An older resident rejects
@@ -378,22 +377,4 @@ def _block_matches(classified: str, block: object) -> bool:
         return block is None
     return isinstance(block, dict) and all(
         isinstance(block.get(field), str) for field in ("decision_source", "event_decision", "reason")
-    )
-
-
-def native_inline_approval_reply_available() -> bool:
-    """Whether this resident classifies the answer to an inline prompt.
-
-    An older resident rejects the query as an unknown check, which fails closed
-    -- correct, but only after the prompt was raised and answered. A caller asks
-    this before it prompts so an answer it cannot use is never collected.
-    """
-
-    status = native_runtime_status()
-    capabilities = status.capabilities
-    return bool(
-        status.available
-        and status.compatible
-        and capabilities is not None
-        and MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE in capabilities.features
     )

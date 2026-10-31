@@ -165,12 +165,6 @@ from ..runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
 )
-from ..runtime.secret_sensitivity import (
-    SecretContentMatch,
-    SecretPathMatch,
-    classify_secret_content,
-    classify_secret_path,
-)
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime.wrapper_run import guard_run

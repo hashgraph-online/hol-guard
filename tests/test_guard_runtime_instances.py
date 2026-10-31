@@ -23,8 +23,6 @@ from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime_identity_assessment import RuntimeIdentityError
 from codex_plugin_scanner.guard.runtime_identity_candidates import RuntimeCandidates
 from codex_plugin_scanner.guard.runtime_identity_probe import (
-    RUNTIME_PROBE_INSTANCES_FEATURE,
-    RUNTIME_PROBE_LAUNCH_FEATURE,
     RuntimeProbe,
     probe_runtime_launches,
 )
@@ -94,22 +92,6 @@ def _probe(calls: list[tuple[str, dict[str, object]]], monkeypatch: pytest.Monke
         return answer(feature, request)
 
     monkeypatch.setattr(runtime_identity_probe, "run_native_identity_command", fake)
-
-
-def test_an_older_native_runtime_still_describes_the_files(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict[str, object]]] = []
-
-    def answer(feature: str, request: dict[str, object]) -> dict[str, object]:
-        if feature == RUNTIME_PROBE_INSTANCES_FEATURE:
-            raise RuntimeIdentityError("runtime_identity_native_unavailable")
-        return _reply()
-
-    _probe(calls, monkeypatch, answer)
-    probe = probe_runtime_launches(LAUNCH, environment={}, candidate_limit=8, known_instances=[_known()])
-
-    assert probe.instances is None
-    assert [feature for feature, _ in calls] == [RUNTIME_PROBE_INSTANCES_FEATURE, RUNTIME_PROBE_LAUNCH_FEATURE]
-    assert "instances" not in calls[1][1]
 
 
 def test_a_damaged_record_costs_what_it_carried_not_the_scan(monkeypatch: pytest.MonkeyPatch) -> None:
