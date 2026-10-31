@@ -212,7 +212,7 @@ def test_the_binding_carries_the_view_only_for_a_resident_that_accepts_it(tmp_pa
 
     publisher._bind_mcp_relay_view(bound)
     assert publisher._direct_lane_mcp_relay == view
-    publisher._bind_mcp_relay_view(bound, ())
+    publisher._bind_mcp_relay_view({"generation": 1})
     assert publisher._direct_lane_mcp_relay is None
 
 
