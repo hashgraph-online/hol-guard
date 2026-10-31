@@ -82,15 +82,20 @@ def _bounded_regular_file(path: Path) -> bytes:
         os.close(descriptor)
 
 
-def _native_verdict(request: dict[str, object]) -> dict[str, Any]:
-    """The runtime's verdict on one round of supervisor evidence."""
+def _native_verdict(request: dict[str, object], deadline: float) -> dict[str, Any]:
+    """The runtime's verdict on one round of supervisor evidence, within the
+    verification's ``deadline`` on the monotonic clock."""
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
+    if deadline - time.monotonic() <= 0:
+        raise OSError("supervisor_verdict_native_unavailable")
+    status = native_runtime_status(deadline_monotonic=min(deadline, time.monotonic() + _STATUS_TIMEOUT_SECONDS))
+    remaining = deadline - time.monotonic()
     output = None
     if (
-        status.available
+        remaining > 0
+        and status.available
         and status.compatible
         and status.identity is not None
         and status.capabilities is not None
@@ -105,7 +110,7 @@ def _native_verdict(request: dict[str, object]) -> dict[str, Any]:
                 default=lambda _value: None,
                 sort_keys=True,
             ),
-            timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+            timeout_seconds=remaining,
             output_limit=_OUTPUT_LIMIT_BYTES,
         )
     try:
@@ -157,13 +162,14 @@ def _verify_macos_supervisor(paths: MachinePaths, plist_path: Path) -> Superviso
         "stderr_log": str(paths.log_root / "machine-health-error.log"),
     }
     probes = {"disabled": ("print-disabled", "system"), "loaded": ("print", f"system/{_MACOS_LABEL}")}
+    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
     try:
         for _round in range(len(probes) + 1):
-            answer = _native_verdict(request)
+            answer = _native_verdict(request, deadline)
             probe = answer.get("next")
             if probe is None:
                 return _status(answer)
-            if probe not in probes or probe in request:
+            if not isinstance(probe, str) or probe not in probes or probe in request:
                 break
             result = _run_macos_launchctl(*probes[probe])
             request[probe] = {"returncode": result.returncode, "stdout": result.stdout}
@@ -207,6 +213,7 @@ def _run_schtasks(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def _verify_windows_supervisor(paths: MachinePaths) -> SupervisorStatus:
+    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
     try:
         result = _run_schtasks("/Query", "/TN", _WINDOWS_TASK_NAME, "/XML", "/HRESULT")
         return _status(
@@ -215,7 +222,8 @@ def _verify_windows_supervisor(paths: MachinePaths) -> SupervisorStatus:
                     "op": "windows",
                     "executable": str(machine_executable(paths, "Windows")),
                     "task": {"returncode": result.returncode, "stdout": result.stdout},
-                }
+                },
+                deadline,
             )
         )
     except (OSError, ValueError, subprocess.SubprocessError):
