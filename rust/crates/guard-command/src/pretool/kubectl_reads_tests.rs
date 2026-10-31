@@ -77,6 +77,44 @@ fn read_verbs_are_proven() {
 }
 
 #[test]
+fn usage_text_is_proven_for_every_builtin_verb() {
+    for command in [
+        "kubectl get --help",
+        "kubectl get pods --help",
+        "kubectl get pods -h",
+        "kubectl apply --help",
+        "kubectl delete --help",
+        "kubectl exec --help",
+        "kubectl rollout status --help",
+        "kubectl config view --help",
+        "kubectl logs deploy/web --help",
+        "kubectl options",
+    ] {
+        assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn usage_text_for_a_plugin_or_behind_an_operand_stays_reviewed() {
+    for command in [
+        // An unknown first word runs `kubectl-<verb>` from PATH, which would
+        // read the help flag itself.
+        "kubectl mycmd --help",
+        "kubectl krew --help",
+        // The flag has to be the last word.
+        "kubectl get --help pods",
+        "kubectl apply --help -f manifest.yaml",
+        // `options` prints the global list only on its own.
+        "kubectl options -o json",
+        // An option in front of the flag still names a server or a file.
+        "kubectl get --server https://cluster.example.test --help",
+        "kubectl get --kubeconfig /tmp/agent.yaml --help",
+    ] {
+        assert!(!proven(command), "{command}");
+    }
+}
+
+#[test]
 fn secrets_mutations_and_server_overrides_stay_reviewed() {
     for command in [
         "kubectl get secrets",

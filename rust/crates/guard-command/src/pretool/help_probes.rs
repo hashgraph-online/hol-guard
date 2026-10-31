@@ -1,9 +1,11 @@
-//! Package-manager usage text: `uv add --help`, `npm install --help`.
+//! Usage text: `uv add --help`, `npm install --help`, `curl --help`.
 //!
 //! A help flag makes these programs print their own usage and exit before the
 //! verb in front of it resolves a name, contacts a registry, downloads an
-//! archive or writes a lockfile. Nothing is installed, so the command is the
-//! same kind of question as the version probe next door.
+//! archive or writes a lockfile. Nothing is installed, transferred, copied or
+//! signalled, so the command is the same kind of question as the version
+//! probe next door: a tool that takes no verb prints the same text whatever
+//! host, file or process the operator was about to name.
 //!
 //! The probe still executes the named binary, so it keeps the identity rule
 //! the other bare-name probes use: only a bare basename with no path
@@ -43,24 +45,36 @@
 //!   is `man` on Unix. Only the `--help` flag prints to stdout.
 //! - `npm init` and `npm create`: they resolve a `create-*` package and run
 //!   it, so the word after them is a program.
+//! - `mysql` and `mysqldump`: their usage text lists the option files they
+//!   read and the values those files set, so the help output can print a
+//!   configured credential the command never asked for.
+//! - `brew` and `apt-get`: a package manager's usage text is answered by the
+//!   package lane, which already carries their proofs.
+//! - `launchctl`: it sits under the privilege floor, which no usage text
+//!   lowers.
+//!
+//! The tools in the second group below take no verb at all, so only the lone
+//! flag is admitted and a short flag is admitted only where that spelling
+//! means help everywhere: `rsync -h` is `--human-readable`, and `psql -h`,
+//! `redis-cli -h` and `nc -h` name a host.
 
-/// The tools whose usage text goes to stdout, with `-h` as their own help
-/// flag rather than something else.
+/// The tools whose usage text goes to stdout, with the spellings each one
+/// reads as a request for that text rather than as something else.
 fn help_flag(basename: &str, flag: &str) -> bool {
-    matches!(
-        basename,
-        "uv" | "pip"
-            | "pip3"
-            | "npm"
-            | "deno"
-            | "ruff"
-            | "black"
-            | "mypy"
-            | "rg"
-            | "fd"
-            | "jq"
-            | "tsc"
-    ) && matches!(flag, "--help" | "-h")
+    match basename {
+        // `-h` is the help flag for all of these.
+        "uv" | "pip" | "pip3" | "npm" | "deno" | "ruff" | "black" | "mypy" | "rg" | "fd" | "jq"
+        | "tsc" | "wget" => matches!(flag, "--help" | "-h"),
+        // curl prints its bundled manual to stdout the same way.
+        "curl" => matches!(flag, "--help" | "-h" | "--manual" | "-M"),
+        // These print usage and exit without opening a connection, copying a
+        // file or signalling a process. Their `-h` means something else, or
+        // means different things on different builds, so only the long
+        // spelling is read as a request for the text.
+        "ssh" | "scp" | "sftp" | "rsync" | "psql" | "redis-cli" | "nc" | "cp" | "chown"
+        | "kill" => flag == "--help",
+        _ => false,
+    }
 }
 
 /// A built-in verb of this manager that names no program to run, so the help
@@ -193,7 +207,7 @@ pub(super) fn configuration_inert(basename: &str, context: super::PathContext<'_
 /// [`configuration_inert`] reads, which no unit context names a directory
 /// for, so their verbs are proved in the benign gate's fixture home.
 /// `tests/fixtures/benign_false_positive_gate.json` carries the alias rows.
-pub(super) fn safe_help_probe(
+pub(crate) fn safe_help_probe(
     basename: &str,
     arguments: &[String],
     context: super::PathContext<'_>,
@@ -274,6 +288,64 @@ mod tests {
         ] {
             assert!(
                 safe_help_probe(tool, &args(&arguments), context()),
+                "{tool} {arguments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn verbless_tool_usage_text_is_admitted() {
+        for (tool, arguments) in [
+            ("curl", vec!["--help"]),
+            ("curl", vec!["-h"]),
+            ("curl", vec!["--manual"]),
+            ("curl", vec!["-M"]),
+            ("wget", vec!["--help"]),
+            ("wget", vec!["-h"]),
+            ("ssh", vec!["--help"]),
+            ("scp", vec!["--help"]),
+            ("sftp", vec!["--help"]),
+            ("rsync", vec!["--help"]),
+            ("psql", vec!["--help"]),
+            ("redis-cli", vec!["--help"]),
+            ("nc", vec!["--help"]),
+            ("cp", vec!["--help"]),
+            ("chown", vec!["--help"]),
+            ("kill", vec!["--help"]),
+        ] {
+            assert!(
+                safe_help_probe(tool, &args(&arguments), context()),
+                "{tool} {arguments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_spelling_that_names_a_host_or_a_mode_is_refused() {
+        for (tool, arguments) in [
+            // `-h` names the host to connect to.
+            ("psql", vec!["-h"]),
+            ("redis-cli", vec!["-h"]),
+            ("nc", vec!["-h"]),
+            // rsync reads `-h` as `--human-readable`, which is a transfer.
+            ("rsync", vec!["-h"]),
+            // The usage text prints the values the option files set.
+            ("mysql", vec!["--help"]),
+            ("mysqldump", vec!["--help"]),
+            // Under the privilege floor, which usage text does not lower.
+            ("launchctl", vec!["--help"]),
+            // The package lane answers for these.
+            ("brew", vec!["--help"]),
+            ("apt-get", vec!["--help"]),
+            // The flag has to be the last word; anything after it is an
+            // operand, and anything before it is a host or a path.
+            ("curl", vec!["--help", "https://example.test"]),
+            ("cp", vec!["--help", "src", "dst"]),
+            ("ssh", vec!["host", "--help"]),
+            ("cp", vec!["-h"]),
+        ] {
+            assert!(
+                !safe_help_probe(tool, &args(&arguments), context()),
                 "{tool} {arguments:?}"
             );
         }
