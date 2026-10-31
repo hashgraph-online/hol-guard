@@ -92,9 +92,37 @@ const OPERAND_VERB_VALUE_OPTIONS: &[&str] = &[
     "-s",
 ];
 
-/// The ref names `model` spells, empty when nothing can be proven: the
-/// command moves between directories, or there is no working directory to
-/// read a candidate name against.
+/// A candidate ref name together with the argument word that spells it.
+/// The screen that consumes this set matches the words the model split, so
+/// `--branch=feat/x` is one word there while the name to prove is only its
+/// value.
+struct RefWord {
+    name: String,
+    word: String,
+}
+
+impl RefWord {
+    /// A ref name spelled as its own operand or as an option's separate
+    /// value, where the word and the name are the same text.
+    fn operand(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            word: name.to_owned(),
+        }
+    }
+
+    /// A ref name spelled inside `--option=value`.
+    fn attached(name: &str, word: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            word: word.to_owned(),
+        }
+    }
+}
+
+/// The words `model` spells that carry a ref name, empty when nothing can
+/// be proven: the command moves between directories, or there is no working
+/// directory to read a candidate name against.
 pub(in crate::pretool) fn ref_names(
     model: &CanonicalCommandV1,
     cwd: Option<&str>,
@@ -116,7 +144,8 @@ pub(in crate::pretool) fn ref_names(
     }
     names
         .into_iter()
-        .filter(|name| names_no_path(name, cwd))
+        .filter(|candidate| names_no_path(&candidate.name, cwd))
+        .map(|candidate| candidate.word)
         .collect()
 }
 
@@ -131,7 +160,7 @@ fn names_no_path(name: &str, cwd: &str) -> bool {
 }
 
 /// The ref names a `git` segment's arguments spell.
-fn git_refs(arguments: &[String], names: &mut Vec<String>) {
+fn git_refs(arguments: &[String], names: &mut Vec<RefWord>) {
     let Some(verb) = arguments.first().filter(|first| !first.starts_with('-')) else {
         return;
     };
@@ -158,14 +187,14 @@ fn git_refs(arguments: &[String], names: &mut Vec<String>) {
         }
         if let Some((option, value)) = token.split_once('=') {
             if refs.contains(&option) {
-                names.push(value.to_owned());
+                names.push(RefWord::attached(value, token));
             }
             index += 1;
             continue;
         }
         if index + 1 < arguments.len() && (refs.contains(&token) || values.contains(&token)) {
             if refs.contains(&token) {
-                names.push(arguments[index + 1].clone());
+                names.push(RefWord::operand(&arguments[index + 1]));
             }
             index += 2;
             continue;
@@ -175,7 +204,7 @@ fn git_refs(arguments: &[String], names: &mut Vec<String>) {
             continue;
         }
         if operands {
-            names.push(token.to_owned());
+            names.push(RefWord::operand(token));
         }
         index += 1;
     }
@@ -183,19 +212,19 @@ fn git_refs(arguments: &[String], names: &mut Vec<String>) {
 
 /// The values of `options` in `arguments`, in both the separated and the
 /// `--option=value` spelling.
-fn option_refs(arguments: &[String], options: &[&str], names: &mut Vec<String>) {
+fn option_refs(arguments: &[String], options: &[&str], names: &mut Vec<RefWord>) {
     let mut index = 0;
     while index < arguments.len() {
         let token = arguments[index].as_str();
         if let Some((option, value)) = token.split_once('=') {
             if options.contains(&option) {
-                names.push(value.to_owned());
+                names.push(RefWord::attached(value, token));
             }
             index += 1;
             continue;
         }
         if options.contains(&token) && index + 1 < arguments.len() {
-            names.push(arguments[index + 1].clone());
+            names.push(RefWord::operand(&arguments[index + 1]));
             index += 2;
             continue;
         }

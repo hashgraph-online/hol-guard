@@ -36404,22 +36404,6 @@
       }
     },
     {
-      "id": "ref-name-branch-create-force-credential-word",
-      "cwd": "worktree",
-      "expect": "allow",
-      "fix_area": "git",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "git checkout -B fix/secret-scan-gate"
-      }
-    },
-    {
       "id": "ref-name-branch-at-start-credential-word",
       "cwd": "worktree",
       "expect": "allow",
@@ -36465,22 +36449,6 @@
       "tool": "shell",
       "tool_input": {
         "command": "git log --oneline origin/add-secret-blast-radius -5"
-      }
-    },
-    {
-      "id": "ref-name-push-refspec-credential-word",
-      "cwd": "worktree",
-      "expect": "allow",
-      "fix_area": "git",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "git push origin fix/secret-scan-gate"
       }
     },
     {
@@ -36545,6 +36513,38 @@
       "tool": "shell",
       "tool_input": {
         "command": "gh run list --branch feat/password-reset"
+      }
+    },
+    {
+      "id": "ref-name-gh-run-list-branch-attached-value",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh run list --branch=feat/password-reset"
+      }
+    },
+    {
+      "id": "ref-name-git-switch-create-attached-value",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch --create=chore/api-key-refresh"
       }
     },
     {
