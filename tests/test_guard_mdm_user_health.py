@@ -240,6 +240,18 @@ def test_user_health_state_fails_closed_without_the_native_runtime(
     assert not (guard_home / "user-health-state.json").exists()
 
 
+def test_user_health_status_never_asks_the_native_runtime_without_a_state(
+    guard_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    def unreachable(**_kwargs: object) -> object:
+        raise AssertionError("native runtime consulted without a state")
+
+    monkeypatch.setattr(native_runtime, "native_runtime_status", unreachable)
+    assert user_health.user_health_status(guard_home)["enabled"] is False
+
+
 def test_user_health_cli_exposes_explicit_status_surface(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["guard", "health-leases", "status", "--home", str(tmp_path), "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)

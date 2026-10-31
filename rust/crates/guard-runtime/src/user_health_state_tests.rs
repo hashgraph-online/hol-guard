@@ -169,7 +169,7 @@ fn a_leased_state_needs_its_digest_and_a_fresh_one_needs_none() {
 fn a_malformed_state_is_never_written() {
     let (_directory, home) = guard_home();
     let other_key = state();
-    let mutations: [(&str, Value); 14] = [
+    let mutations: [(&str, Value); 17] = [
         ("schemaVersion", json!("hol-guard-user-health-state.v0")),
         ("enabled", json!(1)),
         ("workspaceId", json!("")),
@@ -187,6 +187,9 @@ fn a_malformed_state_is_never_written() {
         ("pendingOutbox", json!("x".repeat(400_001))),
         ("updatedAt", json!("2026-10-31T22:47:00")),
         ("updatedAt", json!(null)),
+        ("updatedAt", json!(" 2026-10-31T22:47:00.123456+00:00")),
+        ("updatedAt", json!("2026-10-31T22:47:00.123456+00:00\n")),
+        ("updatedAt", json!("2026-10-31T22:47:00Z")),
     ];
     for (field, value) in mutations {
         let mut invalid = state();

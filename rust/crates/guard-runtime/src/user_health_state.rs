@@ -201,8 +201,16 @@ fn is_valid_state(state: &Value) -> bool {
         && text("publicKeySpki").is_some_and(|value| value.chars().count() <= 1024)
         && text("privateKeyPem").is_some_and(|value| value.chars().count() <= 4096)
         && optional_text_within(fields, "pendingOutbox", 400_000)
-        && text("updatedAt").is_some_and(|value| parse_attestation_timestamp(value).is_some())
+        && text("updatedAt").is_some_and(is_isoformat_timestamp)
         && keys_agree(fields)
+}
+
+/// A timestamp as `datetime.isoformat()` writes it: an offset, no `Z` and no
+/// padding, since every Python reader parses it with `fromisoformat`.
+fn is_isoformat_timestamp(value: &str) -> bool {
+    value.trim() == value
+        && !value.ends_with(['Z', 'z'])
+        && parse_attestation_timestamp(value).is_some()
 }
 
 fn optional_text_within(fields: &Map<String, Value>, name: &str, limit: usize) -> bool {

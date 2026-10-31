@@ -33,9 +33,10 @@ USER_HEALTH_STATE_COMMAND = "user-health-state"
 USER_HEALTH_STATE_FEATURE = "native-user-health-state-v1"
 USER_HEALTH_STATE_SCHEMA = "user-health-state.v1"
 _STATUS_TIMEOUT_SECONDS = 10.0
-_COMMAND_TIMEOUT_SECONDS = 30.0
+_COMMAND_TIMEOUT_SECONDS = 10.0
 # A stored state is bounded at 512 KiB.
 _OUTPUT_LIMIT_BYTES = 1024 * 1024
+_STATE_NAME = "user-health-state.json"
 _STATE_UNAVAILABLE = "user_health_state_native_unavailable"
 _STATE_ERROR_TYPES: dict[str, type[Exception]] = {
     "permission": PermissionError,
@@ -154,6 +155,10 @@ def _native_state(guard_home: Path, op: str, state: UserHealthState | None = Non
 
 
 def _read_state(guard_home: Path) -> UserHealthState | None:
+    # Most installs never enable the user health lease; skip the native round
+    # trip so cloud sync never waits on it for a file that is not there.
+    if not os.path.lexists(guard_home / _STATE_NAME):
+        return None
     raw = _native_state(guard_home, "read").get("state")
     if raw is None:
         return None
