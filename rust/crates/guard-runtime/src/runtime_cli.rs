@@ -100,6 +100,12 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag]
+            if release_manifest_verify_command::is_command(command) && flag == "--stdin" =>
+        {
+            let response = release_manifest_verify_command::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if business_source_codec::is_command(command) && flag == "--stdin" => {
             let response = business_source_codec::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)

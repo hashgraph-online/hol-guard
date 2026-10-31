@@ -6,12 +6,13 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from codex_plugin_scanner.guard.mdm import manifest as manifest_module
+from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.mdm.contracts import RELEASE_MANIFEST_SCHEMA_VERSION
 from codex_plugin_scanner.guard.mdm.manifest import verify_release_manifest
 
@@ -290,18 +291,6 @@ def test_rejects_unlisted_windows_directory_junction(tmp_path: Path) -> None:
     assert result.reason_code == "release_manifest_path_escape"
 
 
-def test_bounds_total_hashed_runtime_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    runtime = tmp_path / "runtime"
-    manifest = _manifest(runtime)
-    manifest_path = runtime / "release-manifest.json"
-    manifest_path.write_text(json.dumps(manifest))
-    monkeypatch.setattr(manifest_module, "_MAX_RUNTIME_BYTES", 1)
-
-    result = verify_release_manifest(manifest_path, runtime, require_signature=False)
-
-    assert result.reason_code == "release_manifest_size_limit_exceeded"
-
-
 def test_dangling_manifest_symlink_is_tamper_not_absence(tmp_path: Path) -> None:
     runtime = tmp_path / "runtime"
     runtime.mkdir()
@@ -313,25 +302,19 @@ def test_dangling_manifest_symlink_is_tamper_not_absence(tmp_path: Path) -> None
     assert result.reason_code == "release_manifest_path_escape"
 
 
-def test_bounds_directory_and_entry_traversal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unanswered_native_verification_leaves_the_manifest_invalid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     runtime = tmp_path / "runtime"
-    manifest = _manifest(runtime)
     manifest_path = runtime / "release-manifest.json"
-    manifest_path.write_text(json.dumps(manifest))
-    monkeypatch.setattr(manifest_module, "_MAX_RUNTIME_ENTRIES", 1)
+    manifest_path.parent.mkdir()
+    manifest_path.write_text(json.dumps(_manifest(tmp_path / "unused")))
+    monkeypatch.setattr(
+        native_runtime,
+        "native_runtime_status",
+        lambda **_: SimpleNamespace(available=False, compatible=False, identity=None, capabilities=None),
+    )
 
     result = verify_release_manifest(manifest_path, runtime, require_signature=False)
 
-    assert result.reason_code == "release_manifest_file_limit_exceeded"
-
-
-def test_hashes_runtime_file_through_bounded_descriptor_reads(tmp_path: Path) -> None:
-    runtime_file = tmp_path / "runtime"
-    raw = b"guard\r\n-runtime\x1a-after-control-z"
-    runtime_file.write_bytes(raw)
-
-    digest, consumed, metadata = manifest_module._hash_regular_file(runtime_file, 1024)
-
-    assert digest == hashlib.sha256(raw).hexdigest()
-    assert consumed == len(raw)
-    assert metadata.st_size == consumed
+    assert (result.status, result.reason_code) == ("tampered", "release_manifest_invalid")

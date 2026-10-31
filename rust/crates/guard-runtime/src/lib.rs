@@ -747,6 +747,8 @@ use guard_runtime_pyjson as pyjson;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;
+mod release_manifest_verify;
+mod release_manifest_verify_command;
 mod request_context_op;
 mod request_context_shell;
 mod resident_client;
