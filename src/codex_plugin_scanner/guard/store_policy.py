@@ -1360,38 +1360,6 @@ class StorePolicyMixin:
         Returns ``(reason, stored_artifact_hash)``.  The stored hash is needed
         by emit layers that must distinguish a rejected approval bound to the
         current context-token contract from stale pre-token (legacy) evidence.
-        """
-
-        reason, stored_hash, _reuse = self.approval_reuse_miss(
-            harness,
-            artifact_id,
-            artifact_hash,
-            workspace,
-            publisher,
-            current_action=None,
-            now=now,
-        )
-        return reason, stored_hash
-
-    def approval_reuse_miss(
-        self,
-        harness: str,
-        artifact_id: str | None,
-        artifact_hash: str | None,
-        workspace: str | None,
-        publisher: str | None,
-        current_action: str | None = None,
-        now: str | None = None,
-    ) -> tuple[str | None, str | None, Mapping[str, object] | None]:
-        """Diagnose a saved-allow miss and, optionally, compose what it means.
-
-        Returns ``(reason, stored_artifact_hash, reuse)``.  Naming
-        ``current_action`` asks the resident to compose the reuse decision for
-        the miss in the same round trip, including whether the rejected
-        approval was ever bound to the context-token contract; ``reuse`` is
-        ``None`` whenever the resident did not compose one, either because the
-        caller did not ask or because there was no resident answer to compose
-        from.
 
         The resident runs the bounded probes and picks the reason. This wrapper
         only procures integrity evidence when the resident asks for it. A store
@@ -1404,7 +1372,7 @@ class StorePolicyMixin:
         """
 
         if artifact_id is None:
-            return None, None, None
+            return None, None
         current_time = _canonical_utc_timestamp(now or _now())
         with self._connect() as connection:
             has_rows = (
@@ -1415,7 +1383,7 @@ class StorePolicyMixin:
                 is not None
             )
         if not has_rows:
-            return None, None, None
+            return None, None
         self._provision_resident_verifier()
 
         def evidence_provider(policy: bool, local_once: bool) -> dict[str, object]:
@@ -1446,7 +1414,6 @@ class StorePolicyMixin:
                 publisher=publisher,
                 now=current_time,
                 evidence_provider=evidence_provider,
-                current_action=current_action,
             )
         except ApprovalReuseDiagnosticUnavailableError as error:
             _LOGGER.warning(
@@ -1455,7 +1422,7 @@ class StorePolicyMixin:
                 error,
                 APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON,
             )
-            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None, None
+            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None
 
     def _provision_resident_verifier(self, key: bytes | None = None) -> None:
         """Establish the verifier key the resident requires before it serves.

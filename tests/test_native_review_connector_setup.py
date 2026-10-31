@@ -260,11 +260,8 @@ def test_the_queue_call_renders_the_silent_block_with_its_row(tmp_path: Path, mo
     assert not silent
     respond: Any = queued[0]["respond"]
     block = respond["silent_review_block"]
-    assert {key: block[key] for key in ("ask", "home_dir")} == {"ask": False, "home_dir": str(tmp_path / "home")}
-    # An older resident refuses a block without the facts it renders from,
-    # and the review would never reach the inbox.
-    assert (block["setup_reason"], block["connector_is_local"]) == (None, False)
-    assert {type(block[key]) for key in ("retry_reuses_approval", "exact_action_allowable")} == {bool}
+    # The resident derives the binding and setup facts itself.
+    assert block == {"ask": False, "home_dir": str(tmp_path / "home")}
 
 
 def test_the_queue_call_renders_the_paused_review_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
