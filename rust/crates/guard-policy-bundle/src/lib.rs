@@ -7,6 +7,7 @@ mod policy_bundle_crypto;
 mod policy_bundle_decisions;
 mod policy_bundle_delivery;
 mod policy_bundle_dpop;
+mod policy_bundle_dpop_proof;
 mod policy_bundle_families;
 mod policy_bundle_json;
 mod policy_bundle_keys;

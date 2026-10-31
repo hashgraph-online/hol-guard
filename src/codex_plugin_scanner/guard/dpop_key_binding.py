@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from .native_policy_bundle import policy_bundle_verdict
+from .native_policy_bundle import PolicyBundleNativeUnavailableError, policy_bundle_verdict
 
 _INVALID_MATERIAL = "invalid_dpop_key_material"
+_SCHEMA_MISMATCH = "native_policy_bundle_authority_schema_mismatch"
 
 
 def verified_dpop_jwk_thumbprint(
@@ -32,4 +33,40 @@ def verified_dpop_jwk_thumbprint(
     return thumbprint
 
 
-__all__ = ["verified_dpop_jwk_thumbprint"]
+def signed_dpop_proof(
+    *,
+    private_key_pem: str,
+    algorithm: str,
+    public_jwk: dict[str, str],
+    request_url: str,
+    method: str,
+    issued_at: int,
+    access_token: str | None = None,
+    nonce: str | None = None,
+) -> str:
+    """Return the DPoP proof (RFC 9449) Rust signs for one Guard Cloud request.
+
+    A rejected key or token raises ``PolicyBundleNativeError`` with Rust's code;
+    an outage raises ``PolicyBundleNativeUnavailableError``.
+    """
+
+    verdict = policy_bundle_verdict(
+        "dpop_proof",
+        {
+            "private_key_pem": private_key_pem,
+            "algorithm": algorithm,
+            "public_jwk": public_jwk,
+            "request_url": request_url,
+            "method": method,
+            "issued_at": issued_at,
+            "access_token": access_token,
+            "nonce": nonce,
+        },
+    )
+    proof = verdict.get("proof")
+    if not isinstance(proof, str) or proof.count(".") != 2:
+        raise PolicyBundleNativeUnavailableError(_SCHEMA_MISMATCH)
+    return proof
+
+
+__all__ = ["signed_dpop_proof", "verified_dpop_jwk_thumbprint"]
