@@ -337,6 +337,11 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         // The test opens a file the next pass would reach again.
         "until nc -z localhost 5432 > wait.log; do sleep 1; done",
         "until nc -z localhost 5432 2> wait.log; do sleep 1; done",
+        // A redirection after `done` is opened once and written through on
+        // every pass, and an input device need never end.
+        "until nc -z localhost 5432; do sleep 1; done > wait.log",
+        "until nc -z localhost 5432; do sleep 1; done >> wait.log",
+        "until nc -z localhost 5432; do sleep 1; done < /dev/stdin",
         // An expansion need not name the same text on the next pass.
         "until nc -z localhost $PORT; do sleep 1; done",
         "until nc -z localhost `cat port`; do sleep 1; done",
