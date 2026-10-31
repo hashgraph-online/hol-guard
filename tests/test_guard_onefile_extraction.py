@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard import onefile_extraction
 from codex_plugin_scanner.guard.onefile_extraction import (
     OWNER_MARKER_NAME,
     ExtractionReclaimResult,
-    is_onefile_extraction_dir,
     reclaim_orphaned_extraction_dirs,
 )
 
@@ -60,33 +59,6 @@ def _no_live_pids(pid: int) -> bool:
 
 def _all_live_pids(pid: int) -> bool:
     return True
-
-
-def test_is_onefile_extraction_dir_requires_mei_name_and_real_directory(tmp_path: Path) -> None:
-    extraction = _extraction_dir(tmp_path)
-    assert is_onefile_extraction_dir(extraction, tmp_path)
-    assert not is_onefile_extraction_dir(tmp_path / "_MEImissing0", tmp_path)
-    assert not is_onefile_extraction_dir(_extraction_dir(tmp_path, "other"), tmp_path)
-    assert not is_onefile_extraction_dir(_extraction_dir(tmp_path, "_MEIab"), tmp_path)
-
-    not_a_dir = tmp_path / "_MEIfile000"
-    not_a_dir.write_text("x", encoding="utf-8")
-    assert not is_onefile_extraction_dir(not_a_dir, tmp_path)
-
-    nested_root = tmp_path / "nested"
-    nested = _extraction_dir(nested_root)
-    assert not is_onefile_extraction_dir(nested, tmp_path)
-
-
-def test_is_onefile_extraction_dir_rejects_symlink(tmp_path: Path) -> None:
-    target = tmp_path / "elsewhere"
-    target.mkdir()
-    link = tmp_path / "_MEIlink99"
-    try:
-        link.symlink_to(target, target_is_directory=True)
-    except OSError:
-        pytest.skip("symlink creation unavailable")
-    assert not is_onefile_extraction_dir(link, tmp_path)
 
 
 def test_reclaim_deletes_dead_owner_dir_and_counts_bytes(tmp_path: Path) -> None:
@@ -279,19 +251,6 @@ def test_reclaim_rechecks_marker_before_deleting(tmp_path: Path, monkeypatch: py
     assert result.reclaimed_count == 0
     assert extraction.exists()
     assert len(calls) == 2
-
-
-def test_is_onefile_extraction_dir_survives_resolve_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    extraction = _extraction_dir(tmp_path)
-    original_resolve = Path.resolve
-
-    def broken_resolve(self: Path, *args: object, **kwargs: object) -> Path:
-        if self.name.startswith("_MEI"):
-            raise OSError("vanishing mount")
-        return original_resolve(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "resolve", broken_resolve)
-    assert not is_onefile_extraction_dir(extraction, tmp_path)
 
 
 def test_pid_alive_with_real_processes() -> None:

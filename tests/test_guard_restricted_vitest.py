@@ -9,6 +9,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_vitest as vitest
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests import restricted_vitest_ops
 
 
 @pytest.mark.parametrize("version, supported", [("4.1.8", True), ("3.2.0", False), ("invalid", False)])
@@ -16,18 +17,18 @@ def test_readonly_config_loader_is_version_bounded(tmp_path: Path, version: str,
     manifest = tmp_path / "package.json"
     manifest.write_text(json.dumps({"name": "vitest", "version": version}))
     args = ("run", "tests/example.test.ts")
-    assert vitest._readonly_config_arguments(args, manifest) == (
+    assert restricted_vitest_ops.readonly_config_arguments(args, manifest) == (
         (*args, "--configLoader", "runner") if supported else args
     )
     explicit = (*args, "--configLoader=native")
-    assert vitest._readonly_config_arguments(explicit, manifest) == explicit
+    assert restricted_vitest_ops.readonly_config_arguments(explicit, manifest) == explicit
 
 
 def test_invalid_manifest_cannot_enable_config_loader(tmp_path: Path) -> None:
     manifest = tmp_path / "package.json"
     for content in ("[]", "{broken", "x" * 65537):
         manifest.write_text(content)
-        assert vitest._readonly_config_arguments(("run",), manifest) == ("run",)
+        assert restricted_vitest_ops.readonly_config_arguments(("run",), manifest) == ("run",)
 
 
 def test_manifest_symlink_is_not_read_for_config_capability(tmp_path: Path) -> None:
@@ -35,7 +36,7 @@ def test_manifest_symlink_is_not_read_for_config_capability(tmp_path: Path) -> N
     target.write_text(json.dumps({"name": "vitest", "version": "4.1.8"}))
     manifest = tmp_path / "package.json"
     manifest.symlink_to(target)
-    assert vitest._readonly_config_arguments(("run",), manifest) == ("run",)
+    assert restricted_vitest_ops.readonly_config_arguments(("run",), manifest) == ("run",)
 
 
 @pytest.mark.parametrize(
@@ -51,7 +52,7 @@ def test_manifest_symlink_is_not_read_for_config_capability(tmp_path: Path) -> N
     ],
 )
 def test_local_vitest_run_arguments(command: list[str]) -> None:
-    assert vitest.vitest_arguments(command)[0] == "run"
+    assert restricted_vitest_ops.vitest_arguments(command)[0] == "run"
 
 
 def test_node_vitest_preserves_bounded_heap_option() -> None:
@@ -61,7 +62,7 @@ def test_node_vitest_preserves_bounded_heap_option() -> None:
         "/project/node_modules/vitest/vitest.mjs",
         "run",
     ]
-    assert vitest.vitest_arguments(command) == ("run",)
+    assert restricted_vitest_ops.vitest_arguments(command) == ("run",)
 
 
 @pytest.mark.parametrize(
@@ -79,7 +80,7 @@ def test_node_vitest_preserves_bounded_heap_option() -> None:
 )
 def test_downloads_other_tools_and_shell_operators_are_not_execution_plans(command: list[str]) -> None:
     with pytest.raises(RestrictedPytestError):
-        vitest.vitest_arguments(command)
+        restricted_vitest_ops.vitest_arguments(command)
 
 
 @pytest.mark.parametrize("denied_context", [None, "original", "selected"])

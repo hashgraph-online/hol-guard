@@ -11,27 +11,36 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any, cast
+from enum import Enum
+from typing import Any, TypeVar, cast
 
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
+    ActivityApprovalReuseStatus,
+    ActivityDecisionReason,
+    ActivityLatencyBucket,
+    ActivityParseConfidence,
     CommandActivity,
     CommandActivityEvidence,
+    CommandExecutionStatus,
+    CommandHookPhase,
+    CommandProofLevel,
     CorrelationHandle,
     CorrelationKind,
+    ReceiptLinkStatus,
 )
 from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     CommandShadowCohort,
     CommandShadowComparison,
     CommandShadowObservation,
 )
+from codex_plugin_scanner.guard.runtime.effect_contract import UncertaintyKind
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity import _validate_command_activity_write
 from codex_plugin_scanner.guard.store_command_activity_display_schema import INVOCATION_PREVIEW_MAX_CHARS
 from codex_plugin_scanner.guard.store_command_activity_lifecycle import _require_utc_datetime
 from codex_plugin_scanner.guard.store_command_activity_wire import (
-    activity_from_wire,
     activity_wire,
     evidence_wire,
     handle_wire,
@@ -187,3 +196,48 @@ __all__ = (
     "record_command_activity_observation_conflict",
     "transition_command_activity",
 )
+
+
+def _handle_from_wire(value: object) -> CorrelationHandle | None:
+    if not isinstance(value, Mapping):
+        return None
+    item = cast(Mapping[str, object], value)
+    return CorrelationHandle(
+        CorrelationKind(str(item["kind"])),
+        str(item["harness"]),
+        str(item["key_id"]),
+        str(item["digest"]),
+    )
+
+
+_EnumT = TypeVar("_EnumT", bound=Enum)
+
+
+def _optional_enum(enum_type: type[_EnumT], value: object) -> _EnumT | None:
+    return enum_type(str(value)) if value is not None else None
+
+
+def activity_from_wire(row: Mapping[str, object]) -> CommandActivity:
+    return CommandActivity(
+        activity_id=str(row["activity_id"]),
+        occurred_at=datetime.fromisoformat(str(row["occurred_at"])),
+        harness=str(row["harness"]),
+        hook_phase=CommandHookPhase(str(row["hook_phase"])),
+        execution_status=CommandExecutionStatus(str(row["execution_status"])),
+        proof_level=CommandProofLevel(str(row["proof_level"])),
+        policy_action=cast(GuardAction | None, row["policy_action"]),
+        decision_reason_code=_optional_enum(ActivityDecisionReason, row["decision_reason_code"]),
+        controlling_rule_id=str(row["controlling_rule_id"]) if row["controlling_rule_id"] is not None else None,
+        parse_confidence=_optional_enum(ActivityParseConfidence, row["parse_confidence"]),
+        uncertainty_class=_optional_enum(UncertaintyKind, row["uncertainty_class"]),
+        match_count=int(cast(int, row["match_count"])),
+        prompted=bool(row["prompted"]),
+        approval_reuse_status=ActivityApprovalReuseStatus(str(row["approval_reuse_status"])),
+        request_correlation=_handle_from_wire(row.get("request_correlation")),
+        session_correlation=_handle_from_wire(row.get("session_correlation")),
+        receipt_link_status=ReceiptLinkStatus(str(row["receipt_link_status"])),
+        receipt_id=str(row["receipt_id"]) if row["receipt_id"] is not None else None,
+        evaluation_latency_bucket=ActivityLatencyBucket(str(row["evaluation_latency_bucket"])),
+        persistence_latency_bucket=ActivityLatencyBucket(str(row["persistence_latency_bucket"])),
+        schema_version=str(row["schema_version"]),
+    )
