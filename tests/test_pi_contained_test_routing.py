@@ -43,6 +43,8 @@ def test_routing_is_active_for_pi_and_omp_and_does_not_change_frozen_previous(tm
     assert pi_source.count("Object.assign(event.input, input);") == 1
     # The sink re-checks authority under Pi's own harness policy, not OMP's default.
     assert pi_source.count('"execute-contained-test", "--harness", "pi", "--guard-home"') == 1
+    assert pi_source.count('"contained-workspace-sink", "--harness", boundBashHarness,') == 1
+    assert pi_source.count('const boundBashHarness = "pi";') == 1
     # Pi has no session_stop event, so shutdown releases unconsumed request files.
     assert "for (const key of containedTestRequests.keys()) cleanupContainedTestRequest(key);\n  });" in pi_source
 
@@ -224,3 +226,65 @@ console.log(JSON.stringify({ input, directory, raw, pytestInput, pytestDirectory
     assert pytest_argv[:6] == argv[:6]
     assert Path(result["pytestDirectory"]).parent == request_root
     assert pytest_argv[pytest_argv.index("--request-file") + 1] == str(Path(result["pytestDirectory"]) / "request.json")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the runtime's own sink runs only on macOS and Linux")
+def test_a_marked_workspace_sandbox_starts_the_runtime_sink(tmp_path: Path) -> None:
+    bun = shutil.which("bun")
+    if bun is None:
+        pytest.skip("requires the OMP Bun runtime")
+    script = tmp_path / "contained-routing-native.ts"
+    script.write_text(
+        """
+import { createHash } from 'node:crypto';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const handlers = {};
+const pi = { on(name, callback) { handlers[name] = callback; } };
+const GUARD_CLI_WRAPPER_COMMAND = "/tmp/guard";
+// A wrapper the Python sink cannot use keeps the runtime's sink available.
+const GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS = true;
+const GUARD_HOME = "/tmp/guard-home";
+const GUARD_HOME_DIR_IS_DEFAULT = true;
+const GUARD_HOME_DIR = "/tmp/home dir";
+const GUARD_NATIVE_HOOK_RUNTIME = "/opt/hol guard/runtime";
+const GUARD_CONTAINED_SINK_COMMAND = [];
+const GUARD_CONTAINED_REQUEST_ROOT = "";
+const toolCallIdKey = (value) => typeof value === 'string' ? value : null;
+"""
+        + CONTAINED_TEST_HELPERS_SOURCE
+        + """
+const snapshot = (id) => ({
+  cwd: "/project",
+  payload: { hook_event_name: 'PreToolUse', tool_name: 'bash', tool_call_id: id,
+    tool_input: { command: 'pytest -q' } },
+});
+const required = { decision: 'deny', policy_action: 'sandbox-required',
+  reason_code: 'native_workspace_containment_required', required_execution_profile: 'workspace-contained-v1' };
+const marked = prepareContainedTestInput({ ...required, native_contained_sink: true }, snapshot('marked'));
+const raw = readFileSync(join(containedTestRequests.get('marked'), 'request.json'), 'utf8');
+// An unmarked answer keeps Guard's sink, which this wrapper cannot start.
+const unmarked = prepareContainedTestInput(required, snapshot('unmarked'));
+const other = prepareContainedTestInput({ ...required, native_contained_sink: 'yes' }, snapshot('other'));
+handlers.session_stop();
+console.log(JSON.stringify({ marked, raw, unmarked, other }));
+""",
+        encoding="utf-8",
+    )
+    completed = subprocess.run([bun, str(script)], text=True, capture_output=True, timeout=30, check=False)
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["unmarked"] is None
+    assert result["other"] is None
+    argv = shlex.split(result["marked"]["command"])
+    assert argv[:4] == ["/opt/hol guard/runtime", "contained-workspace-sink", "--harness", "omp"]
+    # The runtime's sink takes exactly its six named values, home included.
+    assert dict(zip(argv[2::2], argv[3::2], strict=True)) == {
+        "--harness": "omp",
+        "--guard-home": "/tmp/guard-home",
+        "--workspace": "/project",
+        "--request-file": argv[argv.index("--request-file") + 1],
+        "--request-sha256": hashlib.sha256(result["raw"].encode()).hexdigest(),
+        "--home": "/tmp/home dir",
+    }
