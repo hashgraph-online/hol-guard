@@ -34337,6 +34337,54 @@
       "expect": "allow"
     },
     {
+      "id": "git-bisect-start-names-the-two-states",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git bisect start --term-old working --term-new broken"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "git-bisect-terms-reads-the-session-names",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git bisect terms"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "git-bisect-reset-closes-the-session",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git bisect reset"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
       "id": "git-notes-list-reads-the-notes-ref",
       "fix_area": "shell",
       "harnesses": [
