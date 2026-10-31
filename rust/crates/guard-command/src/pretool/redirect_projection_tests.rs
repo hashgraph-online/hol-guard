@@ -467,7 +467,9 @@ fn a_redirect_with_no_command_is_read_as_the_write_it_performs() {
         let projection = project(command, context()).expect(command);
         assert_eq!(projection.command, NO_OP, "{command}");
         assert!(projection.writes_file, "{command}");
-        assert!(projection.bounded_writes, "{command}");
+        // The test workspace does not exist, so no write is bounded here; the
+        // target check below is what decides a real one.
+        assert!(!projection.bounded_writes, "{command}");
         let result = evaluate(command);
         assert_eq!(
             result.reason_code, "native_command_redirect_write_review",
@@ -483,5 +485,7 @@ fn a_redirect_with_no_command_is_read_as_the_write_it_performs() {
     // is no more writable without a command in front of the redirect.
     let outside = project(&format!("> {HOME}/.bashrc"), context()).expect("home target");
     assert_eq!(outside.command, NO_OP);
+    assert!(outside.writes_file);
     assert!(!outside.bounded_writes);
+    assert_ne!(evaluate(&format!("> {HOME}/.bashrc")).minimum_action, "allow");
 }
