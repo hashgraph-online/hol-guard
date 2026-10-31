@@ -113,7 +113,8 @@ const PRIVILEGE_DENY: &[&str] = &[
     "killall",
     "pkill",
 ];
-// The sandbox cannot undo losing uncommitted work, so these stay at review.
+// The sandbox cannot undo losing work, committed or not, so these stay at
+// review.
 const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.hard-reset",
     "command.git.force-clean",
@@ -125,6 +126,8 @@ const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.restore",
     "command.git.switch",
     "command.git.unsafe-read",
+    "command.git.reflog",
+    "command.git.tag",
 ];
 // Remote changes: with no network, containing them only hides a consent prompt.
 const REMOTE_RULES: &[&str] = &["command.git.force-push", "command.git.remote-branch-delete"];
