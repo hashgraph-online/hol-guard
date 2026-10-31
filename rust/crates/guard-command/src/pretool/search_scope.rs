@@ -154,18 +154,12 @@ pub(super) fn grep_include_scope_proven(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    if globs.iter().any(|glob| glob.contains(['/', '\\'])) {
-        return false;
-    }
-    let Some(filter) = SearchFilter::from_rg_inclusions(globs) else {
+    let Some(filter) = include_filter(globs) else {
         return false;
     };
     roots.iter().all(
         |target| match verified_directory_root(target, home_dir, cwd) {
-            Some(root) => {
-                !super::read_paths::inside_agent_state_tree(&root, home_dir)
-                    && walk_scope(&root, &filter, Ignores::None, false, home_dir, &mut None).is_ok()
-            }
+            Some(root) => directory_include_proven(&root, &filter, home_dir),
             // A root that is a regular file was screened as a path already,
             // and an include can only keep `grep` from opening it.
             None => cwd.is_some_and(|cwd| {
@@ -174,6 +168,42 @@ pub(super) fn grep_include_scope_proven(
             }),
         },
     )
+}
+
+/// True when the files `globs` select below `root` hold nothing sensitive.
+///
+/// The recursive walk reads whatever it reaches, so a secret anywhere below
+/// the root refuses it. With an include the search opens only the files the
+/// globs name, and this proof walks the tree under exactly that filter: a
+/// directory is still descended, but a file no glob selects is not read and
+/// so cannot be printed. The root must be a directory, because the caller
+/// asks this only for a recursive operand.
+pub(super) fn grep_include_walk_proven(
+    root: &str,
+    globs: &[&str],
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some(filter) = include_filter(globs) else {
+        return false;
+    };
+    verified_directory_root(root, home_dir, cwd)
+        .is_some_and(|root| directory_include_proven(&root, &filter, home_dir))
+}
+
+/// The walk filter for a grep include, or nothing when the globs reach past
+/// what it models. A separator makes the glob match against a base this walk
+/// does not model, and the implementations differ on what it is.
+fn include_filter(globs: &[&str]) -> Option<SearchFilter> {
+    if globs.iter().any(|glob| glob.contains(['/', '\\'])) {
+        return None;
+    }
+    SearchFilter::from_rg_inclusions(globs)
+}
+
+fn directory_include_proven(root: &Path, filter: &SearchFilter, home_dir: Option<&str>) -> bool {
+    !super::read_paths::inside_agent_state_tree(root, home_dir)
+        && walk_scope(root, filter, Ignores::None, false, home_dir, &mut None).is_ok()
 }
 
 /// True when a Claude `Glob` returns only names under a verified directory

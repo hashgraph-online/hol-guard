@@ -322,3 +322,74 @@ fn an_include_without_an_operand_is_read_against_the_pipe() {
         );
     }
 }
+
+/// The include decides the recursive walk too. `grep -rn KEY --include '*.md'
+/// docs` opens no file but Markdown, so a secret the globs never select
+/// cannot be printed. Before this, the walk below the root knew nothing of
+/// the include and refused the search for any sensitive file it reached.
+#[test]
+fn an_include_narrows_the_recursive_walk_below_the_root() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/grep-include-walk")
+        .join(std::process::id().to_string());
+    let home = root.join("home");
+    let repo = home.join("work/app");
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    std::fs::create_dir_all(repo.join("deploy/secrets")).unwrap();
+    std::fs::write(repo.join("docs/notes.md"), "# notes\n").unwrap();
+    std::fs::write(repo.join("docs/.env"), "TOKEN=value\n").unwrap();
+    std::fs::write(repo.join("docs/credentials.json"), "{}\n").unwrap();
+    std::fs::write(repo.join("README.md"), "# app\n").unwrap();
+    std::fs::write(repo.join("deploy/deploy.md"), "# deploy\n").unwrap();
+    std::fs::write(repo.join("deploy/secrets/id_rsa"), "key\n").unwrap();
+    let (home, repo) = (
+        crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+        crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
+    );
+    let context = crate::pretool::PathContext {
+        home_dir: home.to_str(),
+        cwd: repo.to_str(),
+        ..Default::default()
+    };
+    for (command, allowed) in [
+        ("-rn KEY --include *.md docs".to_owned(), true),
+        ("-rn KEY --include=*.md docs".to_owned(), true),
+        // A secret in a directory below the root is as unselected as one
+        // beside it.
+        ("-rn KEY --include *.md .".to_owned(), true),
+        ("-rn KEY --include *.md deploy".to_owned(), true),
+        // Every glob on the line opens files, including one the name screen
+        // cleared on its own, so all of them decide the walk. `*.json` is a
+        // glob that screen passes, and it still selects the credential store
+        // beside the Markdown.
+        (
+            "-rn KEY --include *.md --include *.json docs".to_owned(),
+            false,
+        ),
+        (
+            "-rn KEY --include *.md --include .env docs".to_owned(),
+            false,
+        ),
+        ("-rn KEY --include * docs".to_owned(), false),
+        // Without an include the walk reads whatever it reaches.
+        ("-rn KEY docs".to_owned(), false),
+        // `-R` follows the links this walk steps over, so it cannot stand
+        // for what that search opens.
+        ("-Rn KEY --include *.md docs".to_owned(), false),
+        (
+            "--dereference-recursive -n KEY --include *.md docs".to_owned(),
+            false,
+        ),
+        // A glob holding a separator is matched against a name this walk
+        // does not render.
+        ("-rn KEY --include docs/*.md .".to_owned(), false),
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert_eq!(
+            super::safe_grep_arguments(&arguments, context),
+            allowed,
+            "{command}"
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
