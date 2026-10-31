@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioAction
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import record_local_custom_extension_mutation
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_store_shims import record_composio_discovery
 
 _TIME = "2026-09-27T12:00:00Z"
 _TOOL = "mcp__codex_apps__composio__composio_search_tools"
@@ -25,8 +26,11 @@ def _setup(tmp_path: Path):
     store = GuardStore(tmp_path / "home")
     source = observed_mcp_tool("codex", _TOOL)
     assert source is not None
-    cli_id = store.record_composio_discovery(
-        source, (ComposioActionSchema("slack", "SLACK_SEND_MESSAGE", "Send", {"type": "object"}, True),), seen_at=_TIME
+    cli_id = record_composio_discovery(
+        store,
+        source,
+        (ComposioActionSchema("slack", "SLACK_SEND_MESSAGE", "Send", {"type": "object"}, True),),
+        seen_at=_TIME,
     )
     return store, source, cli_id
 
@@ -64,7 +68,8 @@ def test_protected_transaction_saves_deny_and_native_choice_without_granting_all
 
 def test_metadata_revision_conflict_rolls_back_parent_and_provider_authority(tmp_path: Path):
     store, source, _ = _setup(tmp_path)
-    store.record_composio_discovery(
+    record_composio_discovery(
+        store,
         source,
         (ComposioActionSchema("slack", "SLACK_SEND_MESSAGE", "Send", {"type": "object", "required": ["text"]}, True),),
         seen_at=_TIME,
@@ -78,7 +83,8 @@ def test_metadata_revision_conflict_rolls_back_parent_and_provider_authority(tmp
 def test_metadata_changes_do_not_erase_deny(tmp_path: Path):
     store, source, cli_id = _setup(tmp_path)
     _save(store, source)
-    store.record_composio_discovery(
+    record_composio_discovery(
+        store,
         source,
         (
             ComposioActionSchema(
@@ -100,7 +106,8 @@ def test_paged_inventory_rejects_metadata_and_permission_changes(tmp_path: Path)
     with pytest.raises(ValueError, match="provider_catalog_changed"):
         store.read_local_mcp_provider_actions(cli_id, expected_token=token)
     next_token = store.read_local_mcp_provider_actions(cli_id)["catalog_token"]
-    store.record_composio_discovery(
+    record_composio_discovery(
+        store,
         source,
         (ComposioActionSchema("slack", "SLACK_SEND_MESSAGE", "Display changed", {"type": "object"}, True),),
         seen_at=_TIME,
@@ -202,14 +209,16 @@ def test_provider_schema_binding_changes_hash_and_rejects_stale_execution_contex
     original = artifact()
     old_hash = build_tool_call_hash(original, args, workspace=None, config=config)
     old_provider_hash = store.read_mcp_provider_authority_hash()
-    store.record_composio_discovery(
+    record_composio_discovery(
+        store,
         source,
         (ComposioActionSchema("slack", "SLACK_SEND_MESSAGE", "Cosmetic description", {"type": "object"}, True),),
         seen_at=_TIME,
     )
     assert store.read_mcp_provider_authority_hash() == old_provider_hash
     assert build_tool_call_hash(artifact(), args, workspace=None, config=config) == old_hash
-    store.record_composio_discovery(
+    record_composio_discovery(
+        store,
         source,
         (
             ComposioActionSchema(

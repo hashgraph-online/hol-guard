@@ -192,7 +192,11 @@ pub(crate) fn proven_read_segment(
 pub(crate) fn proven_reason_code(model: &crate::CanonicalCommandV1) -> &'static str {
     let fetches = model.segments.iter().any(|segment| {
         segment.executable.as_deref().is_some_and(|executable| {
-            matches!(super::executable_basename(executable), "curl" | "wget")
+            // `http` and `xh` fetch over the same rules; see `super::http_reads`.
+            matches!(
+                super::executable_basename(executable),
+                "curl" | "wget" | "http" | "xh"
+            )
         })
     });
     if fetches {
@@ -202,7 +206,7 @@ pub(crate) fn proven_reason_code(model: &crate::CanonicalCommandV1) -> &'static 
     }
 }
 
-fn expands(argument: &str) -> bool {
+pub(in crate::pretool) fn expands(argument: &str) -> bool {
     argument.contains(['$', '`', '\n', '\r']) || argument.starts_with('@')
 }
 
@@ -299,7 +303,7 @@ fn long_value_safe(option: &str, value: &str, context: super::PathContext<'_>) -
     }
 }
 
-fn safe_header(value: &str) -> bool {
+pub(in crate::pretool) fn safe_header(value: &str) -> bool {
     let Some((name, _)) = value.split_once(':') else {
         return false;
     };
@@ -311,7 +315,7 @@ fn safe_header(value: &str) -> bool {
         && !CREDENTIAL_TERMS.iter().any(|term| name.contains(term))
 }
 
-fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
+pub(in crate::pretool) fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
     web_target(raw, context).is_some()
 }
 
@@ -341,6 +345,16 @@ pub(in crate::pretool) fn web_target(
         return Some(WebTarget::Loopback);
     }
     public_url(&raw).then_some(WebTarget::Public)
+}
+
+/// The same reading, held to a destination on this host.
+///
+/// A program that can pick up a request body the command never names carries
+/// away whatever that body holds, so its reading of a public host asks for
+/// more than the URL screen above. A loopback request cannot leave the
+/// machine, which is what [`super::http_reads`] leans on.
+pub(in crate::pretool) fn loopback_read_url(raw: &str, context: super::PathContext<'_>) -> bool {
+    as_curl_reads_it(raw).is_some_and(|raw| loopback_url(&raw, context.home_dir))
 }
 
 /// Names whose prefix picks curl a protocol other than HTTP when the URL is

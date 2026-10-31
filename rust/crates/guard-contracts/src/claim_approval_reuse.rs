@@ -43,9 +43,9 @@ pub struct ClaimApprovalReuseDecisionsRequestV1 {
     /// Claim timestamp (`YYYY-MM-DDTHH:MM:SS+00:00`); batch applies it to every
     /// member and both the revision re-check and each claim's expiry window.
     pub now: String,
-    /// Materialized policy-bundle row identities (11-tuples); `None`/missing
-    /// means the bundle source is unset → identity compare short-circuits per
-    /// member without touching the bundle table.
+    /// Materialized policy-bundle row identities (11-tuples). When missing,
+    /// the resident derives them from the store for any `policy-bundle`
+    /// member; a bundle it cannot authorize leaves those members unclaimable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_bundle_decision_identities: Option<Vec<Vec<Value>>>,
     /// `_refresh_policy_integrity_state(...)` output captured before dispatch.

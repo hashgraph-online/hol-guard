@@ -38,7 +38,7 @@ use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
 use crate::cloud_exception_lift::{cloud_exception_covers, stored_exception_bundle, LiftTarget};
 use crate::guard_store_json::dumps_sorted;
-use crate::policy_bundle_store_identities::lookup_bundle_identities;
+use crate::policy_bundle_store_identities::lookup_bundle_authority;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 /// The ceiling a non-consuming lookup stops fetching at. The document path
@@ -1338,9 +1338,11 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
 }
 
 /// Python ships no bundle identities: the resident derives them from the store
-/// the lookup reads. A request that carries them, one that never reads policy
-/// rows (a local-once peek, a grant probe with nothing to lift), or one
-/// `evaluate` refuses before opening the store, is left as sent.
+/// the lookup reads. The exception cache is left to fill on the connection
+/// that reads the rows, so an exception never lifts a row stored after the
+/// bundle it came from. A request that carries them, one that never
+/// reads policy rows (a local-once peek, a grant probe with nothing to lift),
+/// or one `evaluate` refuses before opening the store, is left as sent.
 fn with_bundle_identities(
     request: &PolicyDecisionLookupRequestV1,
 ) -> Result<Cow<'_, PolicyDecisionLookupRequestV1>, String> {
@@ -1359,13 +1361,16 @@ fn with_bundle_identities(
         return Ok(Cow::Borrowed(request));
     };
     let conn = open_lookup_connection(&request.store_path)?;
-    let identities = lookup_bundle_identities(&conn, &now)
-        .map_err(|()| "native_policy_decision_lookup_bundle_unavailable".to_owned())?;
-    if identities.is_none() {
+    let Some((identities, _bundle)) = lookup_bundle_authority(&conn, &now)
+        .map_err(|()| "native_policy_decision_lookup_bundle_unavailable".to_owned())?
+    else {
+        return Ok(Cow::Borrowed(request));
+    };
+    if identities.is_empty() {
         return Ok(Cow::Borrowed(request));
     }
     let mut derived = request.clone();
-    derived.policy_bundle_decision_identities = identities;
+    derived.policy_bundle_decision_identities = Some(identities);
     Ok(Cow::Owned(derived))
 }
 

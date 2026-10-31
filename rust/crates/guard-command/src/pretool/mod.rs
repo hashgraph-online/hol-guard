@@ -26,6 +26,10 @@ pub struct PathContext<'a> {
     /// `--pre`, `--hidden` or extra search paths to an `rg` command that
     /// omits `--no-config`. Literal contexts leave this false.
     pub ripgrep_config_absent: bool,
+    /// No inherited `HTTPIE_CONFIG_DIR` or `XH_CONFIG_DIR` can move the
+    /// `config.json` whose `default_options` HTTPie and `xh` prepend to
+    /// every request. Literal contexts leave this false.
+    pub http_config_absent: bool,
     /// No step of this command creates a filesystem entry, so a path with
     /// nothing at it now still has nothing at it when a read runs and cannot
     /// be a link a peer step planted. Literal contexts leave this false.
@@ -52,6 +56,7 @@ mod digest_reads;
 pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
+mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;

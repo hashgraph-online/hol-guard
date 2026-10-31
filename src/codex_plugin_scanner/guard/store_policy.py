@@ -1067,8 +1067,8 @@ class StorePolicyMixin:
                 else {}
             )
             # The claim a composing lookup may take re-reads these sources under
-            # its write lock. Name them here, before the bundle identities below
-            # are derived, so a source that moves afterwards makes the resident
+            # its write lock. Name them here, before the resident derives the
+            # bundle identities, so a source that moves afterwards makes it
             # refuse the claim instead of honouring stale evidence.
             evidence_binding: dict[str, Any] | None = None
             if claim_binding:
@@ -1295,8 +1295,8 @@ class StorePolicyMixin:
             evidence["integrity_key_b64"] = encode_key(key)
             evidence["integrity_key_id"] = key_id
         # The evidence above is derived outside the claim's write lock. Name the
-        # store-resident sources it depends on *before* deriving the bundle
-        # identities, so anything that moves afterwards makes the resident refuse
+        # store-resident sources it depends on *before* the resident derives the
+        # bundle identities, so anything that moves afterwards makes it refuse
         # the claim when it re-reads them under the lock.
         with self._connect() as connection:
             evidence["evidence_binding"] = claim_evidence_binding(
@@ -1304,12 +1304,12 @@ class StorePolicyMixin:
                 bundle=needs_bundle,
                 cloud_workspace_id=self._cloud_workspace_id_from_connection(connection) if needs_bundle else None,
             )
-        if needs_bundle:
+        if needs_bundle and not _RESIDENT_DERIVES_BUNDLE_IDENTITIES:
             identities = self._cached_policy_bundle_decision_identities(
                 now=_parse_utc_timestamp(current_time).timestamp(),
             )
-            if identities:
-                evidence["policy_bundle_decision_identities"] = [list(identity) for identity in identities]
+            # An empty list authorizes nothing; see _lookup_bundle_identities.
+            evidence["policy_bundle_decision_identities"] = [list(identity) for identity in identities]
         return evidence
 
     def approval_reuse_validation_reason(
