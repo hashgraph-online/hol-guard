@@ -86,3 +86,15 @@ fn stash_push_that_asks_for_more_keeps_its_review() {
     assert!(!keeps("stash push -- -src/a.ts"));
     assert!(!keeps("stash push -m"));
 }
+
+#[test]
+fn switch_creates_a_branch_in_the_attached_spelling_too() {
+    assert!(keeps("switch --create feature"));
+    assert!(keeps("switch --create=feature"));
+    assert!(keeps("switch --create=chore/api-key-refresh"));
+    assert!(!keeps("switch --create=../elsewhere"));
+    assert!(!keeps("switch --create="));
+    assert!(!keeps("switch --force-create=feature"));
+    assert!(!keeps("switch -C feature"));
+    assert!(!keeps("switch --create=feature main"));
+}

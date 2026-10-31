@@ -289,20 +289,12 @@ pub(super) fn aliased(effective: &GitConfig, model: &CanonicalCommandV1) -> bool
         .any(|name| effective.contains_key(&format!("alias.{}", name.to_ascii_lowercase())))
 }
 
-/// The branch `git switch -c <name>` or `git checkout -b <name>` creates at
-/// the checked-out commit. A start point is not one of these forms.
+/// The branch `git switch -c <name>`, `git switch --create=<name>` or
+/// `git checkout -b <name>` creates at the checked-out commit. A start point
+/// is not one of these forms.
 pub(super) fn created_branch(original: &CommandSegmentV1) -> Option<&str> {
-    match original.arguments.as_slice() {
-        [command, flag, name]
-            if matches!(
-                (command.as_str(), flag.as_str()),
-                ("switch", "-c" | "--create") | ("checkout", "-b")
-            ) =>
-        {
-            Some(name.as_str())
-        }
-        _ => None,
-    }
+    let words: Vec<&str> = original.arguments.iter().map(String::as_str).collect();
+    super::super::workspace_contained::created_branch_name(&words)
 }
 
 /// Whether a write other than a branch creation may change what a push would

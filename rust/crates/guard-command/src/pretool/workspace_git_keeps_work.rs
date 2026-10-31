@@ -57,14 +57,26 @@ pub(super) fn keeps_work(
 pub(in crate::pretool) fn keeping_arguments(arguments: &[String]) -> bool {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match words.as_slice() {
-        ["switch", "-c" | "--create", name] | ["checkout", "-b", name] => branch_name(name),
         ["stash", rest @ ..] => match rest.strip_prefix(&["push"]) {
             Some(after) => stash_push(after, true),
             None => stash_push(rest, false),
         },
         ["reset", rest @ ..] => index_only_reset(rest),
         ["restore", rest @ ..] => index_only_restore(rest),
-        _ => false,
+        other => created_branch_name(other).is_some_and(branch_name),
+    }
+}
+
+/// The branch a `switch` or `checkout` creates at `HEAD`, in every spelling
+/// Git accepts for it: `switch -c NAME`, the long `switch --create NAME` and
+/// the attached `switch --create=NAME`, and `checkout -b NAME`. A start point
+/// is not one of these forms, and neither is a force-create, which moves an
+/// existing branch.
+pub(in crate::pretool) fn created_branch_name<'a>(arguments: &[&'a str]) -> Option<&'a str> {
+    match arguments {
+        ["switch", "-c" | "--create", name] | ["checkout", "-b", name] => Some(name),
+        ["switch", attached] => attached.strip_prefix("--create="),
+        _ => None,
     }
 }
 

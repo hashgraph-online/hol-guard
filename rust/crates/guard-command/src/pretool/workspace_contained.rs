@@ -76,7 +76,7 @@ pub(super) mod sibling;
 #[path = "workspace_contained_vendored.rs"]
 mod vendored;
 
-pub(super) use keeps_work::keeping_arguments;
+pub(super) use keeps_work::{created_branch_name, keeping_arguments};
 pub(super) use reach::PRIVATE_TEMP_WITH_FALLBACK;
 pub(super) use reach::{private_temp_expansions_only, rebinds_private_temp};
 pub(super) use settings::carry_settings;
