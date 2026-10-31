@@ -119,6 +119,7 @@ impl Shaping {
             Some(Frame {
                 merge: true,
                 captured: Some(captured),
+                ..
             }) => captured.extend_from_slice(bytes),
             Some(Frame { merge: true, .. }) => write(&mut std::io::stdout().lock(), bytes),
             _ => write(&mut std::io::stderr().lock(), bytes),
