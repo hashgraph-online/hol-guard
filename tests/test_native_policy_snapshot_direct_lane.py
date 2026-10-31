@@ -445,7 +445,9 @@ def test_the_integrity_key_binds_only_for_a_resident_that_answers_permission_not
 def test_the_bound_sink_command_starts_the_command_the_daemon_routes(
     containment_resident: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "platform", "linux")
+    # The resident runs a call its own sink reproduces there, but only for its
+    # own host; a call routed for another host starts Guard's bound sink.
+    monkeypatch.setattr(sys, "platform", "darwin" if sys.platform.startswith("linux") else "linux")
     workspace = tmp_path / "repo"
     workspace.mkdir()
     payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "pytest -q"}}

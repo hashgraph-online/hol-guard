@@ -60,6 +60,89 @@ fn argument_after<'a>(argv: &'a [String], flag: &str) -> &'a str {
     &argv[index + 1]
 }
 
+/// The argv that starts the sink: the runtime's own, or Guard's CLI.
+fn sink(argv: &[String]) -> Vec<String> {
+    let length = if argv[1] == "contained-workspace-sink" {
+        2
+    } else {
+        5
+    };
+    argv[..length].to_vec()
+}
+
+/// The sink the resident names for a call the runtime's own sink takes,
+/// asked for `platform`: the runtime's only for its own host.
+fn runtime_sink(platform: &str) -> Vec<String> {
+    let host = crate::hook_decision_containment_route::host_platform();
+    if platform == host && cfg!(any(target_os = "macos", target_os = "linux")) {
+        let runtime = std::env::current_exe().expect("test binary");
+        vec![
+            runtime.to_str().expect("utf-8 test binary").to_owned(),
+            "contained-workspace-sink".to_owned(),
+        ]
+    } else {
+        guard_sink()
+    }
+}
+
+fn guard_sink() -> Vec<String> {
+    [
+        "/opt/hol guard/bin/python",
+        "-m",
+        "codex_plugin_scanner.cli",
+        "guard",
+        "execute-contained-test",
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+
+fn routed_argv(payload: &Value) -> Vec<String> {
+    let command = payload["response"]["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the call is routed: {payload}"));
+    let argv = crate::mcp_proxy_shlex::split(command).expect("the sink command is quoted");
+    discard(Path::new(argument_after(&argv, "--request-file")));
+    argv
+}
+
+#[test]
+fn a_read_only_route_runs_the_runtime_sink_too() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let mut inputs = rewrite_inputs(workspace.path(), "python3 -c 0");
+    inputs["platform"] = json!("macos");
+    inputs["reason_code"] = json!("native_python_eval_readonly_containment_required");
+    inputs["required_execution_profile"] = json!("python-eval-readonly-v1");
+    let payload = rewritten(&inputs);
+
+    assert_eq!(payload["profile"], "python-eval-readonly-v1", "{payload}");
+    // The shape check reads the whole receipt, as on the direct route.
+    assert_eq!(sink(&routed_argv(&payload)), runtime_sink("macos"));
+}
+
+#[test]
+fn a_rewrite_for_another_host_keeps_guards_sink() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let mut inputs = rewrite_inputs(workspace.path(), "make build");
+    let host = crate::hook_decision_containment_route::host_platform();
+    inputs["platform"] = json!(if host == "macos" { "linux" } else { "macos" });
+    let payload = rewritten(&inputs);
+
+    assert_eq!(sink(&routed_argv(&payload)), guard_sink());
+}
+
+#[test]
+fn the_resident_keeps_guards_sink_for_cursor() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let mut inputs = rewrite_inputs(workspace.path(), "make build");
+    inputs["harness"] = json!("cursor");
+    inputs["bridge"] = json!(true);
+    let payload = rewritten(&inputs);
+
+    // Only a Cursor probe whose own scope admits the runtime's sink runs it.
+    assert_eq!(sink(&routed_argv(&payload)), guard_sink());
+}
+
 #[test]
 fn a_sandbox_required_receipt_runs_the_sink_on_a_private_snapshot() {
     let workspace = tempfile::tempdir().expect("workspace");
@@ -82,16 +165,9 @@ fn a_sandbox_required_receipt_runs_the_sink_on_a_private_snapshot() {
         .as_str()
         .expect("command is text");
     let argv = crate::mcp_proxy_shlex::split(command).expect("the sink command is quoted");
-    assert_eq!(
-        argv[..5],
-        [
-            "/opt/hol guard/bin/python",
-            "-m",
-            "codex_plugin_scanner.cli",
-            "guard",
-            "execute-contained-test",
-        ]
-    );
+    // The resident runs a call the runtime's own sink reproduces there, as
+    // the edge does.
+    assert_eq!(sink(&argv), runtime_sink("linux"));
     assert_eq!(argument_after(&argv, "--harness"), "claude-code");
     assert_eq!(argument_after(&argv, "--guard-home"), "/guard/home");
     assert_eq!(argument_after(&argv, "--workspace"), resolved);
@@ -204,19 +280,11 @@ fn cursor_runs_the_runtime_sink_its_shell_check_admits() {
     inputs["bridge"] = json!(true);
     let inputs: guard_contracts::ContainmentRewriteInputsV1 =
         serde_json::from_value(inputs).expect("rewrite inputs");
-    let reason = json!("protected");
-    let runtime = |_: &Value, _: &serde_json::Map<String, Value>, _: &str, _: &str| {
-        Some("/opt/hol guard/runtime".to_owned())
-    };
+    let runtime: crate::hook_direct::contained::NativeSink =
+        |_, _, _, _| Some("/opt/hol guard/runtime".to_owned());
 
-    let rewritten = super::containment_rewrite_with(
-        &inputs,
-        Some(super::Native {
-            reason: &reason,
-            sink: runtime,
-        }),
-    )
-    .expect("the rewrite answers");
+    let rewritten =
+        super::containment_rewrite_with(&inputs, Some(runtime)).expect("the rewrite answers");
 
     // A Cursor scope that admits the runtime's own sink on
     // `beforeShellExecution` routes the probe there, as Codex does.
