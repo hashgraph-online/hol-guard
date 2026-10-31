@@ -62,6 +62,8 @@ pub(super) fn list(rest: &[&str]) -> bool {
 /// Whether the word only chooses how a listed entry reads. A date or pretty
 /// format is a layout string: it names no file, renders no diff and starts
 /// no program, which is why `git log` reads the same options the same way.
+/// A `%G` placeholder is the exception: it asks for the entry's signature,
+/// which runs the configured verification program.
 fn listing_layout(word: &str) -> bool {
     matches!(
         word,
@@ -74,8 +76,28 @@ fn listing_layout(word: &str) -> bool {
             | "--color=never"
             | "--pretty"
     ) || word.starts_with("--date=")
-        || word.starts_with("--format=")
-        || word.starts_with("--pretty=")
+        || ((word.starts_with("--format=") || word.starts_with("--pretty="))
+            && !verifies_a_signature(word))
+}
+
+/// Whether a pretty format asks Git for a signature. Every `%G` placeholder
+/// (`%G?`, `%GS`, `%GK`, ...) verifies the entry's signature with the
+/// configured `gpg.program`, and Git reads the letter past the modifiers that
+/// only move whitespace, so `%+GS` and `% G?` ask for it too. The proof
+/// rebuilds a listing as a fixed `git log -g --first-parent refs/stash` and
+/// never sees the format the agent wrote, so the request is refused here
+/// instead. `%%G` is a literal percent followed by a `G` rather than a
+/// placeholder; it is refused with the rest, which costs a listing nobody
+/// writes.
+fn verifies_a_signature(word: &str) -> bool {
+    let bytes = word.as_bytes();
+    bytes.iter().enumerate().any(|(index, byte)| {
+        *byte == b'%'
+            && bytes[index + 1..]
+                .iter()
+                .find(|byte| !matches!(**byte, b'+' | b'-' | b' '))
+                == Some(&b'G')
+    })
 }
 
 /// `stash show` with the diff options that only choose how the entry's diff

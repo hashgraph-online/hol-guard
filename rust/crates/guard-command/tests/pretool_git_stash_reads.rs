@@ -57,6 +57,15 @@ fn printing_stash_forms_are_proven_reads() {
             "git stash list --stat",
             "git stash list --name-only",
             "git stash list --oneline --patch",
+            // A `%G` placeholder verifies the entry's signature with the
+            // configured program, and the proof rebuilds the listing as a
+            // fixed `git log -g --first-parent refs/stash`, so it never
+            // reads the format the request carried.
+            "git stash list --format=%G?",
+            "git stash list --format=%GS",
+            "git stash list --pretty=format:%G?",
+            "git stash list --format=%+GS",
+            "git stash list --oneline --format=%G?",
             // Two counts still name a form the grammar does not carry.
             "git stash list -3 -n 5",
             "git stash list --unknown-option",
