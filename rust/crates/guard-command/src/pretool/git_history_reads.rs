@@ -87,7 +87,7 @@ const REFLOG_FLAGS: [&str; 8] = [
 const REFLOG_VALUES: [&str; 5] = ["-n", "--max-count", "--date", "--format", "--pretty"];
 
 /// `reflog` operations that rewrite or drop entries.
-const REFLOG_WRITES: [&str; 4] = ["expire", "delete", "drop", "write"];
+pub(in crate::pretool) const REFLOG_WRITES: [&str; 4] = ["expire", "delete", "drop", "write"];
 
 /// Whether `subcommand rest...` is a proven history read.
 pub(super) fn read_form(subcommand: &str, rest: &[String]) -> bool {

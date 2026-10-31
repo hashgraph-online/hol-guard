@@ -98,3 +98,62 @@ fn switch_creates_a_branch_in_the_attached_spelling_too() {
     assert!(!keeps("switch -C feature"));
     assert!(!keeps("switch --create=feature main"));
 }
+
+fn keeps_under(rule_id: &str, command: &str) -> bool {
+    let arguments: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
+    super::keeping_form(rule_id).is_some_and(|keeping| keeping(&arguments))
+}
+
+#[test]
+fn reading_a_reflog_stays_contained() {
+    assert!(keeps_under("command.git.reflog", "reflog"));
+    assert!(keeps_under("command.git.reflog", "reflog show HEAD"));
+    assert!(keeps_under("command.git.reflog", "reflog -n 5"));
+    assert!(keeps_under(
+        "command.git.reflog",
+        "reflog exists refs/heads/main"
+    ));
+}
+
+#[test]
+fn a_reflog_write_keeps_its_review() {
+    assert!(!keeps_under(
+        "command.git.reflog",
+        "reflog expire --expire=now --all"
+    ));
+    assert!(!keeps_under(
+        "command.git.reflog",
+        "reflog expire --expire-unreachable=now --all"
+    ));
+    assert!(!keeps_under("command.git.reflog", "reflog delete HEAD@{0}"));
+    assert!(!keeps_under("command.git.reflog", "reflog drop HEAD"));
+    assert!(!keeps_under("command.git.reflog", "reflog write"));
+    // A leading Git option can point the command at another repository.
+    assert!(!keeps_under("command.git.reflog", "-C /other reflog show"));
+}
+
+#[test]
+fn listing_and_creating_a_tag_stays_contained() {
+    assert!(keeps_under("command.git.tag", "tag"));
+    assert!(keeps_under("command.git.tag", "tag -l"));
+    assert!(keeps_under("command.git.tag", "tag --sort=-creatordate"));
+    assert!(keeps_under("command.git.tag", "tag v1.0.0"));
+    assert!(keeps_under("command.git.tag", "tag -a v1.0.0 -m release"));
+    assert!(keeps_under("command.git.tag", "tag -v v1.0.0"));
+}
+
+#[test]
+fn a_tag_that_is_dropped_or_moved_keeps_its_review() {
+    assert!(!keeps_under("command.git.tag", "tag -d v1.0.0"));
+    assert!(!keeps_under("command.git.tag", "tag --delete v1.0.0"));
+    assert!(!keeps_under("command.git.tag", "tag -f v1.0.0 HEAD"));
+    assert!(!keeps_under("command.git.tag", "tag --force v1.0.0 HEAD"));
+    assert!(!keeps_under("command.git.tag", "tag -af v1.0.0 -m release"));
+    assert!(!keeps_under("command.git.tag", "-C /other tag -l"));
+}
+
+#[test]
+fn a_rule_this_module_does_not_answer_for_has_no_keeping_form() {
+    assert!(super::keeping_form("command.git.hard-reset").is_none());
+    assert!(super::keeping_form("command.git.force-clean").is_none());
+}

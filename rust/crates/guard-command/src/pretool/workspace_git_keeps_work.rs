@@ -13,26 +13,47 @@
 //! entries, and every form that writes the working tree — `reset --hard`,
 //! `--merge` and `--keep`, and `restore` without `--staged` or with
 //! `--worktree` — keep their review.
+//!
+//! `reflog` and `tag` lose committed history rather than working-tree changes.
+//! The sandbox leaves `.git/logs/refs` and `.git/refs/tags` writable, so
+//! `git reflog expire`, `git reflog delete`, `git reflog drop` and
+//! `git reflog write` throw away the record a mistaken `reset --hard` is
+//! recovered from, and `git tag -d` and `git tag -f` drop or move a tag whose
+//! commit may be reachable from nothing else. Those forms keep their review;
+//! reading a reflog, and listing, creating, annotating or verifying a tag,
+//! stay contained.
 use crate::CanonicalCommandV1;
 use guard_contracts::NativeCommandObservationV1;
 
-const RULES: &[&str] = &[
-    "command.git.switch",
-    "command.git.checkout",
-    "command.git.stash",
-    "command.git.reset",
-    "command.git.restore",
-];
+/// `tag` options that delete a tag or move one onto another commit. Their
+/// short forms are `TAG_LOSING_LETTERS`.
+const TAG_LOSING: &[&str] = &["--delete", "--force"];
+const TAG_LOSING_LETTERS: &str = "df";
+
+/// The argument form each rule must be written in to stay containable, or
+/// nothing when the rule is not one this module answers for.
+fn keeping_form(rule_id: &str) -> Option<fn(&[String]) -> bool> {
+    match rule_id {
+        "command.git.switch"
+        | "command.git.checkout"
+        | "command.git.stash"
+        | "command.git.reset"
+        | "command.git.restore" => Some(keeping_arguments),
+        "command.git.reflog" => Some(reflog_keeps_history),
+        "command.git.tag" => Some(tag_keeps_history),
+        _ => None,
+    }
+}
 
 /// Whether `observation` is one of the rules above and every segment it
-/// matched is a form that keeps uncommitted work.
+/// matched is a form that keeps the work the sandbox cannot restore.
 pub(super) fn keeps_work(
     observation: &NativeCommandObservationV1,
     model: &CanonicalCommandV1,
 ) -> bool {
-    if !RULES.contains(&observation.rule_id.as_str()) {
+    let Some(keeping) = keeping_form(&observation.rule_id) else {
         return false;
-    }
+    };
     let mut indexes = observation
         .matcher_evidence
         .iter()
@@ -42,8 +63,7 @@ pub(super) fn keeps_work(
     indexes.peek().is_some()
         && indexes.all(|index| {
             model.segments.get(index).is_some_and(|segment| {
-                segment.executable.as_deref() == Some("git")
-                    && keeping_arguments(&segment.arguments)
+                segment.executable.as_deref() == Some("git") && keeping(&segment.arguments)
             })
         })
 }
@@ -167,6 +187,43 @@ fn operands(words: &[&str]) -> bool {
         }
     }
     true
+}
+
+/// `git reflog`, `git reflog show ...` and `git reflog exists ...` only read
+/// the reflog. Every other operation name rewrites or drops entries, and the
+/// sandbox cannot write back what it discards. A leading Git option is refused
+/// the way `keeping_arguments` refuses one: it can point the command at
+/// another repository.
+fn reflog_keeps_history(arguments: &[String]) -> bool {
+    let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    match words.as_slice() {
+        ["reflog"] => true,
+        ["reflog", operation, ..] => {
+            !crate::pretool::git_history_reads::REFLOG_WRITES.contains(operation)
+        }
+        _ => false,
+    }
+}
+
+/// `git tag` without `-d`/`--delete` and without `-f`/`--force`. Listing,
+/// creating, annotating, signing and verifying a tag all leave every existing
+/// tag where it is; deleting one, or forcing it onto another commit, can leave
+/// its old commit reachable from nothing. A value written against an option
+/// (`git tag -m -d`) is read as an option here, which keeps the review rather
+/// than losing the tag.
+fn tag_keeps_history(arguments: &[String]) -> bool {
+    let Some(("tag", rest)) = arguments
+        .split_first()
+        .map(|(first, rest)| (first.as_str(), rest))
+    else {
+        return false;
+    };
+    !rest.iter().any(|argument| {
+        TAG_LOSING.contains(&argument.as_str())
+            || argument.strip_prefix('-').is_some_and(|flags| {
+                !flags.starts_with('-') && flags.chars().any(|c| TAG_LOSING_LETTERS.contains(c))
+            })
+    })
 }
 
 fn branch_name(name: &str) -> bool {
