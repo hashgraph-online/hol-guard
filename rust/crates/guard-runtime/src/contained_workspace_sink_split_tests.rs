@@ -32,11 +32,23 @@ fn a_host_step_searches_only_outside_the_workspace() {
     ])
     .unwrap();
     assert_eq!(
-        outside_search_path(&search_path, &workspace),
+        outside_search_path(&search_path, &[&workspace]),
         std::env::join_paths([
             PathBuf::from("/usr/bin"),
             workspace.join("missing/../.."),
             base.join("project-other"),
+            "/bin".into(),
+        ])
+        .unwrap()
+    );
+    // A new checkout is left out as well: it holds whatever its branch
+    // tracks.
+    let checkout = base.join("project-other");
+    assert_eq!(
+        outside_search_path(&search_path, &[&workspace, &checkout]),
+        std::env::join_paths([
+            PathBuf::from("/usr/bin"),
+            workspace.join("missing/../.."),
             "/bin".into(),
         ])
         .unwrap()
@@ -61,7 +73,7 @@ fn a_host_step_runs_without_git_location_and_with_the_outside_path() {
     let ran = run_launched(
         launcher,
         script,
-        &GIT_LOCATION,
+        "The Git steps",
         OsStr::new("/usr/bin:/bin"),
         &cwd,
         &signals,
@@ -74,7 +86,7 @@ fn a_host_step_runs_without_git_location_and_with_the_outside_path() {
     let slow = run_launched(
         grouped,
         "sleep 5",
-        &GIT_LOCATION,
+        "The Git steps",
         OsStr::new("/usr/bin:/bin"),
         &cwd,
         &signals,

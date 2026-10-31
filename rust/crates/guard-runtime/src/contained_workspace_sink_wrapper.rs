@@ -75,7 +75,7 @@ fn projected(payload: &Map<String, Value>, workspace: &Path, home: &Path) -> Opt
 }
 
 /// `payload` with `command` in place of its own text.
-fn with_text(payload: &Map<String, Value>, command: &str) -> Map<String, Value> {
+pub(super) fn with_text(payload: &Map<String, Value>, command: &str) -> Map<String, Value> {
     let mut asked = payload.clone();
     if let Some(Value::Object(input)) = asked.get_mut("tool_input") {
         input.insert("command".to_owned(), Value::String(command.to_owned()));
@@ -114,7 +114,7 @@ fn plain(
     if let Some(route) = readonly::readonly_route(receipt) {
         return readonly::run(payload, workspace, authority, route, signals);
     }
-    if !receipt_matches(receipt) || host_split(receipt.get("reason")) {
+    if !receipt_matches(receipt) {
         return Err(Failure::unauthorized());
     }
     let root = sibling_root(payload, &authority.workspace, &authority.arguments.home);
@@ -140,7 +140,7 @@ fn wrapped(
     if !at_root {
         // The workspace sandbox starts only at its root, where the resident
         // classified the whole text, so the `cd` runs inside it as issued.
-        if receipt_matches(receipt) && !host_split(receipt.get("reason")) {
+        if receipt_matches(receipt) {
             return run_workspace_contained(payload, &root, authority, receipt, signals);
         }
         return Err(Failure::unauthorized());
