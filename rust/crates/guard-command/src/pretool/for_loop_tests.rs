@@ -429,10 +429,6 @@ fn a_group_opening_or_closing_on_a_pipe_keeps_its_review() {
         "for p in a b; do (echo \"$p\" |); done",
         "for p in a b; do (echo \"$p\" | | ls); done",
     ] {
-        assert_eq!(
-            super::for_loop_unroll::unroll(command),
-            None,
-            "{command}"
-        );
+        assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
     }
 }
