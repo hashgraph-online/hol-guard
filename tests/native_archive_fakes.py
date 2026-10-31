@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_supply_chain_archive
+from codex_plugin_scanner.guard.native_supply_chain_egress import TEST_LOOPBACK_ONLY_ENV
 from codex_plugin_scanner.guard.runtime.restricted_archive_contract import (
     RestrictedArchiveDownload,
     RestrictedArchiveFailure,
@@ -69,6 +70,8 @@ def install_download(
         )
 
     monkeypatch.setattr(native_supply_chain_archive, "download_restricted_archive", download)
+    # The fake stands in for the download, so the suite's loopback-only egress rule is lifted.
+    monkeypatch.delenv(TEST_LOOPBACK_ONLY_ENV, raising=False)
     return created
 
 
@@ -95,3 +98,4 @@ def forbid_download(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
         pytest.fail(reason)
 
     monkeypatch.setattr(native_supply_chain_archive, "download_restricted_archive", unexpected)
+    monkeypatch.delenv(TEST_LOOPBACK_ONLY_ENV, raising=False)
