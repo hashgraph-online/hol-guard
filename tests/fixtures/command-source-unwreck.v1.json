@@ -1223,9 +1223,11 @@
         "command.unwreck.permission.state-change"
       ],
       "disabled_permissions": [],
-      "expected_action": "review",
+      "expected_action": "block",
       "rule_id": "command.unwreck.state-change",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "compound-state-command",
@@ -1287,6 +1289,32 @@
       "expected_action": "allow",
       "rule_id": "command.unwreck.state-change",
       "expected_effective_segments": []
+    },
+    {
+      "id": "global-project-root",
+      "command": "unwreck --root /tmp/project restore 42",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "compound-dry-run-then-gc",
+      "command": "unwreck restore --dry-run 42; unwreck gc --keep 5",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.state-change",
+      "expected_effective_segments": [
+        1
+      ]
     }
   ]
 }
