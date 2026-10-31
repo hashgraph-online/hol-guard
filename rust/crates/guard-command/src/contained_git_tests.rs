@@ -272,3 +272,59 @@ fn only_git_itself_is_read_this_way() {
     assert!(read(&["git"]).is_none());
     assert!(read(&[]).is_none());
 }
+
+#[test]
+fn a_comparison_verb_that_prints_a_diff_carries_both_helper_screens() {
+    assert_eq!(
+        read(&["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]),
+        Some((
+            "diff-tree".to_owned(),
+            vector(&[
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-commit-id",
+                "--name-only",
+                "-r",
+                "HEAD",
+            ])
+        ))
+    );
+    assert_eq!(
+        read(&["git", "range-diff", "main...HEAD"]),
+        Some((
+            "range-diff".to_owned(),
+            vector(&["--no-ext-diff", "--no-textconv", "main...HEAD"])
+        ))
+    );
+}
+
+#[test]
+fn a_comparison_verb_that_defines_no_diff_option_carries_no_screen() {
+    // `git cherry` prints commit names through no helper, and it refuses
+    // `--no-ext-diff` outright, so writing the screens would turn a read into
+    // a usage error.
+    assert_eq!(
+        read(&["git", "cherry", "-v", "main"]),
+        Some(("cherry".to_owned(), vector(&["-v", "main"])))
+    );
+}
+
+#[test]
+fn a_comparison_verb_is_refused_the_helpers_and_the_output_file() {
+    for verb in ["diff-tree", "range-diff"] {
+        assert_eq!(read(&["git", verb, "--ext-diff", "HEAD"]), None, "{verb}");
+        assert_eq!(read(&["git", verb, "--textconv", "HEAD"]), None, "{verb}");
+        assert_eq!(
+            read(&["git", verb, "--output=patch.txt", "HEAD"]),
+            None,
+            "{verb}"
+        );
+        // An unambiguous prefix names the same option Git would resolve it to.
+        assert_eq!(read(&["git", verb, "--out", "patch.txt"]), None, "{verb}");
+        assert_eq!(read(&["git", verb, "-O", "order.txt"]), None, "{verb}");
+        // `--text` is the verb's own "treat the file as text", not a prefix of
+        // `--textconv`.
+        assert!(read(&["git", verb, "--text", "HEAD"]).is_some(), "{verb}");
+    }
+    assert_eq!(read(&["git", "cherry", "-o", "names.txt"]), None);
+}

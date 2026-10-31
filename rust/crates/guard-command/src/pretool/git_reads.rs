@@ -207,7 +207,16 @@ pub(super) fn safe_git_arguments(
     }
     if !matches!(
         subcommand,
-        "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
+        "status"
+            | "cherry"
+            | "diff"
+            | "diff-tree"
+            | "log"
+            | "range-diff"
+            | "show"
+            | "rev-parse"
+            | "ls-files"
+            | "remote"
     ) {
         return false;
     }
@@ -253,21 +262,25 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
-    // These three read through the diff machinery, so without the
+    // These read through the diff machinery, so without the
     // configuration probe only the spelling that turns the external driver
     // and the textconv filter off is proven. A `-C` route that discovers no
     // repository needs neither: Git dies in its own setup before it reads a
     // diff, textconv, pager or filter setting, so there is no configured
-    // helper for the options to turn off.
+    // helper for the options to turn off. `git cherry` runs no helper of its
+    // own, but it still prints under `pager.cherry`, so it asks for the same
+    // clearance and has no spelling of its own that answers instead: the two
+    // diff switches are not options it defines.
     let helpers_off = active_options
         .iter()
         .any(|argument| argument == "--no-ext-diff")
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
-    if matches!(subcommand, "diff" | "log" | "show")
+    let diff_family = matches!(subcommand, "diff" | "diff-tree" | "log" | "range-diff" | "show");
+    if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
-            || helpers_off
+            || (diff_family && helpers_off)
             || super::git_helper_context::arguments_route_to_no_repository(with_route, context))
     {
         return false;
@@ -298,7 +311,16 @@ pub(super) fn inspection_writes_nothing(
     };
     if !matches!(
         subcommand.as_str(),
-        "status" | "diff" | "log" | "show" | "grep" | "merge-base" | "stash"
+        "status"
+            | "cherry"
+            | "diff"
+            | "diff-tree"
+            | "log"
+            | "range-diff"
+            | "show"
+            | "grep"
+            | "merge-base"
+            | "stash"
     ) {
         return false;
     }

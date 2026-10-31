@@ -81,8 +81,11 @@ pub(super) fn execution_free_paging(
     if !matches!(
         operation,
         "status"
+            | "cherry"
             | "diff"
+            | "diff-tree"
             | "log"
+            | "range-diff"
             | "show"
             | "blame"
             | "describe"

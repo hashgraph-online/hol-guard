@@ -241,10 +241,11 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
-            | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
-            | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
-            | "shortlog" | "check-ignore" | "count-objects" | "check-attr",
+            "status" | "diff" | "diff-tree" | "log" | "range-diff" | "cherry" | "show" | "blame"
+            | "describe" | "reflog" | "branch" | "hash-object" | "rev-parse" | "merge-base"
+            | "ls-files" | "remote" | "worktree" | "config" | "grep" | "ls-tree" | "cat-file"
+            | "show-ref" | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore"
+            | "count-objects" | "check-attr",
         ) => true,
         // A tag listing, a clean preview and a patch check only print, but the
         // same three subcommands also write a tag, remove a file and patch the
