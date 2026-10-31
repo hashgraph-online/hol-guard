@@ -36,11 +36,10 @@ fn indexed_submodules_require_review_unless_all_submodule_processing_is_disabled
     let controls = fixture::github_controls("enabled");
     for (command, allowed) in [
         ("git status --short", false),
-        // The pathspec-magic switches belong to the agent's own pathspecs.
-        // The probe spells its index query as `:/`, so a probe that read
-        // them would find no entry and miss the gitlink entirely.
+        // `--literal-pathspecs` belongs to the agent's own pathspecs. The
+        // probe spells its index query as `:/`, so a probe that inherited
+        // the switch would find no entry and miss the gitlink entirely.
         ("git --literal-pathspecs status --short", false),
-        ("git --icase-pathspecs status --short", false),
         ("git diff --no-ext-diff --no-textconv", false),
         ("git -C . status --short", false),
         ("git -C nested status --short", false),
@@ -73,6 +72,20 @@ fn indexed_submodules_require_review_unless_all_submodule_processing_is_disabled
             assert_eq!(result.minimum_action, "require-reapproval");
         }
     }
+    // The rest of the pathspec-magic family is not an admitted spelling, so
+    // the read is never routed and the command is refused for that reason
+    // rather than for the gitlink. It still never reaches an allow.
+    let icase = fixture::evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name":"bash", "tool_input":{"command":"git --icase-pathspecs status --short"}}),
+        Some(&controls),
+        None,
+        home.to_str(),
+        repository.to_str(),
+    );
+    assert_ne!(icase.decision, "allow", "{}", icase.reason_code);
+
     let nested = repository.join("nested");
     let from_nested = fixture::evaluate_pre_tool_envelope_with_context(
         "omp",

@@ -582,15 +582,15 @@ fn probe(
     Some(true)
 }
 
-/// The probe runs Git without a shell, so a `-C ~/repo` target the shell
-/// would expand must be expanded here or the probe inspects nothing.
 /// The switches that change how Git reads a pathspec. The probe spells its
 /// own index query as `:/`, the magic naming the repository root, so a probe
 /// that inherited `--literal-pathspecs` from the agent's command would read
 /// that word as a literal path, match no entry under it and report a
-/// repository holding no gitlinks. The agent's command carries these for its
-/// own pathspecs; none of them changes the configuration, hook path or index
-/// the probe asks about, so the probe asks without them.
+/// repository holding no gitlinks. Only `--literal-pathspecs` reaches a
+/// routed read today; the other three are refused with the rest of the
+/// unrecognised spellings. The family is dropped together so widening that
+/// admission cannot reopen the hole, and none of them names the
+/// configuration, hook path or index the probe asks about.
 const PATHSPEC_MAGIC: [&str; 4] = [
     "--literal-pathspecs",
     "--glob-pathspecs",
@@ -598,6 +598,8 @@ const PATHSPEC_MAGIC: [&str; 4] = [
     "--icase-pathspecs",
 ];
 
+/// The probe runs Git without a shell, so a `-C ~/repo` target the shell
+/// would expand must be expanded here or the probe inspects nothing.
 fn expand_home_targets(leading: &[String], home: &Path) -> Vec<String> {
     let mut expanded = Vec::with_capacity(leading.len());
     let mut directory_next = false;
