@@ -20,20 +20,29 @@
 //! the rest of that record's evidence but not the receipt. For a tool answer
 //! it queues the command activity behind that receipt as well, after a
 //! post-tool call's Composio discovery, and marks the record for that too,
-//! which saves the drain another writer request per hook.
+//! which saves the drain another writer request per hook. An edge
+//! `PostToolUse` answer whose envelope asked queues its activity behind the
+//! receipt the same way, and says so with `activity_recorded`. So does a
+//! `PreToolUse` answer the daemon returns as the edge rendered it: one no
+//! approval pause, saved exact-command block or containment rewrite of the
+//! daemon's can still change.
 
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use guard_command::hook_evidence_writer::RuntimeHookEvidenceWriter;
 use guard_contracts::{GuardHookEdgeResultV2, GuardHookEnvelopeV2};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::hook_direct_evidence::DirectEvidenceQueue;
 use crate::hook_evidence_writer_op as writer_op;
 
 /// The resident feature under which an envelope may ask for this.
 pub(crate) const EDGE_RECEIPT_RECORD_FEATURE: &str = "edge-receipt-record-v1";
+/// The resident queues an edge `PostToolUse` answer's activity when asked.
+pub(crate) const EDGE_ACTIVITY_RECORD_FEATURE: &str = "edge-activity-record-v1";
+/// The resident queues an edge `PreToolUse` answer's activity when asked.
+pub(crate) const EDGE_PRE_TOOL_ACTIVITY_RECORD_FEATURE: &str = "edge-pre-tool-activity-record-v1";
 /// The field of a direct answer's evidence record that says the resident
 /// already queued its receipt with the writer.
 const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
@@ -41,6 +50,9 @@ const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
 const DIRECT_ACTIVITY_RECORDED: &str = "activity_recorded";
 /// `hook_post_succeeded`'s compact spelling of a failed tool call's event.
 const POST_TOOL_USE_FAILURE: &str = "posttoolusefailure";
+/// The `minimum_action`s the daemon pauses for an approval
+/// (`_NATIVE_PRE_TOOL_APPROVAL_ACTIONS`, `hook_worker_native.py`).
+const APPROVAL_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
 
 /// Encode the checked `edge`, recording its receipt when the envelope asked
 /// and a writer runs for its Guard home. `resident` is false for a caller
@@ -52,19 +64,169 @@ pub(crate) fn encode(
     started: Instant,
 ) -> Result<Vec<u8>, String> {
     let mut edge = crate::edge_structured::attached(envelope, edge, started);
-    if resident && envelope.record_receipt {
+    if resident && envelope.record_receipt && !budget_spent(envelope, started) {
+        let activity = edge_activity(envelope, &edge);
         edge.receipt_recorded = true;
+        edge.activity_recorded = activity.is_some();
+        let mut activity_queued = true;
         let recorded = writer_op::record_edge_receipt(
             Path::new(&envelope.source.guard_home),
             &edge.receipt,
             || crate::encode_response(&edge),
+            |writer| match activity {
+                Some(EdgeActivity::PostTool(payload)) => {
+                    activity_queued = queue_post_tool_activity(writer, &edge.harness, payload);
+                }
+                Some(EdgeActivity::PreTool(payload, activity)) => {
+                    let receipt_id = Some(edge.receipt.decision_id.as_str());
+                    activity_queued = activity.submit(writer, &edge.harness, payload, receipt_id);
+                }
+                None => {}
+            },
         );
         if let Some(encoded) = recorded {
-            return encoded;
+            if activity_queued || encoded.is_err() {
+                return encoded;
+            }
+            // The writer took the receipt but refused the activity, so the
+            // daemon submits the activity itself.
+            edge.activity_recorded = false;
+            return crate::encode_response(&edge);
         }
         edge.receipt_recorded = false;
+        edge.activity_recorded = false;
     }
     crate::encode_response(&edge)
+}
+
+/// Whether the daemon's budget for this answer ran out while the edge worked.
+///
+/// A daemon that stops waiting records the hook as unavailable on its own, so
+/// an edge that records evidence after that point would leave two records for
+/// one hook. Past the budget the edge records nothing and leaves it all to a
+/// daemon that may still read the answer.
+fn budget_spent(envelope: &GuardHookEnvelopeV2, started: Instant) -> bool {
+    envelope
+        .deadline_budget_ms
+        .is_some_and(|budget| started.elapsed() >= Duration::from_millis(budget))
+}
+
+/// The command activity an edge answer queues behind its receipt.
+enum EdgeActivity<'a> {
+    PostTool(&'a Map<String, Value>),
+    PreTool(&'a Map<String, Value>, PreToolActivity),
+}
+
+/// The activity `envelope` asked the edge to queue for `edge`, if the edge
+/// can record it as the daemon would.
+fn edge_activity<'a>(
+    envelope: &'a GuardHookEnvelopeV2,
+    edge: &GuardHookEdgeResultV2,
+) -> Option<EdgeActivity<'a>> {
+    let payload = envelope.raw_payload.as_object()?;
+    match edge.event_name.as_str() {
+        "PostToolUse" if envelope.record_activity => Some(EdgeActivity::PostTool(payload)),
+        "PreToolUse" if envelope.record_pre_tool_activity => {
+            let response = daemon_response(envelope, edge)?.as_object()?;
+            Some(EdgeActivity::PreTool(
+                payload,
+                PreToolActivity::of(response)?,
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// The response the daemon returns for a `PreToolUse` edge answer, when
+/// nothing it does after the edge can change it: the answer of a call
+/// recorded only that the edge did not allow, a custom rule's block, or the
+/// edge's own answer once no approval pause, saved exact-command block or
+/// sink rewrite applies. `None` leaves the activity to the daemon, as does
+/// an answer the edge does not stamp with its route.
+fn daemon_response<'a>(
+    envelope: &GuardHookEnvelopeV2,
+    edge: &'a GuardHookEdgeResultV2,
+) -> Option<&'a Value> {
+    let text = |key: &str| edge.result.get(key).and_then(Value::as_str);
+    let action = text("minimum_action").unwrap_or_default();
+    let allowed = action == "allow" && text("decision") == Some("allow");
+    if envelope.recording_only && !allowed {
+        return edge.harness_response.as_ref();
+    }
+    if APPROVAL_ACTIONS.contains(&action) {
+        return None;
+    }
+    if let Some(rule) = edge.local_cli_rule.as_ref().filter(|rule| rule.blocked) {
+        return Some(&rule.harness_response);
+    }
+    // The daemon's saved exact-command block lookup reads only a shell
+    // action outside Watch, and skips one the edge found no block for.
+    let shell = matches!(
+        edge.result
+            .pointer("/action/action_type")
+            .and_then(Value::as_str),
+        Some("command" | "package" | "process_service" | "network" | "shell" | "shell_command")
+    );
+    if shell && !envelope.recording_only && edge.exact_command_block != Some(false) {
+        return None;
+    }
+    match (
+        edge.containment_route.as_deref(),
+        edge.containment_rewrite.as_deref(),
+    ) {
+        (Some("none" | "grant"), _) | (Some("sink"), Some("kept")) => {
+            edge.harness_response.as_ref()
+        }
+        _ => None,
+    }
+}
+
+/// The fields of a `PreToolUse` activity read from the response it records.
+struct PreToolActivity {
+    policy_action: Option<String>,
+    prompted: bool,
+    approval_reuse_status: String,
+}
+
+impl PreToolActivity {
+    /// `None` for a response whose fields the activity cannot take.
+    fn of(response: &Map<String, Value>) -> Option<Self> {
+        let policy_action = match response.get("policy_action") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(action)) => Some(action.clone()),
+            Some(_) => return None,
+        };
+        let approval_reuse_status = match response.get("approval_reuse_status") {
+            None => "not-applicable".to_owned(),
+            Some(Value::String(status)) => status.clone(),
+            Some(_) => return None,
+        };
+        Some(Self {
+            policy_action,
+            prompted: response.get("prompted") == Some(&Value::Bool(true)),
+            approval_reuse_status,
+        })
+    }
+
+    /// Queue the activity, citing the receipt the writer just accepted.
+    fn submit(
+        &self,
+        writer: &RuntimeHookEvidenceWriter,
+        harness: &str,
+        payload: &Map<String, Value>,
+        receipt_id: Option<&str>,
+    ) -> bool {
+        writer.submit_command_activity(
+            harness,
+            "PreToolUse",
+            payload,
+            true,
+            self.policy_action.as_deref(),
+            receipt_id,
+            self.prompted,
+            &self.approval_reuse_status,
+        )
+    }
 }
 
 /// Queue a direct answer's `evidence` for the drain, recording its receipt
@@ -125,6 +287,18 @@ fn submit_post_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value)
     ) else {
         return false;
     };
+    queue_post_tool_activity(writer, harness, payload);
+    true
+}
+
+/// Queue a post-tool call's Composio discovery, when it succeeded, and then
+/// its command activity, as the daemon's `_record_post_tool_activity` does.
+/// True when the writer took the activity.
+fn queue_post_tool_activity(
+    writer: &RuntimeHookEvidenceWriter,
+    harness: &str,
+    payload: &Map<String, Value>,
+) -> bool {
     let succeeded = post_succeeded(payload);
     let tool_name = payload.get("tool_name").and_then(Value::as_str);
     if let Some(tool_name) = tool_name.filter(|_| succeeded) {
@@ -139,13 +313,12 @@ fn submit_post_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value)
         None,
         false,
         "not-applicable",
-    );
-    true
+    )
 }
 
 /// `hook_post_succeeded("PostToolUse", payload)`: only bounded failure
 /// signals count, and their absence means the call succeeded.
-fn post_succeeded(payload: &serde_json::Map<String, Value>) -> bool {
+fn post_succeeded(payload: &Map<String, Value>) -> bool {
     for name in ["hook_event_name", "hookEventName"] {
         if let Some(event) = payload.get(name).and_then(Value::as_str) {
             let compact: String = event.chars().filter(|c| *c != '_' && *c != '-').collect();
@@ -178,32 +351,19 @@ fn submit_pre_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) 
     ) else {
         return false;
     };
-    let policy_action = match response.get("policy_action") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(action)) => Some(action.as_str()),
-        Some(_) => return false,
-    };
-    let approval_reuse_status = match response.get("approval_reuse_status") {
-        None => "not-applicable",
-        Some(Value::String(status)) => status.as_str(),
-        Some(_) => return false,
+    let Some(activity) = PreToolActivity::of(response) else {
+        return false;
     };
     let receipt_id = record
         .get("receipt")
         .and_then(|receipt| receipt.get("decision_id"))
         .and_then(Value::as_str);
-    writer.submit_command_activity(
-        harness,
-        "PreToolUse",
-        payload,
-        true,
-        policy_action,
-        receipt_id,
-        response.get("prompted") == Some(&Value::Bool(true)),
-        approval_reuse_status,
-    )
+    activity.submit(writer, harness, payload, receipt_id)
 }
 
+#[cfg(test)]
+#[path = "edge_receipt_deadline_tests.rs"]
+mod deadline_tests;
 #[cfg(test)]
 #[path = "edge_receipt_tests.rs"]
 mod tests;

@@ -14,9 +14,6 @@ from codex_plugin_scanner.guard import native_policy_snapshot_direct_lane as dir
 from codex_plugin_scanner.guard.adapters import zcode_contained_tests
 from codex_plugin_scanner.guard.native_policy_snapshot_contract import _policy_snapshot_push_bytes_v3
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane import (
-    DIRECT_HOOK_CONTAINED_ROUTE_FEATURE,
-    DIRECT_HOOK_EVIDENCE_FEATURE,
-    DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,
     DIRECT_LANE_ACK_LEASE_MS,
     DIRECT_LANE_ACK_SCHEMA,
     NativePolicySnapshotDirectLaneAck,
@@ -26,6 +23,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane import (
     local_cli_block_rules_present,
     with_direct_hook_state,
 )
+from tests import containment_rewrite_client
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="the direct lane is Unix-only")
 
@@ -275,21 +273,20 @@ def test_local_cli_rule_change_closes_only_the_direct_lane(tmp_path: Path) -> No
     assert not ack.exists()
 
 
-def test_evidence_drain_binds_only_while_enabled_and_supported(tmp_path: Path) -> None:
+def test_evidence_drain_binds_only_while_enabled(tmp_path: Path) -> None:
     publisher = _publisher(tmp_path)
     ack = publisher._direct_lane_ack_path()
-    assert not publisher.direct_evidence_bound([DIRECT_HOOK_EVIDENCE_FEATURE])
+    assert not publisher.direct_evidence_bound()
 
     publisher.enable_direct_evidence_drain(True)
-    assert publisher.direct_evidence_bound([DIRECT_HOOK_EVIDENCE_FEATURE])
-    assert not publisher.direct_evidence_bound(["hook-direct-v1"])
+    assert publisher.direct_evidence_bound()
 
     publisher._acked = True
     publisher._publish_direct_lane_ack({"generation": 3, "policy_digest": DIGEST})
     assert ack.exists()
     publisher.enable_direct_evidence_drain(False)
     assert not ack.exists()
-    assert not publisher.direct_evidence_bound([DIRECT_HOOK_EVIDENCE_FEATURE])
+    assert not publisher.direct_evidence_bound()
 
 
 def test_a_stopped_drain_rejects_an_in_flight_evidence_ack(tmp_path: Path) -> None:
@@ -307,7 +304,7 @@ def test_a_stopped_drain_rejects_an_in_flight_evidence_ack(tmp_path: Path) -> No
     assert not ack.exists()
 
 
-def test_evidence_transport_needs_a_resident_with_the_drain(tmp_path: Path) -> None:
+def test_evidence_transport_needs_a_resident(tmp_path: Path) -> None:
     publisher = _publisher(tmp_path)
     assert publisher.direct_evidence_transport() is None
 
@@ -316,13 +313,9 @@ def test_evidence_transport_needs_a_resident_with_the_drain(tmp_path: Path) -> N
 
     status = SimpleNamespace(
         identity=SimpleNamespace(path=str(tmp_path / "guard-runtime")),
-        capabilities=SimpleNamespace(features=("hook-direct-v1",)),
     )
     publisher._last_runtime_status = status  # pyright: ignore[reportAttributeAccessIssue]
     publisher._client_request = client  # pyright: ignore[reportAttributeAccessIssue]
-    assert publisher.direct_evidence_transport() is None
-
-    status.capabilities.features = ("hook-direct-v1", DIRECT_HOOK_EVIDENCE_FEATURE)
     assert publisher.direct_evidence_transport() == (tmp_path / "guard-runtime", client)
 
 
@@ -334,7 +327,6 @@ def test_evidence_transport_leaves_a_cold_resident_to_callers_that_budget_a_spaw
     publisher = _publisher(tmp_path)
     publisher._last_runtime_status = SimpleNamespace(  # pyright: ignore[reportAttributeAccessIssue]
         identity=SimpleNamespace(path=str(tmp_path / "guard-runtime")),
-        capabilities=SimpleNamespace(features=("hook-direct-v1", DIRECT_HOOK_EVIDENCE_FEATURE)),
     )
     ready: list[tuple[Path, Path]] = []
     pooled = False
@@ -375,10 +367,9 @@ def test_the_lane_binds_a_home_only_when_the_daemon_gives_hooks_its_own(
     assert len(publishes) == 2
 
 
-def test_the_sink_command_binds_only_for_a_resident_that_routes_containment() -> None:
+def test_the_sink_command_binds_only_when_the_resident_accepts_it() -> None:
     binding = {"workspaces": ["/work/repo"], "inputs": []}
-    assert contained_sink_command(()) is None
-    command = contained_sink_command((DIRECT_HOOK_CONTAINED_ROUTE_FEATURE,))
+    command = contained_sink_command()
     assert command is not None
 
     def bind(sink: tuple[str, ...] | None) -> dict[str, object]:
@@ -407,7 +398,7 @@ def test_the_sink_command_binds_only_for_a_resident_that_routes_containment() ->
         assert "contained_sink_command" not in bind(rejected)
 
 
-def test_the_integrity_key_binds_only_for_a_resident_that_answers_permission_notices() -> None:
+def test_the_integrity_key_is_read_never_minted() -> None:
     calls: list[bool] = []
 
     class _Store:
@@ -415,9 +406,7 @@ def test_the_integrity_key_binds_only_for_a_resident_that_answers_permission_not
             calls.append(create)
             return b"\x07" * 32, "synthetic:0707"
 
-    assert direct_lane_integrity_key(_Store(), ()) is None
-    assert calls == []
-    key = direct_lane_integrity_key(_Store(), (DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,))
+    key = direct_lane_integrity_key(_Store())
     assert key == (b"\x07" * 32, "synthetic:0707")
     # The key is read, never minted for the resident.
     assert calls == [False]
@@ -431,7 +420,7 @@ def test_the_integrity_key_binds_only_for_a_resident_that_answers_permission_not
             raise RuntimeError("keyring unavailable")
 
     for store in (_Keyless(), _Failing(), object()):
-        assert direct_lane_integrity_key(store, (DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,)) is None
+        assert direct_lane_integrity_key(store) is None
 
     def bind(integrity_key: tuple[bytes, str] | None) -> dict[str, object]:
         bound = with_direct_hook_state(
@@ -477,7 +466,7 @@ def test_the_bound_sink_command_starts_the_command_the_daemon_routes(
         "reason_code": "native_workspace_containment_required",
         "required_execution_profile": "workspace-contained-v1",
     }
-    routed = zcode_contained_tests.route_zcode_containment(
+    routed = containment_rewrite_client.route_zcode_containment(
         response,
         harness="claude-code",
         payload=payload,

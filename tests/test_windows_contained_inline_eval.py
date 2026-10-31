@@ -8,10 +8,10 @@ import pytest
 
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
-from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_rewrite
 from codex_plugin_scanner.guard.runtime import restricted_inline_eval
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 from tests.containment_resident import native_containment_sink
+from tests.containment_rewrite_client import native_containment_rewrite
 
 PYTHON = r"C:\Program Files\Python312\python.exe"
 RUNTIME = r"C:\Program Files\HOL Guard\hol-guard-runtime.exe"

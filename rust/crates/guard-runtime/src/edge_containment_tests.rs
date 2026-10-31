@@ -44,6 +44,8 @@ fn envelope(workspace: &Path, sink: bool) -> GuardHookEnvelopeV2 {
         local_cli_rules: None,
         observe_local_cli: false,
         record_receipt: false,
+        record_activity: false,
+        record_pre_tool_activity: false,
         structured_output_config: None,
         containment_sink: sink.then(|| GuardHookContainmentSinkV1 {
             sink_command: SINK_COMMAND.map(str::to_owned).to_vec(),
@@ -222,7 +224,7 @@ fn without_the_sink_argv_the_receipt_stands_unanswered() {
         no_native,
     );
 
-    // Not answered, so the daemon asks the resident as before.
+    // Not answered: the daemon sends the argv for every call it can rewrite.
     assert_eq!(answer, None);
     assert_eq!(response, Some(receipt()));
 }
@@ -260,8 +262,6 @@ fn only_a_sink_route_the_daemon_would_rewrite_is_answered() {
         (&request, "none", sandbox_required(), false),
         (&request, "grant", sandbox_required(), false),
         (&watched, "sink", sandbox_required(), false),
-        (&request, "sink", review, false),
-        (&request, "sink", sandbox_required(), true),
     ] {
         let mut response = Some(receipt());
         let answer = rewrite(
@@ -275,6 +275,22 @@ fn only_a_sink_route_the_daemon_would_rewrite_is_answered() {
         );
         assert_eq!(answer, None, "{route}");
         assert_eq!(response, Some(receipt()), "{route}");
+    }
+    // A review or a custom block answers a sink route first, and its
+    // receipt stands without a second resident call.
+    for (result, custom_block) in [(review, false), (sandbox_required(), true)] {
+        let mut response = Some(receipt());
+        let answer = rewrite(
+            &request,
+            "claude-code",
+            "sink",
+            &result,
+            custom_block,
+            &mut response,
+            no_native,
+        );
+        assert_eq!(answer, Some(KEPT));
+        assert_eq!(response, Some(receipt()));
     }
 }
 

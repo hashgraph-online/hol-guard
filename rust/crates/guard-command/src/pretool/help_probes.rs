@@ -21,6 +21,13 @@
 //! each manager admits only verbs that are its own built-ins and that name no
 //! program to run.
 //!
+//! A manager that documents a second level is read a level deeper, with the
+//! second word judged against the first: `uv tool install --help` and `npm
+//! cache clean --help` print the page the manager carries for that pair.
+//! Reading the pair rather than two independent words is what keeps `uv tool
+//! run --help` out, since `run` is carried by no parent, and it also keeps
+//! out pairs the manager never documents and would answer with a usage error.
+//!
 //! Deliberately absent:
 //! - `uvx`: it is `uv tool run`, so its first word is a package to fetch and
 //!   execute. `uvx build --help` runs `build` from the index.
@@ -84,6 +91,7 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
         "uv" => matches!(
             verb,
             "add"
+                | "auth"
                 | "build"
                 | "cache"
                 | "export"
@@ -94,7 +102,9 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
                 | "publish"
                 | "python"
                 | "remove"
+                | "self"
                 | "sync"
+                | "tool"
                 | "tree"
                 | "uninstall"
                 | "venv"
@@ -123,12 +133,16 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
         // `exec`, and `run` is `run-script`.
         "npm" => matches!(
             verb,
-            "add"
+            "access"
+                | "add"
                 | "audit"
+                | "cache"
                 | "ci"
                 | "clean-install"
+                | "config"
                 | "ddp"
                 | "dedupe"
+                | "dist-tag"
                 | "explain"
                 | "i"
                 | "ic"
@@ -141,14 +155,19 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
                 | "ll"
                 | "ln"
                 | "ls"
+                | "org"
                 | "outdated"
+                | "owner"
                 | "pkg"
+                | "profile"
                 | "prune"
                 | "publish"
                 | "r"
                 | "remove"
                 | "rm"
                 | "show"
+                | "team"
+                | "token"
                 | "un"
                 | "uninstall"
                 | "unlink"
@@ -178,6 +197,64 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
     }
 }
 
+/// A verb carried by one of the manager's own verbs, where the pair names no
+/// program to run.
+///
+/// `uv tool install --help` and `npm cache clean --help` print the page the
+/// manager carries for that pair, the same way the first level does. The
+/// table is written parent by parent rather than as one flat list because the
+/// depth is where the difference lives: `uv tool run` and `uv run` both hand
+/// the tail to a program the line names, so `run` appears under no parent,
+/// while `install` is harmless under `tool` and under `pip` alike.
+///
+/// A verb that opens an editor is absent for the same reason a verb that runs
+/// a package is: `npm config edit` and `pip config edit` both spawn the
+/// program `EDITOR` names, and the reading cannot tell the page from the
+/// editor that shares the name.
+fn usage_only_subverb(basename: &str, parent: &str, verb: &str) -> bool {
+    match (basename, parent) {
+        ("uv", "pip") => matches!(
+            verb,
+            "check"
+                | "compile"
+                | "freeze"
+                | "install"
+                | "list"
+                | "show"
+                | "sync"
+                | "tree"
+                | "uninstall"
+        ),
+        // `uv tool run` is `uvx`: the verb after it is a package to fetch and
+        // run, so it is absent here the way it is absent from the first level.
+        ("uv", "tool") => matches!(
+            verb,
+            "dir" | "install" | "list" | "uninstall" | "upgrade" | "update-shell"
+        ),
+        ("uv", "python") => matches!(
+            verb,
+            "dir" | "find" | "install" | "list" | "pin" | "uninstall" | "upgrade"
+        ),
+        ("uv", "cache") => matches!(verb, "clean" | "dir" | "prune"),
+        ("uv", "self") => matches!(verb, "update" | "version"),
+        ("uv", "auth") => matches!(verb, "login" | "logout" | "token"),
+        ("pip" | "pip3", "cache") => matches!(verb, "dir" | "info" | "list" | "purge" | "remove"),
+        ("pip" | "pip3", "config") => matches!(verb, "debug" | "get" | "list" | "set" | "unset"),
+        ("pip" | "pip3", "index") => verb == "versions",
+        ("npm", "access") => matches!(verb, "get" | "grant" | "list" | "ls" | "revoke" | "set"),
+        ("npm", "cache") => matches!(verb, "add" | "clean" | "ls" | "verify"),
+        ("npm", "config") => matches!(verb, "delete" | "fix" | "get" | "list" | "ls" | "set"),
+        ("npm", "dist-tag") => matches!(verb, "add" | "ls" | "rm"),
+        ("npm", "org") => matches!(verb, "ls" | "rm" | "set"),
+        ("npm", "owner") => matches!(verb, "add" | "ls" | "rm"),
+        ("npm", "pkg") => matches!(verb, "delete" | "fix" | "get" | "set"),
+        ("npm", "profile") => matches!(verb, "disable-2fa" | "enable-2fa" | "get" | "set"),
+        ("npm", "team") => matches!(verb, "add" | "create" | "destroy" | "ls" | "rm"),
+        ("npm", "token") => matches!(verb, "create" | "list" | "revoke"),
+        _ => false,
+    }
+}
+
 /// Whether this manager's startup reads a configuration the session could
 /// have pointed elsewhere. npm and pip both load their configuration before
 /// they print usage, so the probe asks for the whole proof the read listings
@@ -200,8 +277,15 @@ pub(super) fn configuration_inert(basename: &str, context: super::PathContext<'_
     }
 }
 
-/// A lone help flag, or one behind at most two of the manager's own
-/// usage-only verbs.
+/// A lone help flag, or one behind a usage-only verb of the manager's, or
+/// behind such a verb and one the parent carries.
+///
+/// The second word is read against the first rather than against the whole
+/// list, so `uv tool install --help` is admitted while `uv tool run --help`
+/// is not. A flat list would admit both, since `install` and `run` would each
+/// be judged on their own; it would also admit pairs no manager documents,
+/// such as `uv add sync --help`, which the manager answers with a usage error
+/// rather than a page.
 ///
 /// npm's and pip's admission also needs the files
 /// [`configuration_inert`] reads, which no unit context names a directory
@@ -216,268 +300,24 @@ pub(crate) fn safe_help_probe(
         return false;
     };
     help_flag(basename, flag)
-        && verbs.len() <= 2
-        && verbs.iter().all(|verb| usage_only_verb(basename, verb))
+        && usage_only_verbs(basename, verbs)
         && configuration_inert(basename, context)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::safe_help_probe;
-
-    fn args(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| (*value).to_owned()).collect()
-    }
-
-    fn context() -> super::super::PathContext<'static> {
-        super::super::PathContext {
-            npm_config_inert: true,
-            pip_config_inert: true,
-            ..Default::default()
+/// The words between the executable and the help flag, read as a path through
+/// the manager's own verbs.
+fn usage_only_verbs(basename: &str, verbs: &[String]) -> bool {
+    match verbs {
+        [] => true,
+        [verb] => usage_only_verb(basename, verb),
+        [parent, verb] => {
+            usage_only_verb(basename, parent) && usage_only_subverb(basename, parent, verb)
         }
-    }
-
-    /// npm and pip read files this context names no directory for, so the
-    /// shape tests below carry the managers whose usage text needs no proof
-    /// beyond their own words. The two whose startup reads a configuration
-    /// are admitted by the benign gate instead, where a fixture home holds
-    /// the files the proof reads.
-    #[test]
-    fn a_configuration_the_session_can_write_refuses_the_probe() {
-        let root = std::env::temp_dir().join(format!("guard-help-npmrc-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let home = root.join("home");
-        let project = root.join("project");
-        std::fs::create_dir_all(&home).unwrap();
-        std::fs::create_dir_all(&project).unwrap();
-        // npm requires this file while it is still working out what to print.
-        std::fs::write(project.join(".npmrc"), "onload-script=./onload.js\n").unwrap();
-        let home = home.to_string_lossy().into_owned();
-        let project = project.to_string_lossy().into_owned();
-        let written = super::super::PathContext {
-            npm_config_inert: true,
-            pip_config_inert: true,
-            shell_home_matches: true,
-            home_dir: Some(&home),
-            cwd: Some(&project),
-            ..Default::default()
-        };
-
-        assert!(!safe_help_probe(
-            "npm",
-            &args(&["install", "--help"]),
-            written
-        ));
-        // The refusal is the file, not the shape: a manager that reads no
-        // configuration prints its usage from the same directory.
-        assert!(safe_help_probe("jq", &args(&["--help"]), written));
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn install_family_usage_text_is_admitted() {
-        for (tool, arguments) in [
-            ("uv", vec!["add", "--help"]),
-            ("uv", vec!["add", "-h"]),
-            ("uv", vec!["pip", "install", "--help"]),
-            ("uv", vec!["sync", "--help"]),
-            ("uv", vec!["--help"]),
-            ("deno", vec!["install", "--help"]),
-            ("ruff", vec!["check", "--help"]),
-            ("jq", vec!["--help"]),
-        ] {
-            assert!(
-                safe_help_probe(tool, &args(&arguments), context()),
-                "{tool} {arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn verbless_tool_usage_text_is_admitted() {
-        for (tool, arguments) in [
-            ("curl", vec!["--help"]),
-            ("curl", vec!["-h"]),
-            ("curl", vec!["--manual"]),
-            ("curl", vec!["-M"]),
-            ("wget", vec!["--help"]),
-            ("wget", vec!["-h"]),
-            ("ssh", vec!["--help"]),
-            ("scp", vec!["--help"]),
-            ("sftp", vec!["--help"]),
-            ("rsync", vec!["--help"]),
-            ("psql", vec!["--help"]),
-            ("redis-cli", vec!["--help"]),
-            ("nc", vec!["--help"]),
-            ("cp", vec!["--help"]),
-            ("chown", vec!["--help"]),
-            ("kill", vec!["--help"]),
-        ] {
-            assert!(
-                safe_help_probe(tool, &args(&arguments), context()),
-                "{tool} {arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_spelling_that_names_a_host_or_a_mode_is_refused() {
-        for (tool, arguments) in [
-            // `-h` names the host to connect to.
-            ("psql", vec!["-h"]),
-            ("redis-cli", vec!["-h"]),
-            ("nc", vec!["-h"]),
-            // rsync reads `-h` as `--human-readable`, which is a transfer.
-            ("rsync", vec!["-h"]),
-            // The usage text prints the values the option files set.
-            ("mysql", vec!["--help"]),
-            ("mysqldump", vec!["--help"]),
-            // Under the privilege floor, which usage text does not lower.
-            ("launchctl", vec!["--help"]),
-            // The package lane answers for these.
-            ("brew", vec!["--help"]),
-            ("apt-get", vec!["--help"]),
-            // The flag has to be the last word; anything after it is an
-            // operand, and anything before it is a host or a path.
-            ("curl", vec!["--help", "https://example.test"]),
-            ("cp", vec!["--help", "src", "dst"]),
-            ("ssh", vec!["host", "--help"]),
-            ("cp", vec!["-h"]),
-        ] {
-            assert!(
-                !safe_help_probe(tool, &args(&arguments), context()),
-                "{tool} {arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn verbs_that_name_a_program_to_run_are_refused() {
-        for (tool, arguments) in [
-            // The flag reaches pytest, which loads the workspace's conftest.
-            ("uv", vec!["run", "pytest", "--help"]),
-            ("uv", vec!["run", "--help"]),
-            ("uv", vec!["tool", "run", "--help"]),
-            ("npm", vec!["exec", "--help"]),
-            ("npm", vec!["run", "test", "--help"]),
-            // `npm init <name>` resolves and runs a `create-*` package.
-            ("npm", vec!["init", "--help"]),
-            // npm's own aliases for those three verbs point at the same
-            // programs, so they are refused with them.
-            ("npm", vec!["create", "--help"]),
-            ("npm", vec!["x", "--help"]),
-            // `uvx` is `uv tool run`: the verb is a package to fetch and run.
-            ("uvx", vec!["build", "--help"]),
-            ("uvx", vec!["pip", "--help"]),
-            ("uvx", vec!["--help"]),
-            // The script, not the manager, reads the flag.
-            ("uv", vec!["run", "script.py", "--help"]),
-        ] {
-            assert!(
-                !safe_help_probe(tool, &args(&arguments), context()),
-                "{tool} {arguments:?}"
-            );
-        }
-    }
-
-    /// npm's own admission also reads its configuration, which this unit
-    /// context names no directory for, so the shape test above cannot tell a
-    /// refused verb from a refused configuration. The verb list answers for
-    /// itself here: every word npm resolves to a package or a script stays
-    /// out of it, whatever the configuration proof later decides.
-    #[test]
-    fn npm_verbs_that_run_a_program_stay_out_of_the_usage_list() {
-        for verb in ["create", "x", "exec", "run", "run-script", "init"] {
-            assert!(!super::usage_only_verb("npm", verb), "npm {verb}");
-        }
-        // The aliases that only print usage are still in it.
-        for verb in [
-            "add",
-            "remove",
-            "un",
-            "in",
-            "up",
-            "info",
-            "ln",
-            "clean-install",
-        ] {
-            assert!(super::usage_only_verb("npm", verb), "npm {verb}");
-        }
-    }
-
-    #[test]
-    fn workspace_selected_launchers_and_pagers_are_refused() {
-        for (tool, arguments) in [
-            ("yarn", vec!["add", "--help"]),
-            ("pnpm", vec!["add", "--help"]),
-            ("cargo", vec!["add", "--help"]),
-            ("go", vec!["install", "--help"]),
-            ("git", vec!["commit", "--help"]),
-            ("poetry", vec!["add", "--help"]),
-            // `bun <word>` falls back to running that script or file.
-            ("bun", vec!["add", "--help"]),
-            ("bun", vec!["check", "--help"]),
-            ("bun", vec!["init", "-h"]),
-            // A plugin of the same name takes the command.
-            ("helm", vec!["audit", "--help"]),
-            // Help discovers Docker's CLI plugins by executing them.
-            ("docker", vec!["build", "--help"]),
-            ("docker", vec!["--help"]),
-            // The flag has to be the last word; anything after it is an
-            // operand the manager would act on.
-            ("npm", vec!["install", "--help", "left-pad"]),
-            ("uv", vec![]),
-            ("npm", vec!["install"]),
-        ] {
-            assert!(
-                !safe_help_probe(tool, &args(&arguments), context()),
-                "{tool} {arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_verb_belonging_to_another_manager_is_refused() {
-        for (tool, arguments) in [
-            // `npm sync` and `npm venv` are not npm commands; admitting them
-            // from a shared list is what let a launcher's fallback through.
-            ("npm", vec!["sync", "--help"]),
-            ("npm", vec!["venv", "--help"]),
-            ("pip", vec!["add", "--help"]),
-            ("deno", vec!["sync", "--help"]),
-            ("ruff", vec!["install", "--help"]),
-            // The single-purpose tools take no verb at all.
-            ("jq", vec!["install", "--help"]),
-            ("rg", vec!["check", "--help"]),
-        ] {
-            assert!(
-                !safe_help_probe(tool, &args(&arguments), context()),
-                "{tool} {arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_redirected_manager_configuration_keeps_the_question() {
-        let npm_moved = super::super::PathContext {
-            pip_config_inert: true,
-            ..Default::default()
-        };
-        assert!(!safe_help_probe(
-            "npm",
-            &args(&["install", "--help"]),
-            npm_moved
-        ));
-        let pip_moved = super::super::PathContext {
-            npm_config_inert: true,
-            ..Default::default()
-        };
-        assert!(!safe_help_probe(
-            "pip",
-            &args(&["install", "--help"]),
-            pip_moved
-        ));
-        // A tool with no configuration of its own is unaffected.
-        assert!(safe_help_probe("jq", &args(&["--help"]), pip_moved));
+        // No manager here documents a third level.
+        _ => false,
     }
 }
+
+#[cfg(test)]
+#[path = "help_probes_tests.rs"]
+mod tests;

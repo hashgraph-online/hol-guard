@@ -17,16 +17,10 @@ from collections.abc import Iterable, Mapping
 from .native_policy_snapshot_codec import _validate_json_limits_v3
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 
-# The resident accepts the managed-policy view below in its direct-lane binding.
-DIRECT_HOOK_STRUCTURED_OUTPUT_FEATURE = "hook-direct-structured-output-v1"
 STRUCTURED_OUTPUT_BINDING_KEY = "structured_output_config"
 
 _MAX_VIEW_BYTES = 65_536
 _MAX_SAFE_INTEGER = 2**53 - 1
-
-
-def structured_output_bound(features: Iterable[str]) -> bool:
-    return DIRECT_HOOK_STRUCTURED_OUTPUT_FEATURE in set(features)
 
 
 def _plain(value: object) -> bool:
@@ -107,23 +101,22 @@ def uniform_structured_output_view(configs: Iterable[object]) -> dict[str, objec
 def with_structured_output_view(
     binding: Mapping[str, object] | None,
     *,
-    features: Iterable[str],
     view: Mapping[str, object] | None,
 ) -> dict[str, object] | None:
-    """Add the managed-policy view, for a resident that accepts it."""
+    """Add the managed-policy view."""
 
     if binding is None:
         return None
     bound = dict(binding)
-    if view is not None and structured_output_bound(features):
+    if view is not None:
         bound[STRUCTURED_OUTPUT_BINDING_KEY] = dict(view)
     return bound
 
 
-def bound_structured_output_view(binding: object, features: Iterable[str]) -> dict[str, object] | None:
+def bound_structured_output_view(binding: object) -> dict[str, object] | None:
     """The view an ACKed binding carries, for the reconcile recheck."""
 
-    if not isinstance(binding, Mapping) or not structured_output_bound(features):
+    if not isinstance(binding, Mapping):
         return None
     view = binding.get(STRUCTURED_OUTPUT_BINDING_KEY)
     return dict(view) if isinstance(view, Mapping) else None

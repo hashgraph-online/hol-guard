@@ -19,10 +19,10 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_containment_route as route_module
 from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from tests import containment_resident as probe
+from tests import containment_rewrite_client as route_module
 
 OUTSIDE = "native_workspace_containment_executable_outside_roots"
 _SHELL_CALL = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "pytest -q"}}

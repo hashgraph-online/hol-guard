@@ -12,7 +12,6 @@ from typing_extensions import override
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_mcp_relay import (
     MCP_RELAY_BINDING_KEY,
-    MCP_RELAY_DECIDE_FEATURE,
     MCP_RELAY_VIEW_SCHEMA,
     REDACTION_LEVEL_KEY,
     NativePolicySnapshotMcpRelayMixin,
@@ -36,7 +35,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
 )
 
-FEATURES = (MCP_RELAY_DECIDE_FEATURE,)
 DIGEST = "a" * 64
 LAYERS: list[object] = [{"kind": "local-admin", "global_lockdown": False, "controls": []}]
 
@@ -194,35 +192,34 @@ class _Publisher(NativePolicySnapshotMcpRelayMixin):
 def test_the_binding_carries_the_view_only_for_a_resident_that_accepts_it(tmp_path: Path) -> None:
     publisher = _Publisher(tmp_path)
 
-    bound = publisher._with_mcp_relay_view({"generation": 1}, FEATURES)
+    bound = publisher._with_mcp_relay_view({"generation": 1})
     assert bound is not None
     view = bound[MCP_RELAY_BINDING_KEY]
     assert isinstance(view, dict) and set(view["harnesses"]) == {"codex", "copilot", "cursor", "hermes", "opencode"}
-    assert publisher._with_mcp_relay_view({"generation": 1}, ()) == {"generation": 1}
-    assert publisher._with_mcp_relay_view(None, FEATURES) is None
+    assert publisher._with_mcp_relay_view(None) is None
     harnesses = publisher._compiled_mcp_relay_harnesses
     publisher._compiled_mcp_relay_harnesses = {}
-    assert publisher._with_mcp_relay_view({"generation": 1}, FEATURES) == {"generation": 1}
+    assert publisher._with_mcp_relay_view({"generation": 1}) == {"generation": 1}
     publisher._compiled_mcp_relay_harnesses = harnesses
 
     assert view["extension_layers"] == []
     publisher._command_control_runtime = None
-    unlayered = publisher._with_mcp_relay_view({"generation": 1}, FEATURES)
+    unlayered = publisher._with_mcp_relay_view({"generation": 1})
     assert unlayered is not None
     unlayered_view = unlayered[MCP_RELAY_BINDING_KEY]
     assert isinstance(unlayered_view, dict) and "extension_layers" not in unlayered_view
     publisher._command_control_runtime = _runtime()
 
-    publisher._bind_mcp_relay_view(bound, FEATURES)
+    publisher._bind_mcp_relay_view(bound)
     assert publisher._direct_lane_mcp_relay == view
-    publisher._bind_mcp_relay_view(bound, ())
+    publisher._bind_mcp_relay_view({"generation": 1})
     assert publisher._direct_lane_mcp_relay is None
 
 
 @pytest.mark.parametrize("compiled", [None, {}])
 def test_a_moved_view_rebinds_the_lane(tmp_path: Path, compiled: dict[str, object] | None) -> None:
     publisher = _Publisher(tmp_path)
-    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}, FEATURES), FEATURES)
+    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}))
     publisher._recheck_direct_lane_mcp_relay()
     assert publisher.rebound == 0
 
@@ -236,7 +233,7 @@ def test_an_unbound_or_closed_lane_is_not_rechecked(tmp_path: Path) -> None:
     publisher = _Publisher(tmp_path)
     publisher._compiled_mcp_relay_harnesses = None
     publisher._recheck_direct_lane_mcp_relay()
-    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}, FEATURES), FEATURES)
+    publisher._bind_mcp_relay_view(publisher._with_mcp_relay_view({}))
     publisher._direct_lane_ack_target = None
     publisher._recheck_direct_lane_mcp_relay()
     assert publisher.rebound == 0

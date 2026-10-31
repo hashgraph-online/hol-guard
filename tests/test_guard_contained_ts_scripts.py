@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import (
     RestrictedPytestError,
     RestrictedPytestPlan,
 )
+from tests.restricted_native_clients import is_inline_eval
 
 pytestmark = [
     pytest.mark.usefixtures("native_context_digest"),
@@ -68,7 +69,7 @@ def _workspace(tmp_path: Path) -> Path:
     ],
 )
 def test_test_named_node_scripts_share_the_inline_profile(argv):
-    assert inline.is_inline_eval(argv)
+    assert is_inline_eval(argv)
 
 
 @pytest.mark.parametrize(
@@ -84,7 +85,7 @@ def test_test_named_node_scripts_share_the_inline_profile(argv):
     ],
 )
 def test_other_node_scripts_do_not_inherit_the_inline_profile(argv):
-    assert not inline.is_inline_eval(argv)
+    assert not is_inline_eval(argv)
 
 
 def test_node_test_script_plan_keeps_its_flags(tmp_path, monkeypatch):

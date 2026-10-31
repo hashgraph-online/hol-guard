@@ -55,6 +55,7 @@ _NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 # `containment_rewrite` answers the edge gives once it rewrote a sink route.
 _EDGE_CONTAINMENT_REWRITES = frozenset({"routed", "kept"})
 _EDGE_REWRITE_INVALID = "native_containment_rewrite_invalid"
+_EDGE_REWRITE_UNAVAILABLE = "native_containment_rewrite_unavailable"
 
 
 class _HookWorkerMetrics(Protocol):
@@ -101,6 +102,8 @@ def _record_native_pre_activity(
     payload: Mapping[str, object],
     response: dict[str, object],
     receipt: Mapping[str, object] | None = None,
+    *,
+    recorded: bool = False,
 ) -> dict[str, object]:
     from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
 
@@ -110,7 +113,8 @@ def _record_native_pre_activity(
     if observation is not None:
         response = {**response, OBSERVATION_FIELD: observation}
     submit = getattr(host.activity_writer, "submit_command_activity", None)
-    if callable(submit):
+    # An edge that queued this activity behind its receipt says so.
+    if callable(submit) and not recorded:
         receipt_id = receipt.get("decision_id") if receipt is not None else None
         # The hook has its verdict; the activity row records it. The writer
         # lives in the resident, so submitting here would spend a round trip
@@ -407,12 +411,20 @@ class HookWorkerNativeMixin:
             # The edge already carries Guard's Claude Code notice outside Watch.
             return (_edge_harness_response(edge), True)
         if native_event == "PreToolUse":
+            # The edge queues the activity only for an answer returned as it
+            # rendered it: recorded only, a custom block, or the final one.
+            recorded = edge.get("activity_recorded") is True
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
                     return (
                         _record_native_pre_activity(
-                            self, native_harness, payload, _edge_harness_response(edge), accepted_receipt
+                            self,
+                            native_harness,
+                            payload,
+                            _edge_harness_response(edge),
+                            accepted_receipt,
+                            recorded=recorded,
                         ),
                         True,
                     )
@@ -450,6 +462,7 @@ class HookWorkerNativeMixin:
                         payload,
                         dict(cast("Mapping[str, object]", custom_block["harness_response"])),
                         accepted_receipt,
+                        recorded=recorded,
                     ),
                     True,
                 )
@@ -469,29 +482,18 @@ class HookWorkerNativeMixin:
                         _record_native_pre_activity(self, native_harness, payload, command_block, accepted_receipt),
                         True,
                     )
-            from ..adapters.zcode_contained_tests import route_zcode_containment
-
             rendered = _edge_harness_response(edge)
-            # The edge rewrote the sink route itself when it says so; an edge
-            # that did not is asked, and no answer is the outage response. Its
-            # routed allow is held to the shape the resident's answer is.
+            # The edge rewrites a sink route in a workspace itself and says so;
+            # an edge that could not is the outage response. Its routed allow
+            # is held to the shape the sink's rewrite gives. Without a
+            # workspace there is no snapshot to write, so the receipt stands.
             rewrite = edge.get("containment_rewrite") if containment == "sink" else None
             if rewrite == "routed" and not edge_routed_shape(rendered, payload):
                 error = NativeHookDecisionError(_EDGE_REWRITE_INVALID)
                 return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
-            if containment == "sink" and rewrite not in _EDGE_CONTAINMENT_REWRITES:
-                try:
-                    rendered = route_zcode_containment(
-                        rendered,
-                        harness=native_harness,
-                        payload=payload,
-                        guard_home=guard_home,
-                        home_dir=home_dir,
-                        workspace=workspace,
-                        deadline=deadline,
-                    )
-                except NativeHookDecisionError as error:
-                    return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
+            if containment == "sink" and workspace is not None and rewrite not in _EDGE_CONTAINMENT_REWRITES:
+                error = NativeHookDecisionError(_EDGE_REWRITE_UNAVAILABLE)
+                return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             return (
                 _record_native_pre_activity(
                     self,
@@ -499,14 +501,16 @@ class HookWorkerNativeMixin:
                     payload,
                     rendered,
                     accepted_receipt,
+                    recorded=recorded,
                 ),
                 True,
             )
-        self._record_post_tool_activity(
-            harness=native_harness,
-            payload=payload,
-            succeeded=hook_post_succeeded(native_event, payload),
-        )
+        if edge.get("activity_recorded") is not True:
+            self._record_post_tool_activity(
+                harness=native_harness,
+                payload=payload,
+                succeeded=hook_post_succeeded(native_event, payload),
+            )
         response = _edge_harness_response(edge)
         if structured_view is not None:
             edge_result = edge.get("result")
