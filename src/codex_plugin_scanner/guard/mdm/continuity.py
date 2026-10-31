@@ -23,7 +23,7 @@ from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 from .contracts import MachinePaths, default_machine_paths
 from .device_key import require_machine_device_context, verified_machine_device_key_ids
@@ -167,7 +167,10 @@ def _native_answer(request: dict[str, object]) -> dict[str, Any]:
         raise OSError("installation_identity_native_unavailable")
     fields = cast(dict[str, Any], answer)
     if isinstance(fields.get("record"), dict):
-        fields["record"] = InstallationContinuityRecord(**cast(dict[str, Any], fields["record"]))
+        try:
+            fields["record"] = InstallationContinuityRecord(**cast(dict[str, Any], fields["record"]))
+        except TypeError as exc:
+            raise OSError("installation_identity_native_unavailable") from exc
     return fields
 
 
@@ -175,7 +178,10 @@ def _parse_record(payload: bytes) -> InstallationContinuityRecord:
     answer = _native_answer({"op": "parse", "content": base64.b64encode(payload).decode("ascii")})
     if answer["ok"] is not True:
         raise ValueError("installation_identity_invalid")
-    return cast(InstallationContinuityRecord, answer["record"])
+    record = answer.get("record")
+    if not isinstance(record, InstallationContinuityRecord):
+        raise OSError("installation_identity_native_unavailable")
+    return record
 
 
 def _read_record(paths: MachinePaths) -> InstallationContinuityRecord | None:
@@ -333,6 +339,14 @@ def verify_installation_continuity(
         return ContinuityVerification("tampered", "installation_identity_acl_invalid", "lease_continuity_invalid")
     except OSError:
         return probe_failed
+    encoded = base64.b64encode(content).decode("ascii")
+    try:
+        # A record the runtime cannot read never costs a key or boot probe.
+        parsed = _native_answer({"op": "parse", "content": encoded})
+    except OSError:
+        return probe_failed
+    if parsed["ok"] is not True:
+        return ContinuityVerification("tampered", "installation_identity_invalid", "lease_continuity_invalid")
     observations: list[BootObservation] = []
 
     def boot() -> dict[str, object]:
@@ -341,20 +355,28 @@ def verify_installation_continuity(
 
     request: dict[str, object] = {
         "op": "verify",
-        "content": base64.b64encode(content).decode("ascii"),
+        "content": encoded,
         "key": _probe(lambda: {"ids": sorted(verified_machine_device_key_ids(paths, system_name=resolved)[1])}),
         "boot": _probe(boot),
     }
     try:
         answer = _native_answer(request)
-    except OSError:
+        state = answer["state"]
+        identity_reason = answer["identity_reason_code"]
+        lease_reason = answer["lease_reason_code"]
+        record = answer.get("record")
+        observed = answer["observed"] is True and bool(observations)
+    except (OSError, KeyError):
+        return probe_failed
+    if not (
+        state in get_args(ContinuityState)
+        and isinstance(identity_reason, str)
+        and isinstance(lease_reason, str)
+        and (record is None or isinstance(record, InstallationContinuityRecord))
+    ):
         return probe_failed
     return ContinuityVerification(
-        answer["state"],
-        answer["identity_reason_code"],
-        answer["lease_reason_code"],
-        answer["record"],
-        observations[0] if answer["observed"] is True else None,
+        cast(ContinuityState, state), identity_reason, lease_reason, record, observations[0] if observed else None
     )
 
 
