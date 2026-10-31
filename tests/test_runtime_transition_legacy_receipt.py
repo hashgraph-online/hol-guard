@@ -11,10 +11,10 @@ from codex_plugin_scanner.guard import runtime_transition_legacy_receipt as look
 from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     derive_proven_request_correlation,
-    load_or_create_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.command_activity_correlation_key_support import write_correlation_key
 from tests.test_native_decision_receipt import _receipt
 
 
@@ -47,7 +47,7 @@ def legacy(native_hook_force, tmp_path):
     # The resident creates the installation key on its first write; this
     # fixture derives a correlation before any write, so it creates the same
     # file the resident would.
-    key = load_or_create_installation_correlation_key(store.guard_home)
+    key = write_correlation_key(store.guard_home)
     handle = derive_proven_request_correlation(harness="codex", event="PreToolUse", payload=payload, key=key)
     assert handle is not None
     try:

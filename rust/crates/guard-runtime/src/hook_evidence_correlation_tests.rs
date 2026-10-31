@@ -308,3 +308,46 @@ fn a_sixteen_character_identifier_still_carries_a_correlation() {
         assert_eq!(outcome.is_ok(), derived, "{value}");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn an_existing_key_left_readable_is_made_private_again() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = guard_home();
+    let created = load_or_create_correlation_key(&home).expect("created");
+    let path = home.join(CORRELATION_KEY_FILE);
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).expect("chmod");
+    let reloaded = load_or_create_correlation_key(&home).expect("reloaded");
+    assert_eq!(created.key_id, reloaded.key_id);
+    assert_eq!(
+        fs::metadata(&path).expect("stat").permissions().mode() & 0o777,
+        0o600
+    );
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn writers_racing_to_create_the_key_all_read_one_key() {
+    let home = guard_home();
+    let keys: Vec<InstallationCorrelationKey> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..12)
+            .map(|_| scope.spawn(|| load_or_create_correlation_key(&home).expect("key")))
+            .collect();
+        workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker"))
+            .collect()
+    });
+    let first = &keys[0];
+    for key in &keys {
+        assert_eq!(key.key_id, first.key_id);
+        assert_eq!(key.material(), first.material());
+    }
+    let leftovers: Vec<_> = fs::read_dir(&home)
+        .expect("listing")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name() != CORRELATION_KEY_FILE)
+        .collect();
+    assert!(leftovers.is_empty());
+    let _ = fs::remove_dir_all(&home);
+}
