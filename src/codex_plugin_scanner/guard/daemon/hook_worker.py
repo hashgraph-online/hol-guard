@@ -32,9 +32,6 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast, final
 
-from ..cli.commands_support_command_activity import (
-    record_post_hook_command_activity_best_effort,
-)
 from ..config import load_guard_config
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
@@ -422,38 +419,32 @@ class HookWorker(HookWorkerNativeMixin):
         payload: Mapping[str, object],
         succeeded: bool,
     ) -> None:
-        if self.activity_writer is not None:
-            writer = self.activity_writer
-            discovery_writer = getattr(writer, "submit_composio_discovery", None)
-
-            # Recording what a hook decided must not change what it decided.
-            # The writer reaches the resident now, so these calls can fail
-            # where the in-process writer could not, and each costs a round
-            # trip the response the caller is waiting on should not pay for.
-            # Both go to the dispatch as one unit so the discovery is still
-            # submitted before the activity.
-            def record() -> None:
-                if callable(discovery_writer):
-                    with suppress(Exception):
-                        discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
-                with suppress(Exception):
-                    _ = writer.submit_command_activity(
-                        harness=harness,
-                        event="PostToolUse",
-                        payload=payload,
-                        succeeded=succeeded,
-                    )
-
-            run_hook_evidence(self, record)
+        # A worker built without the resident writer (a qualification probe,
+        # a bound Bash sink) never answers a post-tool call it should record.
+        writer = self.activity_writer
+        if writer is None:
             return
-        _ = record_post_hook_command_activity_best_effort(
-            store=self.store,
-            guard_home=self.guard_home,
-            harness=harness,
-            event="PostToolUse",
-            payload=payload,
-            succeeded=succeeded,
-        )
+        discovery_writer = getattr(writer, "submit_composio_discovery", None)
+
+        # Recording what a hook decided must not change what it decided.
+        # The writer reaches the resident now, so these calls can fail
+        # where the in-process writer could not, and each costs a round
+        # trip the response the caller is waiting on should not pay for.
+        # Both go to the dispatch as one unit so the discovery is still
+        # submitted before the activity.
+        def record() -> None:
+            if callable(discovery_writer):
+                with suppress(Exception):
+                    discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
+            with suppress(Exception):
+                _ = writer.submit_command_activity(
+                    harness=harness,
+                    event="PostToolUse",
+                    payload=payload,
+                    succeeded=succeeded,
+                )
+
+        run_hook_evidence(self, record)
 
     def _runtime_harness(self, params: Mapping[str, list[str]]) -> str | None:
         values = params.get("runtime-harness", [])
