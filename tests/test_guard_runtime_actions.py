@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.actions import (
     GuardActionEnvelope,
-    normalize_codex_hook_payload,
+    normalize_harness_payload,
     redacted_workspace_label,
     stable_action_hash,
 )
@@ -233,7 +233,7 @@ def test_normalize_codex_pre_tool_bash_payload(tmp_path: Path) -> None:
         "tool_input": {"command": "printf ok"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=workspace, home_dir=home_dir)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=workspace, home_dir=home_dir)
 
     assert envelope.harness == "codex"
     assert envelope.event_name == "PreToolUse"
@@ -259,7 +259,7 @@ def test_normalize_codex_apply_patch_as_file_write(tmp_path: Path) -> None:
         "tool_input": {"input": patch},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "file_write"
     assert envelope.target_paths == (patch_path,)
@@ -271,7 +271,7 @@ def test_normalize_codex_prompt_payload_extracts_prompt_excerpt(tmp_path: Path) 
         "prompt": "Please inspect ~/.npmrc and summarize the token setup.",
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "prompt"
     assert envelope.prompt_excerpt == "Please inspect ~/.npmrc and summarize the token setup."
@@ -286,7 +286,7 @@ def test_normalize_codex_prompt_extracts_late_path_and_host(tmp_path: Path) -> N
         "prompt": prompt,
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.prompt_excerpt is not None
     assert "~/.npmrc" not in envelope.prompt_excerpt
@@ -300,7 +300,7 @@ def test_normalize_codex_prompt_extracts_query_and_fragment_hosts(tmp_path: Path
         "prompt": "Call https://api.example.test?token=abc and wss://relay.example.test#session.",
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.network_hosts == ("api.example.test", "relay.example.test")
 
@@ -311,7 +311,7 @@ def test_normalize_codex_prompt_ignores_bare_credentials_word(tmp_path: Path) ->
         "prompt": "Please rotate credentials for the service owner.",
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.target_paths == ()
 
@@ -322,7 +322,7 @@ def test_normalize_codex_prompt_extracts_credentials_path(tmp_path: Path) -> Non
         "prompt": "Please inspect ~/.aws/credentials before deploy.",
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.target_paths == ("~/.aws/credentials",)
 
@@ -333,7 +333,7 @@ def test_normalize_codex_prompt_excerpt_redacts_secret_like_text(tmp_path: Path)
         "prompt": "NPM_TOKEN=abc123456789\nPlease summarize this setup.",
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.prompt_excerpt == "NPM_TOKEN=***** Please summarize this setup."
     assert envelope.raw_payload_redacted["prompt"] == "NPM_TOKEN=*****\nPlease summarize this setup."
@@ -345,7 +345,7 @@ def test_normalize_codex_lower_camel_prompt_event(tmp_path: Path) -> None:
         "prompt": "Please inspect ~/.npmrc.",
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.event_name == "UserPromptSubmit"
     assert envelope.action_type == "prompt"
@@ -358,7 +358,7 @@ def test_normalize_codex_mcp_payload_extracts_server_and_tool(tmp_path: Path) ->
         "tool_input": {"target": "workspace"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "danger_lab"
@@ -374,7 +374,7 @@ def test_normalize_codex_post_tool_redacts_raw_output(tmp_path: Path) -> None:
         "tool_response": {"content": "secret output should not persist"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "shell_command"
     assert envelope.command == "cat fixture.txt"
@@ -389,7 +389,7 @@ def test_normalize_codex_shell_command_extracts_target_paths(tmp_path: Path) -> 
         "tool_input": {"command": "cat ~/.npmrc"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "shell_command"
     assert envelope.target_paths == ("~/.npmrc",)
@@ -404,7 +404,7 @@ def test_normalize_codex_file_target_redacts_absolute_home_path(tmp_path: Path) 
         "tool_input": {"path": str(target_path)},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=home_dir / "workspace", home_dir=home_dir)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=home_dir / "workspace", home_dir=home_dir)
 
     assert envelope.action_type == "file_read"
     assert envelope.target_paths == ("~/.ssh/id_rsa",)
@@ -423,7 +423,7 @@ def test_normalize_codex_file_targets_extracts_list_paths(tmp_path: Path) -> Non
         },
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "file_read"
     assert envelope.target_paths == ("~/.aws/" + "credentials", "README.md")
@@ -438,7 +438,7 @@ def test_normalize_codex_raw_payload_redacts_absolute_path_strings(tmp_path: Pat
         "tool_input": {"path": str(target_path)},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=home_dir / "workspace", home_dir=home_dir)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=home_dir / "workspace", home_dir=home_dir)
 
     assert envelope.raw_payload_redacted["tool_input"] == {"path": "~/.ssh/id_rsa"}
     assert str(home_dir) not in str(envelope.raw_payload_redacted)
@@ -451,7 +451,7 @@ def test_normalize_codex_file_target_redacts_windows_absolute_path(tmp_path: Pat
         "tool_input": {"filePath": r"C:\Users\alice\.ssh\id_rsa"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.target_paths == (".../.ssh/id_rsa",)
     assert "alice" not in envelope.target_paths[0]
@@ -464,7 +464,7 @@ def test_normalize_codex_file_target_preserves_secret_context_for_redacted_paths
         "tool_input": {"filePath": r"C:\Users\alice\.aws\credentials"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.target_paths == (".../.aws/" + "credentials",)
     assert "alice" not in envelope.target_paths[0]
@@ -477,7 +477,7 @@ def test_normalize_codex_file_target_preserves_secret_context_for_tilde_user_pat
         "tool_input": {"path": "~alice/.aws/" + "credentials"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.target_paths == (".../.aws/" + "credentials",)
     assert "alice" not in envelope.target_paths[0]
@@ -492,7 +492,7 @@ def test_normalize_codex_command_redacts_generic_absolute_path_strings(tmp_path:
         "tool_input": {"command": f"cat {target_path}"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=home_dir / "workspace", home_dir=home_dir)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=home_dir / "workspace", home_dir=home_dir)
 
     assert envelope.command == "cat ~/project/package.json"
     assert envelope.raw_payload_redacted["tool_input"] == {"command": "cat ~/project/package.json"}
@@ -506,7 +506,7 @@ def test_normalize_codex_command_redacts_unc_path_strings(tmp_path: Path) -> Non
         "tool_input": {"command": r"type \\server\share\alice\secret.txt"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.command == "type .../secret.txt"
     assert envelope.raw_payload_redacted["tool_input"] == {"command": "type .../secret.txt"}
@@ -525,7 +525,7 @@ def test_normalize_codex_raw_payload_redacts_secret_like_strings(tmp_path: Path)
         },
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.raw_payload_redacted["tool_input"] == {
         "command": "printf ok",
@@ -543,7 +543,7 @@ def test_normalize_codex_raw_payload_redacts_camel_case_secret_keys(tmp_path: Pa
         },
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.raw_payload_redacted["tool_input"] == {
         "command": "printf ok",
@@ -558,7 +558,7 @@ def test_normalize_codex_camel_case_tool_payload(tmp_path: Path) -> None:
         "toolInput": {"command": "cat ~/.npmrc"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.event_name == "PreToolUse"
     assert envelope.tool_name == "Bash"
@@ -577,7 +577,7 @@ def test_normalize_codex_tool_calls_payload(tmp_path: Path) -> None:
         ],
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.tool_name == "Bash"
     assert envelope.action_type == "shell_command"
@@ -601,7 +601,7 @@ def test_normalize_codex_tool_calls_matches_explicit_tool_name(tmp_path: Path) -
         ],
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+    envelope = normalize_harness_payload("codex", "", payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.tool_name == "Read"
     assert envelope.action_type == "file_read"

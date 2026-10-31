@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.adapters.grok_hooks import (
     grok_hook_process_exit,
     grok_hook_response_from_guard,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_grok_hook_payload
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 from .grok_test_support import _ctx, _fixture
 
@@ -126,7 +126,9 @@ class TestGrokInstallUninstall:
 
 class TestGrokHookPayload:
     def test_normalize_grok_hook_payload_builds_shell_envelope(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_bash.json"),
             workspace=tmp_path / "workspace",
             home_dir=tmp_path,
@@ -284,7 +286,9 @@ class TestGrokFixturesAreRedacted:
 
 class TestGrokHookPayloadFixtures:
     def test_webfetch_envelope_keeps_web_tool_name(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_webfetch.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -295,7 +299,9 @@ class TestGrokHookPayloadFixtures:
 
 class TestGrokActionEnvelopes:
     def test_read_secret_maps_to_file_read(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_read_secret.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -304,7 +310,9 @@ class TestGrokActionEnvelopes:
         assert ".env" in envelope.target_paths[0]
 
     def test_safe_grep_maps_to_file_read(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_grep_safe.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -314,7 +322,9 @@ class TestGrokActionEnvelopes:
         assert envelope.command.startswith("grep ")
 
     def test_session_id_is_preserved(self, tmp_path: Path) -> None:
-        envelope = normalize_grok_hook_payload(
+        envelope = normalize_harness_payload(
+            "grok",
+            "",
             _fixture("pretooluse_bash.json"),
             workspace=tmp_path / "ws",
             home_dir=tmp_path,
@@ -326,5 +336,5 @@ class TestGrokActionEnvelopes:
         workspace.mkdir()
         fixture = dict(_fixture("pretooluse_bash.json"))
         fixture["workspaceRoot"] = str(workspace)
-        envelope = normalize_grok_hook_payload(fixture, workspace=workspace, home_dir=tmp_path)
+        envelope = normalize_harness_payload("grok", "", fixture, workspace=workspace, home_dir=tmp_path)
         assert str(workspace) not in (envelope.workspace or "")
