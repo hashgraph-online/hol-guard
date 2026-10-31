@@ -22,6 +22,7 @@ from ..browser_opener import open_browser_url
 from ..dpop_key_binding import signed_dpop_proof
 from ..mdm.network import managed_urlopen
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
+from ..native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
 from ..oauth_token_claims import oauth_device_id
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
@@ -214,16 +215,23 @@ def _sign_dpop_proof(
     nonce: str | None = None,
     access_token: str | None = None,
 ) -> str:
-    return signed_dpop_proof(
-        private_key_pem=dpop_key_material.private_key_pem,
-        algorithm=dpop_key_material.algorithm,
-        public_jwk=dpop_key_material.public_jwk,
-        request_url=token_endpoint,
-        method="POST",
-        issued_at=int(now.timestamp()),
-        access_token=access_token,
-        nonce=nonce,
-    )
+    # The native errors subclass ValueError, which connect reports as bad input;
+    # a signing failure is operational, so it leaves here as a RuntimeError.
+    try:
+        return signed_dpop_proof(
+            private_key_pem=dpop_key_material.private_key_pem,
+            algorithm=dpop_key_material.algorithm,
+            public_jwk=dpop_key_material.public_jwk,
+            request_url=token_endpoint,
+            method="POST",
+            issued_at=int(now.timestamp()),
+            access_token=access_token,
+            nonce=nonce,
+        )
+    except PolicyBundleNativeUnavailableError as exc:
+        raise RuntimeError("Guard could not sign the Guard Cloud request. Try again shortly.") from exc
+    except PolicyBundleNativeError as exc:
+        raise RuntimeError("Guard Cloud authorization key is invalid. Reconnect Guard Cloud.") from exc
 
 
 def _oauth_response_header_value(response: object, header_name: str) -> str | None:
