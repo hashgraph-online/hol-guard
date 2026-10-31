@@ -1185,6 +1185,23 @@
       "expect": "allow"
     },
     {
+      "id": "grep-include-glob-on-a-piped-filter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printf 'review\\n' | grep --include=\"*.md\" review"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-grep-include-glob-under-credential-store",
       "fix_area": "shell",
       "harnesses": [

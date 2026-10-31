@@ -303,3 +303,22 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A `grep` with no operand opens nothing an include could select: it reads
+/// the pipe it was handed. Proving a glob against the working directory there
+/// let a file the search never opens decide a filter's reading.
+#[test]
+fn an_include_without_an_operand_is_read_against_the_pipe() {
+    for command in [
+        "--include=*.md review",
+        "--include *.md review",
+        "-n --include=*.md review",
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert!(super::safe_stdin_arguments(&arguments), "{command}");
+        assert!(
+            super::safe_grep_arguments(&arguments, crate::pretool::PathContext::default()),
+            "{command}"
+        );
+    }
+}
