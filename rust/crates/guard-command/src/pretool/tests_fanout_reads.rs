@@ -199,3 +199,57 @@ fn whitespace_split_xargs_names_the_safe_form() {
     assert_eq!(decision.minimum_action, "review");
     assert!(decision.reason.contains("-print0 | xargs -0"));
 }
+
+#[test]
+fn read_only_fd_fanout_runs_silently() {
+    let fixture = fixture();
+    let ws = fixture.workspace.as_str();
+    for command in [
+        "fd -t f -e ts -x cat",
+        "fd --type f --extension ts --exec cat",
+        "fd -t f -e ts -X head -n 5",
+        "fd -t f -e ts -e tsx -x cat",
+        "fd -t f -x wc -l",
+        "fd -t f -e ts . src -x grep -n main",
+        "fd -t f -e ts . src test -X wc -l",
+        "fd -t f -e ts --max-depth 2 -x cat",
+        "fd -H -t f -e ts -x cat 2>&1",
+    ] {
+        assert_eq!(action(&fixture, ws, command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn unproven_fd_fanout_stays_reviewed() {
+    let fixture = fixture();
+    let ws = fixture.workspace.as_str();
+    for command in [
+        // Without a regular-file test fd lists symlinks, which the child follows.
+        "fd -e ts -x cat",
+        "fd -t l -e ts -x cat",
+        "fd -t f -t l -e ts -x cat",
+        // A content reader needs every extension to name a source file.
+        "fd -t f -x cat",
+        "fd -t f -e env -x cat",
+        "fd -t f -e ts -e pem -x cat",
+        // Children that write, execute or reach the network.
+        "fd -t f -e ts -x rm",
+        "fd -t f -e ts -x curl",
+        "fd -t f -e ts -x sh -c cat",
+        "fd -t f -e ts -x sed -i s/a/b/",
+        // A placeholder means the child is not the reader plus one operand.
+        "fd -t f -e ts -x cat {}",
+        // Roots outside the workspace, or reached through a link.
+        "fd -t f -e ts . .. -x cat",
+        "fd -t f -e ts . linked -x cat",
+        "fd -t f -e ts . /etc -x cat",
+        "fd -t f -e ts . ~/.ssh -x cat",
+        // Options that move the walk or that this reading does not model.
+        "fd -L -t f -e ts -x cat",
+        "fd --search-path src -t f -e ts -x cat",
+        "fd --base-directory .. -t f -e ts -x cat",
+        "fd -tf -e ts -x cat",
+    ] {
+        assert_ne!(action(&fixture, ws, command), "allow", "{command}");
+    }
+}

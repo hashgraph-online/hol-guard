@@ -42,12 +42,23 @@ const SOURCE_EXTENSIONS: [&str; 46] = [
 ];
 
 fn plain_extension_pattern(pattern: &str) -> bool {
-    pattern.strip_prefix("*.").is_some_and(|extension| {
-        SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-    })
+    pattern
+        .strip_prefix("*.")
+        .is_some_and(|extension| source_extension(extension))
+}
+
+fn source_extension(extension: &str) -> bool {
+    SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
 }
 
 fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
+    roots_contained(
+        &shape.roots.iter().map(String::as_str).collect::<Vec<_>>(),
+        context,
+    )
+}
+
+fn roots_contained(roots: &[&str], context: PathContext<'_>) -> bool {
     let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
         return false;
     };
@@ -69,7 +80,7 @@ fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
     // directory as the relative spelling. Where it resolves, links and `..`
     // included, is what decides, so an absolute root has to land inside the
     // workspace as well.
-    shape.roots.iter().all(|root| {
+    roots.iter().all(|root| {
         !root.starts_with(['\\', '~'])
             && bounded_read_target(root, Some(home), Some(cwd), true)
             && std::fs::canonicalize(std::path::Path::new(cwd).join(root))
@@ -172,6 +183,48 @@ pub(super) fn safe_find_exec(
             producer_allowed(&exec.shape, exec.child, context)
                 && child_proven(model, segment, exec.child, context)
         })
+}
+
+/// `fd ... -x CHILD` with a proven producer scope and child.
+///
+/// fd appends the file name to the child, so the command that runs is the
+/// child as written with one operand last -- the same proxy the `find -exec`
+/// proof judges. `--type f` carries the regular-file bound find spells
+/// `-type f`, and `--extension` carries the name bound find spells
+/// `-name '*.ext'`.
+pub(super) fn safe_fd_exec(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    plain(segment)
+        && words_as_written(segment)
+        && fanout::fd::fd_exec(&segment.arguments).is_some_and(|exec| {
+            fd_producer_allowed(&exec.shape, exec.child, context)
+                && child_proven(model, segment, exec.child, context)
+        })
+}
+
+/// Whether every `--extension` value names a source file.
+///
+/// fd reads several `--extension` values as a union, so one credential
+/// extension beside a source one widens the walk back to the files the
+/// content reader may not have.
+fn source_extensions_only(extensions: &[&str]) -> bool {
+    !extensions.is_empty()
+        && extensions
+            .iter()
+            .all(|extension| source_extension(extension))
+}
+
+fn fd_producer_allowed(
+    shape: &fanout::fd::FdShape<'_>,
+    child: &[String],
+    context: PathContext<'_>,
+) -> bool {
+    shape.regular_files_only
+        && (!fanout::child_reads_contents(child) || source_extensions_only(&shape.extensions))
+        && roots_contained(&shape.roots, context)
 }
 
 fn previous_find<'a>(

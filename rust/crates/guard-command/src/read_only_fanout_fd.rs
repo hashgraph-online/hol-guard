@@ -1,0 +1,178 @@
+//! Syntax of read-only `fd` fan-out: `fd [OPTIONS] [PATTERN] [PATH...] -x CHILD`.
+//!
+//! `fd -t f -e ts -x cat` is the same walk-and-read `find src -type f -name
+//! '*.ts' -exec cat {} +` performs, written in the tool agents reach for more
+//! often. The parser marked every `fd` exec mode uncertain, so the whole
+//! family -- counting lines, grepping a file set, listing what a search found
+//! -- stopped on a review card while its `find` spelling went through.
+//!
+//! This module reads the shape only. Admission still rests on
+//! [`crate::pretool`]'s fan-out proof: workspace-contained roots, regular
+//! files only, a source extension for a child that reads contents, and the
+//! child's own read-only proof with one file operand appended.
+//!
+//! The reading is deliberately narrow, because fd's options decide where the
+//! walk goes:
+//!
+//! - every option has to be one of the names below. An unknown option keeps
+//!   the uncertain model rather than being guessed at, which is what stops
+//!   `--search-path`, `--base-directory` and anything added to a later fd
+//!   from silently moving the root;
+//! - `--follow`/`-L` is absent, so a symlink is listed as a symlink and
+//!   `--type f` keeps it out of the result;
+//! - an option and its value are separate words or joined by `=`. A short
+//!   cluster such as `-tf` or `-Hx` is not read here;
+//! - the child carries no `{}`, `{/}` or other placeholder and no `;`
+//!   terminator, so fd appends the file name last and the command the proof
+//!   judges is the command that runs.
+
+use super::{child_listed, without_stderr_merge, MAX_ROOTS};
+
+/// Options that take a value and cannot move the walk outside the roots.
+///
+/// `--search-path`, `--base-directory` and `--ignore-file` are absent: the
+/// first two name another root, and the third reads a file the command never
+/// shows.
+const VALUE_OPTIONS: [&str; 20] = [
+    "-e",
+    "--extension",
+    "-t",
+    "--type",
+    "-d",
+    "--max-depth",
+    "--min-depth",
+    "--exact-depth",
+    "-E",
+    "--exclude",
+    "-S",
+    "--size",
+    "--changed-within",
+    "--changed-before",
+    "--changed-after",
+    "--max-results",
+    "-j",
+    "--threads",
+    "--color",
+    "--path-separator",
+];
+
+/// Options that take no value and only narrow or re-spell the result.
+///
+/// `--list-details`/`-l` is absent because it runs its own `ls`, and
+/// `--follow`/`-L` because it walks through symlinks.
+const FLAG_OPTIONS: [&str; 16] = [
+    "-H",
+    "--hidden",
+    "-I",
+    "--no-ignore",
+    "--no-ignore-vcs",
+    "--no-ignore-parent",
+    "-u",
+    "--unrestricted",
+    "-s",
+    "--case-sensitive",
+    "-i",
+    "--ignore-case",
+    "-g",
+    "--glob",
+    "--regex",
+    "-F",
+];
+
+/// The walk a proven `fd` exec runs, in the terms the fan-out proof reads.
+pub(crate) struct FdShape<'a> {
+    pub roots: Vec<&'a str>,
+    pub regular_files_only: bool,
+    pub extensions: Vec<&'a str>,
+}
+
+pub(crate) struct FdExec<'a> {
+    pub shape: FdShape<'a>,
+    pub child: &'a [String],
+}
+
+/// `fd ... -x CHILD` or `fd ... -X CHILD`, with a child from the read-only
+/// list and nothing between the walk and the command it runs.
+pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
+    let arguments = without_stderr_merge(arguments);
+    let mut positionals: Vec<&str> = Vec::new();
+    let mut types: Vec<&str> = Vec::new();
+    let mut extensions: Vec<&str> = Vec::new();
+    let mut index = 0;
+    let mut child: Option<&[String]> = None;
+    while let Some(word) = arguments.get(index).map(String::as_str) {
+        index += 1;
+        if word == "--" {
+            return None;
+        }
+        if matches!(word, "-x" | "-X" | "--exec" | "--exec-batch") {
+            child = Some(&arguments[index..]);
+            break;
+        }
+        if !word.starts_with('-') || word == "-" {
+            positionals.push(word);
+            continue;
+        }
+        let (name, inline) = match word.split_once('=') {
+            Some((name, value)) => (name, Some(value)),
+            None => (word, None),
+        };
+        if FLAG_OPTIONS.contains(&name) {
+            // `--glob=...` is not a spelling fd accepts for a flag.
+            if inline.is_some() {
+                return None;
+            }
+            continue;
+        }
+        if !VALUE_OPTIONS.contains(&name) {
+            return None;
+        }
+        let value = match inline {
+            Some(value) => value,
+            None => {
+                let value = arguments.get(index).map(String::as_str)?;
+                index += 1;
+                value
+            }
+        };
+        match name {
+            "-t" | "--type" => types.push(value),
+            "-e" | "--extension" => extensions.push(value),
+            _ => {}
+        }
+    }
+    let child = child?;
+    if child.is_empty()
+        || child
+            .iter()
+            .any(|word| word.contains(['{', '}']) || matches!(word.as_str(), ";" | r"\;" | "+"))
+        || !child_listed(child)
+    {
+        return None;
+    }
+    // fd reads the first positional as the pattern and the rest as roots; with
+    // none, or only a pattern, it walks the working directory.
+    let roots = match positionals.len() {
+        0 | 1 => vec!["."],
+        _ => positionals[1..].to_vec(),
+    };
+    if roots.len() > MAX_ROOTS {
+        return None;
+    }
+    // Several `--type` values are a union, so every one of them has to be the
+    // regular-file type for the result to hold regular files only.
+    let regular_files_only =
+        !types.is_empty() && types.iter().all(|value| matches!(*value, "f" | "file"));
+    Some(FdExec {
+        shape: FdShape {
+            roots,
+            regular_files_only,
+            extensions,
+        },
+        child,
+    })
+}
+
+#[cfg(test)]
+#[path = "read_only_fanout_fd_tests.rs"]
+mod tests;

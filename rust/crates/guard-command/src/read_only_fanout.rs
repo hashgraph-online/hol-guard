@@ -21,6 +21,9 @@
 use crate::parser_executables::executable_basename;
 use crate::CommandSegmentV1;
 
+#[path = "read_only_fanout_fd.rs"]
+pub(crate) mod fd;
+
 /// Placeholder operand the child proof stands in for the unknown file names.
 pub(crate) const PLACEHOLDER: &str = "guard-fanout-result";
 

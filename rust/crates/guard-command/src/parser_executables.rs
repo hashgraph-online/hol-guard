@@ -98,7 +98,8 @@ pub(super) fn is_nested_command_executor(executable: &str, arguments: &[String])
         return true;
     }
     if matches!(basename, "fd" | "fd.exe") {
-        return fd_arguments_execute_command(arguments);
+        return fd_arguments_execute_command(arguments)
+            && crate::read_only_fanout::fd::fd_exec(arguments).is_none();
     }
     basename == "find"
         && !is_contained_compile_check_arguments(arguments)
