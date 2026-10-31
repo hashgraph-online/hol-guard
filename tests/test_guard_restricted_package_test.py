@@ -9,10 +9,10 @@ from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_test as node
 from codex_plugin_scanner.guard.runtime.restricted_package_test import (
     KIND_NAMES,
-    is_package_test,
     resolve_package_test,
 )
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests.restricted_native_clients import is_package_test
 
 
 @pytest.mark.parametrize("manager", ["npm", "pnpm", "bun"])
@@ -136,7 +136,7 @@ def test_the_alias_answer_rides_on_the_reading_the_sink_already_asks_for(monkeyp
         return dict.fromkeys(KIND_NAMES, False) | {"package_test": alias}
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.restricted_package_test.restricted_native",
+        "tests.restricted_native_clients.restricted_native",
         native,
     )
     assert is_package_test(command) is alias
@@ -147,7 +147,7 @@ def test_an_answer_that_is_not_the_whole_reading_is_refused(monkeypatch):
     """A short reply cannot stand in for the kinds, so a missing key never reads as `False`."""
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.restricted_package_test.restricted_native",
+        "tests.restricted_native_clients.restricted_native",
         lambda *args, **kwargs: {"inline_eval": False, "node_test": False},
     )
     with pytest.raises(RestrictedPytestError, match="could not read"):

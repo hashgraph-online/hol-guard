@@ -14,10 +14,10 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.restricted_package_test import (
     PACKAGE_TEST_REASON,
-    is_package_test,
     resolve_package_test,
 )
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests.restricted_native_clients import is_package_test
 
 FIXTURE = Path(__file__).parent / "fixtures" / "package-script-routes.v1.json"
 CASES = json.loads(FIXTURE.read_text())["cases"]
