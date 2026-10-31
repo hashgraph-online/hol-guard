@@ -91,43 +91,48 @@ class StoreExactCloudLocalOnceMixin:
             raise evidence_error
         return dict(result)
 
-    def settle_claimed_native_allow(
+    def settle_claimed_native_review(
         self: _NativeStoreOwner,
         *,
         harness: str,
         artifact_id: str,
+        artifact_name: str,
+        launch_target: str,
         workspace: str | None,
         identity: str,
         claimed_saved_allow_hash: str,
         claimed_approval_request_id: str | None,
         claim_saved_approval: bool,
         now: str,
-    ) -> bool:
-        # The resident checks the claimed identity, peeks the exact local-once
-        # allow, spends it or falls back to the request's exact Cloud allow in
-        # one call. The key stays with the keyring here.
+    ) -> object:
+        # The resident runs the retry's Keep blocked check, checks the claimed
+        # identity, peeks the exact local-once allow and spends it or falls
+        # back to the request's exact Cloud allow, then spends an approve-once
+        # for a retry that claims, in one call. The key stays with the keyring
+        # here; without it the claimed allow reads as no authority.
         key, key_id = self._policy_integrity_secret_material(create=False)
-        if key is None or key_id is None:
-            return False
-        # The resident serves only once its verifier exists; a restart that
-        # lost it is restored from the keyring key, as the lookup does.
-        self._provision_resident_verifier(key)
-        args = {
+        args: dict[str, object] = {
             "harness": harness,
             "artifact_id": artifact_id,
+            "artifact_name": artifact_name,
+            "artifact_hash": identity,
+            "launch_target": launch_target,
             "workspace": workspace,
             "identity": identity,
             "claimed_saved_allow_hash": claimed_saved_allow_hash,
             "claimed_approval_request_id": claimed_approval_request_id,
             "claim_saved_approval": claim_saved_approval,
             "now": now,
-            "integrity_key_b64": encode_key(key),
-            "integrity_key_id": key_id,
         }
+        if key is not None and key_id is not None:
+            # The resident serves only once its verifier exists; a restart that
+            # lost it is restored from the keyring key, as the lookup does.
+            self._provision_resident_verifier(key)
+            args.update(integrity_key_b64=encode_key(key), integrity_key_id=key_id)
         # Never retried: a claim spends the approval, and even a live
         # completion's lookup records a refused row's integrity audit, so a
         # call whose reply was lost may already have landed.
-        return self._native_store_call("settle_claimed_native_allow", args) is True
+        return self._native_store_call("settle_claimed_native_review", args)
 
 
 def _live_authority_args(

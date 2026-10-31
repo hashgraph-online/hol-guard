@@ -59,65 +59,43 @@ def native_review_settle(
     workspace: Path | None,
     identity: str | None,
     spend: bool,
+    claimed_saved_allow_hash: str | None = None,
+    claimed_approval_request_id: str | None = None,
 ) -> str | None:
     """Settle a retry in one resident transaction.
 
     ``"blocked"`` when the user chose Keep blocked for it, ``"allowed"`` when
-    ``spend`` spent an approve-once, else ``None``.
+    ``spend`` spent an approve-once, else ``None``. A retry that names the
+    once-approval it was granted (``claimed_saved_allow_hash``) settles that
+    MAC'd allow between the two in the same call; the resident owns the
+    identity check, the exact peek, the spend and the exact Cloud fallback.
+    No answer means no allow.
     """
 
-    settle = getattr(store, "settle_native_review_reuse", None)
-    if not callable(settle) or identity is None or not launch_target:
+    claimed = claimed_saved_allow_hash is not None
+    method = "settle_claimed_native_review" if claimed else "settle_native_review_reuse"
+    settle = getattr(store, method, None)
+    if not callable(settle) or identity is None or not (launch_target or claimed):
         return None
-    try:
-        settled = settle(
-            harness=harness,
-            artifact_id=artifact_id,
-            artifact_name=tool_name,
-            artifact_hash=identity,
-            launch_target=launch_target,
-            workspace=str(workspace) if workspace is not None else None,
-            now=datetime.now(tz=timezone.utc).isoformat(),
-            spend=spend,
+    identity_args: dict[str, object] = {
+        "harness": harness,
+        "artifact_id": artifact_id,
+        "artifact_name": tool_name,
+        "launch_target": launch_target,
+        "workspace": str(workspace) if workspace is not None else None,
+        "now": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    if claimed:
+        identity_args.update(
+            identity=identity,
+            claimed_saved_allow_hash=claimed_saved_allow_hash,
+            claimed_approval_request_id=claimed_approval_request_id,
+            claim_saved_approval=spend,
         )
+    else:
+        identity_args.update(artifact_hash=identity, spend=spend)
+    try:
+        settled = settle(**identity_args)
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         return None
     return settled if settled in ("blocked", "allowed") else None
-
-
-def native_review_claimed_allow(
-    store: object,
-    *,
-    harness: str,
-    artifact_id: str,
-    workspace: Path | None,
-    identity: str | None,
-    claimed_saved_allow_hash: str,
-    claimed_approval_request_id: str | None,
-    claim_saved_approval: bool,
-) -> bool:
-    """Settle a MAC'd once-approval bound to this exact native request.
-
-    The resident owns the identity check, the exact peek, the spend and the
-    exact Cloud fallback; no answer means no allow.
-    """
-
-    settle = getattr(store, "settle_claimed_native_allow", None)
-    if identity is None or not callable(settle):
-        return False
-    try:
-        return (
-            settle(
-                harness=harness,
-                artifact_id=artifact_id,
-                workspace=str(workspace) if workspace is not None else None,
-                identity=identity,
-                claimed_saved_allow_hash=claimed_saved_allow_hash,
-                claimed_approval_request_id=claimed_approval_request_id,
-                claim_saved_approval=claim_saved_approval,
-                now=datetime.now(tz=timezone.utc).isoformat(),
-            )
-            is True
-        )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-        return False
