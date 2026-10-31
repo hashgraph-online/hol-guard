@@ -86,7 +86,7 @@ fn spends_wrapper_keywords<'a>(
 /// does, so they have to spend the same keywords: a gate that reads only the
 /// executable sees no `cd` in `builtin cd app && ls ..` and hands back the
 /// root's zero, which would leave the walk's reading of that move unused.
-fn segment_moves_the_shell(segment: &crate::CanonicalCommandSegmentV1) -> bool {
+fn segment_moves_the_shell(segment: &crate::CommandSegmentV1) -> bool {
     segment.executable.as_deref().is_some_and(|name| {
         spends_wrapper_keywords(name, segment.arguments.as_slice())
             .is_some_and(|(name, _)| moves_the_shell(Some(name)))
