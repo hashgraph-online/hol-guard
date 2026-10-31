@@ -407,3 +407,25 @@ fn a_secret_carried_only_by_an_encoding_is_replaced_rather_than_blocking() {
         sha256(source.as_bytes())
     );
 }
+
+#[test]
+fn a_secret_written_both_in_the_clear_and_encoded_has_both_copies_replaced() {
+    // Replacing a credential is per credential, but the payload holding one is
+    // its own occurrence: a file carrying the token in the clear and again in a
+    // dump reports it twice, and the plain finding comes first. Reading the
+    // encoded one as the same work already done leaves the dump on the page,
+    // where the second scan finds the token again and blocks the bundle over a
+    // file whose credential could have been taken out.
+    let dir = tempfile::tempdir().unwrap();
+    let token = github_token();
+    let dump = base64_lines(&format!("# restored from backup\nGH_TOKEN={token}\n"), 64);
+    let source = format!("GH_TOKEN={token}\n{dump}");
+    write(dir.path(), "env.sh", source.as_bytes());
+
+    let result = run(dir.path(), &["env.sh"]);
+
+    assert_eq!(result["status"], "ready", "{result}");
+    assert!(reasons(&result).is_empty(), "{result}");
+    // One credential, one redaction, both of the places it was written gone.
+    assert_eq!(result["redactions"].as_u64().unwrap(), 1, "{result}");
+}

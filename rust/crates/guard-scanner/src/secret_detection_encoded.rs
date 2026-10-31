@@ -198,7 +198,7 @@ fn walk_payloads(text: &str, read: &mut impl FnMut(&Payload<'_>) -> bool) {
             match block.extend(body, start) {
                 Taken::Held => continue,
                 Taken::Spilled => {
-                    if !spill(block, read) || !runs_in(body, start, read) {
+                    if !spill(block, false, read) || !runs_in(body, start, read) {
                         return;
                     }
                     continue;
@@ -228,10 +228,21 @@ fn walk_payloads(text: &str, read: &mut impl FnMut(&Payload<'_>) -> bool) {
 /// The lines it was holding are given up here, so that what a block that
 /// outgrew the bound carries stays bounded, and so that a block already read
 /// as a join cannot be read as one again.
-fn spill(block: &mut OpenBlock, read: &mut impl FnMut(&Payload<'_>) -> bool) -> bool {
+fn spill(
+    block: &mut OpenBlock,
+    read_whole: bool,
+    read: &mut impl FnMut(&Payload<'_>) -> bool,
+) -> bool {
     let held = std::mem::take(&mut block.lines);
     let joined = std::mem::replace(&mut block.joined, Zeroizing::new(String::new()));
     for (index, at) in held.iter().enumerate() {
+        // The first line stands at the join's own group boundaries, so the
+        // bytes it holds alone are a prefix of the bytes the join decodes to.
+        // Where the join was read, reading this line again reports the same
+        // credential twice and spends the decoding budget twice for it.
+        if read_whole && index == 0 {
+            continue;
+        }
         let from = index * block.column;
         let to = (from + block.column).min(joined.len());
         if from >= to {
@@ -252,11 +263,12 @@ fn spill(block: &mut OpenBlock, read: &mut impl FnMut(&Payload<'_>) -> bool) -> 
 /// base64 in neither, and a column that is not a whole number of base64 groups
 /// shifts every line after the first, so the join decodes to bytes none of the
 /// lines hold on their own. Either way the lines are read as runs, which is
-/// the reading they had before a block was recognised at all. A shifted join
-/// is read as well, because a dump wrapped at such a column is still a wrap:
-/// where both readings find the same credential they agree on its line and its
-/// decoded bytes, so the scan's dedup collapses them, and the spans they name
-/// for a redaction nest.
+/// the reading they had before a block was recognised at all. A join
+/// decoding to bytes that are not text is no reading either, since those bytes
+/// are dropped unread. A shifted join is read as well, because a dump wrapped
+/// at such a column is still a wrap; its first line is then left out of the
+/// per-line reading, because the join already read the bytes that line holds
+/// on its own.
 fn close(block: Option<OpenBlock>, read: &mut impl FnMut(&Payload<'_>) -> bool) -> bool {
     let Some(mut block) = block else {
         return true;
@@ -279,19 +291,23 @@ fn close(block: Option<OpenBlock>, read: &mut impl FnMut(&Payload<'_>) -> bool) 
             }),
         };
         match payload.decode() {
-            Some(_) => {
+            // Bytes that are not text are dropped unread, the way the scan
+            // drops them for any payload, so such a join is no reading of its
+            // lines: they are still read one at a time below, where a line
+            // that is text on its own is read as the text it is.
+            Some(bytes) if std::str::from_utf8(&bytes).is_ok() => {
                 if !read(&payload) {
                     return false;
                 }
                 true
             }
-            None => false,
+            _ => false,
         }
     };
     if joined && block.column % 4 == 0 {
         return true;
     }
-    spill(&mut block, read)
+    spill(&mut block, joined, read)
 }
 
 /// Read the runs standing inside one line. A run cannot cross a line break, so

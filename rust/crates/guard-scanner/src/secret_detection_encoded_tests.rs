@@ -317,3 +317,46 @@ fn equal_width_lines_at_a_shifted_column_are_read_one_at_a_time_as_well() {
     assert_eq!(findings[0].rule_id, "aws-access-key");
     assert_eq!(findings[0].line, 2);
 }
+
+#[test]
+fn a_wrap_joining_to_bytes_that_are_not_text_is_read_one_line_at_a_time() {
+    // Equal-width lines in one alphabet, so the join is valid base64 and
+    // decodes -- to bytes that are not text, because the first line holds
+    // something that was never text. Bytes like those are dropped unread, so
+    // the join is no reading of these lines, and the key written on the second
+    // one is only there to be found in that line.
+    let binary = Base64Unpadded::encode_string(&(0x80u8..0x98).collect::<Vec<u8>>());
+    let key = Base64Unpadded::encode_string(format!("{}\nx=1", aws_key()).as_bytes());
+    assert_eq!(binary.len(), key.len(), "the lines have to look wrapped");
+    assert_eq!(key.len() % 4, 0, "the column has to be a whole one");
+    let text = format!("{binary}\n{key}\n");
+
+    let findings = scan(&text, "backup/values.b64");
+    let findings = decoded(&findings);
+
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule_id, "aws-access-key");
+    assert_eq!(findings[0].line, 2);
+}
+
+#[test]
+fn a_shifted_join_does_not_read_its_first_line_twice() {
+    // The first line of a shifted wrap stands at the join's own group
+    // boundaries, so both readings hold the bytes it carries. Reported twice,
+    // the credential on it fills the caller's budget on its own and the next
+    // one in the file is never looked for -- the caller's dedup then returns a
+    // single finding, with nothing to say that something else was dropped.
+    let key = Base64Unpadded::encode_string(aws_key().as_bytes());
+    let region = Base64Unpadded::encode_string(b"AWS_DEFAULT_REGION=e");
+    assert_eq!(key.len(), region.len(), "the lines have to look wrapped");
+    assert_ne!(key.len() % 4, 0, "the column has to be a shifted one");
+    let token = Base64Unpadded::encode_string(github_token().as_bytes());
+    let text = format!("{key}\n{region}\n# and the portal account\n{token}\n");
+
+    let findings = scan_secret_text(&text, "backup/values.b64", "text", None, 2).findings;
+    let findings = decoded(&findings);
+
+    assert_eq!(findings.len(), 2, "{findings:?}");
+    assert_eq!(findings[0].rule_id, "aws-access-key");
+    assert_eq!(findings[1].rule_id, "github-token");
+}
