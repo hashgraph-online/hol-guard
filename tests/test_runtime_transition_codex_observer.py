@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.command_activity_correlation_key_support import write_correlation_key
+from tests.native_store_shims import count_command_shadow_observations
 from tests.test_native_decision_receipt import _receipt
 
 
@@ -322,7 +323,7 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(
     if fault in {"unrelated_nonce", "wrong_runtime", "changed_receipt", "stale_receipt"}:
         writer = NativeHookEvidenceWriter(store=store)
         # The deadline measures the observer, not one-time native store provisioning.
-        _ = store.count_command_shadow_observations()
+        _ = count_command_shadow_observations(store)
     launched = []
 
     def launch(argv, *, input_text, **kwargs):

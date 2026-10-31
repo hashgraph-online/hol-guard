@@ -37,6 +37,12 @@ from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeveri
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_maintenance import CommandActivityMaintenanceResult
 from tests.coverage_ci import under_coverage_scale
+from tests.native_store_shims import (
+    command_activity_rollups_are_reconciled,
+    rebuild_command_activity_rollups,
+    record_command_activity,
+    transition_command_activity,
+)
 
 _NOW = datetime(2026, 7, 18, 20, 0, tzinfo=timezone.utc)
 
@@ -166,10 +172,10 @@ def test_record_and_transition_update_exact_bounded_cells_once(tmp_path: Path) -
     first = _evidence("activity:1", matches=2)
     second = _evidence("activity:2", action=None)
     third = _evidence("activity:3", prompted=True)
-    assert store.record_command_activity(first) is True
-    assert store.record_command_activity(first) is False
-    assert store.record_command_activity(second) is True
-    assert store.record_command_activity(third) is True
+    assert record_command_activity(store, first) is True
+    assert record_command_activity(store, first) is False
+    assert record_command_activity(store, second) is True
+    assert record_command_activity(store, third) is True
 
     cells = _rollups(store)
     day = _NOW.date().isoformat()
@@ -201,8 +207,8 @@ def test_record_and_transition_update_exact_bounded_cells_once(tmp_path: Path) -
         proof_level=CommandProofLevel.POST_HOOK,
         persistence_latency_bucket=ActivityLatencyBucket.LE_5_MS,
     )
-    assert store.transition_command_activity(current) is True
-    assert store.transition_command_activity(current) is False
+    assert transition_command_activity(store, current) is True
+    assert transition_command_activity(store, current) is False
     transitioned = _rollups(store)
     assert transitioned[(day, "execution_status", "confirmed_success")] == 1
     assert transitioned[(day, "proof_level", "post_hook")] == 1
@@ -220,7 +226,7 @@ def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     template = _evidence("activity:1")
-    store.record_command_activity(template)
+    record_command_activity(store, template)
     with sqlite3.connect(store.path) as connection:
         row = list[object](connection.execute("select * from command_activity").fetchone() or ())
         connection.execute("delete from command_activity")
@@ -273,9 +279,9 @@ def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_
     assert cursor[2] == 0
     assert any("idx_command_activity_occurred_at" in str(row) for row in plan)
 
-    store.rebuild_command_activity_rollups(now=_NOW)
+    rebuild_command_activity_rollups(store, now=_NOW)
     assert store.count_command_activities() == 100_000
-    assert store.command_activity_rollups_are_reconciled() is True
+    assert command_activity_rollups_are_reconciled(store) is True
     analytics_query = CommandActivityAnalyticsQuery(days=90, top_limit=10)
     analytics_as_of = (_NOW - timedelta(days=400)).date()
     store.command_activity_analytics(analytics_query, as_of=analytics_as_of)
@@ -308,7 +314,7 @@ def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_
         ).fetchall()
     assert any("idx_command_activity_rollup_membership_day" in str(row) for row in plan)
 
-    store.rebuild_command_activity_rollups(now=_NOW)
+    rebuild_command_activity_rollups(store, now=_NOW)
     same_day = store.maintain_command_activity(now=_NOW, detail_retain_days=1_000, batch_size=1_000)
     assert same_day.aggregate_rows_deleted > 0
     values = list(row)
@@ -341,7 +347,7 @@ def test_compaction_is_bounded_preserves_history_and_delayed_replay_dedupes(tmp_
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     old = _NOW - timedelta(days=60)
     for index in range(5):
-        store.record_command_activity(_evidence(f"activity:{index + 1}", occurred_at=old))
+        record_command_activity(store, _evidence(f"activity:{index + 1}", occurred_at=old))
     old_day = old.date().isoformat()
 
     results: list[CommandActivityMaintenanceResult] = []
@@ -353,11 +359,11 @@ def test_compaction_is_bounded_preserves_history_and_delayed_replay_dedupes(tmp_
     assert _total(store, old_day) == 5
     assert results[-1].completed is True
     assert store.maintain_command_activity(now=_NOW, detail_retain_days=30, batch_size=2).ran is False
-    assert store.command_activity_rollups_are_reconciled() is False
+    assert command_activity_rollups_are_reconciled(store) is False
     with pytest.raises(RuntimeError, match="after detail compaction"):
-        store.rebuild_command_activity_rollups(now=_NOW)
+        rebuild_command_activity_rollups(store, now=_NOW)
 
-    assert store.record_command_activity(_evidence("activity:1", occurred_at=old)) is False
+    assert record_command_activity(store, _evidence("activity:1", occurred_at=old)) is False
     assert store.count_command_activities() == 0
     assert _total(store, old_day) == 5
 
@@ -389,7 +395,7 @@ def test_aggregate_and_membership_retention_is_thirteen_calendar_months_and_boun
 def test_maintenance_failure_rolls_back_all_mutations_and_state(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     old = _NOW - timedelta(days=60)
-    store.record_command_activity(_evidence("activity:1", occurred_at=old))
+    record_command_activity(store, _evidence("activity:1", occurred_at=old))
 
     with sqlite3.connect(store.path) as connection:
         connection.execute(

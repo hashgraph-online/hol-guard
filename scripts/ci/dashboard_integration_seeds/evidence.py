@@ -1,9 +1,9 @@
 """Seed data for the dashboard evidence integration specs.
 
 Receipts go through ``GuardStore.add_receipt`` (the write every harness hook
-ends in) and command activity through ``GuardStore.record_command_activity``
-(the write the command-protection runtime ends in), so the daemon reads them
-back the way it reads live evidence.
+ends in) and command activity through the resident's ``record_command_activity``
+store op (the write the command-protection runtime ends in), so the daemon
+reads them back the way it reads live evidence.
 
 Every receipt carries ``SOURCE_SCOPE`` and every command row uses a harness and
 rule the spec filters on, so the specs can ignore receipts and activity other
@@ -37,6 +37,7 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
 )
 from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind
 from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
+from codex_plugin_scanner.guard.store_command_activity_wire import evidence_wire
 
 from . import SeedContext
 
@@ -489,9 +490,14 @@ def _seed_commands(context: SeedContext) -> dict[str, Any]:
     for command in _COMMANDS:
         if _needs_receipt(command):
             context.store.add_receipt(_command_receipt(command, day))
-        context.store.record_command_activity(
-            _command_evidence(command, day),
-            invocation_preview=command.command,
+        _ = context.store._native_store_call(  # pyright: ignore[reportPrivateUsage]
+            "record_command_activity",
+            {
+                "evidence": evidence_wire(_command_evidence(command, day)),
+                "shadow": None,
+                "shadow_evaluation_succeeded": False,
+                "invocation_preview": command.command,
+            },
         )
     return {
         "total": len(_COMMANDS),

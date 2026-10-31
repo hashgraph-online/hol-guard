@@ -1927,6 +1927,17 @@
    "native_replacements": [
     "rust/crates/guard-command/src/hook_evidence_preview.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/store_command_shadow.py",
+   "module": "codex_plugin_scanner.guard.store_command_shadow",
+   "source_sha256": "88e5d1b550d1e941d0d211958b90eaa8fc179315c03fea1d5c21300840d83e82",
+   "forbidden_symbols": [
+    "StoreCommandShadowMixin"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_cmd_privacy.rs"
+   ]
   }
  ],
  "retired_test_paths": [
