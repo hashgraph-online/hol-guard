@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, suppress
 from hashlib import sha256
@@ -360,6 +361,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         raise pytest.UsageError(f"Protected test invariants are missing from collection: {details}")
 
 
+_DAEMON_HOME_MARKERS = frozenset({"daemon-state.json", "daemon-wake-reservation.json"})
+
+
 def _test_guard_homes_with_daemon_state(root: Path) -> set[Path]:
     guard_homes: set[Path] = set()
     pending = [root]
@@ -371,7 +375,7 @@ def _test_guard_homes_with_daemon_state(root: Path) -> set[Path]:
                     try:
                         if entry.is_dir(follow_symlinks=False):
                             pending.append(Path(entry.path))
-                        elif entry.is_file(follow_symlinks=False) and entry.name == "daemon-state.json":
+                        elif entry.is_file(follow_symlinks=False) and entry.name in _DAEMON_HOME_MARKERS:
                             guard_homes.add(Path(entry.path).parent)
                     except OSError:
                         continue
@@ -395,6 +399,7 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
     # The per-test native mode is already undone here; the lifecycle decisions
     # that identify the daemons to retire need the same compiled authority.
     guard_homes = sorted(_test_guard_homes_with_daemon_state(test_tmp_path))
+    _wait_for_detached_daemon_wakes(guard_homes)
     if guard_homes and "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
         os.environ["HOL_GUARD_NATIVE"] = "force"
         os.environ["HOL_GUARD_TEST_MODE"] = "1"
@@ -405,6 +410,28 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
             os.environ.pop("HOL_GUARD_TEST_MODE", None)
         return
     _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+
+
+# A hook that finds no live daemon reserves a detached `guard daemon ensure`
+# and returns at once. That launch can finish after the test does, so
+# retirement waits for the reservation to clear before looking for daemons.
+_DAEMON_WAKE_SETTLE_SECONDS = 15.0
+
+
+def _wait_for_detached_daemon_wakes(guard_homes: list[Path]) -> None:
+    deadline = time.monotonic() + _DAEMON_WAKE_SETTLE_SECONDS
+    waking = [guard_home for guard_home in guard_homes if _daemon_wake_reserved(guard_home)]
+    while waking and time.monotonic() < deadline:
+        time.sleep(0.1)
+        waking = [guard_home for guard_home in waking if _daemon_wake_reserved(guard_home)]
+
+
+def _daemon_wake_reserved(guard_home: Path) -> bool:
+    try:
+        reservation = json.loads((guard_home / "daemon-wake-reservation.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(reservation, dict) and bool(reservation.get("token"))
 
 
 def _retire_homes(guard_homes: list[Path], retire: Callable[[Path], object], unavailable: type[Exception]) -> None:
