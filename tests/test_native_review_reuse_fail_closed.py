@@ -214,40 +214,22 @@ def test_a_mismatched_verifier_leaves_the_block_check_and_the_spend(
     assert "integrity_key_b64" not in sent[0]
 
 
-@pytest.mark.parametrize(
-    ("answers", "expected", "methods"),
-    [
-        ({"block": "blocked"}, "blocked", ["settle_native_review_reuse"]),
-        ({"claimed": True}, "allowed", ["settle_native_review_reuse", "settle_claimed_native_allow"]),
-        (
-            {"spend": "allowed"},
-            "allowed",
-            ["settle_native_review_reuse", "settle_claimed_native_allow", "settle_native_review_reuse"],
-        ),
-    ],
-)
-def test_an_older_resident_settles_a_claimed_retry_one_step_at_a_time(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    answers: dict[str, object],
-    expected: str,
-    methods: list[str],
+def test_a_resident_without_the_combined_settle_is_not_asked_step_by_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda create=False: (b"k" * 32, "key-id"))
     monkeypatch.setattr(store, "_provision_resident_verifier", lambda _key=None: None)
     calls: list[str] = []
 
-    def older(method: str, args: dict[str, object]) -> object:
-        if method == "settle_claimed_native_review":
-            raise native_guard_store._unavailable("native_guard_store_method_unknown")
+    def unknown(method: str, _args: dict[str, object]) -> object:
         calls.append(method)
-        if method == "settle_claimed_native_allow":
-            return answers.get("claimed", False)
-        return answers.get("spend" if args["spend"] else "block")
+        raise native_guard_store.NativeGuardStoreUnavailable("native_guard_store_method_unknown")
 
-    monkeypatch.setattr(store, "_native_store_call", older)
+    monkeypatch.setattr(store, "_native_store_call", unknown)
 
+    # The settle is never split into separate spends: the unanswered call
+    # reads as no allow.
     settled = native_review_settle(
         store,
         harness="claude-code",
@@ -259,8 +241,8 @@ def test_an_older_resident_settles_a_claimed_retry_one_step_at_a_time(
         spend=True,
         claimed_saved_allow_hash=_IDENTITY,
     )
-    assert settled == expected
-    assert calls == methods
+    assert settled is None
+    assert calls == ["settle_claimed_native_review"]
 
 
 def _record_once(store: GuardStore, tmp_path: Path, *, request_id: str = "r1") -> None:
