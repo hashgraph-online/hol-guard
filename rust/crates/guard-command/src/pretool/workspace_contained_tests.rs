@@ -726,3 +726,46 @@ fn a_timeout_clock_keeps_the_command_it_wraps_in_the_sandbox() {
     }
     let _ = std::fs::remove_dir_all(&ws);
 }
+
+/// `truncate -s 0 log` empties a file the way `> log` does, and `truncate -s
+/// 1M blob` grows one the way a write does. Both are the sandbox's ordinary
+/// workspace write, so they reach it like the removal they stand next to,
+/// while a target outside the workspace is refused for the target.
+#[test]
+fn truncating_a_workspace_file_runs_in_the_workspace_sandbox() {
+    let ws = workspace("truncate", true);
+    std::fs::create_dir_all(ws.join("logs")).unwrap();
+    std::fs::write(ws.join("logs/app.log"), "old\n").unwrap();
+    for command in [
+        "truncate -s 0 logs/app.log",
+        "truncate -s0 logs/app.log",
+        "truncate --size 0 logs/app.log",
+        "truncate --size=0 logs/app.log",
+        "truncate -c -s 0 logs/app.log",
+        "truncate -s 1M data/blob.bin",
+        "truncate -r logs/app.log logs/copy.log",
+        "truncate -s 0 -- logs/app.log",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+    for command in [
+        "truncate -s 0 /etc/hosts",
+        "truncate -s 0 ../outside.txt",
+        "truncate -s 0 ~/.bashrc",
+        "truncate -s 0 $HOME/.bashrc",
+        "truncate -s 0 .git/config",
+        // An option neither spelling documents could mean anything.
+        "truncate -z 0 logs/app.log",
+        "truncate --follow logs/app.log",
+        // With no operand there is no target to hold to the workspace.
+        "truncate -s 0",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
+}
