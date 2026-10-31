@@ -96,9 +96,20 @@ pub(super) fn scan_members(
     // per repetition, all pointing at one member's data. The findings are
     // collapsed on the same key the tar walk uses.
     let mut read: HashSet<(String, usize, CandidateDigest)> = HashSet::new();
+    // A directory can name far more member bytes than the archive itself
+    // holds: each record costs a few dozen bytes, and several records may name
+    // one deflated run. Without a bound of its own, a few kilobytes of zip
+    // could charge the whole scan's remaining allowance and leave every file
+    // committed after it unread. The allowance a zip may spend is bounded the
+    // same way the gzip walk bounds its own inflation.
+    let total = data
+        .len()
+        .saturating_mul(super::MAX_EXPANSION_RATIO)
+        .max(super::RATIO_FLOOR_BYTES)
+        .min(caps.total);
     let mut cursor = 0usize;
     let mut seen = 0usize;
-    while seen < MAX_MEMBERS && findings.len() < finding_budget && scanned < caps.total {
+    while seen < MAX_MEMBERS && findings.len() < finding_budget && scanned < total {
         let Some(record) = CentralRecord::parse(directory, cursor) else {
             break;
         };
@@ -107,7 +118,7 @@ pub(super) fn scan_members(
         let Some(name) = record.name() else {
             continue;
         };
-        let room = (caps.total - scanned) as u64;
+        let room = (total - scanned) as u64;
         if !record.is_readable_member() || record.uncompressed > caps.member.min(room) {
             continue;
         }
@@ -142,8 +153,14 @@ pub(super) fn scan_members(
 /// requires: its own position depends on the length of a comment that follows
 /// it. A candidate is accepted only when its stated comment length reaches
 /// exactly the end of the file, so a `PK\x05\x06` that happens to occur inside
-/// a member's compressed data is not mistaken for the record.
+/// a member's compressed data is not mistaken for the record, and only when
+/// the directory it names is one, so a record forged inside the archive's own
+/// comment cannot stand in for the archive's account of itself.
 fn central_directory(data: &[u8]) -> Option<&[u8]> {
+    // An archive that holds anything begins with its first member's local
+    // header. One that does not is the end record alone, and the empty
+    // directory it names is the whole truth about it.
+    let holds_members = data.starts_with(LOCAL_SIGNATURE);
     let window = data.len().min(EOCD_FIXED + MAX_COMMENT);
     let start = data.len() - window;
     let mut candidate = data.len().checked_sub(EOCD_FIXED)?;
@@ -155,10 +172,20 @@ fn central_directory(data: &[u8]) -> Option<&[u8]> {
                 let size = u32_at(data, candidate + 12)? as usize;
                 let end = offset.checked_add(size)?;
                 // The directory has to lie inside the file and ahead of the
-                // record that named it; a zip whose own account of itself does
-                // not is not read at all rather than read partially.
+                // record that named it, and it has to begin with a record of
+                // its own unless the archive holds no members at all. The one
+                // position a forged end record is reached from before the real
+                // one is the archive's own trailing comment, and the cheapest
+                // forgery there names an empty directory at offset zero, which
+                // satisfies every bound while hiding every member behind it.
                 if end <= candidate {
-                    return data.get(offset..end);
+                    if let Some(directory) = data.get(offset..end) {
+                        if directory.starts_with(CENTRAL_SIGNATURE)
+                            || (!holds_members && directory.is_empty())
+                        {
+                            return Some(directory);
+                        }
+                    }
                 }
             }
         }

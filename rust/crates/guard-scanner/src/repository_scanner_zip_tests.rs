@@ -544,3 +544,60 @@ fn a_member_whose_checksum_does_not_match_its_bytes_is_still_read() {
     let (paths, _) = scan(&archive, "corrupt.zip");
     assert_eq!(paths, ["corrupt.zip!/prod.env"]);
 }
+
+#[test]
+fn an_empty_directory_forged_in_the_comment_does_not_hide_the_members() {
+    // The cheapest forgery at the one position the backwards search reaches
+    // first: an end-of-directory record, planted at the start of the archive's
+    // own comment, naming an empty directory at offset zero. Every bound it is
+    // asked about holds - the comment length reaches the end of the file, and
+    // an empty directory at offset zero lies inside the file and ahead of the
+    // record naming it - so what refuses it is that an archive holding a member
+    // cannot have a directory with no records in it.
+    let mut forged = Vec::new();
+    forged.extend_from_slice(b"PK\x05\x06");
+    forged.extend_from_slice(&0u16.to_le_bytes()); // this disk
+    forged.extend_from_slice(&0u16.to_le_bytes()); // disk the directory starts on
+    forged.extend_from_slice(&0u16.to_le_bytes()); // records on this disk
+    forged.extend_from_slice(&0u16.to_le_bytes()); // records in total
+    forged.extend_from_slice(&0u32.to_le_bytes()); // directory size
+    forged.extend_from_slice(&0u32.to_le_bytes()); // directory offset
+    forged.extend_from_slice(&0u16.to_le_bytes()); // comment length
+    assert_eq!(forged.len(), 22);
+
+    let member = credential_line();
+    let archive = zip_bytes_with_comment(&[stored("prod.env", member.as_bytes())], &forged);
+    let (paths, _) = scan(&archive, "forged.zip");
+    assert_eq!(paths, ["forged.zip!/prod.env"]);
+}
+
+#[test]
+fn a_small_zip_cannot_spend_the_whole_scans_allowance() {
+    // Two megabytes of one repeated byte deflate to about two kilobytes, and a
+    // directory may name that member as often as it likes for a few dozen bytes
+    // apiece. Without a bound of its own, a couple of kilobytes of archive could
+    // charge the scan's whole remaining allowance and leave every file committed
+    // after it unread. The allowance a zip may spend is bounded by the archive's
+    // own size, the same ratio the gzip walk applies, so the member is skipped
+    // and the credential beside it is still found.
+    let filler = vec![b'A'; 2 * 1024 * 1024];
+    assert!((filler.len() as u64) < MAX_MEMBER_BYTES);
+    let member = credential_line();
+    let archive = zip_bytes(&[
+        deflated("filler.bin", &filler),
+        stored("small.env", member.as_bytes()),
+    ]);
+    assert!(archive.len() * super::super::MAX_EXPANSION_RATIO < filler.len());
+
+    let (findings, scanned) = scan_blob(
+        &archive,
+        "ratio.zip",
+        "working_tree",
+        None,
+        200,
+        ByteBudget::unbounded(),
+    );
+    let paths: Vec<&str> = findings.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths, ["ratio.zip!/small.env"]);
+    assert_eq!(scanned, member.len());
+}
