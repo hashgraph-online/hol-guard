@@ -202,16 +202,6 @@ def merge_policy_bundle_trusted_keys(
     return tuple(merged[key_id] for key_id in sorted(merged))
 
 
-def resolve_policy_bundle_signing_key(
-    key_id: str,
-    trusted_keys: tuple[PolicyBundleVerificationKey, ...],
-) -> PolicyBundleVerificationKey | None:
-    for key in trusted_keys:
-        if key.key_id == key_id:
-            return key
-    return None
-
-
 def signing_key_is_current(
     signing_key: PolicyBundleVerificationKey,
     *,

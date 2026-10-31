@@ -48,6 +48,7 @@ fn a_cd_to_or_below_a_sibling_root_takes_the_native_sink() {
     assert!(shape(format!("cd {} && npm test", report.display())));
     assert!(shape(format!("cd {} && npm test", workspace.display())));
     assert!(shape("cd ../report && npm test".to_owned()));
+    assert!(shape("cd '../report' && npm test".to_owned()));
     assert!(!shape(format!("cd {}/home && npm test", root.display())));
 }
 

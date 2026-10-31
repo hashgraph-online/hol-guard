@@ -124,6 +124,8 @@ fn every_named_target_narrows_the_exception() {
     let mut by_publisher = target("codex", ARTIFACT);
     by_publisher.publisher = Some("acme");
     assert!(lifted(vec![publisher.clone()], &by_publisher));
+    by_publisher.publisher = Some("other");
+    assert!(!lifted(vec![publisher.clone()], &by_publisher));
     by_publisher.publisher = None;
     assert!(!lifted(vec![publisher], &by_publisher));
 }

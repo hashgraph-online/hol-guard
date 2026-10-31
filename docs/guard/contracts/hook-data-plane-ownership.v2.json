@@ -442,7 +442,6 @@
     "src/codex_plugin_scanner/guard/native_supply_chain_archive.py",
     "src/codex_plugin_scanner/guard/native_shim_admin.py",
     "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
-    "src/codex_plugin_scanner/guard/native_content_decode.py",
     "src/codex_plugin_scanner/guard/native_direct_tool_context.py",
     "src/codex_plugin_scanner/guard/native_cli_runtime_support.py",
     "src/codex_plugin_scanner/guard/native_context.py",

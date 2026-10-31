@@ -22,27 +22,29 @@ def queue_bound_bash_review(
     errors: TextIO,
 ) -> None:
     from ..daemon.hook_native_review_approval import queue_native_pre_tool_review
-    from ..native_decision_receipt import edge_receipt
 
     review = prepared["review"]
-    if not isinstance(review, dict) or not isinstance(review.get("decision"), dict):
+    if (
+        not isinstance(review, dict)
+        or not isinstance(review.get("decision"), dict)
+        or not isinstance(review.get("receipt"), dict)
+    ):
         raise NativeBashError("native_bash_review_evidence_invalid")
-    decision = review["decision"]
-    receipt = edge_receipt(harness, decision, review.get("receipt"), guard_home=Path(store.guard_home))
-    if receipt is None:
-        raise NativeBashError("native_bash_review_evidence_invalid")
+    # The resident checks the receipt against the decision, the prepared
+    # reply and the policy binding in the queue call itself.
     queued = queue_native_pre_tool_review(
         store,
         harness=harness,
         payload=payload,
-        native_result=decision,
-        native_receipt=receipt,
+        native_result=review["decision"],
+        native_receipt=review["receipt"],
         workspace=workspace,
         guard_home=Path(store.guard_home),
         home_dir=home,
         exact_token=str(prepared["artifact_hash"]),
         review_binding=str(prepared["artifact_hash"]),
         bound_bash=prepared,
+        policy_binding_verified=True,
         silent=True,
     )
     if queued is None:

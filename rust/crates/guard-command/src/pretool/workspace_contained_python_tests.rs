@@ -136,6 +136,23 @@ fn a_read_the_sandbox_would_answer_for_itself_keeps_its_review() {
         ".venv/bin/pip list --user",
         ".venv/bin/pip freeze --user",
         "uv pip list --user",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+        }
+    }
+}
+
+#[test]
+fn a_launcher_inventory_read_answers_from_the_developers_own_home() {
+    // These print what pipx already keeps on disk, so containment would answer
+    // them from the workspace `HOME` and report the wrong inventory. The tool
+    // inventory proof admits them instead of asking, which leaves the real
+    // layout to answer for itself.
+    let ws = project("python-home-reads");
+    for command in [
         "pipx list",
         "pipx list --short",
         "pipx environment",
@@ -144,7 +161,7 @@ fn a_read_the_sandbox_would_answer_for_itself_keeps_its_review() {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, minimum) = outcome(harness, command, &ws);
             assert_ne!(reason, CONTAINED, "{harness}: {command}");
-            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+            assert_eq!(minimum, "allow", "{harness}: {command} ({reason})");
         }
     }
 }

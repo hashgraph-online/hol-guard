@@ -128,6 +128,7 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_names;
+mod helm_usage;
 pub(crate) mod help_probes;
 mod installed_program_path;
 mod list_wrapper;
@@ -191,6 +192,7 @@ mod sink_peel;
 mod stderr_merge;
 mod stdin_filters;
 mod symlink_writes;
+mod tool_inventory_reads;
 mod tree_reads;
 pub(crate) mod version_probes;
 #[cfg(test)]

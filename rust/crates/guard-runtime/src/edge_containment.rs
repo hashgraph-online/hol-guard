@@ -21,7 +21,7 @@
 use guard_contracts::{ContainmentRewriteInputsV1, GuardHookEdgeResultV2, GuardHookEnvelopeV2};
 use serde_json::{json, Map, Value};
 
-use crate::hook_decision_containment_rewrite::{containment_rewrite_with, Native};
+use crate::hook_decision_containment_rewrite::containment_rewrite_with;
 use crate::hook_decision_containment_route::host_platform;
 use crate::hook_direct::contained::NativeSink;
 
@@ -95,13 +95,7 @@ fn rewrite(
     let inputs = inputs(envelope, harness, payload, rendered, &sink.sink_command);
     // Cursor's shell check admits the runtime's sink only for a probe its
     // own scope routes, so any other Cursor call keeps Guard's sink.
-    let native = rendered
-        .get("reason")
-        .filter(|_| harness != CURSOR)
-        .map(|reason| Native {
-            reason,
-            sink: native,
-        });
+    let native = (harness != CURSOR).then_some(native);
     match containment_rewrite_with(&inputs, native).ok()?.response {
         Some(routed) => {
             *harness_response = Some(routed);

@@ -62,7 +62,7 @@ fn single_flag_probe(basename: &str, flag: &str) -> bool {
     match basename {
         "uv" | "pip" | "pip3" | "ruff" => long || flag == "-V",
         "npm" | "bun" | "deno" | "docker" => long || flag == "-v",
-        "gh" | "jq" | "rg" | "fd" | "tsc" | "black" | "mypy" => long,
+        "gh" | "jq" | "rg" | "fd" | "tsc" | "black" | "mypy" | "pipx" => long,
         "curl" | "wget" | "ssh" => long || flag == "-V",
         "scp" | "sftp" | "rsync" | "psql" | "redis-cli" | "cp" | "chown" => long,
         "git" => long || flag == "version",
@@ -89,6 +89,7 @@ mod tests {
             ("deno", "--version"),
             ("helm", "version"),
             ("pip", "--version"),
+            ("pipx", "--version"),
             ("ruff", "--version"),
             ("gh", "--version"),
             ("docker", "--version"),

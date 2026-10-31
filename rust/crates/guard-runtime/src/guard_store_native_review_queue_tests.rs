@@ -11,7 +11,7 @@ const CONNECTOR_HASH: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 /// A call with no admitted snapshot, as the unit tests have none, whose
 /// launch names no connector.
 pub(super) fn delegate(args: &Map<String, Value>) -> Result<Delegated, StoreError> {
-    super::delegate(args, None, 10_000, |_| None)
+    super::delegate(METHOD, args, None, 10_000, |_| None)
 }
 
 /// A call whose launch names `connector`, within `budget_ms`.
@@ -20,7 +20,9 @@ pub(super) fn looked_up(
     budget_ms: u64,
     connector: Value,
 ) -> Result<Delegated, StoreError> {
-    super::delegate(args, None, budget_ms, move |_| Connector::parse(&connector))
+    super::delegate(METHOD, args, None, budget_ms, move |_| {
+        Connector::parse(&connector)
+    })
 }
 
 /// The launch the daemon names for a non-recognition review.
@@ -207,14 +209,14 @@ fn a_launch_that_names_no_local_cli_stays_an_ordinary_review() {
 fn only_a_non_recognition_review_looks_up_its_launch() {
     let mut call = unrecognised(json!({}));
     call["review"]["result"]["reason_code"] = json!("native_network_review");
-    let delegated = super::delegate(&call, None, 10_000, |_| -> Option<Connector> {
+    let delegated = super::delegate(METHOD, &call, None, 10_000, |_| -> Option<Connector> {
         panic!("a review with a risk signal looked up its launch")
     })
     .unwrap();
     assert_eq!(delegated.args["request"]["queue_group_id"], Value::Null);
     let mut call = unrecognised(json!({}));
     call.remove("connector_lookup");
-    let delegated = super::delegate(&call, None, 10_000, |_| -> Option<Connector> {
+    let delegated = super::delegate(METHOD, &call, None, 10_000, |_| -> Option<Connector> {
         panic!("a review without its launch looked it up")
     })
     .unwrap();
@@ -519,7 +521,7 @@ fn the_lookup_never_waits_into_the_writes_reserve() {
 #[test]
 fn a_call_with_no_time_past_the_writes_reserve_skips_the_lookup() {
     let mut asked = false;
-    let delegated = super::delegate(&unrecognised(json!({})), None, 350, |_| {
+    let delegated = super::delegate(METHOD, &unrecognised(json!({})), None, 350, |_| {
         asked = true;
         None
     })
