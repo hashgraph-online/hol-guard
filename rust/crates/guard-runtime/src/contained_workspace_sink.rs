@@ -24,10 +24,14 @@ use serde_json::{json, Map, Value};
 mod denial;
 #[path = "contained_esbuild_image.rs"]
 mod esbuild_image;
+#[path = "contained_workspace_sink_filters.rs"]
+mod filters;
 #[path = "contained_workspace_sink_grant.rs"]
 mod grant;
 #[path = "contained_node_build_sink.rs"]
 mod node_build;
+#[path = "contained_workspace_sink_output.rs"]
+mod output;
 #[cfg(any(target_os = "linux", all(unix, test)))]
 #[path = "contained_workspace_sink_overlay.rs"]
 mod overlay;
@@ -51,6 +55,8 @@ mod snapshot;
 mod split;
 #[path = "contained_vitest_sink.rs"]
 mod vitest;
+#[path = "contained_workspace_sink_wrapper.rs"]
+mod wrapper;
 
 use paths::{expand_user, py_normal, search_path, wire_path};
 use plan_check::{plan_paths, sibling_root, validated_plan};
@@ -249,15 +255,7 @@ fn sink(arguments: &Arguments, signals: &process::Signals) -> Outcome<i32> {
     let receipt = authority
         .authorize(&payload)
         .ok_or_else(Failure::unauthorized)?;
-    if let Some(route) = readonly::readonly_route(&receipt) {
-        return readonly::run(&payload, &workspace, &authority, route, signals);
-    }
-    if !receipt_matches(&receipt) || host_split(receipt.get("reason")) {
-        return Err(Failure::unauthorized());
-    }
-    let root = sibling_root(&payload, &authority.workspace, &arguments.home);
-    let root = root.unwrap_or(workspace);
-    run_workspace_contained(&payload, &root, &authority, &receipt, signals)
+    wrapper::contained(&payload, &workspace, &authority, &receipt, signals)
 }
 
 fn path_text(path: &Path) -> Outcome<String> {

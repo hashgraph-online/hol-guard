@@ -139,7 +139,7 @@ def test_publication_wait_retries_network_errors_but_rejects_failed_publication(
         monkeypatch.setenv(key, value)
     calls = []
 
-    def ready(*args):
+    def ready(*args, **kwargs):
         calls.append(args)
         if len(calls) == 1:
             raise error

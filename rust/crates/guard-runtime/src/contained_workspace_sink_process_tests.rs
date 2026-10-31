@@ -1,12 +1,6 @@
 use super::*;
 
 #[test]
-fn replayed_output_is_display_safe() {
-    assert_eq!(display_text(b"a\r\nb\x1b[0m\tc\n"), "a\nb\u{fffd}[0m\tc\n");
-    assert_eq!(display_text(b"\xff"), "\u{fffd}");
-}
-
-#[test]
 fn a_captured_command_reports_its_output_and_exit() {
     let scratch = tempfile::tempdir().unwrap();
     let command = [
