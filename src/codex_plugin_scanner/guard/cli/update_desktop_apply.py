@@ -9,12 +9,14 @@ from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
+from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..daemon.runtime_peer import (
     daemon_refresh_outcome_succeeded,
     retained_desktop_owner_note,
     retained_desktop_owner_payload,
 )
+from ..daemon.start_classification import GuardDaemonStillStartingError
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..store import GuardStore
 from .update_desktop_core import (
@@ -25,6 +27,7 @@ from .update_desktop_core import (
     pypi_desktop_core_versions,
     select_desktop_core_latest,
 )
+from .update_desktop_core_start import wait_for_started_core
 from .update_release_candidates import live_release_candidates
 
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
@@ -269,6 +272,17 @@ def refresh_desktop_core_daemon(
             home_dir=context.home_dir,
             executable=executable,
         )
+    except GuardDaemonStillStartingError:
+        # The updated Core can take longer to load than the post-update start
+        # window on a busy machine. The launch is left running in that case, so
+        # wait for it to answer before calling the refresh a failure.
+        # Without an applied version, the Core being started is this
+        # executable, so nothing older than this process may stand in for it.
+        url = wait_for_started_core(context.guard_home, minimum_version=minimum_version or __version__)
+        if url is None:
+            return None, (
+                "The updated Guard daemon is still starting. Run `hol-guard daemon status` shortly to confirm it is up."
+            )
     except (OSError, RuntimeError) as error:
         return None, f"Could not restart the Guard daemon after update: {error}"
     # ensure_guard_daemon_after_update only returns once the restarted daemon
