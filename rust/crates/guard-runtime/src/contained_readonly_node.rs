@@ -11,6 +11,8 @@
 //! A Vitest run or a build starts a transform image under Vitest's route,
 //! so that route admits the help too. This replays that step.
 
+use std::process::{Command, Stdio};
+
 use super::*;
 
 const WASM_TRAP_OPTION: &[u8] = b"--disable-wasm-trap-handler";
@@ -67,27 +69,54 @@ pub(in super::super) fn settle(
     probe_environment.remove("NODE_OPTIONS");
     probe_environment.remove("NODE_PATH");
     let argv = process::launcher_argv(&backend::argv(&helper, &private)?)?;
-    let captured = process::run_captured(
+    let help = run_probe(
         &argv,
         &probe_environment,
         Path::new(&plan.cwd),
         &private.path,
-        Duration::from_secs(timeout.min(PROBE_SECONDS)),
+        signals,
+        timeout.min(PROBE_SECONDS),
     )
-    .filter(|captured| captured.code == 0)
     .ok_or_else(|| {
         Failure::new(
             "node_restricted_capabilities_unavailable",
             "Node runtime capability discovery did not finish.",
         )
     })?;
-    if offers_wasm_trap_option(&captured.stdout) {
+    if offers_wasm_trap_option(&help) {
         environment.insert(
             "NODE_OPTIONS".to_owned(),
             String::from_utf8_lossy(WASM_TRAP_OPTION).into_owned(),
         );
     }
     Ok(())
+}
+
+/// What the help probe `argv` printed, when it exits cleanly in time. The
+/// launcher starts it in a session of its own, which is tracked like the run
+/// itself: an interrupt reaches its whole group, and the group is killed
+/// when the time runs out and once the probe exits.
+fn run_probe(
+    argv: &[String],
+    environment: &BTreeMap<String, String>,
+    cwd: &Path,
+    scratch: &Path,
+    signals: &process::Signals,
+    seconds: u64,
+) -> Option<Vec<u8>> {
+    let (program, arguments) = argv.split_first()?;
+    let stdout = process::capture_file(scratch, "node-help").ok()?;
+    let mut command = Command::new(program);
+    command
+        .args(arguments)
+        .env_clear()
+        .envs(environment)
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(stdout.try_clone().ok()?)
+        .stderr(Stdio::null());
+    let (status, timed_out) = process::run_tracked(&mut command, signals, seconds, true).ok()?;
+    (!timed_out && status.map(process::exit_code) == Some(0)).then(|| process::read_all(stdout))
 }
 
 /// Whether `plan` starts a transform image, as a Vitest run and a build do.

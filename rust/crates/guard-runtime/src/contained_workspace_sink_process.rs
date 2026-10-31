@@ -274,7 +274,7 @@ fn not_started(error: &std::io::Error) -> Failure {
 
 /// A new owner-only file in `scratch`, unlinked once open so only the
 /// descriptors hold it.
-fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
+pub(super) fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
     let path = scratch.join(name);
     let file = std::fs::OpenOptions::new()
         .read(true)
@@ -404,7 +404,7 @@ fn run_captured_in(
     })
 }
 
-fn read_all(mut file: File) -> Vec<u8> {
+pub(super) fn read_all(mut file: File) -> Vec<u8> {
     let mut raw = Vec::new();
     if file.seek(SeekFrom::Start(0)).is_ok() {
         let _ = file.read_to_end(&mut raw);
