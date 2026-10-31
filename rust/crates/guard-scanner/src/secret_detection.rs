@@ -756,14 +756,15 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "slack-app-token",
             "Slack app-level token",
             "critical",
-            r"(?:^|[^A-Za-z0-9_-])(?P<secret>xapp-[0-9]-[A-Za-z0-9-]{10,})(?:$|[^A-Za-z0-9_-])",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>xapp-[0-9]-[A-Za-z0-9-]{10,})(?P<overrun>_?)",
             FLAG_UNICODE,
             "slack",
             true,
             // `-` is a token character here, so a word boundary would end the
             // match at one and report the head as the whole token. The match
-            // runs to the first character the alphabet does not hold, and the
-            // value is claimed entire or not at all.
+            // runs to the first character the alphabet does not hold, which
+            // leaves only `_` able to continue the value, and `overrun` catches
+            // that without consuming anything else.
             "Slack app-level token for socket-mode connections.",
             None,
         ),
@@ -771,12 +772,12 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "discord-bot-token",
             "Discord bot token",
             "critical",
-            r"(?:^|[^A-Za-z0-9_.-])(?P<secret>[MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})(?:$|[^A-Za-z0-9_.-])",
+            r"(?:^|[^A-Za-z0-9_.-])(?P<secret>[MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})(?P<overrun>[A-Za-z0-9_.-]*)",
             FLAG_UNICODE,
             "discord",
             true,
             // The segments hold `-` and `_`, and the token is exactly three of
-            // them, so the guards exclude `.` as well: a fourth segment or a
+            // them, so `overrun` watches for `.` as well: a fourth segment or a
             // longer third one is some other value, not a bot token with its
             // tail cut off.
             "Discord bot token granting the application its gateway identity.",
@@ -808,12 +809,14 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "sentry-auth-token",
             "Sentry auth token",
             "critical",
-            r"(?:^|[^A-Za-z0-9+/=_-])(?P<secret>sntry[su]_[A-Za-z0-9+/=_-]{50,})(?:$|[^A-Za-z0-9+/=_-])",
+            r"(?:^|[^A-Za-z0-9+/=_-])(?P<secret>sntry[su]_[A-Za-z0-9+/=_-]{50,})",
             FLAG_UNICODE,
             "sentry",
             true,
             // Unbounded above, because a ceiling on the quantifier reports the
-            // first N characters of anything longer.
+            // first N characters of anything longer. The class already holds
+            // every character that could continue the value, so the greedy run
+            // ends the token and no overrun group is needed.
             "Sentry organization or user auth token.",
             None,
         ),
@@ -821,13 +824,13 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "google-oauth-client-secret",
             "Google OAuth client secret",
             "critical",
-            r"(?:^|[^A-Za-z0-9_-])(?P<secret>GOCSPX-[A-Za-z0-9_-]{28})(?:$|[^A-Za-z0-9_-])",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>GOCSPX-[A-Za-z0-9_-]{28})(?P<overrun>[A-Za-z0-9_-]*)",
             FLAG_UNICODE,
             "google",
             true,
             // Exactly 28 characters after the prefix, and `-` is one of them, so
-            // the character after the match has to come from outside the
-            // alphabet for the 28 to be the whole secret.
+            // anything after the 28 that still comes from the alphabet means
+            // those 28 were never the whole secret. `overrun` collects it.
             "Google OAuth 2.0 client secret.",
             None,
         ),
@@ -1811,6 +1814,20 @@ pub fn scan_secret_text(
             // the newline ending the line above, the whole match begins on the
             // previous line. Reporting from there would name the wrong line
             // and score the wrong line's text.
+            // A rule whose alphabet holds characters a word boundary cannot see
+            // has to prove the value ends where the rule says it does. The
+            // regex crate has no lookahead, and a guard that consumes the next
+            // character would swallow the separator between two neighbouring
+            // tokens and miss the second one. Such a rule captures the overrun
+            // instead: anything matched there means the value runs past what
+            // the rule describes, so the rule does not claim it and the generic
+            // assignment rule reports the whole value on its own.
+            if captures
+                .name("overrun")
+                .is_some_and(|overrun| !overrun.is_empty())
+            {
+                continue;
+            }
             let matched = captures
                 .name("secret")
                 .unwrap_or_else(|| captures.get(0).expect("whole match always present"));
@@ -2696,6 +2713,65 @@ mod tests {
             assert!(
                 !(claimed.contains(&rule_id) && claimed.contains(&"credential-assignment")),
                 "{rule_id}: {claimed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn two_neighbouring_values_of_one_rule_are_both_reported() {
+        // A rule with no lookahead available proves its tail by capturing the
+        // overrun. A guard that consumed the next character instead would eat
+        // the separator between two values, and the second value's leading
+        // guard would then find nothing before it, so only the first of a pair
+        // would ever be reported. One space is the tightest such separator.
+        //
+        // Every sample is held in two pieces, as the rest of this file is.
+        let slack = [
+            format!("{}{}", "xapp-1-Zz9Qq2VvL8nP4wR7tY", "1uI6oP3aS5dFgHjK9m"),
+            format!("{}{}", "xapp-1-Rr4TtY7uI1oP3aS5dF", "gH9jK2lZ6xC8vB4nM0"),
+        ];
+        let google = [
+            format!("{}{}", "GOCSPX-Qq2VvL8nP4wR7tY1u", "I6oP3aS5dFg"),
+            format!("{}{}", "GOCSPX-Rr4TtY7uI1oP3aS5d", "FgH9jK2lZ6x"),
+        ];
+        let sentry = [
+            format!(
+                "{}{}",
+                "sntrys_Rr4TtY7uI1oP3aS5dFgH9jK2lZ6xC8vB4nM0", "Qq2VvL8nP4wR7tY1uI6oP3aS5dFg"
+            ),
+            format!(
+                "{}{}",
+                "sntryu_Zz9Qq2VvL8nP4wR7tY1uI6oP3aS5dFgHjK9m", "Rr4TtY7uI1oP3aS5dFgH9jK2l"
+            ),
+        ];
+        let discord = [
+            format!(
+                "{}{}",
+                "N2k8vQ4rT7yU1iO3pA5sD9fG.Qq2VvL.", "6hJ0kL2zX4cV8bN1mZz9Qq2VvL8nP4wR"
+            ),
+            format!(
+                "{}{}",
+                "M1a2B3c4D5e6F7g8H9i0J1k2.Rr4TtY.", "7uI1oP3aS5dFgH9jK2lZ6xC8vB4nM0Q"
+            ),
+        ];
+        for (rule_id, pair) in [
+            ("slack-app-token", &slack),
+            ("google-oauth-client-secret", &google),
+            ("sentry-auth-token", &sentry),
+            ("discord-bot-token", &discord),
+        ] {
+            let text = format!("SERVICE_CREDENTIALS = \"{} {}\"", pair[0], pair[1]);
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .filter(|finding| finding.rule_id == rule_id)
+                .map(|finding| finding.candidate.as_str())
+                .collect();
+            assert_eq!(
+                claimed,
+                vec![pair[0].as_str(), pair[1].as_str()],
+                "{rule_id} did not report both neighbours"
             );
         }
     }
