@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 MCP_RELAY_BINDING_KEY = "mcp_relay"
 MCP_RELAY_VIEW_SCHEMA = "guard-mcp-relay-view.v2"
 # The harnesses whose MCP proxy the relay replaces.
-MCP_RELAY_HARNESSES = ("codex", "copilot", "cursor", "hermes", "opencode")
+MCP_RELAY_HARNESSES = ("cline", "codex", "copilot", "cursor", "hermes", "opencode")
 
 # The field a bound harness carries its receipt redaction level in.
 REDACTION_LEVEL_KEY = "receipt_redaction_level"

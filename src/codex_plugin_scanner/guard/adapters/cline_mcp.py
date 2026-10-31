@@ -9,14 +9,12 @@ from hashlib import sha256
 from pathlib import Path
 
 from ..aibom_detection import enrich_mcp_server_metadata
-from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection, _redact_arg
 from ..redaction import redact_text
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
-from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
 from .cline_paths import cline_data_dir
-from .mcp_servers import ManagedMcpServer, is_guard_proxy_command, proxy_cli_args, proxy_process_env
+from .mcp_servers import ManagedMcpServer, is_guard_proxy_command, proxy_launcher_entry
 
 
 def cline_mcp_settings_candidates(context: HarnessContext) -> tuple[Path, ...]:
@@ -228,22 +226,8 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
 
 
 def _proxy_entry(context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
-    args = proxy_cli_args(
-        proxy_command="mcp-proxy",
-        guard_home=str(context.guard_home),
-        server=server,
-        home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-        workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
-    )
-    entry: dict[str, object] = {
-        "command": guard_cli_launcher(),
-        "args": args,
-        "type": "stdio",
-    }
-    environment = merge_guard_launcher_env(proxy_process_env(server.env))
-    if environment:
-        entry["env"] = environment
-    return entry
+    entry = proxy_launcher_entry(proxy_command="cline-mcp-proxy", context=context, server=server)
+    return {**entry, "type": "stdio"}
 
 
 def install_cline_mcp_proxies(context: HarnessContext) -> dict[str, object]:

@@ -357,6 +357,7 @@ def _resolve_legacy_args(
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",
+        "cline-mcp-proxy",
         "hermes-mcp-proxy",
     }
     if program_mode == "combined" and argv[0] in _guard_subcommands and ("--format" not in argv or argv[0] == "policy"):
