@@ -144,7 +144,7 @@ fn verify_surface(
     };
     for candidate in &chain {
         match cache.get(candidate) {
-            Some(Checked::Refused(reason_code)) => return refused(*reason_code),
+            Some(Checked::Refused(reason_code)) => return refused(reason_code),
             Some(Checked::Verified(_)) => {
                 if !unchanged(probe, cache, candidate) {
                     return unknown;
