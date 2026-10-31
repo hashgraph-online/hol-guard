@@ -913,6 +913,12 @@
           "src/codex_plugin_scanner/guard/runtime/jsonc.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/durable_io.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the retired Python command activity lifecycle imported it at load, so it counted as eager. It is now reached lazily through the Codex hook integrity writer and command activity correlation, which fsync a directory after a durable write. It runs while Guard records state, so it stays counted as runtime."
       }
     ],
     "tests": {

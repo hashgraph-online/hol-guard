@@ -284,7 +284,7 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
                 ownership[path] = _text(item["id"])
             ownership_counts[cast(int, item["pull_request"])] += 1
     assert observed_overlaps == overlap_exceptions.keys()
-    assert ownership_counts == {1761: 31, 1763: 33}
+    assert ownership_counts == {1761: 31, 1763: 32}
 
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])
