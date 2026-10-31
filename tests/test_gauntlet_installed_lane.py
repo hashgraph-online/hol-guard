@@ -72,14 +72,45 @@ HARNESSES = ["claude-code"]
 
 
 def test_lane_owned_infrastructure_codes_cover_product_availability_failures():
-    from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
-        _INTEGRITY_FAIL_CLOSED_REASON_CODES,
-        _REVIEW_CANNOT_FINISH_REASON_CODES,
+    review_cannot_finish_codes = frozenset(
+        {
+            "native_policy_not_ready",
+            "native_policy_update_in_progress",
+            "native_hook_event_unavailable",
+            "native_pre_tool_unavailable",
+            "native_post_tool_unavailable",
+            "native_overloaded",
+            "native_hook_worker_unavailable",
+            "native_hook_worker_unavailable_before_compatibility",
+            "native_hook_worker_unsupported",
+            "native_hook_worker_exception",
+            "native_hook_compatibility_disabled",
+            "native_hook_edge_invalid_response",
+            "native_hook_edge_unavailable",
+            "python_hook_oracle_unavailable",
+            "python_oracle_exception",
+            "watch_recording_only",
+            "daemon_hook_queue_capacity",
+            "daemon_hook_deadline_exhausted",
+            "daemon_hook_process_deadline_exhausted",
+            "daemon_hook_process_not_ready",
+            "daemon_hook_process_failed",
+            "daemon_hook_process_invalid_request",
+            "daemon_hook_process_guard_home_mismatch",
+            "daemon_worker_exception",
+            "harness_not_managed",
+        }
+    )
+    integrity_fail_closed_codes = frozenset(
+        {
+            "invalid_hook_payload_reference",
+            "daemon_hook_queue_bytes",
+        }
     )
 
     # The oracle stays lane-owned; adding a product outage code cannot silently
     # make that denial qualify as policy protection.
-    assert (_INTEGRITY_FAIL_CLOSED_REASON_CODES | _REVIEW_CANNOT_FINISH_REASON_CODES) <= NON_DECISION_REASONS
+    assert (integrity_fail_closed_codes | review_cannot_finish_codes) <= NON_DECISION_REASONS
 
 
 def test_registered_hook_percentiles_include_timeouts(tmp_path, monkeypatch):

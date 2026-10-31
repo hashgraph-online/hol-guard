@@ -992,19 +992,6 @@ _MCP_RISK_CATEGORIES = frozenset(
 )
 
 
-def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
-    """Project native browser semantics; native absence is not a negative match."""
-    result = native_context_digest(
-        "browser_mcp",
-        {"request": request},
-        guard_home=_resolve_digest_home(None),
-    )
-    browser = result.get("browser_mcp") if isinstance(result, dict) and result.get("status") == "ok" else None
-    if not isinstance(browser, dict) or browser.get("operation") != request.get("operation"):
-        raise _unavailable("native_browser_mcp_intent_unavailable")
-    return browser
-
-
 def context_mcp_redact_json(value: object) -> object:
     """stdio `_redact_json` parity for recorded MCP traffic; terminal on failure."""
     fields = json.loads(json.dumps({"material": value}))
@@ -1022,7 +1009,6 @@ __all__ = [
     "bind_context_digest_home",
     "bind_context_digest_lifecycle_budget",
     "bound_context_digest_home",
-    "context_browser_mcp",
     "context_digest_guard_home",
     "context_mcp_identity",
     "context_mcp_redact_json",
