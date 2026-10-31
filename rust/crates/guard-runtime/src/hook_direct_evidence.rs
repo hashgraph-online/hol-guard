@@ -273,8 +273,13 @@ impl DirectEvidenceQueue {
             0
         };
         if recorded > 0 {
-            // Its receipt is already written.
-            state.append(unmarked(record, &markers[recorded..]), marked_bytes, false);
+            // Its receipt is already written. The queue holds the record
+            // without the markers left to the drain, so it is charged for
+            // that encoding, which is no larger than the marked one.
+            let record = unmarked(record, &markers[recorded..]);
+            let kept_bytes =
+                serde_json::to_vec(&record).map_or(marked_bytes, |encoded| encoded.len());
+            state.append(record, kept_bytes, false);
         } else {
             let record = unmarked(record, markers);
             let native = crate::mcp_relay_receipt::is_plain(&record);
