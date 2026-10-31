@@ -20,7 +20,6 @@ from .store_command_activity_api import StoreCommandActivityApiMixin
 from .store_command_activity_lifecycle import StoreCommandActivityLifecycleMixin
 from .store_command_activity_maintenance import StoreCommandActivityMaintenanceMixin
 from .store_command_activity_privacy import StoreCommandActivityPrivacyMixin
-from .store_command_shadow import StoreCommandShadowMixin
 from .store_connection_schema import StoreConnectionSchemaMixin
 from .store_continuation import StoreContinuationMixin
 from .store_custom_extension_continuity import StoreCustomExtensionContinuityMixin
@@ -77,7 +76,6 @@ class GuardStore(
     StoreCommandActivityMaintenanceMixin,
     StoreCommandActivityPrivacyMixin,
     StoreStorageMaintenanceMixin,
-    StoreCommandShadowMixin,
     StoreInventoryMixin,
     StorePortableProjectMemoryMixin,
     StorePolicyMixin,

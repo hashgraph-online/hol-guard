@@ -233,3 +233,30 @@ fn a_cloud_exception_lifts_the_bundle_block_from_a_tool_lookup() {
     crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
     assert_eq!(observed.expect("lookup")["decision"], Value::Null);
 }
+
+#[test]
+fn a_bundle_row_the_resident_cannot_authorize_fails_the_lookup() {
+    let store = tmp_store("mcp-lookup-bundle");
+    seed_store(&store);
+    let conn = rusqlite::Connection::open(&store).expect("open");
+    conn.execute_batch(
+        "create table sync_state (state_key text primary key, payload_json text not null,
+           updated_at text not null);
+         insert into sync_state values ('policy_bundle', 'not json', '2030-01-01T00:00:00+00:00');",
+    )
+    .expect("sync state");
+    let lookup = input(&store);
+    assert!(lookup_ids(&lookup, &["npm:lodash"]).is_ok());
+    conn.execute(
+        "insert into policy_decisions values
+         (1,'codex','artifact','npm:lodash','block','sha256:abc',NULL,NULL,
+          'policy-bundle','bundle block',NULL,'2029-01-01T00:00:00+00:00',
+          '2030-01-01T00:00:00+00:00',NULL,1,NULL,'h','m','k','s')",
+        [],
+    )
+    .expect("insert");
+    assert!(matches!(
+        lookup_ids(&lookup, &["npm:lodash"]),
+        Err(Stop::Fail(ERR_LOOKUP))
+    ));
+}

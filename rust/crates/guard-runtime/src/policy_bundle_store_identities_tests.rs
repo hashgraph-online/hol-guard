@@ -186,3 +186,39 @@ fn a_document_past_the_limit_is_not_chunked() {
     );
     assert_eq!(chunks(&json!("é".repeat(MAX_DOCUMENT_CHARS - 1))), None);
 }
+
+fn policy_row(connection: &Connection, source: &str) {
+    connection
+        .execute_batch("create table if not exists policy_decisions (source text not null)")
+        .unwrap();
+    connection
+        .execute(
+            "insert into policy_decisions (source) values (?1)",
+            [source],
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_lookup_derives_identities_only_for_a_store_with_bundle_rows() {
+    let connection = store();
+    sync_state(&connection, "policy_bundle", "not json");
+    assert_eq!(lookup_bundle_identities(&connection, NOW), Ok(None));
+    policy_row(&connection, "local");
+    assert_eq!(lookup_bundle_identities(&connection, NOW), Ok(None));
+    policy_row(&connection, "policy-bundle");
+    assert_eq!(lookup_bundle_identities(&connection, NOW), Err(()));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bundle_that_authorizes_nothing_ships_no_identities() {
+    let connection = store();
+    policy_row(&connection, "policy-bundle");
+    sync_state(
+        &connection,
+        "policy_bundle",
+        r#"{"bundleVersion": 1, "decisions": [{"harness": "codex"}]}"#,
+    );
+    assert_eq!(lookup_bundle_identities(&connection, NOW), Ok(None));
+}
