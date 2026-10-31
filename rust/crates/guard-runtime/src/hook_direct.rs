@@ -488,6 +488,7 @@ fn answer(
         local_cli_rules: None,
         observe_local_cli: false,
         record_receipt: false,
+        record_activity: false,
         structured_output_config: None,
         containment_sink: None,
     };

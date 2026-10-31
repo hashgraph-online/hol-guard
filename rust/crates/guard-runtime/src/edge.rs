@@ -392,9 +392,8 @@ fn evaluate_validated_envelope(
             } else {
                 native
             };
-            // The policy join above may rewrite the verdict or the output
-            // action, so the answer to "may the model read this" is settled
-            // here, once, after everything that can change it has run.
+            // The policy join may rewrite the verdict or output action, so
+            // "may the model read this" is settled once, after all of it ran.
             evaluated.seal_output_mask();
             let receipt = receipt_from_post_tool(
                 &envelope,
@@ -447,6 +446,7 @@ fn evaluate_validated_envelope(
         containment_rewrite: None,
         local_cli_rule: local_cli_rule?,
         receipt_recorded: false,
+        activity_recorded: false,
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
         request_id: Some(request_id),
