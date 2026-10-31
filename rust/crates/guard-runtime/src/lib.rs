@@ -475,6 +475,8 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+mod harness_coverage;
+mod harness_coverage_command;
 mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
