@@ -19,9 +19,10 @@
 //! `git reflog expire`, `git reflog delete`, `git reflog drop` and
 //! `git reflog write` throw away the record a mistaken `reset --hard` is
 //! recovered from, and `git tag -d` and `git tag -f` drop or move a tag whose
-//! commit may be reachable from nothing else. Those forms keep their review;
-//! reading a reflog, and listing, creating, annotating or verifying a tag,
-//! stay contained.
+//! commit may be reachable from nothing else. A reflog read that is handed an
+//! output file writes over the same places, so it keeps its review too. The
+//! rest — reading a reflog, and listing, creating, annotating or verifying a
+//! tag — stays contained.
 use crate::CanonicalCommandV1;
 use guard_contracts::NativeCommandObservationV1;
 
@@ -197,15 +198,27 @@ fn operands(words: &[&str]) -> bool {
 /// sandbox cannot write back what it discards. A leading Git option is refused
 /// the way `keeping_arguments` refuses one: it can point the command at
 /// another repository.
+///
+/// Reading is not enough on its own: `git reflog show` is `git log` written
+/// another way, so it answers to the log option set, and `--output=<file>`
+/// writes the walk over a file the sandbox leaves writable — the reflog
+/// itself, among others. Those options, and the ones that name a helper
+/// program for Git to run, are refused through the same screen the contained
+/// read route applies, so the two cannot drift apart.
 fn reflog_keeps_history(arguments: &[String]) -> bool {
-    let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    match words.as_slice() {
-        ["reflog"] => true,
-        ["reflog", operation, ..] => {
-            !crate::pretool::git_history_reads::REFLOG_WRITES.contains(operation)
-        }
-        _ => false,
+    let Some(("reflog", rest)) = arguments
+        .split_first()
+        .map(|(first, rest)| (first.as_str(), rest))
+    else {
+        return false;
+    };
+    let operation = rest.first().map_or("show", String::as_str);
+    if crate::pretool::git_history_reads::REFLOG_WRITES.contains(&operation) {
+        return false;
     }
+    !rest
+        .iter()
+        .any(|word| crate::contained_git::names_helper_or_output(word, "reflog", operation))
 }
 
 /// `git tag` without `-d`/`--delete` and without `-f`/`--force`, in every

@@ -153,6 +153,38 @@ fn a_tag_that_is_dropped_or_moved_keeps_its_review() {
 }
 
 #[test]
+fn a_reflog_read_that_writes_a_file_keeps_its_review() {
+    // `git reflog show` walks the log, so it takes the log option set, and
+    // `--output` points that walk at a file the sandbox leaves writable.
+    assert!(!keeps_under(
+        "command.git.reflog",
+        "reflog show --output=.git/logs/refs/heads/main"
+    ));
+    assert!(!keeps_under(
+        "command.git.reflog",
+        "reflog --output=.git/logs/HEAD"
+    ));
+    // The same abbreviation Git resolves for a tag option it resolves here.
+    assert!(!keeps_under(
+        "command.git.reflog",
+        "reflog show --outp=notes"
+    ));
+    // A helper option runs a program the review never saw.
+    assert!(!keeps_under("command.git.reflog", "reflog show --ext-diff"));
+    assert!(!keeps_under(
+        "command.git.reflog",
+        "reflog show -p --textconv"
+    ));
+}
+
+#[test]
+fn an_ordinary_reflog_option_stays_contained() {
+    assert!(keeps_under("command.git.reflog", "reflog show --date=iso"));
+    assert!(keeps_under("command.git.reflog", "reflog show --oneline"));
+    assert!(keeps_under("command.git.reflog", "reflog show -n 20 HEAD"));
+}
+
+#[test]
 fn an_abbreviated_tag_deletion_keeps_its_review() {
     // Git resolves any unambiguous prefix of a long option, so the shortened
     // spellings delete and move tags exactly as the full ones do.

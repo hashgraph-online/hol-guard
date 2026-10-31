@@ -35,6 +35,9 @@ HISTORY_LOSS = (
     "git reflog expire --expire-unreachable=now --all",
     "git reflog delete HEAD@{0}",
     "git reflog drop HEAD",
+    # `git reflog show` is a log walk, so `--output` writes the walk over the
+    # reflog the sandbox leaves writable.
+    "git reflog show --output=.git/logs/refs/heads/main",
     "git tag -d v1.0.0",
     "git tag --delete v1.0.0",
     "git tag -f v1.0.0 HEAD",
