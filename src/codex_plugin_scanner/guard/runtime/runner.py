@@ -383,6 +383,15 @@ def _build_canonical_policy_bundle_decisions(
     ]
 
 
+def _policy_bundle_is_evaluating(policy_bundle: dict[str, object]) -> bool:
+    """Whether the bundle rolls its rules out to watch them, not to enforce them."""
+
+    payload = policy_bundle.get("payload")
+    spec = payload.get("spec") if isinstance(payload, dict) else None
+    defaults = spec.get("defaults") if isinstance(spec, dict) else None
+    return isinstance(defaults, dict) and defaults.get("mode") == "observe"
+
+
 def _build_policy_bundle_decisions(
     policy_bundle: dict[str, object],
     *,
@@ -755,9 +764,15 @@ def sync_receipts(
                     )
                     native_shadow_unavailable = False
                     try:
-                        mismatch_reasons = _authority.policy_shadow_mismatch(
-                            legacy_decisions,
-                            canonical_decisions,
+                        # An Evaluate bundle compiles to no rows on purpose, so
+                        # an older bundle's rows say nothing about its drift.
+                        mismatch_reasons = (
+                            ()
+                            if _policy_bundle_is_evaluating(validated_policy_bundle)
+                            else _authority.policy_shadow_mismatch(
+                                legacy_decisions,
+                                canonical_decisions,
+                            )
                         )
                     except NativeRunnerAuthorityError:
                         # Rust owns the shadow comparison. Without its verdict
