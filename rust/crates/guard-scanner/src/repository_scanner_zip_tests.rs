@@ -431,17 +431,46 @@ fn a_zip_carrying_a_trailing_comment_is_still_read() {
 fn a_record_signature_inside_a_members_data_is_not_mistaken_for_the_directory() {
     // A stored member may contain any bytes at all, the end-of-directory
     // signature included. Searching backwards from the tail reaches the real
-    // record first, and a candidate is accepted only when its own comment
-    // length reaches exactly the end of the file, so the planted one is not
-    // read as the directory's address.
+    // record first, so the planted one is never read as the directory's
+    // address and the member is scanned like any other.
+    //
+    // The filler after the signature is printable on purpose: a NUL in the
+    // first sample window marks the member binary, and a member that never
+    // decodes as text would make this case pass for the wrong reason.
     let mut member = Vec::new();
     member.extend_from_slice(b"PK\x05\x06");
-    member.extend_from_slice(&[0u8; 18]);
+    member.extend_from_slice(b"not a real record!");
+    member.push(b'\n');
     member.extend_from_slice(credential_line().as_bytes());
     member.push(b'\n');
     let archive = zip_bytes(&[stored("prod.env", &member)]);
     let (paths, _) = scan(&archive, "tricky.zip");
     assert_eq!(paths, ["tricky.zip!/prod.env"]);
+}
+
+#[test]
+fn a_planted_record_in_the_trailing_comment_is_walked_past() {
+    // The one position a planted record is reached from before the real one
+    // is the archive's own trailing comment, and a record planted at the very
+    // start of a comment of its own length does satisfy the comment check.
+    // What refuses it is the directory it names: that has to lie inside the
+    // file and ahead of the record naming it. This one does not, so the
+    // backwards search carries on and reaches the real record behind it.
+    let mut planted = Vec::new();
+    planted.extend_from_slice(b"PK\x05\x06");
+    planted.extend_from_slice(&0u16.to_le_bytes()); // this disk
+    planted.extend_from_slice(&0u16.to_le_bytes()); // disk the directory starts on
+    planted.extend_from_slice(&1u16.to_le_bytes()); // records on this disk
+    planted.extend_from_slice(&1u16.to_le_bytes()); // records in total
+    planted.extend_from_slice(&100u32.to_le_bytes()); // directory size
+    planted.extend_from_slice(&0xffff_ff00u32.to_le_bytes()); // directory offset
+    planted.extend_from_slice(&0u16.to_le_bytes()); // comment length
+    assert_eq!(planted.len(), 22);
+
+    let member = credential_line();
+    let archive = zip_bytes_with_comment(&[stored("prod.env", member.as_bytes())], &planted);
+    let (paths, _) = scan(&archive, "planted.zip");
+    assert_eq!(paths, ["planted.zip!/prod.env"]);
 }
 
 #[test]
