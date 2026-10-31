@@ -10,13 +10,26 @@
 //! are not carried into the flat list, and each is taken only when it plainly
 //! starts no command of its own.
 //!
-//! A loop is only the same shape when it is known to stop and its body cannot
-//! build up across iterations, because one flattened pass stands for every
-//! iteration. `while read NAME; do ...; done < FILE` is that shape, for a
-//! plain relative `FILE`: the read ends at that file's end, and a body that
-//! writes nothing leaves each iteration doing the work the single pass
-//! already describes. A device or a path outside the workspace need never
-//! end, so neither is taken. Every other loop keeps its review.
+//! A loop is only the same shape when one flattened pass stands for every
+//! iteration it could run. `while read NAME; do ...; done < FILE` is that
+//! shape, for a plain relative `FILE`: the read ends at that file's end, and
+//! a body that writes nothing leaves each iteration doing the work the single
+//! pass already describes. A device or a path outside the workspace need
+//! never end, so neither is taken.
+//!
+//! A wait is the other shape. `until pg_isready -h 127.0.0.1; do sleep 1;
+//! done` asks one question over and over and waits between the asks, which is
+//! how a developer holds a test suite until its fixture server answers. The
+//! loop never ends on its own, but it reaches nothing a single pass does not:
+//! the body only sleeps, so it reads no input and opens no output, and the
+//! one command the test runs is the same command each time. Sleeping twice is
+//! sleeping longer, so a flat `TEST; sleep N` holds everything the loop can
+//! do however long it runs, and that command still faces the ordinary proofs.
+//! The test is taken as one command with no redirection of its own, because a
+//! list or a redirection would make the iterations differ from the pass; the
+//! body is taken only as plain `sleep` calls with a literal duration, since
+//! anything else could build up across them. Every other loop keeps its
+//! review.
 //!
 //! The loop's redirection is the file its `read` consumes, so the flat list
 //! opens with a read of that file and then the body's own commands. Carrying
@@ -32,7 +45,9 @@
 //! existing review behavior.
 
 use super::for_loop_unroll::body::{body_items, redirect_tail, substitute};
-use super::for_loop_unroll::{ordinary_loop_name, valid_identifier};
+
+#[path = "control_flow_flatten_loop.rs"]
+mod loops;
 
 /// Enough room for a conditional with a handful of `elif` arms.
 const MAX_ITEMS: usize = 48;
@@ -52,7 +67,10 @@ pub(super) fn flatten(command: &str) -> Option<String> {
         return flatten_conditional(rest);
     }
     if let Some(rest) = keyword(text, "while") {
-        return flatten_loop(rest);
+        return loops::flatten_loop(rest);
+    }
+    if let Some(rest) = keyword(text, "until") {
+        return loops::flatten_wait(rest);
     }
     if let Some(rest) = keyword(text, "case") {
         return flatten_case(rest);
@@ -314,97 +332,6 @@ fn arm_end(body: &str) -> Option<(usize, usize)> {
 fn closing(text: &str) -> Option<&str> {
     let rest = text.strip_prefix("esac")?;
     (rest.is_empty() || rest.starts_with([' ', '\t', '\n', ';', '<', '>'])).then_some(rest)
-}
-
-/// `while read NAME...; do LIST; done < FILE`, the one loop shape a single
-/// flattened pass describes. The read ends at the file's end, so the loop
-/// stops on its own, and a body that opens no output keeps every iteration
-/// doing the work that one pass already stands for. A loop whose test is
-/// anything else may never end, and a body that writes would repeat its
-/// effect for as long as it runs, so neither is flattened.
-///
-/// The flat list reads the redirected file and then runs the body. `read`
-/// itself only binds a name from that file, so the read of the file is the
-/// whole of what the loop's test reaches.
-fn flatten_loop(rest: &str) -> Option<String> {
-    // The loop binds a name of its own, and the flat list does not, so an
-    // expansion inside it would stand for different text than the one the
-    // loop ran. No expansion at all is the rule that keeps the two the same
-    // work. A conditional binds nothing, so it carries its expansions.
-    if rest.contains(['$', '`']) {
-        return None;
-    }
-    let (test, _, after_test) = body_items(rest, "", &["do"])?;
-    let (body, _, tail) = body_items(after_test, "", &["done"])?;
-    if !driven_by_a_read(&test) {
-        return None;
-    }
-    let source = read_source(&redirect_tail(tail)?)?;
-    if body
-        .iter()
-        .any(|(text, _)| text.contains('>') || text.contains('<'))
-    {
-        return None;
-    }
-    let mut parts: Vec<(String, &'static str)> = vec![(format!("cat {source}"), "; ")];
-    collect(&mut parts, body)?;
-    assemble(&parts, "")
-}
-
-/// Whether a loop's test is the single `read` that empties the redirected
-/// input, which is what makes the iteration count finite. A test that opens a
-/// file of its own is some other loop.
-///
-/// The names the `read` binds matter as much as the word itself. `read` fills
-/// them for every line of the input, so `while read PATH` rebinds `PATH` for
-/// the body and changes which program each of its command words resolves to.
-/// The flat list would then stand for commands the loop never ran. Only the
-/// ordinary lowercase names `for` already admits as loop variables are taken,
-/// and `-r`, which only stops backslash processing, is the one option allowed
-/// before them.
-fn driven_by_a_read(test: &[(String, &'static str)]) -> bool {
-    let [(text, _)] = test else {
-        return false;
-    };
-    if text.contains(['<', '>']) {
-        return false;
-    }
-    let mut words = text.split_whitespace();
-    let mut word = words.next();
-    // `IFS=` empties the field separator for the `read` alone, which keeps
-    // the whole line in the name instead of splitting it. It starts no
-    // program and leaves the flat list the same, so the loop is still the
-    // one a single pass describes. Any other assignment is some other loop.
-    if word == Some("IFS=") {
-        word = words.next();
-    }
-    if word != Some("read") {
-        return false;
-    }
-    let mut names = words.peekable();
-    if names.peek() == Some(&"-r") {
-        names.next();
-    }
-    names.all(|name| valid_identifier(name) && ordinary_loop_name(name))
-}
-
-/// The file a loop's input redirection names, for the plain `< FILE` tail and
-/// nothing else. A second redirection, a descriptor, or `<>` leaves a shape
-/// this recognizer does not model.
-///
-/// Only a plain relative spelling counts. The loop stops because its `read`
-/// reaches the input's end, and a character device such as `/dev/urandom` or
-/// `/dev/stdin` has no end, so a loop reading one runs without bound and a
-/// single flattened pass stands for nothing. An absolute path, a `~` home
-/// path, a `-` and a `..` segment all leave the workspace the flat list is
-/// read against, so they keep their review too.
-fn read_source(tail: &str) -> Option<String> {
-    let target = tail.strip_prefix('<')?.trim();
-    let plain = !target.is_empty()
-        && !target.starts_with(['/', '-', '~'])
-        && !target.split('/').any(|segment| segment == "..")
-        && !target.contains(['<', '>', '&', ' ', '\t']);
-    plain.then(|| target.to_owned())
 }
 
 /// Add a list's items, rejecting an empty list and any item whose command

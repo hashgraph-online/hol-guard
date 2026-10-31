@@ -76,22 +76,36 @@ pub(super) fn safe_exit_arguments(arguments: &[String]) -> bool {
 }
 
 /// Parse a bounded literal `sleep` duration in seconds.
+///
+/// A readiness loop is as often written `sleep 30s` or `sleep 5m` as
+/// `sleep 30`, and the suffix only says which unit the number counts. Each
+/// supported unit is multiplied out here so the same bound decides every
+/// spelling: `sleep 2h` is past it, exactly as `sleep 7200` is.
 pub(super) fn sleep_seconds(arguments: &[String]) -> Option<f64> {
     let [duration] = arguments else {
         return None;
     };
-    if duration.is_empty()
-        || duration.len() > 16
-        || !duration
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || byte == b'.')
-        || duration.bytes().filter(|byte| *byte == b'.').count() > 1
+    let (digits, multiplier) = match duration.as_bytes() {
+        [rest @ .., b's'] => (rest, 1.0),
+        [rest @ .., b'm'] => (rest, 60.0),
+        [rest @ .., b'h'] => (rest, 3600.0),
+        [rest @ .., b'd'] => (rest, 86_400.0),
+        rest => (rest, 1.0),
+    };
+    if digits.is_empty()
+        || digits.len() > 16
+        || !digits
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || *byte == b'.')
+        || digits.iter().filter(|byte| **byte == b'.').count() > 1
     {
         return None;
     }
-    duration
+    std::str::from_utf8(digits)
+        .ok()?
         .parse::<f64>()
         .ok()
+        .map(|count| count * multiplier)
         .filter(|seconds| (0.0..=MAX_SAFE_SLEEP_SECONDS).contains(seconds))
 }
 
@@ -432,6 +446,50 @@ mod psql_environment_tests {
         for name in ["PSQLRC", "pgsysconfdir"] {
             let environment = super::psql_environment(Some(&stamped(&[name])), false);
             assert!(!environment.startup_files_absent, "{name}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod sleep_tests {
+    fn arguments(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    /// The unit a developer writes beside the number only says what the
+    /// number counts, so each spelling of the same wait reads as that wait.
+    #[test]
+    fn a_duration_carries_its_unit() {
+        for (values, seconds) in [
+            (&["30"][..], 30.0),
+            (&["30s"], 30.0),
+            (&["0.5s"], 0.5),
+            (&["5m"], 300.0),
+            (&["1h"], 3600.0),
+        ] {
+            assert_eq!(super::sleep_seconds(&arguments(values)), Some(seconds));
+        }
+    }
+
+    /// The bound is the same one in every unit, and a word that is not a
+    /// literal pause stays reviewed whichever letter it ends with.
+    #[test]
+    fn a_pause_past_the_bound_or_past_a_literal_stays_reviewed() {
+        for values in [
+            &["2h"][..],
+            &["1d"],
+            &["61m"],
+            &["3601"],
+            &["30x"],
+            &["s"],
+            &["-1s"],
+            &["$DELAY"],
+            &["1", "2"],
+        ] {
+            assert!(
+                super::sleep_seconds(&arguments(values)).is_none(),
+                "{values:?}"
+            );
         }
     }
 }
