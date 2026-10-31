@@ -6,9 +6,8 @@ Command activity is a local security-evidence domain. It records bounded facts a
 not command content. It is separate from receipts, matcher diagnostics, and command identities because those domains
 may contain user input.
 
-The default egress mode is `local_only`. Optional cloud egress accepts only rare-cell-suppressed daily aggregate
-counts through a separate type. Local activity rows, match rows, correlation handles, and receipt links cannot enter
-that type.
+The only egress mode is `local_only`. Command activity has no Cloud egress; see the Cloud Boundary below. Local
+activity rows, match rows, correlation handles, and receipt links never leave the device.
 
 ## Lifecycle
 
@@ -38,7 +37,7 @@ The versioned local schema permits only:
 - Local keyed request/session correlation handles
 - Bounded evaluation and persistence latency buckets
 - Built-in extension/rule identities, versions, safe-variant outcomes, severity, floors, and effect classes
-- A local-only redacted invocation preview for dashboard review, stored beside the activity row and omitted from cloud aggregates, hook journals, and analytics
+- A local-only redacted invocation preview for dashboard review, stored beside the activity row and omitted from hook journals and analytics
 
 Multi-rule commands produce one activity row and ordered match rows. A safe variant has its own analytics class and
 is never projected as unsafe. An unmatched ordinary command may have zero match rows and cannot name a controlling
@@ -48,7 +47,7 @@ Review-or-stronger decisions require a linked receipt reference. Analytics does 
 
 ## Forbidden Data
 
-The core activity, match, correlation, and cloud-aggregate types must never store, expose, log, or export:
+The core activity, match, and correlation types must never store, expose, log, or export:
 
 - Raw or normalized commands, arguments, shell fragments, substitutions, heredocs, or redirects
 - Paths, current directories, workspace or repository names, owners, remotes, hosts, or URLs
@@ -63,7 +62,7 @@ The core activity, match, correlation, and cloud-aggregate types must never stor
 
 Positive field allowlists and closed typed values enforce this boundary on those types. Redaction is not sufficient there.
 
-The local dashboard may show a redacted invocation preview so operators can see which command Guard checked. That preview is local-only: it is omitted from hook journals, cloud aggregates, and analytics, and it must still drop secrets, tokens, private paths, URLs, emails, secret-bearing environment assignments, and heredoc bodies. The exact original command string must not appear on command-activity API, diagnostics, log, or journal surfaces. A local recovery sidecar may retain the same redacted preview until the activity row is persisted, then it is deleted with the journal record.
+The local dashboard may show a redacted invocation preview so operators can see which command Guard checked. That preview is local-only: it is omitted from hook journals and analytics, and it must still drop secrets, tokens, private paths, URLs, emails, secret-bearing environment assignments, and heredoc bodies. The exact original command string must not appear on command-activity API, diagnostics, log, or journal surfaces. A local recovery sidecar may retain the same redacted preview until the activity row is persisted, then it is deleted with the journal record.
 
 ## Correlation
 
@@ -101,9 +100,10 @@ Allowed dimensions are total, harness, built-in extension, built-in rule, dispos
 status, proof level, and latency bucket. A record carries only one dimension, preventing arbitrary multidimensional
 slices. Cells below the fixed privacy threshold are rejected.
 
-Cloud payloads cannot contain activity, receipt, correlation, installation, or device identifiers; exact timestamps;
-free-form text; local versions; or per-command rows. Creating local activity has no network callback. Later cloud
-transport must accept only the aggregate type and must reject unexpected or nested fields recursively.
+A future aggregate payload must not contain activity, receipt, correlation, installation, or device identifiers;
+exact timestamps; free-form text; local versions; or per-command rows. Creating local activity has no network
+callback. Any future transport must accept only that aggregate and must reject unexpected or nested fields
+recursively.
 
 ## Failure Model
 
@@ -112,4 +112,5 @@ bounded dropped-event or error counters and expose degraded evidence health with
 
 Tests must continue to cover the exhaustive phase/status/proof matrix, transitions, receipt requirements,
 safe-variant projection, schema drift, HMAC separation and rotation, forbidden-field canaries, and enforcement
-independence from analytics failures. A Cloud aggregate must add cloud-allowlist and rare-cell suppression tests.
+independence from analytics failures. A future resident-built aggregate must add allowlist and rare-cell suppression
+tests.
