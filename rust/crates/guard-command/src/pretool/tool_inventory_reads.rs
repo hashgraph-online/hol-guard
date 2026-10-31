@@ -1,6 +1,11 @@
 //! What a tool launcher already holds: `uv tool list`, `uv tool dir`,
 //! `uv cache dir`, `uv python dir`, `pipx list` and `pipx environment`.
 //!
+//! A lone help flag reaches pipx here too: argparse prints the usage text and
+//! exits before pipx reads a package name or opens a venv, and the flag ends
+//! the command whatever verb stands in front of it. `uv --help` already
+//! answers quietly on its own.
+//!
 //! Each of these prints a directory the launcher owns, or the tools it has
 //! already installed into one. None resolves a version, contacts an index,
 //! builds a distribution or runs an entry point, so none can reach the
@@ -84,6 +89,11 @@ fn safe_uv_arguments(arguments: &[String]) -> bool {
 fn safe_pipx_arguments(arguments: &[String]) -> bool {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match after_global_flags(&words, PIPX_GLOBAL_FLAGS) {
+        // argparse answers a help flag with the usage text and exits before
+        // pipx reads a package name or opens a venv, so the flag ends the
+        // command whatever verb stands in front of it.
+        [help] if help_flag(help) => true,
+        [verb, help] if help_flag(help) && plain_verb(verb) => true,
         ["list", rest @ ..] => flags_only(rest, PIPX_LIST_FLAGS),
         // `--value` picks one of the names the bare listing prints, so it
         // reads no further than the listing does.
@@ -110,6 +120,19 @@ fn flags_only(rest: &[&str], allowed: &[&str]) -> bool {
 
 /// One of pipx's own `PIPX_` names: letters, digits and underscores, so the
 /// value cannot carry a path or an option of its own.
+fn help_flag(word: &str) -> bool {
+    matches!(word, "--help" | "-h")
+}
+
+/// A bare subcommand name, so a help flag behind it names no path or package.
+fn plain_verb(word: &str) -> bool {
+    !word.is_empty()
+        && !word.starts_with('-')
+        && word
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+}
+
 fn environment_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -144,6 +167,10 @@ mod tests {
             vec!["environment"],
             vec!["environment", "--value", "PIPX_HOME"],
             vec!["-q", "list"],
+            vec!["--help"],
+            vec!["-h"],
+            vec!["install", "--help"],
+            vec!["environment", "--help"],
         ] {
             assert!(super::safe_pipx_arguments(&args(&words)), "pipx {words:?}");
         }
@@ -173,6 +200,12 @@ mod tests {
             vec!["ensurepath"],
             vec!["inject", "ruff", "requests"],
             vec!["uninstall", "ruff"],
+            // A help flag ends the command only when nothing else is left to
+            // act on, and only behind a plain verb.
+            vec!["install", "--help", "ruff"],
+            vec!["install", "ruff", "--help"],
+            vec!["--help", "install"],
+            vec!["./script.py", "--help"],
             vec![],
         ] {
             assert!(!super::safe_pipx_arguments(&args(&words)), "pipx {words:?}");
