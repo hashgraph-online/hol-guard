@@ -8,6 +8,9 @@ publish = false
 
 [dependencies]
 base64ct.workspace = true
+# Reading the members of a committed archive: the same readers, at the same
+# versions, that `guard-archive` and `guard-policy-bundle` already use.
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 guard-rules = { path = "../guard-rules" }
 hex.workspace = true
 hmac.workspace = true
@@ -15,6 +18,7 @@ regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tar = { version = "0.4.44", default-features = false }
 zeroize = "1.9.0"
 
 # `precommit` ports the Python `dir_fd` filesystem operations (openat/fstatat/

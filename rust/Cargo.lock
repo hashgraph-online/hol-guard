@@ -967,6 +967,7 @@ name = "guard-scanner"
 version = "0.1.0"
 dependencies = [
  "base64ct",
+ "flate2",
  "guard-alloc-probe",
  "guard-rules",
  "hex",
@@ -976,6 +977,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tar",
  "zeroize",
 ]
 

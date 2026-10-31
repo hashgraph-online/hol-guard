@@ -23,6 +23,11 @@ use crate::secret_detection::{
     PublicFinding, SecretFinding,
 };
 
+#[path = "repository_scanner_archive.rs"]
+mod archive;
+
+use archive::scan_archive_members;
+
 /// `DEFAULT_MAX_FILES` from the Python module.
 pub const DEFAULT_MAX_FILES: usize = 5_000;
 /// `DEFAULT_MAX_FILE_BYTES` from the Python module.
@@ -454,7 +459,11 @@ pub(crate) fn scan_blob(
     finding_budget: usize,
 ) -> (Vec<SecretFinding>, usize) {
     let Some(text) = decode_text(path, data) else {
-        return (Vec::new(), 0);
+        // An archive is a container of files rather than a file of its own,
+        // so its members are read instead of being skipped with the images
+        // and the object code.
+        return scan_archive_members(data, path, source, commit, finding_budget)
+            .unwrap_or_else(|| (Vec::new(), 0));
     };
     let summary = scan_secret_text(text, path, source, commit, finding_budget);
     (summary.findings, data.len())
