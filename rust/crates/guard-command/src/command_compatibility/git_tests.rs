@@ -391,16 +391,27 @@ fn printing_the_replacement_refs_stays_silent() {
         "git replace -l",
         "git replace --list refs/replace/*",
         "git replace --format=long -l",
-        "git -C sub replace --list",
-        "git -C sub replace",
     ] {
         assert!(observations(command).rule_matches.is_empty(), "{command}");
+    }
+    // A `-C` route is only admitted into a checkout, so the listing behind one
+    // is read where git enters.
+    let worktree = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(worktree.path().join(".git")).unwrap();
+    std::fs::create_dir_all(worktree.path().join("sub")).unwrap();
+    for command in ["git -C sub replace --list", "git -C sub replace"] {
+        assert!(
+            observations_in(command, worktree.path())
+                .rule_matches
+                .is_empty(),
+            "{command}"
+        );
     }
     // The spellings that write a replacement ref keep their rule wherever they
     // are routed from.
     for command in ["git replace HEAD HEAD~1", "git -C sub replace -d HEAD"] {
         assert_eq!(
-            observations(command)
+            observations_in(command, worktree.path())
                 .rule_matches
                 .iter()
                 .map(|item| item.rule_id)
