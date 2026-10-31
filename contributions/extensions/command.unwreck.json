@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "guard.extension-contribution.v2",
+  "generated": true,
+  "id": "command.unwreck",
+  "version": "1.0.0",
+  "name": "Unwreck command protection",
+  "description": "Reviews Unwreck CLI invocations that restore or delete project and snapshot state, persist snapshots, change agent hook configuration, or launch child processes. Read-only inspection commands and the installed hook callback are outside this extension's matchers.",
+  "icon": {
+    "background": "#0F172A",
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine"
+  },
+  "executables": [
+    "unwreck",
+    "unwreck.exe"
+  ],
+  "publisher": {
+    "id": "community.unwreck",
+    "displayName": "Ayush Anand Srivastava",
+    "url": "https://github.com/ayushdoesdev/unwreck"
+  },
+  "homepage": "https://github.com/ayushdoesdev/unwreck",
+  "license": "MIT OR Apache-2.0",
+  "riskClasses": [
+    "destructive_shell",
+    "execution"
+  ],
+  "actionClasses": [
+    "Unwreck state and snapshot mutation command",
+    "Unwreck agent hook configuration command",
+    "Unwreck child process execution command"
+  ],
+  "ecosystemIds": [
+    "unwreck"
+  ],
+  "referenceUrls": [
+    "https://github.com/ayushdoesdev/unwreck",
+    "https://github.com/ayushdoesdev/unwreck/blob/main/README.md"
+  ],
+  "saferAlternatives": [
+    "Preview restore, undo, and hook configuration changes with their dry-run options.",
+    "Inspect the exact command before using `unwreck run` to launch a child process.",
+    "Review snapshot retention and protect the local snapshot store."
+  ],
+  "trustClass": "external",
+  "activation": "opt-in",
+  "nativeSource": {
+    "schemaVersion": "guard.command-extension-source.v1",
+    "path": "contributions/command-sources/command.unwreck.json",
+    "digest": "b927f194fc0a12099f568fa5557a142e7f44ca701fd8d542acbebd6a438abc29"
+  }
+}
