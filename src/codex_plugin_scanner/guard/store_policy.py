@@ -81,6 +81,10 @@ POLICY_LOOKUP_MEMORY_FEATURE = "policy-decision-lookup-memory-v1"
 PORTABLE_COMPOSITION_LOOKUP_FEATURE = "policy-decision-lookup-portable-composition-v1"
 _RESIDENT_VERDICT_ATTEMPTS = 6
 _DEGRADED_AUTHORITY_REVISION = -1
+# The resident derives policy-bundle decision identities from the store it
+# reads, except off Unix, where it cannot read the host name a generic device
+# label yields to.
+_RESIDENT_DERIVES_BUNDLE_IDENTITIES = os.name != "nt"
 
 
 @dataclass(frozen=True)
@@ -972,7 +976,7 @@ class StorePolicyMixin:
             "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
             "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
         }
-        if evidence.policy_bundle_decision_identities:
+        if evidence.policy_bundle_decision_identities is not None:
             request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
         if portable_workspace is not None:
             request["portable_workspace"] = portable_workspace
@@ -1171,14 +1175,14 @@ class StorePolicyMixin:
         )
 
     def _lookup_bundle_identities(self, current_time: str) -> list[list[Any]] | None:
-        # The resident derives these from the store it reads, except off Unix,
-        # where it cannot read the host name a generic device label yields to.
-        if os.name != "nt":
+        if _RESIDENT_DERIVES_BUNDLE_IDENTITIES:
             return None
         identities = self._cached_policy_bundle_decision_identities(
             now=_parse_utc_timestamp(current_time).timestamp(),
         )
-        return [list(identity) for identity in identities] or None
+        # An empty list is sent as is: it authorizes nothing, where an absent
+        # one would hand the derivation back to the resident.
+        return [list(identity) for identity in identities]
 
     def resolve_policy_decision(
         self,
@@ -1300,14 +1304,12 @@ class StorePolicyMixin:
                 bundle=needs_bundle,
                 cloud_workspace_id=self._cloud_workspace_id_from_connection(connection) if needs_bundle else None,
             )
-        # The resident derives these itself, except off Unix, where it cannot
-        # read the host name a generic device label yields to.
-        if needs_bundle and os.name == "nt":
+        if needs_bundle and not _RESIDENT_DERIVES_BUNDLE_IDENTITIES:
             identities = self._cached_policy_bundle_decision_identities(
                 now=_parse_utc_timestamp(current_time).timestamp(),
             )
-            if identities:
-                evidence["policy_bundle_decision_identities"] = [list(identity) for identity in identities]
+            # An empty list authorizes nothing; see _lookup_bundle_identities.
+            evidence["policy_bundle_decision_identities"] = [list(identity) for identity in identities]
         return evidence
 
     def approval_reuse_validation_reason(

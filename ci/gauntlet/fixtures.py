@@ -20,7 +20,14 @@ from .extension_adapters import EXTENSION_ADAPTERS
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
 from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
-from .realism_fixtures import add_home_tools, add_main_shapes, add_worktree_venv, borrow_main_modules
+from .realism_fixtures import (
+    LOCAL_BIN,
+    add_home_tools,
+    add_main_shapes,
+    add_worktree_venv,
+    borrow_main_modules,
+    write_windows_launcher,
+)
 from .review_fixtures import (
     CODEX_HOOKS,
     GH_LOG,
@@ -208,6 +215,29 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def write_cache_client_stub(bin_dir: Path) -> None:
+    """A cache client that answers its own ping.
+
+    The liveness case asks what Guard makes of ``redis-cli ping``, not whether a
+    cache server is listening. A runner with no client installed, or none
+    answering at the default endpoint, would fail the shell call after Guard
+    allowed it, and the judge would read that as an unfinished task rather than
+    the admission decision the case was written for. The stand-in keeps the
+    command the model types exactly as the case names it.
+
+    It goes where the other per-user CLIs go, the home ``.local/bin`` every lane
+    puts ahead of the system PATH, rather than beside the extension sentinels:
+    that directory reaches PATH only for the blocked-extension oracle and the
+    few cases named in the business and GitHub stub sets, so a stub left there
+    would never be the client this case resolves.
+    """
+    bin_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stub = bin_dir / "redis-cli"
+    stub.write_text("#!/bin/sh\nprintf 'PONG\\n'\n", encoding="utf-8", newline="\n")
+    stub.chmod(0o700)
+    write_windows_launcher(bin_dir, "redis-cli", "print('PONG')\n")
+
+
 def create_fixture(
     root: Path, *, realistic: bool = False, linked_worktree: bool = False, scenario_id: str | None = None
 ) -> Fixture:
@@ -275,6 +305,7 @@ def create_fixture(
             newline="\n",
         )
         sentinel.chmod(0o700)
+    write_cache_client_stub(home / LOCAL_BIN)
     try:
         (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
     except OSError as error:

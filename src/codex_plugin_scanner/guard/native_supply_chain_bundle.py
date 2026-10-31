@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -30,6 +31,7 @@ from .runtime.supply_chain_bundle_base import (
     SupplyChainBundleRollbackError,
     SupplyChainBundleSignatureError,
 )
+from .runtime.supply_chain_verification_keys import SupplyChainVerificationKey, load_supply_chain_verification_keys
 
 SUPPLY_CHAIN_BUNDLE_VERIFY_FEATURE = "supply-chain-bundle-verify-v1"
 _REQUEST_SCHEMA = "guard-supply-chain-bundle-verify-request.v1"
@@ -53,6 +55,21 @@ _REFUSAL_CLASSES: dict[str, type[SupplyChainBundleError]] = {
     "payload_hash": SupplyChainBundlePayloadHashError,
     "keyring": SupplyChainBundleKeyringError,
 }
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedSupplyChainBundle:
+    """A bundle response the resident verified, in the forms the sync path saves.
+
+    ``response`` is the wire form the cache keeps and later re-verifies;
+    ``verification_keys`` is the keyring it advertised; ``summary`` is the
+    resident's reading of the bundle: version, key, policy hash, tier, feed
+    snapshot hash and the advisory and package counts.
+    """
+
+    response: dict[str, object]
+    verification_keys: tuple[SupplyChainVerificationKey, ...]
+    summary: dict[str, object]
 
 
 class SupplyChainBundleUnavailableError(SupplyChainBundleError):
@@ -91,8 +108,8 @@ def native_verify_supply_chain_bundle_response(
     now: float | None = None,
     guard_home: Path | None = None,
     store: Any | None = None,
-) -> None:
-    """Return when the resident verified the bundle; raise when it did not.
+) -> VerifiedSupplyChainBundle:
+    """Return the bundle the resident verified; raise when it did not.
 
     ``response`` is the bundle response in its wire form, unaltered, because
     the resident recomputes the canonical payload over it. ``trusted_keys``
@@ -160,3 +177,13 @@ def native_verify_supply_chain_bundle_response(
         raise error_class(message if isinstance(message, str) else "Supply-chain bundle is refused")
     if outcome != "verified":
         raise SupplyChainBundleUnavailableError
+    return _verified(response, answer.get("summary"))
+
+
+def _verified(response: Mapping[str, object], summary: object) -> VerifiedSupplyChainBundle:
+    keys = tuple(load_supply_chain_verification_keys(response.get("verificationKeys")))
+    cached = {name: response.get(name) for name in ("bundle", "payloadHash", "signature", "signatureAlgorithm")}
+    cached["verificationKeys"] = [key.to_dict() for key in keys]
+    if not isinstance(summary, dict):
+        raise SupplyChainBundleUnavailableError
+    return VerifiedSupplyChainBundle(response=cached, verification_keys=keys, summary=summary)

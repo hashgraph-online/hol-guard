@@ -10,7 +10,6 @@ diagnosis must fail closed instead of raising.
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -254,10 +253,10 @@ def test_claim_refuses_local_evidence_shipped_without_a_binding(
     assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is False
 
 
-@pytest.mark.skipif(os.name != "nt", reason="only Windows ships bundle identities")
 def test_bundle_binding_is_read_before_the_identities_it_binds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A source that moves while the identities are derived must differ from the binding."""
 
+    monkeypatch.setattr(store_policy, "_RESIDENT_DERIVES_BUNDLE_IDENTITIES", False)
     store, selected = _bundle_store(tmp_path)
     real = store._cached_policy_bundle_decision_identities
 
@@ -272,7 +271,7 @@ def test_bundle_binding_is_read_before_the_identities_it_binds(tmp_path: Path, m
     assert _claim_events(store) == 0
 
 
-@pytest.mark.skipif(os.name == "nt", reason="off Unix the caller ships the identities")
+@pytest.mark.skipif(not store_policy._RESIDENT_DERIVES_BUNDLE_IDENTITIES, reason="off Unix the caller ships them")
 def test_the_resident_derives_the_bundle_identities_it_claims_against(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

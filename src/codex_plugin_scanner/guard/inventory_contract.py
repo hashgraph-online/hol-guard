@@ -54,9 +54,6 @@ from .inventory_contract_constants import _SERIALIZER_UNSAFE_PATH_RE as _SERIALI
 from .inventory_contract_constants import _UNSAFE_PATH_MARKERS as _UNSAFE_PATH_MARKERS
 from .inventory_contract_constants import _WHITESPACE_RE as _WHITESPACE_RE
 from .inventory_contract_constants import _path_has_symlink_component as _path_has_symlink_component
-from .inventory_contract_fingerprints import _inventory_snapshot_content_hash as _inventory_snapshot_content_hash
-from .inventory_contract_fingerprints import _stable_snapshot_sort_key as _stable_snapshot_sort_key
-from .inventory_contract_fingerprints import _stable_snapshot_value as _stable_snapshot_value
 from .inventory_contract_fingerprints import fingerprint_mapping as fingerprint_mapping
 from .inventory_contract_fingerprints import fingerprint_text as fingerprint_text
 from .inventory_contract_fingerprints import inventory_item_id as inventory_item_id
@@ -111,6 +108,7 @@ from .native_inventory_scan_findings import (
     InventoryScanFindingsUnavailableError,
     native_inventory_scan_findings,
 )
+from .native_inventory_snapshot_digest import native_inventory_snapshot_digest
 from .native_inventory_source_evidence import native_inventory_source_evidence
 from .path_security import path_has_symlink_component as path_has_symlink_component
 from .skill_directory_identity import validated_complete_skill_directory_hash as validated_complete_skill_directory_hash
@@ -428,7 +426,7 @@ def inventory_snapshot_from_detection(
         include_symlinks=include_symlinks,
     )
     sources = (*config_sources, *scanner_sources)
-    snapshot_hash = _inventory_snapshot_content_hash(
+    snapshot_hash = native_inventory_snapshot_digest(
         agent_type=harness,
         items=item_tuple,
         findings=scan_findings,

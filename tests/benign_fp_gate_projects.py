@@ -291,6 +291,7 @@ def host_tool_path(home: Path, search_path: str) -> str:
     php = home / ".asdf" / "installs" / "php" / "8.3.6" / "bin"
     ruby = home / ".asdf" / "installs" / "ruby" / "3.3.0" / "bin"
     golang = home / ".asdf" / "installs" / "golang" / "1.23.2" / "bin"
+    redis = home / ".asdf" / "installs" / "redis" / "7.4.1" / "bin"
     cloud_sdk = home / "google-cloud-sdk" / "bin"
     tools = (
         (bun, ("bun",)),
@@ -305,6 +306,13 @@ def host_tool_path(home: Path, search_path: str) -> str:
         (php, ("composer",)),
         (ruby, ("bundle", "bundler")),
         (golang, ("go",)),
+        # A developer waiting on a fixture server runs `redis-cli ping`, and
+        # whether Guard reads that as a liveness check is the whole question
+        # the case asks. A runner with no Redis would answer it with an
+        # absent program instead, which Guard contains for a different
+        # reason, so a stand-in sits in a version-manager install the way
+        # the other clients do.
+        (redis, ("redis-cli",)),
         # An unpacked cloud SDK, which is how a developer gets `kubectl` when
         # no package manager owns it. It stays off the returned PATH on
         # purpose: the cases that use it spell the installer's own path, and
@@ -325,6 +333,7 @@ def host_tool_path(home: Path, search_path: str) -> str:
             str(php),
             str(ruby),
             str(golang),
+            str(redis),
             search_path,
             str(bun),
         ]
