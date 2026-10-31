@@ -208,7 +208,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                     || Path::new(target.as_str()).components().all(|component| {
                         matches!(component, Component::ParentDir | Component::CurDir)
                     });
-                if !inside && !(descent_failed && climbs) {
+                if !(inside || (descent_failed && climbs)) {
                     return None;
                 }
                 // A failed cd leaves the old cwd. &&/|| choose the corresponding
