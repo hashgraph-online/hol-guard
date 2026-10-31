@@ -218,12 +218,11 @@ fn sensitive_directory_labels() -> &'static BTreeMap<&'static str, &'static str>
 /// client picks, so no fixed basename can anchor them: an AWS SSO token cache
 /// and a gcloud account directory are both named after the account.
 fn sensitive_directory_sequences() -> &'static [(&'static [&'static str], &'static str)] {
+    const AWS_SSO: &[&str] = &[".aws", "sso"];
+    const GCLOUD_LEGACY: &[&str] = &["gcloud", "legacy_credentials"];
     &[
-        (&[".aws", "sso"][..], "AWS SSO cached credentials"),
-        (
-            &["gcloud", "legacy_credentials"][..],
-            "Google Cloud credentials",
-        ),
+        (AWS_SSO, "AWS SSO cached credentials"),
+        (GCLOUD_LEGACY, "Google Cloud credentials"),
     ]
 }
 fn sensitive_suffix_labels() -> &'static BTreeMap<&'static [&'static str], &'static str> {
