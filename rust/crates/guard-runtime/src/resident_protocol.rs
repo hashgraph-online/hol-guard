@@ -108,6 +108,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-guard-config-update-v1".into(),
         "native-guard-config-resolve-v1".into(),
         "native-installation-continuity-v1".into(),
+        "native-machine-state-files-v1".into(),
         "native-managed-policy-load-v1".into(),
         "native-health-lease-state-v1".into(),
         "native-policy-effective-v1".into(),

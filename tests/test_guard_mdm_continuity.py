@@ -10,7 +10,7 @@ import pytest
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import commands_dispatch_mdm
-from codex_plugin_scanner.guard.mdm import continuity
+from codex_plugin_scanner.guard.mdm import continuity, state_file
 from codex_plugin_scanner.guard.mdm.contracts import MachinePaths
 
 
@@ -31,6 +31,7 @@ def _prepare(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MachinePaths:
     monkeypatch.setattr(continuity, "default_machine_paths", lambda **_kwargs: paths)
     monkeypatch.setattr(continuity, "require_machine_device_context", lambda _system_name: None)
     monkeypatch.setattr(continuity, "_private_regular_file", lambda _metadata: True)
+    monkeypatch.setattr(state_file, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
     monkeypatch.setattr(
         continuity,
         "verified_machine_device_key_ids",
@@ -265,8 +266,8 @@ def test_continuity_rejects_symlink_and_oversized_state(tmp_path: Path, monkeypa
     assert symlink_result.identity_reason_code == "installation_identity_acl_invalid"
 
     state_path.unlink()
-    state_path.write_bytes(b"x" * (continuity._MAX_STATE_BYTES + 1))
-    monkeypatch.setattr(continuity, "_private_regular_file", lambda _metadata: True)
+    state_path.write_bytes(b"x" * (64 * 1024 + 1))
+    monkeypatch.setattr(state_file, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
     oversized = continuity.verify_installation_continuity(paths, system_name="Darwin")
     assert oversized.identity_reason_code == "installation_identity_acl_invalid"
 
