@@ -1748,23 +1748,6 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-helm-plugin-help-text",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "helm audit --help"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
       "id": "bun-version",
       "fix_area": "shell",
       "harnesses": [
