@@ -128,6 +128,7 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_names;
+mod helm_usage;
 mod help_probes;
 mod installed_program_path;
 mod list_wrapper;

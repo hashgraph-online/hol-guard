@@ -27,7 +27,11 @@
 //! - `helm`: a plugin whose name matches the verb takes the command, so the
 //!   usage text would come from a binary the command never names.
 //! - `docker`: `docker --help` lists CLI plugins, and it discovers them by
-//!   executing each one's metadata command.
+//!   executing each one's metadata command. That holds for every usage page
+//!   the client prints, not only the top-level one: the root help function
+//!   adds the plugin stubs before it renders any of them, so `docker ps
+//!   --help` runs the same binaries. `docker help <word>` is worse again,
+//!   because it hands the page to the `docker-<word>` plugin to print.
 //! - `yarn` and `pnpm`: Yarn's `yarnPath` and Corepack's `packageManager`
 //!   field select a workspace-supplied binary that the probe would execute,
 //!   for the same reason the version probe refuses them.
