@@ -60,7 +60,7 @@ pub(crate) use session::session_decidable;
 pub(crate) const MCP_RELAY_DECIDE_FEATURE: &str = "mcp-relay-decide-v2";
 const RESULT_SCHEMA: &str = "guard-mcp-relay-decide-result.v1";
 /// The harnesses whose MCP proxy the relay replaces.
-const RELAY_HARNESSES: [&str; 5] = ["codex", "copilot", "cursor", "hermes", "opencode"];
+const RELAY_HARNESSES: [&str; 6] = ["cline", "codex", "copilot", "cursor", "hermes", "opencode"];
 /// `blocked_request_mode`, under which the queue route asks for approval.
 const ASK_MODE: &str = "ask";
 
