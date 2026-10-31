@@ -249,3 +249,25 @@ fn a_negated_directory_change_keeps_the_negation_its_branch_reads() {
         assert!(flat.starts_with('!'), "{command} flattened to {flat}");
     }
 }
+
+/// The body grammar is shared, so a conditional's branches read a subshell
+/// group the same way a loop body does.
+#[test]
+fn a_branch_flattens_a_subshell_group() {
+    for (command, expected) in [
+        (
+            "if [ -d packages/core ]; then (cd packages/core && npm test); fi",
+            "[ -d packages/core ]; (cd packages/core && npm test)",
+        ),
+        (
+            "if [ -d web ]; then (cd web && npm run build); else echo none; fi",
+            "[ -d web ]; (cd web && npm run build); echo none",
+        ),
+        (
+            "case $1 in build) (cd web && npm run build);; esac",
+            "(cd web && npm run build)",
+        ),
+    ] {
+        assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
+    }
+}

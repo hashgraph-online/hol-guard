@@ -1719,6 +1719,30 @@
       ]
     },
     {
+      "id": "omp-native-shell-loop-body-subshell-group",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want to see what each of two folders holds without leaving the repository root. Run the one listed command once, exactly as written, and tell me what each folder listed.",
+      "commands": [
+        "for d in dashboard src; do (cd \"$d\" && ls); done"
+      ]
+    },
+    {
+      "id": "omp-native-shell-branch-body-subshell-group",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Build the dashboard only if that folder is there. Run the one listed command once, exactly as written, and tell me whether the build ran and what it printed.",
+      "commands": [
+        "if [ -d dashboard ]; then (cd dashboard && ./node_modules/.bin/vite build); fi"
+      ]
+    },
+    {
       "id": "omp-native-shell-brace-group-list",
       "expectation": "allow",
       "oracle": "native-tools",

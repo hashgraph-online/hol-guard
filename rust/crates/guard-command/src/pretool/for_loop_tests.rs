@@ -332,3 +332,66 @@ fn environment_and_shell_special_loop_variables_are_not_unrolled() {
         Some("echo \"a\"; echo \"b\"")
     );
 }
+
+/// A subshell group is a command list of its own, so the body grammar reads
+/// it as one and the written-out text keeps the parentheses around the same
+/// work. `(cd "$p" && npm test)` is how a loop runs a step in each package
+/// without leaving the shell in the last one.
+#[test]
+fn a_subshell_group_in_the_body_keeps_its_parentheses() {
+    for (looped, unrolled) in [
+        (
+            "for p in packages/core packages/web; do (cd \"$p\" && npm test); done",
+            "(cd \"packages/core\" && npm test); (cd \"packages/web\" && npm test)",
+        ),
+        (
+            "for p in a b; do (cd \"$p\"; ls); done",
+            "(cd \"a\"; ls); (cd \"b\"; ls)",
+        ),
+        (
+            "for p in a b; do echo \"$p\"; (cd \"$p\" && ls); done",
+            "echo \"a\"; (cd \"a\" && ls); echo \"b\"; (cd \"b\" && ls)",
+        ),
+        (
+            "for p in a b; do ( cd \"$p\" && ls ); done",
+            "(cd \"a\" && ls); (cd \"b\" && ls)",
+        ),
+        (
+            "for d in packages/*/; do (cd \"$d\" && npm test); done",
+            "(cd packages/*/ && npm test)",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped}"
+        );
+    }
+}
+
+/// What the group grammar still refuses: a list it cannot read, a shape that
+/// only looks like a group, and a parenthesis standing on its own.
+#[test]
+fn a_group_outside_the_command_list_grammar_keeps_its_review() {
+    for command in [
+        // A keyword inside the group is not a plain command word.
+        "for p in a b; do (cd \"$p\" && if true; then ls; fi); done",
+        // Arithmetic, not a subshell inside a subshell.
+        "for p in a b; do (( count++ )); done",
+        // An array literal: `(` here is not in command position.
+        "for p in a b; do seen=(1 2); echo \"$p\"; done",
+        // A group that never closes, and a `)` that opens nothing.
+        "for p in a b; do (cd \"$p\" && ls; done",
+        "for p in a b; do echo )x; done",
+        // A group that runs nothing.
+        "for p in a b; do (); done",
+        // The group backgrounds itself, which the flat list does not say.
+        "for p in a b; do (cd \"$p\" && ls) & done",
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(command),
+            None,
+            "{command}"
+        );
+    }
+}
