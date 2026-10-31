@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import stat
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -14,6 +17,7 @@ from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.mdm import policy as policy_module
 from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION
+from codex_plugin_scanner.guard.mdm.managed_file_trust import machine_controlled_file_is_trusted
 from codex_plugin_scanner.guard.mdm.policy import load_managed_policy
 from tests.policy_bundle_signing_helpers import policy_bundle_key_fingerprint, policy_bundle_test_keyring
 
@@ -391,6 +395,38 @@ def test_missing_policy_reports_absent(tmp_path: Path) -> None:
     assert state.reason_code == "managed_policy_absent"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="directory modes are POSIX")
+def test_memoized_machine_policy_is_reread_after_an_ancestor_directory_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_dir = tmp_path / "etc" / "hol-guard"
+    policy_dir.mkdir(parents=True)
+    policy_path = policy_dir / "managed-policy.json"
+    policy_path.write_text("{}", encoding="utf-8")
+    paths = SimpleNamespace(policy_path=policy_path, state_root=tmp_path / "state")
+    loads: list[object] = []
+
+    def load_native(request: object, source: str) -> policy_module.ManagedPolicyState:
+        loads.append(request)
+        return policy_module.ManagedPolicyState("invalid", source, reason_code="managed_policy_invalid")
+
+    monkeypatch.setattr(policy_module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_: paths)
+    monkeypatch.setattr(policy_module, "_load_native", load_native)
+    monkeypatch.setattr(policy_module, "_MEMO", {})
+    # Files this test just wrote count as settled.
+    monkeypatch.setattr(policy_module, "_RACY_WINDOW_NS", -60_000_000_000)
+
+    load_managed_policy()
+    load_managed_policy()
+    assert len(loads) == 1
+
+    # The native trust walk refuses a policy below a group-writable directory.
+    (tmp_path / "etc").chmod(0o775)
+    load_managed_policy()
+    assert len(loads) == 2
+
+
 def test_managed_policy_survives_local_and_cloud_weakening(tmp_path: Path) -> None:
     path = tmp_path / "policy.json"
     path.write_text(
@@ -437,3 +473,54 @@ def test_invalid_machine_policy_fails_closed_in_runtime_config(tmp_path: Path) -
     assert config.mode == "enforce"
     assert config.default_action == "block"
     assert config.install_owner == "mdm"
+
+
+# The native machine-policy load applies this provenance rule in
+# `managed_policy_file_trust::component_is_restricted`, pinned by its own Rust
+# test; this keeps the shared Python predicate, which still guards the other
+# machine-controlled files, to the same cases.
+@pytest.mark.parametrize(
+    ("file_mode", "file_uid", "parent_mode"),
+    [
+        (stat.S_IFLNK | 0o777, 0, stat.S_IFDIR | 0o755),
+        (stat.S_IFREG | 0o666, 0, stat.S_IFDIR | 0o755),
+        (stat.S_IFREG | 0o644, 501, stat.S_IFDIR | 0o755),
+        (stat.S_IFREG | 0o644, 0, stat.S_IFDIR | 0o777),
+    ],
+    ids=("symlink", "writable-file", "non-root-owner", "writable-parent"),
+)
+def test_native_machine_policy_source_rejects_insecure_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+    file_mode: int,
+    file_uid: int,
+    parent_mode: int,
+) -> None:
+    policy_path = Path("/etc/hol-guard/managed-policy.json")
+
+    def fake_lstat(path: Path) -> SimpleNamespace:
+        if path == policy_path:
+            return SimpleNamespace(st_mode=file_mode, st_uid=file_uid)
+        mode = parent_mode if path == policy_path.parent else stat.S_IFDIR | 0o755
+        return SimpleNamespace(st_mode=mode, st_uid=0)
+
+    monkeypatch.setattr(Path, "lstat", fake_lstat)
+
+    assert not machine_controlled_file_is_trusted(policy_path, system_name="Linux")
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="simulates Linux /etc provenance with a drive-less POSIX absolute path",
+)
+def test_native_machine_policy_source_accepts_root_owned_nonwritable_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy_path = Path("/etc/hol-guard/managed-policy.json")
+
+    def fake_lstat(path: Path) -> SimpleNamespace:
+        mode = stat.S_IFREG | 0o644 if path == policy_path else stat.S_IFDIR | 0o755
+        return SimpleNamespace(st_mode=mode, st_uid=0)
+
+    monkeypatch.setattr(Path, "lstat", fake_lstat)
+
+    assert machine_controlled_file_is_trusted(policy_path, system_name="Linux")

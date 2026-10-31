@@ -151,6 +151,12 @@ def _signature(path: Path) -> tuple[int, ...] | None:
     )
 
 
+def _ancestor_signatures(path: Path) -> tuple[tuple[int, ...] | None, ...]:
+    # The native trust walk refuses a file below any group- or world-writable
+    # or non-root directory, so a change to one of them has to miss the memo.
+    return tuple(_signature(parent) for parent in path.parents)
+
+
 def _windows_policy_key_present() -> bool:
     try:
         import winreg
@@ -196,7 +202,13 @@ def load_managed_policy(*, policy_path: Path | None = None, write_cache: bool = 
     signatures = (_signature(paths.policy_path), _signature(cache_path))
     if signatures == (None, None):
         return ManagedPolicyState("absent", source, reason_code="managed_policy_absent")
-    key = (source, write_cache, *signatures)
+    key = (
+        source,
+        write_cache,
+        *signatures,
+        _ancestor_signatures(paths.policy_path),
+        _ancestor_signatures(cache_path),
+    )
     with _MEMO_LOCK:
         cached = _MEMO.get(key)
     if cached is not None:
@@ -206,8 +218,9 @@ def load_managed_policy(*, policy_path: Path | None = None, write_cache: bool = 
     settled = all(
         signature is None or (len(signature) > 1 and max(signature[-2:]) < racy_after) for signature in signatures
     )
-    # Only a state read from files that have not moved since is reusable; a
-    # cache this load just wrote changes the signature and is reread once.
+    # Only a state read from files that have not moved since is reusable. The
+    # first cache write changes its signature, so that state is read once more;
+    # the runtime leaves an unchanged cache in place after that.
     if settled and state.reason_code != "managed_policy_native_unavailable":
         with _MEMO_LOCK:
             _MEMO[key] = state

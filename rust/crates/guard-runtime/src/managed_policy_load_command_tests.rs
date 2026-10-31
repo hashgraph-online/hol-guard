@@ -66,6 +66,17 @@ fn a_rejected_document_reports_the_parser_message() {
 }
 
 #[test]
+fn a_null_document_is_rejected_by_the_parser() {
+    let response =
+        respond_to(json!({"schema": SCHEMA, "op": "parse", "payload": null})).expect("response");
+
+    assert_eq!(response["ok"], json!(false));
+    assert!(response["rejected"]
+        .as_str()
+        .is_some_and(|message| !message.is_empty()));
+}
+
+#[test]
 fn an_explicit_path_loads_without_touching_the_machine_cache() {
     let root = TempDir::new().expect("tempdir");
     let path = root.path().join("managed-policy.json");

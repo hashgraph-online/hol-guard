@@ -31,8 +31,13 @@ struct Request {
     policy_path: Option<PathBuf>,
     #[serde(default = "default_write_cache")]
     write_cache: bool,
-    #[serde(default)]
+    /// Absent is `None`; an explicit `null` is a document the parser rejects.
+    #[serde(default, deserialize_with = "present")]
     payload: Option<Value>,
+}
+
+fn present<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(deserializer).map(Some)
 }
 
 fn default_write_cache() -> bool {
