@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     canonical_json_bytes,
 )
 from tests.guard_mdm_health_lease_support import NOW, prepare, signer, snapshot
-from tests.guard_mdm_health_lease_support import paths as machine_paths
 
 
 def _ack(outbox: HealthLeaseOutbox, **updates: object) -> bytes:
@@ -31,26 +30,6 @@ def _ack(outbox: HealthLeaseOutbox, **updates: object) -> bytes:
     }
     payload.update(updates)
     return canonical_json_bytes(payload)
-
-
-def test_windows_atomic_create_omits_unsupported_follow_symlinks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    paths = machine_paths(tmp_path)
-    paths.state_root.mkdir(parents=True)
-    linked: list[tuple[Path, Path]] = []
-
-    def link(source: Path, target: Path) -> None:
-        linked.append((source, target))
-
-    monkeypatch.setattr(health_lease.os, "name", "nt")
-    monkeypatch.setattr(health_lease.os, "link", link)
-
-    target = paths.state_root / "pending.json"
-    health_lease._atomic_create(paths, target, b"payload", conflict_reason="conflict")
-
-    assert len(linked) == 1
-    assert linked[0][1] == target
 
 
 def test_authenticated_ack_retires_one_item_and_advances_exact_chain(

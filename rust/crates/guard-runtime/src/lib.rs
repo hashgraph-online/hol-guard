@@ -478,6 +478,7 @@ mod hardening;
 mod harness_coverage;
 mod harness_coverage_command;
 mod health_lease_contract;
+mod health_lease_state;
 mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
@@ -757,6 +758,7 @@ mod registry_vectors_tests;
 mod release_feed_op;
 mod release_manifest_verify;
 mod release_manifest_verify_command;
+mod removal_evidence;
 mod request_context_op;
 mod request_context_shell;
 mod resident_client;
