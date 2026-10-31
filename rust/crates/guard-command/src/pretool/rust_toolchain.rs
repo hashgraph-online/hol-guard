@@ -26,6 +26,68 @@ pub(super) fn safe_version_probe(arguments: &[String], context: super::PathConte
         && proxy_selects_official_toolchain(context)
 }
 
+/// `cargo --version` or a `cargo search` query of the registry.
+pub(super) fn safe_cargo_probe(arguments: &[String], context: super::PathContext<'_>) -> bool {
+    (registry_query(arguments)
+        || matches!(arguments, [flag] if matches!(flag.as_str(), "--version" | "-V")))
+        && proxy_selects_official_toolchain(context)
+}
+
+/// `cargo search <term>`, optionally bounded by `--limit`.
+///
+/// The subcommand asks the registry which crates match a word and prints the
+/// answer. It resolves nothing, writes no lockfile, unpacks no crate and runs
+/// no `build.rs`, which is the whole reason the package review exists for
+/// `cargo`. `npm search`, `npm view` and `brew search` already read their
+/// registries without review; this is the same reading.
+///
+/// A user alias cannot turn the word into another subcommand: Cargo ignores
+/// an `[alias]` entry that shadows a built-in command, and `search` is built
+/// in. The query carries no token either -- it is an unauthenticated endpoint
+/// -- so no `credential-provider` from a `.cargo/config.toml` is started.
+///
+/// Only `--limit` and plain search words are read. A `+toolchain` word makes
+/// the rustup proxy install a toolchain before the query, and every other
+/// option -- `--registry`, `--index`, `--config`, `-Z` -- either names a
+/// different endpoint or sets configuration the review should still see.
+fn registry_query(arguments: &[String]) -> bool {
+    let Some((subcommand, rest)) = arguments.split_first() else {
+        return false;
+    };
+    if subcommand.as_str() != "search" {
+        return false;
+    }
+    let mut rest = rest.iter();
+    while let Some(argument) = rest.next() {
+        match argument.as_str() {
+            "--limit" => {
+                if !rest
+                    .next()
+                    .is_some_and(|value| bounded_limit(value.as_str()))
+                {
+                    return false;
+                }
+            }
+            value if value.starts_with("--limit=") => {
+                if !bounded_limit(&value["--limit=".len()..]) {
+                    return false;
+                }
+            }
+            value if value.starts_with(['-', '+']) => return false,
+            value if value.is_empty() || value.contains(['$', '`', '\n', '\r']) => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
+/// The value `--limit` accepts: Cargo refuses anything outside 1..=100.
+fn bounded_limit(value: &str) -> bool {
+    value
+        .parse::<u32>()
+        .is_ok_and(|limit| (1..=100).contains(&limit))
+}
+
 /// Whether the rustup proxy started from the working directory can only pick
 /// an official toolchain: no override in the environment and no toolchain
 /// file above the directory that could select another binary.
@@ -237,6 +299,37 @@ fn digits(value: &str, length: usize) -> bool {
 mod tests {
     use super::{inert_toolchain, rustup_settings_only_official};
     use std::path::Path;
+
+    fn words(command: &str) -> Vec<String> {
+        command.split_whitespace().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn reads_a_bounded_search_query_only() {
+        for arguments in [
+            "search serde",
+            "search serde json",
+            "search --limit 5 serde",
+            "search --limit=100 serde",
+            "search",
+        ] {
+            assert!(registry_query(&words(arguments)), "{arguments}");
+        }
+        for arguments in [
+            "search --limit 0 serde",
+            "search --limit 101 serde",
+            "search --limit all serde",
+            "search --limit",
+            "search --registry mirror serde",
+            "search --index https://example.invalid serde",
+            "search -Z unstable-options serde",
+            "search +nightly serde",
+            "install serde",
+            "test",
+        ] {
+            assert!(!registry_query(&words(arguments)), "{arguments}");
+        }
+    }
 
     #[test]
     fn admits_plain_channels_only() {

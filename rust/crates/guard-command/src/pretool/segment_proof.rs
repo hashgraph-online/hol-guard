@@ -331,7 +331,8 @@ pub(super) fn exact_safe_segment_with_context(
         "type" | "command" => {
             super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)
         }
-        "cargo" | "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
+        "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
+        "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
         "sleep" => safe_reads::safe_sleep_arguments(&segment.arguments),
         "uptime" => segment.arguments.is_empty(),
