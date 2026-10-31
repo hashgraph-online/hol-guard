@@ -210,6 +210,7 @@ fn scan_into(
     let mut excluded_directories = Vec::new();
     let mut pending_exclusion = None;
     let mut includes_present = false;
+    let mut unscreened_includes: Vec<String> = Vec::new();
     let mut positional_started = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
@@ -230,6 +231,14 @@ fn scan_into(
                 && argument.eq_ignore_ascii_case("recurse")
             {
                 recursive = true;
+                continue;
+            }
+            // An `--include` glob the name screen cannot clear is held for
+            // the scope proof below rather than ending the reading here.
+            if matches!(role, SearchValueRole::Glob) {
+                if unsafe_search_value(role, argument, context) {
+                    unscreened_includes.push(argument.clone());
+                }
                 continue;
             }
             if unsafe_search_value(role, argument, context) {
@@ -302,6 +311,10 @@ fn scan_into(
                 }
                 if attached.is_empty() {
                     pending_value = Some(role);
+                } else if matches!(role, SearchValueRole::Glob) {
+                    if unsafe_search_value(role, attached, context) {
+                        unscreened_includes.push(attached.to_owned());
+                    }
                 } else if unsafe_search_value(role, attached, context) {
                     return false;
                 } else if matches!(role, SearchValueRole::Pattern) {
@@ -407,6 +420,20 @@ fn scan_into(
         // Include/exclude precedence differs across grep implementations. Do not
         // use exclusions as proof when an include could re-enable a file.
         && (!includes_present || (excluded_files.is_empty() && excluded_directories.is_empty()))
+        && (unscreened_includes.is_empty() || {
+            let globs: Vec<&str> = unscreened_includes.iter().map(String::as_str).collect();
+            let scope: Vec<&str> = if targets.is_empty() {
+                vec!["."]
+            } else {
+                targets.clone()
+            };
+            super::super::search_scope::grep_include_scope_proven(
+                &scope,
+                &globs,
+                context.home_dir,
+                context.cwd,
+            )
+        })
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive || {
             let proven = |target: &str| {
