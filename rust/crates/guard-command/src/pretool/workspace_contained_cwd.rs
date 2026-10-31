@@ -48,8 +48,10 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
 /// would return to a `prev` the shell no longer holds. `command` and `time`
 /// are spent here as well, for the same reason and because
 /// `script_content`'s jobs analysis spends all three; a bare one the parser
-/// peels before it reaches this walk, and one carrying an option leaves the
-/// whole run unmodelled, so neither arrives.
+/// peels before it reaches this walk. An option carries the word on only
+/// where it still runs it: `command -p cd app` and `time -p cd app` move,
+/// while `command -v cd app` and `command -V cd app` only print how `cd`
+/// would resolve and leave the shell where it stood.
 ///
 /// `None` where a wrapper has no word left to run, which is no move the walk
 /// can read and so no walk at all.
@@ -70,6 +72,13 @@ fn spends_wrapper_keywords<'a>(
                 break;
             }
             if first.starts_with('-') {
+                // Only `-p` still runs the word, and only for `command` and
+                // `time`. `command -v cd build` prints how `cd` resolves and
+                // moves nothing, so reading a descent out of it would credit
+                // the walk with a step the shell never took.
+                if name == "builtin" || first != "-p" {
+                    return None;
+                }
                 rest = tail;
                 continue;
             }

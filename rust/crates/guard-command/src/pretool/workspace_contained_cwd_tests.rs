@@ -303,8 +303,8 @@ fn a_return_after_a_builtin_move_follows_the_move_that_happened() {
 /// shell functions, so every one of these spellings moves this shell, and a
 /// walk that spends only the bare `builtin` keyword would read the move out
 /// of a descent as no move at all. An option-carrying prefix (`command -p cd`)
-/// is not among them: the parser leaves that run unmodelled, so no shape is
-/// read from it here at all.
+/// carries the word on only where the option still runs it, so
+/// `command -v cd build` buys no descent.
 #[test]
 fn a_wrapped_move_is_still_a_move() {
     let ws = workspace("cwd-wrapped", true);
@@ -333,6 +333,11 @@ fn a_wrapped_move_is_still_a_move() {
         "command cd absent && ls ..",
         // A wrapper with no word left to run is no move the walk can read.
         "cd build && command && ls ..",
+        // `-v`/`-V` only print how `cd` resolves, so no descent is bought
+        // and the step after the lookup leaves the workspace.
+        "command -v cd build && ls ..",
+        "command -V cd build && ls ..",
+        "builtin -p cd build && ls ..",
     ] {
         assert!(!shaped(command, &ws), "{command}");
     }
