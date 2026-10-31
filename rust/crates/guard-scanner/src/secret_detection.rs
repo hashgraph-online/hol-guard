@@ -18,6 +18,7 @@ use hmac::{Hmac, Mac};
 use regex::{Regex, RegexBuilder};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
@@ -1595,8 +1596,30 @@ fn context_score(
     (score.clamp(0.0, 1.0), reasons)
 }
 
-fn line_number(text: &str, match_start: usize) -> usize {
-    text[..match_start].bytes().filter(|b| *b == b'\n').count() + 1
+/// Where every line of a scanned text begins, so a finding's line is found by
+/// search instead of by counting the newlines before it again.
+///
+/// A scan reports up to ten thousand findings, and counting from the start of
+/// the text for each one walks the whole prefix every time: a large file that
+/// leaks in many places reads its own bytes once per finding. The offsets are
+/// built on the first finding that survives the filters, so a text that yields
+/// none never pays for them, and a scan that stops at its bound has built them
+/// once.
+#[derive(Default)]
+struct LineIndex {
+    newlines: OnceCell<Vec<usize>>,
+}
+
+impl LineIndex {
+    /// The one-based line `match_start` falls on. A match standing on the
+    /// newline itself belongs to the line that newline ends, as counting the
+    /// newlines strictly before it did.
+    fn line_of(&self, text: &str, match_start: usize) -> usize {
+        let newlines = self
+            .newlines
+            .get_or_init(|| text.match_indices('\n').map(|(start, _)| start).collect());
+        newlines.partition_point(|start| *start < match_start) + 1
+    }
 }
 
 fn line_text(text: &str, match_start: usize) -> Zeroizing<String> {
@@ -1627,6 +1650,7 @@ fn finding_from_match(
     source: &str,
     commit: Option<&str>,
     provider_rule: Option<&SecretRule>,
+    lines: &LineIndex,
 ) -> Option<SecretFinding> {
     let line_text = line_text(text, match_start);
     if rule.strong_format {
@@ -1651,7 +1675,7 @@ fn finding_from_match(
         severity: rule.severity,
         confidence: confidence_label(score),
         confidence_score: score,
-        line: line_number(text, match_start),
+        line: lines.line_of(text, match_start),
         path: path.to_string(),
         source: source.to_string(),
         commit: commit.map(str::to_string),
@@ -1688,6 +1712,7 @@ pub fn scan_secret_text(
         };
     }
     let bounded_max = max_findings.clamp(1, MAX_FINDINGS_PER_TEXT);
+    let lines = LineIndex::default();
     let mut findings: Vec<SecretFinding> = Vec::new();
     let mut seen: HashSet<(&'static str, usize, CandidateDigest)> = HashSet::new();
 
@@ -1713,6 +1738,7 @@ pub fn scan_secret_text(
                 source,
                 commit,
                 Some(rule),
+                &lines,
             );
             let Some(finding) = finding else { continue };
             if !seen.insert((
@@ -1774,6 +1800,7 @@ pub fn scan_secret_text(
             source,
             commit,
             None,
+            &lines,
         );
         let Some(finding) = finding else { continue };
         if !seen.insert((
@@ -2213,6 +2240,50 @@ mod tests {
             .join("\n");
         let capped = scan_secret_text(&many, "a.env", "working_tree", None, 3);
         assert_eq!(capped.findings.len(), 3);
+    }
+
+    /// The line index answers what counting the newlines before an offset
+    /// answered, including at a newline itself, at the first byte and at the
+    /// end of the text.
+    #[test]
+    fn the_line_index_agrees_with_counting_the_newlines_before_an_offset() {
+        let text = "\nalpha\n\nbeta\ngamma";
+        let index = LineIndex::default();
+        for offset in 0..=text.len() {
+            let counted = text[..offset].bytes().filter(|byte| *byte == b'\n').count() + 1;
+            assert_eq!(index.line_of(text, offset), counted, "offset {offset}");
+        }
+    }
+
+    /// Every finding reads its own line, not the line of the one the index was
+    /// first built for.
+    #[test]
+    fn findings_after_the_first_keep_their_own_lines() {
+        let tokens = [
+            "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+            "ghp_ZyXwVuTsRqPoNmLkJiHgFeDcBa543210",
+            "ghp_0123456789AbCdEfGhIjKlMnOpQrStUv",
+        ];
+        let mut text = String::new();
+        for (position, token) in tokens.iter().enumerate() {
+            text.push_str(&"filler\n".repeat(position * 40));
+            text.push_str(&format!("key{position} {token}\n"));
+        }
+        let summary = scan_secret_text(&text, "a.env", "text", None, 200);
+        assert_eq!(summary.findings.len(), tokens.len());
+        let counted: Vec<usize> = tokens
+            .iter()
+            .map(|token| {
+                let start = text.find(token).expect("token present");
+                text[..start].bytes().filter(|byte| *byte == b'\n').count() + 1
+            })
+            .collect();
+        let reported: Vec<usize> = summary
+            .findings
+            .iter()
+            .map(|finding| finding.line)
+            .collect();
+        assert_eq!(reported, counted);
     }
 
     #[test]
