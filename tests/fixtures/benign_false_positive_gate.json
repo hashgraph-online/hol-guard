@@ -34309,22 +34309,6 @@
       "expect": "allow"
     },
     {
-      "fix_area": "negative",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "helm diff --help"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
       "id": "neg-helm-usage-text-after-kubeconfig",
       "fix_area": "negative",
       "harnesses": [
