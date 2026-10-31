@@ -629,15 +629,19 @@ mod tests {
 
     #[test]
     fn a_listing_search_is_read_as_its_roots_and_globs() {
-        let shape = listing_shape(&args(&["-l", "TODO", "src"])).unwrap();
+        let words = args(&["-l", "TODO", "src"]);
+        let shape = listing_shape(&words).unwrap();
         assert_eq!(shape.roots, ["src"]);
         assert!(!shape.null_separated);
-        let shape = listing_shape(&args(&["-rlZ", "TODO", "src", "docs"])).unwrap();
+        let words = args(&["-rlZ", "TODO", "src", "docs"]);
+        let shape = listing_shape(&words).unwrap();
         assert_eq!(shape.roots, ["src", "docs"]);
         assert!(shape.null_separated);
-        let shape = listing_shape(&args(&["-l", "--glob", "*.ts", "TODO", "src"])).unwrap();
+        let words = args(&["-l", "--glob", "*.ts", "TODO", "src"]);
+        let shape = listing_shape(&words).unwrap();
         assert_eq!(shape.patterns, ["*.ts"]);
-        let shape = listing_shape(&args(&["-l", "--include=*.rs", "TODO", "."])).unwrap();
+        let words = args(&["-l", "--include=*.rs", "TODO", "."]);
+        let shape = listing_shape(&words).unwrap();
         assert_eq!(shape.patterns, ["*.rs"]);
         assert!(listing_shape(&args(&["--files-with-matches", "TODO", "src"])).is_some());
         assert!(listing_shape(&args(&["-l", "--max-count", "1", "TODO", "src"])).is_some());
