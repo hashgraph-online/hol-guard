@@ -277,7 +277,10 @@ pub(super) fn safe_git_arguments(
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
-    let diff_family = matches!(subcommand, "diff" | "diff-tree" | "log" | "range-diff" | "show");
+    let diff_family = matches!(
+        subcommand,
+        "diff" | "diff-tree" | "log" | "range-diff" | "show"
+    );
     if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
             || (diff_family && helpers_off)

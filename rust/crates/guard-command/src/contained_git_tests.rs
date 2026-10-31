@@ -276,7 +276,14 @@ fn only_git_itself_is_read_this_way() {
 #[test]
 fn a_comparison_verb_that_prints_a_diff_carries_both_helper_screens() {
     assert_eq!(
-        read(&["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]),
+        read(&[
+            "git",
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            "HEAD"
+        ]),
         Some((
             "diff-tree".to_owned(),
             vector(&[
