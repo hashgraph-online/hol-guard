@@ -2050,6 +2050,33 @@ def test_approval_gate_background_sync_applies_signed_remote_policy(
     assert not store.get_sync_payload("policy_bundle_last_error")
 
 
+def test_approval_gate_still_guards_review_memory_rows_rebuilt_from_local_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    planted = PolicyDecision(
+        harness="codex",
+        scope="artifact",
+        action="allow",
+        artifact_id="codex:project:planted",
+        artifact_hash="hash-planted",
+        source="cloud-signed-memory",
+    )
+
+    # Review-memory rows come from a registry kept in local state, so no
+    # workspace signature covers them and the password still decides.
+    with pytest.raises(ApprovalGateError):
+        store.apply_review_policy_memory_state(
+            [planted],
+            registry=[],
+            version={},
+            acknowledgement={},
+            now="2026-04-19T00:00:00+00:00",
+        )
+    assert ("codex:project:planted", "allow") not in {
+        (item["artifact_id"], item["action"]) for item in store.list_policy_decisions("codex")
+    }
+
+
 def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

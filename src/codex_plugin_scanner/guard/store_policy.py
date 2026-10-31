@@ -415,6 +415,7 @@ class StorePolicyMixin:
             now,
             approval_gate_grant=approval_gate_grant,
             remote_write_authorized=remote_write_authorized,
+            signed_bundle=True,
         )
         payload_rejection, encoded_payloads = encoded_policy_activation_payloads(
             policy_bundle,
@@ -798,6 +799,7 @@ class StorePolicyMixin:
         *,
         approval_gate_grant: ApprovalGateGrant | None,
         remote_write_authorized: bool,
+        signed_bundle: bool = False,
     ) -> tuple[str, list[tuple[object, ...]]]:
         normalized_now = _canonical_utc_timestamp(now)
         rows: list[tuple[object, ...]] = []
@@ -807,11 +809,13 @@ class StorePolicyMixin:
                 remote_write_authorized=remote_write_authorized,
             )
             # The approval password stops a local process from writing its own
-            # allow rules. A verified bundle row carries the workspace's
+            # allow rules. Rows of a verified bundle carry the workspace's
             # signature instead, which no local process can produce, and a
             # background sync never holds a password grant: gating these rows
             # left every password-protected device without its team policy.
-            if not (remote_write_authorized and is_remote_policy_source(decision.source)):
+            # Only bundle activation sets ``signed_bundle``; rows rebuilt from
+            # local state, such as the review-memory registry, stay gated.
+            if not (signed_bundle and remote_write_authorized and is_remote_policy_source(decision.source)):
                 require_policy_write(
                     self.guard_home,
                     decision=decision,
