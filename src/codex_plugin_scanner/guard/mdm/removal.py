@@ -112,10 +112,10 @@ def _native_fields(request: dict[str, object], *, unavailable: Exception) -> dic
     raise ValueError(code)
 
 
-def _native_string(fields: dict[str, object], key: str) -> str:
+def _native_string(fields: dict[str, object], key: str, *, unavailable: Exception | None = None) -> str:
     value = fields.get(key)
     if not isinstance(value, str):
-        raise ValueError("mdm_removal_authorization_native_unavailable")
+        raise unavailable or ValueError("mdm_removal_authorization_native_unavailable")
     return value
 
 
@@ -273,7 +273,7 @@ def record_removal_tombstone(
         },
         unavailable=OSError("mdm_removal_native_unavailable"),
     )
-    return Path(_native_string(recorded, "path"))
+    return Path(_native_string(recorded, "path", unavailable=OSError("mdm_removal_native_unavailable")))
 
 
 __all__ = [

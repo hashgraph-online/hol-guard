@@ -726,6 +726,9 @@ def test_removal_evidence_fails_closed_without_the_native_runtime(
     )
     with pytest.raises(OSError, match="mdm_removal_native_unavailable"):
         removal.record_removal_tombstone(evidence, status="started", machine_paths=paths)
+    monkeypatch.setattr(removal, "_native_answer", lambda _request: {"ok": True})
+    with pytest.raises(OSError, match="mdm_removal_native_unavailable"):
+        removal.record_removal_tombstone(evidence, status="started", machine_paths=paths)
     assert not (authorization_root / "developer.json").exists()
     assert not (paths.state_root / "removal-tombstones").exists()
 
