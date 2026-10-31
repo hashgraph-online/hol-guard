@@ -164,7 +164,9 @@ class StorePortableProjectMemoryMixin:
             "integrity_key_id": evidence.integrity_key_id,
             "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
             "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
-            "policy_bundle_decision_identities": evidence.policy_bundle_decision_identities,
+            # Sent as null so the request digest matches the one the resident
+            # re-serializes; the resident derives the identities itself.
+            "policy_bundle_decision_identities": None,
             "degraded_trust_status": evidence.degraded_trust_status,
             "diagnostic_empty": not evidence.has_saved_rows,
         }
