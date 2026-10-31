@@ -6,13 +6,15 @@
 //! `guard_local_once_approvals` claim. Python ships the pre-op `integrity_state`
 //! snapshot + `local_once_*`/`policy_integrity_*` key material as request DTOs
 //! (secret procurement stays Python-side because it requires
-//! `EncryptedFileSecretStore`), plus `policy_bundle_decision_identities` (needs
-//! the synced bundle + device metadata Rust cannot read) and `now` (the caller's
-//! `_canonical_utc_timestamp`-normalized lookup timestamp).
+//! `EncryptedFileSecretStore`) and `now` (the caller's
+//! `_canonical_utc_timestamp`-normalized lookup timestamp). The resident derives
+//! `policy_bundle_decision_identities` from the store when a request omits them.
 //!
 //! Parity contract: row selection, integrity-result status, event payload
 //! bytes, and the `PolicyDecisionLookupResultV1.payload` `lookup_result` dict
 //! must match Python byte-for-byte.
+
+use std::borrow::Cow;
 
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, TransactionBehavior};
 use serde_json::{json, Value};
@@ -36,6 +38,7 @@ use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
 use crate::cloud_exception_lift::{cloud_exception_covers, stored_exception_bundle, LiftTarget};
 use crate::guard_store_json::dumps_sorted;
+use crate::policy_bundle_store_identities::lookup_bundle_authority;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 /// The ceiling a non-consuming lookup stops fetching at. The document path
@@ -1320,7 +1323,7 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
     request: &PolicyDecisionLookupRequestV1,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request)?;
-    let (status, code, payload) = match evaluate(request) {
+    let (status, code, payload) = match with_bundle_identities(request).and_then(|r| evaluate(&r)) {
         Ok(p) => ("ok".to_owned(), "ok".to_owned(), Some(p)),
         Err(c) => ("error".to_owned(), c, None),
     };
@@ -1332,6 +1335,43 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
         code,
         payload,
     })
+}
+
+/// Python ships no bundle identities: the resident derives them from the store
+/// the lookup reads. The exception cache is left to fill on the connection
+/// that reads the rows, so an exception never lifts a row stored after the
+/// bundle it came from. A request that carries them, one that never
+/// reads policy rows (a local-once peek, a grant probe with nothing to lift),
+/// or one `evaluate` refuses before opening the store, is left as sent.
+fn with_bundle_identities(
+    request: &PolicyDecisionLookupRequestV1,
+) -> Result<Cow<'_, PolicyDecisionLookupRequestV1>, String> {
+    let grant = request
+        .probe_groups
+        .as_ref()
+        .and_then(|groups| groups.local_tool_grant.as_ref());
+    if request.policy_bundle_decision_identities.is_some()
+        || request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA
+        || request.local_once_only
+        || grant.is_some_and(|grant| !crate::policy_lookup_local_tool_grant::reads_store(grant))
+    {
+        return Ok(Cow::Borrowed(request));
+    }
+    let Some(now) = canonical_utc_timestamp(&request.now) else {
+        return Ok(Cow::Borrowed(request));
+    };
+    let conn = open_lookup_connection(&request.store_path)?;
+    let Some((identities, _bundle)) = lookup_bundle_authority(&conn, &now)
+        .map_err(|()| "native_policy_decision_lookup_bundle_unavailable".to_owned())?
+    else {
+        return Ok(Cow::Borrowed(request));
+    };
+    if identities.is_empty() {
+        return Ok(Cow::Borrowed(request));
+    }
+    let mut derived = request.clone();
+    derived.policy_bundle_decision_identities = Some(identities);
+    Ok(Cow::Owned(derived))
 }
 
 /// One lookup on its own store connection: the `lookup_result` payload, with

@@ -137,6 +137,45 @@ pub(super) fn rg_glob_scope_proven(
     )
 }
 
+/// Shell `grep` with `--include` globs the name screen cannot clear, such as
+/// `*.md` or `README*`: true when below each directory root no sensitive file
+/// matches one of them.
+///
+/// An include narrows what `grep` opens and can never widen it: `grep` reads
+/// no ignore file and walks hidden entries already, so there is nothing for a
+/// glob to re-include. The walk therefore counts every reachable entry.
+///
+/// A glob holding a separator is left unproven. `grep` matches such a glob
+/// against the whole name it reached the file by, which depends on how the
+/// operand was spelled, and this walk renders no such path.
+pub(super) fn grep_include_scope_proven(
+    roots: &[&str],
+    globs: &[&str],
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    if globs.iter().any(|glob| glob.contains(['/', '\\'])) {
+        return false;
+    }
+    let Some(filter) = SearchFilter::from_rg_inclusions(globs) else {
+        return false;
+    };
+    roots.iter().all(
+        |target| match verified_directory_root(target, home_dir, cwd) {
+            Some(root) => {
+                !super::read_paths::inside_agent_state_tree(&root, home_dir)
+                    && walk_scope(&root, &filter, Ignores::None, false, home_dir, &mut None).is_ok()
+            }
+            // A root that is a regular file was screened as a path already,
+            // and an include can only keep `grep` from opening it.
+            None => cwd.is_some_and(|cwd| {
+                std::fs::symlink_metadata(Path::new(cwd).join(target))
+                    .is_ok_and(|metadata| metadata.is_file())
+            }),
+        },
+    )
+}
+
 /// True when a Claude `Glob` returns only names under a verified directory
 /// whose whole reachable tree holds no sensitive file. The pattern must stay
 /// inside that directory: relative, no `..`, no alternation or escapes.

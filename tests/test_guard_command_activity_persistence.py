@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind
 from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.command_activity_privacy_support import FORBIDDEN_ACTIVITY_FIELD_NAMES
+from tests.native_store_shims import record_command_activity
 
 
 def _correlation(kind: CorrelationKind, digest: str) -> CorrelationHandle:
@@ -106,7 +107,7 @@ def _table_names(path: Path) -> set[str]:
 
 def _record_in_process(guard_home: str, evidence: CommandActivityEvidence) -> bool:
     store = GuardStore(Path(guard_home), prime_policy_integrity=False)
-    return store.record_command_activity(evidence)
+    return record_command_activity(store, evidence)
 
 
 def test_command_activity_migration_is_forward_safe_and_reopens(tmp_path: Path) -> None:
@@ -134,10 +135,10 @@ def test_command_activity_migration_is_forward_safe_and_reopens(tmp_path: Path) 
     assert version == (activity_schema.COMMAND_ACTIVITY_SCHEMA_MIGRATION_VERSION,)
 
     evidence = _evidence()
-    first.record_command_activity(evidence)
+    record_command_activity(first, evidence)
     reopened = GuardStore(guard_home, prime_policy_integrity=False)
     assert expected.issubset(_table_names(reopened.path))
-    assert reopened.record_command_activity(evidence) is False
+    assert record_command_activity(reopened, evidence) is False
     assert reopened.count_command_activities() == 1
 
 
@@ -212,7 +213,7 @@ def test_command_activity_migration_rejects_an_incompatible_existing_schema(tmp_
 def test_command_activity_integrity_rejects_orphans_and_cascades(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     evidence = _evidence()
-    store.record_command_activity(evidence)
+    record_command_activity(store, evidence)
 
     with store._connect() as connection:
         with pytest.raises(sqlite3.IntegrityError):

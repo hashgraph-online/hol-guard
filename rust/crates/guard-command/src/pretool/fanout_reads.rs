@@ -27,31 +27,18 @@
 use super::safe_reads::{bounded_read_target, verified_path_context};
 use super::segment_proof::exact_safe_segment_with_context;
 use super::PathContext;
-use crate::read_only_fanout::{self as fanout, FindShape};
+use crate::read_only_fanout::{self as fanout, source_extension, FindShape};
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
-/// Source and documentation extensions a content reader may fan out over.
-/// find's `*` also matches a leading dot, so a denylist of secret extensions
-/// would still reach `.env.local` through `*.local`; configuration formats
-/// such as JSON and YAML are left out because they often hold keys.
-const SOURCE_EXTENSIONS: [&str; 46] = [
-    "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "py", "pyi", "rs", "go", "java", "kt",
-    "kts", "scala", "c", "h", "cc", "cpp", "hpp", "cs", "rb", "php", "swift", "m", "dart", "lua",
-    "ex", "exs", "hs", "md", "mdx", "rst", "txt", "html", "htm", "css", "scss", "sass", "less",
-    "vue", "svelte", "sql", "graphql", "proto",
-];
-
 fn plain_extension_pattern(pattern: &str) -> bool {
-    pattern.strip_prefix("*.").is_some_and(|extension| {
-        SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-    })
+    pattern.strip_prefix("*.").is_some_and(source_extension)
 }
 
 fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
-    roots_inside_workspace(shape.roots, context)
+    roots_contained(shape.roots, context)
 }
 
-fn roots_inside_workspace<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool {
+fn roots_contained<R: AsRef<str>>(roots: &[R], context: PathContext<'_>) -> bool {
     let (Some(home), Some(cwd)) = (context.home_dir, context.cwd) else {
         return false;
     };
@@ -179,6 +166,27 @@ pub(super) fn safe_find_exec(
         })
 }
 
+/// `fd ... -x CHILD` with a proven producer scope and child.
+///
+/// fd appends the file name to the child, so the command that runs is the
+/// child as written with one operand last -- the same proxy the `find -exec`
+/// proof judges. `--type f` carries the regular-file bound find spells
+/// `-type f`, and `--extension` carries the name bound find spells
+/// `-name '*.ext'`.
+pub(super) fn safe_fd_exec(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    plain(segment)
+        && words_as_written(segment)
+        && fanout::fd::fd_exec(&segment.arguments).is_some_and(|exec| {
+            fanout::fd::producer_shape_proven(&exec)
+                && roots_contained(&exec.shape.roots, context)
+                && child_proven(model, segment, exec.child, context)
+        })
+}
+
 fn previous_find<'a>(
     model: &'a CanonicalCommandV1,
     segment: &CommandSegmentV1,
@@ -270,7 +278,7 @@ pub(super) fn safe_listing_xargs(
                     .patterns
                     .iter()
                     .all(|pattern| plain_extension_pattern(pattern))))
-        && roots_inside_workspace(&shape.roots, context)
+        && roots_contained(&shape.roots, context)
         && child_proven(model, segment, xargs.child, context)
 }
 

@@ -17523,15 +17523,13 @@ def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
     assert persisted_local_keyring["keys"] == []
     assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") == keyring
     assert summary["remote_policies_stored"] == 1
-    assert (
-        resolve_policy(
-            store,
-            "codex",
-            "codex:project:package-request:fresh-managed-device",
-            "hash",
-        )
-        == "block"
-    )
+    # The resident reads machine MDM policy natively and cannot see the policy
+    # patched in above, so the check stops at the row the sync stored.
+    with sqlite3.connect(store.path) as connection:
+        stored = connection.execute(
+            "select action from policy_decisions where source = 'policy-bundle' and harness = 'codex'"
+        ).fetchall()
+    assert stored == [("block",)]
 
 
 def test_cached_bundle_is_not_activated_after_live_anchor_revocation(

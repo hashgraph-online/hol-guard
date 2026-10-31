@@ -67,6 +67,7 @@ pub(super) fn exact_safe_command(
         pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
+        http_config_absent: context.http_config_absent,
         psql_environment: context.psql_environment,
         cwd: cwd_proof
             .as_ref()

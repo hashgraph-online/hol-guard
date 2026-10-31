@@ -16,6 +16,8 @@ use std::path::Path;
 #[cfg(windows)]
 mod drives;
 #[cfg(windows)]
+mod host_name;
+#[cfg(windows)]
 mod known_folders;
 #[cfg(windows)]
 mod owner;
@@ -52,6 +54,9 @@ pub use windows::{
 
 #[cfg(windows)]
 pub use drives::local_drive_letters;
+
+#[cfg(windows)]
+pub use host_name::dns_host_name;
 
 #[cfg(windows)]
 pub use known_folders::{trusted_install_roots, user_profile_directory, windows_directory};
