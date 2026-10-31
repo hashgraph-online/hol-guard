@@ -55,6 +55,7 @@ _NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 # `containment_rewrite` answers the edge gives once it rewrote a sink route.
 _EDGE_CONTAINMENT_REWRITES = frozenset({"routed", "kept"})
 _EDGE_REWRITE_INVALID = "native_containment_rewrite_invalid"
+_EDGE_REWRITE_UNAVAILABLE = "native_containment_rewrite_unavailable"
 
 
 class _HookWorkerMetrics(Protocol):
@@ -469,29 +470,18 @@ class HookWorkerNativeMixin:
                         _record_native_pre_activity(self, native_harness, payload, command_block, accepted_receipt),
                         True,
                     )
-            from ..adapters.zcode_contained_tests import route_zcode_containment
-
             rendered = _edge_harness_response(edge)
-            # The edge rewrote the sink route itself when it says so; an edge
-            # that did not is asked, and no answer is the outage response. Its
-            # routed allow is held to the shape the resident's answer is.
+            # The edge rewrites a sink route in a workspace itself and says so;
+            # an edge that could not is the outage response. Its routed allow
+            # is held to the shape the sink's rewrite gives. Without a
+            # workspace there is no snapshot to write, so the receipt stands.
             rewrite = edge.get("containment_rewrite") if containment == "sink" else None
             if rewrite == "routed" and not edge_routed_shape(rendered, payload):
                 error = NativeHookDecisionError(_EDGE_REWRITE_INVALID)
                 return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
-            if containment == "sink" and rewrite not in _EDGE_CONTAINMENT_REWRITES:
-                try:
-                    rendered = route_zcode_containment(
-                        rendered,
-                        harness=native_harness,
-                        payload=payload,
-                        guard_home=guard_home,
-                        home_dir=home_dir,
-                        workspace=workspace,
-                        deadline=deadline,
-                    )
-                except NativeHookDecisionError as error:
-                    return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
+            if containment == "sink" and workspace is not None and rewrite not in _EDGE_CONTAINMENT_REWRITES:
+                error = NativeHookDecisionError(_EDGE_REWRITE_UNAVAILABLE)
+                return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             return (
                 _record_native_pre_activity(
                     self,

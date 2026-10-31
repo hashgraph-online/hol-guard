@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_containment_route as containment_route
 from codex_plugin_scanner.guard import native_restricted_pytest as native
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
 from tests import containment_resident as containment_probe
+from tests import containment_rewrite_client as containment_route
 
 COMMAND = "./todo.py add x"
 

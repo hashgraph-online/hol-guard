@@ -17,8 +17,8 @@ from typing import Any, NamedTuple
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_containment_route as route_module
 from codex_plugin_scanner.guard.native_hook_decision import _INVALID, NativeHookDecisionError
+from tests import containment_rewrite_client as route_module
 
 
 @pytest.fixture
