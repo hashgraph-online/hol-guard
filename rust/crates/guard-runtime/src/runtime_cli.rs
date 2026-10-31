@@ -104,6 +104,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if installation_continuity::is_command(command) && flag == "--stdin" => {
+            let response = installation_continuity::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if managed_policy_load_command::is_command(command) && flag == "--stdin" => {
             let response = managed_policy_load_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
