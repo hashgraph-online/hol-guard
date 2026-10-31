@@ -1083,6 +1083,22 @@
    "body": "05adc32b95e0"
   },
   {
+   "verdict": "posix-primitive",
+   "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private`, so no error code needs classifying there.",
+   "file": "rust/crates/guard-runtime/src/user_health_state.rs",
+   "item": "fn is_link_loop(_error: &io::Error) -> bool",
+   "cfg": "not(unix)",
+   "body": "2fd3a565b13a"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Python parity: `mdm/user_health.py` checked only the file type on Windows because `os.stat` reports no owner or mode bits there. The Guard home's own ACL is what keeps the state private on Windows; a DACL check was never ported. A link is still refused, since `symlink_metadata` and the reparse-point open report it as neither a directory nor a regular file. Covered by `a_state_reads_back_without_owner_bits` in `user_health_state_tests.rs`.",
+   "file": "rust/crates/guard-runtime/src/user_health_state.rs",
+   "item": "fn is_private(metadata: &Metadata, _owner_uid: u32, directory: bool) -> bool",
+   "cfg": "not(unix)",
+   "body": "695d774d653b"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/hook_approval_context/support.rs",
    "item": "pub(super) fn named_user_home(_text: &str) -> Option<String>",
    "verdict": "posix-primitive",

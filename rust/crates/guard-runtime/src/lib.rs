@@ -842,6 +842,7 @@ mod trust_attestation_verify_op;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
+mod user_health_state;
 mod verified_read_decision_op;
 #[cfg(unix)]
 mod verified_read_execute;

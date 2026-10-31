@@ -104,6 +104,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = managed_policy_load_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if user_health_state::is_command(command) && flag == "--stdin" => {
+            let response = user_health_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
