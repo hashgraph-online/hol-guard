@@ -287,6 +287,13 @@ pub(super) fn configuration_inert(basename: &str, context: super::PathContext<'_
 /// such as `uv add sync --help`, which the manager answers with a usage error
 /// rather than a page.
 ///
+/// A flag that only shapes the page -- `curl --help --silent`, `uv add
+/// --help --no-cache` -- is dropped before any of that is read, by the table
+/// [`super::manager_usage::inert_usage_flag`] carries, because the tool
+/// still prints the text and exits. Dropping a word only shortens the line,
+/// so an option that carries a value leaves that value where the reading
+/// refuses it.
+///
 /// npm's and pip's admission also needs the files
 /// [`configuration_inert`] reads, which no unit context names a directory
 /// for, so their verbs are proved in the benign gate's fixture home.
@@ -296,7 +303,12 @@ pub(crate) fn safe_help_probe(
     arguments: &[String],
     context: super::PathContext<'_>,
 ) -> bool {
-    let Some((flag, verbs)) = arguments.split_last() else {
+    let words: Vec<&str> = arguments
+        .iter()
+        .map(String::as_str)
+        .filter(|word| !super::manager_usage::inert_usage_flag(basename, word))
+        .collect();
+    let Some((flag, verbs)) = words.split_last() else {
         return false;
     };
     help_flag(basename, flag)
@@ -306,7 +318,7 @@ pub(crate) fn safe_help_probe(
 
 /// The words between the executable and the help flag, read as a path through
 /// the manager's own verbs.
-fn usage_only_verbs(basename: &str, verbs: &[String]) -> bool {
+fn usage_only_verbs(basename: &str, verbs: &[&str]) -> bool {
     match verbs {
         [] => true,
         [verb] => usage_only_verb(basename, verb),

@@ -226,6 +226,120 @@ const BUILTIN_SUBCOMMANDS: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Flags that change how the usage text is rendered, never what the command
+/// does.
+///
+/// `npm install --help --json` prints the same page npm would have printed
+/// without the flag, as a JSON document rather than a column of text, and
+/// `pip install --help -q` prints it with the version banner left off. The
+/// reading below compares words against the subcommand table, so a flag
+/// standing beside the help flag used to end it and send a manual page to
+/// review.
+///
+/// Each entry is a flag that takes no value of its own and names no file,
+/// path, program or directory, so removing it can only ever leave words the
+/// reading already refuses: a value-taking option keeps its value on the
+/// line, and the shape check fails on the word left behind. Loudness,
+/// colour, progress and the machine-readable spelling of the page are all
+/// this table carries. A flag that chooses where output goes, or what the
+/// manager would have installed, is deliberately absent.
+const INERT_USAGE_FLAGS: &[(&str, &[&str])] = &[
+    (
+        "npm",
+        &[
+            "--json",
+            "--silent",
+            "-s",
+            "--quiet",
+            "--no-color",
+            "--no-progress",
+        ],
+    ),
+    (
+        "pip",
+        &[
+            "-q",
+            "-qq",
+            "-qqq",
+            "--quiet",
+            "-v",
+            "-vv",
+            "-vvv",
+            "--verbose",
+            "--no-color",
+            "--no-input",
+            "--no-cache-dir",
+            "--disable-pip-version-check",
+        ],
+    ),
+    (
+        "uv",
+        &[
+            "-q",
+            "--quiet",
+            "-v",
+            "--verbose",
+            "--no-cache",
+            "--no-progress",
+            "--offline",
+        ],
+    ),
+    (
+        "gem",
+        &[
+            "-q",
+            "--quiet",
+            "--silent",
+            "--verbose",
+            "--no-verbose",
+            "--norc",
+        ],
+    ),
+    ("brew", &["-q", "--quiet", "-v", "--verbose"]),
+    ("apt", &["-q", "-qq", "--quiet"]),
+    (
+        "curl",
+        &[
+            "-s",
+            "--silent",
+            "-S",
+            "--show-error",
+            "-v",
+            "--verbose",
+            "--no-progress-meter",
+        ],
+    ),
+    (
+        "wget",
+        &["-q", "--quiet", "-v", "--verbose", "-nv", "--no-verbose"],
+    ),
+    ("deno", &["-q", "--quiet"]),
+    ("ruff", &["-q", "--quiet", "-v", "--verbose", "--no-cache"]),
+];
+
+/// Whether this word only shapes the usage text the tool is about to print.
+///
+/// Read by [`super::help_probes::safe_help_probe`] as well, because the two
+/// readings answer the same question about the same line: the lane that
+/// admits a manager's own subcommands and the lane that admits a bare tool's
+/// help flag both end on a word that prints a page.
+pub(super) fn inert_usage_flag(executable: &str, word: &str) -> bool {
+    let name = canonical_manager(executable);
+    INERT_USAGE_FLAGS
+        .iter()
+        .any(|(tool, flags)| *tool == name && flags.contains(&word))
+}
+
+/// The name a tool's own installer leaves on `PATH`, under the spelling the
+/// tables here use.
+fn canonical_manager(executable: &str) -> &str {
+    match executable {
+        "pip3" => "pip",
+        "apt-get" => "apt",
+        other => other,
+    }
+}
+
 pub(super) fn safe_manager_segment(
     executable: &str,
     model: &crate::CanonicalCommandV1,
@@ -256,11 +370,7 @@ pub(super) fn safe_manager_segment(
 /// The subcommand table for a manager, under the spellings its own installer
 /// leaves on `PATH`.
 fn manager_subcommands(executable: &str) -> Option<&'static [&'static str]> {
-    let name = match executable {
-        "pip3" => "pip",
-        "apt-get" => "apt",
-        other => other,
-    };
+    let name = canonical_manager(executable);
     BUILTIN_SUBCOMMANDS
         .iter()
         .find(|(manager, _)| *manager == name)
@@ -270,11 +380,19 @@ fn manager_subcommands(executable: &str) -> Option<&'static [&'static str]> {
 /// `<manager> --help`, `<manager> help [subcommand]`, or a subcommand the
 /// manager carries followed directly by a help flag.
 ///
+/// A flag from [`INERT_USAGE_FLAGS`] is dropped before any of that is read,
+/// since it only decides how the page is rendered.
+///
 /// The word after `help` is read against the same table, because an unknown
 /// name is not the manager's to answer: `brew help <word>` loads a tap's
 /// command and `cargo help <word>` runs a `cargo-<word>` binary. Only one
 /// such word is accepted, since no manager here documents a second level.
 fn usage_only(executable: &str, subcommands: &[&str], words: &[&str]) -> bool {
+    let words: Vec<&str> = words
+        .iter()
+        .copied()
+        .filter(|word| !inert_usage_flag(executable, word))
+        .collect();
     let Some((first, rest)) = words.split_first() else {
         return false;
     };
