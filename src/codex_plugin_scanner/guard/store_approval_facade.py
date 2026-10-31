@@ -75,6 +75,7 @@ class StoreApprovalsMixin:
         codex_live_wait: dict[str, object] | None = None,
         respond: dict[str, object] | None = None,
         connector_lookup: dict[str, object] | None = None,
+        bound_bash: bool = False,
     ) -> dict[str, object] | None:
         """Queue a paused native review and answer the row it was stored as.
 
@@ -113,6 +114,11 @@ class StoreApprovalsMixin:
         with its setup hint and wording, and keeps the review's context with
         it in the same write. The row carries what it found as
         ``connector_setup``.
+
+        ``bound_bash`` queues a prepared native Bash review, whose query
+        carries the whole prepared reply: the resident queues it only when it
+        is the reply the native Bash owner prepared and the receipt holds its
+        policy binding. An older resident without the method refuses it.
         """
         args: dict[str, object] = {
             "review": review,
@@ -135,7 +141,8 @@ class StoreApprovalsMixin:
             cwd: str | None = os.getcwd()
         except OSError:
             cwd = None
-        queued = self._native_queue_call("queue_native_review", {**args, "return_row": True, "cwd": cwd})
+        method = "queue_bound_bash_review" if bound_bash else "queue_native_review"
+        queued = self._native_queue_call(method, {**args, "return_row": True, "cwd": cwd})
         if not isinstance(queued, dict) or not isinstance(queued.get("request_id"), str) or not queued["request_id"]:
             raise NativeSignalProjectionUnavailableError("native_guard_store_approval_request_invalid")
         if queued.get("event_error") is not None:

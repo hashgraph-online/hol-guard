@@ -4,7 +4,7 @@
 use guard_contracts::{
     native_bash_operation_id_is_valid, NativeBashAuthorizationKindV1 as Authorization,
     NativeBashExecuteResultV1, NativeBashOperationStateV1 as State, NativeBashReviewLineageV1,
-    NATIVE_BASH_ARTIFACT_ID,
+    ReviewRequestQueryV1, NATIVE_BASH_ARTIFACT_ID,
 };
 use serde_json::Value;
 
@@ -98,6 +98,31 @@ fn queued_review(prepared: &Value, request: &Value) -> bool {
         edge["payload_kind"] = receipt["payload_kind"].clone();
     }
     crate::edge::standalone_receipt(receipt, &edge)
+}
+
+/// Whether a review `queue_bound_bash_review` queues is the one the native
+/// Bash owner prepared, and its receipt holds the policy binding its verdict
+/// claims. The query's `bound_bash` carries the whole prepared reply with
+/// its lineage.
+pub(crate) fn queued_bound_bash(query: &ReviewRequestQueryV1) -> bool {
+    let Some(prepared) = &query.bound_bash else {
+        return false;
+    };
+    let request = serde_json::json!({
+        "harness": query.envelope.harness,
+        "exact_token": query.exact_token,
+        "review_binding": query.review_binding,
+        "decision": query.result,
+        "native_receipt": query.native_receipt,
+    });
+    queued_review(prepared, &request)
+        && query.result.as_object().is_some_and(|result| {
+            crate::native_exact_action_op::policy_binding_holds(
+                &query.envelope.harness,
+                result,
+                query.native_receipt.as_ref().and_then(Value::as_object),
+            )
+        })
 }
 
 pub(crate) fn prepared(value: &Value) -> bool {
@@ -280,7 +305,6 @@ pub(crate) fn validate(kind: &str, material: &Value, request: &Value) -> bool {
         "prepared" => prepared(material),
         "executed" => executed(material, request),
         "lineage" => lineage(material),
-        "review" => queued_review(material, request),
         _ => false,
     }
 }

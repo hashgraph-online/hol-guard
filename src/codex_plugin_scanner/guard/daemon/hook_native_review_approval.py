@@ -332,18 +332,6 @@ def queue_native_pre_tool_review(
     queue = getattr(store, "queue_native_review", None)
     if not callable(queue):
         return None
-    if bound_bash is not None:
-        from .native_review_bound_bash import valid_bound_bash_review
-
-        if not valid_bound_bash_review(
-            bound_bash,
-            harness=harness,
-            exact_token=exact_token,
-            review_binding=review_binding,
-            decision=native_result,
-            native_receipt=native_receipt,
-        ):
-            return None
     request_id = uuid.uuid4().hex
     live_wait = _codex_live_wait(payload, workspace) if codex_live_wait else None
     review = {
@@ -359,11 +347,9 @@ def queue_native_pre_tool_review(
         "once_only_reason": once_only_reason,
         # A connector the queue call finds groups the row under its setup.
         "queue_group_id": None,
-        "bound_bash": (
-            None
-            if bound_bash is None
-            else {"subject": bound_bash["subject"], "review_lineage": bound_bash["review_lineage"]}
-        ),
+        # The resident queues a prepared Bash review only as the reply the
+        # native Bash owner prepared, with the receipt's policy binding.
+        "bound_bash": None if bound_bash is None else dict(bound_bash),
     }
     try:
         query = native_review_query(harness, payload, review, workspace=workspace, home_dir=home_dir)
@@ -390,6 +376,7 @@ def queue_native_pre_tool_review(
             codex_live_wait=live_wait,
             respond=respond,
             connector_lookup=connector_lookup,
+            bound_bash=bound_bash is not None,
         )
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
         # The action fails closed. Only the store's fixed reason code, never an

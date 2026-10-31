@@ -190,15 +190,21 @@ fn evaluate_tracked(
     // A paused review's request is built here and queued by the write it
     // names, so everything below sees that method.
     let started = Instant::now();
-    let delegated = (request.method == native_review_queue::METHOD)
-        .then(|| {
-            native_review_queue::delegate(&request.args, owner, request.busy_timeout_ms, |ask| {
-                crate::hook_direct::saved_decision::review_queue::connector::queued_lookup(
-                    &ask.request(request),
-                )
-            })
+    let method = request.method.as_str();
+    let delegated = [
+        native_review_queue::METHOD,
+        native_review_queue::BOUND_BASH_METHOD,
+    ]
+    .contains(&method)
+    .then(|| {
+        let budget_ms = request.busy_timeout_ms;
+        native_review_queue::delegate(method, &request.args, owner, budget_ms, |ask| {
+            crate::hook_direct::saved_decision::review_queue::connector::queued_lookup(
+                &ask.request(request),
+            )
         })
-        .transpose()?;
+    })
+    .transpose()?;
     // The caller's deadline covers the whole call, so the write waits for the
     // lock only as long as the hint left it. With nothing left a contended
     // write fails at once rather than commit after the caller gave up.
