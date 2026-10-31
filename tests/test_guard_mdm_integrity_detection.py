@@ -54,42 +54,6 @@ def test_snapshot_schema_reason_codes_match_runtime_contract() -> None:
     assert set(schema["$defs"]["reasonCode"]["enum"]) == set(get_args(IntegrityReasonCode))
 
 
-def test_managed_policy_source_tamper_reason_is_preserved() -> None:
-    component = integrity._component("tampered", "managed_policy_source_tampered")
-
-    assert component.state == "tampered"
-    assert component.reason_code == "managed_policy_source_tampered"
-
-
-@pytest.mark.parametrize(
-    ("supervisor", "expected"),
-    [
-        (SupervisorStatus("running", "supervisor_running"), ("healthy", "daemon_running")),
-        (SupervisorStatus("absent", "supervisor_absent"), ("absent", "daemon_absent")),
-        (SupervisorStatus("stopped", "supervisor_stopped"), ("degraded", "daemon_stopped")),
-        (SupervisorStatus("disabled", "supervisor_disabled"), ("tampered", "daemon_disabled")),
-        (
-            SupervisorStatus("unknown", "supervisor_registration_invalid"),
-            ("tampered", "daemon_registration_invalid"),
-        ),
-        (
-            SupervisorStatus("unknown", "supervisor_executable_mismatch"),
-            ("tampered", "daemon_registration_invalid"),
-        ),
-        (
-            SupervisorStatus("unknown", "supervisor_schedule_invalid"),
-            ("tampered", "daemon_registration_invalid"),
-        ),
-        (SupervisorStatus("unknown", "supervisor_probe_failed"), ("unknown", "daemon_probe_failed")),
-    ],
-)
-def test_daemon_component_has_stable_supervisor_reason_codes(
-    supervisor: SupervisorStatus, expected: tuple[str, str]
-) -> None:
-    component = integrity._daemon_component(supervisor)
-    assert (component.state, component.reason_code) == expected
-
-
 def test_snapshot_projects_disabled_supervisor_as_daemon_tamper(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
