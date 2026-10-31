@@ -191,6 +191,7 @@ mod sink_peel;
 mod stderr_merge;
 mod stdin_filters;
 mod symlink_writes;
+mod tool_inventory_reads;
 mod tree_reads;
 mod version_probes;
 #[cfg(test)]
