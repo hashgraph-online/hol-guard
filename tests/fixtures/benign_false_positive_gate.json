@@ -43368,6 +43368,172 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "neg-http-moved-configuration-directory",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http :3000/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "HTTPIE_CONFIG_DIR": "httpie"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-http-moved-xdg-base",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http :3000/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "XDG_CONFIG_HOME": "/tmp/hol-guard-gate-xdg"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-xh-moved-xdg-base",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xh http://127.0.0.1:8080/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "XDG_CONFIG_HOME": "/tmp/hol-guard-gate-xdg"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-xh-moved-configuration-directory",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xh http://127.0.0.1:8080/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "XH_CONFIG_DIR": "xh"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "queue-http-loopback-shorthand",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http :3000/health"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-http-loopback-get",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http GET http://127.0.0.1:8080/health"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-http-loopback-rendering-flag",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http --json GET http://localhost:3000/api/status"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-http-loopback-header-item",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http :3000/health Accept:application/json"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-http-public-read-carries-no-stdin",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http --ignore-stdin https://example.com/api/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-http-public-read-may-send-inherited-stdin",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http https://example.com/api/health"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "queue-xh-loopback-read",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xh http://127.0.0.1:8080/health"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-xh-loopback-get",
+      "fix_area": "queue",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xh GET http://localhost:3000/api/status"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-http-uploads-a-private-key",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http http://127.0.0.1:3000/upload key@${HOME}/.ssh/id_ed25519"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-http-downloads-to-a-file",
+      "fix_area": "negative",
+      "harnesses": ["codex"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http --download http://127.0.0.1:3000/archive"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

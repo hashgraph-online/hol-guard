@@ -84,6 +84,7 @@ fn home_result(
             npm_config_inert: false,
             pip_config_inert: false,
             ripgrep_config_absent: false,
+            http_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -197,6 +198,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
         npm_config_inert: false,
         pip_config_inert: false,
         ripgrep_config_absent: false,
+        http_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     };
