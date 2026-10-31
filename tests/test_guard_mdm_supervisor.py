@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import plistlib
 import subprocess
+import time
 from pathlib import Path
 from unittest.mock import Mock
 from xml.etree import ElementTree
@@ -377,3 +378,68 @@ def test_unsupported_platform_never_reports_supervisor_health(tmp_path: Path) ->
 
     assert not result.healthy
     assert result.reason_code == "supervisor_platform_unsupported"
+
+
+@pytest.mark.parametrize("system_name", ["Darwin", "Windows"])
+def test_supervisor_health_is_unknown_without_the_native_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system_name: str
+) -> None:
+    paths = default_machine_paths(system_name=system_name)
+
+    def unavailable(_request: dict[str, object], _deadline: float) -> dict[str, object]:
+        raise OSError("supervisor_verdict_native_unavailable")
+
+    monkeypatch.setattr(supervisor, "_native_verdict", unavailable)
+    monkeypatch.setattr(supervisor, "_run_macos_launchctl", Mock(return_value=_completed()))
+    monkeypatch.setattr(supervisor, "_run_schtasks", Mock(return_value=_completed()))
+
+    result = supervisor.verify_machine_supervisor(
+        paths,
+        system_name=system_name,
+        macos_plist_path=_macos_plist(tmp_path),
+    )
+
+    assert (result.state, result.reason_code) == ("unknown", "supervisor_probe_failed")
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"ok": True, "state": "healthy", "reason_code": "supervisor_running"},
+        {"ok": True, "state": "running", "reason_code": "supervisor_fine"},
+        {"ok": True, "next": "unknown-probe"},
+        {"ok": True, "next": "disabled"},
+        {"ok": True, "next": ["disabled"]},
+        {"ok": True, "next": {"disabled": True}},
+    ],
+)
+def test_a_malformed_native_verdict_is_a_failed_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    run = Mock(return_value=_completed(stdout='disabled services = { "other" => true }'))
+    monkeypatch.setattr(supervisor, "_native_verdict", lambda _request, _deadline: dict(answer))
+    monkeypatch.setattr(supervisor, "_run_macos_launchctl", run)
+
+    result = supervisor.verify_machine_supervisor(
+        default_machine_paths(system_name="Darwin"),
+        system_name="Darwin",
+        macos_plist_path=_macos_plist(tmp_path),
+    )
+
+    assert (result.state, result.reason_code) == ("unknown", "supervisor_probe_failed")
+    assert run.call_count <= 1
+
+
+def test_a_spent_verification_budget_never_starts_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    status = Mock(side_effect=AssertionError("runtime status was read"))
+    process = Mock(side_effect=AssertionError("runtime was started"))
+    monkeypatch.setattr(native_runtime, "native_runtime_status", status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", process)
+
+    with pytest.raises(OSError, match="supervisor_verdict_native_unavailable"):
+        supervisor._native_verdict({"op": "windows"}, time.monotonic() - 1)
+
+    status.assert_not_called()
+    process.assert_not_called()

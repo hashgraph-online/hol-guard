@@ -88,8 +88,16 @@ pub(super) fn run() -> Result<(), String> {
             let response = removal_evidence::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if harness_coverage_command::is_command(command) && flag == "--stdin" => {
+            let response = harness_coverage_command::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if health_snapshot_binding::is_command(command) && flag == "--stdin" => {
             let response = health_snapshot_binding::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if supervisor_verdict::is_command(command) && flag == "--stdin" => {
+            let response = supervisor_verdict::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if guard_config_load::is_command(command) && flag == "--stdin" => {
@@ -102,6 +110,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if guard_config_resolve::is_command(command) && flag == "--stdin" => {
             let response = guard_config_resolve::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if installation_continuity::is_command(command) && flag == "--stdin" => {
+            let response = installation_continuity::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if managed_policy_load_command::is_command(command) && flag == "--stdin" => {
@@ -118,8 +130,16 @@ pub(super) fn run() -> Result<(), String> {
             let response = release_manifest_verify_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if ownership_acl_verdict::is_command(command) && flag == "--stdin" => {
+            let response = ownership_acl_verdict::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if business_source_codec::is_command(command) && flag == "--stdin" => {
             let response = business_source_codec::run_command(command, io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if mdm_integrity_snapshot::is_command(command) && flag == "--stdin" => {
+            let response = mdm_integrity_snapshot::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {
