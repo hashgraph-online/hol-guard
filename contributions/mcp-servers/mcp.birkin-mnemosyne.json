@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.birkin-mnemosyne",
+  "version": "1.0.0",
+  "name": "birkin-mnemosyne MCP",
+  "description": "Local Markdown memory with multilingual BM25 retrieval, reviewed against birkin-mnemosyne 0.7.0. Reviews note creation, append/replace, archival, restoration, curation, review answers and undo, and INDEX route writes and splits through mnemosyne-mcp. Recall inherits Guard policy; reading a note records usage, and indexing may write cache files. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.ashmoonori-afk",
+    "displayName": "ashmoonori-afk",
+    "url": "https://github.com/ashmoonori-afk/birkin-mnemosyne"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#1F3A8A" },
+  "homepage": "https://github.com/ashmoonori-afk/birkin-mnemosyne",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "birkin-mnemosyne[mcp]"
+  },
+  "riskClasses": ["external-filesystem-write", "external-memory-archive", "external-note-rewrite"],
+  "tools": [
+    { "name": "memory_search", "state": "inherit" },
+    { "name": "memory_get_note", "state": "inherit" },
+    { "name": "memory_list", "state": "inherit" },
+    { "name": "memory_remember", "state": "review" },
+    { "name": "memory_related", "state": "inherit" },
+    { "name": "memory_forget", "state": "review" },
+    { "name": "memory_restore", "state": "review" },
+    { "name": "memory_curation_catalog", "state": "inherit" },
+    { "name": "memory_curate", "state": "review" },
+    { "name": "memory_capacity", "state": "inherit" },
+    { "name": "memory_review_questions", "state": "inherit" },
+    { "name": "memory_review_apply", "state": "review" },
+    { "name": "memory_review_undo", "state": "review" },
+    { "name": "memory_identity_read", "state": "inherit" },
+    { "name": "memory_kibitzer_candidates", "state": "inherit" },
+    { "name": "memory_index_register", "state": "review" },
+    { "name": "memory_index_read", "state": "inherit" },
+    { "name": "memory_open_trigger", "state": "inherit" },
+    { "name": "memory_index_check", "state": "inherit" },
+    { "name": "memory_index_split", "state": "review" },
+    { "name": "memory_startup_read", "state": "inherit" },
+    { "name": "memory_startup_verify", "state": "inherit" },
+    { "name": "memory_handoff_read", "state": "inherit" },
+    { "name": "memory_handoff_capture", "state": "review" },
+    { "name": "memory_handoff_fold", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/08e518d31bb71e5e8c530a5a0f8930c5f194b300/README.md",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/08e518d31bb71e5e8c530a5a0f8930c5f194b300/birkin_mnemosyne/_mcp_app.py",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/08e518d31bb71e5e8c530a5a0f8930c5f194b300/birkin_mnemosyne/mcp_server.py",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/08e518d31bb71e5e8c530a5a0f8930c5f194b300/pyproject.toml",
+    "https://github.com/ashmoonori-afk/birkin-mnemosyne/blob/08e518d31bb71e5e8c530a5a0f8930c5f194b300/benchmarks/retrieval/RESULTS.md"
+  ],
+  "saferAlternatives": [
+    "Configure uvx with --from birkin-mnemosyne[mcp], then mnemosyne-mcp --vault PATH; the console script differs from the package name.",
+    "Inspect memory_search, memory_list, or memory_curation_catalog before approving note changes; memory_get_note also persists usage history.",
+    "Use memory_remember mode=create to avoid overwriting notes; replace requires expected_version from a fresh memory_get_note.",
+    "Preview memory_forget with confirm=false and memory_curate with apply=false before approving archival or curation.",
+    "Use an explicitly selected vault with only intended notes; its path is not an OS sandbox, and existing symlinks can expose other files.",
+    "Check or restrict MNEMOSYNE_IDENTITY_ROOT / --identity-root too: memory_identity_read and memory_startup_read can read files under that separate root outside the selected vault.",
+    "Launch exactly birkin-mnemosyne[mcp] (optionally ==VERSION). Other spellings such as [mcp,semantic], birkin_mnemosyne or no extra are outside this entry and keep your ordinary Guard policy."
+  ]
+}
