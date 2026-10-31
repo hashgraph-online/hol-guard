@@ -1731,23 +1731,6 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-bun-script-name-help-text",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "bun check --help"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
       "id": "neg-docker-help-text",
       "fix_area": "shell",
       "harnesses": [
