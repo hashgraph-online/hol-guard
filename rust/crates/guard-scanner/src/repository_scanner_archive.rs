@@ -200,7 +200,15 @@ fn inflate_gzip(data: &[u8], total_cap: usize) -> Option<Vec<u8>> {
     let read = (&mut decoder)
         .take(allowance as u64 + 1)
         .read_to_end(&mut inflated);
-    if read.is_err() || inflated.len() > allowance {
+    if inflated.len() > allowance {
+        return None;
+    }
+    // Reading end to end is also how the tail of a file stops being gzip: the
+    // zero padding a backup tool writes after the last member reads as a
+    // header that will not parse. What was already inflated is whole archive
+    // up to that point, and a credential inside it is still a credential, so
+    // the error only ends the read rather than discarding it.
+    if read.is_err() && inflated.is_empty() {
         return None;
     }
     Some(inflated)

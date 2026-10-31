@@ -330,6 +330,27 @@ fn a_second_gzip_stream_written_after_the_first_is_still_read() {
 }
 
 #[test]
+fn padding_written_after_the_last_gzip_member_does_not_cost_the_archive() {
+    // Backup and tape tools pad a `.tar.gz` out to a block boundary. Reading
+    // members end to end, those zero bytes read as the header of a member
+    // that will not parse, and refusing the file over its tail would leave
+    // every credential in the part that did decode unread.
+    let member = credential_line();
+    let mut archive = gzip_bytes(&tar_bytes(&[("config/prod.env", member.as_bytes())]));
+    archive.extend_from_slice(&[0u8; 1024]);
+    let (findings, _) = scan_blob(
+        &archive,
+        "backup.tar.gz",
+        "working_tree",
+        None,
+        200,
+        ByteBudget::unbounded(),
+    );
+    assert_eq!(findings.len(), 1, "{findings:#?}");
+    assert_eq!(findings[0].path, "backup.tar.gz!/config/prod.env");
+}
+
+#[test]
 fn a_member_naming_itself_with_the_separator_is_still_read() {
     // The separator opens a path segment, so a member carrying the separator
     // character alone is still unambiguous — and refusing to read it skipped
