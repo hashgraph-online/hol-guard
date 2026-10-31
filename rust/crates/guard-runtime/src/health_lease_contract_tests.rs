@@ -2,7 +2,8 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use super::{der_encode, run_command, utc_instant, P256_HALF_ORDER, P256_ORDER};
+use super::encoding::{der_encode, utc_instant, P256_HALF_ORDER, P256_ORDER};
+use super::run_command;
 use crate::health_snapshot_binding::tests::snapshot;
 
 const KEY_ID: &str = "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk";
