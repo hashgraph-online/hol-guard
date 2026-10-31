@@ -40,7 +40,6 @@ _EQUIVALENCE_FUNCTIONS: Final = frozenset({"output_equivalent", "parity_signatur
 _COMPATIBILITY_PATHS: Final = frozenset({"src/codex_plugin_scanner/guard/native_command_model.py"})
 _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
     {
-        "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
         "src/codex_plugin_scanner/guard/native_restricted_pytest.py",
         # Resolves the session directory a launch is bound to; the native
         # runtime decides what the program found from it may reach.
@@ -117,7 +116,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         # Same correlation-only digest for the Composio routing op.
         "src/codex_plugin_scanner/guard/native_composio_role.py",
-        "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
         # Same correlation-only digest for the GitHub workflow prepare op.
         "src/codex_plugin_scanner/guard/native_github_workflow.py",
         "src/codex_plugin_scanner/guard/native_protect_request.py",
