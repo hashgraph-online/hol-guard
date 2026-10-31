@@ -23,6 +23,12 @@ use crate::secret_detection::{
     PublicFinding, SecretFinding,
 };
 
+#[path = "repository_scanner_archive.rs"]
+mod archive;
+
+use archive::scan_archive_members;
+pub(crate) use archive::ByteBudget;
+
 /// `DEFAULT_MAX_FILES` from the Python module.
 pub const DEFAULT_MAX_FILES: usize = 5_000;
 /// `DEFAULT_MAX_FILE_BYTES` from the Python module.
@@ -452,9 +458,15 @@ pub(crate) fn scan_blob(
     source: &str,
     commit: Option<&str>,
     finding_budget: usize,
+    byte_budget: ByteBudget,
 ) -> (Vec<SecretFinding>, usize) {
     let Some(text) = decode_text(path, data) else {
-        return (Vec::new(), 0);
+        // An archive is a container of files rather than a file of its own,
+        // so its members are read instead of being skipped with the images
+        // and the object code. The caller's remaining allowance goes with it:
+        // the length it weighed before this call was the compressed one.
+        return scan_archive_members(data, path, source, commit, finding_budget, byte_budget)
+            .unwrap_or_else(|| (Vec::new(), 0));
     };
     let summary = scan_secret_text(text, path, source, commit, finding_budget);
     (summary.findings, data.len())
@@ -602,6 +614,10 @@ pub fn scan_repository_secrets(
             // its findings and still report complete coverage. The extra
             // finding is dropped by the cap below, which reports the cut.
             max_findings - findings.len() + 1,
+            ByteBudget {
+                max_member_bytes: max_file_bytes,
+                remaining_total_bytes: max_total_bytes.saturating_sub(bytes_scanned),
+            },
         );
         files_scanned += 1;
         bytes_scanned += scanned_bytes;
@@ -689,6 +705,10 @@ pub fn scan_repository_secrets(
                         // visible to the cap below instead of ending the scan
                         // quietly. See the working-tree call above.
                         max_findings - findings.len() + 1,
+                        ByteBudget {
+                            max_member_bytes: max_file_bytes,
+                            remaining_total_bytes: max_total_bytes.saturating_sub(bytes_scanned),
+                        },
                     );
                     files_scanned += 1;
                     bytes_scanned += scanned_bytes;
@@ -828,6 +848,7 @@ mod tests {
             "git_history",
             Some("deadbeef"),
             200,
+            ByteBudget::unbounded(),
         );
         assert_eq!(scanned, blob.len());
         assert_eq!(findings.len(), 1);
@@ -839,7 +860,14 @@ mod tests {
         assert_eq!(finding.line, 2);
 
         // Binary blobs produce no findings and contribute zero scanned bytes.
-        let (none, scanned) = scan_blob(b"\0binary", "blob.bin", "working_tree", None, 200);
+        let (none, scanned) = scan_blob(
+            b"\0binary",
+            "blob.bin",
+            "working_tree",
+            None,
+            200,
+            ByteBudget::unbounded(),
+        );
         assert!(none.is_empty());
         assert_eq!(scanned, 0);
     }
