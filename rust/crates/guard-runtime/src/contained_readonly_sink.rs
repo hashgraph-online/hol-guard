@@ -8,12 +8,12 @@
 //! the command stands behind, plans the run, and asks the live resident
 //! again — for the call as issued and, except for Git and pytest, for the
 //! planned argv — before it starts the planned argv under a read-only
-//! Seatbelt profile with a private home and temporary directory. This replays those steps for the plain
-//! shape, a call with no wrapper or directory change in front of the
-//! program, and for one with settings in front: the call as issued draws
-//! the receipt and the plain run behind the settings runs with the inert
-//! ones carried. The edge routes nothing else here. Linux keeps Guard's own
-//! sink, whose read-only namespace this does not build.
+//! sandbox with a private home and temporary directory. This replays those
+//! steps for the plain shape, a call with no wrapper or directory change in
+//! front of the program, and for one with settings in front: the call as
+//! issued draws the receipt and the plain run behind the settings runs with
+//! the inert ones carried. The edge routes nothing else here. macOS and
+//! Linux each start the plan under their own sandbox (`backend`).
 //!
 //! Rust owns every verdict: the resident's receipts, the operations' plan.
 
@@ -21,6 +21,11 @@ use serde::Deserialize;
 
 use super::program::{carried_program, plain_program, Carried, Kind, Program};
 use super::*;
+
+#[path = "contained_readonly_backend.rs"]
+mod backend;
+#[path = "contained_readonly_node.rs"]
+pub(super) mod node_runtime;
 
 /// The read-only routes: the reason the resident gives and the profile it
 /// requires.
@@ -75,6 +80,7 @@ const PYTEST_PROFILE: &str = "pytest-readonly-v2";
 const NODE_TOOL_PROFILE: &str = "node-tool-readonly-v1";
 const NODE_BUILD_PROFILE: &str = "node-build-output-v1";
 const PACKAGE_PROFILE: &str = "package-test-readonly-v1";
+#[cfg(test)]
 const SEATBELT: &str = "macos-seatbelt";
 const INVALID_PLAN: &str = "Invalid native restricted launch plan.";
 
@@ -112,7 +118,7 @@ pub(crate) fn readonly_route(response: &Map<String, Value>) -> Option<Route> {
 /// builds, with no `cwd` argument for Guard's own sink to turn into a
 /// directory change.
 pub(crate) fn readonly_shape(response: &Value, original: &Map<String, Value>) -> bool {
-    HOST_BACKEND == Some(SEATBELT) && plain_call(response, original)
+    HOST_BACKEND.is_some() && plain_call(response, original)
 }
 
 fn plain_call(response: &Value, original: &Map<String, Value>) -> bool {
@@ -172,7 +178,7 @@ pub(super) fn run(
     route: Route,
     signals: &process::Signals,
 ) -> Outcome<i32> {
-    if HOST_BACKEND != Some(SEATBELT) {
+    if HOST_BACKEND.is_none() {
         return Err(Failure::unauthorized());
     }
     let command = payload
@@ -269,14 +275,21 @@ pub(super) fn run(
     }
     let mut environment = environment(&plan, &private)?;
     match kind {
-        Kind::Eval => {
-            environment.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
-        }
-        Kind::NodeTest | Kind::NodeTool => {
-            // Node preloads and search paths from the host are not
-            // repository test input.
-            environment.remove("NODE_OPTIONS");
-            environment.remove("NODE_PATH");
+        Kind::Eval | Kind::NodeTest | Kind::NodeTool => {
+            if kind == Kind::Eval {
+                environment.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
+            }
+            if plan.profile_version != PYTHON_EVAL_PROFILE {
+                node_runtime::settle(
+                    payload,
+                    workspace,
+                    authority,
+                    &plan,
+                    &mut environment,
+                    signals,
+                    timeout,
+                )?;
+            }
         }
         Kind::Git => {
             environment.remove("PYTHONPATH");
@@ -374,7 +387,7 @@ fn prepare(
     if !ROUTES
         .iter()
         .any(|(_, profile)| *profile == plan.profile_version)
-        || plan.backend != SEATBELT
+        || HOST_BACKEND != Some(plan.backend.as_str())
         || plan.command.is_empty()
         || !plan.allowed_executables.contains(&plan.executable)
         || plan.output_roots.is_empty() == (plan.profile_version == NODE_BUILD_PROFILE)
@@ -432,31 +445,10 @@ pub(super) fn launch(
     timeout: u64,
     notes: process::Notes<'_>,
 ) -> Outcome<i32> {
-    let profile = native(
-        "macos_profile",
-        json!({
-            "profile_version": plan.profile_version,
-            "workspace": plan.workspace,
-            "cwd": plan.cwd,
-            "allowed_executables": plan.allowed_executables,
-            "read_only_roots": plan.read_only_roots,
-            "output_roots": plan.output_roots,
-            "command": plan.command,
-            "backend_executable": plan.backend_executable,
-            "private_root": path_text(&private.path)?,
-            "user_site_root": plan.user_site_root,
-        }),
-    )?;
-    let Value::String(profile) = profile else {
-        return Err(unavailable("invalid_reply"));
-    };
-    let mut backend = vec![
-        plan.backend_executable.clone(),
-        "-p".to_owned(),
-        profile,
-        "--".to_owned(),
-    ];
-    backend.extend(plan.command.iter().cloned());
+    let mut backend = backend::argv(plan, private)?;
+    if backend::node_memory(plan) {
+        backend.insert(0, process::NODE_MEMORY.to_owned());
+    }
     process::run_backend(
         &backend,
         environment,

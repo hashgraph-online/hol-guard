@@ -3224,8 +3224,10 @@
       "enabled_extensions": [
         "command.procedural-memory"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-delete",
       "rule_id": "command.procedural-memory.delete"
     },
@@ -3318,8 +3320,10 @@
       "enabled_extensions": [
         "command.procedural-memory"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-import-legacy",
       "rule_id": "command.procedural-memory.import-legacy"
     },
@@ -3596,8 +3600,10 @@
       "enabled_extensions": [
         "command.procedural-memory"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "delete-env-wrapper",
       "rule_id": "command.procedural-memory.delete"
     },

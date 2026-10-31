@@ -83,14 +83,24 @@ pub(super) fn run(
     if let Some(image) = &image {
         environment.insert("ESBUILD_BINARY_PATH".into(), path_text(&image.image)?);
     }
+    readonly::node_runtime::settle(
+        payload,
+        workspace,
+        authority,
+        &plan,
+        &mut environment,
+        signals,
+        timeout,
+    )?;
     let preload = path_text(&write_preload(&private.path)?)?;
     plan.command
         .splice(1..1, ["--require".to_owned(), preload.clone()]);
     // Vitest supplies its own worker execArgv. Only Guard-owned options,
     // not the caller's NODE_OPTIONS or NODE_PATH, may reach those runtimes.
     let quoted = serde_json::to_string(&preload).map_err(|_| unavailable("invalid_reply"))?;
-    environment.remove("NODE_PATH");
-    environment.insert("NODE_OPTIONS".into(), format!("--require {quoted}"));
+    let guard_options = environment.remove("NODE_OPTIONS").unwrap_or_default();
+    let options = format!("{guard_options} --require {quoted}");
+    environment.insert("NODE_OPTIONS".into(), options.trim().to_owned());
     readonly::launch(
         &plan,
         &private,

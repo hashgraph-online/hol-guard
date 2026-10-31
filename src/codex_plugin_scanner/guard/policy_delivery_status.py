@@ -125,6 +125,21 @@ def _bounded_devices(value: object) -> list[dict[str, object]]:
     return devices
 
 
+def _count(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _state_counts(value: object) -> dict[str, int] | None:
+    """Whole-fleet counts from Cloud, which lists at most ``MAX_DEVICES`` devices; older Clouds send none."""
+
+    if not isinstance(value, dict):
+        return None
+    counts = {state: _count(value.get(state)) for state in sorted(_DEVICE_STATES)}
+    if any(count is None for count in counts.values()):
+        return None
+    return {state: count for state, count in counts.items() if count is not None}
+
+
 def fetch_policy_delivery(store: GuardStore) -> dict[str, object]:
     """Read ``/api/guard/policy/delivery``; return ``{"available": False, "reason": ...}`` on any failure."""
 
@@ -163,6 +178,8 @@ def fetch_policy_delivery(store: GuardStore) -> dict[str, object]:
         "available": True,
         "versionNumber": version if isinstance(version, int) and not isinstance(version, bool) else None,
         "devices": devices,
+        "deviceCount": _count(response.get("deviceCount")),
+        "stateCounts": _state_counts(response.get("stateCounts")),
         "thisDevice": this_device,
     }
 
@@ -195,7 +212,7 @@ def format_policy_status(payload: dict[str, object]) -> str:
     if delivery.get("available"):
         raw_devices = delivery.get("devices")
         devices = raw_devices if isinstance(raw_devices, list) else []
-        counts = {
+        counts = _state_counts(delivery.get("stateCounts")) or {
             state: sum(1 for item in devices if isinstance(item, dict) and item.get("state") == state)
             for state in sorted(_DEVICE_STATES)
         }
