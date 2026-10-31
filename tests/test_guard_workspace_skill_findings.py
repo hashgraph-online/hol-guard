@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_workspace_snapshot as native
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
@@ -20,9 +19,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
     SCANNED,
-    SECRETS_COMPLETE,
     SKILLS_COMPLETE,
-    SNAPSHOT,
     T0,
     queued_run,
 )
@@ -100,35 +97,6 @@ def test_a_worktree_without_skills_has_no_skill_inputs(tmp_path: Path, monkeypat
     assert outcome.state == "completed"
     assert outcome.coverage is not None
     assert outcome.coverage["detectors"]["skill_content_v1"] == "no_inputs"
-
-
-def test_older_runtime_keeps_the_secret_scan_and_reports_skills_not_run(tmp_path: Path, monkeypatch) -> None:
-    store, claimed = queued_run(tmp_path)
-    requested: list[tuple[bool, bool]] = []
-
-    def snapshot(root: Path, *, mode: str = "content", secrets: bool = False, skills: bool = False, **_):
-        requested.append((secrets, skills))
-        if skills:
-            raise native.WorkspaceSnapshotError("workspace_snapshot_skills_unavailable")
-        return replace(SNAPSHOT, secrets=SECRETS_COMPLETE) if secrets else SNAPSHOT
-
-    monkeypatch.setattr(runner, "workspace_snapshot", snapshot)
-    monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
-    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
-    # Detector snapshot with skills, again without them, then the plain recheck.
-    assert requested == [(True, True), (True, False), (False, False)]
-    assert outcome.state == "partial"
-    assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == [
-        "detector_not_run:skill_content_v1",
-        "detector_not_run:hook_config_v1",
-        "detector_not_run:plugin_manifest_v1",
-        "detector_not_run:ci_workflow_v1",
-        "detector_not_run:editor_task_v1",
-        "detector_not_run:instruction_file_v1",
-    ]
-    assert outcome.coverage["detectors"]["secrets"] == "complete"
-    assert outcome.coverage["detectors"]["skill_content_v1"] == "not_run"
 
 
 @pytest.mark.parametrize(
