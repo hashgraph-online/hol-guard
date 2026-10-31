@@ -39,6 +39,11 @@ HISTORY_LOSS = (
     "git tag --delete v1.0.0",
     "git tag -f v1.0.0 HEAD",
     "git tag --force v1.0.0 HEAD",
+    # Git resolves an unambiguous prefix of a long option, so the shortened
+    # spellings drop and move tags exactly as the full ones do.
+    "git tag --del v1.0.0",
+    "git tag --delet v1.0.0",
+    "git tag --forc v1.0.0 HEAD",
 )
 
 # Reads that never needed the sandbox, so they are quiet on every host.
@@ -56,6 +61,9 @@ HISTORY_KEPT_CONTAINED = (
     "git tag v1.0.0",
     "git tag -a v1.0.0 -m release",
     "git tag -v v1.0.0",
+    # Options that only read tags share letters with the losing ones without
+    # abbreviating them.
+    "git tag --format=%(refname)",
 )
 
 

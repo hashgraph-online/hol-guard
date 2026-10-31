@@ -153,6 +153,33 @@ fn a_tag_that_is_dropped_or_moved_keeps_its_review() {
 }
 
 #[test]
+fn an_abbreviated_tag_deletion_keeps_its_review() {
+    // Git resolves any unambiguous prefix of a long option, so the shortened
+    // spellings delete and move tags exactly as the full ones do.
+    assert!(!keeps_under("command.git.tag", "tag --delet v1.0.0"));
+    assert!(!keeps_under("command.git.tag", "tag --del v1.0.0"));
+    assert!(!keeps_under("command.git.tag", "tag --d v1.0.0"));
+    assert!(!keeps_under("command.git.tag", "tag --forc v1.0.0 HEAD"));
+    assert!(!keeps_under("command.git.tag", "tag --fo v1.0.0 HEAD"));
+    // A prefix Git itself calls ambiguous is refused rather than read twice.
+    assert!(!keeps_under("command.git.tag", "tag --f v1.0.0 HEAD"));
+}
+
+#[test]
+fn a_listing_option_that_merely_starts_like_one_stays_contained() {
+    // `--format` and `--file` share letters with `--force` without being an
+    // abbreviation of it, and neither changes a tag.
+    assert!(keeps_under("command.git.tag", "tag --format=%(refname)"));
+    assert!(keeps_under("command.git.tag", "tag -l --format=%(refname)"));
+    assert!(keeps_under(
+        "command.git.tag",
+        "tag -a v1.0.0 --file=notes.txt"
+    ));
+    assert!(keeps_under("command.git.tag", "tag --list v1.*"));
+    assert!(keeps_under("command.git.tag", "tag --contains HEAD"));
+}
+
+#[test]
 fn a_rule_this_module_does_not_answer_for_has_no_keeping_form() {
     assert!(super::keeping_form("command.git.hard-reset").is_none());
     assert!(super::keeping_form("command.git.force-clean").is_none());

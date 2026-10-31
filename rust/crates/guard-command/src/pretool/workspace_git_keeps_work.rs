@@ -25,9 +25,12 @@
 use crate::CanonicalCommandV1;
 use guard_contracts::NativeCommandObservationV1;
 
-/// `tag` options that delete a tag or move one onto another commit. Their
-/// short forms are `TAG_LOSING_LETTERS`.
-const TAG_LOSING: &[&str] = &["--delete", "--force"];
+/// The `tag` options that delete a tag or move one onto another commit,
+/// written out in full. Git resolves any unambiguous prefix of a long option,
+/// so `git tag --del` deletes exactly as `--delete` does; these names are
+/// matched by prefix rather than by their full spelling. Their short forms are
+/// `TAG_LOSING_LETTERS`.
+const TAG_LOSING: &[&str] = &["delete", "force"];
 const TAG_LOSING_LETTERS: &str = "df";
 
 /// The argument form each rule must be written in to stay containable, or
@@ -205,7 +208,8 @@ fn reflog_keeps_history(arguments: &[String]) -> bool {
     }
 }
 
-/// `git tag` without `-d`/`--delete` and without `-f`/`--force`. Listing,
+/// `git tag` without `-d`/`--delete` and without `-f`/`--force`, in every
+/// spelling Git accepts for them. Listing,
 /// creating, annotating, signing and verifying a tag all leave every existing
 /// tag where it is; deleting one, or forcing it onto another commit, can leave
 /// its old commit reachable from nothing. A value written against an option
@@ -218,12 +222,24 @@ fn tag_keeps_history(arguments: &[String]) -> bool {
     else {
         return false;
     };
-    !rest.iter().any(|argument| {
-        TAG_LOSING.contains(&argument.as_str())
-            || argument.strip_prefix('-').is_some_and(|flags| {
-                !flags.starts_with('-') && flags.chars().any(|c| TAG_LOSING_LETTERS.contains(c))
-            })
-    })
+    !rest.iter().any(|argument| loses_a_tag(argument))
+}
+
+/// Whether one argument is an option that deletes a tag or moves one, in any
+/// spelling Git resolves to one: the full long name, an abbreviation of it, an
+/// attached value, or the short letter inside a cluster. A prefix Git would
+/// call ambiguous is refused here too, which keeps the review rather than
+/// reading the command a second way.
+fn loses_a_tag(argument: &str) -> bool {
+    let Some(long) = argument.strip_prefix("--") else {
+        return argument.strip_prefix('-').is_some_and(|letters| {
+            letters
+                .chars()
+                .any(|letter| TAG_LOSING_LETTERS.contains(letter))
+        });
+    };
+    let name = long.split('=').next().unwrap_or(long);
+    !name.is_empty() && TAG_LOSING.iter().any(|losing| losing.starts_with(name))
 }
 
 fn branch_name(name: &str) -> bool {
