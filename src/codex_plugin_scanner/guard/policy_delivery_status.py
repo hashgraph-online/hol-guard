@@ -212,15 +212,10 @@ def format_policy_status(payload: dict[str, object]) -> str:
     if delivery.get("available"):
         raw_devices = delivery.get("devices")
         devices = raw_devices if isinstance(raw_devices, list) else []
-        reported = delivery.get("stateCounts")
-        counts = (
-            reported
-            if isinstance(reported, dict)
-            else {
-                state: sum(1 for item in devices if isinstance(item, dict) and item.get("state") == state)
-                for state in sorted(_DEVICE_STATES)
-            }
-        )
+        counts = _state_counts(delivery.get("stateCounts")) or {
+            state: sum(1 for item in devices if isinstance(item, dict) and item.get("state") == state)
+            for state in sorted(_DEVICE_STATES)
+        }
         lines.append(
             f"Cloud version {delivery.get('versionNumber')}: "
             + ", ".join(f"{count} {state}" for state, count in counts.items())
