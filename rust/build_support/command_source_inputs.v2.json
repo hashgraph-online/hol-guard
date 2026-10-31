@@ -531,6 +531,7 @@
       "src/pretool/search/glob_expand.rs",
       "src/pretool/search/glob_scope.rs",
       "src/pretool/search/grep.rs",
+      "src/pretool/search/grep/includes.rs",
       "src/pretool/search/grep/reach.rs",
       "src/pretool/search/hint.rs",
       "src/pretool/search/literal_bracket.rs",
