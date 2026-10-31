@@ -7648,6 +7648,118 @@
       "expect": "allow"
     },
     {
+      "id": "readiness-curl-retry-connrefused",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -sf --retry-connrefused http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "readiness-curl-retry-all-errors",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -fsS --retry 3 --retry-all-errors http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "readiness-curl-protocol-version",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -sf --http2-prior-knowledge http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "readiness-curl-connection-tuning",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -sf --no-keepalive --tcp-nodelay http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-curl-retry-follows-redirects",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -sf --retry-connrefused -L http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-curl-retry-skips-the-certificate-check",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -sf --retry-all-errors --insecure https://example.invalid/"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-curl-retry-writes-the-response-to-a-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -sf --retry-connrefused --remote-name https://example.invalid/a.tgz"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-curl-loopback-redirect-query-url",
       "fix_area": "queue",
       "harnesses": [

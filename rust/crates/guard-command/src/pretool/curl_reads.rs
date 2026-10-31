@@ -57,23 +57,40 @@ const LOCAL_ADMIN_PORTS: [u16; 23] = [
 ];
 
 /// Flags that change only presentation, failure handling or transport version.
-const PLAIN_FLAGS: [&str; 17] = [
+///
+/// None of them names a destination, carries a body or a credential, or
+/// writes a file, so each leaves the request this module already proved
+/// exactly where it was.
+const PLAIN_FLAGS: [&str; 30] = [
     "--compressed",
     "--fail",
     "--fail-with-body",
     "--get",
     "--globoff",
     "--head",
+    "--http1.0",
     "--http1.1",
     "--http2",
+    "--http2-prior-knowledge",
+    "--http3",
     "--include",
     "--ipv4",
     "--ipv6",
+    "--no-alpn",
     "--no-buffer",
+    "--no-keepalive",
     "--no-progress-meter",
+    "--no-styled-output",
+    "--path-as-is",
+    "--progress-bar",
+    "--raw",
+    "--retry-all-errors",
+    "--retry-connrefused",
     "--show-error",
     "--silent",
     "--ssl-reqd",
+    "--styled-output",
+    "--tcp-nodelay",
     "--verbose",
 ];
 
