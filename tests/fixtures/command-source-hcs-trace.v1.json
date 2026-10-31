@@ -2742,6 +2742,7 @@
           "command.batterycontrol",
           "command.blitcp",
           "command.blkcp",
+          "command.ccx",
           "command.claude-tmux",
           "command.cloudg",
           "command.codesage",
@@ -2801,6 +2802,7 @@
           "command.mcp-contribos",
           "command.mcp-dchub",
           "command.mcp-debuganything",
+          "command.mcp-duckdb-vectors",
           "command.mcp-enola",
           "command.mcp-evernode-mcp",
           "command.mcp-fablecut",
@@ -2818,10 +2820,10 @@
           "command.mcp-jd-church-website-audit",
           "command.mcp-keepawake",
           "command.mcp-kranz",
+          "command.mcp-krusch",
           "command.mcp-krusch-agentic-proxy",
           "command.mcp-krusch-context-mcp",
           "command.mcp-krusch-git",
-          "command.mcp-krusch",
           "command.mcp-kuuhaku",
           "command.mcp-lattice-talk",
           "command.mcp-leadline",
@@ -2846,6 +2848,7 @@
           "command.mcp-reaper",
           "command.mcp-remote-pc-mcp",
           "command.mcp-repo-notebook",
+          "command.mcp-roslyngate",
           "command.mcp-run",
           "command.mcp-seahorse",
           "command.mcp-seminara",
@@ -2868,6 +2871,7 @@
           "command.omairc",
           "command.opencomms",
           "command.probe",
+          "command.procedural-memory",
           "command.pyrig",
           "command.redpen",
           "command.remote.essh",
@@ -2969,7 +2973,7 @@
       },
       "publishers": {
         "hol": {
-          "displayName": "HOL",
+          "displayName": "Hashgraph Online",
           "id": "hol"
         },
         "hol-curated": {
