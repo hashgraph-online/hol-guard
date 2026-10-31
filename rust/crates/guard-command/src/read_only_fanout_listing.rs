@@ -329,13 +329,27 @@ mod tests {
         // here do not describe what the search prints.
         let words = args(&["-rlZ", "--exclude=*.md", "--include=*.rs", "KEY", "src"]);
         assert!(shape("grep", &words).unwrap().patterns.is_empty());
-        let words = args(&["-rlZ", "--exclude", "*.md", "--include", "*.rs", "KEY", "src"]);
+        let words = args(&[
+            "-rlZ",
+            "--exclude",
+            "*.md",
+            "--include",
+            "*.rs",
+            "KEY",
+            "src",
+        ]);
         assert!(shape("grep", &words).unwrap().patterns.is_empty());
         // An exclude after the includes only narrows them further.
         let words = args(&["-rlZ", "--include=*.rs", "--exclude=*.md", "KEY", "src"]);
         assert_eq!(shape("grep", &words).unwrap().patterns, ["*.rs"]);
         // A directory filter keeps its own list, which never re-admits a name.
-        let words = args(&["-rlZ", "--exclude-dir=target", "--include=*.rs", "KEY", "src"]);
+        let words = args(&[
+            "-rlZ",
+            "--exclude-dir=target",
+            "--include=*.rs",
+            "KEY",
+            "src",
+        ]);
         assert_eq!(shape("grep", &words).unwrap().patterns, ["*.rs"]);
         // The roots are still read, so a child that reads no contents is
         // unaffected by the empty globs.
