@@ -80,9 +80,12 @@ def native_policy_snapshot(guard_home: Path) -> Iterator[Mapping[str, object]]:
     publisher = get_native_policy_snapshot_publisher(GuardStore(guard_home))
     publisher.start()
     try:
-        # Hosted macOS Intel runners can take the same cold-start path as
-        # Windows before the resident accepts its first authenticated policy.
-        ready_wait_seconds = 25.0 if sys.platform in {"darwin", "win32"} else 3.0
+        # The budget bounds a publisher that never ACKs; it is not a latency
+        # claim about any platform. Windows, then hosted macOS, then Linux each
+        # turned out to spend a cold start inside the publisher worker's own
+        # imports, so the split only ever moved one way and every platform now
+        # waits the longest of the three.
+        ready_wait_seconds = 25.0
         wait_started = time.monotonic()
         if not publisher.wait_until_ready(wait_started + ready_wait_seconds):
             diagnostics = _publisher_startup_diagnostics(publisher, time.monotonic() - wait_started)

@@ -128,9 +128,18 @@ fn safe_header(value: &str) -> bool {
         })
 }
 
+/// Whether `value` names one fixed endpoint.
+///
+/// The path is spelled from a closed byte set, so no expansion, traversal
+/// trick or second endpoint can hide in it. A read's query string also admits
+/// `<` and `>`, the comparison operators GitHub's own search syntax is written
+/// with (`created:>=2026-10-29`, `comments:>10`). They sit after the first
+/// literal `?`, so they can never reach the path the capability is attributed
+/// from, and an encoded `%3F` stays data rather than opening the query.
 fn static_endpoint(value: &str, read_only: bool) -> bool {
     let mut bytes = value.bytes();
     let mut decoded = Vec::with_capacity(value.len());
+    let mut in_query = false;
     while let Some(byte) = bytes.next() {
         if byte == b'%' && read_only {
             let Some(high) = bytes.next().and_then(|byte| (byte as char).to_digit(16)) else {
@@ -145,6 +154,9 @@ fn static_endpoint(value: &str, read_only: bool) -> bool {
             }
             decoded.push(byte);
         } else if byte.is_ascii_alphanumeric() || b"_./{}:+,@=?&-".contains(&byte) {
+            in_query |= byte == b'?';
+            decoded.push(byte);
+        } else if read_only && in_query && matches!(byte, b'<' | b'>') {
             decoded.push(byte);
         } else {
             return false;

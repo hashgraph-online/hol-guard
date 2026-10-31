@@ -9,9 +9,10 @@
 //! sandbox's, the sandbox runs the text whole from the root. Otherwise the
 //! core is asked about again from its directory and run with its output
 //! redirected and filtered as the wrapper spells, and the echo prints the
-//! status the shell would have. This replays those steps for a core run
-//! from the root itself; Guard's own sink also runs a read-only core from
-//! below it, which the edge keeps there.
+//! status the shell would have. A trailing group or a virtualenv activation
+//! is projected first, as the pre-tool pass projected it. This replays those
+//! steps for a core run from the root itself; Guard's own sink also runs a
+//! read-only core from below it, which the edge keeps there.
 
 use guard_command::pretool::{contained_wrapper_plan, ContainedOutput, ContainedWrapperCore};
 
@@ -34,11 +35,51 @@ pub(super) fn contained(
     receipt: &Map<String, Value>,
     signals: &process::Signals,
 ) -> Outcome<i32> {
+    if let Some(projected) = projected(payload, workspace, &authority.arguments.home) {
+        // A trailing group runs the list inside it, and a virtualenv
+        // activation hands its verdict to the command after it, so the
+        // pre-tool pass answered for that command. The call as issued must
+        // carry the receipt; the projected text is then asked about on its
+        // own and run as that call.
+        if !contained_receipt(receipt) {
+            return Err(Failure::unauthorized());
+        }
+        let asked = with_text(payload, &projected);
+        let receipt = authority
+            .authorize(&asked)
+            .ok_or_else(Failure::unauthorized)?;
+        return contained(&asked, workspace, authority, &receipt, signals);
+    }
     match peel(payload, workspace, &authority.arguments.home) {
         Peel::Wrapped(peeled) => wrapped(payload, workspace, authority, receipt, peeled, signals),
         Peel::Refused if !receipt_matches(receipt) => Err(Failure::unauthorized()),
         Peel::Bare | Peel::Refused => plain(payload, workspace, authority, receipt, signals),
     }
+}
+
+/// The command a trailing group or a virtualenv activation in `payload`
+/// projects to, read from `workspace` as the pre-tool pass reads it. A call
+/// that names its own `cwd` is never projected here.
+fn projected(payload: &Map<String, Value>, workspace: &Path, home: &Path) -> Option<String> {
+    let input = payload.get("tool_input")?.as_object()?;
+    if input.contains_key("cwd") {
+        return None;
+    }
+    let context = guard_command::pretool::PathContext {
+        home_dir: Some(home.to_str()?),
+        cwd: Some(workspace.to_str()?),
+        ..Default::default()
+    };
+    guard_command::pretool::generic::contained_target(input.get("command")?.as_str()?, context)
+}
+
+/// `payload` with `command` in place of its own text.
+fn with_text(payload: &Map<String, Value>, command: &str) -> Map<String, Value> {
+    let mut asked = payload.clone();
+    if let Some(Value::Object(input)) = asked.get_mut("tool_input") {
+        input.insert("command".to_owned(), Value::String(command.to_owned()));
+    }
+    asked
 }
 
 fn peel(payload: &Map<String, Value>, workspace: &Path, home: &Path) -> Peel {

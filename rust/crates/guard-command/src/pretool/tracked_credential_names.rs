@@ -15,6 +15,7 @@ use crate::pretool::sensitive_command;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use serde_json::Value;
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 /// The formats the proof covers. A script or source file named for a secret
@@ -114,7 +115,7 @@ pub(in crate::pretool) fn resolves_to_tracked(value: &str, cwd: Option<&str>) ->
 
 /// `text` with one occurrence of each credential-named word of `words` left
 /// out, or `None` when one of those words is anything but a path to a proven
-/// tracked document. Only an occurrence that stands as a shell word of its own
+/// tracked document or a ref name of `refs`. Only an occurrence that stands as a shell word of its own
 /// is removed, once per word, so a redirect target, assignment or script word
 /// that repeats the path stays in place for the caller's screen. When `moves`
 /// is set the command changes directory first, so a relative path may name a
@@ -124,12 +125,15 @@ pub(in crate::pretool) fn without_tracked_words<'a>(
     words: impl IntoIterator<Item = &'a String>,
     cwd: Option<&str>,
     moves: bool,
+    refs: &BTreeSet<String>,
 ) -> Option<String> {
     let mut rest = text.to_owned();
     for word in words.into_iter().filter(|word| sensitive_command(word)) {
-        operand(word)
-            .filter(|value| !moves || Path::new(value).is_absolute())
-            .filter(|value| resolves_to_tracked(value, cwd))?;
+        if !refs.contains(word.as_str()) {
+            operand(word)
+                .filter(|value| !moves || Path::new(value).is_absolute())
+                .filter(|value| resolves_to_tracked(value, cwd))?;
+        }
         if let Some(at) = standalone(&rest, word) {
             rest.replace_range(at..at + word.len(), " ");
         }
@@ -145,7 +149,9 @@ pub(in crate::pretool) fn screened<'a>(
     words: impl IntoIterator<Item = &'a String>,
     cwd: Option<&str>,
 ) -> String {
-    without_tracked_words(&text, words, cwd, moves_directory(model)).unwrap_or(text)
+    let moves = moves_directory(model);
+    let refs = crate::pretool::ref_name_words::ref_names(model, cwd, moves);
+    without_tracked_words(&text, words, cwd, moves, &refs).unwrap_or(text)
 }
 
 /// The text a credential-word screen reads for `segment`: `text`, or the

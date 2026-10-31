@@ -54,9 +54,12 @@ impl GenericSignals {
         let model = &decision.command_model;
         // Redirect targets, assignments and any text the model did not split
         // into words stay in the rest and keep the signal.
-        paths_proven
-            && without_tracked_words(command, command_words(model), cwd, moves_directory(model))
+        paths_proven && {
+            let moves = moves_directory(model);
+            let refs = crate::pretool::ref_name_words::ref_names(model, cwd, moves);
+            without_tracked_words(command, command_words(model), cwd, moves, &refs)
                 .is_some_and(|rest| !sensitive_command_input(&rest))
+        }
     }
 }
 

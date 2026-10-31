@@ -195,8 +195,16 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     # Git read case behind a review that real agents never see.
     # A developer's RIPGREP_CONFIG_PATH likewise keeps every rg case on
     # review; a case that models one sets it through its environment.
+    # NPM_CONFIG_*, NODE_* and PIP_* are the same shape: a CI runner or a
+    # developer shell that exports one makes npm and pip read a redirected
+    # configuration, which keeps their probes on review no matter what the
+    # case says.
     for name in list(os.environ):
-        if name.upper().startswith(("GIT_", "LD_", "DYLD_")) or name.upper() == "RIPGREP_CONFIG_PATH":
+        upper = name.upper()
+        if (
+            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_"))
+            or upper == "RIPGREP_CONFIG_PATH"
+        ):
             patch.delenv(name)
     patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
     patch.setenv("HOL_GUARD_NATIVE", "force")

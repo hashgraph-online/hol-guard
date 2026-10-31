@@ -44,6 +44,9 @@ METADATA_CALLS = (
     ("extension", "list"),
     ("config", "list"),
     ("config", "get", "editor"),
+    ("api", "search/issues?q=repo:example-org/example-repo+created:>=2026-10-29"),
+    ("api", "search/issues?q=repo:example-org/example-repo+created:<2026-10-29"),
+    ("api", "search/issues?q=repo:example-org/example-repo+comments:>10"),
 )
 WORKTREE_CASE = "linked-worktree-edit-from-main-checkout"
 # A shell edit of the same worktree whose quoted perl pattern uses `|` delimiters.

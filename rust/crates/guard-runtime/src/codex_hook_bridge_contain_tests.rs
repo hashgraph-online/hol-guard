@@ -302,16 +302,15 @@ fn a_call_the_runtime_reproduces_runs_its_own_sink() {
         command.ends_with(&format!("--request-sha256 {digest} --home /h")),
         "{command}"
     );
-    // The verdict for a group was answered for the list inside it; the
-    // snapshot keeps the text Codex sent, so Guard's own sink projects it.
+    // The verdict for a group was answered for the list inside it. The
+    // snapshot keeps the text Codex sent and the native sink projects it
+    // again before it plans the call.
     let command = call("(make test)");
-    take_request(&command);
+    let (request, _) = take_request(&command);
+    let snapshot: serde_json::Value = serde_json::from_slice(&request).unwrap();
+    assert_eq!(snapshot["payload"]["tool_input"]["command"], "(make test)");
     assert!(
-        command.starts_with(&format!("{PYTHON} -I -c '")),
-        "{command}"
-    );
-    assert!(
-        command.contains(" guard execute-contained-test --harness codex "),
+        command.starts_with("'/opt/hol guard/runtime' contained-workspace-sink --harness codex "),
         "{command}"
     );
 }

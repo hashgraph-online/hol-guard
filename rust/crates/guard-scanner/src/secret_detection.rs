@@ -18,6 +18,7 @@ use hmac::{Hmac, Mac};
 use regex::{Regex, RegexBuilder};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
@@ -750,6 +751,121 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "flyio",
             true,
             "Fly.io deploy or personal access token.",
+            None,
+        ),
+        secret_rule(
+            "slack-app-token",
+            "Slack app-level token",
+            "critical",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>xapp-[0-9]-[A-Za-z0-9-]{10,})(?P<overrun>_?)",
+            FLAG_UNICODE,
+            "slack",
+            true,
+            // `-` is a token character here, so a word boundary would end the
+            // match at one and report the head as the whole token. The match
+            // runs to the first character the alphabet does not hold, which
+            // leaves only `_` able to continue the value, and `overrun` catches
+            // that without consuming anything else.
+            "Slack app-level token for socket-mode connections.",
+            None,
+        ),
+        secret_rule(
+            "discord-bot-token",
+            "Discord bot token",
+            "critical",
+            r"(?:^|[^A-Za-z0-9_.-])(?P<secret>[MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})(?P<overrun>[A-Za-z0-9_.-]*)",
+            FLAG_UNICODE,
+            "discord",
+            true,
+            // The segments hold `-` and `_`, and the token is exactly three of
+            // them, so `overrun` watches for `.` as well: a fourth segment or a
+            // longer third one is some other value, not a bot token with its
+            // tail cut off.
+            "Discord bot token granting the application its gateway identity.",
+            None,
+        ),
+        secret_rule(
+            "digitalocean-token",
+            "DigitalOcean access token",
+            "critical",
+            r"\b(?P<secret>do[opr]_v1_[0-9a-f]{64})\b",
+            FLAG_UNICODE,
+            "digitalocean",
+            true,
+            "DigitalOcean personal, OAuth, or refresh access token.",
+            None,
+        ),
+        secret_rule(
+            "notion-integration-token",
+            "Notion integration token",
+            "critical",
+            r"\b(?P<secret>ntn_[A-Za-z0-9]{40,60})\b",
+            FLAG_UNICODE,
+            "notion",
+            true,
+            "Notion internal integration token.",
+            None,
+        ),
+        secret_rule(
+            "sentry-auth-token",
+            "Sentry auth token",
+            "critical",
+            r"(?:^|[^A-Za-z0-9+/=_-])(?P<secret>sntry[su]_[A-Za-z0-9+/=_-]{50,})",
+            FLAG_UNICODE,
+            "sentry",
+            true,
+            // Unbounded above, because a ceiling on the quantifier reports the
+            // first N characters of anything longer. The class already holds
+            // every character that could continue the value, so the greedy run
+            // ends the token and no overrun group is needed.
+            "Sentry organization or user auth token.",
+            None,
+        ),
+        secret_rule(
+            "google-oauth-client-secret",
+            "Google OAuth client secret",
+            "critical",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>GOCSPX-[A-Za-z0-9_-]{28})(?P<overrun>[A-Za-z0-9_-]*)",
+            FLAG_UNICODE,
+            "google",
+            true,
+            // Exactly 28 characters after the prefix, and `-` is one of them, so
+            // anything after the 28 that still comes from the alphabet means
+            // those 28 were never the whole secret. `overrun` collects it.
+            "Google OAuth 2.0 client secret.",
+            None,
+        ),
+        secret_rule(
+            "groq-api-key",
+            "Groq API key",
+            "critical",
+            r"\b(?P<secret>gsk_[A-Za-z0-9]{48,60})\b",
+            FLAG_UNICODE,
+            "groq",
+            true,
+            "Groq API key.",
+            None,
+        ),
+        secret_rule(
+            "replicate-api-token",
+            "Replicate API token",
+            "critical",
+            r"\b(?P<secret>r8_[A-Za-z0-9]{37,45})\b",
+            FLAG_UNICODE,
+            "replicate",
+            true,
+            "Replicate API token.",
+            None,
+        ),
+        secret_rule(
+            "perplexity-api-key",
+            "Perplexity API key",
+            "critical",
+            r"\b(?P<secret>pplx-[A-Za-z0-9]{32,60})\b",
+            FLAG_UNICODE,
+            "perplexity",
+            true,
+            "Perplexity API key.",
             None,
         ),
     ]
@@ -1595,8 +1711,57 @@ fn context_score(
     (score.clamp(0.0, 1.0), reasons)
 }
 
-fn line_number(text: &str, match_start: usize) -> usize {
-    text[..match_start].bytes().filter(|b| *b == b'\n').count() + 1
+/// How many lines a scanned text holds before each block of it, so a
+/// finding's line is read from one count and a short scan instead of by
+/// counting the newlines before it again.
+///
+/// A scan reports up to ten thousand findings, and counting from the start of
+/// the text for each one walks the whole prefix every time: a large file that
+/// leaks in many places reads its own bytes once per finding. Holding the
+/// offset of every newline would answer that in a single search, but a
+/// newline-heavy text would then carry eight bytes of index for every byte of
+/// itself, and a repository scan admits files up to 32 MiB while a direct
+/// caller of `scan_secret_text` is bounded by nothing at all. One count per
+/// block is a five-hundredth of the text instead, and the newlines after the
+/// last boundary are counted over at most one block.
+///
+/// The counts are built on the first finding that survives the filters, so a
+/// text that yields none never pays for them, and a scan that stops at its
+/// bound has built them once.
+const LINE_INDEX_BLOCK: usize = 4096;
+
+#[derive(Default)]
+struct LineIndex {
+    blocks: OnceCell<Vec<usize>>,
+}
+
+impl LineIndex {
+    /// The one-based line `match_start` falls on. A match standing on the
+    /// newline itself belongs to the line that newline ends, as counting the
+    /// newlines strictly before it did.
+    fn line_of(&self, text: &str, match_start: usize) -> usize {
+        let blocks = self.blocks.get_or_init(|| {
+            let bytes = text.as_bytes();
+            // One more count than there are blocks, so the boundary at the
+            // very end of the text is a block start like any other and an
+            // offset standing on it has a count to read.
+            let mut counts = Vec::with_capacity(bytes.len() / LINE_INDEX_BLOCK + 2);
+            let mut counted = 0usize;
+            for block in bytes.chunks(LINE_INDEX_BLOCK) {
+                counts.push(counted);
+                counted += newlines(block);
+            }
+            counts.push(counted);
+            counts
+        });
+        let block = match_start / LINE_INDEX_BLOCK;
+        let boundary = block * LINE_INDEX_BLOCK;
+        blocks[block] + newlines(&text.as_bytes()[boundary..match_start]) + 1
+    }
+}
+
+fn newlines(bytes: &[u8]) -> usize {
+    bytes.iter().filter(|byte| **byte == b'\n').count()
 }
 
 fn line_text(text: &str, match_start: usize) -> Zeroizing<String> {
@@ -1627,6 +1792,7 @@ fn finding_from_match(
     source: &str,
     commit: Option<&str>,
     provider_rule: Option<&SecretRule>,
+    lines: &LineIndex,
 ) -> Option<SecretFinding> {
     let line_text = line_text(text, match_start);
     if rule.strong_format {
@@ -1651,7 +1817,7 @@ fn finding_from_match(
         severity: rule.severity,
         confidence: confidence_label(score),
         confidence_score: score,
-        line: line_number(text, match_start),
+        line: lines.line_of(text, match_start),
         path: path.to_string(),
         source: source.to_string(),
         commit: commit.map(str::to_string),
@@ -1688,6 +1854,7 @@ pub fn scan_secret_text(
         };
     }
     let bounded_max = max_findings.clamp(1, MAX_FINDINGS_PER_TEXT);
+    let lines = LineIndex::default();
     let mut findings: Vec<SecretFinding> = Vec::new();
     let mut seen: HashSet<(&'static str, usize, CandidateDigest)> = HashSet::new();
 
@@ -1699,6 +1866,20 @@ pub fn scan_secret_text(
             // the newline ending the line above, the whole match begins on the
             // previous line. Reporting from there would name the wrong line
             // and score the wrong line's text.
+            // A rule whose alphabet holds characters a word boundary cannot see
+            // has to prove the value ends where the rule says it does. The
+            // regex crate has no lookahead, and a guard that consumes the next
+            // character would swallow the separator between two neighbouring
+            // tokens and miss the second one. Such a rule captures the overrun
+            // instead: anything matched there means the value runs past what
+            // the rule describes, so the rule does not claim it and the generic
+            // assignment rule reports the whole value on its own.
+            if captures
+                .name("overrun")
+                .is_some_and(|overrun| !overrun.is_empty())
+            {
+                continue;
+            }
             let matched = captures
                 .name("secret")
                 .unwrap_or_else(|| captures.get(0).expect("whole match always present"));
@@ -1713,6 +1894,7 @@ pub fn scan_secret_text(
                 source,
                 commit,
                 Some(rule),
+                &lines,
             );
             let Some(finding) = finding else { continue };
             if !seen.insert((
@@ -1774,6 +1956,7 @@ pub fn scan_secret_text(
             source,
             commit,
             None,
+            &lines,
         );
         let Some(finding) = finding else { continue };
         if !seen.insert((
@@ -2215,6 +2398,71 @@ mod tests {
         assert_eq!(capped.findings.len(), 3);
     }
 
+    /// The line index answers what counting the newlines before an offset
+    /// answered, including at a newline itself, at the first byte and at the
+    /// end of the text.
+    #[test]
+    fn the_line_index_agrees_with_counting_the_newlines_before_an_offset() {
+        let text = "\nalpha\n\nbeta\ngamma";
+        let index = LineIndex::default();
+        for offset in 0..=text.len() {
+            let counted = text[..offset].bytes().filter(|byte| *byte == b'\n').count() + 1;
+            assert_eq!(index.line_of(text, offset), counted, "offset {offset}");
+        }
+    }
+
+    /// The block counts answer the same line as counting the newlines does
+    /// for a text long enough to hold several blocks, at the boundaries
+    /// themselves and on either side of them.
+    #[test]
+    fn the_line_index_crosses_block_boundaries() {
+        let text = "ab\n".repeat(LINE_INDEX_BLOCK);
+        let index = LineIndex::default();
+        let mut offsets = vec![0, 1, text.len()];
+        for block in 0..=text.len() / LINE_INDEX_BLOCK {
+            let boundary = block * LINE_INDEX_BLOCK;
+            offsets.extend([boundary.saturating_sub(1), boundary, boundary + 1]);
+        }
+        for offset in offsets {
+            if offset > text.len() {
+                continue;
+            }
+            let counted = text[..offset].bytes().filter(|byte| *byte == b'\n').count() + 1;
+            assert_eq!(index.line_of(&text, offset), counted, "offset {offset}");
+        }
+    }
+
+    /// Every finding reads its own line, not the line of the one the index was
+    /// first built for.
+    #[test]
+    fn findings_after_the_first_keep_their_own_lines() {
+        let tokens = [
+            "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+            "ghp_ZyXwVuTsRqPoNmLkJiHgFeDcBa543210",
+            "ghp_0123456789AbCdEfGhIjKlMnOpQrStUv",
+        ];
+        let mut text = String::new();
+        for (position, token) in tokens.iter().enumerate() {
+            text.push_str(&"filler\n".repeat(position * 40));
+            text.push_str(&format!("key{position} {token}\n"));
+        }
+        let summary = scan_secret_text(&text, "a.env", "text", None, 200);
+        assert_eq!(summary.findings.len(), tokens.len());
+        let counted: Vec<usize> = tokens
+            .iter()
+            .map(|token| {
+                let start = text.find(token).expect("token present");
+                text[..start].bytes().filter(|byte| *byte == b'\n').count() + 1
+            })
+            .collect();
+        let reported: Vec<usize> = summary
+            .findings
+            .iter()
+            .map(|finding| finding.line)
+            .collect();
+        assert_eq!(reported, counted);
+    }
+
     #[test]
     fn empty_text_and_dedup_match_python() {
         let empty = scan_secret_text("", "x.env", "text", None, 200);
@@ -2335,7 +2583,7 @@ mod tests {
     /// each is assembled to satisfy its own pattern and nothing else. Each is
     /// held in two pieces, as `jwt_fixture` is, so no complete provider-shaped
     /// token ever appears as a literal in this file.
-    const RULES_ADDED_AFTER_PYTHON: [(&str, &str, &str); 16] = [
+    const RULES_ADDED_AFTER_PYTHON: [(&str, &str, &str); 25] = [
         (
             "atlassian-api-token",
             "ATATT3xFfGF0A1b2C3d4E5",
@@ -2408,6 +2656,51 @@ mod tests {
             "fm2_Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ",
             "2vL8nP4wR7tY1uI6oP3aS5dFgH",
         ),
+        (
+            "slack-app-token",
+            "xapp-1-A0K2VL8NP4W-7tY1uI6oP",
+            "3aS5dFgHjK9mQ2vL8nP4wR",
+        ),
+        (
+            "discord-bot-token",
+            "MTI5ODM3NDY1MDE5MjgzNzQ2N.Gq2VL8.nP4wR7tY1uI6",
+            "oP3aS5dFgHjK9mQ",
+        ),
+        (
+            "digitalocean-token",
+            "dop_v1_9f3b7c2a1d4e8f60b5a9c7d3e1f2a4b6",
+            "9c8d7e5f3a1b2c4d6e8f0a2b4c6d8e0f",
+        ),
+        (
+            "notion-integration-token",
+            "ntn_Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9m",
+            "Q2vL8nP4wR7tY1",
+        ),
+        (
+            "sentry-auth-token",
+            "sntrys_Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9m",
+            "Q2vL8nP4wR7tY1uI6oP3aS5d",
+        ),
+        (
+            "google-oauth-client-secret",
+            "GOCSPX-Qq2VL8nP4wR7tY1",
+            "uI6oP3aS5dFgH",
+        ),
+        (
+            "groq-api-key",
+            "gsk_Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9m",
+            "Q2vL8nP4wR7tY1uI6oP3",
+        ),
+        (
+            "replicate-api-token",
+            "r8_Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9m",
+            "Q2vL8nP4",
+        ),
+        (
+            "perplexity-api-key",
+            "pplx-Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9m",
+            "Q2vL8nP4",
+        ),
     ];
 
     #[test]
@@ -2474,6 +2767,130 @@ mod tests {
             assert!(
                 !(claimed.contains(&rule_id) && claimed.contains(&"credential-assignment")),
                 "{rule_id}: {claimed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_value_that_runs_past_a_rule_in_its_own_alphabet_is_not_claimed() {
+        // The sibling test above appends letters and digits, which a word
+        // boundary already stops. These are the continuations it cannot see:
+        // `-` is not a word character, so `\b` is satisfied between a letter
+        // and a `-` and a rule whose alphabet holds `-` would report the head
+        // of the value as the whole token. A ceiling on the quantifier does
+        // the same to anything longer than the ceiling.
+        //
+        // Every sample is held in two pieces, as the rest of this file is.
+        let discord_segment = format!("{}{}", "N2k8vQ4rT7yU1iO3pA5sD", "9fG6hJ0kL2zX4cV8bN1m");
+        let google_tail = format!("{}{}", "Qq2VvL8nP4wR7tY1uI", "6oP3aS5dFg");
+        let slack_tail = format!("{}{}", "Zz9Qq2VvL8nP4wR7tY", "1uI6oP3aS5dFgHjK9m");
+        let sentry_tail = format!("{}{}", "Rr4TtY7uI1oP3aS5dF", "gH9jK2lZ6xC8vB4nM0");
+        for (rule_id, value) in [
+            // A third segment of 40 characters with a `-` at offset 30: a
+            // boundary stops the match at the `-` and reports the first 30.
+            (
+                "discord-bot-token",
+                format!(
+                    "{}.{}.{}-{}",
+                    &discord_segment[..24],
+                    "Qq2VvL",
+                    &discord_segment[..30],
+                    "9fG6hJ0kL"
+                ),
+            ),
+            // A 29th character that is a `-`, where the rule takes 28.
+            (
+                "google-oauth-client-secret",
+                format!("GOCSPX-{google_tail}-{}", "9fG6hJ0kL"),
+            ),
+            // Longer than the 255 characters the rule used to cap at.
+            (
+                "slack-app-token",
+                format!("xapp-1-{}", slack_tail.repeat(10)),
+            ),
+            (
+                "sentry-auth-token",
+                format!("sntrys_{}", sentry_tail.repeat(10)),
+            ),
+        ] {
+            let text = format!("SERVICE_CREDENTIAL = \"{value}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            for finding in &summary.findings {
+                if finding.rule_id != rule_id {
+                    continue;
+                }
+                assert_eq!(
+                    finding.candidate, value,
+                    "{rule_id} reported a fragment of the value"
+                );
+            }
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(
+                !(claimed.contains(&rule_id) && claimed.contains(&"credential-assignment")),
+                "{rule_id}: {claimed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn two_neighbouring_values_of_one_rule_are_both_reported() {
+        // A rule with no lookahead available proves its tail by capturing the
+        // overrun. A guard that consumed the next character instead would eat
+        // the separator between two values, and the second value's leading
+        // guard would then find nothing before it, so only the first of a pair
+        // would ever be reported. One space is the tightest such separator.
+        //
+        // Every sample is held in two pieces, as the rest of this file is.
+        let slack = [
+            format!("{}{}", "xapp-1-Zz9Qq2VvL8nP4wR7tY", "1uI6oP3aS5dFgHjK9m"),
+            format!("{}{}", "xapp-1-Rr4TtY7uI1oP3aS5dF", "gH9jK2lZ6xC8vB4nM0"),
+        ];
+        let google = [
+            format!("{}{}", "GOCSPX-Qq2VvL8nP4wR7tY1u", "I6oP3aS5dFg"),
+            format!("{}{}", "GOCSPX-Rr4TtY7uI1oP3aS5d", "FgH9jK2lZ6x"),
+        ];
+        let sentry = [
+            format!(
+                "{}{}",
+                "sntrys_Rr4TtY7uI1oP3aS5dFgH9jK2lZ6xC8vB4nM0", "Qq2VvL8nP4wR7tY1uI6oP3aS5dFg"
+            ),
+            format!(
+                "{}{}",
+                "sntryu_Zz9Qq2VvL8nP4wR7tY1uI6oP3aS5dFgHjK9m", "Rr4TtY7uI1oP3aS5dFgH9jK2l"
+            ),
+        ];
+        let discord = [
+            format!(
+                "{}{}",
+                "N2k8vQ4rT7yU1iO3pA5sD9fG.Qq2VvL.", "6hJ0kL2zX4cV8bN1mZz9Qq2VvL8nP4wR"
+            ),
+            format!(
+                "{}{}",
+                "M1a2B3c4D5e6F7g8H9i0J1k2.Rr4TtY.", "7uI1oP3aS5dFgH9jK2lZ6xC8vB4nM0Q"
+            ),
+        ];
+        for (rule_id, pair) in [
+            ("slack-app-token", &slack),
+            ("google-oauth-client-secret", &google),
+            ("sentry-auth-token", &sentry),
+            ("discord-bot-token", &discord),
+        ] {
+            let text = format!("SERVICE_CREDENTIALS = \"{} {}\"", pair[0], pair[1]);
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .filter(|finding| finding.rule_id == rule_id)
+                .map(|finding| finding.candidate.as_str())
+                .collect();
+            assert_eq!(
+                claimed,
+                vec![pair[0].as_str(), pair[1].as_str()],
+                "{rule_id} did not report both neighbours"
             );
         }
     }

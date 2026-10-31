@@ -178,16 +178,19 @@ pub(super) fn bounded(target: &str, workspace: &Path, temp_fixed: bool) -> bool 
 }
 
 /// A literal operand the directory walk reads exactly as the shell would: no
-/// variable to expand, and no stand-in for the previous, home or stacked
-/// directory, which name a place the walk never joined. It is admitted only
+/// variable to expand, and no stand-in for the home or stacked directory,
+/// which name a place the walk never joined. `-` is the exception among the
+/// stand-ins, since the walk carries the directory each shell moved out of
+/// and so follows the return as precisely as the move. It is admitted only
 /// beside `cwd::moves_stay_inside`, whose own proof is that the move lands
 /// inside the workspace, so what this reading adds over [`below`] is the
 /// parent step that proof already covers.
 pub(super) fn walked(target: &str) -> bool {
-    !target.is_empty()
-        && !target.contains('$')
-        && !target.starts_with(['~', '-', '+'])
-        && !rewritten_before_cd(target)
+    target == "-"
+        || (!target.is_empty()
+            && !target.contains('$')
+            && !target.starts_with(['~', '-', '+'])
+            && !rewritten_before_cd(target))
 }
 
 /// Whether the shell rewrites `target` before `cd` ever sees it. Both

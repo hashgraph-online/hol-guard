@@ -139,7 +139,7 @@ fn route_on(
     let Some(original) = shell_input(payload) else {
         return Ok(None);
     };
-    let projected = projected_input(original, target);
+    let projected = projected_input(original, target.workspace, target.home_dir);
     let original = projected.as_ref().unwrap_or(original);
     let native = (host.native)(response, original, target.workspace, target.home_dir);
     request::write_and_route(temp, payload, original, target, native.as_deref())
@@ -159,7 +159,8 @@ fn route_on(
 /// removed. Any other command has no projection and keeps its own bytes.
 fn projected_input(
     original: &Map<String, Value>,
-    target: &SinkTarget<'_>,
+    workspace: &str,
+    home_dir: &str,
 ) -> Option<Map<String, Value>> {
     let command = original.get("command")?.as_str()?;
     // The pre-tool pass answered with the settled workspace, not the spelling
@@ -169,8 +170,8 @@ fn projected_input(
     let projected = guard_command::pretool::generic::contained_target(
         command,
         guard_command::pretool::PathContext {
-            home_dir: Some(target.home_dir),
-            cwd: Some(target.workspace),
+            home_dir: Some(home_dir),
+            cwd: Some(workspace),
             ..Default::default()
         },
     )?;
@@ -180,11 +181,11 @@ fn projected_input(
 }
 
 /// The runtime's own sink command for a call whose request snapshot keeps
-/// the text the harness sent, as the Codex bridge writes it: the calls
-/// `native` takes, less one whose verdict was answered for a projection of
-/// its text (a virtualenv activation, a trailing group or a home-spelled
-/// launcher). The native sink plans the text it is given, so such a call
-/// stays with Guard's own sink, which projects it again.
+/// the text the harness sent, as the Codex bridge writes it. A verdict
+/// answered for a projection of that text (a virtualenv activation, a
+/// trailing group or a home-spelled launcher) decides on the projected
+/// call, as the direct route does; the native sink projects the text again
+/// before it plans it, as Guard's own sink does.
 #[cfg(unix)]
 pub(crate) fn unprojected_sink_command(
     response: &Value,
@@ -193,16 +194,9 @@ pub(crate) fn unprojected_sink_command(
     home_dir: &str,
     native: NativeSink,
 ) -> Option<Vec<String>> {
-    let command = original.get("command")?.as_str()?;
-    let context = guard_command::pretool::PathContext {
-        home_dir: Some(home_dir),
-        cwd: Some(workspace),
-        ..Default::default()
-    };
-    if guard_command::pretool::generic::contained_target(command, context).is_some() {
-        return None;
-    }
-    let executable = native(response, original, workspace, home_dir)?;
+    let projected = projected_input(original, workspace, home_dir);
+    let decided = projected.as_ref().unwrap_or(original);
+    let executable = native(response, decided, workspace, home_dir)?;
     Some(vec![
         executable,
         crate::contained_workspace_sink::SINK_COMMAND.to_owned(),

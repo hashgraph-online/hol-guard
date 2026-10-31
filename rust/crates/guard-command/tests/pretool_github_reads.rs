@@ -91,6 +91,18 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("gh api -X DELETE repos/owner/repo -q .name", false),
             ("gh api -X GET repos/owner/repo/pulls/1", true),
             ("gh api --method=HEAD repos/owner/repo/commits/main", true),
+            // GitHub's search syntax writes its date and count bounds with
+            // comparison operators. They sit in the query string of a read, so
+            // the endpoint the capability is attributed from is unchanged.
+            ("gh api 'search/issues?q=repo:example-org/example-repo+created:>=2026-10-29'", true),
+            ("gh api 'search/issues?q=repo:example-org/example-repo+created:<2026-10-29'", true),
+            ("gh api 'search/issues?q=repo:example-org/example-repo+comments:>10'", true),
+            ("gh api -X GET 'search/issues?q=repo:example-org/example-repo+created:>2026-10-29'", true),
+            // An operator in the path, in a write, or behind an encoded `?`
+            // that never opens a query string keeps the endpoint unproven.
+            ("gh api 'repos/owner/re>po'", false),
+            ("gh api 'repos/owner/repo%3Fq=a>b'", false),
+            ("gh api -X POST 'repos/owner/repo/issues?q=a>b'", false),
             ("gh pr view 1 --json title,state", true),
             ("gh pr checks 4295 --repo hol-fake/example", true),
             ("gh pr view 4295 --repo hol-fake/example --json number,state,mergeable", true),

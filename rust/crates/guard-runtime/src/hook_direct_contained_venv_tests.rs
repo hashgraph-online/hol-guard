@@ -9,7 +9,7 @@
 #![cfg(unix)]
 
 use super::request::REQUEST_FILE_NAME;
-use super::{route_on, Host, SinkTarget};
+use super::{route_on, unprojected_sink_command, Host, SinkTarget};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -229,5 +229,38 @@ fn a_command_the_activation_scan_cannot_read_keeps_its_own_bytes() {
         fs::remove_dir_all(root.join("tmp")).unwrap();
         fs::create_dir_all(root.join("tmp")).unwrap();
     }
+    fs::remove_dir_all(root).unwrap();
+}
+
+fn tool_input(command: &str) -> Map<String, Value> {
+    serde_json::from_value(json!({ "command": command })).unwrap()
+}
+
+/// The native sink when it runs `.venv/bin/pytest -q` and nothing else.
+fn projected_only(
+    _response: &Value,
+    input: &Map<String, Value>,
+    _workspace: &str,
+    _home: &str,
+) -> Option<String> {
+    let command = input.get("command")?.as_str()?;
+    (command == ".venv/bin/pytest -q").then(|| "/runtime".to_owned())
+}
+
+#[test]
+fn the_edge_decides_the_sink_on_the_projected_call() {
+    let root = scratch("edge");
+    let workspace = root.join("project");
+    environment(&workspace, &["pytest"]);
+    let workspace = workspace.to_str().unwrap();
+    let home = root.to_str().unwrap();
+    // The edge rewrites the unprojected snapshot, so it has to ask the
+    // native sink about the call the denial was answered for.
+    let activated = tool_input("source .venv/bin/activate && pytest -q");
+    let command = unprojected_sink_command(&denial(), &activated, workspace, home, projected_only)
+        .expect("the projected call runs in the native sink");
+    assert_eq!(command[0], "/runtime");
+    let plain = tool_input("pytest -q");
+    assert!(unprojected_sink_command(&denial(), &plain, workspace, home, projected_only).is_none());
     fs::remove_dir_all(root).unwrap();
 }

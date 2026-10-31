@@ -18969,7 +18969,7 @@ def test_sync_receipts_enforces_an_exact_command_rule_from_a_v2_bundle(tmp_path,
     ] == [("codex", "artifact", "block", f"memory:exact-shell-command:{digest}", "rule.block-install")]
 
 
-def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
+def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True, mode="prompt"):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     if canonical:
@@ -19010,7 +19010,7 @@ def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
                 "revision": 1,
             },
             "spec": {
-                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "defaults": {"mode": mode, "defaultAction": "warn"},
                 "rules": [
                     {
                         "id": "rule.canonical",
@@ -19078,6 +19078,19 @@ def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
     )
 
     return store, legacy
+
+
+def test_sync_receipts_activates_an_evaluate_bundle_over_legacy_rows(tmp_path, monkeypatch):
+    """Evaluate compiles to no rows on purpose; an older bundle's rows are not drift."""
+
+    store, _legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch, mode="observe")
+
+    guard_runner_module.sync_receipts(store)
+
+    assert not store.get_sync_payload("policy_bundle_last_error")
+    assert store.get_sync_payload("policy_bundle")["contractVersion"] == "guard-policy-bundle.v2"
+    assert store.list_policy_decisions() == []
+    assert store.list_events(event_name="policy_bundle/shadow_mismatch") == []
 
 
 def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(

@@ -5,7 +5,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from hashlib import sha256
 from pathlib import Path
 
@@ -14,6 +14,7 @@ import pytest
 from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 from tests.home_isolation import isolate_user_home
+from tests.outbound_network_guard import outbound_network_attempts
 
 # Before any Guard module computes a default home or a test spawns a helper.
 isolate_user_home()
@@ -57,6 +58,26 @@ if pythonpath_prefix:
 # and so an inherited value cannot silently re-enable launches.
 os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
 os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
+
+# Fixtures carry production Guard Cloud URLs and tokens that are not valid
+# there, so no test may reach a public host. Inside this process the socket
+# guard below refuses it; a fake that stands in for the transport never opens a
+# socket and is unaffected. The flag carries the rule to supply-chain egress in
+# helpers a test spawns, and to archive fetches the native runtime makes, which
+# no Python socket guard can see. Tests that need Cloud answers serve them from loopback.
+os.environ["HOL_GUARD_TEST_LOOPBACK_EGRESS_ONLY"] = "1"
+
+_session_network_guard = ExitStack()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    # Session-wide rather than per test: background threads a test leaves
+    # running are still covered after its own fixtures are torn down.
+    _session_network_guard.enter_context(outbound_network_attempts())
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    _session_network_guard.close()
 
 
 def pytest_configure(config: pytest.Config) -> None:

@@ -168,6 +168,10 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
         "cd app && ls 2>&1 | tail -5 && cd ..",
         "cd app && ls && cd ../web && ls",
         "cd app/src && ls && cd ../..",
+        // A `;` runs the climb whatever the work did. The only branch it
+        // leaves the workspace on is the one whose first `cd` failed, which
+        // never descended and runs nothing afterwards.
+        "cd app && ls; cd ..",
     ] {
         assert!(shaped(command, &ws), "{command}");
     }
@@ -181,11 +185,19 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
         "cd app && ls && cd ../..".to_owned(),
         format!("cd app && ls && cd {outside}"),
         "cd app && ls && cd ../missing-name".to_owned(),
-        "cd app && ls && cd -".to_owned(),
+        // `cd -` is the one stand-in the walk follows, since it carries the
+        // directory each shell moved out of;
+        // `a_return_to_the_previous_directory_follows_the_move_the_walk_saw`
+        // covers it. An `$OLDPWD` spelling is an expansion the walk never
+        // reads, so it stays out.
         "cd app && ls && cd $OLDPWD".to_owned(),
-        // A `;` leaves the shell of a failed `cd` where it started, and the
-        // climb from there is a step out, so both readings have to stay in.
-        "cd app && ls; cd ..".to_owned(),
+        // A `;` resumes the branch whose `cd` failed as well, and a climb
+        // from there is a step out — but only a step, with nothing left to
+        // run from it.
+        // `a_climb_that_only_leaves_where_the_descent_failed_stays_contained`
+        // holds that reading, and keeps the spellings that do run something
+        // after the climb out.
+        "cd app && ls; cd ..; ls".to_owned(),
         "CDPATH=/ cd app && ls && cd ..".to_owned(),
     ] {
         assert!(!shaped(&command, &ws), "{command}");
@@ -231,4 +243,40 @@ fn a_move_the_walk_cannot_read_as_the_shell_does_is_refused() {
     // One step in and one step back through the same link is still the
     // directory the sandbox bounds.
     assert!(shaped("cd deep && ls && cd ..", &ws));
+}
+
+/// Only the shell's own `cd` moves the shell. A program in the workspace that
+/// carries the builtin's name is an ordinary executable, and the walk never
+/// moved for it, so its operand is read as the path it is.
+#[test]
+fn a_program_named_after_the_builtin_earns_no_move_exemption() {
+    let ws = workspace("cd-lookalike", true);
+    std::fs::create_dir_all(ws.join("app")).unwrap();
+    for command in [
+        "cd app && ./cd /etc/passwd",
+        "cd app && ./cd /etc",
+        "cd app && bin/cd /etc/passwd",
+        "cd app && ./pushd /etc/passwd",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
+
+/// Git's metadata belongs to `git`. The reach check refuses that directory to
+/// every other program, and a move into it must not carry the name past that
+/// refusal for whatever runs next.
+#[test]
+fn a_move_into_git_metadata_is_refused() {
+    let ws = workspace("cd-git-metadata", true);
+    std::fs::create_dir_all(ws.join(".git")).unwrap();
+    std::fs::create_dir_all(ws.join("app/.git")).unwrap();
+    for command in [
+        "cd .git && cat config",
+        "cd .git && ls",
+        "cd app/.git && cat config",
+        "cd app && cd ../.git && cat config",
+        "pushd .git && cat config",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
 }

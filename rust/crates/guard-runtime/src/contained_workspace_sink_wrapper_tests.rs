@@ -75,3 +75,23 @@ fn the_edge_sends_a_core_the_sink_runs_from_the_root() {
         assert_eq!(core(&command), None, "{command}");
     }
 }
+
+#[test]
+fn a_trailing_group_is_projected_unless_the_harness_set_a_directory() {
+    let asked = |input: Value| {
+        let Value::Object(payload) = serde_json::json!({ "tool_input": input }) else {
+            unreachable!()
+        };
+        projected(&payload, Path::new("/w"), Path::new("/h"))
+    };
+    assert_eq!(
+        asked(serde_json::json!({ "command": "(git status)" })).as_deref(),
+        Some("git status")
+    );
+    assert_eq!(asked(serde_json::json!({ "command": "git status" })), None);
+    // The pre-tool pass decides a call with its own directory unprojected.
+    assert_eq!(
+        asked(serde_json::json!({ "command": "(git status)", "cwd": "/w" })),
+        None
+    );
+}

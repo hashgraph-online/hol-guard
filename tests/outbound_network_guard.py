@@ -37,6 +37,8 @@ def outbound_network_attempts() -> Iterator[list[str]]:
     real_connect = socket.socket.connect
     real_connect_ex = socket.socket.connect_ex
     real_getaddrinfo = socket.getaddrinfo
+    real_gethostbyname = socket.gethostbyname
+    real_gethostbyname_ex = socket.gethostbyname_ex
     real_sendto = socket.socket.sendto
     # Windows sockets have no sendmsg.
     real_sendmsg = getattr(socket.socket, "sendmsg", None)
@@ -77,6 +79,16 @@ def outbound_network_attempts() -> Iterator[list[str]]:
             refuse(f"resolve {host}")
         return real_getaddrinfo(host, *args, **kwargs)
 
+    def gethostbyname(host: str) -> str:
+        if not _local(host):
+            refuse(f"resolve {host}")
+        return real_gethostbyname(host)
+
+    def gethostbyname_ex(host: str) -> tuple[str, list[str], list[str]]:
+        if not _local(host):
+            refuse(f"resolve {host}")
+        return real_gethostbyname_ex(host)
+
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(socket.socket, "connect", connect)
         patch.setattr(socket.socket, "connect_ex", connect_ex)
@@ -84,4 +96,6 @@ def outbound_network_attempts() -> Iterator[list[str]]:
         if real_sendmsg is not None:
             patch.setattr(socket.socket, "sendmsg", sendmsg)
         patch.setattr(socket, "getaddrinfo", getaddrinfo)
+        patch.setattr(socket, "gethostbyname", gethostbyname)
+        patch.setattr(socket, "gethostbyname_ex", gethostbyname_ex)
         yield attempts
