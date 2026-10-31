@@ -134,6 +134,7 @@ mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;
+mod liveness_probes;
 mod lookup_reads;
 mod manager_usage;
 mod metadata_reads;
