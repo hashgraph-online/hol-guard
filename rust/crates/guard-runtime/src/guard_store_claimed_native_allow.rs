@@ -16,6 +16,9 @@
 //!
 //! The caller keeps the integrity key in the keyring and ships it; a missing
 //! key reads as no authority. Any refusal answers `false`.
+//!
+//! `settle_claimed_native_review` runs it between a retry's Keep blocked
+//! check and its approve-once spend, so a claimed retry is one store call.
 
 use std::path::Path;
 
@@ -149,6 +152,41 @@ pub(crate) fn settle(
         true,
     )?;
     Ok(json!(claimed))
+}
+
+/// `settle_claimed_native_review`: a claimed retry's whole settle in one
+/// store call, in the order the daemon ran it as three: the Keep blocked
+/// check, the claimed allow (`settle`), then, for a retry that claims, the
+/// approve-once spend under the write lock it takes itself. Answers
+/// `"blocked"`, `"allowed"` or `null`, as `settle_native_review_reuse` does.
+pub(crate) fn settle_review(
+    connection: &Connection,
+    guard_home: &str,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    use crate::guard_store_native_review_consume as consume;
+    if consume::matching_block(connection, args)? == Value::Bool(true) {
+        return Ok(json!("blocked"));
+    }
+    // A claimed allow that cannot be read is no allow; the approve-once spend
+    // still runs, as it did when the daemon asked for each step on its own.
+    match settle(connection, guard_home, args) {
+        Ok(Value::Bool(true)) => return Ok(json!("allowed")),
+        Err(_) if !connection.is_autocommit() => connection.execute_batch("ROLLBACK")?,
+        Ok(_) | Err(_) => {}
+    }
+    if !args.flag("claim_saved_approval")? {
+        return Ok(Value::Null);
+    }
+    // The block check runs again with the spend, as one transaction.
+    connection.execute_batch("BEGIN IMMEDIATE")?;
+    let settled = consume::settled(connection, args, true);
+    connection.execute_batch(if settled.is_ok() {
+        "COMMIT"
+    } else {
+        "ROLLBACK"
+    })?;
+    settled
 }
 
 fn allows_request(decision: &Value, request_id: Option<&str>) -> bool {

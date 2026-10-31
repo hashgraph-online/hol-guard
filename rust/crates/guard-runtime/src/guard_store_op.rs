@@ -438,6 +438,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         // Its lookup runs on the shared connection and its claim takes the
         // write lock itself, so no transaction is held around them.
         "settle_claimed_native_allow" => Kind::Read,
+        // The same, followed by an approve-once spend that takes the write
+        // lock itself once the claim has committed.
+        "settle_claimed_native_review" => Kind::Read,
         // Its exact Cloud read takes its own snapshot and its lookup opens its
         // own connection, so no transaction is held around them.
         "codex_live_allow_authority" => Kind::Read,
@@ -809,6 +812,9 @@ fn dispatch(
         }
         "settle_claimed_native_allow" => {
             crate::guard_store_claimed_native_allow::settle(connection, guard_home, args)
+        }
+        "settle_claimed_native_review" => {
+            crate::guard_store_claimed_native_allow::settle_review(connection, guard_home, args)
         }
         "codex_live_allow_authority" => {
             crate::guard_store_codex_live_authority::op(connection, guard_home, args, owner)
