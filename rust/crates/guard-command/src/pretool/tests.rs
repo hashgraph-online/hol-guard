@@ -450,6 +450,12 @@ fn allows_bounded_exact_commands() {
         "uname -a",
         "git status --short",
         "git status --short --branch",
+        // Bare `git remote` prints the configured names, which the verbose
+        // form already prints beside their URLs, and `show -n` prints what
+        // the configuration holds without asking the remote itself.
+        "git remote",
+        "git remote show -n",
+        "git remote show -n origin",
         "git remote -v",
         "git remote --verbose",
         "git remote -v --",
@@ -553,8 +559,11 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "date +%s +%N",
         "date -f timestamps.txt",
         "date -d tomorrow",
-        "git remote",
         "git remote add origin example",
+        // Without `-n` Git opens the connection to the remote, which is a
+        // different question than a read of the local configuration.
+        "git remote show origin",
+        "git remote show -n origin upstream",
         "git remote -v -- add origin example",
         "git remote -v -- remove origin",
         "git remote -v -- set-url origin example",

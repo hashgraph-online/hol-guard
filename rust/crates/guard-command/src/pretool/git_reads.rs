@@ -231,10 +231,24 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|option| matches!(option.as_str(), "--push" | "--all"));
     }
+    if subcommand == "remote" && arguments.get(1).is_some_and(|argument| argument == "show") {
+        // `show -n` prints what the configuration already holds about a
+        // remote and says so: `-n` is the switch that keeps Git from asking
+        // the remote itself, so the command stays inside the repository.
+        // Without it Git opens the connection, which is a different question
+        // than a read of the local configuration.
+        let (names, options): (Vec<&String>, Vec<&String>) = arguments[2..]
+            .iter()
+            .partition(|argument| !argument.starts_with('-'));
+        return !options.is_empty()
+            && options.iter().all(|option| option.as_str() == "-n")
+            && names.len() <= 1;
+    }
     if subcommand == "remote" {
+        // Bare `git remote` prints the configured names, which `-v` already
+        // prints beside their URLs.
         let has_arguments_after_options = option_end + 1 < arguments.len();
-        return !active_options.is_empty()
-            && !has_arguments_after_options
+        return !has_arguments_after_options
             && active_options
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
