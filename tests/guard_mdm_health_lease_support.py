@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -135,7 +136,7 @@ def prepare(
     machine_paths.state_root.mkdir(parents=True)
     private, generation = key()
     monkeypatch.setattr(continuity, "_private_regular_file", lambda _metadata: True)
-    monkeypatch.setattr(health_lease, "_private_regular_file", lambda _metadata: True)
+    monkeypatch.setattr(health_lease, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
     monkeypatch.setattr(health_lease, "verified_machine_device_key_by_id", lambda *_args, **_kwargs: generation)
     monkeypatch.setattr(
         health_lease,

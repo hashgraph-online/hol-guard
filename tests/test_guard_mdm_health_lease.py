@@ -148,7 +148,7 @@ def _prepare(
     paths.state_root.mkdir(parents=True)
     private, key = _key()
     monkeypatch.setattr(continuity, "_private_regular_file", lambda _metadata: True)
-    monkeypatch.setattr(health_lease, "_private_regular_file", lambda _metadata: True)
+    monkeypatch.setattr(health_lease, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
     monkeypatch.setattr(health_lease, "verified_machine_device_key_by_id", lambda *_args, **_kwargs: key)
     monkeypatch.setattr(
         health_lease,
@@ -480,6 +480,7 @@ def test_malformed_and_symlink_outbox_fail_closed(tmp_path: Path, monkeypatch: p
     paths, _private, _key_generation = _prepare(tmp_path, monkeypatch)
     outbox_path = paths.state_root / "health-lease-outbox.json"
     outbox_path.write_bytes(b'{"schemaVersion":"wrong"}')
+    outbox_path.chmod(0o600)
 
     with pytest.raises(ValueError, match="health_lease_outbox_invalid"):
         health_lease._load_pending(paths)
@@ -490,6 +491,23 @@ def test_malformed_and_symlink_outbox_fail_closed(tmp_path: Path, monkeypatch: p
     outbox_path.symlink_to(target)
     with pytest.raises(PermissionError, match="health_lease_outbox_acl_invalid"):
         health_lease._load_pending(paths)
+
+
+def test_lease_state_fails_closed_without_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths, private, _key_generation = _prepare(tmp_path, monkeypatch)
+    monkeypatch.setattr(health_lease, "HEALTH_LEASE_STATE_FEATURE", "native-health-lease-state-absent")
+
+    with pytest.raises(OSError, match="health_lease_state_native_unavailable"):
+        health_lease.issue_or_load_pending_health_lease(
+            paths,
+            HealthLeaseBinding("workspace-a", "device-a"),
+            now=_NOW,
+            system_name="Darwin",
+            snapshot_factory=_snapshot,
+            signer=_signer(private),
+        )
+
+    assert not (paths.state_root / "health-lease-outbox.json").exists()
 
 
 def test_concurrent_issuance_creates_only_one_pending_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

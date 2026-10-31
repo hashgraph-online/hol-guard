@@ -99,6 +99,13 @@ runs:
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib daemon_storage_hold
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib windows_expanded_home
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test process_liveness
+    - name: Keep the health lease state private on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib health_lease_state
     - name: Wait out an exiting resident owner on Windows
       if: inputs.shim-gate == 'native-op'
       shell: pwsh
