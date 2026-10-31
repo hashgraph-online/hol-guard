@@ -266,10 +266,13 @@ pub(super) fn exact_safe_segment_with_context(
     let inert_search = match basename {
         "grep" | "egrep" | "fgrep" => search::grep::safe_grep_segment(model, segment, context),
         "rg" => search::safe_rg_segment(model, segment, context),
-        "fd" => {
-            search::safe_search_arguments_with_context(basename, &segment.arguments, context)
-                || super::fanout_reads::safe_fd_exec(model, segment, context)
-        }
+        // A fan-out is deliberately absent here. The proof below bounds the
+        // walk to regular source files under the working directory, but it
+        // reads nothing about the name the walk matches, so `fd -H -t f -e
+        // txt id_rsa -x cat` would otherwise shed the screen that keeps the
+        // same pattern reviewed as a plain search -- and as `find ... -exec`,
+        // which this arm has never carried either.
+        "fd" => search::safe_search_arguments_with_context(basename, &segment.arguments, context),
         _ => false,
     };
     let search_text = if basename == "git" {

@@ -43587,6 +43587,23 @@
       "expect": "allow"
     },
     {
+      "id": "neg-fd-exec-credential-name",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -H -I -t f -e txt id_rsa -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-fd-exec-without-type-test",
       "fix_area": "negative",
       "harnesses": [

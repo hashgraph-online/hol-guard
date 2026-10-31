@@ -249,6 +249,11 @@ fn unproven_fd_fanout_stays_reviewed() {
         "fd --search-path src -t f -e ts -x cat",
         "fd --base-directory .. -t f -e ts -x cat",
         "fd -tf -e ts -x cat",
+        // A pattern naming a credential keeps the screen a plain search has:
+        // the walk is bounded to source extensions, but nothing in the proof
+        // reads the name it matches, so `.ssh/id_rsa.txt` is still in reach.
+        "fd -H -I -t f -e txt id_rsa -x cat",
+        "fd -t f -e txt id_rsa -X cat",
     ] {
         assert_ne!(action(&fixture, ws, command), "allow", "{command}");
     }
