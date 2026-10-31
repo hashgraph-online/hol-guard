@@ -57,13 +57,35 @@ fn write_program(path: &Path) {
 }
 
 fn proven(root: &Path, executable: &str) -> bool {
+    spelled(root, &format!("{executable} get pods"), true)
+}
+
+/// The proof as the command itself spells it, so a quoted `~` is read the way
+/// the shell reads it rather than the way the model records the word.
+fn spelled(root: &Path, command: &str, shell_home_matches: bool) -> bool {
     let home = root.to_str().unwrap().to_owned();
     let cwd = root.join("project").to_str().unwrap().to_owned();
+    let model = crate::parse_command(
+        &serde_json::from_value(serde_json::json!({
+            "command": command,
+            "dialect": "posix",
+            "transport": "shell_string",
+            "provenance": "pre-tool-generic",
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let segment = model.segments.first().unwrap();
+    let Some(executable) = segment.executable.as_deref() else {
+        return false;
+    };
     installed_program(
+        segment,
         executable,
         PathContext {
             home_dir: Some(&home),
             cwd: Some(&cwd),
+            shell_home_matches,
             ..Default::default()
         },
     )
@@ -143,4 +165,31 @@ fn a_name_the_installation_does_not_hold_is_not_proven() {
     let root = root("absent");
     installed(&root, "sdk/bin", "kubectl", "sdk/platform/kubectl");
     assert!(!proven(&root, "~/sdk/bin/kubelet"));
+}
+
+/// The home spelling is the shell's own word, so it is proved only where the
+/// shell expands it to the declared home. A quoted or escaped `~` is a
+/// literal relative name the shell looks for under the working directory,
+/// which the agent writes; a HOME the context cannot vouch for names some
+/// other directory altogether.
+#[cfg(unix)]
+#[test]
+fn a_home_spelling_is_proven_only_where_the_shell_expands_it() {
+    let root = root("home-spelling");
+    installed(&root, "sdk/bin", "kubectl", "sdk/platform/kubectl");
+    assert!(spelled(&root, "~/sdk/bin/kubectl get pods", true));
+    assert!(!spelled(&root, "~/sdk/bin/kubectl get pods", false));
+    for command in [
+        "\"~/sdk/bin/kubectl\" get pods",
+        "'~/sdk/bin/kubectl' get pods",
+        "~\"/sdk/bin/kubectl\" get pods",
+        "\\~/sdk/bin/kubectl get pods",
+    ] {
+        assert!(!spelled(&root, command, true), "{command}");
+    }
+    // The absolute spelling carries no `~` for a quote to hold back, so it is
+    // unchanged by either reading.
+    let absolute = format!("{} get pods", root.join("sdk/bin/kubectl").display());
+    assert!(spelled(&root, &absolute, true));
+    assert!(spelled(&root, &absolute, false));
 }

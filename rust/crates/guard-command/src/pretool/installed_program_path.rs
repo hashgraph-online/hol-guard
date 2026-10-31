@@ -22,6 +22,11 @@
 //! * The file resolves to a regular executable file outside the checkout the
 //!   command runs in. The agent writes the workspace, so a `bin` it wrote
 //!   there proves nothing about what the program is.
+//! * A home spelling is the shell's own, not one this screen supplies: the
+//!   shell's HOME is the declared one, and the `~` is unquoted, so the word
+//!   the program is looked up by is the home path this proof resolved. A
+//!   quoted `~` stays a literal relative name under the working directory,
+//!   which is the one place the agent writes.
 //! * The resolved file still carries the basename the command spelled. An
 //!   installer's `bin` entry is routinely a link into the version it unpacked,
 //!   and that link keeps the program's name; a link that renames some other
@@ -31,9 +36,23 @@
 //! what the command may do with it, exactly as it does for a bare name.
 use std::path::Path;
 
-pub(super) fn installed_program(executable: &str, context: super::PathContext<'_>) -> bool {
+pub(super) fn installed_program(
+    segment: &crate::CommandSegmentV1,
+    executable: &str,
+    context: super::PathContext<'_>,
+) -> bool {
     if !super::read_paths::verified_path_context(context.home_dir, context.cwd)
         || !super::read_paths::bounded_path_spelling(executable)
+    {
+        return false;
+    }
+    // The expansion below reads `~` as the declared home, which is the shell's
+    // answer only when its own HOME is that directory and the word reaches it
+    // unquoted. Windows has no such expansion to read.
+    if executable.starts_with('~')
+        && (cfg!(windows)
+            || !context.shell_home_matches
+            || !super::directory_targets::home_executable_unquoted(segment))
     {
         return false;
     }
