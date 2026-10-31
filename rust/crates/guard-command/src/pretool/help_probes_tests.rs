@@ -334,3 +334,43 @@ fn a_redirected_manager_configuration_keeps_the_question() {
     // A tool with no configuration of its own is unaffected.
     assert!(safe_help_probe("jq", &args(&["--help"]), pip_moved));
 }
+
+/// A flag that only shapes the page is dropped before the shape is read.
+#[test]
+fn a_rendering_flag_beside_the_help_flag_keeps_the_probe() {
+    for (tool, arguments) in [
+        ("curl", vec!["--help", "--silent"]),
+        ("curl", vec!["-s", "--help"]),
+        ("curl", vec!["--help", "--no-progress-meter"]),
+        ("uv", vec!["add", "--help", "--no-cache"]),
+        ("uv", vec!["--quiet", "--help"]),
+        ("uv", vec!["pip", "install", "--help", "--offline"]),
+        ("wget", vec!["--help", "-q"]),
+        ("deno", vec!["install", "--help", "--quiet"]),
+        ("ruff", vec!["check", "--help", "--no-cache"]),
+    ] {
+        assert!(
+            safe_help_probe(tool, &args(&arguments), context()),
+            "{tool} {arguments:?}"
+        );
+    }
+}
+
+/// Dropping a flag drops nothing else: an option that carries a value keeps
+/// it, a flag another tool owns is not this one's to drop, and an operand is
+/// still an operand.
+#[test]
+fn a_value_an_operand_or_another_tools_flag_keeps_the_review() {
+    for (tool, arguments) in [
+        ("curl", vec!["--help", "--output", "page.txt"]),
+        ("curl", vec!["--help", "--no-cache"]),
+        ("uv", vec!["add", "--help", "requests"]),
+        ("wget", vec!["--help", "--silent"]),
+        ("jq", vec!["--help", "-q"]),
+    ] {
+        assert!(
+            !safe_help_probe(tool, &args(&arguments), context()),
+            "{tool} {arguments:?}"
+        );
+    }
+}
