@@ -178,6 +178,8 @@ fn any_other_plain_program_is_planned_as_pytest() {
     assert!(!plain_call(&pytest, &call("python3 -c 0")));
     assert!(!plain_call(&pytest, &call("cd x && pytest -q")));
     assert!(!plain_call(&pytest, &call("pytest -q > report.txt")));
+    assert!(!plain_call(&pytest, &call("CI=1 cd x && pytest -q")));
+    assert!(!plain_call(&pytest, &call("CI=1 pytest -q > report.txt")));
 }
 
 #[test]

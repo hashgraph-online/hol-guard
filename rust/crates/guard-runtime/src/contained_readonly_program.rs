@@ -95,6 +95,9 @@ pub(crate) struct Carried {
 /// command behind them is read again as a plain run. `None` for a command
 /// with no setting in front, or whose remainder is not a plain read-only run.
 pub(crate) fn carried_program(command: &str) -> Option<(Carried, Program)> {
+    if !one_command(command) {
+        return None;
+    }
     let words = strings(native("command_words", json!({ "command_text": command })).ok()?)?;
     let peeled = native(
         "command_prefix_split",
