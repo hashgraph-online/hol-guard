@@ -39,15 +39,17 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
 
 /// The builtin a segment really runs, with every wrapper keyword spent.
 ///
-/// The parser leaves `builtin`, `command` and `time` where they stand, so
-/// `builtin cd app` arrives with `builtin` as the executable and `cd` as its
-/// first argument. All three still run the builtin in this shell -- `command`
-/// only skips shell functions -- so the shell moves, and reading only the
-/// executable would leave the walk tracking a directory the shell has left: a
-/// later `..` would be credited to a descent the walk never saw, and a later
-/// `cd -` would return to a `prev` the shell no longer holds. The same
-/// spellings move the shell in `script_content`'s jobs analysis, which reads
-/// `command -p cd`, `time -p cd` and `builtin -- cd` as moves.
+/// The parser leaves `builtin` where it stands, so `builtin cd app` arrives
+/// with `builtin` as the executable and `cd` as its first argument, and
+/// `builtin -- cd app` with the `--` in between. The keyword still runs the
+/// builtin in this shell, so the shell moves, and reading only the executable
+/// would leave the walk tracking a directory the shell has left: a later `..`
+/// would be credited to a descent the walk never saw, and a later `cd -`
+/// would return to a `prev` the shell no longer holds. `command` and `time`
+/// are spent here as well, for the same reason and because
+/// `script_content`'s jobs analysis spends all three; a bare one the parser
+/// peels before it reaches this walk, and one carrying an option leaves the
+/// whole run unmodelled, so neither arrives.
 ///
 /// `None` where a wrapper has no word left to run, which is no move the walk
 /// can read and so no walk at all.
@@ -58,8 +60,8 @@ fn spends_wrapper_keywords<'a>(
     let mut name = name;
     let mut arguments = arguments;
     while matches!(name, "builtin" | "command" | "time") {
-        // The wrapper's own options come before the word it runs, and `--`
-        // ends them: `command -p cd ..` and `builtin -- cd ..` both move.
+        // The keyword's own options come before the word it runs, and `--`
+        // ends them: `builtin -- cd ..` moves.
         let mut rest = arguments;
         loop {
             let (first, tail) = rest.split_first()?;

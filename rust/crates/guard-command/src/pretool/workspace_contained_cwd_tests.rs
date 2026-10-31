@@ -302,7 +302,9 @@ fn a_return_after_a_builtin_move_follows_the_move_that_happened() {
 /// `command cd` and `builtin -- cd` run the builtin too. `command` only skips
 /// shell functions, so every one of these spellings moves this shell, and a
 /// walk that spends only the bare `builtin` keyword would read the move out
-/// of a descent as no move at all.
+/// of a descent as no move at all. An option-carrying prefix (`command -p cd`)
+/// is not among them: the parser leaves that run unmodelled, so no shape is
+/// read from it here at all.
 #[test]
 fn a_wrapped_move_is_still_a_move() {
     let ws = workspace("cwd-wrapped", true);
@@ -311,7 +313,6 @@ fn a_wrapped_move_is_still_a_move() {
     for command in [
         // The descent is real whichever wrapper spells it.
         "command cd build && ls ..",
-        "command -p cd build && ls ..",
         "builtin -- cd build && ls ..",
         "command cd build/sub && cat ../../package.json",
         // A move away and back, the return reading the move that happened.
@@ -328,7 +329,6 @@ fn a_wrapped_move_is_still_a_move() {
         // The wrapper hid the move out, so the step after it leaves.
         "cd build && command cd .. && ls ..",
         "cd build && builtin -- cd .. && ls ..",
-        "cd build && command -p cd .. && ls ..",
         // A descent the file system does not confirm proves no depth.
         "command cd absent && ls ..",
         // A wrapper with no word left to run is no move the walk can read.
