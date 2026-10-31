@@ -66,6 +66,9 @@ fn read_verbs_are_proven() {
         "kubectl -n web rollout status deploy/web --timeout=5m",
         "kubectl --context prod rollout history deploy/web",
         "kubectl rollout history deploy/web --revision=3",
+        "kubectl wait --for=condition=available deployment/web --timeout=120s",
+        "kubectl -n web wait --for=condition=Ready pod -l app=web",
+        "kubectl wait --for=delete pod/web-0 --timeout=60s",
     ] {
         assert!(proven(command), "{command}");
     }
@@ -138,6 +141,9 @@ fn secrets_mutations_and_server_overrides_stay_reviewed() {
         "kubectl rollout resume deploy/web",
         "kubectl rollout status",
         "kubectl rollout status deploy/web deploy/api",
+        "kubectl wait",
+        "kubectl wait --for=condition=Ready -f ./pod.yaml",
+        "kubectl wait --for=condition=Ready secret/web",
         "kubectl label pod web-0 a=b",
         "kubectl annotate pod web-0 a=b",
         "kubectl drain node-1",

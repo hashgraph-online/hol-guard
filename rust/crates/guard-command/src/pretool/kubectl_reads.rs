@@ -39,12 +39,13 @@ const FLAGS: [&str; 10] = [
 ];
 
 /// Options whose value only filters, sorts or bounds the printed state.
-const VALUE_OPTIONS: [&str; 15] = [
+const VALUE_OPTIONS: [&str; 16] = [
     "--api-group",
     "--api-version",
     "--chunk-size",
     "--context",
     "--field-selector",
+    "--for",
     "-l",
     "-L",
     "--label-columns",
@@ -233,6 +234,12 @@ fn verb_safe(positionals: &[&str], output: Option<&str>) -> bool {
         // neither is a way to start, stop or undo a rollout -- `restart`,
         // `undo`, `pause` and `resume` are, and they stay out.
         "rollout" => matches!(rest, ["status" | "history", resource] if !resource.is_empty()),
+        // `kubectl wait` blocks until the objects named on the command line
+        // reach the condition `--for` describes, or until its timeout, and
+        // prints which ones did. Waiting is not a way to bring the condition
+        // about, and unlike `logs --follow` it ends. `-f` reads a local
+        // manifest and stays out with every other unlisted option.
+        "wait" => !rest.is_empty(),
         _ => false,
     }
 }
