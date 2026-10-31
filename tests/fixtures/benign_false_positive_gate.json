@@ -22733,23 +22733,6 @@
       "expect": "allow"
     },
     {
-      "id": "uv-tool-list-installed",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "uv tool list"
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
       "id": "uv-tool-dir-bin-path",
       "fix_area": "shell",
       "harnesses": [

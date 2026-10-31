@@ -1,5 +1,5 @@
-//! What a tool launcher already holds: `uv tool list`, `uv tool dir`,
-//! `uv cache dir`, `uv python dir`, `pipx list` and `pipx environment`.
+//! What a tool launcher already holds: `uv tool dir`, `uv cache dir`,
+//! `uv python dir`, `pipx list` and `pipx environment`.
 //!
 //! A lone help flag reaches pipx here too: argparse prints the usage text and
 //! exits before pipx reads a package name or opens a venv, and the flag ends
@@ -24,6 +24,10 @@
 //!   running each candidate it finds on `PATH` and in its own directories,
 //!   so these two execute a program the command never named. The listing
 //!   verbs here read directory entries instead.
+//! - `uv tool list`, for the same reason. It asks each installed tool's
+//!   environment for its version, and that query runs the interpreter inside
+//!   the tool directory to print the environment's own description. A
+//!   planted interpreter there would run without the command naming it.
 //! - every option outside the small sets below. Both launchers take options
 //!   that move the directory a verb reads, choose an index, or name a
 //!   configuration file, and an option this module does not know keeps the
@@ -54,7 +58,6 @@ const PIPX_GLOBAL_FLAGS: &[&str] = &["--quiet", "-q", "--verbose", "-v"];
 
 /// Options each admitted verb may carry. Every one changes only how the
 /// listing prints or which of the launcher's own directories it names.
-const UV_TOOL_LIST_FLAGS: &[&str] = &["--show-paths", "--show-version-specifiers", "--show-with"];
 const UV_DIRECTORY_FLAGS: &[&str] = &["--bin"];
 const PIPX_LIST_FLAGS: &[&str] = &["--short", "--json", "--include-injected"];
 
@@ -77,7 +80,6 @@ pub(super) fn safe_pipx_segment(
 fn safe_uv_arguments(arguments: &[String]) -> bool {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match after_global_flags(&words, UV_GLOBAL_FLAGS) {
-        ["tool", "list", rest @ ..] => flags_only(rest, UV_TOOL_LIST_FLAGS),
         ["tool", "dir", rest @ ..] | ["python", "dir", rest @ ..] => {
             flags_only(rest, UV_DIRECTORY_FLAGS)
         }
@@ -118,8 +120,6 @@ fn flags_only(rest: &[&str], allowed: &[&str]) -> bool {
     rest.iter().all(|word| allowed.contains(word))
 }
 
-/// One of pipx's own `PIPX_` names: letters, digits and underscores, so the
-/// value cannot carry a path or an option of its own.
 fn help_flag(word: &str) -> bool {
     matches!(word, "--help" | "-h")
 }
@@ -133,6 +133,8 @@ fn plain_verb(word: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || character == '-')
 }
 
+/// One of pipx's own `PIPX_` names: letters, digits and underscores, so the
+/// value cannot carry a path or an option of its own.
 fn environment_name(name: &str) -> bool {
     !name.is_empty()
         && name
@@ -149,13 +151,11 @@ mod tests {
     #[test]
     fn listing_verbs_are_admitted() {
         for words in [
-            vec!["tool", "list"],
-            vec!["tool", "list", "--show-paths"],
             vec!["tool", "dir"],
             vec!["tool", "dir", "--bin"],
             vec!["cache", "dir"],
             vec!["python", "dir"],
-            vec!["--offline", "tool", "list"],
+            vec!["--offline", "tool", "dir"],
             vec!["-q", "--no-config", "cache", "dir"],
         ] {
             assert!(super::safe_uv_arguments(&args(&words)), "uv {words:?}");
@@ -186,6 +186,10 @@ mod tests {
             // uv runs each candidate interpreter to answer these.
             vec!["python", "list"],
             vec!["python", "find"],
+            // uv runs each tool environment's own interpreter for its version.
+            vec!["tool", "list"],
+            vec!["tool", "list", "--show-paths"],
+            vec!["--offline", "tool", "list"],
             vec!["python", "install", "3.12"],
             vec!["cache", "clean"],
             vec!["cache", "prune"],
