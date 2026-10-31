@@ -17,9 +17,9 @@ command never widens what runs.
 
 The resident reads both: this module reviews a probe through the daemon's
 edge with the sink command it binds, and the edge answers a probe it routes
-to the sink as the direct lane does. A resident that predates that answer
-gets the edge, the call and the sink command through its
-``cursor_shell_route`` render instead, as does a sink call.
+to the sink as the direct lane does. A probe the edge does not answer is the
+plain allow. A sink call goes to the resident's ``cursor_shell_route``
+render with the call and the sink command.
 """
 
 from __future__ import annotations
@@ -47,12 +47,7 @@ _SINK_VERB = "execute-contained-test"
 _NATIVE_SINK_VERB = "contained-workspace-sink"
 _ALLOW: dict[str, object] = {"policy_action": "allow"}
 _SINK_ROUTE = "sink"
-# A resident that advertises this answers the probe in its edge when the
-# daemon sends the sink argv; an older one leaves it to the render.
-_EDGE_PROBE_FEATURE = "edge-cursor-probe-v1"
 _ROUTED = "native_contained_execution_routed"
-# The edge fields the resident reads to route a probe.
-_EDGE_FIELDS = ("harness", "event_name", "containment_route", "result")
 
 
 def cursor_shell_route_response(
@@ -86,7 +81,7 @@ def cursor_shell_route_response(
     if workspace is not None and payload.get(_SOURCE_HOOK_FIELD) == _BEFORE_SHELL and _names_sink(payload):
         try:
             return _resident_route(
-                payload, None, home_dir=home_dir, guard_home=guard_home, workspace=workspace, deadline=deadline
+                payload, home_dir=home_dir, guard_home=guard_home, workspace=workspace, deadline=deadline
             )
         except Exception:
             # The call is reviewed as usual, so a sink it does not admit runs nowhere.
@@ -131,8 +126,6 @@ def _probe_response(
     snapshot = worker._native_policy_snapshot(workspace, deadline=deadline)
     if snapshot is None or recording_only_for_binding(snapshot, _CURSOR):
         return None
-    capabilities = worker._native_runtime_status().capabilities
-    edge_answers = capabilities is not None and _EDGE_PROBE_FEATURE in capabilities.features
     edge = worker._review_raw_hook_native(
         payload=dict(payload),
         harness=_CURSOR,
@@ -144,33 +137,29 @@ def _probe_response(
         observe_mode=False,
         deadline=deadline,
         policy_snapshot=snapshot,
-        containment_sink=edge_answers,
+        containment_sink=True,
     )
     if edge is None:
         return None
-    # The resident rewrites only a probe the edge routes to the sink and
-    # answers any other with the plain allow, so that one skips the call.
+    # The edge rewrites only a probe it routes to the sink; any other is the
+    # plain allow.
     if edge.get("containment_route") != _SINK_ROUTE:
         return dict(_ALLOW)
-    # A resident replaced after the feature was read may answer with the
-    # generic rewrite, which keeps the receipt, so only probe answers count.
+    # An edge whose probe answer failed falls back to the generic rewrite,
+    # which keeps the receipt, so only probe answers count.
     response = edge.get("harness_response")
     mark = edge.get("containment_rewrite")
     if (
-        edge_answers
-        and isinstance(response, dict)
+        isinstance(response, dict)
         and ((mark == "kept" and response == _ALLOW) or (mark == "routed" and response.get("reason_code") == _ROUTED))
         and response.get("policy_action") == "allow"
     ):
         return dict(response)
-    return _resident_route(
-        payload, edge, home_dir=home_dir, guard_home=guard_home, workspace=workspace, deadline=deadline
-    )
+    return None
 
 
 def _resident_route(
     payload: Mapping[str, object],
-    edge: Mapping[str, object] | None,
     *,
     home_dir: Path,
     guard_home: Path,
@@ -189,8 +178,6 @@ def _resident_route(
         # This daemon admits the runtime's own sink command too.
         "native_sink": True,
     }
-    if edge is not None:
-        params["edge"] = {key: edge[key] for key in _EDGE_FIELDS if key in edge}
     rendered = native_render_cli("cursor_shell_route", _CURSOR, params, guard_home=guard_home, deadline=deadline)
     value = rendered[1].get("value") if rendered is not None and rendered[1] is not None else None
     return dict(value) if isinstance(value, dict) else None
