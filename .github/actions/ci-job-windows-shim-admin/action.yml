@@ -107,6 +107,13 @@ runs:
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib managed_owner_lock
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib owner_release
+    - name: Keep the user health state private on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib user_health_state
     - name: Contain MCP server process trees in a JobObject on Windows
       if: inputs.shim-gate == 'mcp'
       shell: pwsh
