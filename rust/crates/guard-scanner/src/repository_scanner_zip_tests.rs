@@ -163,7 +163,7 @@ fn scan(archive: &[u8], path: &str) -> (Vec<String>, usize) {
         200,
         ByteBudget::unbounded(),
     );
-    (findings.into_iter().map(|f| f.path).collect(), scanned)
+    (findings.iter().map(|f| f.path.clone()).collect(), scanned)
 }
 
 #[test]
