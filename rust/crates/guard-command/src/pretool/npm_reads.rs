@@ -40,38 +40,42 @@ pub(super) fn safe_npm_read(arguments: &[String], context: super::PathContext<'_
 }
 
 /// The configuration check reads files before the command runs, so nothing
-/// else in the command may write. Every other segment must be another npm
-/// segment, which gets its own proof, or a tool that only reads or filters.
-pub(super) fn read_only_neighbors(model: &crate::CanonicalCommandV1) -> bool {
+/// else in the command may write. Every other segment must be another segment
+/// of the same manager, which gets its own proof, or a tool that only reads or
+/// filters.
+pub(in crate::pretool) fn read_only_neighbors(
+    model: &crate::CanonicalCommandV1,
+    manager: &str,
+) -> bool {
     model.segments.iter().all(|segment| {
         segment.executable.as_deref().is_some_and(|executable| {
-            matches!(
-                super::executable_basename(executable),
-                "npm"
-                    | "cd"
-                    | "pwd"
-                    | "echo"
-                    | "printf"
-                    | "true"
-                    | "ls"
-                    | "cat"
-                    | "head"
-                    | "tail"
-                    | "grep"
-                    | "rg"
-                    | "jq"
-                    | "wc"
-                    | "sort"
-                    | "uniq"
-                    | "cut"
-                    | "which"
-            )
+            let basename = super::executable_basename(executable);
+            basename == manager
+                || matches!(
+                    basename,
+                    "cd" | "pwd"
+                        | "echo"
+                        | "printf"
+                        | "true"
+                        | "ls"
+                        | "cat"
+                        | "head"
+                        | "tail"
+                        | "grep"
+                        | "rg"
+                        | "jq"
+                        | "wc"
+                        | "sort"
+                        | "uniq"
+                        | "cut"
+                        | "which"
+                )
         })
     })
 }
 
 /// One package spec, then any number of field paths, with `--json` anywhere.
-fn view_arguments(arguments: &[String]) -> bool {
+pub(in crate::pretool) fn view_arguments(arguments: &[String]) -> bool {
     let mut operands = arguments
         .iter()
         .filter(|argument| argument.as_str() != "--json");
@@ -208,7 +212,7 @@ fn cache_list_arguments(arguments: &[String]) -> bool {
 /// `name`, `@scope/name`, either followed by `@selector`, where the selector
 /// is a version, range or dist-tag with no source syntax in it. Aliases,
 /// paths, URLs and Git shorthands all need a `:` or an unscoped `/`.
-fn plain_registry_spec(spec: &str) -> bool {
+pub(in crate::pretool) fn plain_registry_spec(spec: &str) -> bool {
     let (scope, rest) = match spec.strip_prefix('@') {
         Some(scoped) => match scoped.split_once('/') {
             Some((scope, rest)) => (Some(scope), rest),

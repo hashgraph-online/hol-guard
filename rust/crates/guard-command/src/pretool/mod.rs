@@ -142,6 +142,7 @@ mod npm_reads;
 mod npmrc_keys;
 mod path_word_reads;
 mod pip_reads;
+mod pnpm_reads;
 mod postgres_reads;
 mod process_stops;
 mod pytest_contained;

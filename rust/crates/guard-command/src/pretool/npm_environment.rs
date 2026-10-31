@@ -20,11 +20,14 @@ const INERT_NPM_KEYS: &[&str] = &[
     "update_notifier",
 ];
 
-/// Whether `name` is an `npm_config_*` variable naming an inert key.
+/// Whether `name` is an `npm_config_*` or `pnpm_config_*` variable naming an
+/// inert key. pnpm reads the second spelling of the same settings, and the
+/// keys above are as inert for it as they are for npm.
 pub(super) fn inert_npm_config_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase().replace('-', "_");
     lower
         .strip_prefix("npm_config_")
+        .or_else(|| lower.strip_prefix("pnpm_config_"))
         .is_some_and(|key| INERT_NPM_KEYS.contains(&key))
 }
 
