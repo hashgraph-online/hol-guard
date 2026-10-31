@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
 from .native_guard_store import NativeGuardStoreUnavailable
+from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .native_store_policy import encode_key
 from .project_identity import _process_directory
 
@@ -14,6 +15,8 @@ _LOOKUP_KEY_FIELDS = ("integrity_key_b64", "local_once_integrity_key_b64")
 # The resident has no published evidence to read; the caller must send it.
 _EVIDENCE_REQUIRED = "codex_live_evidence_required"
 _NATIVE_EVIDENCE_REQUIRED = "native_guard_store_codex_live_evidence_required"
+# A resident older than the call answers that it has no such method.
+_METHOD_UNKNOWN = "native_guard_store_method_unknown"
 
 
 class _NativeStoreOwner(Protocol):
@@ -111,28 +114,59 @@ class StoreExactCloudLocalOnceMixin:
         # for a retry that claims, in one call. The key stays with the keyring
         # here; without it the claimed allow reads as no authority.
         key, key_id = self._policy_integrity_secret_material(create=False)
-        args: dict[str, object] = {
+        reuse: dict[str, object] = {
             "harness": harness,
             "artifact_id": artifact_id,
             "artifact_name": artifact_name,
             "artifact_hash": identity,
             "launch_target": launch_target,
             "workspace": workspace,
+            "now": now,
+        }
+        claim: dict[str, object] = {
             "identity": identity,
             "claimed_saved_allow_hash": claimed_saved_allow_hash,
             "claimed_approval_request_id": claimed_approval_request_id,
             "claim_saved_approval": claim_saved_approval,
-            "now": now,
         }
         if key is not None and key_id is not None:
-            # The resident serves only once its verifier exists; a restart that
-            # lost it is restored from the keyring key, as the lookup does.
-            self._provision_resident_verifier(key)
-            args.update(integrity_key_b64=encode_key(key), integrity_key_id=key_id)
+            try:
+                # The resident serves only once its verifier exists; a restart
+                # that lost it is restored from the keyring key, as the lookup
+                # does.
+                self._provision_resident_verifier(key)
+            except NativePolicySnapshotError:
+                # A verifier the keyring key does not match is tampering
+                # evidence: the claimed allow reads as no authority, while the
+                # Keep blocked check and the approve-once spend still run.
+                key = None
+            if key is not None:
+                claim.update(integrity_key_b64=encode_key(key), integrity_key_id=key_id)
         # Never retried: a claim spends the approval, and even a live
         # completion's lookup records a refused row's integrity audit, so a
         # call whose reply was lost may already have landed.
-        return self._native_store_call("settle_claimed_native_review", args)
+        try:
+            return self._native_store_call("settle_claimed_native_review", {**reuse, **claim})
+        except NativeGuardStoreUnavailable as error:
+            if error.reason != _METHOD_UNKNOWN:
+                raise
+        # A resident older than the combined call settles the same three steps
+        # one call each.
+        if self._native_store_call("settle_native_review_reuse", {**reuse, "spend": False}) == "blocked":
+            return "blocked"
+        if "integrity_key_b64" in claim:
+            try:
+                claimed = self._native_store_call(
+                    "settle_claimed_native_allow",
+                    {"harness": harness, "artifact_id": artifact_id, "workspace": workspace, "now": now, **claim},
+                )
+            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+                claimed = None
+            if claimed is True:
+                return "allowed"
+        if not claim_saved_approval:
+            return None
+        return self._native_store_call("settle_native_review_reuse", {**reuse, "spend": True})
 
 
 def _live_authority_args(

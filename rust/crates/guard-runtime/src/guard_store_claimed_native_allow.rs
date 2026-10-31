@@ -168,8 +168,12 @@ pub(crate) fn settle_review(
     if consume::matching_block(connection, args)? == Value::Bool(true) {
         return Ok(json!("blocked"));
     }
-    if settle(connection, guard_home, args)? == Value::Bool(true) {
-        return Ok(json!("allowed"));
+    // A claimed allow that cannot be read is no allow; the approve-once spend
+    // still runs, as it did when the daemon asked for each step on its own.
+    match settle(connection, guard_home, args) {
+        Ok(claimed) if claimed == Value::Bool(true) => return Ok(json!("allowed")),
+        Err(_) if !connection.is_autocommit() => connection.execute_batch("ROLLBACK")?,
+        Ok(_) | Err(_) => {}
     }
     if !args.flag("claim_saved_approval")? {
         return Ok(Value::Null);

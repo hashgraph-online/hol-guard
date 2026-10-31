@@ -14,6 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, native_store_policy, store_policy
 from codex_plugin_scanner.guard.daemon.hook_native_review_binding import native_review_settle
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.store import GuardStore
 
 _IDENTITY = f"native-review-v4:{'a' * 64}:deny:review:review:native_sensitive_access_review"
@@ -174,6 +175,91 @@ def test_claimed_allow_provisions_the_resident_verifier_before_settling(
     # keyring key the settle already read, as the policy lookup does.
     assert _claimed(store, tmp_path, claim=False) is True
     assert steps == [key, "settle_claimed_native_review"]
+
+
+def test_a_mismatched_verifier_leaves_the_block_check_and_the_spend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    def mismatched(_key: object = None) -> None:
+        raise NativePolicySnapshotError("native_policy_verifier_key_mismatch")
+
+    sent: list[dict[str, object]] = []
+
+    def settle(method: str, args: dict[str, object]) -> object:
+        sent.append({"method": method, **args})
+        return "blocked"
+
+    monkeypatch.setattr(store, "_provision_resident_verifier", mismatched)
+    monkeypatch.setattr(store, "_native_store_call", settle)
+
+    # The claimed allow reads as no authority without the key, but the saved
+    # Keep blocked still answers.
+    assert (
+        native_review_settle(
+            store,
+            harness="claude-code",
+            artifact_id=_ARTIFACT,
+            tool_name="Bash",
+            launch_target="cat .env",
+            workspace=tmp_path,
+            identity=_IDENTITY,
+            spend=True,
+            claimed_saved_allow_hash=_IDENTITY,
+        )
+        == "blocked"
+    )
+    assert [call["method"] for call in sent] == ["settle_claimed_native_review"]
+    assert "integrity_key_b64" not in sent[0]
+
+
+@pytest.mark.parametrize(
+    ("answers", "expected", "methods"),
+    [
+        ({"block": "blocked"}, "blocked", ["settle_native_review_reuse"]),
+        ({"claimed": True}, "allowed", ["settle_native_review_reuse", "settle_claimed_native_allow"]),
+        (
+            {"spend": "allowed"},
+            "allowed",
+            ["settle_native_review_reuse", "settle_claimed_native_allow", "settle_native_review_reuse"],
+        ),
+    ],
+)
+def test_an_older_resident_settles_a_claimed_retry_one_step_at_a_time(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    answers: dict[str, object],
+    expected: str,
+    methods: list[str],
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "_provision_resident_verifier", lambda _key=None: None)
+    calls: list[str] = []
+
+    def older(method: str, args: dict[str, object]) -> object:
+        if method == "settle_claimed_native_review":
+            raise native_guard_store._unavailable("native_guard_store_method_unknown")
+        calls.append(method)
+        if method == "settle_claimed_native_allow":
+            return answers.get("claimed", False)
+        return answers.get("spend" if args["spend"] else "block")
+
+    monkeypatch.setattr(store, "_native_store_call", older)
+
+    settled = native_review_settle(
+        store,
+        harness="claude-code",
+        artifact_id=_ARTIFACT,
+        tool_name="Bash",
+        launch_target="cat .env",
+        workspace=tmp_path,
+        identity=_IDENTITY,
+        spend=True,
+        claimed_saved_allow_hash=_IDENTITY,
+    )
+    assert settled == expected
+    assert calls == methods
 
 
 def _record_once(store: GuardStore, tmp_path: Path, *, request_id: str = "r1") -> None:
