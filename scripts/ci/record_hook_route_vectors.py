@@ -17,7 +17,7 @@ effect is a stub that appends a tagged entry to a trace, so a vector records
 exactly which effects the old ladder ran, in order, in each of a set of
 effect worlds (what the stubbed effects report):
 
-    PYTHONPATH=src .venv/bin/python scripts/ci/record_hook_route_vectors.py
+    PYTHONPATH=src:. .venv/bin/python scripts/ci/record_hook_route_vectors.py
 
 A vector holds the resident's inputs (``facts``), the route the traces exhibit
 (the plan and the event name outage responses carry) and, per world, the trace

@@ -5,7 +5,7 @@ Run at the commit that still carries ``_runtime_artifact_policy_action`` in
 ``cli/commands_support_runtime_artifact_policy.py`` (32cfe23f49), in a checkout
 that has the generated command catalog:
 
-    PYTHONPATH=src .venv/bin/python scripts/ci/record_config_action_vectors.py
+    PYTHONPATH=src:. .venv/bin/python scripts/ci/record_config_action_vectors.py
 
 Each vector records the config and artifact specification, the typed native
 query a Python projection of that specification produces, and the action plus
