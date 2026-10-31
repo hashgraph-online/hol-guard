@@ -82,6 +82,7 @@ from tests.live_hook_review_support import (
     post_tool_output_flagged,
     quietly_allowed,
 )
+from tests.native_store_shims import get_native_decision_receipt
 from tests.policy_bundle_parser_support import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
@@ -10345,7 +10346,7 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
     with store._connect() as connection:
         row = connection.execute("select decision_id from native_prompt_decision_receipts").fetchone()
     assert row is not None
-    receipt = store.get_native_decision_receipt(row["decision_id"])
+    receipt = get_native_decision_receipt(store, row["decision_id"])
     assert receipt is not None
     assert receipt["event_name"] == "UserPromptSubmit"
     assert receipt["decision"] == "deny"
@@ -10434,7 +10435,7 @@ def test_guard_hook_hard_blocks_claude_user_prompt_submit_bypass(
     assert output["decision"] == "block"
     assert "bypass" in output["reason"].lower() or "disable" in output["reason"].lower()
     assert row is not None
-    receipt = store.get_native_decision_receipt(row["decision_id"])
+    receipt = get_native_decision_receipt(store, row["decision_id"])
     assert receipt is not None
     assert receipt["event_name"] == "UserPromptSubmit"
     assert receipt["decision"] == "deny"
@@ -10466,7 +10467,7 @@ def test_guard_hook_native_prompt_injection_requires_review_without_echoing_text
     with store._connect() as connection:
         row = connection.execute("select decision_id from native_prompt_decision_receipts").fetchone()
     assert row is not None
-    receipt = store.get_native_decision_receipt(row["decision_id"])
+    receipt = get_native_decision_receipt(store, row["decision_id"])
     assert receipt is not None
     assert receipt["reason_code"] == "native_prompt_injection_review"
     assert prompt not in json.dumps(receipt)
@@ -10495,7 +10496,7 @@ def test_guard_hook_native_prompt_risk_classes_never_become_automatic_allow(tmp_
     with store._connect() as connection:
         row = connection.execute("select decision_id from native_prompt_decision_receipts").fetchone()
     assert row is not None
-    receipt = store.get_native_decision_receipt(row["decision_id"])
+    receipt = get_native_decision_receipt(store, row["decision_id"])
     assert receipt is not None
     assert receipt["decision"] == "deny"
     assert receipt["reason_code"] == output["reason_code"]

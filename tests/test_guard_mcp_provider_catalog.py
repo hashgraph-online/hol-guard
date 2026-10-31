@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioAction
 from codex_plugin_scanner.guard.runtime.mcp_classification import McpClassificationUnavailableError
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_store_shims import record_composio_discovery
 
 _FIRST = "2026-09-27T12:00:00Z"
 _SECOND = "2026-09-27T12:01:00Z"
@@ -22,7 +23,7 @@ def _action(slug="SLACK_SEARCH_MESSAGES"):
 def test_provider_metadata_is_a_subset_and_never_grants_authority(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
     source = observed_mcp_tool("codex", _TOOL)
-    cli_id = store.record_composio_discovery(source, (_action(),), seen_at=_FIRST)
+    cli_id = record_composio_discovery(store, source, (_action(),), seen_at=_FIRST)
     assert store.read_local_cli_revision() == 0
     assert store.read_local_cli_grant(cli_id) is None
     item = store.list_local_cli_items()[0]
@@ -44,27 +45,28 @@ def test_provider_metadata_is_a_subset_and_never_grants_authority(tmp_path: Path
 def test_discovery_subsets_merge_without_removal_and_authority_revision_is_separate(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
     source = observed_mcp_tool("codex", _TOOL)
-    cli_id = store.record_composio_discovery(source, (_action(),), seen_at=_FIRST)
-    store.record_composio_discovery(source, (_action("SLACK_SEND_MESSAGE"),), seen_at=_SECOND)
+    cli_id = record_composio_discovery(store, source, (_action(),), seen_at=_FIRST)
+    record_composio_discovery(store, source, (_action("SLACK_SEND_MESSAGE"),), seen_at=_SECOND)
     assert len(store.read_local_mcp_provider_actions(cli_id)["actions"]) == 2
-    store.record_composio_discovery(source, (replace(_action(), description="New display text"),), seen_at=_SECOND)
+    record_composio_discovery(store, source, (replace(_action(), description="New display text"),), seen_at=_SECOND)
     assert store.read_local_mcp_provider_actions(cli_id)["actions"][0]["revision"] == 1
-    store.record_composio_discovery(
+    record_composio_discovery(
+        store,
         source,
         (replace(_action(), input_schema={"type": "object", "required": ["query"]}),),
         seen_at=_SECOND,
     )
     assert store.read_local_mcp_provider_actions(cli_id)["actions"][0]["revision"] == 2
-    store.record_composio_discovery(source, (replace(_action(), toolkit="other"),), seen_at=_SECOND)
+    record_composio_discovery(store, source, (replace(_action(), toolkit="other"),), seen_at=_SECOND)
     assert store.read_local_mcp_provider_actions(cli_id, search="SEARCH")["actions"][0]["revision"] == 3
     assert store.read_local_cli_revision() == 0
 
 
 def test_provider_catalogs_keep_host_boundaries_and_literal_search(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
-    codex = store.record_composio_discovery(observed_mcp_tool("codex", _TOOL), (_action(),), seen_at=_FIRST)
-    claude = store.record_composio_discovery(
-        observed_mcp_tool("claude", _TOOL), (_action("SLACK_SEND_MESSAGE"),), seen_at=_FIRST
+    codex = record_composio_discovery(store, observed_mcp_tool("codex", _TOOL), (_action(),), seen_at=_FIRST)
+    claude = record_composio_discovery(
+        store, observed_mcp_tool("claude", _TOOL), (_action("SLACK_SEND_MESSAGE"),), seen_at=_FIRST
     )
     assert codex != claude
     result = store.read_local_mcp_provider_actions(codex, search="SEARCH")
@@ -76,7 +78,8 @@ def test_provider_catalogs_keep_host_boundaries_and_literal_search(tmp_path: Pat
 
 def test_provider_catalog_pages_are_stable_and_bounded(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
-    cli_id = store.record_composio_discovery(
+    cli_id = record_composio_discovery(
+        store,
         observed_mcp_tool("codex", _TOOL),
         (_action("A"), _action("B"), _action("C")),
         seen_at=_FIRST,
@@ -92,9 +95,10 @@ def test_provider_catalog_pages_are_stable_and_bounded(tmp_path: Path) -> None:
 def test_provider_catalog_capacity_failure_rolls_back_the_whole_update(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
     source = observed_mcp_tool("codex", _TOOL)
-    cli_id = store.record_composio_discovery(source, (_action(),), seen_at=_FIRST)
+    cli_id = record_composio_discovery(store, source, (_action(),), seen_at=_FIRST)
     with pytest.raises(ValueError, match="capacity exceeded"):
-        store.record_composio_discovery(
+        record_composio_discovery(
+            store,
             source,
             (
                 replace(_action(), description="Changed before failure"),
@@ -110,7 +114,7 @@ def test_provider_catalog_capacity_failure_rolls_back_the_whole_update(tmp_path:
 
 def test_provider_action_api_reads_cached_metadata_without_mutating_choices(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
-    cli_id = store.record_composio_discovery(observed_mcp_tool("codex", _TOOL), (_action(),), seen_at=_FIRST)
+    cli_id = record_composio_discovery(store, observed_mcp_tool("codex", _TOOL), (_action(),), seen_at=_FIRST)
     service = LocalCliApiService(store=store)
     page = service.provider_actions({"cli_id": cli_id, "search": "SEARCH", "limit": 50})
     assert page["cli_id"] == cli_id
@@ -140,7 +144,7 @@ def test_an_unavailable_resident_still_lists_connections_and_actions(
 
     store = GuardStore(tmp_path / "home")
     source = observed_mcp_tool("codex", _TOOL)
-    cli_id = store.record_composio_discovery(source, (_action(),), seen_at=_FIRST)
+    cli_id = record_composio_discovery(store, source, (_action(),), seen_at=_FIRST)
 
     def unavailable(declarations: object, *, guard_home: Path) -> list[dict[str, object] | None]:
         del declarations, guard_home
