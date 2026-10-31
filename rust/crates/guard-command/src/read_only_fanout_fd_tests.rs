@@ -108,6 +108,33 @@ fn only_a_separate_exec_option_with_a_listed_child_is_read() {
 }
 
 #[test]
+fn an_option_that_rewrites_the_path_handed_to_the_child_is_not_read() {
+    for text in [
+        "-t f -e ts --path-separator / -x cat",
+        "-t f -e ts --path-separator /../ . src -x cat",
+    ] {
+        assert!(fd_exec(&arguments(text)).is_none(), "{text}");
+        assert!(
+            crate::parser_executables::is_nested_command_executor("fd", &arguments(text)),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn a_word_the_shell_may_have_expanded_is_not_read() {
+    for text in [
+        "-t f -e ts . * -x cat",
+        "-t f -e ts . src/*/ -x cat",
+        "-t f -g *.ts -x cat",
+        "-t f -e ts . ? -x cat",
+        "-t f -e ts [a-z]+ -x cat",
+    ] {
+        assert!(fd_exec(&arguments(text)).is_none(), "{text}");
+    }
+}
+
+#[test]
 fn more_roots_than_the_fan_out_bound_are_not_read() {
     let roots = (0..9)
         .map(|index| format!("dir{index}"))
@@ -132,6 +159,11 @@ fn a_walk_the_shape_proof_refuses_stays_a_nested_command_executor() {
         "-e ts . app-portal -x cat",
         // A type union wider than regular files.
         "-t f -t l -e ts -x cat",
+        // Roots the line alone cannot place below the working directory.
+        "-t f -e ts . ../src -x cat",
+        "-t f -e ts . ~/Code -x cat",
+        "-t f -e ts . /tmp -x cat",
+        r"-t f -e ts . C:\code -x cat",
         // A content reader with no extension bound, or one off the list.
         "-t f -x cat",
         "-t f -e env -x cat",

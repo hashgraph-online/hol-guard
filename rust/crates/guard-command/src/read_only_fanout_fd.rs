@@ -34,8 +34,10 @@ use super::{
 ///
 /// `--search-path`, `--base-directory` and `--ignore-file` are absent: the
 /// first two name another root, and the third reads a file the command never
-/// shows.
-const VALUE_OPTIONS: [&str; 20] = [
+/// shows. `--path-separator` is absent too: fd rewrites the separator in the
+/// path it hands the child as well as in what it prints, so a value such as
+/// `/../` turns a path inside a root into one above it.
+const VALUE_OPTIONS: [&str; 19] = [
     "-e",
     "--extension",
     "-t",
@@ -55,7 +57,6 @@ const VALUE_OPTIONS: [&str; 20] = [
     "-j",
     "--threads",
     "--color",
-    "--path-separator",
 ];
 
 /// Options that take no value and only narrow or re-spell the result.
@@ -97,6 +98,17 @@ pub(crate) struct FdExec<'a> {
 /// list and nothing between the walk and the command it runs.
 pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
     let arguments = without_stderr_merge(arguments);
+    // A pathname glob is one word here and several, or different ones, by the
+    // time fd is called: `fd -t f -e ts . * -x cat` walks whatever the shell
+    // found beside the working directory, not the roots this reader saw. The
+    // shape is refused rather than guessed at, which costs a pattern written
+    // as a glob its reading and keeps the walk the proof judged.
+    if arguments
+        .iter()
+        .any(|argument| argument.contains(['*', '?', '[']))
+    {
+        return None;
+    }
     let mut positionals: Vec<&str> = Vec::new();
     let mut types: Vec<&str> = Vec::new();
     let mut extensions: Vec<&str> = Vec::new();
@@ -183,7 +195,26 @@ pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
 /// because nothing further along would look at it again.
 pub(crate) fn producer_shape_proven(exec: &FdExec<'_>) -> bool {
     exec.shape.regular_files_only
+        && exec.shape.roots.iter().all(|root| root_bounded(root))
         && (!child_reads_contents(exec.child) || source_extensions_only(&exec.shape.extensions))
+}
+
+/// Whether a root is one the line alone shows to stay below the working
+/// directory.
+///
+/// Where the walk actually lands is a question only the working directory
+/// answers, and [`crate::pretool`]'s fan-out proof asks it. This is the half
+/// the text settles: an absolute path, a home-relative one and a `..`
+/// component each name a tree the working directory does not hold, and the
+/// parser reads this answer too, so a root it cannot place keeps the
+/// uncertain model instead of resting on a proof that runs later.
+fn root_bounded(root: &str) -> bool {
+    let normalized = root.replace('\\', "/");
+    !normalized.starts_with('/')
+        && !normalized.starts_with('~')
+        && !normalized.split('/').any(|part| part == "..")
+        // `C:` and `\\server`, which name a tree of their own on Windows.
+        && !normalized.contains(':')
 }
 
 /// Whether every `--extension` value names a source file.

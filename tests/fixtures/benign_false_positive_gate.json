@@ -43319,6 +43319,61 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-path-separator",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts --path-separator / . src -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-sibling-checkout-root",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts . app-portal -x cat"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-parent-root",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e rs . ../ -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-home-root",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts . ${HOME} -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-glob-root",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts . * -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [
