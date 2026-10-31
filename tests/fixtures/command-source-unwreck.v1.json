@@ -618,82 +618,7 @@
               ],
               "rule_id": "command.unwreck.run",
               "rule_version": "1.0.0",
-              "safe_variants": [
-                {
-                  "variant_id": "run-long-help",
-                  "title": "run help",
-                  "matcher": {
-                    "op": "any.v1",
-                    "config": {},
-                    "matchers": [
-                      {
-                        "op": "executable.v1",
-                        "config": {
-                          "allow_leading_options": true,
-                          "executables": [
-                            "unwreck",
-                            "unwreck.exe"
-                          ],
-                          "fail_secure_unknown_options": true,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [
-                            "--root"
-                          ],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "--help"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "run"
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                },
-                {
-                  "variant_id": "run-short-help",
-                  "title": "run short help",
-                  "matcher": {
-                    "op": "any.v1",
-                    "config": {},
-                    "matchers": [
-                      {
-                        "op": "executable.v1",
-                        "config": {
-                          "allow_leading_options": true,
-                          "executables": [
-                            "unwreck",
-                            "unwreck.exe"
-                          ],
-                          "fail_secure_unknown_options": true,
-                          "forbidden_flags": [],
-                          "interspersed_flags": [],
-                          "interspersed_options_with_values": [],
-                          "inverse_flag_pairs": [],
-                          "leading_options_with_values": [
-                            "--root"
-                          ],
-                          "options_with_values": [],
-                          "required_flags": [
-                            "-h"
-                          ],
-                          "required_flags_in_all_arguments": true,
-                          "required_option_values": [],
-                          "subcommands": [
-                            "run"
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                }
-              ],
+              "safe_variants": [],
               "safer_alternatives": [
                 "Review the exact child executable and arguments before launching the process.",
                 "Keep the underlying command subject to its own command and policy checks."
@@ -1139,7 +1064,9 @@
       "disabled_permissions": [],
       "expected_action": "review",
       "rule_id": "command.unwreck.run",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "read-only-hooks-snippet",
@@ -1316,6 +1243,32 @@
       "rule_id": "command.unwreck.state-change",
       "expected_effective_segments": [
         1
+      ]
+    },
+    {
+      "id": "run-child-help-long",
+      "command": "unwreck run sh -c 'echo x' --help",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.run",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "run-child-help-short",
+      "command": "unwreck run rm -rf build -h",
+      "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.unwreck.run",
+      "expected_effective_segments": [
+        0
       ]
     }
   ]
