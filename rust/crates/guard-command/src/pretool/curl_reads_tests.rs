@@ -45,6 +45,46 @@ fn plain_public_reads_are_proven() {
     }
 }
 
+/// A retry policy, a protocol version and a connection or progress setting
+/// each leave the request exactly where it was addressed, so a readiness
+/// check written with them reads the same dev server as the plain one.
+#[test]
+fn retry_transport_and_presentation_flags_leave_the_destination_alone() {
+    for command in [
+        "curl -sf --retry-connrefused http://127.0.0.1:3000/health",
+        "curl -fsS --retry 3 --retry-all-errors http://127.0.0.1:3000/health",
+        "curl -sf --http3 https://example.com/api/health",
+        "curl -sf --http2-prior-knowledge http://127.0.0.1:3000/health",
+        "curl -sf --http1.0 https://example.com/",
+        "curl -sf --no-keepalive --tcp-nodelay http://127.0.0.1:3000/health",
+        "curl -sf --no-alpn https://example.com/",
+        "curl -sf --raw https://example.com/a/b",
+        "curl --progress-bar https://example.com/notes.txt",
+        "curl -sf --styled-output --no-styled-output https://example.com/",
+    ] {
+        assert!(proven(command), "{command}");
+    }
+}
+
+/// Widening the flag table must not admit the options beside these names that
+/// follow a redirect, drop the certificate check or write a file.
+///
+/// `--path-as-is` belongs there too: the URL secret scan reads the parsed
+/// path, which resolves `..` away, so a token this flag would still send to
+/// the host is one the scan never saw.
+#[test]
+fn the_retry_neighbours_that_move_or_write_stay_reviewed() {
+    for command in [
+        "curl -sf --retry-connrefused -L http://127.0.0.1:3000/health",
+        "curl -sf --retry-all-errors --insecure https://example.com/",
+        "curl -sf --retry-connrefused --remote-name https://example.com/a.tgz",
+        "curl -sf --http3 --proxy http://127.0.0.1:8888 https://example.com/",
+        "curl -sf --path-as-is https://example.com/a/../health",
+    ] {
+        assert!(!proven(command), "{command}");
+    }
+}
+
 #[test]
 fn bodies_files_credentials_and_routing_stay_reviewed() {
     for command in [
