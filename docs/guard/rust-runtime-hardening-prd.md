@@ -188,10 +188,13 @@ hook/runtime scope, `scripts/ci/python_capability_cleanup_gate.py` proves
 source/runtime reachability and package content, and the six-case parity
 fixture is language-neutral. The superseded Python resident source is no
 longer retained: it went with the rest of the replaced hook and runtime
-surface, 122 modules and 34 test paths, which
+surface, 125 modules and 34 test paths, which
 `python-capability-ownership.v1.json` records under `retired_modules` and
 `retired_test_paths` with an empty `deletion_candidates` list, an empty
-`package_excluded_candidates` list and `retained_source: false`. Nothing
+`package_excluded_candidates` list and `retained_source: false`. It records a
+further 38 `retired_bodies`, for a symbol retired inside a module that
+survives, each carrying the Rust that decides it, so a deleted table cannot
+return under its old Python name. Nothing
 replaced is held back inside the package as dormant rollback; the reviewed
 release reverts as a unit instead. Remaining category-3 cleanup still lands in
 separately authorized deletion changes once each rollback boundary is reviewed.
