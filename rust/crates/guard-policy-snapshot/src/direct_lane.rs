@@ -102,6 +102,11 @@ pub struct DirectLaneBindingV1 {
     /// review stays with the daemon, which raises the notice itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connector_setup_notice: Option<bool>,
+    /// True while the daemon's evidence drain leaves a direct `PreToolUse`
+    /// answer's command activity to the resident once its record says the
+    /// resident queued it. Without it the drain records every activity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resident_activity: Option<bool>,
 }
 
 /// A process environment whose `Debug` output never shows the values.

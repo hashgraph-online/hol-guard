@@ -85,6 +85,14 @@ def test_a_receipt_the_resident_recorded_is_not_submitted_again(tmp_path: Path, 
     assert activity["receipt_id"] == RECEIPT["decision_id"]
 
 
+def test_activity_the_resident_recorded_is_not_submitted_again(tmp_path: Path, accepted_receipts: None) -> None:
+    host = _host(tmp_path)
+    assert record_direct_hook_evidence(host, _record(receipt_recorded=True, activity_recorded=True))
+
+    assert host.activity_writer.receipts == []
+    assert host.activity_writer.activity == []
+
+
 class _EventStore:
     def __init__(self) -> None:
         self.events: list[tuple[str, dict[str, object]]] = []

@@ -145,7 +145,9 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
             succeeded=hook_post_succeeded(_POST_TOOL_USE, payload),
         )
         return True
-    _record_native_pre_activity(host, harness, payload, response, accepted)  # pyright: ignore[reportArgumentType]
+    if record.get("activity_recorded") is not True:
+        # A current resident queues the activity behind the receipt itself.
+        _record_native_pre_activity(host, harness, payload, response, accepted)  # pyright: ignore[reportArgumentType]
     with suppress(Exception):
         _raise_connector_setup_notice(host.store, record.get(_CONNECTOR_NOTICE_FIELD))
     return True

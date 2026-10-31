@@ -17,11 +17,15 @@
 //! A hook the resident answers directly records its receipt the same way:
 //! with a writer already running, the resident queues the receipt and marks
 //! the evidence record it queues for the daemon's drain, which then submits
-//! the rest of that record's evidence but not the receipt.
+//! the rest of that record's evidence but not the receipt. For a `PreToolUse`
+//! answer it queues the command activity behind that receipt as well and
+//! marks the record for that too, which saves the drain another writer
+//! request per hook.
 
 use std::path::Path;
 use std::time::Instant;
 
+use guard_command::hook_evidence_writer::RuntimeHookEvidenceWriter;
 use guard_contracts::{GuardHookEdgeResultV2, GuardHookEnvelopeV2};
 use serde_json::Value;
 
@@ -33,6 +37,8 @@ pub(crate) const EDGE_RECEIPT_RECORD_FEATURE: &str = "edge-receipt-record-v1";
 /// The field of a direct answer's evidence record that says the resident
 /// already queued its receipt with the writer.
 const DIRECT_RECEIPT_RECORDED: &str = "receipt_recorded";
+/// The field that says the resident queued its command activity as well.
+const DIRECT_ACTIVITY_RECORDED: &str = "activity_recorded";
 
 /// Encode the checked `edge`, recording its receipt when the envelope asked
 /// and a writer runs for its Guard home. `resident` is false for a caller
@@ -60,29 +66,79 @@ pub(crate) fn encode(
 }
 
 /// Queue a direct answer's `evidence` for the drain, recording its receipt
-/// first when a writer already runs for `guard_home`. The record carries
-/// `receipt_recorded` only when that writer accepted the receipt; otherwise it
-/// goes as before and the drain submits the receipt itself, which starts the
-/// writer when none runs. False when the queue
-/// cannot hold the record: nothing was queued or recorded, so the daemon
-/// answering the hook records it once.
+/// and then, with `record_activity`, its command activity first when a writer
+/// already runs for `guard_home`. The record carries `receipt_recorded` and
+/// `activity_recorded` only for what that writer accepted; the drain submits
+/// the rest itself, which starts the writer when none runs. False when the
+/// queue cannot hold the record: nothing was queued or recorded, so the
+/// daemon answering the hook records it once.
 pub(crate) fn offer_direct(
     queue: &DirectEvidenceQueue,
     guard_home: &Path,
     evidence: Value,
+    record_activity: bool,
 ) -> bool {
-    let Some(receipt) = evidence.get("receipt").and_then(Value::as_object).cloned() else {
+    if !evidence.get("receipt").is_some_and(Value::is_object) {
         return queue.offer(evidence);
-    };
+    }
     let mut pending = Some(evidence);
-    let queued = writer_op::record_direct_receipt(guard_home, &receipt, |record_receipt| {
+    let queued = writer_op::record_direct(guard_home, |writer| {
         pending.take().is_some_and(|record| {
+            let markers = [DIRECT_RECEIPT_RECORDED, DIRECT_ACTIVITY_RECORDED];
             queue
-                .try_offer_recorded(record, DIRECT_RECEIPT_RECORDED, record_receipt)
+                .try_offer_recorded(record, &markers, |record| {
+                    let Some(receipt) = record.get("receipt").and_then(Value::as_object) else {
+                        return 0;
+                    };
+                    if !writer.submit_native_decision_receipt(receipt) {
+                        return 0;
+                    }
+                    1 + usize::from(record_activity && submit_pre_tool_activity(writer, record))
+                })
                 .is_ok()
         })
     });
     queued.unwrap_or_else(|| pending.is_some_and(|record| queue.offer(record)))
+}
+
+/// Queue a direct `PreToolUse` answer's command activity as the drain would,
+/// citing the receipt the writer just accepted. False leaves it to the drain,
+/// which also gets any answer whose fields the activity cannot take.
+fn submit_pre_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) -> bool {
+    if record.get("event").and_then(Value::as_str) != Some("PreToolUse") {
+        return false;
+    }
+    let (Some(harness), Some(payload), Some(response)) = (
+        record.get("harness").and_then(Value::as_str),
+        record.get("payload").and_then(Value::as_object),
+        record.get("harness_response").and_then(Value::as_object),
+    ) else {
+        return false;
+    };
+    let policy_action = match response.get("policy_action") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(action)) => Some(action.as_str()),
+        Some(_) => return false,
+    };
+    let approval_reuse_status = match response.get("approval_reuse_status") {
+        None => "not-applicable",
+        Some(Value::String(status)) => status.as_str(),
+        Some(_) => return false,
+    };
+    let receipt_id = record
+        .get("receipt")
+        .and_then(|receipt| receipt.get("decision_id"))
+        .and_then(Value::as_str);
+    writer.submit_command_activity(
+        harness,
+        "PreToolUse",
+        payload,
+        true,
+        policy_action,
+        receipt_id,
+        response.get("prompted") == Some(&Value::Bool(true)),
+        approval_reuse_status,
+    )
 }
 
 #[cfg(test)]

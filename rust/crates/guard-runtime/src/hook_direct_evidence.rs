@@ -125,9 +125,11 @@ impl Default for QueueState {
     }
 }
 
-fn unmarked(mut record: Value, marker: &str) -> Value {
+fn unmarked(mut record: Value, markers: &[&str]) -> Value {
     if let Some(fields) = record.as_object_mut() {
-        fields.remove(marker);
+        for marker in markers {
+            fields.remove(*marker);
+        }
     }
     record
 }
@@ -229,18 +231,21 @@ impl DirectEvidenceQueue {
         Unwritten(Arc::clone(&self.state))
     }
 
-    /// Queue one record, marking it with `marker` when `record_receipt`
-    /// records its receipt first; hand it back when the queue cannot hold it.
+    /// Queue one record, marking it with each leading marker in `markers`
+    /// whose evidence `record_evidence` records first, in order; hand it back
+    /// when the queue cannot hold it.
     ///
-    /// The room check, the receipt and the push share one lock, so a receipt
-    /// is recorded only for a record the queue takes. The record goes
-    /// unmarked when the receipt is refused or the marked record would not
-    /// fit; the drain then submits the receipt, which the writer dedupes.
+    /// `record_evidence` reads the record and says how many of its markers it
+    /// recorded. The room check, the writes and the push share one lock, so
+    /// evidence is recorded only for a record the queue takes. A marker goes
+    /// when its write is refused or the marked record would not fit; the
+    /// drain then submits that evidence itself, which the writer dedupes for a
+    /// receipt.
     pub(crate) fn try_offer_recorded(
         &self,
         mut record: Value,
-        marker: &str,
-        record_receipt: impl FnOnce() -> bool,
+        markers: &[&str],
+        record_evidence: impl FnOnce(&Value) -> usize,
     ) -> Result<(), Value> {
         let Ok(encoded) = serde_json::to_vec(&record) else {
             return Err(record);
@@ -252,19 +257,26 @@ impl DirectEvidenceQueue {
         let Some(fields) = record.as_object_mut() else {
             return Err(record);
         };
-        fields.insert(marker.to_owned(), Value::Bool(true));
+        for marker in markers {
+            fields.insert((*marker).to_owned(), Value::Bool(true));
+        }
         let marked_bytes = serde_json::to_vec(&record).map_or(usize::MAX, |encoded| encoded.len());
         let Ok(mut state) = self.state.lock() else {
-            return Err(unmarked(record, marker));
+            return Err(unmarked(record, markers));
         };
         if !state.holds(bytes) {
-            return Err(unmarked(record, marker));
+            return Err(unmarked(record, markers));
         }
-        if marked_bytes <= MAX_RECORD_BYTES && state.holds(marked_bytes) && record_receipt() {
-            // Its receipt is already written.
-            state.append(record, marked_bytes, false);
+        let recorded = if marked_bytes <= MAX_RECORD_BYTES && state.holds(marked_bytes) {
+            record_evidence(&record).min(markers.len())
         } else {
-            let record = unmarked(record, marker);
+            0
+        };
+        if recorded > 0 {
+            // Its receipt is already written.
+            state.append(unmarked(record, &markers[recorded..]), marked_bytes, false);
+        } else {
+            let record = unmarked(record, markers);
             let native = crate::mcp_relay_receipt::is_plain(&record);
             state.append(record, bytes, native);
         }

@@ -215,6 +215,26 @@ def test_connector_setup_notice_is_bound_only_when_the_drain_raises_it() -> None
     assert bound is not None and bound["connector_setup_notice"] is True
 
 
+def test_resident_activity_is_bound_only_when_the_drain_skips_it() -> None:
+    binding: dict[str, object] = {"workspaces": ["/work/repo"], "inputs": []}
+
+    def bound(*, resident_activity: bool = False) -> dict[str, object]:
+        result = with_direct_hook_state(
+            binding,
+            home_dir="/home/guard",
+            harness_postures={},
+            local_cli_block_rules=False,
+            evidence_drain=True,
+            resident_activity=resident_activity,
+        )
+        assert result is not None
+        return result
+
+    # An old resident rejects unknown binding fields, so the default omits it.
+    assert "resident_activity" not in bound()
+    assert bound(resident_activity=True)["resident_activity"] is True
+
+
 def test_local_cli_rule_probe_fails_toward_the_daemon() -> None:
     class _Store:
         def __init__(self, result: object) -> None:

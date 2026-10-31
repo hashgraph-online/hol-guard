@@ -80,6 +80,8 @@ pub(crate) struct DirectLaneBinding {
     pub(crate) mcp_relay: Option<serde_json::Value>,
     /// Whether the daemon's drain raises a queued connector review's notice.
     pub(crate) connector_setup_notice: Option<bool>,
+    /// Whether the drain skips a direct answer's activity the resident queued.
+    pub(crate) resident_activity: Option<bool>,
 }
 
 /// The daemon's policy-integrity key, held only in memory.
@@ -127,6 +129,7 @@ impl DirectLaneBinding {
             structured_output_config: None,
             mcp_relay: None,
             connector_setup_notice: None,
+            resident_activity: None,
         }
     }
 }
@@ -201,6 +204,7 @@ impl PolicySnapshotStore {
                 structured_output_config: binding.structured_output_config,
                 mcp_relay: binding.mcp_relay,
                 connector_setup_notice: binding.connector_setup_notice,
+                resident_activity: binding.resident_activity,
             })
         });
         match self.direct_lane.lock() {
