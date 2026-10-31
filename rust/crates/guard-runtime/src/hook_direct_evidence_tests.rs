@@ -279,3 +279,16 @@ fn a_paged_receipt_says_whether_the_native_runtime_accepts_it() {
     assert!(records[1].get("receipt_valid").is_none());
     assert!(records[2].get("receipt_valid").is_none());
 }
+
+#[test]
+fn a_partly_recorded_record_is_charged_for_the_markers_it_keeps() {
+    let queue = DirectEvidenceQueue::default();
+    let record = json!({"receipt": {}});
+    assert!(queue
+        .try_offer_recorded(record, &["first_recorded", "second_recorded"], |_| 1)
+        .is_ok());
+    let kept = json!({"receipt": {}, "first_recorded": true});
+    let state = queue.state.lock().unwrap();
+    assert_eq!(state.records[0].record, kept);
+    assert_eq!(state.bytes, serde_json::to_vec(&kept).unwrap().len());
+}

@@ -71,6 +71,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_direct::HOOK_DIRECT_PERMISSION_NOTICE_FEATURE.into(),
         crate::hook_direct::HOOK_DIRECT_SAVED_DECISION_FEATURE.into(),
         crate::hook_direct::HOOK_DIRECT_CONNECTOR_NOTICE_FEATURE.into(),
+        crate::hook_direct::HOOK_DIRECT_ACTIVITY_RECORD_FEATURE.into(),
         crate::hook_direct::HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE.into(),
         crate::policy_store::policy_store_direct_lane::HOOK_DIRECT_REVIEW_FACTS_FEATURE.into(),
         crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_FEATURE.into(),

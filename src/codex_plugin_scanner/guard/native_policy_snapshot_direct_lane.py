@@ -39,6 +39,9 @@ DIRECT_HOOK_SAVED_DECISION_FEATURE = "hook-direct-saved-decision-v1"
 # The resident queues a connector-setup review itself once the binding says
 # the evidence drain raises its desktop setup notice.
 DIRECT_HOOK_CONNECTOR_NOTICE_FEATURE = "hook-direct-connector-notice-v1"
+# The resident queues a direct tool answer's command activity itself
+# once the binding says the evidence drain skips what it queued.
+DIRECT_HOOK_ACTIVITY_RECORD_FEATURE = "hook-direct-activity-record-v1"
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
 DIRECT_LANE_ACK_FILE_NAME = "ack.json"
 DIRECT_LANE_ACK_SCHEMA = "guard-direct-lane-ack.v1"
@@ -237,6 +240,7 @@ def with_direct_hook_state(
     contained_sink_command: Sequence[str] | None = None,
     integrity_key: tuple[bytes, str] | None = None,
     connector_setup_notice: bool = False,
+    resident_activity: bool = False,
 ) -> dict[str, object] | None:
     """Add the daemon state a direct hook needs beyond the snapshot.
 
@@ -248,7 +252,9 @@ def with_direct_hook_state(
     Claude PermissionRequest with a pending notice defers to this daemon.
     ``connector_setup_notice`` is true only while the evidence drain raises
     the setup notice of a connector review the resident queued; without it
-    such a review defers to this daemon.
+    such a review defers to this daemon. ``resident_activity`` is true only
+    while the evidence drain skips the command activity the resident queued
+    for a direct answer; without it the drain records every activity.
     """
 
     if binding is None:
@@ -271,6 +277,8 @@ def with_direct_hook_state(
         bound.update(fields)
     if connector_setup_notice:
         bound["connector_setup_notice"] = True
+    if resident_activity:
+        bound["resident_activity"] = True
     return bound
 
 
