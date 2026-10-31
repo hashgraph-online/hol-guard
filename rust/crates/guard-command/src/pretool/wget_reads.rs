@@ -124,8 +124,10 @@ fn reads_a_named_url(arguments: &[String], context: super::PathContext<'_>) -> b
         if read.names_the_output {
             output_named = true;
         }
-        if read.bounds_redirects {
-            redirects_bounded = true;
+        // wget applies its options in order, so a repeated `--max-redirect`
+        // is decided by the last one written.
+        if let Some(bound) = read.redirect_bound {
+            redirects_bounded = bound;
         }
         index += read.consumed;
     }
@@ -136,7 +138,9 @@ fn reads_a_named_url(arguments: &[String], context: super::PathContext<'_>) -> b
 struct OptionRead {
     consumed: usize,
     names_the_output: bool,
-    bounds_redirects: bool,
+    /// `Some` only for `--max-redirect`, carrying whether that spelling of it
+    /// holds the request to the host that was named.
+    redirect_bound: Option<bool>,
 }
 
 impl OptionRead {
@@ -144,7 +148,7 @@ impl OptionRead {
         Self {
             consumed,
             names_the_output: false,
-            bounds_redirects: false,
+            redirect_bound: None,
         }
     }
 }
@@ -171,7 +175,7 @@ fn option_read(
         return Some(OptionRead {
             consumed: 1,
             names_the_output: true,
-            bounds_redirects: false,
+            redirect_bound: None,
         });
     }
     if let Some(long) = argument.strip_prefix("--") {
@@ -230,7 +234,7 @@ fn value_read(
         "--output-document" => named_output(value, context).then_some(OptionRead {
             consumed,
             names_the_output: true,
-            bounds_redirects: false,
+            redirect_bound: None,
         }),
         "--user-agent" => (!value.is_empty()).then(|| OptionRead::plain(consumed)),
         "--compression" => {
@@ -239,8 +243,8 @@ fn value_read(
         _ if NUMERIC_OPTIONS.contains(&option) => counted(value).then_some(OptionRead {
             consumed,
             names_the_output: false,
-            bounds_redirects: option == "--max-redirect"
-                && value.trim_start_matches('0').is_empty(),
+            redirect_bound: (option == "--max-redirect")
+                .then(|| value.trim_start_matches('0').is_empty()),
         }),
         _ => None,
     }

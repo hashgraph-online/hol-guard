@@ -77,6 +77,21 @@ fn a_public_read_is_proven_only_with_its_redirects_held() {
     }
 }
 
+/// wget reads its options in order and the last `--max-redirect` decides, so
+/// an earlier zero proves nothing about the request that is actually sent.
+#[test]
+fn the_last_redirect_bound_is_the_one_the_request_carries() {
+    assert!(reads(
+        "--max-redirect=20 --max-redirect=0 -qO- https://example.com/release.json"
+    ));
+    for text in [
+        "--max-redirect=0 --max-redirect=20 -qO- https://example.com/release.json",
+        "--max-redirect 0 --max-redirect 1 -qO- https://example.com/release.json",
+    ] {
+        assert!(!reads(text), "{text}");
+    }
+}
+
 /// A loopback port a local admin service answers on is not a dev server, and
 /// a word the shell would still expand proves nothing about what is fetched.
 #[test]
