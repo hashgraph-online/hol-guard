@@ -32,6 +32,15 @@ mod encoded;
 
 use encoded::{encoded_payload_findings, ENCODED_PAYLOAD_POLICY_VERSION};
 
+#[path = "secret_detection_shell.rs"]
+mod shell;
+
+use shell::{
+    shell_credential_findings, shell_credential_material_line, SHELL_RULE_DESCRIPTION,
+    SHELL_RULE_META,
+};
+pub use shell::{AUTHORIZATION_HEADER_REASON, CREDENTIAL_OPTION_REASON};
+
 pub use encoded::{encoded_payload_spans, ENCODED_REASON};
 
 /// How the scan tells two candidates apart without keeping either one.
@@ -1296,6 +1305,7 @@ pub fn detector_version() -> String {
     let mut material_parts: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
     material_parts.push(assignment_material_line());
     material_parts.push(encoded_payload_material_line());
+    material_parts.push(shell_credential_material_line());
     detector_version_over(&material_parts)
 }
 
@@ -1345,6 +1355,14 @@ pub fn secret_rule_catalog() -> Vec<SecretRuleCatalogEntry> {
             description: rule.description,
         })
         .collect();
+    entries.push(SecretRuleCatalogEntry {
+        rule_id: SHELL_RULE_META.rule_id,
+        family: SHELL_RULE_META.family,
+        severity: SHELL_RULE_META.severity,
+        validation: SHELL_RULE_META.validation,
+        strong_format: SHELL_RULE_META.strong_format,
+        description: SHELL_RULE_DESCRIPTION,
+    });
     entries.push(SecretRuleCatalogEntry {
         rule_id: "credential-assignment",
         family: "Contextual credential assignment",
@@ -2176,6 +2194,27 @@ pub fn scan_secret_text(
         }
     }
 
+    // Command lines are read after assignments for the same reason assignments
+    // come after provider formats: a credential both rules can see is reported
+    // under the more specific one.
+    let claimed: HashSet<CandidateDigest> = findings
+        .iter()
+        .map(|finding| candidate_digest(&finding.candidate))
+        .collect();
+    let remaining = bounded_max.saturating_sub(findings.len());
+    for finding in
+        shell_credential_findings(text, path, source, commit, &lines, &claimed, remaining)
+    {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
+            continue;
+        }
+        findings.push(finding);
+    }
+
     // Encoded payloads are read last. A credential that is also written out in
     // the clear is already reported from the line it sits on, which is the
     // place a reader can act on; the encoded pass only adds what no plain read
@@ -2321,8 +2360,10 @@ mod tests {
     #[test]
     fn catalog_keeps_the_python_entries_in_python_order() {
         let catalog = secret_rule_catalog();
-        // The provider rules Python published lead, later ones follow, and the
-        // synthetic contextual entry stays last however many are appended.
+        // The provider rules Python published lead and later ones follow. The
+        // contextual entry Python published closes the list, because the CLI
+        // vectors pin it there; a contextual rule added since sits ahead of
+        // it, however many provider rules are appended before them.
         assert!(catalog.len() > PYTHON_ERA_PROVIDER_RULES);
         assert_eq!(
             catalog
@@ -2352,6 +2393,17 @@ mod tests {
                 "validation": "none",
                 "strong_format": true,
                 "description": "Private-key material in PEM/OpenSSH-style form.",
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(&catalog[catalog.len() - 2]).unwrap(),
+            serde_json::json!({
+                "rule_id": "credential-command",
+                "family": "Contextual credential on a command line",
+                "severity": "high",
+                "validation": "none",
+                "strong_format": false,
+                "description": "Credential written as an authorization header or as the value of a credential-naming option.",
             })
         );
         assert_eq!(
