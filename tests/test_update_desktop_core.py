@@ -884,7 +884,7 @@ def _patch_slow_core_start(
     answers_after: int | None,
     package_version: str = "3.59.0a24",
 ) -> _FakeClock:
-    from codex_plugin_scanner.guard.cli import update_desktop_apply
+    from codex_plugin_scanner.guard.cli import update_desktop_core_start
     from codex_plugin_scanner.guard.daemon.start_classification import GuardDaemonStillStartingError
 
     clock, _launched = _patch_daemon_refresh(monkeypatch, retirement_completes_after=0, desktop_respawn_after=None)
@@ -893,13 +893,14 @@ def _patch_slow_core_start(
         raise GuardDaemonStillStartingError("Guard daemon is still starting; retry shortly.")
 
     monkeypatch.setattr(daemon_manager, "ensure_guard_daemon_after_update", still_starting)
+    monkeypatch.setattr(update_desktop_core_start, "time", clock)
 
     def live_identity(_home: Path) -> dict[str, object] | None:
         if answers_after is None or clock.sleeps < answers_after:
             return None
         return {"daemon_url": "http://127.0.0.1:5474", "package_version": package_version}
 
-    monkeypatch.setattr(update_desktop_apply, "verified_live_guard_daemon_identity", live_identity)
+    monkeypatch.setattr(update_desktop_core_start, "verified_live_guard_daemon_identity", live_identity)
     return clock
 
 
@@ -950,3 +951,31 @@ def test_daemon_refresh_reports_a_core_that_never_finishes_starting(
         "The updated Guard daemon is still starting. Run `hol-guard daemon status` shortly to confirm it is up."
     )
     assert clock.now >= 60.0
+
+
+def test_daemon_refresh_without_an_applied_version_never_accepts_an_older_daemon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    clock = _patch_slow_core_start(monkeypatch, answers_after=0, package_version="0.0.1")
+
+    refreshed, note = refresh_desktop_core_daemon(_refresh_context(tmp_path), executable=tmp_path / "core")
+
+    assert refreshed is None
+    assert note is not None and "still starting" in note
+    assert clock.now >= 60.0
+
+
+def test_daemon_refresh_without_an_applied_version_accepts_this_core_once_it_answers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+    from codex_plugin_scanner.version import __version__
+
+    _patch_slow_core_start(monkeypatch, answers_after=3, package_version=__version__)
+
+    refreshed, note = refresh_desktop_core_daemon(_refresh_context(tmp_path), executable=tmp_path / "core")
+
+    assert refreshed == {"status": "restarted", "url": "http://127.0.0.1:5474", "runtime_verified": True}
+    assert note is None
