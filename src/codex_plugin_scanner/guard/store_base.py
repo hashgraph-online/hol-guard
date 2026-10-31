@@ -1531,15 +1531,6 @@ def _canonical_utc_timestamp(value: str) -> str:
     return _parse_utc_timestamp(value).isoformat(timespec="microseconds")
 
 
-def _timestamp_has_expired(expires_at: str, *, now: str) -> bool:
-    """Return true at the expiry boundary and for malformed legacy values."""
-
-    try:
-        return _parse_utc_timestamp(expires_at) <= _parse_utc_timestamp(now)
-    except (TypeError, ValueError):
-        return True
-
-
 def _now() -> str:
     return _canonical_utc_timestamp(datetime.now(timezone.utc).isoformat())
 
