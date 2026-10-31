@@ -21,6 +21,16 @@ pub(crate) fn capture_for_launch(
     snapshot: &crate::policy_enforcement::AdmittedPolicySnapshot,
 ) -> std::result::Result<CapturedBash, String> {
     let mut captured = platform::capture(request, true).map_err(str::to_owned)?;
+    refresh_launch_policy(&mut captured, request, snapshot)?;
+    Ok(captured)
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn refresh_launch_policy(
+    captured: &mut CapturedBash,
+    request: &NativeBashCaptureV1,
+    snapshot: &crate::policy_enforcement::AdmittedPolicySnapshot,
+) -> std::result::Result<(), String> {
     let assessment = super::bash_policy::assess(
         &captured.graph,
         request,
@@ -32,7 +42,7 @@ pub(crate) fn capture_for_launch(
         return Err("bash_current_policy_denied".into());
     }
     captured.policy = Some(assessment);
-    Ok(captured)
+    Ok(())
 }
 
 pub(super) fn inspect(request: &NativeBashCaptureV1) -> Result<NativeBashSubjectV1, &'static str> {

@@ -12,6 +12,7 @@ worktree would contain; it reads and redacts locally and sends nothing.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
@@ -80,13 +81,12 @@ def _suggested_root(query: str) -> str | None:
 
 
 def _is_tracked(worktrees: list[dict[str, object]], root: str) -> bool:
-    # Worktrees are stored by their resolved root, so resolve the suggestion the
-    # same way: symlinks, ``..`` and trailing separators then compare equal.
-    try:
-        resolved = str(Path(root).resolve(strict=True))
-    except (OSError, ValueError):
+    # The query is only a UI hint. Compare lexical absolute paths without
+    # traversing an arbitrary path supplied by the caller.
+    if not os.path.isabs(root):
         return False
-    return any(worktree.get("root") == resolved for worktree in worktrees)
+    normalized = os.path.normpath(root)
+    return any(worktree.get("root") == normalized for worktree in worktrees)
 
 
 def handle_workspace_assessment_post(

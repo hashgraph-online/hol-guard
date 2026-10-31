@@ -74,7 +74,7 @@ pub(super) fn fixture_file(path: &Path, bytes: &[u8]) {
     fs::write(path, bytes).unwrap();
 }
 
-pub(super) fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
+pub(crate) fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
     signed_snapshot_with_policy(generation, key, guard_home, policy())
 }
 

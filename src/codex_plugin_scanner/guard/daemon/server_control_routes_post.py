@@ -21,6 +21,8 @@ from ..native_resident_revival import native_route_unavailable_body
 from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .background_diagnostics import failure_detail, record_background_event
 from .command_activity_api import handle_command_activity_feedback
+from .context_assistance_http import WRITE_PATHS as CONTEXT_ASSISTANCE_WRITE_PATHS
+from .context_assistance_http import respond as respond_context_assistance
 from .extension_control_api import ExtensionControlApiError
 from .harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
 from .harness_version_api import handle_harness_version_write
@@ -70,6 +72,9 @@ class _ControlPostRoutes:
     """Control-plane route dispatch for the daemon handler."""
 
     def _dispatch_control_post(self, parsed: Any, path_parts: list[str], payload: dict[str, Any], route: Any) -> None:
+        if parsed.path in CONTEXT_ASSISTANCE_WRITE_PATHS:
+            respond_context_assistance(self, CONTEXT_ASSISTANCE_WRITE_PATHS[parsed.path], payload)
+            return
         if route.route_class == "extension_control":
             try:
                 if parsed.path.endswith("/test"):

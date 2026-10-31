@@ -4,6 +4,12 @@
 //! small as operations are added.
 
 pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
+    crate::context_assistance_op::FEATURE,
+    crate::context_assistance_op::WORKSPACE_FEATURE,
+    crate::context_assistance_op::ACTION_FEATURE,
+    crate::context_assistance_op::HISTORY_FEATURE,
+    crate::context_assistance_op::VERSIONS_FEATURE,
+    crate::context_assistance_agent_op::FEATURE,
     guard_contracts::ARCHIVE_INSPECTION_FEATURE,
     guard_contracts::ARCHIVE_ACQUISITION_FEATURE,
     guard_contracts::MANAGED_CONTENT_FETCH_FEATURE,

@@ -45,3 +45,7 @@
 /tests/fixtures/guard-command-corpus/decision-diff-report.framed-sha256 linguist-generated
 /tests/test_guard_extension_trust.py linguist-generated
 /tests/test_policy_bundle_delivery_runtime.py linguist-generated
+
+# CIGAR receipts and test logs are recorded evidence, not hand-edited product source.
+/docs/guard/cigar-integration/evidence/** linguist-generated
+/docs/guard/cigar-integration/evidence/*.log -whitespace linguist-generated

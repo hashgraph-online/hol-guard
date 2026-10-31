@@ -3,6 +3,30 @@
  "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
+   "verdict": "windows-unsupported",
+   "note": "Private directory creation needs POSIX ownership and mode checks; this arm returns PlatformUnsupported.",
+   "file": "rust/crates/guard-cigar-artifacts/src/paths.rs",
+   "item": "fn private_directory -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "725ff950593e"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Private child creation needs POSIX ownership and mode checks; this arm returns PlatformUnsupported.",
+   "file": "rust/crates/guard-cigar-artifacts/src/paths.rs",
+   "item": "fn private_child -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "23a342b0eaf6"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The Python snapshot requires uid, gid, mode and inode identity; this arm returns PlatformUnsupported.",
+   "file": "rust/crates/guard-cigar-artifacts/src/python_snapshot.rs",
+   "item": "fn stamp -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "f92ed341b447"
+  },
+  {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
    "item": "fn resolve_host(text: &str, env: &PathEnv) -> Option<String>",
    "verdict": "windows-permissive",
@@ -715,6 +739,38 @@
    "body": "4183089b80f8"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The persistence compile doctor requires a POSIX broker store; this arm returns PlatformUnqualified.",
+   "file": "rust/crates/guard-context-assistance/src/broker_persistence_doctor.rs",
+   "item": "fn verify_persistence_compile -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "398387831d92"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Private broker storage inspection requires POSIX ownership and mode checks; this arm returns PlatformUnqualified.",
+   "file": "rust/crates/guard-context-assistance/src/broker_storage.rs",
+   "item": "fn inspect -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "83289c3b671b"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Private broker storage revalidation requires POSIX identity checks; this arm returns PlatformUnqualified.",
+   "file": "rust/crates/guard-context-assistance/src/broker_storage.rs",
+   "item": "fn revalidate -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "6fc33b160b25"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Source root revalidation cannot compare stable device and inode identity here; it returns PlatformUnqualified before a source read.",
+   "file": "rust/crates/guard-context-assistance/src/source.rs",
+   "item": "fn revalidate -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e114a3678e26"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows names its own ignorable spawn codes; elsewhere `false` treats every code as worth reporting, which over-reports rather than hiding a failure.",
    "file": "rust/crates/guard-runtime/src/adapters/adapter_inventory.rs",
@@ -939,6 +995,294 @@
    "body": "8ebb1bb3d55c"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Cache expiration is skipped and false is returned; persistent cache opening is Unix-only, so no cache can be active here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn expire_cache -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "943742c6aff3"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "This reports false because the persistent cache can only be opened on Unix; memory mode has no saved cache.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn has_cache -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "08914a24a235"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Staging saved notes is skipped with success; the persistent backend cannot be opened here and memory notes remain actor-owned.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn stage_notes -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "8e252a691752"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Committing saved notes is skipped with success; the persistent backend cannot be opened here and memory notes remain actor-owned.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn commit_notes -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "62fea81c0f23"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Read-only bundled catalog is returned only when no local catalog file exists; any local overlay is refused.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog.rs",
+   "item": "fn installed -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "2b73fd848c2f"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog trust authority configuration requires the private POSIX store; this arm returns platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog.rs",
+   "item": "fn configure -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "1854837a61ec"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog import requires the private POSIX store; this arm returns platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog.rs",
+   "item": "fn import -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "c51034204177"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Remote catalog feed configuration requires the private POSIX store; this arm rejects it.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_feed.rs",
+   "item": "fn configure -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "6c25b5e28bdd"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog refresh requires the private POSIX job store; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_refresh_jobs.rs",
+   "item": "fn refresh_catalog_inner -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "47c336ee48cc"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog refresh worker directory requires private POSIX ownership checks; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_refresh_worker.rs",
+   "item": "fn directory -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "054a1358725a"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog refresh recovery requires the private POSIX job store; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_refresh_worker.rs",
+   "item": "fn recover -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e9457c35a455"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Generation index validation is skipped with success; generation storage and version switching are Unix-only and cannot be opened here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn validate_generations -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "8f4f603465db"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Saved evidence inspection returns an unsupported status with PlatformUnqualified, rather than describing any saved slots.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn inspect -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "118a0390cbb5"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "This removal entry point is compiled off Unix only to report PlatformUnqualified for private saved evidence.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "pub(crate) fn remove(home: &Path) -> Result<(), RuntimeError>",
+   "cfg": "any(test, not(unix))",
+   "body": "3a5764e00324"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Saved evidence removal returns PlatformUnqualified; it does not claim erasure of a private store.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn remove -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "398387831d92"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Retention sweep is skipped with success; the private evidence and generation stores are Unix-only and cannot be opened here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn sweep -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "ce0e263dd06a"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Clear still removes in-memory scopes, graphs and agents; saved evidence removal is inert because no persistent backend can open here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_engine.rs",
+   "item": "fn execute -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "91d1d19de243"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Opening a saved backend returns PlatformUnqualified; only the memory backend is available.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_engine_cache.rs",
+   "item": "fn open_backend -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "5364ae426cdd"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows lacks the Unix uid, mode and link-count proof for this retry. Returning false keeps uncertain reads fail-closed before any job view is exposed; Windows native-runtime CI compiles this arm.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_job_store.rs",
+   "item": "fn replacement_candidate -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "5c14a37d30fd"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Install job leasing requires the private POSIX job store; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_job_store.rs",
+   "item": "fn lease -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e9d7693b8ef0"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Counts available install, Python and catalog jobs; switch jobs are Unix-only and cannot exist here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_jobs.rs",
+   "item": "fn total_job_count(home: &Path) -> Result<usize, String>",
+   "cfg": "not(unix)",
+   "body": "32d0ddb3ca23"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Checks catalog job IDs; switch job IDs cannot exist because switch jobs are Unix-only.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_jobs.rs",
+   "item": "fn switch_job_id_exists -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "78fd32b35e53"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog installation is rejected off Unix before preparing an SDK install job.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_jobs.rs",
+   "item": "fn install_from_catalog -- cfg! expression",
+   "cfg": "unix",
+   "body": "9d10759fa9de"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Installer space reservation needs private POSIX directories; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_worker.rs",
+   "item": "fn space -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "0c4f2945527f"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Installer ownership and directory creation need POSIX controls; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_worker.rs",
+   "item": "fn create_owned -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "7b3b58575d71"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Python installer ownership and directory creation need POSIX controls; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_python_worker.rs",
+   "item": "fn create_owned -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "7b3b58575d71"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Non-memory persistence requests are rejected off Unix; memory mode remains available.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service.rs",
+   "item": "fn schedule -- cfg! expression",
+   "cfg": "unix",
+   "body": "f9cea4d1e602"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Background retention maintenance is skipped off Unix; private saved evidence and generation stores are unavailable here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_data.rs",
+   "item": "fn arm_housekeeping -- cfg! expression",
+   "cfg": "unix",
+   "body": "924baa998dfe"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Resuming saved-data erasure is rejected because the private POSIX removal journal is unavailable.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_data.rs",
+   "item": "fn offline_data -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e2e6068d1450"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Clear and ForgetSaved call saved-data removal, which returns PlatformUnqualified rather than claiming disk erasure.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_data.rs",
+   "item": "fn offline_data -- non-Unix block #2",
+   "cfg": "not(unix)",
+   "body": "3ba6e3fe2552"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "No upgrade status is returned because native CIGAR version switching is Unix-only.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_status.rs",
+   "item": "fn status -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "d4f633a6182f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "The status capability explicitly reports private_persistence false off Unix.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_status.rs",
+   "item": "fn status -- cfg! expression",
+   "cfg": "unix",
+   "body": "17245a06342c"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Returns false because switch jobs are Unix-only; available update jobs still use their own lookup.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn is_switch -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "429c405be4a3"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Switch recovery cannot run because switch jobs do not exist off Unix; update recovery still uses its separate job store.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn recover -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "1305d3fc2bb4"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Preparing a runtime switch returns native_context_assistance_switch_platform_unsupported.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn prepare -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "941bde62ad34"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Committing a runtime switch returns native_context_assistance_switch_platform_unsupported.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn commit -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "a67970660785"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Windows has no stale-copy hand-off yet: a stale Cursor bridge that misses the resident keeps the hook and takes the daemon path, exactly as before this arm existed. Nothing is decided differently; the hook only stays on the slower route. The Unix arm is pinned by hook_bridge_successor_tests.rs.",
    "file": "rust/crates/guard-runtime/src/cursor_hook_bridge.rs",
@@ -1065,6 +1409,30 @@
    "note": "Device and inode are unavailable, so workflow-file identity falls back to size and mtime. It is used to notice a file that changed between two reads.",
    "cfg": "not(unix)",
    "body": "d82502e748db"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Home identity capture retains canonical path but skips Unix device and inode checks; replacement at the same path may escape this check, while path comparison still runs.",
+   "file": "rust/crates/guard-runtime/src/guard_config_update_assistance_preflight.rs",
+   "item": "fn capture -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "41d469586b8c"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "The retained Windows writer has no Unix cross-process lock or atomic replacement; expected-byte comparison still detects prior changes.",
+   "file": "rust/crates/guard-runtime/src/guard_config_update_io.rs",
+   "item": "pub(crate) struct WriteLock(PathBuf)",
+   "cfg": "not(unix)",
+   "body": "7882dbb1cd82"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "The retained Windows writer checks expected bytes before fs::write but skips Unix atomic replacement; concurrent writes or partial writes remain possible.",
+   "file": "rust/crates/guard-runtime/src/guard_config_update_io.rs",
+   "item": "impl WriteLock",
+   "cfg": "not(unix)",
+   "body": "b91ecc406a49"
   },
   {
    "file": "rust/crates/guard-runtime/src/guard_paths.rs",
@@ -1289,6 +1657,22 @@
    "note": "Returns true because Windows residents use an authenticated loopback endpoint instead of a filesystem socket. The authenticated stopped acknowledgement and the owner-lock probe in the caller are the listener-containment checks there, as the comment on the arm says.",
    "cfg": "not(unix)",
    "body": "9d7f0700684d"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "No generation snapshot is captured off Unix; stop still uses the selected resident identity and owner-lock containment checks.",
+   "file": "rust/crates/guard-runtime/src/managed_resident_stop_snapshot.rs",
+   "item": "fn capture_for_stop -- cfg! expression",
+   "cfg": "unix",
+   "body": "ede87be2449f"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "The legacy stop wait may include a later generation; known process identity is still checked before termination, but the Unix snapshot bound is absent.",
+   "file": "rust/crates/guard-runtime/src/managed_resident_stop_snapshot.rs",
+   "item": "fn wait_for_stop -- cfg! expression",
+   "cfg": "unix",
+   "body": "167b996ae6d8"
   },
   {
    "file": "rust/crates/guard-runtime/src/managed_resident_supervisor.rs",

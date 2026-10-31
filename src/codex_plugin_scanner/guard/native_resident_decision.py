@@ -55,6 +55,9 @@ class ResidentOperation:
     request_id_prefix: str
     timeout_seconds: float
     error: type[RuntimeError]
+    # Optional services keep their own native health and cannot change the
+    # shared authority transport circuit. This never skips reply validation.
+    shared_resident_health: bool = True
 
     @property
     def unavailable(self) -> str:
@@ -156,33 +159,40 @@ def resident_decide(
         response_schema=spec.result_schema,
         record_success=False,
         status=runtime_status,
+        **({"record_resilience": False} if not spec.shared_resident_health else {}),
     )
     if response is None:
         raise spec.fail(spec.unavailable)
     if not isinstance(response, dict):
-        record_resident(home, success=False, reason=f"{spec.prefix}_unbound", status=runtime_status)
+        if spec.shared_resident_health:
+            record_resident(home, success=False, reason=f"{spec.prefix}_unbound", status=runtime_status)
         raise spec.fail(spec.unavailable)
     if (
         response.get("schema") != spec.result_schema
         or response.get("request_id") != request["request_id"]
         or response.get("request_sha256") != digest
     ):
-        record_resident(home, success=False, reason=f"{spec.prefix}_unbound", status=runtime_status)
+        if spec.shared_resident_health:
+            record_resident(home, success=False, reason=f"{spec.prefix}_unbound", status=runtime_status)
         raise spec.fail(spec.unavailable)
     status, code = response.get("status"), response.get("code")
     if status == "error":
-        record_resident(home, success=True, status=runtime_status)
+        if spec.shared_resident_health:
+            record_resident(home, success=True, status=runtime_status)
         raise spec.fail(code if isinstance(code, str) and spec.code_pattern().fullmatch(code) else spec.unavailable)
     payload = response.get("payload")
     if status != "ok" or code != "ok" or not isinstance(payload, dict) or payload.get("kind") != query.get("kind"):
-        record_resident(home, success=False, reason=f"{spec.prefix}_bad_status", status=runtime_status)
+        if spec.shared_resident_health:
+            record_resident(home, success=False, reason=f"{spec.prefix}_bad_status", status=runtime_status)
         raise spec.fail(spec.unavailable)
     try:
         validate(payload)
     except spec.error:
-        record_resident(home, success=False, reason=f"{spec.prefix}_invalid", status=runtime_status)
+        if spec.shared_resident_health:
+            record_resident(home, success=False, reason=f"{spec.prefix}_invalid", status=runtime_status)
         raise
-    record_resident(home, success=True, status=runtime_status)
+    if spec.shared_resident_health:
+        record_resident(home, success=True, status=runtime_status)
     return payload
 
 
