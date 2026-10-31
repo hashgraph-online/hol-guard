@@ -985,17 +985,20 @@ def _retire_guard_daemons_for_home(
     retired: list[int] = []
     handled_pids: set[int] = set()
     pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
+    handed_off_launch_nonce: object = None
     if (
         _guard_daemon_pending_launch_is_generation_bound(pending_launch)
         and not _guard_daemon_pending_launch_state_is_resolved(guard_home)
         and not _guard_daemon_pending_launch_is_abandoned(pending_launch)
-        and not resolve_handed_off_guard_daemon_pending_launch(guard_home, pending_launch)
     ):
         # A launch-specific receipt is deliberately unresolved until its
         # owner publishes the matching handoff or its root is gone. Inventory
         # cannot prove that a same-home process is one of a live launch's
         # descendants.
-        return retired
+        if not resolve_handed_off_guard_daemon_pending_launch(guard_home, pending_launch):
+            return retired
+        assert pending_launch is not None
+        handed_off_launch_nonce = pending_launch["launch_nonce"]
     if isinstance(pending_launch, dict):
         pending_pid = pending_launch.get("pid")
         pending_port = pending_launch.get("port")
@@ -1028,6 +1031,15 @@ def _retire_guard_daemons_for_home(
                     handled_pids.add(pending_pid)
 
     authenticated_state = load_authenticated_daemon_state(guard_home)
+    if handed_off_launch_nonce is not None and (
+        not _guard_daemon_pending_launch_state_is_resolved(guard_home)
+        or (
+            isinstance(authenticated_state, dict) and authenticated_state.get("launch_nonce") != handed_off_launch_nonce
+        )
+    ):
+        # A start replaced the handed-off daemon after its receipt cleared.
+        # That launch owns the home now, so this retirement leaves it alone.
+        return retired
     if isinstance(authenticated_state, dict):
         state_pid = authenticated_state.get("pid")
         state_port = authenticated_state.get("port")

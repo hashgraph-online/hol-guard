@@ -162,3 +162,31 @@ def test_a_launch_of_another_executable_accepts_its_handoff_while_it_waits(tmp_p
         )
         == url
     )
+
+
+@pytest.mark.parametrize("replacement", ["state", "receipt"])
+def test_retirement_leaves_a_launch_that_replaced_the_handed_off_daemon(tmp_path, monkeypatch, replacement):
+    guard_home = tmp_path / "guard-home"
+    _write_launch_receipt(guard_home)
+    _live_daemon_state(monkeypatch, guard_home)
+    replacement_nonce = "c" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH
+
+    def replacement_started(_home: Path) -> dict[str, object]:
+        # Another caller starts a daemon between the receipt clear and this read.
+        if replacement == "receipt":
+            _write_launch_receipt(guard_home)
+            return {"pid": _LAUNCH_PID + 1, "port": _LAUNCH_PORT, "launch_nonce": _NONCE}
+        return {"pid": _LAUNCH_PID + 1, "port": _LAUNCH_PORT, "launch_nonce": replacement_nonce}
+
+    def inventory(*_args, **_kwargs):
+        raise AssertionError("retirement must not inventory a home a newer launch owns")
+
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", replacement_started)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", inventory)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_retire_guard_daemon_pid",
+        lambda *_args, **_kwargs: pytest.fail("retirement must not stop the replacement"),
+    )
+
+    assert daemon_manager_module._retire_guard_daemons_for_home(guard_home, keep_port=None, deadline=None) == []
