@@ -1220,9 +1220,11 @@
       "id": "disabled-state-permission",
       "command": "unwreck restore 42",
       "enabled_extensions": [
+        "command.unwreck"
+      ],
+      "disabled_permissions": [
         "command.unwreck.permission.state-change"
       ],
-      "disabled_permissions": [],
       "expected_action": "block",
       "rule_id": "command.unwreck.state-change",
       "expected_effective_segments": [
