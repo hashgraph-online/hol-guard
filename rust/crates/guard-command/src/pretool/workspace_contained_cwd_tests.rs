@@ -293,18 +293,10 @@ fn the_builtin_keyword_does_not_hide_a_move() {
 fn a_return_after_a_builtin_move_follows_the_move_that_happened() {
     let ws = workspace("cwd-builtin-return", true);
     std::fs::create_dir_all(ws.join("build")).unwrap();
-    for command in [
-        // The walk followed both moves, so it can follow the return.
-        "cd build && builtin cd .. && cd - && ls",
-    ] {
-        assert!(shaped(command, &ws), "{command}");
-    }
-    for command in [
-        // `OLDPWD` named by the run is a place the walk never joined.
-        "builtin cd build && ls && OLDPWD=/etc cd -",
-    ] {
-        assert!(!shaped(command, &ws), "{command}");
-    }
+    // The walk followed both moves, so it can follow the return.
+    assert!(shaped("cd build && builtin cd .. && cd - && ls", &ws));
+    // `OLDPWD` named by the run is a place the walk never joined.
+    assert!(!shaped("builtin cd build && ls && OLDPWD=/etc cd -", &ws));
 }
 
 /// `command cd` and `builtin -- cd` run the builtin too. `command` only skips
