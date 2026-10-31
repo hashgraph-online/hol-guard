@@ -42,6 +42,15 @@ pub(crate) fn validate_process_runtime_digest(
         return Err("native_resident_process_identity_mismatch".to_owned());
     }
     validate_process_start_marker(process_id, expected_start_marker)?;
+    // The identity behind a cache hit was read before the lookup. A rename over
+    // the path since then must not ride on that entry, so the file the path
+    // names now is hashed.
+    if cached
+        && file_identity::read(&candidate.path).as_ref() != Ok(&candidate.file)
+        && executable_digest(&candidate.path)? != expected_digest
+    {
+        return Err("native_resident_process_identity_mismatch".to_owned());
+    }
     // A write during the read shows up as a changed identity, and a hash of a
     // file that was changing proves nothing about the next call.
     if !cached
