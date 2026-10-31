@@ -166,7 +166,9 @@ fn object_name(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::safe_git_arguments;
     use super::{read_form, shows_a_note};
+    use crate::pretool::PathContext;
 
     fn words(command: &str) -> Vec<String> {
         command.split_whitespace().map(str::to_string).collect()
@@ -314,5 +316,36 @@ mod tests {
     #[test]
     fn no_other_record_reads_through_this_door() {
         assert!(!read_form("stash", &words("list")));
+    }
+
+    /// A read form proves nothing the classifier never asks it about. All
+    /// three records reach it through the same door, so the listing a form
+    /// here admits is the listing the proof admits.
+    #[test]
+    fn every_record_this_module_reads_is_asked_about() {
+        for command in [
+            "git bisect log",
+            "git notes list",
+            "git replace",
+            "git replace -l",
+            "git replace --list refs/replace/*",
+            "git replace --format=long -l",
+        ] {
+            assert!(
+                safe_git_arguments(&words(command)[1..], true, PathContext::default()),
+                "{command}"
+            );
+        }
+        for command in [
+            "git bisect start",
+            "git notes add -m note HEAD",
+            "git replace HEAD~1 HEAD",
+            "git replace -d HEAD",
+        ] {
+            assert!(
+                !safe_git_arguments(&words(command)[1..], true, PathContext::default()),
+                "{command}"
+            );
+        }
     }
 }

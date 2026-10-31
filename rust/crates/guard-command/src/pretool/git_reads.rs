@@ -163,11 +163,11 @@ pub(super) fn safe_git_arguments(
         // that moves work keep their own review.
         return allow_helper_context && super::git_submodule_reads::read_form(&arguments[1..]);
     }
-    if matches!(subcommand, "bisect" | "notes") {
-        // A bisect log and a note print through the pager (core.pager), so
-        // the configuration probe has to clear it first. Every spelling of
-        // either subcommand that moves a ref, runs a program or opens the
-        // editor keeps its own review.
+    if matches!(subcommand, "bisect" | "notes" | "replace") {
+        // A bisect log, a note and the replacement refs print through the
+        // pager (core.pager), so the configuration probe has to clear it
+        // first. Every spelling of any of the three that moves a ref, runs a
+        // program or opens the editor keeps its own review.
         return allow_helper_context
             && super::git_side_record_reads::read_form(subcommand, &arguments[1..]);
     }

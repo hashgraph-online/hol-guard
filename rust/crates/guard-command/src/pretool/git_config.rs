@@ -145,7 +145,7 @@ pub(super) fn execution_free_paging(
     {
         return None;
     }
-    if matches!(operation, "bisect" | "notes")
+    if matches!(operation, "bisect" | "notes" | "replace")
         && !super::git_side_record_reads::read_form(operation, &remaining[1..])
     {
         return None;
