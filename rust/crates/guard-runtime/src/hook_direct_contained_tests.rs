@@ -307,8 +307,10 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         !shape(&inner),
         "a space in the target is not one plain word"
     );
+    // A home path is the sandbox shell's to expand, as in Guard's own sink.
+    assert!(shape("ls ~/work"));
+    assert!(shape("pytest ~/work/tests 2>&1 | tail -5"));
     for command in [
-        "ls ~/work",
         "npm --prefix web test",
         // Like `cd`, a package directory out of the workspace into no
         // repository, after a `cd`, or spelled any other way keeps the
@@ -331,6 +333,8 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         // A `cd` out of the workspace into no repository.
         "cd .. && pytest",
         "cd /tmp && pytest",
+        "cd ~ && pytest",
+        "npm --prefix ~/web test",
         // Only `&&` after one plain, existing directory.
         "cd sub; pytest",
         "cd sub&& pytest",

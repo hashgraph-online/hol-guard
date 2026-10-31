@@ -24,12 +24,6 @@ const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 /// Set to `0` to keep every workspace sandbox on the daemon's sink.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const NATIVE_SINK_SWITCH: &str = "HOL_GUARD_NATIVE_CONTAINED_SINK";
-/// Command text whose meaning depends on what the native sink does not yet
-/// replay: home expansion. Pipes, stderr folding and exit-status reads run
-/// whole in the sandbox, as the edge classified them, so the shell gives
-/// them their own meaning.
-#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
-const NATIVE_SINK_UNSUPPORTED: [&str; 1] = ["~"];
 /// Package manager flags that run a script in another directory. The native
 /// sink takes them only when `package_directory` holds.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
@@ -229,7 +223,10 @@ pub(crate) fn native_sink(
 /// Whether the native sink reproduces this workspace sandbox: a workspace
 /// run, checks followed by Git steps, or a `git worktree add` chain, started
 /// in the workspace itself or below a sibling repository's root, with no
-/// home expansion or directory change the sink does not yet replay.
+/// directory change the sink does not yet replay. Home paths need no check
+/// of their own: the native sink projects a `~/<dir>/<program>` launcher and
+/// peels a `cd ~/<dir>` from the declared home as Guard's own sink does, and
+/// any other `~` is the sandbox shell's to expand in both.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn native_shape(
     response: &Value,
@@ -256,9 +253,6 @@ fn native_shape(
             .chain([&SHORT_DIRECTORY_FLAG])
             .any(|flag| command.contains(flag))
             || package_directory(command, workspace, home))
-        && !NATIVE_SINK_UNSUPPORTED
-            .iter()
-            .any(|fragment| command.contains(fragment))
 }
 
 /// Whether a leading `cd` leaves the call as both sinks run it: a plain
