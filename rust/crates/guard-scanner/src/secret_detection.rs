@@ -872,7 +872,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "azure-storage-account-key",
             "Azure Storage account key",
             "critical",
-            r"(?P<secret>AccountKey=[A-Za-z0-9+/=]{86,})",
+            r"(?:^|[^A-Za-z0-9+/=])(?P<secret>AccountKey=[A-Za-z0-9+/=]{86,512})(?P<overrun>[A-Za-z0-9+/=]*)",
             FLAG_UNICODE,
             "azure_storage",
             true,
@@ -883,7 +883,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "gcp-oauth-refresh-token",
             "Google Cloud OAuth refresh token",
             "critical",
-            r"\b(?P<secret>1//0[A-Za-z0-9_-]{30,255})\b",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>1//0[A-Za-z0-9_-]{30,255})(?P<overrun>[A-Za-z0-9_-]*)",
             FLAG_UNICODE,
             "gcp_oauth",
             true,
@@ -916,7 +916,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "terraform-cloud-token",
             "Terraform Cloud API token",
             "critical",
-            r"\b(?P<secret>[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{30,255})\b",
+            r"(?:^|[^A-Za-z0-9_.-])(?P<secret>[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{30,255})(?P<overrun>[A-Za-z0-9_-]*)",
             FLAG_UNICODE,
             "terraform_cloud",
             true,
@@ -971,7 +971,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "tailscale-auth-key",
             "Tailscale auth key",
             "critical",
-            r"\b(?P<secret>tskey-(?:auth|api|client|scim|webhook)-[A-Za-z0-9]{8,64}-[A-Za-z0-9]{8,64})\b",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>tskey-(?:auth|api|client|scim|webhook)-[A-Za-z0-9]{8,64}-[A-Za-z0-9]{8,64})(?P<overrun>[A-Za-z0-9_-]*)",
             FLAG_UNICODE,
             "tailscale",
             true,
@@ -1004,7 +1004,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "jfrog-access-token",
             "JFrog Artifactory access token",
             "critical",
-            r"\b(?P<secret>cmVmdGtuOjAx[A-Za-z0-9+/=]{40,255})",
+            r"(?:^|[^A-Za-z0-9+/=])(?P<secret>cmVmdGtuOjAx[A-Za-z0-9+/=]{40,255})(?P<overrun>[A-Za-z0-9+/=]*)",
             FLAG_UNICODE,
             "jfrog",
             true,
@@ -3035,6 +3035,38 @@ mod tests {
             (
                 "sentry-auth-token",
                 format!("sntrys_{}", sentry_tail.repeat(10)),
+            ),
+            // Longer than the 512 characters the rule caps at, in an
+            // alphabet whose `=` a word boundary cannot refuse.
+            (
+                "azure-storage-account-key",
+                format!("AccountKey={}", google_tail.repeat(20)),
+            ),
+            // Longer than the 255 characters the rule caps at, in an
+            // alphabet whose `-` a word boundary cannot refuse.
+            (
+                "gcp-oauth-refresh-token",
+                format!("1//0{}", google_tail.repeat(10)),
+            ),
+            (
+                "terraform-cloud-token",
+                format!("{}.atlasv1.{}", &google_tail[..14], google_tail.repeat(10)),
+            ),
+            // A third hyphenated segment, where the rule takes two.
+            (
+                "tailscale-auth-key",
+                format!(
+                    "tskey-auth-{}-{}-{}",
+                    &google_tail[..10],
+                    &google_tail[..16],
+                    &google_tail[..12]
+                ),
+            ),
+            // Longer than the 255 characters the rule caps at, with no
+            // boundary to stop at: `=` is not a word character.
+            (
+                "jfrog-access-token",
+                format!("cmVmdGtuOjAx{}", google_tail.repeat(10)),
             ),
         ] {
             let text = format!("SERVICE_CREDENTIAL = \"{value}\"");
