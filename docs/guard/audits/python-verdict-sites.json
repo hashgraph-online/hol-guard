@@ -208,39 +208,6 @@
     },
     {
       "file": "src/codex_plugin_scanner/guard/adapters/muse_hook_render.py",
-      "func": "_behavior",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow",
-        "block",
-        "review"
-      ],
-      "note": "The daemon-side twin of _muse_behavior in the generated client: a verdict word the resident wrote, placed in Guard's vocabulary, with a word it does not know reading as no verdict."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/muse_hook_render.py",
-      "func": "_action",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow",
-        "block"
-      ],
-      "note": "The daemon-side twin of _muse_action: the resident's policy_action normalized through normalize_guard_action, then the decision fields of its answer. The allow and block returned here come from the answer's own continue flag."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/muse_hook_render.py",
-      "func": "muse_bridge_response",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "block"
-      ],
-      "note": "Renders the resident's verdict in Muse's wire format. A permitted call is empty stdout and exit 0, so the only verdict written here is the block, which a prompt event sends as a decision and a tool call as a deny permissionDecision."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/muse_hook_render.py",
       "func": "apply_muse_pretool_approval_wait",
       "root": "hook",
       "reading": "records-approval",

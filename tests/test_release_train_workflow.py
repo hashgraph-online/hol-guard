@@ -418,7 +418,7 @@ def test_pull_request_alpha_is_an_admin_dispatch_from_main() -> None:
     assert "needs.authorize-pull-request-alpha.result == 'success'" in jobs["build"]["if"]
     assert "needs.authorize-pull-request-alpha.result == 'success'" in jobs["precompile-native-linux-x64"]["if"]
     assert "needs.authorize-release.result == 'success'" in jobs["resolve-alpha-version"]["if"]
-    assert "inputs.pull_request == ''" in jobs["wake-alpha-core-feed"]["if"]
+    assert "inputs.pull_request" not in jobs["wake-alpha-core-feed"]["if"]
     assert "inputs.pull_request == ''" in jobs["publish-container"]["if"]
     trusted_ref = (
         "${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && "

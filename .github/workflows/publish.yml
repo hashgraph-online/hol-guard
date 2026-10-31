@@ -3484,7 +3484,6 @@ jobs:
     if: >-
       always() && github.repository == 'hashgraph-online/hol-guard' &&
       github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
-      inputs.pull_request == '' &&
       needs.release-alpha.result == 'success' &&
       needs.build.outputs.channel == 'alpha' && needs.build.outputs.release_train == 'main'
     runs-on: ubuntu-24.04
@@ -3515,7 +3514,7 @@ jobs:
         run: |
           set -euo pipefail
           if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.0a[1-9][0-9]*$ ]]; then
-            echo "Published Core version is not a canonical main alpha" >&2
+            echo "Published Core version is not a canonical alpha" >&2
             exit 1
           fi
           gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f release_channel=alpha -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"

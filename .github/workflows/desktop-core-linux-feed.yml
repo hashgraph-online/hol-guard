@@ -149,6 +149,7 @@ jobs:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
           RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
           PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
           GH_TOKEN: ${{ github.token }}
         shell: bash

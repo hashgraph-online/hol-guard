@@ -20,7 +20,7 @@ use guard_command::hook_responses::cli_documents::{
     cli_document, cli_response, copilot_hook_response, CliOutcome,
 };
 use guard_command::hook_responses::{
-    hermes, pre_tool, pre_tool_review, recording_only_pre_tool, Object,
+    hermes, muse, pre_tool, pre_tool_review, recording_only_pre_tool, Object,
 };
 use guard_contracts::{
     artifact_id_from_event, cursor_after_shell_observed, cursor_observer_event_for_payload,
@@ -172,6 +172,27 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         let (stdout_document, exit_code) = hermes::bridge_response(response);
         let mut document = Object::new();
         document.insert("document".into(), Value::Object(stdout_document));
+        document.insert("exit_code".into(), json!(exit_code));
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if request.kind == "muse_bridge" {
+        // Muse reads an allow as empty stdout: an explicit allow without an
+        // updated input is rejected outright. The document is therefore
+        // optional, and a null one is the silence Muse takes as permission.
+        // Which answers earn that silence is a verdict about a verdict, so
+        // the resident names it rather than the hook that prints it.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let response = object_of(params.get("response")).ok_or("native_hook_render_invalid")?;
+        let event_name = params
+            .get("event_name")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let (stdout_document, exit_code) = muse::bridge_response(response, event_name);
+        let mut document = Object::new();
+        document.insert(
+            "document".into(),
+            stdout_document.map_or(Value::Null, Value::Object),
+        );
         document.insert("exit_code".into(), json!(exit_code));
         return Ok(cli_payload(CliOutcome::Document(document)));
     }

@@ -565,3 +565,33 @@ fn a_large_cursor_edge_still_fits_its_route_budget() {
     )
     .expect("the route's own budget holds it");
 }
+
+#[test]
+fn a_large_daemon_reply_still_fits_the_bridge_budget() {
+    // The bridge kinds carry the whole daemon reply they render, and a native
+    // response may be far larger than an ordinary render request. Refusing a
+    // valid large reply would turn an allow the daemon already reached into a
+    // fail-closed refusal of a permitted call, so the kinds carry a budget of
+    // their own.
+    for kind in ["hermes_bridge", "muse_bridge"] {
+        let mut req = request(kind);
+        req.harness = kind.trim_end_matches("_bridge").to_owned();
+        req.cli = Some(json!({
+            "event_name": "PreToolUse",
+            "response": {
+                "policy_action": "allow",
+                "reason": "x".repeat(guard_contracts::HOOK_RENDER_MAX_BYTES),
+            },
+        }));
+        crate::package_authority_op::request_digest_with_limit(
+            &req,
+            guard_contracts::HOOK_RENDER_MAX_BYTES,
+        )
+        .expect_err("the ordinary budget is too small for this reply");
+        crate::package_authority_op::request_digest_with_limit(
+            &req,
+            guard_contracts::hook_render_max_bytes(kind),
+        )
+        .expect("the bridge's own budget holds it");
+    }
+}
