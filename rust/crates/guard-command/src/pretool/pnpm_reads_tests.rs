@@ -163,6 +163,12 @@ fn a_settings_line_that_moves_the_fetch_or_the_hook_module_is_not_inert() {
         "//registry.example.test/:_authToken: secret",
         "@scope:registry: https://registry.example.test",
         "\"${PREFIX}registry\": https://registry.example.test",
+        "registry:\thttps://registry.example.test",
+        "? registry",
+        "  ? registry",
+        "<<: *shared",
+        "catalog: &shared {registry: https://registry.example.test}",
+        "packages: [{registry: https://registry.example.test}]",
     ] {
         assert!(!inert_setting_line(line), "{line}");
     }

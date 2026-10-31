@@ -275,11 +275,25 @@ const UNSAFE_SETTINGS: [&str; 24] = [
 /// a mapping this list says nothing about is still screened. A line that
 /// names no key carries a value of a key already read, and a key written with
 /// an expansion in it is a key this check cannot decode.
+///
+/// Three spellings put a key somewhere this line-by-line reading cannot see
+/// it, so they end the reading rather than passing. An explicit key writes
+/// the name after `?` and the value on a later line, leaving neither line
+/// shaped like the `name: value` this screens. A flow mapping carries its own
+/// keys inside braces on a line whose own key is something else, so
+/// `catalog: {registry: ...}` would be read as `catalog` alone. A merge key
+/// copies another mapping's keys in under a name of `<<`, which screens as no
+/// name at all. pnpm loads these files with js-yaml's default schema, which
+/// resolves all three, so a settings file that spells one is no longer a file
+/// this check can call inert.
 fn inert_setting_line(line: &str) -> bool {
     let line = line.trim();
     let line = line.strip_prefix('-').unwrap_or(line).trim_start();
     if line.is_empty() || line.starts_with('#') {
         return true;
+    }
+    if line.starts_with('?') || line.starts_with("<<") || line.contains('{') {
+        return false;
     }
     let key = match line.chars().next() {
         Some(quote @ ('"' | '\'')) => match line[quote.len_utf8()..].split_once(quote) {
@@ -291,8 +305,11 @@ fn inert_setting_line(line: &str) -> bool {
         // own stays whole: `@scope:registry` and the `//host/:_authToken`
         // spelling of a credential are both read here. A bare `key:value` is
         // one scalar to YAML and names nothing.
-        _ => match line.split_once(": ") {
-            Some((key, _)) => key,
+        // YAML separates a key from its value with a space or a tab after
+        // the colon, so both are read here; a bare `key:value` is one scalar
+        // to YAML and names nothing.
+        _ => match key_end(line) {
+            Some(end) => &line[..end],
             None => match line.strip_suffix(':') {
                 Some(key) => key,
                 None => return true,
@@ -309,6 +326,19 @@ fn inert_setting_line(line: &str) -> bool {
         && !key.contains(":_auth")
         && !key.ends_with(":registry")
         && !UNSAFE_SETTINGS.contains(&named.as_str())
+}
+
+/// Where the key ends on a line that names one.
+///
+/// The first colon followed by a space or a tab separates the key from its
+/// value. A colon with anything else after it belongs to the key, so
+/// `@scope:registry` and the `//host/:_authToken` spelling of a credential
+/// are both read whole.
+fn key_end(line: &str) -> Option<usize> {
+    line.char_indices().find_map(|(index, character)| {
+        (character == ':' && matches!(line[index + 1..].chars().next(), Some(' ' | '\t')))
+            .then_some(index)
+    })
 }
 
 /// Absence is the one error that answers the question. Any other means the
