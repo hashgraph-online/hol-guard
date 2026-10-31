@@ -82,6 +82,11 @@ fn removal(model: &CanonicalCommandV1, index: usize) -> Option<(bool, Vec<&str>)
 /// is the write `> file` performs, so the targets are held to the same bounds
 /// a plain removal is: the reach check still refuses one outside the
 /// workspace.
+///
+/// That check reads the word it is given, so a pattern is refused here rather
+/// than accepted for its literal spelling: the shell picks the files, and
+/// `.*/*` names nothing outside the workspace while selecting what is inside
+/// `.git`.
 fn truncate_targets(arguments: &[String]) -> Option<Vec<&str>> {
     let (mut options, mut operands) = (true, Vec::new());
     let mut words = arguments.iter();
@@ -109,9 +114,19 @@ fn truncate_targets(arguments: &[String]) -> Option<Vec<&str>> {
             for (position, flag) in flags.char_indices() {
                 match flag {
                     'c' | 'o' => {}
-                    // The rest of the word, or the next word, is the value.
-                    's' | 'r' => {
+                    // The rest of the word, or the next word, is the value. A
+                    // size is a count, so it is read either way; a reference is
+                    // a path, and the reach check reads a separate word but
+                    // skips anything still attached to its option, so the
+                    // attached spelling would carry a file past it unseen.
+                    's' => {
                         if position + 1 == flags.len() && words.next().is_none() {
+                            return None;
+                        }
+                        break;
+                    }
+                    'r' => {
+                        if position + 1 != flags.len() || words.next().is_none() {
                             return None;
                         }
                         break;
@@ -119,7 +134,7 @@ fn truncate_targets(arguments: &[String]) -> Option<Vec<&str>> {
                     _ => return None,
                 }
             }
-        } else if argument.is_empty() || argument.contains(['$', '`', '~']) {
+        } else if argument.is_empty() || argument.contains(['$', '`', '~', '*', '?', '[', '{']) {
             return None;
         } else {
             operands.push(argument);

@@ -760,6 +760,14 @@ fn truncating_a_workspace_file_runs_in_the_workspace_sandbox() {
         "truncate -s 0 ~/.bashrc",
         "truncate -s 0 $HOME/.bashrc",
         "truncate -s 0 .git/config",
+        // A reference attached to its own option is skipped by the reach
+        // check, so the spelling is refused instead of read as a bare size.
+        "truncate -r/etc/passwd logs/app.log",
+        "truncate --reference=/etc/passwd logs/app.log",
+        // The shell picks what a pattern names, and these select inside
+        // `.git` while their literal spelling does not say so.
+        "truncate -s 0 .*/*",
+        "truncate -s 0 logs/*.log",
         // An option neither spelling documents could mean anything.
         "truncate -z 0 logs/app.log",
         "truncate --follow logs/app.log",
