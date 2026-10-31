@@ -493,6 +493,11 @@ fn a_plugin_an_operand_or_a_selected_daemon_before_the_flag_stays_reviewed() {
         // A word the client does not carry runs a `docker-<name>` binary.
         vec!["mycmd", "--help"],
         vec!["sbom", "--help"],
+        // `help <word>` picks the same program that word alone would, so an
+        // unknown one hands the usage page to someone else's binary.
+        vec!["help", "mycmd"],
+        vec!["help", "sbom"],
+        vec!["help", "sbom", "scan"],
         // The flag has to be the end of the command.
         vec!["run", "--help", "nginx"],
         vec!["compose", "--help", "up"],

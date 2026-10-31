@@ -324,7 +324,15 @@ fn usage_only(words: &[&str]) -> bool {
         return false;
     };
     if *first == "help" {
-        return rest.len() <= 2 && rest.iter().all(|word| plain_subcommand(word));
+        // The word after `help` picks the same command `docker <word>` would,
+        // so an unknown one reaches a `docker-<word>` binary of someone
+        // else's and lets it answer. Only the deeper words are free: they go
+        // to a client subcommand's own usage tree, which never leaves it.
+        return rest.len() <= 2
+            && rest.iter().all(|word| plain_subcommand(word))
+            && rest
+                .first()
+                .is_none_or(|word| BUILTIN_SUBCOMMANDS.contains(word));
     }
     if !BUILTIN_SUBCOMMANDS.contains(first) {
         return false;
