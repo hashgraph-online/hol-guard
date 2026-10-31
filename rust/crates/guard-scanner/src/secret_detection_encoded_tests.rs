@@ -68,10 +68,12 @@ fn a_finding_is_reported_at_the_run_a_reader_has_to_remove() {
 #[test]
 fn a_wrapped_dump_is_joined_before_it_is_read() {
     let dump = format!(
-        "AWS_ACCESS_KEY_ID={}\nAWS_DEFAULT_REGION=eu-west-1\nAWS_ROLE=deployer\n",
+        "AWS_ACCESS_KEY_ID={}\nAWS_DEFAULT_REGION=eu-west-1\nAWS_ROLE=deployer\nAWS_SESSION_NAME=deploy-bot\n",
         aws_key()
     );
     let encoded = encode(&dump);
+    // Two full 64-column lines and a short last one: a single line would be
+    // read by the run pass instead, and the joining would never be exercised.
     assert!(
         encoded.len() > 128,
         "the dump has to be long enough to wrap"
