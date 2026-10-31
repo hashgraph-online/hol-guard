@@ -56,8 +56,40 @@ const INTEGER_FIELDS: [&str; 4] = [
 ];
 const BAD: &str = "invalid_acknowledgement";
 
-fn required() -> impl Iterator<Item = &'static str> {
-    ALLOWED.iter().copied().filter(|key| *key != "errorCode")
+/// The unmanaged shape: a v2 bundle with no Extension semantics carries no
+/// delivery, so its acknowledgement names only the bundle and the device.
+const GENERIC_ALLOWED: [&str; 9] = [
+    "contractVersion",
+    "workspaceId",
+    "deviceId",
+    "bundleVersion",
+    "bundleHash",
+    "sequence",
+    "status",
+    "observedAt",
+    "errorCode",
+];
+
+/// Any field outside the unmanaged shape keeps the managed contract, so a
+/// delivery acknowledgement that lost a field still fails as incomplete.
+fn is_generic(ack: &Obj) -> bool {
+    ack.keys()
+        .all(|key| GENERIC_ALLOWED.contains(&key.as_str()))
+}
+
+fn allowed(ack: &Obj) -> &'static [&'static str] {
+    if is_generic(ack) {
+        &GENERIC_ALLOWED
+    } else {
+        &ALLOWED
+    }
+}
+
+fn required(ack: &Obj) -> impl Iterator<Item = &'static str> {
+    allowed(ack)
+        .iter()
+        .copied()
+        .filter(|key| *key != "errorCode")
 }
 
 fn transitions(previous: &str) -> &'static [&'static str] {
@@ -71,14 +103,26 @@ fn transitions(previous: &str) -> &'static [&'static str] {
 }
 
 fn field_error(ack: &Obj) -> Option<&'static str> {
-    if ack.keys().any(|key| !ALLOWED.contains(&key.as_str())) {
+    if ack.keys().any(|key| !allowed(ack).contains(&key.as_str())) {
         return Some("unknown_field");
     }
-    if required().any(|key| !ack.contains_key(key)) {
+    if required(ack).any(|key| !ack.contains_key(key)) {
         return Some("missing_required_field");
     }
     if ack.get("contractVersion").and_then(Value::as_str) != Some(CONTRACT) {
         return Some("unsupported_contract_version");
+    }
+    if is_generic(ack) {
+        if ["workspaceId", "deviceId", "bundleHash"]
+            .iter()
+            .any(|key| strict_non_empty(ack.get(*key), 256).is_none())
+            || !is_sha256_digest(ack.get("bundleHash"))
+            || !is_positive_int(ack.get("bundleVersion"))
+            || !is_positive_int(ack.get("sequence"))
+        {
+            return Some(BAD);
+        }
+        return status_time_error(ack);
     }
     if STRING_FIELDS
         .iter()
@@ -102,6 +146,10 @@ fn field_error(ack: &Obj) -> Option<&'static str> {
     {
         return Some(BAD);
     }
+    status_time_error(ack)
+}
+
+fn status_time_error(ack: &Obj) -> Option<&'static str> {
     if !in_set(ack.get("status"), &STATUSES) {
         return Some("invalid_acknowledgement_status");
     }
@@ -136,7 +184,10 @@ pub(crate) fn validate(ack: &Obj, previous: Option<&Obj>) -> Result<(), &'static
     let Some(previous) = previous else {
         return Ok(());
     };
-    let identity = required().filter(|key| {
+    if is_generic(ack) && previous.contains_key("deliveryId") {
+        return Err("acknowledgement_identity_mismatch");
+    }
+    let identity = required(ack).filter(|key| {
         !matches!(
             *key,
             "contractVersion" | "sequence" | "status" | "observedAt"
