@@ -203,7 +203,7 @@ fn configuration_inert(basename: &str, context: super::PathContext<'_>) -> bool 
 /// [`configuration_inert`] reads, which no unit context names a directory
 /// for, so their verbs are proved in the benign gate's fixture home.
 /// `tests/fixtures/benign_false_positive_gate.json` carries the alias rows.
-pub(super) fn safe_help_probe(
+pub(crate) fn safe_help_probe(
     basename: &str,
     arguments: &[String],
     context: super::PathContext<'_>,

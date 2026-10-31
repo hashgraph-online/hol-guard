@@ -36,7 +36,7 @@
 //! and `psql -V` are newer spellings on some builds and older operands on
 //! others, so only their long form is read as the question.
 
-pub(super) fn safe_version_probe(basename: &str, arguments: &[String]) -> bool {
+pub(crate) fn safe_version_probe(basename: &str, arguments: &[String]) -> bool {
     match (basename, arguments) {
         // Server-contacting by default; `--client` keeps it local.
         ("kubectl", [subcommand, flag]) => {

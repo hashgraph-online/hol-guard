@@ -128,7 +128,7 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_names;
-mod help_probes;
+pub(crate) mod help_probes;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
@@ -192,7 +192,7 @@ mod stderr_merge;
 mod stdin_filters;
 mod symlink_writes;
 mod tree_reads;
-mod version_probes;
+pub(crate) mod version_probes;
 #[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;

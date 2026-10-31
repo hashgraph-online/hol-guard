@@ -299,11 +299,15 @@ pub(super) fn observe(
         // `nc -z` probe reads no stdin and sends nothing.
         // A proven local `rsync` copy names two host paths, takes no option
         // that reaches another host and redirects nothing but to `/dev/null`,
-        // so it sends nothing anywhere.
+        // so it sends nothing anywhere. A lone usage or version probe prints
+        // the program's own text and exits before it opens a connection or
+        // reads a transfer source, so it names no host and no path either.
         let proven_read = (executable == "curl"
             && crate::pretool::curl_reads::proven_read_segment(command, segment, context))
             || crate::pretool::port_probes::proven_probe_segment(command, segment, context)
-            || (executable == "rsync" && crate::pretool::rsync_local::local_copy_segment(segment));
+            || (executable == "rsync" && crate::pretool::rsync_local::local_copy_segment(segment))
+            || crate::pretool::version_probes::safe_version_probe(&executable, arguments)
+            || crate::pretool::help_probes::safe_help_probe(&executable, arguments, context);
         if (upload || pipeline) && !proven_read {
             output.rule("command.data-protection.file-upload", index, true);
         }
