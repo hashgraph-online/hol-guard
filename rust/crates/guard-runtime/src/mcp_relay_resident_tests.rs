@@ -178,7 +178,14 @@ fn launcher_home_drops_trailing_separators() {
 
 #[test]
 fn only_composio_tools_leave_the_provider_catalog_to_the_resident() {
-    for name in ["composio_x", "a__COMPOSIO_SEARCH_TOOLS"] {
+    // Python's `str.casefold()` folds `ſ` to `s`, so these are wrappers on
+    // the proxy path too and must bind the provider catalog hash here.
+    for name in [
+        "composio_x",
+        "a__COMPOSIO_SEARCH_TOOLS",
+        "compo\u{17f}io_x",
+        "a__COMPO\u{17f}IO_SEARCH_TOOLS",
+    ] {
         assert!(provider_catalog_tool(name), "{name}");
     }
     for name in ["read", "bash", " Shell ", "RUN_COMMAND", "my_composio_x"] {
@@ -269,6 +276,22 @@ fn a_composio_call_is_sent_with_its_provider_catalog_left_to_the_resident() {
 }
 
 #[test]
+fn a_non_ascii_tool_name_is_sent_as_the_proxy_receives_it() {
+    let facts = facts();
+    let catalog = RelayCatalog::default();
+    let call = params(json!({"name": "caf\u{e9}", "arguments": {}}));
+    let (request, _) = decide_request(&facts, &call, None, &catalog, &no_prompt()).unwrap();
+    assert!(request.get("resident_provider_catalog").is_none());
+    let decoded: McpRelayDecideRequestV1 = serde_json::from_value(request).unwrap();
+    assert_eq!(decoded.build.tool_name, "caf\u{e9}");
+    // A fold-equivalent spelling of a Composio wrapper binds the provider
+    // catalog hash, as the proxy's `str.casefold()` match does.
+    let wrapper = params(json!({"name": "compo\u{17f}io_multi_execute_tool", "arguments": {}}));
+    let (request, _) = decide_request(&facts, &wrapper, None, &catalog, &no_prompt()).unwrap();
+    assert_eq!(request["resident_provider_catalog"], json!(true));
+}
+
+#[test]
 fn calls_the_relay_cannot_send_are_not_requested() {
     let facts = facts();
     let catalog = RelayCatalog::default();
@@ -276,7 +299,6 @@ fn calls_the_relay_cannot_send_are_not_requested() {
         json!({"arguments": {}}),
         json!({"name": "", "arguments": {}}),
         json!({"name": 7}),
-        json!({"name": "caf\u{e9}"}),
     ] {
         assert!(
             decide_request(&facts, &params(call.clone()), None, &catalog, &no_prompt()).is_none(),

@@ -135,14 +135,15 @@ pub(crate) fn proxy_tool(tool: &Value) -> bool {
 /// A tool name the relay sends a call for (`decide_request`); a call to any
 /// other name is never sent.
 pub(crate) fn sendable_name(name: &str) -> bool {
-    !name.is_empty() && name.is_ascii()
+    !name.is_empty()
 }
 
 /// A Composio wrapper, whose identity binds the provider catalog hash
-/// (`composio_names_a_wrapper`).
+/// (`composio_names_a_wrapper`). The tail is matched after full Unicode case
+/// folding, as Python's `str.casefold()` does: `compoſio_x` is a wrapper on
+/// both paths, so its call binds the same provider catalog hash either way.
 pub(crate) fn composio_tool(name: &str) -> bool {
-    let tail = name.rsplit("__").next().unwrap_or(name);
-    tail.to_ascii_lowercase().starts_with("composio_")
+    crate::mcp_tool_policy_composio::tool_role(name).is_some()
 }
 
 #[cfg(test)]
