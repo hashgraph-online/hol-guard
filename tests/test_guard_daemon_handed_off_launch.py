@@ -19,6 +19,7 @@ _LAUNCH_PID = 64_321
 _LAUNCH_MARKER = "posix:launch-start"
 _LAUNCH_OWNER = "launch-owner"
 _LAUNCH_PORT = 5410
+_LAUNCH_CREATION_TIME = 4_242_424
 _NONCE = "a" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH
 
 
@@ -37,7 +38,7 @@ def _write_launch_receipt(guard_home: Path) -> None:
         "launch_generation": _NONCE,
         "generation": _NONCE,
         "process_start_marker": _LAUNCH_MARKER,
-        "process_creation_time": 4_242_424,
+        "process_creation_time": _LAUNCH_CREATION_TIME,
         "user": _LAUNCH_OWNER,
         "owner": _LAUNCH_OWNER,
         "runtime_fingerprint": "launcher-runtime",
@@ -61,6 +62,7 @@ def _live_daemon_state(monkeypatch, guard_home: Path, overrides: dict[str, objec
         "launch_generation": _NONCE,
         "generation": _NONCE,
         "process_start_marker": _LAUNCH_MARKER,
+        "process_creation_time": _LAUNCH_CREATION_TIME,
         "user": _LAUNCH_OWNER,
         "owner": _LAUNCH_OWNER,
         "runtime_fingerprint": "updated-core-runtime",
