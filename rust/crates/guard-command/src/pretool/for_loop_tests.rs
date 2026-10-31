@@ -437,3 +437,53 @@ fn a_group_opening_or_closing_on_a_pipe_keeps_its_review() {
         assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
     }
 }
+
+/// A `|` inside quotes is part of one word the shell hands the command, not a
+/// stage separator, so a loop body carrying a jq filter unrolls to the same
+/// reads it runs.
+#[test]
+fn a_quoted_pipe_in_a_body_word_is_not_a_pipeline_stage() {
+    for (looped, unrolled) in [
+        (
+            "for n in 1 2; do gh pr view \"$n\" --json a --jq '.a | select(.b==\"x\")'; done",
+            "gh pr view \"1\" --json a --jq '.a | select(.b==\"x\")'; gh pr view \"2\" --json a --jq '.a | select(.b==\"x\")'",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped}"
+        );
+    }
+}
+
+/// The stage check still reads the command word of every stage an unquoted
+/// `|` really opens, and an item that ends inside a quoted run spells no
+/// pipeline at all.
+#[test]
+fn an_unquoted_stage_without_a_plain_command_word_keeps_its_review() {
+    for command in [
+        "for n in 1 2; do echo \"$n\" | FOO=bar cat; done",
+        "for n in 1 2; do echo \"$n\" | >out cat; done",
+        "for n in 1 2; do echo \"$n\" | /usr/bin/ca?; done",
+        "for n in 1 2; do echo '$n | cat; done",
+    ] {
+        assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
+    }
+}
+
+/// The same cut applies inside a double-quoted word whose own quotes are
+/// written as escapes, the spelling a `gh ... --jq` read reaches for when the
+/// filter compares a string.
+#[test]
+fn an_escaped_quote_run_holding_a_pipe_stays_one_word() {
+    for command in [
+        "for n in 1 2; do echo \"$n\"; gh run list --commit \"$n\" --json name --jq \"[.[] | select(.conclusion==\\\"ok\\\")]\"; done",
+        "for n in 1 2; do gh pr view \"$n\" --json a --jq '[.a[] | select(.b==\"x\")] | unique | .[0:12]'; done",
+    ] {
+        assert!(
+            super::for_loop_unroll::unroll(command).is_some(),
+            "{command}"
+        );
+    }
+}
