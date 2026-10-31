@@ -4,10 +4,13 @@
 //! command there. Native authority resolves it the way the host does before
 //! judging the command, so the contained run starts in that directory too.
 //! Guard's own sink asks again with that directory as the session folder and,
-//! when the answer is the same workspace sandbox, runs the call as issued
-//! there. Any other call has the argument written as a leading
-//! `cd '<directory>' &&`, which the wrapper peel resolves, rebases onto a
-//! sibling repository and authorizes again. This replays those steps.
+//! when the answer is the same workspace sandbox, runs the call there. Any
+//! other call has the argument written as a leading `cd '<directory>' &&`,
+//! which the wrapper peel resolves, rebases onto a sibling repository and
+//! authorizes again. This replays those steps, except that the sandbox is
+//! never rooted below the workspace: the protected-path and Git write
+//! denials are built from the root, so a call running in `.git` or a
+//! harness folder takes the `cd` form, which keeps the workspace root.
 
 use super::*;
 
@@ -42,15 +45,17 @@ pub(super) fn contained(
     if workspace_sandbox(receipt) {
         // The `cd` form is judged from the session folder and can lose the
         // workspace sandbox native authority chose inside `cwd`. Only a
-        // directory the `cd` form could also root the sandbox at is asked
-        // about: inside the workspace, or a sibling repository's own root.
+        // directory the sandbox may be rooted at is asked about: the
+        // workspace itself, or a sibling repository's own root. The call
+        // then runs through the wrapper from there, so a trailing group or
+        // a virtualenv activation is projected as the pre-tool pass did.
         let root = directory.clone().unwrap_or_else(|| workspace.to_path_buf());
-        if bounded(&root, workspace, home) {
+        if rootable(&root, workspace, home) {
             let mut rooted = payload.clone();
             rooted.insert("cwd".to_owned(), Value::String(path_text(&root)?));
             rooted.insert("tool_input".to_owned(), Value::Object(rest.clone()));
             if let Some(first) = authority.authorize(&rooted).filter(workspace_sandbox) {
-                return run_workspace_contained(&rooted, &root, authority, &first, signals);
+                return wrapper::contained(&rooted, &root, authority, &first, signals);
             }
         }
     }
@@ -130,9 +135,17 @@ fn requested(value: &Value, workspace: &Path, home: &Path) -> Option<Option<Path
     Some((directory != root).then_some(directory))
 }
 
-/// Whether the sandbox may be rooted at `root`: a directory inside the
-/// workspace, or the root of a sibling repository.
-fn bounded(root: &Path, workspace: &Path, home: &Path) -> bool {
+/// Whether the sandbox may be rooted at `root`: the workspace itself, or
+/// the root of a sibling repository. A directory below the workspace is
+/// never a root, so its `.git` and harness folders stay protected, and a
+/// path through a `.git` folder is refused outright.
+fn rootable(root: &Path, workspace: &Path, home: &Path) -> bool {
+    if root
+        .components()
+        .any(|component| component.as_os_str() == ".git")
+    {
+        return false;
+    }
     let sibling = || {
         let plan = guard_command::pretool::contained_wrapper_plan(
             "",
@@ -143,7 +156,7 @@ fn bounded(root: &Path, workspace: &Path, home: &Path) -> bool {
         );
         std::fs::canonicalize(plan.project_root?).ok()
     };
-    std::fs::canonicalize(workspace).is_ok_and(|inside| root.starts_with(inside))
+    std::fs::canonicalize(workspace).is_ok_and(|workspace| root == workspace)
         || sibling().as_deref() == Some(root)
 }
 

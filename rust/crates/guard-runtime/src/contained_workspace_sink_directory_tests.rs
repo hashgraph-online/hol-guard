@@ -129,10 +129,18 @@ fn the_argument_becomes_a_leading_directory_change() {
 }
 
 #[test]
-fn the_sandbox_roots_only_inside_the_workspace_or_at_a_sibling_root() {
+fn the_sandbox_roots_only_at_the_workspace_or_a_sibling_root() {
     let fixture = fixture();
     let (workspace, home) = (&fixture.workspace, &fixture.home);
-    assert!(bounded(workspace, workspace, home));
-    assert!(bounded(&workspace.join("sub"), workspace, home));
-    assert!(!bounded(&home.join("x"), workspace, home));
+    assert!(rootable(workspace, workspace, home));
+    assert!(!rootable(&home.join("x"), workspace, home));
+    // A folder below the workspace runs through the `cd` form, which keeps
+    // the workspace root and so its protected folders.
+    for folder in ["sub", ".git", ".git/hooks", ".claude", ".vscode"] {
+        std::fs::create_dir_all(workspace.join(folder)).unwrap();
+        assert!(
+            !rootable(&workspace.join(folder), workspace, home),
+            "{folder}"
+        );
+    }
 }
