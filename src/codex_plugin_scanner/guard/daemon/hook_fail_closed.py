@@ -59,7 +59,6 @@ _ENVELOPES: Final = _CONTRACT["envelopes"]
 RENDER_UNAVAILABLE_REASON_CODE: Final = str(_DEFAULTS["reason_code"])
 RENDER_UNAVAILABLE_REASON: Final = str(_DEFAULTS["reason"])
 PROMPT_UNAVAILABLE_REASON: Final = str(_DEFAULTS["prompt_reason"])
-PROMPT_UNAVAILABLE_REASON_CODE = "native_prompt_unavailable"
 
 
 def canonical_harness(harness: str) -> str:

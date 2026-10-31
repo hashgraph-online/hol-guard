@@ -23,12 +23,10 @@ from codex_plugin_scanner.guard.native_resident_client import native_resident_cl
 from codex_plugin_scanner.guard.native_response_decoder import native_error
 from codex_plugin_scanner.guard.native_route_receipt import record_native_hook_result
 from codex_plugin_scanner.guard.native_runtime_resilience import (
-    native_record_integrity_failure,
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
 )
-from codex_plugin_scanner.guard.native_runtime_values import _INTEGRITY_FAILURE_REASONS, _identity_key
 
 ModelOutputAction = Literal[
     "allow_original",
@@ -230,14 +228,7 @@ def review_post_tool_native(
     """
     del observe_mode
     status = native_runtime.native_runtime_status()
-    identity_key = _identity_key(status)
     if not status.available or not status.compatible or status.identity is None:
-        if status.reason in _INTEGRITY_FAILURE_REASONS:
-            native_record_integrity_failure(
-                identity_key,
-                request.guard_home,
-                reason=status.reason,
-            )
         return record_native_hook_result("native_fail_safe", None)
 
     deadline_monotonic, deadline_budget_ms = _capture_native_deadline(request)
