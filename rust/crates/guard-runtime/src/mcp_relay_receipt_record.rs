@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 
 const KIND: &str = "mcp_tool_call";
 /// The harnesses whose MCP proxy the relay replaces.
-const RELAY_HARNESSES: [&str; 5] = ["codex", "copilot", "cursor", "hermes", "opencode"];
+const RELAY_HARNESSES: [&str; 6] = ["cline", "codex", "copilot", "cursor", "hermes", "opencode"];
 const RECORD_KEYS: [&str; 10] = [
     "kind",
     "harness",
