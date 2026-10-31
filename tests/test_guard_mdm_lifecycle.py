@@ -687,3 +687,68 @@ def test_authorization_creation_removes_token_when_tombstone_fails(
             token_name="developer.json",
         )
     assert not (paths.state_root / "removal-authorizations" / "developer.json").exists()
+
+
+def test_removal_evidence_fails_closed_without_the_native_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _machine_paths(tmp_path)
+    monkeypatch.setattr(removal, "default_machine_paths", lambda: paths)
+    monkeypatch.setattr(removal, "_active_binding", lambda _paths: (MACHINE_INSTALLATION_ID, INSTALLATION_GENERATION))
+    monkeypatch.setattr(removal, "_is_administrator", lambda: True)
+    monkeypatch.setattr(removal.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(removal, "_authorization_root_is_trusted", lambda _paths: True)
+    monkeypatch.setattr(removal, "_authorization_owner_is_trusted", lambda _metadata: True)
+    authorization_root = paths.state_root / "removal-authorizations"
+    authorization_root.mkdir(parents=True)
+    token = _write_removal_authorization(authorization_root, tmp_path)
+    monkeypatch.setattr(removal, "_native_answer", lambda _request: None)
+
+    with pytest.raises(ValueError, match="mdm_removal_authorization_native_unavailable"):
+        lifecycle.authorize_deactivation(
+            tmp_path,
+            "developer",
+            actor="mdm-admin@example.test",
+            reason="approved retirement",
+            token_name="developer.json",
+        )
+    with pytest.raises(ValueError, match="mdm_removal_authorization_native_unavailable"):
+        removal.validate_removal_authorization(token, home=tmp_path, user="developer")
+    assert token.exists()
+    evidence = removal.RemovalAuthorizationEvidence(
+        "a" * 64,
+        "mdm-admin@example.test",
+        "approved retirement",
+        MACHINE_INSTALLATION_ID,
+        INSTALLATION_GENERATION,
+        "2026-10-31T12:00:00+00:00",
+        "2026-10-31T12:02:00+00:00",
+    )
+    with pytest.raises(OSError, match="mdm_removal_native_unavailable"):
+        removal.record_removal_tombstone(evidence, status="started", machine_paths=paths)
+    assert not (authorization_root / "developer.json").exists()
+    assert not (paths.state_root / "removal-tombstones").exists()
+
+
+def test_removal_evidence_raises_the_native_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths = _machine_paths(tmp_path)
+    evidence = removal.RemovalAuthorizationEvidence(
+        "b" * 64,
+        "mdm-admin@example.test",
+        "approved retirement",
+        MACHINE_INSTALLATION_ID,
+        INSTALLATION_GENERATION,
+        "2026-10-31T12:00:00+00:00",
+        "2026-10-31T12:02:00+00:00",
+    )
+    answers = iter(
+        [
+            {"ok": False, "kind": "os", "error": "mdm_removal_tombstone_capacity_exceeded"},
+            {"ok": False, "kind": "value", "error": "mdm_removal_tombstone_identity_mismatch"},
+        ]
+    )
+    monkeypatch.setattr(removal, "_native_answer", lambda _request: next(answers))
+    with pytest.raises(OSError, match="mdm_removal_tombstone_capacity_exceeded"):
+        removal.record_removal_tombstone(evidence, status="started", machine_paths=paths)
+    with pytest.raises(ValueError, match="mdm_removal_tombstone_identity_mismatch"):
+        removal.record_removal_tombstone(evidence, status="started", machine_paths=paths)
