@@ -57,23 +57,39 @@ const LOCAL_ADMIN_PORTS: [u16; 23] = [
 ];
 
 /// Flags that change only presentation, failure handling or transport version.
-const PLAIN_FLAGS: [&str; 17] = [
+///
+/// None of them names a destination, carries a body or a credential, or
+/// writes a file, so each leaves the request this module already proved
+/// exactly where it was.
+const PLAIN_FLAGS: [&str; 29] = [
     "--compressed",
     "--fail",
     "--fail-with-body",
     "--get",
     "--globoff",
     "--head",
+    "--http1.0",
     "--http1.1",
     "--http2",
+    "--http2-prior-knowledge",
+    "--http3",
     "--include",
     "--ipv4",
     "--ipv6",
+    "--no-alpn",
     "--no-buffer",
+    "--no-keepalive",
     "--no-progress-meter",
+    "--no-styled-output",
+    "--progress-bar",
+    "--raw",
+    "--retry-all-errors",
+    "--retry-connrefused",
     "--show-error",
     "--silent",
     "--ssl-reqd",
+    "--styled-output",
+    "--tcp-nodelay",
     "--verbose",
 ];
 
@@ -179,7 +195,7 @@ pub(crate) fn proven_reason_code(model: &crate::CanonicalCommandV1) -> &'static 
             // `http` and `xh` fetch over the same rules; see `super::http_reads`.
             matches!(
                 super::executable_basename(executable),
-                "curl" | "http" | "xh"
+                "curl" | "wget" | "http" | "xh"
             )
         })
     });
@@ -300,10 +316,35 @@ pub(in crate::pretool) fn safe_header(value: &str) -> bool {
 }
 
 pub(in crate::pretool) fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
-    let Some(raw) = as_curl_reads_it(raw) else {
-        return false;
-    };
-    public_url(&raw) || loopback_url(&raw, context.home_dir)
+    web_target(raw, context).is_some()
+}
+
+/// What a readable URL names: a service on this machine, or public content.
+///
+/// The distinction is the one a fetcher that follows redirects needs. A public
+/// host is chosen by text the agent read, and the redirect it answers with is
+/// the way to reach a destination this screen refuses; a loopback host already
+/// sits on this machine, so whatever its redirect would reach it could as
+/// easily have written into its own response body.
+pub(in crate::pretool) enum WebTarget {
+    Loopback,
+    Public,
+}
+
+/// The target a URL names, read under the scheme the fetcher gives it.
+///
+/// `wget` guesses the same way `curl` does -- HTTP for a bare `host/path`,
+/// another protocol for a name whose prefix says so -- so both read a URL
+/// written without a scheme as the same request, and both reach this screen.
+pub(in crate::pretool) fn web_target(
+    raw: &str,
+    context: super::PathContext<'_>,
+) -> Option<WebTarget> {
+    let raw = as_curl_reads_it(raw)?;
+    if loopback_url(&raw, context.home_dir) {
+        return Some(WebTarget::Loopback);
+    }
+    public_url(&raw).then_some(WebTarget::Public)
 }
 
 /// The same reading, held to a destination on this host.

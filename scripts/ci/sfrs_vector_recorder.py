@@ -43,7 +43,6 @@ _SRC = "codex_plugin_scanner.guard"
 _SERVICES = f"{_SRC}.runtime.secret_file_request_services"
 _ENTRY_POINTS: tuple[tuple[str, str, int], ...] = (
     (f"{_SERVICES}.benign_requests", "build_tool_action_request_artifact", 0),
-    (f"{_SERVICES}.github_shell_capabilities", "classify_github_shell_capabilities", 0),
 )
 _OVERRIDE_GUARDS: tuple[tuple[str, str, str, str], ...] = (
     (
