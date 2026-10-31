@@ -27,6 +27,13 @@ use zeroize::{Zeroize, Zeroizing};
 
 type HmacSha256 = Hmac<Sha256>;
 
+#[path = "secret_detection_encoded.rs"]
+mod encoded;
+
+use encoded::{encoded_payload_findings, ENCODED_PAYLOAD_POLICY_VERSION};
+
+pub use encoded::{encoded_payload_spans, ENCODED_REASON};
+
 /// How the scan tells two candidates apart without keeping either one.
 ///
 /// Deduplication only ever asks whether it has seen these exact bytes before,
@@ -1288,6 +1295,7 @@ fn round4(value: f64) -> f64 {
 pub fn detector_version() -> String {
     let mut material_parts: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
     material_parts.push(assignment_material_line());
+    material_parts.push(encoded_payload_material_line());
     detector_version_over(&material_parts)
 }
 
@@ -1299,11 +1307,20 @@ fn rule_material_line(rule: &SecretRule) -> String {
     )
 }
 
-/// The synthetic `credential-assignment` contribution, always last.
+/// The synthetic `credential-assignment` contribution. It stays in the place
+/// Python gave it, directly after the rules, so the digest Python published is
+/// still reproducible from a prefix of this material.
 fn assignment_material_line() -> String {
     format!(
         "credential-assignment|{ASSIGNMENT_PATTERN_SOURCE}|{FLAG_IGNORECASE_MULTILINE_UNICODE}|{GENERIC_CANDIDATE_POLICY_VERSION}"
     )
+}
+
+/// Where a text is read, rather than which rules read it. A scan taken before
+/// the detector looked inside base64 payloads saw less of the same file, so it
+/// has to be recognisable as a different detector.
+fn encoded_payload_material_line() -> String {
+    format!("encoded-payload|{ENCODED_PAYLOAD_POLICY_VERSION}")
 }
 
 /// Digest over an explicit material list. Hashing a subset is how the rules
@@ -1948,12 +1965,45 @@ fn finding_from_match(
     provider_rule: Option<&SecretRule>,
     lines: &LineIndex,
 ) -> Option<SecretFinding> {
-    let line_text = line_text(text, match_start);
+    finding_in_context(
+        rule,
+        candidate,
+        text,
+        match_start,
+        lines.line_of(text, match_start),
+        path,
+        source,
+        commit,
+        provider_rule,
+    )
+}
+
+/// One match, read against whatever text actually surrounds it.
+///
+/// For a match on the page that text is the file itself. For one decoded out of
+/// a base64 payload it is the decoded bytes, because that is where the words
+/// saying what the value is were written: a sample marker beside a fixture
+/// token still marks it after an encoding, while the encoded characters the
+/// match would otherwise be read against say nothing about anything. `line`
+/// stays the line of the file a reader has to go to either way.
+#[allow(clippy::too_many_arguments)] // Mirrors the Python keyword arguments verbatim.
+fn finding_in_context(
+    rule: &RuleMeta,
+    candidate: &str,
+    context: &str,
+    context_start: usize,
+    line: usize,
+    path: &str,
+    source: &str,
+    commit: Option<&str>,
+    provider_rule: Option<&SecretRule>,
+) -> Option<SecretFinding> {
+    let line_text = line_text(context, context_start);
     if rule.strong_format {
         // Provider fixtures need the full SecretRule for `rule_id`-specific
         // suppression; only provider rules take this branch.
         if let Some(rule) = provider_rule {
-            if provider_match_is_fixture(rule, candidate, text, match_start, path) {
+            if provider_match_is_fixture(rule, candidate, context, context_start, path) {
                 return None;
             }
         }
@@ -1971,7 +2021,7 @@ fn finding_from_match(
         severity: rule.severity,
         confidence: confidence_label(score),
         confidence_score: score,
-        line: lines.line_of(text, match_start),
+        line,
         path: path.to_string(),
         source: source.to_string(),
         commit: commit.map(str::to_string),
@@ -2124,6 +2174,22 @@ pub fn scan_secret_text(
         if findings.len() >= bounded_max {
             break;
         }
+    }
+
+    // Encoded payloads are read last. A credential that is also written out in
+    // the clear is already reported from the line it sits on, which is the
+    // place a reader can act on; the encoded pass only adds what no plain read
+    // of the file could have found.
+    let remaining = bounded_max.saturating_sub(findings.len());
+    for finding in encoded_payload_findings(text, path, source, commit, &lines, remaining) {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
+            continue;
+        }
+        findings.push(finding);
     }
 
     findings.sort_by(|a, b| finding_sort_key(a).cmp(&finding_sort_key(b)));
