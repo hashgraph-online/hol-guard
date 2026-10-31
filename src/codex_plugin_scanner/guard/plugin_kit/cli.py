@@ -148,7 +148,6 @@ def _native_install_command(system: str, machine: str) -> str:
 
 def native_unavailable_message(
     *,
-    outdated: bool = False,
     incompatible: bool = False,
     version: str | None = None,
     system: str | None = None,
@@ -160,11 +159,6 @@ def native_unavailable_message(
     system = system or platform.system()
     machine = machine or platform.machine()
     where = f"{_SYSTEM_NAMES.get(system, system)} {machine}"
-    if outdated:
-        return (
-            "This HOL Guard's native runtime is too old for the Plugin Kit. "
-            f"Update it: {_native_install_command(system, machine)}"
-        )
     if incompatible:
         return (
             f"HOL Guard found a native runtime for {where}, but it does not match this install. "
@@ -200,10 +194,8 @@ def _native_request(request: Mapping[str, object]) -> dict[str, Any]:
     status = native_runtime_status()
     if not status.available or status.identity is None:
         raise PluginKitNativeError(native_unavailable_message())
-    if not status.compatible or status.capabilities is None:
+    if not status.compatible or status.capabilities is None or PLUGIN_KIT_FEATURE not in status.capabilities.features:
         raise PluginKitNativeError(native_unavailable_message(incompatible=True))
-    if PLUGIN_KIT_FEATURE not in status.capabilities.features:
-        raise PluginKitNativeError(native_unavailable_message(outdated=True))
     runtime = status.identity.path
     completed = run_isolated_hook_process(
         (str(runtime), PLUGIN_KIT_COMMAND, "--stdin"),

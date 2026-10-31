@@ -28,7 +28,6 @@ from codex_plugin_scanner.guard.runtime_identity_assessment import (
 )
 from codex_plugin_scanner.guard.runtime_posture import (
     BUNDLE_ASSESSMENT_FAILED,
-    BUNDLE_UNSUPPORTED,
     build_runtime_posture,
 )
 
@@ -186,33 +185,6 @@ def _assessment(source: dict[str, object], *advisories: RuntimeAdvisoryVerdict) 
     return RuntimeIdentityAssessment(
         scope_complete=False, artifacts=(), advisories=tuple(advisories), advisory_source=source
     )
-
-
-def test_older_native_runtime_falls_back_to_observation_only(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, native_runtime: Path
-) -> None:
-    seen: list[dict[str, object]] = []
-
-    def assess(request: dict[str, object]) -> RuntimeIdentityAssessment:
-        seen.append(request)
-        if "cached_bundle" in request:
-            raise RuntimeIdentityError("runtime_identity_native_unavailable")
-        return _assessment({"state": "absent"})
-
-    monkeypatch.setattr(runtime_posture, "assess_runtime_identity", assess)
-
-    payload = _posture(tmp_path, advisory_bundle=BUNDLE_INPUT)
-
-    assert ["cached_bundle" in request for request in seen] == [True, False]
-    assert payload["status"] == "ok"
-    assert payload["advisory_source"] == {
-        "state": "unsupported",
-        "reason": BUNDLE_UNSUPPORTED,
-        "coverage_reason": "runtime_advisory_bundle_unsupported",
-        "advisories_available": False,
-    }
-    assert payload["coverage"]["advisories_available"] is False
-    assert payload["coverage"]["reason"] == "runtime_advisory_bundle_unsupported"
 
 
 def test_any_bundle_failure_still_reports_the_runtimes(

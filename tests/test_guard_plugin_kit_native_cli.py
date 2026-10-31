@@ -213,15 +213,6 @@ def test_plugin_fails_closed_without_native_runtime(
             "The Plugin Kit needs HOL Guard's native runtime, which is not built for FreeBSD amd64. "
             "It is built for macOS, Linux and Windows on x86_64 and arm64.",
         ),
-        (
-            {"outdated": True, "system": "Linux", "machine": "x86_64"},
-            "This HOL Guard's native runtime is too old for the Plugin Kit. "
-            "Update it: pipx install --force hol-guard (or uv tool install --force hol-guard)",
-        ),
-        (
-            {"outdated": True, "system": "Darwin", "machine": "x86_64"},
-            "This HOL Guard's native runtime is too old for the Plugin Kit. Update it: hol-guard update",
-        ),
     ],
 )
 def test_the_native_unavailable_message_names_the_platform_and_the_fix(
@@ -230,7 +221,7 @@ def test_the_native_unavailable_message_names_the_platform_and_the_fix(
     assert plugin_kit_cli.native_unavailable_message(**kwargs) == expected  # type: ignore[arg-type]
 
 
-def test_a_compatible_runtime_without_the_plugin_kit_is_too_old(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_compatible_runtime_without_the_plugin_kit_does_not_match(monkeypatch: pytest.MonkeyPatch) -> None:
     status = SimpleNamespace(
         available=True,
         compatible=True,
@@ -238,9 +229,8 @@ def test_a_compatible_runtime_without_the_plugin_kit_is_too_old(monkeypatch: pyt
         capabilities=SimpleNamespace(features=frozenset()),
     )
     monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
-    with pytest.raises(plugin_kit_cli.PluginKitNativeError, match="too old") as raised:
+    with pytest.raises(plugin_kit_cli.PluginKitNativeError, match="does not match"):
         plugin_kit_cli._native_request({})
-    assert "does not match" not in str(raised.value)
 
 
 def test_a_found_runtime_that_does_not_match_is_not_called_missing(monkeypatch: pytest.MonkeyPatch) -> None:

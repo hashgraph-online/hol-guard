@@ -25,10 +25,7 @@ from .runtime_instance_store import load_known_instances, remember_instances
 
 RUNTIME_POSTURE_SCHEMA = "guard.runtime-posture.v1"
 ADVISORIES_UNAVAILABLE = "runtime_advisories_unavailable"
-BUNDLE_UNSUPPORTED = "runtime_advisory_bundle_unsupported_by_native_runtime"
-BUNDLE_UNSUPPORTED_COVERAGE = "runtime_advisory_bundle_unsupported"
 BUNDLE_ASSESSMENT_FAILED = "runtime_advisory_bundle_assessment_failed"
-NATIVE_UNAVAILABLE = "runtime_identity_native_unavailable"
 HARNESS_CONFIG_UNREADABLE = "harness_config_unreadable"
 CANDIDATE_LIMIT_REACHED = "runtime_candidate_limit_reached"
 COVERAGE_STATEMENT = (
@@ -199,11 +196,7 @@ def _assess(request: dict[str, object], advisory_bundle: Mapping[str, object] | 
         failure = error.code
     # The bundle must not cost the observation: report the runtimes without it.
     assessment = assess_runtime_identity(request)
-    if failure == NATIVE_UNAVAILABLE:
-        # An older native runtime cannot verify bundled advisories.
-        source = {"state": "unsupported", "reason": BUNDLE_UNSUPPORTED, "coverage_reason": BUNDLE_UNSUPPORTED_COVERAGE}
-    else:
-        source = {"state": "invalid", "reason": failure, "coverage_reason": BUNDLE_ASSESSMENT_FAILED}
+    source = {"state": "invalid", "reason": failure, "coverage_reason": BUNDLE_ASSESSMENT_FAILED}
     return replace(assessment, advisory_source={**source, "advisories_available": False})
 
 
