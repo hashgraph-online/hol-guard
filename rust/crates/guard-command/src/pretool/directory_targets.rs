@@ -441,7 +441,7 @@ impl<'a> super::PathContext<'a> {
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
         };
-        // Cargo reads every `CARGO_*` variable as configuration, including
+        // Cargo reads its configuration from the environment too, including
         // the default registry, a named registry's index and the credential
         // provider it starts for an index that asks for a token, and
         // `CARGO_HOME` moves the configuration file those settings live in.
@@ -604,18 +604,38 @@ fn rustup_selector(name: &str) -> bool {
         || name.eq_ignore_ascii_case("RUSTUP_UPDATE_ROOT")
 }
 
-/// Cargo's own configuration surface, read before any command runs.
+/// The settings Cargo reads that can move where a query goes or what it runs.
 ///
 /// Every setting a `.cargo/config.toml` carries has a variable spelling, so
 /// `CARGO_REGISTRY_DEFAULT` picks the registry a query contacts,
 /// `CARGO_REGISTRIES_<NAME>_INDEX` names its index and
 /// `CARGO_REGISTRIES_<NAME>_CREDENTIAL_PROVIDER` names the program Cargo runs
-/// when that index asks for a token. `CARGO_HOME` moves the file all of them
-/// also live in. The whole prefix is read rather than a list of names,
-/// because a query that contacts the wrong endpoint is the same outcome
-/// however the setting was spelled.
+/// when that index asks for a token. `CARGO_HTTP_*` and `CARGO_NET_*` decide
+/// the transport that reaches it, down to the proxy and the certificate
+/// store, and `CARGO_NET_GIT_FETCH_WITH_CLI` starts `git` to do the fetching.
+/// `CARGO_HOME` moves the file all of them also live in, `CARGO_UNSTABLE_*`
+/// turns on behaviour no stable setting describes, and an `[alias]` entry is
+/// read from the environment too.
+///
+/// The rest of the prefix is the build: `CARGO_PROFILE_*`, `CARGO_BUILD_*`,
+/// `CARGO_TERM_*`, `CARGO_TARGET_DIR`, `CARGO_INCREMENTAL`. A registry query
+/// compiles nothing, and continuous integration and ordinary shells export
+/// those freely, so reading them as configuration would take the whole
+/// reading away on most machines that have Rust installed at all.
 fn cargo_selector(name: &str) -> bool {
-    name.to_ascii_uppercase().starts_with("CARGO_")
+    let name = name.to_ascii_uppercase();
+    name == "CARGO_HOME"
+        || [
+            "CARGO_ALIAS_",
+            "CARGO_CREDENTIAL_",
+            "CARGO_HTTP_",
+            "CARGO_NET_",
+            "CARGO_REGISTRIES_",
+            "CARGO_REGISTRY_",
+            "CARGO_UNSTABLE_",
+        ]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
 }
 
 /// npm reads every `npm_config_*` variable as configuration, including the

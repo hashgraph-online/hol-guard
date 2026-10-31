@@ -109,10 +109,10 @@ fn rust_version_queries_are_allowed_unless_a_toolchain_file_selects_a_binary() {
                 "{harness} {name}"
             );
         }
-        // Cargo reads every `CARGO_*` variable as configuration, so an
-        // inherited one can pick the registry `cargo search` contacts, the
-        // index behind it and the credential program started for it. The
-        // version banner contacts nothing, so it is unaffected.
+        // An inherited Cargo registry, transport or credential variable can
+        // pick the registry `cargo search` contacts, the index behind it and
+        // the credential program started for it. The version banner contacts
+        // nothing, so it is unaffected, and a build setting moves no query.
         if decide(harness, "cargo search serde", &home, &plain) == "allow" {
             for name in [
                 "CARGO_REGISTRY_DEFAULT",
@@ -138,6 +138,13 @@ fn rust_version_queries_are_allowed_unless_a_toolchain_file_selects_a_binary() {
                 "allow",
                 "{harness} version banner"
             );
+            for name in ["CARGO_PROFILE_RELEASE_LTO", "CARGO_TERM_COLOR"] {
+                assert_eq!(
+                    decide_with(harness, &[name], "cargo search serde", &home, &plain),
+                    "allow",
+                    "{harness} {name}"
+                );
+            }
         }
     }
 }
