@@ -10,11 +10,13 @@ from pathlib import Path
 from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
+from ..daemon.live_identity import verified_live_guard_daemon_identity
 from ..daemon.runtime_peer import (
     daemon_refresh_outcome_succeeded,
     retained_desktop_owner_note,
     retained_desktop_owner_payload,
 )
+from ..daemon.start_classification import GuardDaemonStillStartingError
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..store import GuardStore
 from .update_desktop_core import (
@@ -269,12 +271,47 @@ def refresh_desktop_core_daemon(
             home_dir=context.home_dir,
             executable=executable,
         )
+    except GuardDaemonStillStartingError:
+        # The updated Core can take longer to load than the post-update start
+        # window on a busy machine. The launch is left running in that case, so
+        # wait for it to answer before calling the refresh a failure.
+        url = _wait_for_started_core(context.guard_home, minimum_version=minimum_version)
+        if url is None:
+            return None, (
+                "The updated Guard daemon is still starting. Run `hol-guard daemon status` shortly to confirm it is up."
+            )
     except (OSError, RuntimeError) as error:
         return None, f"Could not restart the Guard daemon after update: {error}"
     # ensure_guard_daemon_after_update only returns once the restarted daemon
     # answers, so the outcome carries the same verification marker as the
     # CLI refresh path.
     return {"status": "restarted", "url": url, "runtime_verified": True}, None
+
+
+def _wait_for_started_core(guard_home: Path, *, minimum_version: str | None) -> str | None:
+    deadline = time.monotonic() + _DESKTOP_RESPAWN_WAIT_SECONDS
+    while True:
+        url = _live_core_url(verified_live_guard_daemon_identity(guard_home), minimum_version=minimum_version)
+        if url is not None:
+            return url
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(_DESKTOP_RESPAWN_POLL_SECONDS)
+
+
+def _live_core_url(identity: dict[str, object] | None, *, minimum_version: str | None) -> str | None:
+    if identity is None:
+        return None
+    url = identity.get("daemon_url")
+    if not isinstance(url, str) or not url:
+        return None
+    if minimum_version is None:
+        return url
+    try:
+        serves_update = Version(str(identity.get("package_version"))) >= Version(minimum_version)
+    except InvalidVersion:
+        return None
+    return url if serves_update else None
 
 
 def _desktop_update_preflight(
