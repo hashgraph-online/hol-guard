@@ -364,3 +364,46 @@ fn request_errors_are_reported_without_a_preview() {
     assert_eq!(response["ok"], false);
     assert_eq!(response["error"], "workspace_export_preview_root_missing");
 }
+
+/// The same bytes a base64 writer would produce: whole lines of an equal width,
+/// with whatever is left over on the last.
+fn base64_lines(plain: &str, column: usize) -> String {
+    use base64ct::Encoding as _;
+
+    let encoded = base64ct::Base64::encode_string(plain.as_bytes());
+    let mut out = String::new();
+    let mut rest = encoded.as_str();
+    while !rest.is_empty() {
+        let take = rest.len().min(column);
+        out.push_str(&rest[..take]);
+        out.push('\n');
+        rest = &rest[take..];
+    }
+    out
+}
+
+#[test]
+fn a_secret_carried_only_by_an_encoding_is_replaced_rather_than_blocking() {
+    // The candidate of an encoded finding is the decoded credential, which has
+    // no literal occurrence in the file, so replacing only literal occurrences
+    // leaves the credential where it was: the second scan finds it again and
+    // the whole bundle is blocked over a file that could have been exported.
+    let dir = tempfile::tempdir().unwrap();
+    let plain = format!("# deploy secrets\nGH_TOKEN={}\n", github_token());
+    let source = base64_lines(&plain, 64);
+    write(dir.path(), "env.b64", source.as_bytes());
+
+    let result = run(dir.path(), &["env.b64"]);
+
+    assert_eq!(result["status"], "ready", "{result}");
+    assert!(reasons(&result).is_empty(), "{result}");
+    assert!(result["redactions"].as_u64().unwrap() >= 1, "{result}");
+    assert_eq!(
+        result["files"][0]["source_sha256"],
+        sha256(source.as_bytes())
+    );
+    assert_ne!(
+        result["files"][0]["export_sha256"],
+        sha256(source.as_bytes())
+    );
+}

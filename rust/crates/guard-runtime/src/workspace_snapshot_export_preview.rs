@@ -28,7 +28,8 @@ use std::path::PathBuf;
 use guard_command::local_supply_chain::is_audit_sensitive_basename;
 use guard_scanner::repository_scanner::decode_text;
 use guard_scanner::secret_detection::{
-    detector_version, scan_secret_text, SecretFinding, SecretScanSummary,
+    detector_version, encoded_payload_spans, scan_secret_text, SecretFinding, SecretScanSummary,
+    ENCODED_REASON,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -385,6 +386,15 @@ pub(super) fn redact(text: &str, path: &str, scanner: Scanner) -> Redaction {
                 text.match_indices(candidate)
                     .map(|(start, matched)| (start, start + matched.len())),
             );
+            // A credential the file carries only inside a base64 payload has no
+            // literal occurrence to replace, and base64 cannot have the bytes
+            // taken out of it in place, so the payload holding it is replaced
+            // whole. Without this the second scan finds it again and a file
+            // that could have been exported with the credential gone blocks
+            // the bundle instead.
+            if finding.context_reasons.contains(&ENCODED_REASON) {
+                ranges.extend(encoded_payload_spans(text, candidate));
+            }
         }
         if ranges.len() > before {
             redactions += 1;

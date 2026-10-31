@@ -174,3 +174,96 @@ fn the_callers_finding_bound_still_holds() {
 
     assert_eq!(findings.len(), 3, "{findings:?}");
 }
+
+/// A payload written out the way a base64 writer writes one: whole lines of an
+/// equal width, with whatever is left over on the last.
+fn wrapped(plain: &str, column: usize) -> String {
+    let encoded = encode(plain);
+    let mut out = String::new();
+    let mut rest = encoded.as_str();
+    while !rest.is_empty() {
+        let take = rest.len().min(column);
+        out.push_str(&rest[..take]);
+        out.push('\n');
+        rest = &rest[take..];
+    }
+    out
+}
+
+#[test]
+fn a_credential_inside_one_line_of_a_wrap_is_named_once() {
+    // Every whole line of a wrap is also a run that decodes cleanly on its own,
+    // so a credential falling entirely inside one of them was named twice: once
+    // at that line, and once at the line the wrap opened on. The header pushes
+    // the key past the first line's 48 decoded bytes, which is where the two
+    // readings start to disagree about where a reader has to go.
+    let dump = format!(
+        "# rotation notes for the eu-west-1 deploy acct.\nAWS_ACCESS_KEY_ID={}\nAWS_DEFAULT_REGION=eu-west-1\n",
+        aws_key()
+    );
+    let text = format!("# env.b64\n{}", wrapped(&dump, 64));
+
+    let findings = scan(&text, "deploy/env.b64");
+    let findings = decoded(&findings);
+
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule_id, "aws-access-key");
+    assert_eq!(findings[0].line, 3);
+}
+
+#[test]
+fn a_narrowly_wrapped_dump_is_joined_before_it_is_read() {
+    // A writer that wraps picks its own column. At 32 the key is split across
+    // two lines -- neither decodes to anything holding it -- so only the join
+    // finds it at all.
+    let dump = format!(
+        "AWS_ACCESS_KEY_ID={}\nAWS_DEFAULT_REGION=eu-west-1\n",
+        aws_key()
+    );
+    let text = wrapped(&dump, 32);
+
+    let findings = scan(&text, "deploy/env.b64");
+    let findings = decoded(&findings);
+
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule_id, "aws-access-key");
+    assert_eq!(findings[0].line, 1);
+}
+
+#[test]
+fn a_wrap_too_long_to_decode_is_read_as_the_lines_it_was_written_as() {
+    // Joining a wrap this long would pass the run bound, so it is never decoded
+    // whole. Its lines are still read one at a time, which is what finds a
+    // credential sitting inside one of them.
+    let mut dump = format!("AWS_ACCESS_KEY_ID={}\n", aws_key());
+    dump.push_str(&"filler notes\n".repeat(900));
+    assert!(
+        encode(&dump).len() > 8 * 1024,
+        "the dump has to pass the run bound"
+    );
+    let text = wrapped(&dump, 64);
+
+    let findings = scan(&text, "deploy/env.b64");
+    let findings = decoded(&findings);
+
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].line, 1);
+}
+
+#[test]
+fn a_fixture_marker_in_the_payload_still_marks_the_token() {
+    // The words saying a token is a sample were written beside it, so after an
+    // encoding they are in the decoded bytes and nowhere else. Reading the
+    // match against the encoded characters instead reports the fixture.
+    let dump = format!(
+        "# fake sample credentials, for tests only\nGITHUB_TOKEN={}\n",
+        github_token()
+    );
+    let text = wrapped(&dump, 64);
+
+    let fixture = scan(&text, "tests/fixtures/env.b64");
+    let deployed = scan(&text, "deploy/env.b64");
+
+    assert!(decoded(&fixture).is_empty(), "{fixture:?}");
+    assert_eq!(decoded(&deployed).len(), 1, "{deployed:?}");
+}

@@ -32,6 +32,8 @@ mod encoded;
 
 use encoded::{encoded_payload_findings, ENCODED_PAYLOAD_POLICY_VERSION};
 
+pub use encoded::{encoded_payload_spans, ENCODED_REASON};
+
 /// How the scan tells two candidates apart without keeping either one.
 ///
 /// Deduplication only ever asks whether it has seen these exact bytes before,
@@ -1963,12 +1965,45 @@ fn finding_from_match(
     provider_rule: Option<&SecretRule>,
     lines: &LineIndex,
 ) -> Option<SecretFinding> {
-    let line_text = line_text(text, match_start);
+    finding_in_context(
+        rule,
+        candidate,
+        text,
+        match_start,
+        lines.line_of(text, match_start),
+        path,
+        source,
+        commit,
+        provider_rule,
+    )
+}
+
+/// One match, read against whatever text actually surrounds it.
+///
+/// For a match on the page that text is the file itself. For one decoded out of
+/// a base64 payload it is the decoded bytes, because that is where the words
+/// saying what the value is were written: a sample marker beside a fixture
+/// token still marks it after an encoding, while the encoded characters the
+/// match would otherwise be read against say nothing about anything. `line`
+/// stays the line of the file a reader has to go to either way.
+#[allow(clippy::too_many_arguments)] // Mirrors the Python keyword arguments verbatim.
+fn finding_in_context(
+    rule: &RuleMeta,
+    candidate: &str,
+    context: &str,
+    context_start: usize,
+    line: usize,
+    path: &str,
+    source: &str,
+    commit: Option<&str>,
+    provider_rule: Option<&SecretRule>,
+) -> Option<SecretFinding> {
+    let line_text = line_text(context, context_start);
     if rule.strong_format {
         // Provider fixtures need the full SecretRule for `rule_id`-specific
         // suppression; only provider rules take this branch.
         if let Some(rule) = provider_rule {
-            if provider_match_is_fixture(rule, candidate, text, match_start, path) {
+            if provider_match_is_fixture(rule, candidate, context, context_start, path) {
                 return None;
             }
         }
@@ -1986,7 +2021,7 @@ fn finding_from_match(
         severity: rule.severity,
         confidence: confidence_label(score),
         confidence_score: score,
-        line: lines.line_of(text, match_start),
+        line,
         path: path.to_string(),
         source: source.to_string(),
         commit: commit.map(str::to_string),
