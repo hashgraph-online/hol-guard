@@ -20,7 +20,6 @@ from codex_plugin_scanner.guard import native_policy_snapshot_publisher as publi
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane import (
-    DIRECT_HOOK_SAVED_DECISION_FEATURE,
     direct_lane_integrity_key,
 )
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
@@ -28,8 +27,6 @@ from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
     NativePolicySnapshotPublisher,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-
-FEATURES = (DIRECT_HOOK_SAVED_DECISION_FEATURE,)
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +49,7 @@ def _stored(store: GuardStore) -> object:
 
 def _published(store: GuardStore) -> dict[str, object]:
     saved.refresh_integrity_state(store)
-    bound = saved.with_saved_decision_state({}, store=store, features=FEATURES)
+    bound = saved.with_saved_decision_state({}, store=store)
     assert bound is not None
     return bound
 
@@ -62,7 +59,7 @@ def test_a_fresh_home_binds_the_state_its_store_writes(tmp_path: Path) -> None:
     assert _stored(store) is None
     # The environment binds without the state: the resident needs it to resolve
     # a local CLI, and a saved decision still waits for the state and its key.
-    unrefreshed = saved.with_saved_decision_state({}, store=store, features=FEATURES)
+    unrefreshed = saved.with_saved_decision_state({}, store=store)
     assert unrefreshed == {"exact_action_environment": {"HOME": "/home/dev", "PATH": "/usr/bin"}}
 
     bound = _published(store)
@@ -78,7 +75,7 @@ def test_a_fresh_home_binds_the_state_its_store_writes(tmp_path: Path) -> None:
     assert state["mode"] == "degraded"
     assert state["degraded_reasons"]
     assert state["generation"] is None
-    assert direct_lane_integrity_key(store, FEATURES) is None
+    assert direct_lane_integrity_key(store) is None
 
 
 def test_a_key_the_context_mints_reaches_the_first_binding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,7 +83,7 @@ def test_a_key_the_context_mints_reaches_the_first_binding(tmp_path: Path, monke
     # That moves the state without a database write; the first binding must
     # still carry the keyed state rather than the degraded one before it.
     store = _daemon_store(tmp_path / "guard-home")
-    assert direct_lane_integrity_key(store, FEATURES) is None
+    assert direct_lane_integrity_key(store) is None
     publisher = NativePolicySnapshotPublisher(store=store)
     contexts: list[object] = []
     bindings: list[object] = []
@@ -94,7 +91,7 @@ def test_a_key_the_context_mints_reaches_the_first_binding(tmp_path: Path, monke
     def context(*, workspaces: object = None) -> tuple[object, ...]:
         material = store._policy_integrity_secret_material(create=True)
         contexts.append(material)
-        return (SimpleNamespace(), SimpleNamespace(features=FEATURES), material[0], {}, {}, None)
+        return (SimpleNamespace(), SimpleNamespace(features=()), material[0], {}, {}, None)
 
     def publish(**kwargs: object) -> None:
         bindings.append(kwargs["direct_lane"])
@@ -164,17 +161,15 @@ class _Lane(saved.NativePolicySnapshotSavedStateMixin):
         self.guard_home = Path(store.guard_home)
         self._direct_lane_ack_target: tuple[int, str] | None = (1, "ack")
         self.rebinds = 0
-        self._bind_relay_and_saved_state(_published(store), FEATURES)
+        self._bind_relay_and_saved_state(_published(store))
 
-    def _bind_mcp_relay_view(self, binding: object, features: object) -> None:
+    def _bind_mcp_relay_view(self, binding: object) -> None:
         return None
 
     def _rebind_direct_lane(self) -> None:
         # The republish binds the state the store holds.
         self.rebinds += 1
-        self._bind_relay_and_saved_state(
-            saved.with_saved_decision_state({}, store=self.store, features=FEATURES), FEATURES
-        )
+        self._bind_relay_and_saved_state(saved.with_saved_decision_state({}, store=self.store))
 
 
 def _counted_refreshes(monkeypatch: pytest.MonkeyPatch) -> list[object]:

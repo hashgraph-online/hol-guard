@@ -12,12 +12,11 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from .native_policy_snapshot_direct_lane import DIRECT_HOOK_SAVED_DECISION_FEATURE
 from .runtime.extension_control_runtime import current_extension_control_binding_digest
 from .store_base import _now
 
@@ -33,10 +32,6 @@ _U64_MAX = (1 << 64) - 1
 _STATE_FIELDS = frozenset(
     {"backend", "cutover_complete", "degraded_reasons", "enforcement", "generation", "key_id", "mode"}
 )
-
-
-def saved_decision_bound(features: Iterable[str]) -> bool:
-    return DIRECT_HOOK_SAVED_DECISION_FEATURE in set(features)
 
 
 def _utf8_len(value: str) -> int | None:
@@ -137,15 +132,12 @@ def with_saved_decision_state(
     binding: Mapping[str, object] | None,
     *,
     store: object,
-    features: Iterable[str],
 ) -> dict[str, object] | None:
     """Add the exact-action state, for a resident that answers saved decisions."""
 
     if binding is None:
         return None
     bound = dict(binding)
-    if not saved_decision_bound(features):
-        return bound
     environment = _environment()
     if environment is None:
         return bound
@@ -184,11 +176,11 @@ class NativePolicySnapshotSavedStateMixin:
     _direct_lane_integrity_state: dict[str, object] | None = None
     _integrity_checked_stamp: tuple[tuple[int, int] | None, ...] | None = None
 
-    def _bind_relay_and_saved_state(self, binding: object, features: Iterable[str]) -> None:
+    def _bind_relay_and_saved_state(self, binding: object) -> None:
         """Record the relay view and the integrity state an ACKed binding carries."""
 
         publisher = cast("NativePolicySnapshotPublisher", self)
-        publisher._bind_mcp_relay_view(binding, features)
+        publisher._bind_mcp_relay_view(binding)
         state = binding.get("policy_integrity_state") if isinstance(binding, Mapping) else None
         self._direct_lane_integrity_state = (
             dict(cast(Mapping[str, object], state)) if isinstance(state, Mapping) else None

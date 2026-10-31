@@ -8,8 +8,6 @@ import pytest
 
 from codex_plugin_scanner.guard import native_policy_snapshot_direct_lane_saved as saved
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane import (
-    DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,
-    DIRECT_HOOK_SAVED_DECISION_FEATURE,
     direct_lane_integrity_key,
 )
 
@@ -23,7 +21,6 @@ STATE = {
     "key_id": "synthetic:0707",
     "mode": "protected",
 }
-FEATURES = (DIRECT_HOOK_SAVED_DECISION_FEATURE,)
 ENVIRONMENT_ONLY = {"exact_action_environment": {"HOME": "/home/dev", "PATH": "/usr/bin"}}
 
 
@@ -54,10 +51,9 @@ def _daemon(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_the_state_binds_only_for_a_resident_that_answers_saved_decisions() -> None:
-    assert saved.with_saved_decision_state({"generation": 1}, store=_Store(), features=()) == {"generation": 1}
-    assert saved.with_saved_decision_state(None, store=_Store(), features=FEATURES) is None
+    assert saved.with_saved_decision_state(None, store=_Store()) is None
 
-    bound = saved.with_saved_decision_state({"generation": 1}, store=_Store(), features=FEATURES)
+    bound = saved.with_saved_decision_state({"generation": 1}, store=_Store())
 
     assert bound == {
         "generation": 1,
@@ -85,7 +81,7 @@ def test_the_state_binds_only_for_a_resident_that_answers_saved_decisions() -> N
     ],
 )
 def test_a_state_the_resident_rejects_leaves_the_review_to_the_daemon(state: object) -> None:
-    bound = saved.with_saved_decision_state({}, store=_Store(state), features=FEATURES)
+    bound = saved.with_saved_decision_state({}, store=_Store(state))
 
     # The environment still binds: the resident resolves a local CLI against
     # the daemon's home and PATH whether or not a saved decision is readable.
@@ -94,8 +90,8 @@ def test_a_state_the_resident_rejects_leaves_the_review_to_the_daemon(state: obj
 
 @pytest.mark.parametrize("error", [OSError("gone"), sqlite3.OperationalError("locked"), ValueError("bad")])
 def test_an_unreadable_state_leaves_the_review_to_the_daemon(error: Exception) -> None:
-    assert saved.with_saved_decision_state({}, store=_Store(error=error), features=FEATURES) == ENVIRONMENT_ONLY
-    assert saved.with_saved_decision_state({}, store=object(), features=FEATURES) == ENVIRONMENT_ONLY
+    assert saved.with_saved_decision_state({}, store=_Store(error=error)) == ENVIRONMENT_ONLY
+    assert saved.with_saved_decision_state({}, store=object()) == ENVIRONMENT_ONLY
 
 
 def test_the_local_cli_lane_keeps_its_environment_when_no_saved_decision_binds() -> None:
@@ -105,7 +101,7 @@ def test_the_local_cli_lane_keeps_its_environment_when_no_saved_decision_binds()
     # the environment has to bind even where no saved decision can, and the
     # proof a saved decision needs still stays with the daemon.
     for store in (_Store({**STATE, "mode": "pro\x85tected"}), _Store(error=OSError("gone"))):
-        bound = saved.with_saved_decision_state({}, store=store, features=FEATURES)
+        bound = saved.with_saved_decision_state({}, store=store)
 
         assert bound == ENVIRONMENT_ONLY
         assert "exact_action_control_digest" not in bound
@@ -115,9 +111,9 @@ def test_the_local_cli_lane_keeps_its_environment_when_no_saved_decision_binds()
 def test_an_environment_the_resident_rejects_binds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     for environment in ({"A=B": "x"}, {"": "x"}, {"A": "x\0"}, {f"V{index}": "x" for index in range(1025)}):
         _environ(monkeypatch, environment)
-        assert saved.with_saved_decision_state({}, store=_Store(), features=FEATURES) == {}
+        assert saved.with_saved_decision_state({}, store=_Store()) == {}
     _environ(monkeypatch, {"BIG": "x" * 262_145})
-    assert saved.with_saved_decision_state({}, store=_Store(), features=FEATURES) == {}
+    assert saved.with_saved_decision_state({}, store=_Store()) == {}
 
 
 def test_a_digest_the_resident_rejects_leaves_the_saved_decision_to_the_daemon(
@@ -126,7 +122,7 @@ def test_a_digest_the_resident_rejects_leaves_the_saved_decision_to_the_daemon(
     _environ(monkeypatch, {"HOME": "/home/dev"})
     monkeypatch.setattr(saved, "current_extension_control_binding_digest", lambda: None)
 
-    bound = saved.with_saved_decision_state({}, store=_Store(), features=FEATURES)
+    bound = saved.with_saved_decision_state({}, store=_Store())
 
     # Neither the digest nor the state binds, so the resident has no proof to
     # answer a saved decision with and the review stays with the daemon.
@@ -139,9 +135,7 @@ def test_the_integrity_key_also_binds_for_saved_decisions() -> None:
             assert create is False
             return b"\x07" * 32, "synthetic:0707"
 
-    assert direct_lane_integrity_key(_Keyed(), ("other",)) is None
-    for features in (FEATURES, (DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,)):
-        assert direct_lane_integrity_key(_Keyed(), features) == (b"\x07" * 32, "synthetic:0707")
+    assert direct_lane_integrity_key(_Keyed()) == (b"\x07" * 32, "synthetic:0707")
 
 
 @pytest.mark.parametrize("failed_refresh", [False, True])
