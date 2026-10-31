@@ -148,9 +148,12 @@ fn body_items_at<'a>(
             // subshell, and arithmetic assigns without an `=` sign. It is not
             // a command list, so it keeps its review.
             '(' if command_position && depth < MAX_GROUP_DEPTH && !rest.starts_with("((") => {
-                let (inner, _, after) =
-                    body_items_at(&text[byte + 1..], name, &[")"], depth + 1)?;
-                if inner.is_empty() || !inner.iter().all(|(list_item, _)| stages_are_plain(list_item)) {
+                let (inner, _, after) = body_items_at(&text[byte + 1..], name, &[")"], depth + 1)?;
+                if inner.is_empty()
+                    || !inner
+                        .iter()
+                        .all(|(list_item, _)| stages_are_plain(list_item))
+                {
                     return None;
                 }
                 item.push('(');

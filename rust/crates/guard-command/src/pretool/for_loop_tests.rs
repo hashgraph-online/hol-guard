@@ -388,10 +388,6 @@ fn a_group_outside_the_command_list_grammar_keeps_its_review() {
         // The group backgrounds itself, which the flat list does not say.
         "for p in a b; do (cd \"$p\" && ls) & done",
     ] {
-        assert_eq!(
-            super::for_loop_unroll::unroll(command),
-            None,
-            "{command}"
-        );
+        assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
     }
 }
