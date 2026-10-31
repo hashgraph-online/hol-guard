@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_request_context
-from codex_plugin_scanner.guard.runtime import shell_execution_context
+from tests import request_context_support
 
 
 def _payload(command: str, cwd: str | None, matched: object) -> dict:
@@ -61,7 +61,7 @@ def _prime(monkeypatch: pytest.MonkeyPatch, answers: list[object]) -> list[dict]
 
 def test_unrelated_context_build_does_not_request_secret_scan(tmp_path: Path, monkeypatch) -> None:
     calls = _prime(monkeypatch, [None])
-    context = shell_execution_context.model_shell_execution_context("ls", cwd=tmp_path, home_dir=tmp_path)
+    context = request_context_support.model_shell_execution_context("ls", cwd=tmp_path, home_dir=tmp_path)
     assert context.native is not None
     assert context.environment_secret_dump is None
     assert "classify_environment_secrets" not in calls[0]["action"]["body"]
