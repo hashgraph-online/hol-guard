@@ -73,21 +73,42 @@ fn refusal(request: &SupplyChainBundleVerifyRequestV1) -> (String, String) {
     )
 }
 
+/// The summary a verified answer carries, read from the vector's own bundle.
+fn expected_verified(response: &Value) -> Value {
+    let bundle = &response["bundle"];
+    json!({
+        "outcome": "verified",
+        "summary": {
+            "bundle_version": bundle["bundleVersion"],
+            "key_id": bundle["keyId"],
+            "policy_hash": bundle["policyHash"],
+            "tier": bundle["tier"],
+            "feed_snapshot_hash": bundle["feedSnapshotHash"],
+            "advisory_count": bundle["advisories"].as_array().expect("advisories").len(),
+            "package_count": bundle["packages"].as_array().expect("packages").len(),
+        },
+    })
+}
+
 #[test]
 fn accepts_the_producer_signed_bundle_under_its_own_keyring() {
     let response = response();
     let keys = advertised_keys(&response);
+    let expected = expected_verified(&response);
 
     let payload = result(&request(response, Some(keys))).payload;
 
-    assert_eq!(payload, json!({ "outcome": "verified" }));
+    assert_eq!(payload, expected);
 }
 
 #[test]
 fn accepts_the_bundle_when_the_caller_holds_no_keyring_yet() {
-    let payload = result(&request(response(), None)).payload;
+    let response = response();
+    let expected = expected_verified(&response);
 
-    assert_eq!(payload, json!({ "outcome": "verified" }));
+    let payload = result(&request(response, None)).payload;
+
+    assert_eq!(payload, expected);
 }
 
 #[test]
