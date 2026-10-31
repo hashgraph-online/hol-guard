@@ -8,11 +8,13 @@ reflog a mistaken `git reset --hard` is recovered from, and a contained
 loss behind a silent allow, so they keep their review while reading a reflog
 and listing, creating or verifying a tag stay contained.
 
-A harness that runs its own sandbox is told to re-run the command there
-rather than being handed an allow, and a host with no sandbox at all reviews
-every contained command. The forms that stay out of the user's way through
-containment are therefore asserted as "not put to the user", and only where a
-control command proves containment is reachable.
+Containment reaches the user in two shapes: a harness that runs its own
+sandbox is told to re-run the command there (`sandbox-required`), and a
+harness Guard rewrites for is handed the contained command to run
+(`native_contained_execution_routed`). A host with no sandbox at all reviews
+every contained command instead, so the forms that stay out of the user's way
+through containment are asserted by that shape, and only where a control
+command proves containment is reachable here.
 """
 
 from __future__ import annotations
@@ -26,9 +28,12 @@ from tests.live_hook_review_support import live_decision, live_shell_review, qui
 
 HARNESSES = ("pi", "codex", "claude-code")
 
-# A contained command this change does not touch: it reaches the user exactly
-# where containment is unavailable.
+# A contained command this change does not touch: it carries a containment
+# reason exactly where containment is reachable.
 SANDBOX_CONTROL = "git add ."
+
+# The reason the two containment shapes answer with.
+CONTAINMENT_REASONS = frozenset({"native_workspace_containment_required", "native_contained_execution_routed"})
 
 HISTORY_LOSS = (
     "git reflog expire --expire=now --all",
@@ -66,7 +71,7 @@ HISTORY_KEPT_CONTAINED = (
     "git tag -v v1.0.0",
     # Options that only read tags share letters with the losing ones without
     # abbreviating them.
-    "git tag --format=%(refname)",
+    "git tag --format='%(refname)'",
 )
 
 
@@ -95,9 +100,15 @@ def _review(command: str, *, repository: Path, harness: str) -> dict[str, object
     )
 
 
+def _contained(result: dict[str, object]) -> bool:
+    """Whether the answer runs the command contained rather than reviewing it."""
+
+    return result.get("reason_code") in CONTAINMENT_REASONS
+
+
 def _requires_containment(repository: Path, harness: str) -> None:
     control = _review(SANDBOX_CONTROL, repository=repository, harness=harness)
-    if live_decision(control) != "allow":
+    if not _contained(control):
         pytest.skip(f"containment unavailable here: {control.get('reason_code')}")
 
 
@@ -111,7 +122,8 @@ def test_a_command_that_drops_committed_history_asks_the_user(
     result = _review(command, repository=repository, harness=harness)
 
     assert not quietly_allowed(result), f"{command} ran without review"
-    # Containment answers an allow: the sandbox would let the loss through.
+    # Containment would run the loss inside the sandbox, where it still lands.
+    assert not _contained(result), result.get("reason_code")
     assert live_decision(result) in {"ask", "deny"}, result.get("reason_code")
 
 
@@ -138,11 +150,11 @@ def test_listing_and_adding_a_tag_still_run_contained(
 
     result = _review(command, repository=repository, harness=harness)
 
-    if live_decision(result) != "allow":
+    if not _contained(result) and not quietly_allowed(result):
         # Containment is a property of the host, not of the command, and a
         # loaded runner can stop offering it between the control and the case.
         # Asking the control again separates the two: a review that outlives a
         # second contained control came from the form under test.
         _requires_containment(repository, harness)
 
-    assert live_decision(result) == "allow", result.get("reason_code")
+    assert _contained(result) or quietly_allowed(result), result.get("reason_code")
