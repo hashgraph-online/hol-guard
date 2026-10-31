@@ -138,4 +138,11 @@ def test_listing_and_adding_a_tag_still_run_contained(
 
     result = _review(command, repository=repository, harness=harness)
 
+    if live_decision(result) != "allow":
+        # Containment is a property of the host, not of the command, and a
+        # loaded runner can stop offering it between the control and the case.
+        # Asking the control again separates the two: a review that outlives a
+        # second contained control came from the form under test.
+        _requires_containment(repository, harness)
+
     assert live_decision(result) == "allow", result.get("reason_code")
