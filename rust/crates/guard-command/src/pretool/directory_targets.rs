@@ -532,7 +532,11 @@ fn rustup_selector(name: &str) -> bool {
 /// command cannot set the hook's environment.
 fn npm_selector(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
+    // pnpm no longer reads npm's spelling and takes `pnpm_config_*` for the
+    // same settings, so `pnpm_config_registry` moves the registry exactly as
+    // `npm_config_registry` does.
     upper.starts_with("NPM_CONFIG_")
+        || upper.starts_with("PNPM_CONFIG_")
         || matches!(
             upper.as_str(),
             "NODE_OPTIONS"
