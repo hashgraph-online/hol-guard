@@ -182,10 +182,17 @@ def test_the_emit_render_ships_a_large_answer_under_its_own_budget(monkeypatch: 
     # The Cursor route sends the edge result the daemon already produced, which
     # the ordinary budget is too small to hold, so that kind asks for its own.
     assert render.native_render_cli("cursor_shell_route", "cursor", {}, guard_home=tmp_path) is None
+    # The bridge kinds carry the whole daemon reply they render, which may be
+    # as large as a native response; asking with the ordinary budget would
+    # refuse a permitted call before anything read the allow in it.
+    assert render.native_render_cli("hermes_bridge", "hermes", {}, guard_home=tmp_path) is None
+    assert render.native_render_cli("muse_bridge", "muse", {}, guard_home=tmp_path) is None
     assert budgets == {
         "cli_hook_emit": render._CLI_HOOK_EMIT_MAX_REQUEST_BYTES,
         "cli_document": render._MAX_REQUEST_BYTES,
         "cursor_shell_route": render._CURSOR_ROUTE_MAX_REQUEST_BYTES,
+        "hermes_bridge": render._DAEMON_REPLY_MAX_REQUEST_BYTES,
+        "muse_bridge": render._DAEMON_REPLY_MAX_REQUEST_BYTES,
     }
 
 

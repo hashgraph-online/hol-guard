@@ -31,6 +31,9 @@ _MAX_REQUEST_BYTES = 256 * 1024
 # the resident gives both kinds the larger budget (``hook_render_max_bytes``).
 _CLI_HOOK_EMIT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+# The bridge kinds carry the whole daemon reply they render, which may be as
+# large as a native response, so they ask for the same larger budget.
+_DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
 
 def _render_payload(
@@ -95,6 +98,8 @@ def native_render_cli(
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CLI_HOOK_EMIT_MAX_REQUEST_BYTES)
     elif kind == "cursor_shell_route":
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
+    elif kind in {"hermes_bridge", "muse_bridge"}:
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
     else:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
     outcome = payload.get("outcome") if payload is not None else None
@@ -124,6 +129,40 @@ def native_hermes_bridge(
     if not isinstance(document, dict) or not isinstance(exit_code, int) or isinstance(exit_code, bool):
         return None
     return dict(document), exit_code
+
+
+def native_muse_bridge(
+    response: Mapping[str, object],
+    *,
+    event_name: str,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+) -> tuple[dict[str, object] | None, int] | None:
+    """Read a Muse daemon reply into its stdout document and exit status.
+
+    The document is ``None`` where Muse expects empty stdout, which is how it
+    reads a permitted call. ``None`` for the whole result means the resident
+    could not answer, and the caller fails closed rather than deciding here
+    what the reply meant. ``deadline`` is the hook's absolute
+    ``time.monotonic()`` budget; the render gets only what remains.
+    """
+
+    rendered = native_render_cli(
+        "muse_bridge",
+        "muse",
+        {"response": dict(response), "event_name": str(event_name)},
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if rendered is None or rendered[1] is None:
+        return None
+    document = rendered[1].get("document")
+    exit_code = rendered[1].get("exit_code")
+    if document is not None and not isinstance(document, dict):
+        return None
+    if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+        return None
+    return (dict(document) if document is not None else None), exit_code
 
 
 def native_cli_hook_emit(
