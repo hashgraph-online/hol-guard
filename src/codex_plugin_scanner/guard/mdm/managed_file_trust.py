@@ -12,6 +12,7 @@ from typing import cast
 
 from .acl import (
     _native_answer,
+    _native_deadline,
     _PathSurface,
     _run_windows_acl_payload,
     _verify_macos_surface,
@@ -52,7 +53,8 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
         return _verify_macos_surface(surface, expected_uid=0, cache={}).healthy
     if resolved_system == "Windows":
         request: dict[str, object] = {"op": "windows-file-payload", "managed_file": str(path)}
-        answer = _native_answer(request)
+        deadline = _native_deadline()
+        answer = _native_answer(request, deadline=deadline)
         payload = None if answer is None else answer.get("payload")
         if not isinstance(payload, list):
             return False
@@ -60,7 +62,9 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
             rows = _run_windows_acl_payload(cast(list[dict[str, str | bool]], payload))
         except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError):
             return False
-        verdict = _native_answer({"op": "windows-file-verify", "managed_file": str(path), "rows": rows})
+        verdict = _native_answer(
+            {"op": "windows-file-verify", "managed_file": str(path), "rows": rows}, deadline=deadline
+        )
         return verdict is not None and verdict.get("status") == "healthy"
     if os.name != "posix":
         return False

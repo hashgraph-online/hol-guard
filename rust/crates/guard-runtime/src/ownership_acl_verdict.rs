@@ -21,6 +21,8 @@ use std::io::Read;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::daemon_lifecycle_text::nt_root_end;
+
 const SCHEMA: &str = "ownership-acl.v1";
 const MAX_REQUEST_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -221,16 +223,30 @@ fn probe_failed() -> Verdict {
     }
 }
 
-/// Drive letter and normalized components of a drive-absolute Windows path,
-/// as `ntpath.normpath` would spell it.
+/// Drive or UNC share and normalized components of an absolute Windows
+/// path, as `ntpath.splitdrive(ntpath.normpath(path))` would spell it.
+/// Device and verbatim (`\\.\`, `\\?\`) spellings are refused.
 fn windows_components(path: &str) -> Result<(String, Vec<String>), ()> {
     let path = path.replace('/', "\\");
-    let bytes = path.as_bytes();
-    if bytes.len() < 3 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' || bytes[2] != b'\\' {
+    let chars: Vec<char> = path.chars().collect();
+    let end = nt_root_end(&chars);
+    let prefix: String = chars[..end].iter().collect();
+    let drive = prefix.strip_suffix('\\').ok_or(())?;
+    let drive_letter = drive.len() == 2
+        && drive.as_bytes()[0].is_ascii_alphabetic()
+        && drive.as_bytes()[1] == b':';
+    let unc_share = drive
+        .strip_prefix(r"\\")
+        .and_then(|share| share.split_once('\\'))
+        .is_some_and(|(server, share)| {
+            !matches!(server, "" | "?" | ".") && !share.is_empty() && !share.contains('\\')
+        });
+    if !drive_letter && !unc_share {
         return Err(());
     }
+    let tail: String = chars[end..].iter().collect();
     let mut components: Vec<String> = Vec::new();
-    for component in path[3..].split('\\') {
+    for component in tail.split('\\') {
         match component {
             "" | "." => {}
             ".." => {
@@ -239,7 +255,7 @@ fn windows_components(path: &str) -> Result<(String, Vec<String>), ()> {
             _ => components.push(component.to_owned()),
         }
     }
-    Ok((path[..2].to_owned(), components))
+    Ok((drive.to_owned(), components))
 }
 
 fn filesystem_chain(path: &str) -> Result<Vec<String>, ()> {

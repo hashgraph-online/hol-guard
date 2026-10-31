@@ -91,12 +91,18 @@ def _probe_failed(surfaces: tuple[AclSurfaceResult, ...] | None = None) -> Owner
     )
 
 
-def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
+def _native_deadline() -> float:
+    """One budget shared by every runtime call made for a single verification."""
+
+    return time.monotonic() + _COMMAND_TIMEOUT_SECONDS
+
+
+def _native_answer(request: dict[str, object], *, deadline: float) -> dict[str, object] | None:
     """The runtime's answer to one ownership-acl request, or ``None`` when it cannot answer."""
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
+    status = native_runtime_status(deadline_monotonic=min(deadline, time.monotonic() + _STATUS_TIMEOUT_SECONDS))
     if (
         not status.available
         or not status.compatible
@@ -105,11 +111,14 @@ def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
         or OWNERSHIP_ACL_FEATURE not in status.capabilities.features
     ):
         return None
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None
     output = _run_native_process(
         status.identity.path,
         (OWNERSHIP_ACL_COMMAND, "--stdin"),
         input_text=json.dumps({"schema": OWNERSHIP_ACL_SCHEMA, **request}, sort_keys=True),
-        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        timeout_seconds=remaining,
         output_limit=_MAX_ACL_OUTPUT_BYTES,
     )
     if output is None:
@@ -123,8 +132,8 @@ def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
     return cast(dict[str, object], answer)
 
 
-def _native_verdict(request: dict[str, object]) -> OwnershipAclVerification | None:
-    answer = _native_answer(request)
+def _native_verdict(request: dict[str, object], *, deadline: float) -> OwnershipAclVerification | None:
+    answer = _native_answer(request, deadline=deadline)
     if answer is None:
         return None
     status = answer.get("status")
@@ -152,7 +161,8 @@ def _aggregate(surfaces: list[AclSurfaceResult]) -> OwnershipAclVerification:
                 {"name": surface.name, "state": surface.state, "reason_code": surface.reason_code}
                 for surface in surfaces
             ],
-        }
+        },
+        deadline=_native_deadline(),
     )
     # Results nothing could fold never report health.
     return verdict or _probe_failed(tuple(surfaces))
@@ -304,8 +314,8 @@ def _windows_paths(paths: MachinePaths) -> dict[str, str]:
     }
 
 
-def _windows_surface_payload(paths: MachinePaths) -> list[dict[str, str | bool]]:
-    answer = _native_answer({"op": "windows-payload", "windows_paths": _windows_paths(paths)})
+def _windows_surface_payload(paths: MachinePaths, *, deadline: float) -> list[dict[str, str | bool]]:
+    answer = _native_answer({"op": "windows-payload", "windows_paths": _windows_paths(paths)}, deadline=deadline)
     payload = None if answer is None else answer.get("payload")
     if not isinstance(payload, list):
         raise OSError("ownership_acl_native_unavailable")
@@ -362,8 +372,8 @@ def _run_windows_acl_payload(payload: list[dict[str, str | bool]]) -> object:
     return json.loads(result.stdout)
 
 
-def _run_windows_acl_probe(paths: MachinePaths) -> object:
-    return _run_windows_acl_payload(_windows_surface_payload(paths))
+def _run_windows_acl_probe(paths: MachinePaths, *, deadline: float) -> object:
+    return _run_windows_acl_payload(_windows_surface_payload(paths, deadline=deadline))
 
 
 def verify_protected_ownership_and_acl(
@@ -383,11 +393,14 @@ def verify_protected_ownership_and_acl(
             [_verify_macos_surface(surface, expected_uid=expected_posix_uid, cache=cache) for surface in selected]
         )
     if resolved_system == "Windows":
+        deadline = _native_deadline()
         try:
-            rows = _run_windows_acl_probe(paths)
+            rows = _run_windows_acl_probe(paths, deadline=deadline)
         except (OSError, subprocess.SubprocessError, ValueError):
             return _probe_failed()
-        verdict = _native_verdict({"op": "windows-verify", "windows_paths": _windows_paths(paths), "rows": rows})
+        verdict = _native_verdict(
+            {"op": "windows-verify", "windows_paths": _windows_paths(paths), "rows": rows}, deadline=deadline
+        )
         return verdict or _probe_failed()
     return OwnershipAclVerification(
         "unsupported",

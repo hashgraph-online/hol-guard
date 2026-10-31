@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -228,7 +229,7 @@ def test_windows_payload_deduplicates_case_insensitive_paths() -> None:
         manifest_path=Path(str(paths.runtime_root).upper()) / "release-manifest.json",
     )
 
-    payload = acl._windows_surface_payload(mixed_case_paths)
+    payload = acl._windows_surface_payload(mixed_case_paths, deadline=acl._native_deadline())
     normalized_paths = [(str(item["kind"]), str(item["path"]).casefold()) for item in payload]
 
     assert len(normalized_paths) == len(set(normalized_paths))
@@ -256,14 +257,14 @@ def _windows_rows() -> list[dict[str, object]]:
                 }
             ],
         }
-        for item in acl._windows_surface_payload(_windows_paths())
+        for item in acl._windows_surface_payload(_windows_paths(), deadline=acl._native_deadline())
     ]
 
 
 def test_windows_acl_verification_uses_sid_rights_and_accepts_read_only_users(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(acl, "_run_windows_acl_probe", lambda _paths: _windows_rows())
+    monkeypatch.setattr(acl, "_run_windows_acl_probe", lambda _paths, **_kwargs: _windows_rows())
 
     result = acl.verify_protected_ownership_and_acl(_windows_paths(), system_name="Windows")
 
@@ -290,7 +291,7 @@ def test_windows_acl_verification_fails_honestly(
 ) -> None:
     rows = _windows_rows()
     rows[0][field] = value
-    monkeypatch.setattr(acl, "_run_windows_acl_probe", lambda _paths: rows)
+    monkeypatch.setattr(acl, "_run_windows_acl_probe", lambda _paths, **_kwargs: rows)
 
     result = acl.verify_protected_ownership_and_acl(_windows_paths(), system_name="Windows")
 
@@ -303,7 +304,7 @@ def test_windows_installed_tree_and_default_ancestors_have_safe_acls() -> None:
     if not paths.runtime_root.exists():
         pytest.skip("HOL Guard MDM runtime is not installed")
 
-    payload = acl._windows_surface_payload(paths)
+    payload = acl._windows_surface_payload(paths, deadline=acl._native_deadline())
     required_paths = {
         str(paths.runtime_root).casefold(),
         str(paths.manifest_path).casefold(),
@@ -323,8 +324,8 @@ def test_windows_installed_tree_and_default_ancestors_have_safe_acls() -> None:
 def test_windows_acl_verification_fails_closed_without_a_native_verdict(
     monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
 ) -> None:
-    monkeypatch.setattr(acl, "_run_windows_acl_probe", lambda _paths: [])
-    monkeypatch.setattr(acl, "_native_answer", lambda _request: answer)
+    monkeypatch.setattr(acl, "_run_windows_acl_probe", lambda _paths, **_kwargs: [])
+    monkeypatch.setattr(acl, "_native_answer", lambda _request, **_kwargs: answer)
 
     result = acl.verify_protected_ownership_and_acl(_windows_paths(), system_name="Windows")
 
@@ -339,7 +340,7 @@ def test_windows_acl_probe_uses_pinned_powershell_and_encoded_paths(
     monkeypatch.setattr(acl, "_windows_directory", lambda: r"D:\Windows")
     monkeypatch.setattr(acl.subprocess, "run", run)
 
-    acl._run_windows_acl_probe(_windows_paths())
+    acl._run_windows_acl_probe(_windows_paths(), deadline=acl._native_deadline())
 
     command = run.call_args.args[0]
     kwargs = run.call_args.kwargs
@@ -358,3 +359,15 @@ def test_unsupported_platform_never_reports_acl_health(tmp_path: Path) -> None:
 
     assert not result.healthy
     assert result.reason_code == "ownership_acl_platform_unsupported"
+
+
+def test_a_spent_native_budget_never_starts_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    spawn = Mock(return_value=None)
+    monkeypatch.setattr(native_runtime, "_run_native_process", spawn)
+
+    answer = acl._native_answer({"op": "aggregate", "surfaces": []}, deadline=time.monotonic() - 1)
+
+    assert answer is None
+    spawn.assert_not_called()
