@@ -37,6 +37,22 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
     matches!(executable, Some("cd") | Some("pushd"))
 }
 
+/// Whether this run names `OLDPWD` anywhere once the shell's quoting is gone.
+///
+/// The shell removes quoting before it reads an assignment, so the source
+/// text hides the name: `export OLD""PWD=/etc` and `OLD\PWD=/etc` both write
+/// it. The parser's words carry the spelling the shell would act on, so they
+/// are what the check reads. The source text is read as well, for a run whose
+/// quoting the tokenizer could not take apart.
+fn names_the_previous_directory(model: &CanonicalCommandV1) -> bool {
+    let names = |word: &str| word.to_ascii_lowercase().contains("oldpwd");
+    names(&model.normalized_text)
+        || model
+            .segments
+            .iter()
+            .any(|segment| segment.tokens.iter().any(|token| names(token)))
+}
+
 /// The directory a shell says it is in after `cd target`, which is the one it
 /// resolves the next `..` against. A shell without `cd -P` spends a parent
 /// step on the name it last printed rather than on what that name points to,
@@ -140,12 +156,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 // variable, and nothing here reads the assignments that
                 // would: a run that names it at all is one the walk cannot
                 // follow back.
-                if returning
-                    && model
-                        .normalized_text
-                        .to_ascii_lowercase()
-                        .contains("oldpwd")
-                {
+                if returning && names_the_previous_directory(model) {
                     return None;
                 }
                 // bash's `lastpipe` and zsh's default both run the last

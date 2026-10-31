@@ -218,6 +218,11 @@ fn a_return_to_a_rewritten_previous_directory_is_refused() {
         "cd app && ls && OLDPWD=/etc cd -",
         "cd app && ls && cd - && cat $OLDPWD/passwd",
         "cd app && oldpwd=/etc && cd - && ls",
+        // The shell strips the quoting before it reads the assignment, so
+        // these write the same variable as the plain spelling above.
+        "cd app && export OLD\"\"PWD=/etc && cd - && cat passwd",
+        "cd app && export 'OLDPWD'=/etc && cd - && cat passwd",
+        "cd app && OLD\"PWD\"=/etc && cd - && ls",
     ] {
         assert!(!shaped(command, &ws), "{command}");
     }
