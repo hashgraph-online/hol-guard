@@ -84,6 +84,17 @@ fn a_new_bundle_restarts_the_sequence() {
 }
 
 #[test]
+fn a_bundle_cloud_cannot_acknowledge_still_gets_no_acknowledgement() {
+    let mut bare_hash = bundle(json!([]));
+    bare_hash["bundleHash"] = json!("b".repeat(64));
+    let result = run_page(
+        "ack_payload",
+        ack_request(&bare_hash, "applied", Value::Null),
+    );
+    assert_eq!(result, json!({"ack": {}}));
+}
+
+#[test]
 fn managed_bundle_without_delivery_is_not_acknowledged() {
     let managed = bundle(json!([{"x-hol-extension-targets": []}]));
     let result = run_page("ack_payload", ack_request(&managed, "applied", Value::Null));

@@ -271,7 +271,9 @@ pub fn ack_payload(request: &AckRequest) -> Result<Obj, String> {
         if has_extension_semantics(request.bundle) {
             return Ok(Obj::new());
         }
-        return generic_ack(request);
+        // The generic acknowledgement is reporting only: a bundle Cloud cannot
+        // acknowledge this way still activates, as it did before the shape existed.
+        return Ok(generic_ack(request).unwrap_or_default());
     };
     let (Some(revision), Some(digest)) = (
         request.applied_revision.filter(|v| !v.is_null()),
