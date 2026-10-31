@@ -102,6 +102,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-business-policy-document-compile-v1".into(),
         "native-harness-coverage-v1".into(),
         "native-health-snapshot-binding-v1".into(),
+        "native-supervisor-verdict-v1".into(),
         "native-guard-config-load-v1".into(),
         "native-guard-config-update-v1".into(),
         "native-guard-config-resolve-v1".into(),

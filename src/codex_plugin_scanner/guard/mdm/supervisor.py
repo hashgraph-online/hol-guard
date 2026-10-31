@@ -1,19 +1,32 @@
-"""Native machine supervisor installation and fail-honest health verification."""
+"""Native machine supervisor installation and fail-honest health verification.
+
+Python reads the LaunchDaemon property list and runs ``launchctl`` or
+``schtasks``; the native runtime decides what that evidence says. Without a
+runtime that can decide, the supervisor's health is unknown.
+"""
 
 from __future__ import annotations
 
+import json
 import ntpath
 import os
 import platform
 import plistlib
-import re
 import stat
 import subprocess
 import tempfile
+import time
 from pathlib import Path
+from typing import Any, cast, get_args
 from xml.etree import ElementTree
 
-from .contracts import MachinePaths, SupervisorStatus, default_machine_paths
+from .contracts import (
+    IntegrityReasonCode,
+    MachinePaths,
+    SupervisorState,
+    SupervisorStatus,
+    default_machine_paths,
+)
 from .windows_support import windows_directory
 
 _MACOS_LABEL = "org.hol.guard.machine-health"
@@ -26,6 +39,12 @@ _WINDOWS_TASK_SECURITY_DESCRIPTOR = "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
 _MAX_REGISTRATION_BYTES = 256 * 1024
 _PROBE_TIMEOUT_SECONDS = 10
 _ABSENT_HRESULTS = {2, 0x80070002, -2147024894}
+SUPERVISOR_VERDICT_FEATURE = "native-supervisor-verdict-v1"
+SUPERVISOR_VERDICT_COMMAND = "supervisor-verdict"
+SUPERVISOR_VERDICT_SCHEMA = "supervisor-verdict.v1"
+_STATUS_TIMEOUT_SECONDS = 10.0
+_COMMAND_TIMEOUT_SECONDS = 30.0
+_OUTPUT_LIMIT_BYTES = 16 * 1024
 
 
 def machine_executable(paths: MachinePaths, system_name: str) -> Path:
@@ -63,44 +82,53 @@ def _bounded_regular_file(path: Path) -> bytes:
         os.close(descriptor)
 
 
-def _macos_registration_status(paths: MachinePaths, plist_path: Path) -> SupervisorStatus | None:
-    try:
-        payload = plistlib.loads(_bounded_regular_file(plist_path))
-    except FileNotFoundError:
-        return SupervisorStatus("absent", "supervisor_absent")
-    except (OSError, plistlib.InvalidFileException, ValueError):
-        return SupervisorStatus("unknown", "supervisor_probe_failed")
-    if not isinstance(payload, dict) or payload.get("Label") != _MACOS_LABEL:
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    expected_arguments = [
-        str(machine_executable(paths, "Darwin")),
-        "mdm",
-        "health-report",
-        "--scope",
-        "machine",
-        "--json",
-    ]
-    arguments = payload.get("ProgramArguments")
-    if not isinstance(arguments, list) or arguments != expected_arguments:
-        return SupervisorStatus("stopped", "supervisor_executable_mismatch")
-    expected_environment = {
-        "HOME": "/var/root",
-        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-        "TMPDIR": "/var/tmp",
-    }
-    if payload.get("EnvironmentVariables") != expected_environment:
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
+def _native_verdict(request: dict[str, object], deadline: float) -> dict[str, Any]:
+    """The runtime's verdict on one round of supervisor evidence, within the
+    verification's ``deadline`` on the monotonic clock."""
+
+    from ..native_runtime import _run_native_process, native_runtime_status
+
+    if deadline - time.monotonic() <= 0:
+        raise OSError("supervisor_verdict_native_unavailable")
+    status = native_runtime_status(deadline_monotonic=min(deadline, time.monotonic() + _STATUS_TIMEOUT_SECONDS))
+    remaining = deadline - time.monotonic()
+    output = None
     if (
-        payload.get("RunAtLoad") is not True
-        or payload.get("StartInterval") != 300
-        or payload.get("ProcessType") != "Background"
+        remaining > 0
+        and status.available
+        and status.compatible
+        and status.identity is not None
+        and status.capabilities is not None
+        and SUPERVISOR_VERDICT_FEATURE in status.capabilities.features
     ):
-        return SupervisorStatus("stopped", "supervisor_schedule_invalid")
-    if payload.get("StandardOutPath") != str(paths.log_root / "machine-health.log") or payload.get(
-        "StandardErrorPath"
-    ) != str(paths.log_root / "machine-health-error.log"):
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    return None
+        output = _run_native_process(
+            status.identity.path,
+            (SUPERVISOR_VERDICT_COMMAND, "--stdin"),
+            input_text=json.dumps(
+                {"schema": SUPERVISOR_VERDICT_SCHEMA, **request},
+                allow_nan=False,
+                default=lambda _value: None,
+                sort_keys=True,
+            ),
+            timeout_seconds=remaining,
+            output_limit=_OUTPUT_LIMIT_BYTES,
+        )
+    try:
+        answer = cast(object, json.loads(output or ""))
+    except ValueError:
+        answer = None
+    if not isinstance(answer, dict) or cast(dict[str, Any], answer).get("ok") is not True:
+        # A supervisor nothing could check is never reported as running.
+        raise OSError("supervisor_verdict_native_unavailable")
+    return cast(dict[str, Any], answer)
+
+
+def _status(answer: dict[str, Any]) -> SupervisorStatus:
+    state = answer.get("state")
+    reason_code = answer.get("reason_code")
+    if state not in get_args(SupervisorState) or reason_code not in get_args(IntegrityReasonCode):
+        raise OSError("supervisor_verdict_native_unavailable")
+    return SupervisorStatus(cast(SupervisorState, state), cast(IntegrityReasonCode, reason_code))
 
 
 def _run_macos_launchctl(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -119,54 +147,35 @@ def _run_macos_launchctl(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def _verify_macos_supervisor(paths: MachinePaths, plist_path: Path) -> SupervisorStatus:
-    registration = _macos_registration_status(paths, plist_path)
-    if registration is not None:
-        return registration
     try:
-        disabled = _run_macos_launchctl("print-disabled", "system")
-        if disabled.returncode != 0:
-            return SupervisorStatus("unknown", "supervisor_probe_failed")
-        pattern = rf'"{re.escape(_MACOS_LABEL)}"\s*=>\s*true'
-        if re.search(pattern, disabled.stdout, re.IGNORECASE):
-            return SupervisorStatus("disabled", "supervisor_disabled")
-        loaded = _run_macos_launchctl("print", f"system/{_MACOS_LABEL}")
-        if loaded.returncode != 0:
-            return SupervisorStatus("stopped", "supervisor_stopped")
-        loaded_status = _macos_loaded_status(paths, loaded.stdout)
-        if loaded_status is not None:
-            return loaded_status
-        return SupervisorStatus("running", "supervisor_running")
-    except (OSError, subprocess.SubprocessError):
+        payload = cast(object, plistlib.loads(_bounded_regular_file(plist_path)))
+    except FileNotFoundError:
+        return SupervisorStatus("absent", "supervisor_absent")
+    except (OSError, plistlib.InvalidFileException, ValueError):
         return SupervisorStatus("unknown", "supervisor_probe_failed")
-
-
-def _launchctl_scalar(output: str, name: str) -> str | None:
-    match = re.search(rf"(?m)^\s*{re.escape(name)}\s*=\s*(.*?)\s*$", output)
-    return match.group(1) if match is not None else None
-
-
-def _launchctl_arguments(output: str) -> list[str] | None:
-    match = re.search(r"(?ms)^\s*arguments\s*=\s*\{\s*\n(?P<body>.*?)^\s*\}\s*$", output)
-    if match is None:
-        return None
-    return [line.strip() for line in match.group("body").splitlines() if line.strip()]
-
-
-def _macos_loaded_status(paths: MachinePaths, output: str) -> SupervisorStatus | None:
-    expected_executable = str(machine_executable(paths, "Darwin"))
-    expected_arguments = [expected_executable, "mdm", "health-report", "--scope", "machine", "--json"]
-    if _launchctl_scalar(output, "path") != str(_MACOS_PLIST):
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    if _launchctl_scalar(output, "program") != expected_executable:
-        return SupervisorStatus("stopped", "supervisor_executable_mismatch")
-    if _launchctl_arguments(output) != expected_arguments:
-        return SupervisorStatus("stopped", "supervisor_executable_mismatch")
-    if _launchctl_scalar(output, "run interval") != "300 seconds":
-        return SupervisorStatus("stopped", "supervisor_schedule_invalid")
-    state = _launchctl_scalar(output, "state")
-    if state not in {"running", "not running"}:
-        return SupervisorStatus("stopped", "supervisor_stopped")
-    return None
+    request: dict[str, object] = {
+        "op": "macos",
+        "executable": str(machine_executable(paths, "Darwin")),
+        "plist": payload,
+        "plist_path": str(_MACOS_PLIST),
+        "stdout_log": str(paths.log_root / "machine-health.log"),
+        "stderr_log": str(paths.log_root / "machine-health-error.log"),
+    }
+    probes = {"disabled": ("print-disabled", "system"), "loaded": ("print", f"system/{_MACOS_LABEL}")}
+    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
+    try:
+        for _round in range(len(probes) + 1):
+            answer = _native_verdict(request, deadline)
+            probe = answer.get("next")
+            if probe is None:
+                return _status(answer)
+            if not isinstance(probe, str) or probe not in probes or probe in request:
+                break
+            result = _run_macos_launchctl(*probes[probe])
+            request[probe] = {"returncode": result.returncode, "stdout": result.stdout}
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return SupervisorStatus("unknown", "supervisor_probe_failed")
 
 
 _windows_directory = windows_directory
@@ -203,113 +212,22 @@ def _run_schtasks(*arguments: str) -> subprocess.CompletedProcess[str]:
     return result
 
 
-def _xml_text(root: ElementTree.Element, path: str) -> str | None:
-    element = root.find(path, {"task": _TASK_NAMESPACE})
-    return element.text if element is not None else None
-
-
-def _windows_security_descriptor_valid(descriptor: str | None) -> bool:
-    if descriptor is None:
-        return False
-    match = re.fullmatch(
-        r"(?:O:(?:BA|SY|S-1-5-32-544|S-1-5-18))?"
-        r"(?:G:(?:BA|SY|S-1-5-32-544|S-1-5-18))?"
-        r"D:P(?P<aces>(?:\([^()]+\))+)",
-        descriptor,
-        re.IGNORECASE,
-    )
-    if match is None:
-        return False
-    aliases = {"SY": "S-1-5-18", "BA": "S-1-5-32-544"}
-    normalized_aces: list[str] = []
-    for ace in re.findall(r"\(([^()]+)\)", match.group("aces")):
-        fields = ace.upper().split(";")
-        if len(fields) != 6:
-            return False
-        fields[5] = aliases.get(fields[5], fields[5])
-        normalized_aces.append(f"({';'.join(fields)})")
-    return len(normalized_aces) == 2 and set(normalized_aces) == {
-        "(A;;FA;;;S-1-5-18)",
-        "(A;;FA;;;S-1-5-32-544)",
-    }
-
-
-def _windows_registration_status(paths: MachinePaths, xml_text: str) -> SupervisorStatus:
-    try:
-        root = ElementTree.fromstring(xml_text.lstrip("\ufeff"))
-    except ElementTree.ParseError:
-        return SupervisorStatus("unknown", "supervisor_probe_failed")
-    if root.tag != f"{{{_TASK_NAMESPACE}}}Task":
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    enabled = _xml_text(root, "./task:Settings/task:Enabled")
-    if enabled is not None and enabled.casefold() == "false":
-        return SupervisorStatus("disabled", "supervisor_disabled")
-    if _xml_text(root, "./task:RegistrationInfo/task:URI") != _WINDOWS_TASK_NAME:
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    if not _windows_security_descriptor_valid(_xml_text(root, "./task:RegistrationInfo/task:SecurityDescriptor")):
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    principals = root.findall("./task:Principals/task:Principal", {"task": _TASK_NAMESPACE})
-    if len(principals) != 1:
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    principal = principals[0]
-    user_id = _xml_text(principal, "./task:UserId")
-    if user_id is None or user_id.casefold() not in {"s-1-5-18", "system", r"nt authority\system"}:
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    if (
-        _xml_text(principal, "./task:LogonType") != "ServiceAccount"
-        or _xml_text(principal, "./task:RunLevel") != "HighestAvailable"
-    ):
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    triggers = root.findall("./task:Triggers/*", {"task": _TASK_NAMESPACE})
-    if len(triggers) != 1 or triggers[0].tag != f"{{{_TASK_NAMESPACE}}}TimeTrigger":
-        return SupervisorStatus("stopped", "supervisor_schedule_invalid")
-    trigger = triggers[0]
-    if (
-        _xml_text(trigger, "./task:Repetition/task:Interval") != "PT5M"
-        or _xml_text(trigger, "./task:Repetition/task:StopAtDurationEnd") != "false"
-        or _xml_text(trigger, "./task:StartBoundary") != _WINDOWS_TASK_START_BOUNDARY
-        or _xml_text(trigger, "./task:EndBoundary") is not None
-        or _xml_text(trigger, "./task:Enabled") != "true"
-    ):
-        return SupervisorStatus("stopped", "supervisor_schedule_invalid")
-    actions_parent = root.find("./task:Actions", {"task": _TASK_NAMESPACE})
-    if actions_parent is None or actions_parent.get("Context") != "System":
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    actions = root.findall("./task:Actions/*", {"task": _TASK_NAMESPACE})
-    if len(actions) != 1 or actions[0].tag != f"{{{_TASK_NAMESPACE}}}Exec":
-        return SupervisorStatus("stopped", "supervisor_registration_invalid")
-    expected_executable = ntpath.normcase(ntpath.normpath(str(machine_executable(paths, "Windows"))))
-    command = _xml_text(actions[0], "./task:Command")
-    if command is None or ntpath.normcase(ntpath.normpath(command)) != expected_executable:
-        return SupervisorStatus("stopped", "supervisor_executable_mismatch")
-    if _xml_text(actions[0], "./task:Arguments") != _HEALTH_ARGUMENTS:
-        return SupervisorStatus("stopped", "supervisor_executable_mismatch")
-    if (
-        _xml_text(root, "./task:Settings/task:MultipleInstancesPolicy") != "IgnoreNew"
-        or _xml_text(root, "./task:Settings/task:ExecutionTimeLimit") != "PT5M"
-        or _xml_text(root, "./task:Settings/task:StartWhenAvailable") != "true"
-        or _xml_text(root, "./task:Settings/task:Hidden") != "true"
-        or _xml_text(root, "./task:Settings/task:Enabled") != "true"
-    ):
-        return SupervisorStatus("stopped", "supervisor_schedule_invalid")
-    if (
-        _xml_text(root, "./task:Settings/task:DisallowStartIfOnBatteries") != "false"
-        or _xml_text(root, "./task:Settings/task:StopIfGoingOnBatteries") != "false"
-    ):
-        return SupervisorStatus("stopped", "supervisor_schedule_invalid")
-    return SupervisorStatus("running", "supervisor_running")
-
-
 def _verify_windows_supervisor(paths: MachinePaths) -> SupervisorStatus:
+    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
     try:
         result = _run_schtasks("/Query", "/TN", _WINDOWS_TASK_NAME, "/XML", "/HRESULT")
-    except (OSError, subprocess.SubprocessError):
+        return _status(
+            _native_verdict(
+                {
+                    "op": "windows",
+                    "executable": str(machine_executable(paths, "Windows")),
+                    "task": {"returncode": result.returncode, "stdout": result.stdout},
+                },
+                deadline,
+            )
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
         return SupervisorStatus("unknown", "supervisor_probe_failed")
-    if result.returncode in _ABSENT_HRESULTS:
-        return SupervisorStatus("absent", "supervisor_absent")
-    if result.returncode != 0:
-        return SupervisorStatus("unknown", "supervisor_probe_failed")
-    return _windows_registration_status(paths, result.stdout)
 
 
 def verify_machine_supervisor(
