@@ -145,16 +145,33 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
         [
             (".npmrc", "npm registry credentials"),
             (".pypirc", "Python package credentials"),
+            (".yarnrc.yml", "Yarn registry credentials"),
             (".netrc", "netrc credentials"),
+            ("_netrc", "netrc credentials"),
             (".git-credentials", "Git credential store"),
             (".terraform.tfvars", "Terraform variable secrets"),
             ("terraform.tfvars", "Terraform variable secrets"),
+            (".terraformrc", "Terraform CLI credentials"),
+            ("terraform.rc", "Terraform CLI credentials"),
+            ("credentials.tfrc.json", "Terraform CLI credentials"),
+            (".vault-token", "Vault token"),
+            (".pgpass", "PostgreSQL password file"),
+            (".my.cnf", "MySQL client credentials"),
+            (".htpasswd", "htpasswd credential file"),
+            ("rclone.conf", "rclone remote credentials"),
+            (".rclone.conf", "rclone remote credentials"),
+            (
+                "application_default_credentials.json",
+                "Google Cloud credentials",
+            ),
+            (".credentials.json", "stored credential file"),
             ("private-key.pem", "wallet/private-key file"),
             ("private.key", "wallet/private-key file"),
             ("wallet.key", "wallet/private-key file"),
             (".wallet", "wallet/private-key file"),
             ("wallet.dat", "wallet/private-key file"),
             ("id_rsa", "SSH private key"),
+            ("id_dsa", "SSH private key"),
             ("id_ed25519", "SSH private key"),
             ("id_ecdsa", "SSH private key"),
         ]
@@ -176,6 +193,7 @@ fn redacted_basename_labels() -> &'static BTreeMap<&'static str, &'static str> {
     M.get_or_init(|| {
         [
             ("id_rsa", "SSH private key"),
+            ("id_dsa", "SSH private key"),
             ("id_ed25519", "SSH private key"),
             ("id_ecdsa", "SSH private key"),
         ]
@@ -185,7 +203,26 @@ fn redacted_basename_labels() -> &'static BTreeMap<&'static str, &'static str> {
 }
 fn sensitive_directory_labels() -> &'static BTreeMap<&'static str, &'static str> {
     static M: OnceLock<BTreeMap<&'static str, &'static str>> = OnceLock::new();
-    M.get_or_init(|| [(".gnupg", "GnuPG key material")].into_iter().collect())
+    M.get_or_init(|| {
+        [
+            (".gnupg", "GnuPG key material"),
+            (".ssh", "SSH key material"),
+            (".password-store", "password store secrets"),
+        ]
+        .into_iter()
+        .collect()
+    })
+}
+/// Directory pairs whose whole subtree holds credentials under names the
+/// client picks, so no fixed basename can anchor them: an AWS SSO token cache
+/// and a gcloud account directory are both named after the account.
+fn sensitive_directory_sequences() -> &'static [(&'static [&'static str], &'static str)] {
+    const AWS_SSO: &[&str] = &[".aws", "sso"];
+    const GCLOUD_LEGACY: &[&str] = &["gcloud", "legacy_credentials"];
+    &[
+        (AWS_SSO, "AWS SSO cached credentials"),
+        (GCLOUD_LEGACY, "Google Cloud credentials"),
+    ]
 }
 fn sensitive_suffix_labels() -> &'static BTreeMap<&'static [&'static str], &'static str> {
     static M: OnceLock<BTreeMap<&'static [&'static str], &'static str>> = OnceLock::new();
@@ -194,15 +231,83 @@ fn sensitive_suffix_labels() -> &'static BTreeMap<&'static [&'static str], &'sta
             (&[".aws", "credentials"][..], "AWS shared credentials file"),
             (&[".aws", "config"][..], "AWS shared config file"),
             (&[".docker", "config.json"][..], "Docker client config"),
+            (
+                &["containers", "auth.json"][..],
+                "container registry credentials",
+            ),
             (&[".kube", "config"][..], "Kubernetes config"),
             (&[".ssh", "id_rsa"][..], "SSH private key"),
+            (&[".ssh", "id_dsa"][..], "SSH private key"),
             (&[".ssh", "id_ed25519"][..], "SSH private key"),
             (&[".ssh", "id_ecdsa"][..], "SSH private key"),
             (&[".ssh", "config"][..], "SSH client config"),
+            (&["gh", "hosts.yml"][..], "GitHub CLI credentials"),
+            (&["github cli", "hosts.yml"][..], "GitHub CLI credentials"),
+            (&["git", "credentials"][..], "Git credential store"),
+            (
+                &["gcloud", "credentials.db"][..],
+                "Google Cloud credentials",
+            ),
+            (
+                &["gcloud", "access_tokens.db"][..],
+                "Google Cloud credentials",
+            ),
+            (
+                &["gcloud", "application_default_credentials.json"][..],
+                "Google Cloud credentials",
+            ),
+            (&[".azure", "accesstokens.json"][..], "Azure credentials"),
+            (
+                &[".azure", "msal_token_cache.json"][..],
+                "Azure credentials",
+            ),
+            (
+                &[".azure", "service_principal_entries.json"][..],
+                "Azure credentials",
+            ),
+            (&[".cargo", "credentials"][..], "Cargo registry credentials"),
+            (
+                &[".cargo", "credentials.toml"][..],
+                "Cargo registry credentials",
+            ),
+            (&[".gem", "credentials"][..], "RubyGems credentials"),
+            (&[".m2", "settings.xml"][..], "Maven settings credentials"),
+            (
+                &[".gradle", "gradle.properties"][..],
+                "Gradle properties credentials",
+            ),
+            (&[".composer", "auth.json"][..], "Composer credentials"),
+            (&["composer", "auth.json"][..], "Composer credentials"),
+            (&[".pip", "pip.conf"][..], "pip index credentials"),
+            (&["pip", "pip.conf"][..], "pip index credentials"),
+            (&["pip", "pip.ini"][..], "pip index credentials"),
+            (&["nuget", "nuget.config"][..], "NuGet package credentials"),
+            (&[".codex", "auth.json"][..], "stored credential file"),
         ]
         .into_iter()
         .collect()
     })
+}
+/// Basename extensions that name a key or certificate bundle whatever the
+/// file is called. `.pem` is left out: it is as often a public certificate as
+/// a private key, and `private-key.pem` is already a sensitive basename.
+fn sensitive_extension_labels() -> &'static [(&'static str, &'static str)] {
+    &[
+        (".pfx", "keystore or certificate bundle"),
+        (".p12", "keystore or certificate bundle"),
+        (".jks", "keystore or certificate bundle"),
+        (".keystore", "keystore or certificate bundle"),
+    ]
+}
+/// Families whose match names key material itself rather than a file that may
+/// carry a credential.
+fn sensitivity_for(family: &str) -> &'static str {
+    match family {
+        "wallet/private-key file" | "SSH private key" | "keystore or certificate bundle" => {
+            "critical"
+        }
+        _ => "high",
+    }
 }
 fn sensitive_path_reason(family: &str) -> &'static str {
     match family {
@@ -215,9 +320,36 @@ fn sensitive_path_reason(family: &str) -> &'static str {
         "Python package credentials" => {
             "Guard treats .pypirc as sensitive because it may contain package credentials."
         }
+        "Yarn registry credentials" => {
+            "Guard treats .yarnrc.yml as sensitive because it may contain registry tokens."
+        }
+        "NuGet package credentials" => {
+            "Guard treats NuGet config as sensitive because it may contain package source credentials."
+        }
+        "pip index credentials" => {
+            "Guard treats pip config as sensitive because an index URL may carry credentials."
+        }
+        "Cargo registry credentials" => {
+            "Guard treats Cargo credentials as sensitive because they contain registry tokens."
+        }
+        "RubyGems credentials" => {
+            "Guard treats RubyGems credentials as sensitive because they contain API keys."
+        }
+        "Maven settings credentials" => {
+            "Guard treats Maven settings as sensitive because servers may carry passwords."
+        }
+        "Gradle properties credentials" => {
+            "Guard treats the Gradle home properties as sensitive because they often hold signing and publishing keys."
+        }
+        "Composer credentials" => {
+            "Guard treats Composer auth as sensitive because it contains repository tokens."
+        }
         "netrc credentials" => "Guard treats .netrc as sensitive because it may contain login secrets.",
         "Git credential store" => {
             "Guard treats .git-credentials as sensitive because it may contain repository credentials."
+        }
+        "GitHub CLI credentials" => {
+            "Guard treats the GitHub CLI host file as sensitive because it stores OAuth tokens."
         }
         "AWS shared credentials file" => {
             "Guard treats AWS shared credentials as sensitive because they contain cloud access keys."
@@ -225,8 +357,20 @@ fn sensitive_path_reason(family: &str) -> &'static str {
         "AWS shared config file" => {
             "Guard treats AWS shared config as sensitive because it may contain credential profiles."
         }
+        "AWS SSO cached credentials" => {
+            "Guard treats the AWS SSO cache as sensitive because it holds live session tokens."
+        }
+        "Google Cloud credentials" => {
+            "Guard treats gcloud credentials as sensitive because they authorize cloud projects."
+        }
+        "Azure credentials" => {
+            "Guard treats the Azure token cache as sensitive because it holds live access tokens."
+        }
         "Docker client config" => {
             "Guard treats Docker client config as sensitive because it may contain registry auth."
+        }
+        "container registry credentials" => {
+            "Guard treats container auth files as sensitive because they contain registry logins."
         }
         "Kubernetes config" => {
             "Guard treats Kubernetes config as sensitive because it may include cluster credentials."
@@ -237,11 +381,41 @@ fn sensitive_path_reason(family: &str) -> &'static str {
         "SSH client config" => {
             "Guard treats SSH config as sensitive because it may reveal or shape host credentials."
         }
+        "SSH key material" => {
+            "Guard treats the .ssh directory as sensitive because it holds host keys and access material."
+        }
         "GnuPG key material" => {
             "Guard treats GnuPG key material as sensitive because it can unlock encrypted assets."
         }
+        "password store secrets" => {
+            "Guard treats a password store as sensitive because every entry under it is a stored secret."
+        }
+        "keystore or certificate bundle" => {
+            "Guard treats keystores as sensitive because they bundle private keys with their certificates."
+        }
+        "PostgreSQL password file" => {
+            "Guard treats .pgpass as sensitive because it stores database passwords in the clear."
+        }
+        "MySQL client credentials" => {
+            "Guard treats the MySQL client config as sensitive because it may store a database password."
+        }
+        "htpasswd credential file" => {
+            "Guard treats .htpasswd as sensitive because it stores password hashes for a served site."
+        }
+        "rclone remote credentials" => {
+            "Guard treats the rclone config as sensitive because it stores remote storage tokens."
+        }
+        "Vault token" => {
+            "Guard treats the Vault token file as sensitive because it grants whatever the token can reach."
+        }
         "Terraform variable secrets" => {
             "Guard treats Terraform variable files as sensitive because they often contain secrets."
+        }
+        "Terraform CLI credentials" => {
+            "Guard treats Terraform CLI credentials as sensitive because they contain registry tokens."
+        }
+        "stored credential file" => {
+            "Guard treats a stored credential file as sensitive because it holds a signed-in session."
         }
         "wallet/private-key file" => {
             "Guard treats wallet and private-key files as sensitive because they can authorize account control."
@@ -279,8 +453,14 @@ fn make_match(
 /// Basenames and keywords the shell-read classifier flags beyond the
 /// `secret_sensitivity.classify_secret_path` tables that the file-request
 /// classification used.
-const SHELL_READ_ONLY_BASENAMES: &[&str] =
-    &[".wallet", "wallet.dat", "id_rsa", "id_ed25519", "id_ecdsa"];
+const SHELL_READ_ONLY_BASENAMES: &[&str] = &[
+    ".wallet",
+    "wallet.dat",
+    "id_rsa",
+    "id_dsa",
+    "id_ed25519",
+    "id_ecdsa",
+];
 
 /// `classify_secret_path` (:221-288).
 pub(crate) fn classify_secret_path(
@@ -339,16 +519,11 @@ fn classify_secret_path_profile(
         .get(basename.as_str())
         .filter(|_| !shell_read_only)
     {
-        let sensitivity = if *family == "wallet/private-key file" {
-            "critical"
-        } else {
-            "high"
-        };
         return Some(make_match(
             requested_path,
             &normalized_path,
             family,
-            sensitivity,
+            sensitivity_for(family),
         ));
     }
     if sensitive_basename_keywords()
@@ -366,23 +541,16 @@ fn classify_secret_path_profile(
         && redacted_basename_labels().contains_key(basename.as_str())
     {
         let family = redacted_basename_labels()[basename.as_str()];
-        let sensitivity = if family == "SSH private key" {
-            "critical"
-        } else {
-            "high"
-        };
         return Some(make_match(
             requested_path,
             &normalized_path,
             family,
-            sensitivity,
+            sensitivity_for(family),
         ));
     }
-    for (directory, family) in sensitive_directory_labels() {
-        if lowered_segments.iter().any(|s| s == directory) {
-            return Some(make_match(requested_path, &normalized_path, family, "high"));
-        }
-    }
+    // The suffix tables name an exact file, so they are read before the
+    // directory tables: `.ssh/id_rsa` is a private key, while another name
+    // under `.ssh` is only key material.
     for (suffix, family) in sensitive_suffix_labels() {
         let n = suffix.len();
         if lowered_segments.len() >= n
@@ -391,16 +559,46 @@ fn classify_secret_path_profile(
                 .map(String::as_str)
                 .eq(suffix.iter().copied())
         {
-            let sensitivity = if *family == "SSH private key" {
-                "critical"
-            } else {
-                "high"
-            };
             return Some(make_match(
                 requested_path,
                 &normalized_path,
                 family,
-                sensitivity,
+                sensitivity_for(family),
+            ));
+        }
+    }
+    for (directory, family) in sensitive_directory_labels() {
+        if lowered_segments.iter().any(|s| s == directory) {
+            return Some(make_match(
+                requested_path,
+                &normalized_path,
+                family,
+                sensitivity_for(family),
+            ));
+        }
+    }
+    for (sequence, family) in sensitive_directory_sequences() {
+        if lowered_segments.windows(sequence.len()).any(|window| {
+            window
+                .iter()
+                .map(String::as_str)
+                .eq(sequence.iter().copied())
+        }) {
+            return Some(make_match(
+                requested_path,
+                &normalized_path,
+                family,
+                sensitivity_for(family),
+            ));
+        }
+    }
+    for (extension, family) in sensitive_extension_labels() {
+        if basename.ends_with(extension) {
+            return Some(make_match(
+                requested_path,
+                &normalized_path,
+                family,
+                sensitivity_for(family),
             ));
         }
     }
@@ -1908,5 +2106,198 @@ mod launch_parity_tests {
         );
         assert_eq!(out, vec!["a/b", FAIL_CLOSED_SENSITIVE_READ]);
         assert!(classify_secret_path(FAIL_CLOSED_SENSITIVE_READ, None, None).is_some());
+    }
+}
+
+#[cfg(test)]
+mod secret_corpus_tests {
+    use super::*;
+
+    /// One path per credential family the shell classifier learned, with the
+    /// family and rating callers branch on. A family whose reason arm is
+    /// missing reads back as an empty string, so each case checks that too.
+    #[test]
+    fn every_credential_family_classifies_with_its_rating_and_reason() {
+        for (path, family, sensitivity) in [
+            ("/home/me/.yarnrc.yml", "Yarn registry credentials", "high"),
+            (
+                "/home/me/.nuget/NuGet/NuGet.Config",
+                "NuGet package credentials",
+                "high",
+            ),
+            ("/home/me/_netrc", "netrc credentials", "high"),
+            (
+                "/home/me/.config/gh/hosts.yml",
+                "GitHub CLI credentials",
+                "high",
+            ),
+            (
+                "/home/me/.config/git/credentials",
+                "Git credential store",
+                "high",
+            ),
+            (
+                "/home/me/.config/containers/auth.json",
+                "container registry credentials",
+                "high",
+            ),
+            (
+                "/home/me/.aws/sso/cache/7f3.json",
+                "AWS SSO cached credentials",
+                "high",
+            ),
+            (
+                "/home/me/.config/gcloud/credentials.db",
+                "Google Cloud credentials",
+                "high",
+            ),
+            (
+                "/home/me/.config/gcloud/legacy_credentials/me@example.test/adc.json",
+                "Google Cloud credentials",
+                "high",
+            ),
+            (
+                "/home/me/.azure/msal_token_cache.json",
+                "Azure credentials",
+                "high",
+            ),
+            (
+                "/home/me/.cargo/credentials.toml",
+                "Cargo registry credentials",
+                "high",
+            ),
+            ("/home/me/.gem/credentials", "RubyGems credentials", "high"),
+            (
+                "/home/me/.m2/settings.xml",
+                "Maven settings credentials",
+                "high",
+            ),
+            (
+                "/home/me/.gradle/gradle.properties",
+                "Gradle properties credentials",
+                "high",
+            ),
+            (
+                "/home/me/.composer/auth.json",
+                "Composer credentials",
+                "high",
+            ),
+            (
+                "/home/me/.config/pip/pip.conf",
+                "pip index credentials",
+                "high",
+            ),
+            ("/home/me/.pgpass", "PostgreSQL password file", "high"),
+            ("/home/me/.my.cnf", "MySQL client credentials", "high"),
+            ("/home/me/.htpasswd", "htpasswd credential file", "high"),
+            ("/home/me/.rclone.conf", "rclone remote credentials", "high"),
+            ("/home/me/.vault-token", "Vault token", "high"),
+            ("/home/me/.terraformrc", "Terraform CLI credentials", "high"),
+            ("/home/me/.ssh/id_dsa", "SSH private key", "critical"),
+            ("/home/me/.ssh/known_hosts", "SSH key material", "high"),
+            (
+                "/home/me/.password-store/work/github.gpg",
+                "password store secrets",
+                "high",
+            ),
+            (
+                "/work/app/release.keystore",
+                "keystore or certificate bundle",
+                "critical",
+            ),
+            (
+                "/work/app/certs/client.p12",
+                "keystore or certificate bundle",
+                "critical",
+            ),
+            (
+                "/work/app/certs/bundle.pfx",
+                "keystore or certificate bundle",
+                "critical",
+            ),
+            (
+                "/work/app/certs/store.jks",
+                "keystore or certificate bundle",
+                "critical",
+            ),
+        ] {
+            let found = classify_secret_path(path, None, None)
+                .unwrap_or_else(|| panic!("{path} lost its classification"));
+            assert_eq!(found.family, family, "{path}");
+            assert_eq!(found.sensitivity, sensitivity, "{path}");
+            assert!(!found.reason.is_empty(), "{path} has no reason text");
+        }
+    }
+
+    /// The ambiguous basenames are anchored to the directory their credential
+    /// form lives in, so a project file of the same name stays ordinary.
+    #[test]
+    fn a_project_file_sharing_a_credential_name_stays_ordinary() {
+        for path in [
+            "/work/app/gradle.properties",
+            "/work/app/settings.xml",
+            "/work/app/auth.json",
+            "/work/app/credentials",
+            "/work/app/pip.conf",
+            "/work/app/hosts.yml",
+            "/work/app/nuget.config",
+            "/work/app/config",
+            "/work/app/server.pem",
+        ] {
+            assert!(
+                classify_secret_path(path, None, None).is_none(),
+                "{path} gained a classification it should not have"
+            );
+        }
+    }
+
+    /// `kubeconfig` names a Kubernetes credential only where the `.kube`
+    /// directory holds it. A workspace file carrying that name — a template,
+    /// a fixture, a generated copy — is ordinary, and reading it as a secret
+    /// refuses writes the workspace is allowed to make.
+    #[test]
+    fn a_workspace_file_named_kubeconfig_stays_ordinary() {
+        assert!(classify_secret_path("/work/app/kubeconfig", None, None).is_none());
+        assert!(classify_secret_path("/work/app/deploy/kubeconfig", None, None).is_none());
+        assert_eq!(
+            classify_secret_path("/home/me/.kube/config", None, None)
+                .expect("the credential itself")
+                .family,
+            "Kubernetes config"
+        );
+    }
+
+    /// The `.ssh` directory reads as the material it holds, so a command that
+    /// walks it reaches keys without naming one. A directory whose name only
+    /// starts with the same letters is a different directory.
+    #[test]
+    fn the_ssh_directory_reads_as_key_material_but_a_lookalike_does_not() {
+        assert_eq!(
+            classify_secret_path("/home/me/.ssh", None, None)
+                .expect("the directory itself")
+                .family,
+            "SSH key material"
+        );
+        assert!(classify_secret_path("/home/me/.ssh-backup", None, None).is_none());
+        assert!(classify_secret_path("/home/me/.ssh-backup/notes.txt", None, None).is_none());
+    }
+
+    /// A bare key basename is a shell-read signal only. The file-request
+    /// profile wants the `.ssh` directory or a redaction to name one.
+    #[test]
+    fn a_bare_key_basename_stays_shell_only() {
+        assert_eq!(
+            classify_secret_path("/work/app/id_dsa", None, None)
+                .expect("shell read")
+                .family,
+            "SSH private key"
+        );
+        assert!(classify_request_secret_path("/work/app/id_dsa", None, None).is_none());
+        assert_eq!(
+            classify_request_secret_path("/home/me/.ssh/id_dsa", None, None)
+                .expect("request read")
+                .family,
+            "SSH private key"
+        );
     }
 }

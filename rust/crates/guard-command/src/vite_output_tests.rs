@@ -366,3 +366,35 @@ fn a_workspace_spelled_behind_a_link_still_grants_its_own_modules() {
     let behind = linked_app.join("node_modules");
     assert_eq!(bundle_directory(&linked_app, &workspace, &behind), None);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_linked_bundle_directory_entry_or_modules_is_not_granted() {
+    for problem in ["linked-temp", "linked-entry", "linked-modules"] {
+        let project = Project::new(problem);
+        let app = project.app();
+        let modules = app.join("node_modules");
+        let outside = project.workspace().join("outside");
+        fs::create_dir_all(&outside).expect("outside");
+        match problem {
+            "linked-temp" => {
+                fs::create_dir_all(&modules).expect("modules");
+                std::os::unix::fs::symlink(&outside, modules.join(".vite-temp")).expect("link");
+            }
+            "linked-entry" => {
+                fs::create_dir_all(modules.join(".vite-temp")).expect("temp");
+                std::os::unix::fs::symlink(
+                    outside.join("elsewhere.mjs"),
+                    modules.join(".vite-temp/x.mjs"),
+                )
+                .expect("link");
+            }
+            _ => std::os::unix::fs::symlink(&outside, &modules).expect("link"),
+        }
+        assert_eq!(
+            bundle_directory(&app, project.workspace(), &modules),
+            None,
+            "{problem}"
+        );
+    }
+}

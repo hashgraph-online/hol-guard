@@ -126,6 +126,26 @@ fn grok_searches_keep_review_when_a_secret_is_reachable() {
 }
 
 #[test]
+fn grok_searches_a_folder_whose_secret_the_pattern_cannot_match() {
+    let (home, workspace, project) = fixture();
+    // The same reachable secret as above, searched for a plain word it does
+    // not contain: the host prints only matching lines, so the file adds
+    // nothing to the output and need not hold the search.
+    write(&project.join("docs/.env"), "TOKEN=canary\n");
+    for input in [
+        json!({"pattern": "hol-hermes", "path": text(&project.join("docs"))}),
+        json!({
+            "pattern": "hol-hermes",
+            "path": text(&project.join("docs")),
+            "glob": "*.md",
+        }),
+    ] {
+        let decision = grok("Grep", input.clone(), &home, &workspace);
+        assert!(allowed(&decision, SEARCH_SCOPE), "{input} {decision:?}");
+    }
+}
+
+#[test]
 fn grok_searches_keep_review_for_unmodeled_input() {
     let (home, workspace, project) = fixture();
     let docs = text(&project.join("docs"));

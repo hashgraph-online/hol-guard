@@ -128,6 +128,7 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_names;
+mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;
@@ -782,6 +783,7 @@ fn exact_safe_command_with_context(
         return false;
     }
     if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
+        || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
         || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
     {
         return true;

@@ -216,6 +216,18 @@ pub(crate) fn home_targets_unquoted(segment: &crate::CommandSegmentV1) -> bool {
         || !shell_keeps_tilde_literal(&segment.text)
 }
 
+/// Whether a `~`-spelled executable reaches the shell as the home path the
+/// path proofs resolve it to. A quoted or escaped `~` stays a literal
+/// relative name, which the shell looks for under the working directory —
+/// the one place the agent writes without review.
+pub(crate) fn home_executable_unquoted(segment: &crate::CommandSegmentV1) -> bool {
+    !segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| executable.starts_with('~'))
+        || !shell_keeps_tilde_literal(&segment.text)
+}
+
 /// Search reads also accept a quoted `~` when the working directory has no
 /// `~` entry: the literal relative path then names nothing, so the search
 /// reads nothing, and the home spelling has already cleared the read screens.

@@ -352,3 +352,66 @@ fn the_daemon_path_refuses_a_request_missing_its_binding() {
         );
     }
 }
+
+#[test]
+fn a_native_scope_runs_the_runtime_sink_and_admits_only_this_runtime() {
+    let (_directory, workspace) = workspace();
+    let scope = scope(&workspace).with_native_sink();
+    let answer = probe_answer(
+        &sandboxed_edge("sink"),
+        &probe("make build", &workspace),
+        &scope,
+    );
+    let command = routed_command(&answer).to_owned();
+    let request = request_file(&command);
+    let argv = crate::mcp_proxy_shlex::split_with(&command, "", "").unwrap();
+    let runtime = std::env::current_exe().unwrap();
+    assert_eq!(
+        argv[..2],
+        [runtime.to_str().unwrap(), "contained-workspace-sink"]
+    );
+    assert_eq!(route(&sink_call(&command)).unwrap(), Route::Sink);
+    assert!(admit_sink(&sink_call(&command), &scope).is_ok());
+    // The same argv naming any other executable takes the daemon's review.
+    let mut other = argv.clone();
+    other[0] = "/opt/elsewhere/hol-guard".to_owned();
+    assert_eq!(
+        admit_sink(&sink_call(&crate::mcp_proxy_shlex::join(&other)), &scope),
+        Err(HookDirectDefer::Cursor(CursorDefer::SinkArgv))
+    );
+    discard(Path::new(&request));
+
+    // A call that leaves the directory to the top level runs there too.
+    let mut plain = probe("make build", &workspace);
+    plain.insert("tool_input".to_owned(), json!({ "command": "make build" }));
+    let answer = probe_answer(&sandboxed_edge("sink"), &plain, &scope);
+    let command = routed_command(&answer).to_owned();
+    let argv = crate::mcp_proxy_shlex::split_with(&command, "", "").unwrap();
+    assert_eq!(argv[1], "contained-workspace-sink");
+    discard(Path::new(&request_file(&command)));
+}
+
+#[test]
+fn the_daemon_path_runs_the_runtime_sink_only_when_the_daemon_admits_it() {
+    let (_directory, workspace) = workspace();
+    let edge: Value = serde_json::from_slice(&sandboxed_edge("sink")).unwrap();
+    let mut params = daemon_params(&workspace, probe("make build", &workspace), Some(edge));
+    let head = |params: &Map<String, Value>| {
+        let response = daemon_answer(params).unwrap().unwrap();
+        let command = routed_command(&json!({ "harness_response": response })).to_owned();
+        discard(Path::new(&request_file(&command)));
+        crate::mcp_proxy_shlex::split_with(&command, "", "").unwrap()[1].clone()
+    };
+    // An older daemon reviews the runtime's sink command, so it gets Guard's.
+    assert_eq!(head(&params), "-I");
+    params.insert("native_sink".to_owned(), json!(true));
+    assert_eq!(head(&params), "contained-workspace-sink");
+}
+
+#[test]
+fn the_native_sink_verb_is_the_runtime_sink_command() {
+    assert_eq!(
+        super::NATIVE_SINK_VERB,
+        crate::contained_workspace_sink::SINK_COMMAND
+    );
+}

@@ -908,6 +908,7 @@ dependencies = [
  "guard-contracts",
  "guard-policy-snapshot",
  "hex",
+ "ring",
  "rsa",
  "serde_json",
  "sha2",
@@ -966,6 +967,7 @@ name = "guard-scanner"
 version = "0.1.0"
 dependencies = [
  "base64ct",
+ "guard-alloc-probe",
  "guard-rules",
  "hex",
  "hmac",
@@ -974,6 +976,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "zeroize",
 ]
 
 [[package]]

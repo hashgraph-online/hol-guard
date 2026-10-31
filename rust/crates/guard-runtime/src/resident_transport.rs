@@ -260,6 +260,21 @@ fn is_codex_resume_retry(request: &[u8]) -> bool {
     })
 }
 
+/// Settle one evaluation into the bytes its client is answered with. An
+/// evaluation that panicked is answered the way any other failure is — a
+/// fixed, non-retryable code and a counted panic — so the worker that ran it
+/// keeps serving instead of taking the connection, or the pool, down with it.
+fn settle_evaluation(outcome: thread::Result<Result<Vec<u8>, String>>) -> Vec<u8> {
+    match outcome {
+        Ok(Ok(response)) => response,
+        Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
+        Err(_panic) => {
+            counters::record_panic();
+            crate::resident_protocol::error_response("native_runtime_panicked", false)
+        }
+    }
+}
+
 /// The slot is already reserved. A thread that cannot be started drops the
 /// connection and releases the slot.
 fn spawn_codex_resume_retry(
@@ -270,21 +285,14 @@ fn spawn_codex_resume_retry(
     if thread::Builder::new()
         .spawn(move || {
             let slot = ContinuationSlot;
-            let response = match catch_unwind(AssertUnwindSafe(|| {
+            let response = settle_evaluation(catch_unwind(AssertUnwindSafe(|| {
                 observe(Phase::ResidentEvaluate, || {
                     crate::resident_protocol::evaluate_resident_bytes(
                         &request,
                         policy_store.as_deref(),
                     )
                 })
-            })) {
-                Ok(Ok(response)) => response,
-                Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
-                Err(_panic) => {
-                    counters::record_panic();
-                    crate::resident_protocol::error_response("native_runtime_panicked", false)
-                }
-            };
+            })));
             // Free the slot before replying so a caller that sends again on
             // receipt never sees this finished continuation as in flight.
             drop(slot);
@@ -359,18 +367,11 @@ fn handle_pending_request(
             }
             return;
         } else {
-            match catch_unwind(AssertUnwindSafe(|| {
+            settle_evaluation(catch_unwind(AssertUnwindSafe(|| {
                 observe(Phase::ResidentEvaluate, || {
                     request_cancellation::evaluate(&mut pending, &request, policy_store.as_deref())
                 })
-            })) {
-                Ok(Ok(response)) => response,
-                Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
-                Err(_panic) => {
-                    counters::record_panic();
-                    crate::resident_protocol::error_response("native_runtime_panicked", false)
-                }
-            }
+            })))
         }
     };
     let is_shutdown_request = crate::strict_json_value(&request).is_ok_and(|value| {
@@ -633,3 +634,7 @@ mod continuation_tests;
 #[cfg(test)]
 #[path = "resident_transport_hardening_tests.rs"]
 mod hardening_tests;
+
+#[cfg(test)]
+#[path = "resident_transport_panic_tests.rs"]
+mod panic_tests;

@@ -27,11 +27,12 @@ use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
 
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 const TRUNCATED: &str = "\n[HOL Guard truncated restricted pytest output]\n";
-const CPU_SECONDS: u64 = 1200;
-const ADDRESS_SPACE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-const FILE_SIZE_BYTES: u64 = 256 * 1024 * 1024;
-const OPEN_FILES: u64 = 256;
 const CEILING_BUDGET: Duration = Duration::from_secs(5);
+/// The launcher's `CEILING` for a host step, which runs without limits.
+pub(super) const HOST_STEP: &str = "host";
+/// The word in front of a Node run's argv: the launcher bounds its writable
+/// memory instead of its whole address space (`limits`).
+pub(super) const NODE_MEMORY: &str = "node-memory";
 /// Lowers the process ceiling the launcher passes as `$1`, then runs the
 /// rest: Apple targets expose `RLIMIT_NPROC` only through the shell.
 #[cfg(target_vendor = "apple")]
@@ -45,7 +46,7 @@ const PROCESS_LIMIT_SCRIPT: &str = concat!(
 #[derive(Default)]
 struct Running {
     child: Option<i32>,
-    scratch: Option<PathBuf>,
+    scratch: Vec<PathBuf>,
     overlay: Option<PathBuf>,
 }
 
@@ -80,7 +81,7 @@ impl Signals {
     /// Remove `scratch` should a signal end the sink between commands.
     pub(super) fn clean_up(&self, scratch: PathBuf) {
         if let Ok(mut running) = self.running.lock() {
-            running.scratch = Some(scratch);
+            running.scratch.push(scratch);
         }
     }
 
@@ -93,6 +94,14 @@ impl Signals {
     pub(super) fn clean_up_overlay(&self, overlay: PathBuf) {
         if let Ok(mut running) = self.running.lock() {
             running.overlay = Some(overlay);
+        }
+    }
+
+    /// Signals that nothing waits on, for a test that starts a command.
+    #[cfg(test)]
+    pub(super) fn idle() -> Self {
+        Self {
+            running: Arc::new(Mutex::new(Running::default())),
         }
     }
 
@@ -114,7 +123,7 @@ fn forward(running: &Mutex<Running>, signal: Signal) {
             }
         }
         None => {
-            if let Some(scratch) = &running.scratch {
+            for scratch in &running.scratch {
                 let _ = std::fs::remove_dir_all(scratch);
             }
             if let Some(overlay) = &running.overlay {
@@ -123,6 +132,17 @@ fn forward(running: &Mutex<Running>, signal: Signal) {
             std::process::exit(128 + signal as i32);
         }
     }
+}
+
+/// The note a failed run's output earns.
+pub(super) enum Notes<'a> {
+    /// The workspace sandbox's notes, read from the output; the callback
+    /// hears of a blocked connection to this machine.
+    Workspace(&'a dyn Fn()),
+    /// A fixed note for output that names a denied write.
+    ReadOnly(&'static str),
+    /// No note.
+    Silent,
 }
 
 /// Run `backend` (the `sandbox-exec` argv) in its own session under the
@@ -134,12 +154,9 @@ pub(super) fn run_backend(
     scratch: &Path,
     signals: &Signals,
     timeout_seconds: u64,
-    on_loopback_denied: &dyn Fn(),
+    notes: Notes<'_>,
 ) -> Outcome<i32> {
-    let deadline = std::time::Instant::now() + CEILING_BUDGET;
-    let ceiling = envelope(crate::restricted_process_ceiling::evaluate(deadline))?
-        .as_u64()
-        .ok_or_else(|| super::unavailable("invalid_reply"))?;
+    let ceiling = ceiling()?;
     let launcher = std::env::current_exe().map_err(|error| not_started(&error))?;
     let stdout = capture_file(scratch, "stdout")?;
     let stderr = capture_file(scratch, "stderr")?;
@@ -154,35 +171,8 @@ pub(super) fn run_backend(
         .stdin(Stdio::null())
         .stdout(clone(&stdout)?)
         .stderr(clone(&stderr)?);
-    // Track the child under the lock, so a signal never meets a child that
-    // started but is not yet tracked.
-    let child = {
-        let mut running = signals
-            .running
-            .lock()
-            .map_err(|_| Failure::new(SANDBOX_UNAVAILABLE, "The sandbox state is unavailable."))?;
-        let child = command.spawn().map_err(|error| not_started(&error))?;
-        running.child = i32::try_from(child.id()).ok();
-        child
-    };
-    let pid = child.id();
-    let (sender, receiver) = mpsc::channel();
-    let waiter = std::thread::spawn(move || {
-        let mut child = child;
-        let _ = sender.send(child.wait());
-    });
-    let waited = receiver.recv_timeout(Duration::from_secs(timeout_seconds));
-    let timed_out = waited.is_err();
-    let group = i32::try_from(pid).ok().map(Pid::from_raw);
-    if let Some(group) = group {
-        let _ = killpg(group, Signal::SIGKILL);
-    }
-    let status = match waited {
-        Ok(status) => status.ok(),
-        Err(_) => receiver.recv().ok().and_then(Result::ok),
-    };
-    let _ = waiter.join();
-    signals.track(None);
+    let (status, timed_out) = run_tracked(&mut command, signals, timeout_seconds, true)
+        .map_err(|error| not_started(&error))?;
     let stdout_text = replay(stdout, &mut std::io::stdout());
     let stderr_text = replay(stderr, &mut std::io::stderr());
     if timed_out {
@@ -194,16 +184,85 @@ pub(super) fn run_backend(
     }
     let code = status.map_or(1, exit_code);
     let outputs = [stdout_text.as_slice(), stderr_text.as_slice()];
-    let note = (code != 0).then(|| denial_note(&outputs)).flatten();
-    if note.is_some() && loopback_denied(&outputs) {
-        on_loopback_denied();
-    }
+    let note = match notes {
+        _ if code == 0 => None,
+        Notes::Workspace(on_loopback_denied) => {
+            let note = denial_note(&outputs);
+            if note.is_some() && loopback_denied(&outputs) {
+                on_loopback_denied();
+            }
+            note
+        }
+        Notes::ReadOnly(note) => super::readonly::names_denied_write(&outputs).then_some(note),
+        Notes::Silent => None,
+    };
     if let Some(note) = note {
         let mut stderr = std::io::stderr().lock();
         let _ = writeln!(stderr, "\n[HOL Guard] {note}");
         let _ = stderr.flush();
     }
     Ok(code)
+}
+
+/// The process ceiling the launcher lowers a sandboxed command to.
+fn ceiling() -> Outcome<u64> {
+    let deadline = std::time::Instant::now() + CEILING_BUDGET;
+    envelope(crate::restricted_process_ceiling::evaluate(deadline))?
+        .as_u64()
+        .ok_or_else(|| super::unavailable("invalid_reply"))
+}
+
+/// The argv that starts `backend` through the launcher, under the
+/// sandbox's resource limits, for a caller that captures its output.
+pub(super) fn launcher_argv(backend: &[String]) -> Outcome<Vec<String>> {
+    let launcher = std::env::current_exe().map_err(|error| not_started(&error))?;
+    let launcher = launcher
+        .into_os_string()
+        .into_string()
+        .map_err(|_| super::unavailable("launcher_path"))?;
+    let mut argv = vec![launcher, LAUNCH_COMMAND.to_owned(), ceiling()?.to_string()];
+    argv.extend(backend.iter().cloned());
+    Ok(argv)
+}
+
+/// Start `command`, which the launcher makes a session of its own, and wait
+/// up to `timeout_seconds`. The child is tracked under the lock, so a signal
+/// never meets a child that started but is not yet tracked. Its group is
+/// killed when the time runs out, and also once it exits when `sweep`. The
+/// status, and whether the time ran out.
+pub(super) fn run_tracked(
+    command: &mut Command,
+    signals: &Signals,
+    timeout_seconds: u64,
+    sweep: bool,
+) -> std::io::Result<(Option<ExitStatus>, bool)> {
+    let child = {
+        let mut running = signals
+            .running
+            .lock()
+            .map_err(|_| std::io::Error::other("the sandbox state is unavailable"))?;
+        let child = command.spawn()?;
+        running.child = i32::try_from(child.id()).ok();
+        child
+    };
+    let group = i32::try_from(child.id()).ok().map(Pid::from_raw);
+    let (sender, receiver) = mpsc::channel();
+    let waiter = std::thread::spawn(move || {
+        let mut child = child;
+        let _ = sender.send(child.wait());
+    });
+    let waited = receiver.recv_timeout(Duration::from_secs(timeout_seconds));
+    let timed_out = waited.is_err();
+    if let Some(group) = group.filter(|_| sweep || timed_out) {
+        let _ = killpg(group, Signal::SIGKILL);
+    }
+    let status = match waited {
+        Ok(status) => status.ok(),
+        Err(_) => receiver.recv().ok().and_then(Result::ok),
+    };
+    let _ = waiter.join();
+    signals.track(None);
+    Ok((status, timed_out))
 }
 
 fn not_started(error: &std::io::Error) -> Failure {
@@ -215,7 +274,7 @@ fn not_started(error: &std::io::Error) -> Failure {
 
 /// A new owner-only file in `scratch`, unlinked once open so only the
 /// descriptors hold it.
-fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
+pub(super) fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
     let path = scratch.join(name);
     let file = std::fs::OpenOptions::new()
         .read(true)
@@ -269,7 +328,7 @@ fn display_text(raw: &[u8]) -> String {
 }
 
 /// The shell's view of `status`: the code, or 128 plus the signal.
-fn exit_code(status: ExitStatus) -> i32 {
+pub(super) fn exit_code(status: ExitStatus) -> i32 {
     status
         .code()
         .or_else(|| status.signal().map(|signal| 128 + signal))
@@ -345,7 +404,7 @@ fn run_captured_in(
     })
 }
 
-fn read_all(mut file: File) -> Vec<u8> {
+pub(super) fn read_all(mut file: File) -> Vec<u8> {
     let mut raw = Vec::new();
     if file.seek(SeekFrom::Start(0)).is_ok() {
         let _ = file.read_to_end(&mut raw);
@@ -353,18 +412,32 @@ fn read_all(mut file: File) -> Vec<u8> {
     raw
 }
 
-/// `contained-workspace-launch CEILING ARGV...`: start a session, apply the
-/// sandbox's resource limits, and exec `ARGV`. Returns only on failure.
+/// `contained-workspace-launch CEILING [node-memory] ARGV...`: start a
+/// session, apply the sandbox's resource limits, and exec `ARGV`. With
+/// `host` for `CEILING`, a host step: the session only. Returns only on
+/// failure.
 pub(crate) fn launch(args: &[String]) -> i32 {
     let Some((ceiling, argv)) = args.split_first() else {
         return launch_failed("missing command");
+    };
+    if let (HOST_STEP, Some((program, arguments))) = (ceiling.as_str(), argv.split_first()) {
+        let _ = nix::unistd::setsid();
+        release_forwarded_signals();
+        let error = Command::new(program).args(arguments).exec();
+        return launch_failed(&error.to_string());
+    }
+    let (node, argv) = match argv.split_first() {
+        Some((word, rest)) if word == NODE_MEMORY => (true, rest),
+        _ => (false, argv),
     };
     let (Ok(ceiling), Some(_)) = (ceiling.parse::<u64>(), argv.first()) else {
         return launch_failed("invalid launch arguments");
     };
     let _ = nix::unistd::setsid();
     release_forwarded_signals();
-    limit_resources(ceiling);
+    if !limits::apply(ceiling, node) {
+        return launch_failed("Linux Node memory limits are unavailable");
+    }
     #[cfg(target_vendor = "apple")]
     let error = Command::new("/bin/sh")
         .arg("-c")
@@ -402,90 +475,9 @@ fn launch_failed(detail: &str) -> i32 {
     126
 }
 
-fn limit_resources(ceiling: u64) {
-    use nix::sys::resource::Resource;
-    lower(Resource::RLIMIT_CPU, CPU_SECONDS);
-    lower(Resource::RLIMIT_AS, ADDRESS_SPACE_BYTES);
-    lower(Resource::RLIMIT_FSIZE, FILE_SIZE_BYTES);
-    lower(Resource::RLIMIT_NOFILE, OPEN_FILES);
-    #[cfg(not(target_vendor = "apple"))]
-    lower(Resource::RLIMIT_NPROC, ceiling);
-    #[cfg(target_vendor = "apple")]
-    let _ = ceiling;
-}
-
-/// Lower `resource` to `requested` without raising either limit; a limit
-/// the platform refuses is left as it is.
-fn lower(resource: nix::sys::resource::Resource, requested: u64) {
-    let Ok((soft, hard)) = nix::sys::resource::getrlimit(resource) else {
-        return;
-    };
-    let (soft, hard) = lowered(soft, hard, requested);
-    let _ = nix::sys::resource::setrlimit(resource, soft, hard);
-}
-
-fn lowered(soft: u64, hard: u64, requested: u64) -> (u64, u64) {
-    let infinite = libc::RLIM_INFINITY;
-    let hard = if hard == infinite {
-        requested
-    } else {
-        requested.min(hard)
-    };
-    let soft = if soft == infinite {
-        hard
-    } else {
-        requested.min(soft).min(hard)
-    };
-    (soft, hard)
-}
+#[path = "contained_workspace_sink_limits.rs"]
+mod limits;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn limits_only_ever_come_down() {
-        let infinite = libc::RLIM_INFINITY;
-        assert_eq!(lowered(infinite, infinite, 256), (256, 256));
-        assert_eq!(lowered(100, infinite, 256), (100, 256));
-        assert_eq!(lowered(infinite, 200, 256), (200, 200));
-        assert_eq!(lowered(1024, 4096, 256), (256, 256));
-    }
-
-    #[test]
-    fn replayed_output_is_display_safe() {
-        assert_eq!(display_text(b"a\r\nb\x1b[0m\tc\n"), "a\nb\u{fffd}[0m\tc\n");
-        assert_eq!(display_text(b"\xff"), "\u{fffd}");
-    }
-
-    #[test]
-    fn a_captured_command_reports_its_output_and_exit() {
-        let scratch = tempfile::tempdir().unwrap();
-        let command = [
-            "/bin/sh".to_owned(),
-            "-c".to_owned(),
-            "echo out; echo err >&2; exit 3".to_owned(),
-        ];
-        let environment = BTreeMap::from([("PATH".to_owned(), "/usr/bin:/bin".to_owned())]);
-        let captured = run_captured(
-            &command,
-            &environment,
-            scratch.path(),
-            scratch.path(),
-            Duration::from_secs(10),
-        )
-        .unwrap();
-        assert_eq!(captured.code, 3);
-        assert_eq!(captured.stdout, b"out\n");
-        assert_eq!(captured.stderr, b"err\n");
-        let slow = ["/bin/sh".to_owned(), "-c".to_owned(), "sleep 5".to_owned()];
-        assert!(run_captured(
-            &slow,
-            &environment,
-            scratch.path(),
-            scratch.path(),
-            Duration::from_millis(100),
-        )
-        .is_none());
-    }
-}
+#[path = "contained_workspace_sink_process_tests.rs"]
+mod tests;

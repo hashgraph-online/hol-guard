@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
 import shlex
-import stat
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
 from ..native_restricted_pytest import contained_target
-from ..windows_paths import trusted_windows_local_temp
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
 from .contained_authority import authority_unavailable, settled_authority
 from .contained_command_prefix import (
@@ -44,7 +39,6 @@ from .restricted_pytest_model import (
 from .restricted_pytest_validation import _path_is_within
 from .restricted_workspace import receipt_matches, run_workspace_contained
 
-_MAX_REQUEST_BYTES = 1_048_576
 _FAILURE = "contained_run_authorization_failed"
 
 
@@ -88,123 +82,23 @@ def _names_pytest(command: list[str] | None) -> bool:
         return False
 
 
-def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _reject()
-        result[key] = value
-    return result
-
-
 def read_contained_test_request(path: Path, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
-    """Read one bounded private adapter snapshot, without following its leaf."""
-    if os.name == "nt":
-        return _read_windows_request(path, expected_sha256, workspace=workspace)
-    if (
-        os.name != "posix"
-        or path.name != "request.json"
-        or not path.parent.name.startswith("hol-guard-contained-test-")
-        or len(expected_sha256) != 64
-        or any(character not in "0123456789abcdef" for character in expected_sha256)
-    ):
-        raise _reject()
+    """Read one bounded private adapter snapshot, without following its leaf.
+
+    Native authority reads it where and as the hook wrote it, at the digest
+    the rewritten command pins; any other answer refuses the run.
+    """
+    from ..native_restricted_pytest import restricted_native
+
     try:
-        parent_descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
-        try:
-            parent = os.fstat(parent_descriptor)
-            if stat.S_IMODE(parent.st_mode) != 0o700 or parent.st_uid != os.getuid():
-                raise _reject()
-            descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent_descriptor)
-        finally:
-            os.close(parent_descriptor)
-        with os.fdopen(descriptor, "rb") as stream:
-            metadata = os.fstat(stream.fileno())
-            if (
-                not stat.S_ISREG(metadata.st_mode)
-                or stat.S_IMODE(metadata.st_mode) != 0o600
-                or metadata.st_uid != os.getuid()
-                or metadata.st_size > _MAX_REQUEST_BYTES
-            ):
-                raise _reject()
-            raw = stream.read(_MAX_REQUEST_BYTES + 1)
-        return _decode_request(raw, expected_sha256, workspace=workspace)
-    except (OSError, ValueError, RuntimeError, RecursionError) as error:
-        if isinstance(error, RestrictedPytestError):
-            raise
-        raise _reject() from error
-
-
-def _read_windows_request(path: Path, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
-    """Windows has no owner-mode bits; the snapshot must sit directly in this
-    user's temporary directory, reached without links or junctions. The
-    directory comes from the profile, not TEMP, which the hook that wrote the
-    snapshot and the shell that runs this sink may set differently."""
-    if (
-        path.name != "request.json"
-        or not path.parent.name.startswith("hol-guard-contained-test-")
-        or not path.is_absolute()
-        or len(expected_sha256) != 64
-        or any(character not in "0123456789abcdef" for character in expected_sha256)
-    ):
-        raise _reject()
-    try:
-        temporary = trusted_windows_local_temp()
-        if os.path.normcase(path.parent.parent) != os.path.normcase(temporary):
-            raise _reject()
-        for candidate, regular in ((path.parent, False), (path, True)):
-            metadata = os.lstat(candidate)
-            if (
-                getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
-                or (stat.S_ISREG(metadata.st_mode) if regular else stat.S_ISDIR(metadata.st_mode)) is not True
-            ):
-                raise _reject()
-        if metadata.st_nlink != 1 or metadata.st_size > _MAX_REQUEST_BYTES:
-            raise _reject()
-        with open(path, "rb") as stream:
-            opened = os.fstat(stream.fileno())
-            if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
-                raise _reject()
-            raw = stream.read(_MAX_REQUEST_BYTES + 1)
-        return _decode_request(raw, expected_sha256, workspace=workspace)
-    except (OSError, ValueError, RuntimeError, RecursionError) as error:
-        if isinstance(error, RestrictedPytestError):
-            raise
-        raise _reject() from error
-
-
-def _decode_request(raw: bytes, expected_sha256: str, *, workspace: Path) -> dict[str, object]:
-    if len(raw) > _MAX_REQUEST_BYTES or hashlib.sha256(raw).hexdigest() != expected_sha256:
-        raise _reject()
-    try:
-        value = json.loads(raw, object_pairs_hook=_unique_object)
-        if (
-            not isinstance(value, dict)
-            or set(value) != {"schema", "workspace", "payload"}
-            or value["schema"] != "guard-contained-test-request.v1"
-            or not isinstance(value["workspace"], str)
-            or Path(value["workspace"]).resolve(strict=True) != workspace.resolve(strict=True)
-            or not isinstance(value["payload"], dict)
-        ):
-            raise _reject()
-        payload = value["payload"]
-        if "cwd" in payload and (
-            not isinstance(payload["cwd"], str)
-            or Path(payload["cwd"]).resolve(strict=True) != workspace.resolve(strict=True)
-        ):
-            raise _reject()
-        tool_input = payload.get("tool_input")
-        if (
-            payload.get("hook_event_name") != "PreToolUse"
-            or payload.get("tool_name") != "bash"
-            or not isinstance(tool_input, dict)
-            or not isinstance(tool_input.get("command"), str)
-        ):
-            raise _reject()
-        return payload
-    except (OSError, ValueError, RuntimeError, RecursionError) as error:
-        if isinstance(error, RestrictedPytestError):
-            raise
+        return restricted_native(
+            "contained_test_request",
+            {"path": path, "sha256": expected_sha256, "workspace": workspace},
+            dict,
+        )
+    except RestrictedPytestError as error:
+        if error.reason_code != _FAILURE and (superseded := superseded_desktop_core()) is not None:
+            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message()) from error
         raise _reject() from error
 
 

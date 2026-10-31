@@ -23,6 +23,11 @@ pub(crate) fn evaluate(
         budget.check()?;
         return Ok(result);
     }
+    if operation == "contained_test_request" {
+        let result = crate::contained_test_request::evaluate(input);
+        budget.check()?;
+        return Ok(result);
+    }
     // The grant reading lives with the workspace sink, which is contained on
     // Unix only. Where there is no sink the operation falls through to the
     // platform's own answer below, which reports no enforceable backend
@@ -38,6 +43,17 @@ pub(crate) fn evaluate(
         budget.check()?;
         return Ok(result);
     }
+    // Protected Git proves its executable with the execution-safety check,
+    // which lives here, so the planner is handed it rather than a copy.
+    #[cfg(unix)]
+    if operation == "prepare_git" {
+        let result = guard_command::restricted_pytest::prepare_git(
+            input,
+            crate::git_execution_safety_binary::binary_path_is_trusted,
+        );
+        budget.check()?;
+        return Ok(result);
+    }
     #[cfg(unix)]
     let result = guard_command::restricted_pytest::evaluate_with_deadline(
         operation,
@@ -50,6 +66,11 @@ pub(crate) fn evaluate(
         .or_else(|| guard_command::node_build_output::evaluate(operation, input))
     {
         result
+    } else if operation == "prepare_git" {
+        serde_json::json!({
+            "reason_code": "git_restricted_sandbox_unavailable",
+            "message": "Protected Git filtering is unavailable."
+        })
     } else if operation == "normalized_command" {
         guard_command::restricted_command::evaluate_normalized(input)
     } else if cfg!(windows) && operation == "prepare_inline" {

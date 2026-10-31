@@ -242,6 +242,46 @@ pub(super) fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
     None
 }
 
+/// The snapshot at `path`, read back only from directly inside this user's
+/// temporary directory: Windows has no owner-mode bits, so the location the
+/// writer chose is what binds it. The directory comes from the profile, not
+/// `TEMP`, which the hook that wrote the snapshot and the shell that runs the
+/// sink may set differently. Neither level may be a reparse point, and the
+/// request has to be a plain file with one link.
+pub(crate) fn read_snapshot(path: &Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    let directory = path.parent()?;
+    let comparable =
+        |path: &Path| Some(plain_path(path.to_str()?).replace('/', "\\").to_lowercase());
+    if comparable(directory.parent()?)? != comparable(&trusted_local_temp()?)? {
+        return None;
+    }
+    let parent = std::fs::symlink_metadata(directory).ok()?;
+    if !plain(&parent) || !parent.is_dir() {
+        return None;
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    if !plain(&metadata)
+        || !metadata.is_file()
+        || metadata.len() > super::MAX_REQUEST_BYTES as u64
+        || !guard_runtime_windows_process::is_single_link_handle(&file).ok()?
+    {
+        return None;
+    }
+    let mut raw = Vec::new();
+    file.take(super::MAX_REQUEST_BYTES as u64 + 1)
+        .read_to_end(&mut raw)
+        .ok()?;
+    Some(raw)
+}
+
 /// Stale-snapshot cleanup on Windows: a snapshot whose call never
 /// ran is reclaimed after a full day. Only a plain directory holding a plain
 /// request file is removed; a reparse point at either level is left alone.

@@ -7,13 +7,14 @@ has to ask for them itself before it reuses any allow.
 
 from __future__ import annotations
 
-import contextlib
 import copy
 import hashlib
 import sqlite3
-from collections.abc import Iterator
 from typing import Any
 
+import pytest
+
+from codex_plugin_scanner.guard.daemon import hook_native_saved_approval
 from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import native_exact_command_block_response
 
 _COMMAND = "npm publish"
@@ -29,14 +30,13 @@ _REVIEW = {
 
 
 class _Store:
-    """The two store reads the hook makes, over a real ``policy_decisions`` table."""
+    """The store lookup the hook makes, over a real ``policy_decisions`` table."""
 
     def __init__(
         self,
         rows: list[tuple[str, str, str, str]],
         *,
         lookup_error: Exception | None = None,
-        probe_error: Exception | None = None,
     ) -> None:
         self._connection = sqlite3.connect(":memory:")
         self._connection.execute(
@@ -47,14 +47,7 @@ class _Store:
             rows,
         )
         self._lookup_error = lookup_error
-        self._probe_error = probe_error
         self.lookups: list[str] = []
-
-    @contextlib.contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        if self._probe_error is not None:
-            raise self._probe_error
-        yield self._connection
 
     def resolve_policy_decision_lookup(self, harness: str, artifact_id: str, **_kwargs: object) -> dict[str, Any]:
         self.lookups.append(artifact_id)
@@ -70,13 +63,19 @@ class _Store:
         return {"decision": {"scope": "artifact", "artifact_id": row[1], "action": row[2], "source": row[3]}}
 
 
-def _respond(store: _Store, command: str | None = _COMMAND, review: dict[str, Any] | None = None) -> object:
+def _respond(
+    store: _Store,
+    command: str | None = _COMMAND,
+    review: dict[str, Any] | None = None,
+    edge_hint: object = True,
+) -> object:
     return native_exact_command_block_response(
         store,
         harness="claude-code",
         command=command,
         native_result=copy.deepcopy(review or _REVIEW),
         workspace=None,
+        edge_hint=edge_hint,
     )
 
 
@@ -103,10 +102,23 @@ def test_other_commands_harnesses_and_actions_keep_their_review() -> None:
     assert _respond(blocked, command=None) is None
     assert _respond(blocked, review={**_REVIEW, "action": {"action_type": "mcp_tool"}}) is None
     assert _respond(_Store([("codex", _EXACT_ID, "block", "policy-bundle-canonical")])) is None
-    allowed = _Store([("*", _EXACT_ID, "allow", "policy-bundle-canonical")])
-    assert _respond(allowed) is None
-    # No block row means no lookup at all on the hot path.
-    assert allowed.lookups == []
+    assert _respond(_Store([("*", _EXACT_ID, "allow", "policy-bundle-canonical")])) is None
+
+
+def test_an_edge_that_found_no_block_skips_the_lookup() -> None:
+    # The edge read the same store and found no block that can name the
+    # command, so the hot path makes no lookup at all.
+    store = _Store([("*", _EXACT_ID, "allow", "policy-bundle-canonical")])
+    assert _respond(store, edge_hint=False) is None
+    assert store.lookups == []
+
+
+def test_an_edge_without_an_answer_leaves_the_lookup_to_decide() -> None:
+    # An older resident sends no answer; the lookup still finds the block.
+    response = _respond(_Store([("*", _EXACT_ID, "block", "policy-bundle-canonical")]), edge_hint=None)
+
+    assert isinstance(response, dict)
+    assert response["approval_reuse_status"] == "blocked"
 
 
 def test_a_block_the_store_cannot_read_still_denies() -> None:
@@ -122,8 +134,14 @@ def test_a_block_the_store_cannot_read_still_denies() -> None:
     assert "could not read the saved block" in str(response)
 
 
-def test_a_failed_block_probe_denies_rather_than_letting_the_command_run() -> None:
-    store = _Store([], probe_error=sqlite3.OperationalError("database is locked"))
+def test_a_failed_block_probe_denies_rather_than_letting_the_command_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _unavailable(*_args: object, **_kwargs: object) -> object:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(hook_native_saved_approval, "memory_lookup_candidates", _unavailable)
+    store = _Store([("*", _EXACT_ID, "block", "policy-bundle-canonical")])
 
     response = _respond(store)
 

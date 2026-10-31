@@ -323,6 +323,14 @@
    "body": "98cc7df63848"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Windows carries no executable mode bit, so the arm asks only whether the resolved path is a regular file; a data file an installer left in `bin` therefore still reads as the program. The surrounding proof is what bounds it: `trusted_program_directory` rests on `home_loader_directory`, which is Unix-only and false here, so off Unix the directory must be a trusted install root, and the basename still decides what the command may do. Closing it needs an ACL read, not a mode mask.",
+   "file": "rust/crates/guard-command/src/pretool/installed_program_path.rs",
+   "item": "fn executable_file(path: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "a8428b519fee"
+  },
+  {
    "file": "rust/crates/guard-command/src/pretool/kubeconfig_trust.rs",
    "item": "fn outside_agent_trees -- non-Unix block",
    "verdict": "windows-permissive",
@@ -907,6 +915,14 @@
    "body": "40044ed07203"
   },
   {
+   "verdict": "other-platform",
+   "note": "Neither Unix nor Windows: no hook on such a platform writes a request snapshot, so the sink reads none. `None` refuses the run with `contained_run_authorization_failed` and no sandbox starts. Windows reads through `codex_hook_bridge_contain_windows::read_snapshot`, proven by its Windows unit tests.",
+   "file": "rust/crates/guard-runtime/src/contained_test_request.rs",
+   "item": "fn read_snapshot(_: &Path) -> Option<Vec<u8>>",
+   "cfg": "not(any(unix, windows))",
+   "body": "24533b1b187e"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "There is no parent-process reparent check to make, so `original_parent` is zero; the request is still parsed and refused before any decode, and the decode arm reports the unsupported platform.",
    "file": "rust/crates/guard-runtime/src/content_decode.rs",
@@ -1073,6 +1089,14 @@
    "note": "`~user` has no Windows meaning; only the current account's home is resolved.",
    "cfg": "not(unix)",
    "body": "cd50b16d1937"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Off Unix the runtime runs no contained sink of its own (contained_workspace_sink is Unix-only), so a Codex call keeps the installed Guard's `guard execute-contained-test` sink exactly as before; the Windows rewrite tests pin that command line.",
+   "file": "rust/crates/guard-runtime/src/hook_direct_contained.rs",
+   "item": "pub(crate) fn unprojected_sink_command( _response: &Value, _original: &Map<String, Value>, _workspace: &str, _home_dir: &str, _native: NativeSink, ) -> Option<Vec<String>>",
+   "cfg": "not(unix)",
+   "body": "071cae1ef9da"
   },
   {
    "file": "rust/crates/guard-runtime/src/hook_direct_contained.rs",
@@ -1574,9 +1598,9 @@
    "file": "rust/crates/guard-runtime/src/restricted_pytest_op.rs",
    "item": "fn evaluate -- non-Unix block",
    "verdict": "windows-equivalent",
-   "note": "The `linux_*` operations and `process_ceiling` are answered before this block on every platform. Inside it, off Unix only `contained_argv`, `vite_output`, `node_build_output`, `normalized_command` and, on Windows, three planners answer: inline scripts and pytest get a read-only AppContainer plan (`windows_readonly`, `windows_pytest`), and `windows_node_build` stages Node tools into a private copy, running checking tools under `node-tool-readonly-v1` and Vite builds under `node-build-output-v1`, which publishes the declared output directories back after a clean exit. Any other operation here, and every one on a non-Windows platform without the Unix backend, answers `pytest_restricted_sandbox_unavailable` and nothing is started.",
+   "note": "The `linux_*` operations and `process_ceiling` are answered before this block on every platform. Inside it, off Unix only `contained_argv`, `vite_output`, `node_build_output`, `normalized_command` and, on Windows, three planners answer: inline scripts and pytest get a read-only AppContainer plan (`windows_readonly`, `windows_pytest`), and `windows_node_build` stages Node tools into a private copy, running checking tools under `node-tool-readonly-v1` and Vite builds under `node-build-output-v1`, which publishes the declared output directories back after a clean exit. `prepare_git` answers `git_restricted_sandbox_unavailable`, as the Python planner always has off Unix, so protected Git never starts there. Any other operation here, and every one on a non-Windows platform without the Unix backend, answers `pytest_restricted_sandbox_unavailable` and nothing is started.",
    "cfg": "not(unix)",
-   "body": "06df1c2ee726"
+   "body": "d80461553dce"
   },
   {
    "verdict": "other-platform",

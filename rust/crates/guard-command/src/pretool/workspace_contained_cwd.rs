@@ -1,7 +1,7 @@
 //! Possible shell working directories for literal command segments.
 
 use crate::CanonicalCommandV1;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const MAX_STATES: usize = 64;
 
@@ -17,9 +17,39 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
     matches!(executable, Some("cd") | Some("pushd"))
 }
 
+/// The directory a shell says it is in after `cd target`, which is the one it
+/// resolves the next `..` against. A shell without `cd -P` spends a parent
+/// step on the name it last printed rather than on what that name points to,
+/// so `cd deep` into a link to `a/b` leaves the shell in `deep`, and the
+/// `../..` after it climbs out of the workspace while resolving the link
+/// first would land back inside it. `None` where the steps climb past the
+/// root, which no directory answers to.
+fn logical_join(cwd: &Path, target: &str) -> Option<PathBuf> {
+    let mut walked = PathBuf::new();
+    for component in cwd.join(target).components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => walked.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !walked.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(part) => walked.push(part),
+        }
+    }
+    Some(walked)
+}
+
 pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<Vec<Vec<PathBuf>>> {
+    let root = workspace.canonicalize().ok()?;
     let mut states = vec![(workspace.to_path_buf(), true)];
     let mut result = Vec::new();
+    // The operator that decided whether the pipeline now being read runs at
+    // all. A `|` joins a segment to the one before it rather than to the list,
+    // so the `&&` or `||` at the head of the pipeline is what governs every
+    // element of it.
+    let mut opened_pipeline = String::new();
     for (index, segment) in model.segments.iter().enumerate() {
         let connector: String = if index == 0 {
             String::new()
@@ -36,6 +66,17 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
         if !matches!(connector, "" | "&&" | "||" | ";" | "|" | "\n") {
             return None;
         }
+        // `false && work | tail` runs neither element, so reading `tail` as
+        // unconditional would resume the directory the failed `cd` left and
+        // credit a later climb to a shell that never descended.
+        if connector != "|" {
+            opened_pipeline = connector.to_owned();
+        }
+        let connector = if connector == "|" {
+            opened_pipeline.as_str()
+        } else {
+            connector
+        };
         let name = segment.executable.as_deref()?;
         let mut executing = Vec::new();
         let mut next = Vec::new();
@@ -52,34 +93,41 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 if target.starts_with(['-', '~', '+']) {
                     return None;
                 }
-                // A pipeline's cd runs in a child shell and never moves its parent.
-                let in_pipeline = model
+                // bash's `lastpipe` and zsh's default both run the last
+                // element of a pipeline in the shell that read it, so a `cd`
+                // inside one may move the shell the rest of the command runs
+                // in. The walk cannot tell which shell read this text, and
+                // taking the reading where nothing moved would credit a later
+                // climb to a descent that did happen.
+                if model
                     .segments
                     .iter()
                     .filter(|other| other.execution_context == segment.execution_context)
                     .count()
-                    > 1;
-                if in_pipeline {
-                    next.extend([(cwd.clone(), true), (cwd, false)]);
-                } else {
-                    let supplied = cwd.join(target);
-                    // The sandbox hands the run no CDPATH to search, and
-                    // `cd::sets_search_path` refuses the shape of a run that
-                    // sets one itself, so a name that exists here is where the
-                    // run lands. A name that does not exist has nowhere to
-                    // land at all, so don't invent a cwd the real shell never
-                    // reaches.
-                    if !supplied.is_dir() {
-                        return None;
-                    }
-                    let moved = supplied.canonicalize().ok()?;
-                    if !moved.starts_with(workspace) {
-                        return None;
-                    }
-                    // A failed cd leaves the old cwd. &&/|| choose the corresponding
-                    // state; a later semicolon resumes both, rather than guessing.
-                    next.extend([(moved, true), (cwd, false)]);
+                    > 1
+                {
+                    return None;
                 }
+                // The sandbox hands the run no CDPATH to search, and
+                // `cd::sets_search_path` refuses the shape of a run that sets
+                // one itself, so a name that exists here is where the run
+                // lands. A name that does not exist has nowhere to land at
+                // all, so don't invent a cwd the real shell never reaches.
+                //
+                // The shell is tracked by the spelling it carries, since that
+                // is what its next `..` is spent on; where that spelling
+                // points has to stay inside the workspace too, so a link out
+                // of it is still refused.
+                let moved = logical_join(&cwd, target)?;
+                if !moved.is_dir() {
+                    return None;
+                }
+                if !moved.starts_with(workspace) || !moved.canonicalize().ok()?.starts_with(&root) {
+                    return None;
+                }
+                // A failed cd leaves the old cwd. &&/|| choose the corresponding
+                // state; a later semicolon resumes both, rather than guessing.
+                next.extend([(moved, true), (cwd, false)]);
             } else if name == "popd" {
                 return None;
             } else {
@@ -97,6 +145,25 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
         states = next;
     }
     Some(result)
+}
+
+/// Whether the walk reads every directory move this command makes and each
+/// one lands inside the workspace. A chain that goes in, works and comes back
+/// — `cd app && cargo test && cd ..` — ends where the sandbox already bounds
+/// it, so the climb it spends is one the walk has accounted for rather than a
+/// step out. Where a `CDPATH` could send a bare operand somewhere the walk
+/// does not join it, or the walk cannot read a move at all, this is false and
+/// the stricter literal reading of each operand decides on its own.
+pub(super) fn moves_stay_inside(model: &CanonicalCommandV1, workspace: &Path) -> bool {
+    model
+        .segments
+        .iter()
+        .any(|segment| moves_the_shell(segment.executable.as_deref()))
+        && !model
+            .normalized_text
+            .to_ascii_lowercase()
+            .contains("cdpath")
+        && locations(model, workspace).is_some()
 }
 
 /// How many directories below `workspace` every shell that could run each
@@ -130,6 +197,7 @@ pub(super) fn depths(model: &CanonicalCommandV1, workspace: &Path) -> Vec<usize>
     let Some(locations) = locations(model, workspace) else {
         return zeros;
     };
+    let canonical_workspace = workspace.canonicalize().ok();
     locations
         .iter()
         .map(|roots| {
@@ -138,9 +206,30 @@ pub(super) fn depths(model: &CanonicalCommandV1, workspace: &Path) -> Vec<usize>
             // both can spend stay inside.
             roots
                 .iter()
-                .map(|root| {
-                    root.strip_prefix(workspace)
-                        .map_or(0, |rest| rest.components().count())
+                .map(|cwd| {
+                    // The walk carries the spelling the shell prints, since a
+                    // later `cd ..` is spent on that. A `..` in an ordinary
+                    // operand is resolved by the kernel instead, which spends
+                    // it on whatever the spelling points to: with a link to
+                    // its own directory in the way, `cd l/l` leaves the shell
+                    // two names deep while the process stands at the root, and
+                    // `cat ../../secret` then reads above the workspace. Only
+                    // the steps both readings grant may be spent.
+                    let printed = cwd
+                        .strip_prefix(workspace)
+                        .map_or(0, |rest| rest.components().count());
+                    let resolved = cwd
+                        .canonicalize()
+                        .ok()
+                        .zip(canonical_workspace.as_deref())
+                        .and_then(|(moved, root)| {
+                            moved
+                                .strip_prefix(root)
+                                .ok()
+                                .map(|rest| rest.components().count())
+                        })
+                        .unwrap_or(0);
+                    printed.min(resolved)
                 })
                 .min()
                 .unwrap_or(0)

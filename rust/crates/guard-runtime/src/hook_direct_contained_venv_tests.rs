@@ -116,7 +116,7 @@ fn routed_from(root: &Path, command: &str, payload_cwd: Option<&str>) -> (Value,
     };
     let host = Host {
         platform: |_| true,
-        native: |_, _, _| None,
+        native: |_, _, _, _| None,
     };
     let temp = root.join("tmp");
     let (response, snapshot) = route_on(

@@ -6,7 +6,7 @@ use guard_contracts::{
     GuardHookContainmentSinkV1, GuardHookEnvelopeV2, GuardHookSourceMetadataV2,
     GUARD_HOOK_ENVELOPE_V2_SCHEMA,
 };
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::{cursor_probe, rewrite, KEPT, ROUTED};
 use crate::codex_hook_bridge::contain::discard;
@@ -47,6 +47,7 @@ fn envelope(workspace: &Path, sink: bool) -> GuardHookEnvelopeV2 {
         structured_output_config: None,
         containment_sink: sink.then(|| GuardHookContainmentSinkV1 {
             sink_command: SINK_COMMAND.map(str::to_owned).to_vec(),
+            native_sink: false,
         }),
     }
 }
@@ -77,6 +78,15 @@ fn receipt() -> Value {
     })
 }
 
+fn no_native(_: &Value, _: &Map<String, Value>, _: &str, _: &str) -> Option<String> {
+    None
+}
+
+/// The runtime's own sink, for any call it is asked about.
+fn runtime_sink(_: &Value, _: &Map<String, Value>, _: &str, _: &str) -> Option<String> {
+    Some("/opt/hol guard/runtime".to_owned())
+}
+
 fn argument_after<'a>(argv: &'a [String], flag: &str) -> &'a str {
     let index = argv
         .iter()
@@ -99,6 +109,7 @@ fn a_sink_routed_call_comes_back_as_the_routed_allow() {
         &sandbox_required(),
         false,
         &mut response,
+        no_native,
     );
 
     assert_eq!(answer, Some(ROUTED));
@@ -125,6 +136,74 @@ fn a_sink_routed_call_comes_back_as_the_routed_allow() {
 }
 
 #[test]
+fn a_call_the_runtime_reproduces_runs_its_own_sink() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let resolved = std::fs::canonicalize(workspace.path()).expect("resolved workspace");
+    let request = envelope(&resolved, true);
+    let mut response = Some(receipt());
+
+    let answer = rewrite(
+        &request,
+        "claude-code",
+        "sink",
+        &sandbox_required(),
+        false,
+        &mut response,
+        runtime_sink,
+    );
+
+    assert_eq!(answer, Some(ROUTED));
+    let response = response.expect("a response");
+    let command = response["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .expect("command is text");
+    let argv = crate::mcp_proxy_shlex::split(command).expect("the sink command is quoted");
+    assert_eq!(
+        argv[..2],
+        ["/opt/hol guard/runtime", "contained-workspace-sink"]
+    );
+    assert_eq!(argument_after(&argv, "--harness"), "claude-code");
+    assert_eq!(argument_after(&argv, "--guard-home"), "/guard/home");
+    assert_eq!(argument_after(&argv, "--home"), "/user/home");
+    discard(Path::new(argument_after(&argv, "--request-file")));
+}
+
+#[test]
+fn a_receipt_without_its_reason_keeps_guards_sink() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let resolved = std::fs::canonicalize(workspace.path()).expect("resolved workspace");
+    let request = envelope(&resolved, true);
+    let mut unexplained = receipt();
+    unexplained
+        .as_object_mut()
+        .expect("receipt is an object")
+        .remove("reason");
+    let mut response = Some(unexplained);
+
+    let answer = rewrite(
+        &request,
+        "claude-code",
+        "sink",
+        &sandbox_required(),
+        false,
+        &mut response,
+        runtime_sink,
+    );
+
+    // Without the reason the edge cannot tell a chain whose host step the
+    // runtime's sink does not run, so the call keeps the sink that does.
+    assert_eq!(answer, Some(ROUTED));
+    let response = response.expect("a response");
+    let command = response["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .expect("command is text");
+    let argv = crate::mcp_proxy_shlex::split(command).expect("the sink command is quoted");
+    assert_eq!(argv[..3], SINK_COMMAND);
+    assert_eq!(argv[3..5], ["guard", "execute-contained-test"]);
+    discard(Path::new(argument_after(&argv, "--request-file")));
+}
+
+#[test]
 fn without_the_sink_argv_the_receipt_stands_unanswered() {
     let workspace = tempfile::tempdir().expect("workspace");
     let request = envelope(workspace.path(), false);
@@ -137,6 +216,7 @@ fn without_the_sink_argv_the_receipt_stands_unanswered() {
         &sandbox_required(),
         false,
         &mut response,
+        no_native,
     );
 
     // Not answered, so the daemon asks the resident as before.
@@ -158,6 +238,7 @@ fn a_receipt_the_sink_does_not_take_is_kept() {
         &sandbox_required(),
         false,
         &mut response,
+        no_native,
     );
 
     assert_eq!(answer, Some(KEPT));
@@ -187,6 +268,7 @@ fn only_a_sink_route_the_daemon_would_rewrite_is_answered() {
             &result,
             custom_block,
             &mut response,
+            no_native,
         );
         assert_eq!(answer, None, "{route}");
         assert_eq!(response, Some(receipt()), "{route}");
@@ -261,6 +343,40 @@ fn a_sink_routed_cursor_probe_comes_back_as_the_sink_command() {
     assert_eq!(argv[..3], SINK_COMMAND);
     assert_eq!(argument_after(&argv, "--harness"), "cursor");
     assert_eq!(argument_after(&argv, "--workspace"), workspace);
+    discard(Path::new(argument_after(&argv, "--request-file")));
+
+    // A daemon that admits the runtime's own sink gets that sink instead.
+    let mut native = cursor_probe_envelope(workspace, true);
+    if let Some(sink) = native.containment_sink.as_mut() {
+        sink.native_sink = true;
+    }
+    let mut response = Some(json!({}));
+    let answer = cursor_probe(
+        &native,
+        "cursor",
+        "PreToolUse",
+        "sink",
+        &sandboxed_build(),
+        &mut response,
+    );
+    assert_eq!(answer, Some(ROUTED));
+    let response = response.expect("a response");
+    let command = response["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .expect("command is text");
+    let argv = crate::mcp_proxy_shlex::split_with(command, "", "").expect("quoted");
+    if cfg!(any(target_os = "macos", target_os = "linux")) {
+        let runtime = std::env::current_exe().expect("runtime");
+        assert_eq!(
+            argv[..2],
+            [
+                runtime.to_str().expect("utf-8 runtime"),
+                "contained-workspace-sink"
+            ]
+        );
+    } else {
+        assert_eq!(argv[..3], SINK_COMMAND);
+    }
     discard(Path::new(argument_after(&argv, "--request-file")));
 }
 

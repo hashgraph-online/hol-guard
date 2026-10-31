@@ -278,7 +278,9 @@ def host_tool_path(home: Path, search_path: str) -> str:
     recorded for. ``uv`` is there for the same reason as SQLite: a runner installs it wherever its
     own setup put it, often a directory the sandbox executes nothing from, so a stand-in sits in
     the Cargo bin directory a developer's own ``uv`` resolves from and the gate measures the
-    command rather than the runner's layout.
+    command rather than the runner's layout. Go is the same case once more: a hosted runner keeps
+    its toolchain in ``/usr/local/go/bin``, which the sandbox executes nothing from, so ``go test``
+    would record that image's layout instead of the setting the case is about.
     """
     stand_in = "#!/bin/sh\nexit 0\n"
     bun = home / ".bun" / "bin"
@@ -288,6 +290,8 @@ def host_tool_path(home: Path, search_path: str) -> str:
     local_bin = home / ".local" / "bin"
     php = home / ".asdf" / "installs" / "php" / "8.3.6" / "bin"
     ruby = home / ".asdf" / "installs" / "ruby" / "3.3.0" / "bin"
+    golang = home / ".asdf" / "installs" / "golang" / "1.23.2" / "bin"
+    cloud_sdk = home / "google-cloud-sdk" / "bin"
     tools = (
         (bun, ("bun",)),
         (node, ("node", "npm", "npx", "yarn")),
@@ -300,6 +304,13 @@ def host_tool_path(home: Path, search_path: str) -> str:
         # command rather than this host's package layout.
         (php, ("composer",)),
         (ruby, ("bundle", "bundler")),
+        (golang, ("go",)),
+        # An unpacked cloud SDK, which is how a developer gets `kubectl` when
+        # no package manager owns it. It stays off the returned PATH on
+        # purpose: the cases that use it spell the installer's own path, and
+        # the gate would not be measuring that spelling if the same name also
+        # resolved on PATH.
+        (cloud_sdk, ("kubectl",)),
     )
     for directory, names in tools:
         for name in names:
@@ -313,6 +324,7 @@ def host_tool_path(home: Path, search_path: str) -> str:
             str(cargo),
             str(php),
             str(ruby),
+            str(golang),
             search_path,
             str(bun),
         ]

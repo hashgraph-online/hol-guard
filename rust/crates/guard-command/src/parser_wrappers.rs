@@ -621,14 +621,35 @@ mod tests {
             "TagSet=[{Key=env,Value=prod}]"
         );
         // A command that is nothing but one brace group is the list inside it,
-        // so the list is what the command owns and what decides it.
+        // so the list is what the command owns and what decides it. The same
+        // is true when the group is one element of a list: the `rm` is still
+        // the command that runs.
         let model = parse("{ rm -rf /tmp/x; }");
         assert_eq!(model.confidence, "exact");
         assert_eq!(model.segments.len(), 1);
         assert_eq!(model.segments[0].executable.as_deref(), Some("rm"));
+        for source in ["true;{ rm -rf /tmp/x;}", "true&&{ rm -rf /tmp/x;}"] {
+            let model = parse(source);
+            assert_eq!(model.confidence, "exact", "{source}");
+            assert_eq!(
+                model
+                    .segments
+                    .last()
+                    .and_then(|segment| segment.executable.as_deref()),
+                Some("rm"),
+                "{source}"
+            );
+            assert!(
+                model.segments.last().is_some_and(|segment| segment
+                    .arguments
+                    .iter()
+                    .any(|argument| argument == "/tmp/x")),
+                "{source}"
+            );
+        }
+        // A single `|` does not start a list element, and an expansion is not
+        // a group, so neither is read as the words inside the braces.
         for source in [
-            "true;{ rm -rf /tmp/x;}",
-            "true&&{ rm -rf /tmp/x;}",
             "printf x|{ rm -rf /tmp/x;}",
             "printf %s ${COMMAND}",
             "${COMMAND} --force",

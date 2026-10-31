@@ -856,6 +856,13 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     ("manager", "argv", "expected"),
     [
         ("bun", ("add", "minimist@1.2.9"), True),
+        ("bun", ("add", "--help"), False),
+        ("bun", ("add", "-h"), False),
+        ("bun", ("install", "--help"), False),
+        ("bun", ("install", "-h"), False),
+        ("bun", ("i", "--help"), False),
+        ("bun", ("i", "-h"), False),
+        ("bun", ("add", "minimist@1.2.9", "--help"), True),
         ("bun", ("run", "build"), True),
         ("bun", ("run", "build", "--watch"), True),
         ("bun", ("run", "dev"), True),

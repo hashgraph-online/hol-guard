@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 # ruff: noqa: F403,F405
+from .native_store_policy import encode_key
 from .store_base import *
-from .store_local_once_authority import persist_local_once_approval
+
+LOCAL_ONCE_LEGACY_AUTHORITY_KIND = "legacy"
+EXACT_CLOUD_AUTHORITY_KIND = "exact-cloud"
 
 
 def _list_events_query(limit: int, event_name: str | None) -> tuple[str, tuple[object, ...]]:
@@ -35,25 +38,39 @@ class StoreEventReceiptsMixin:
         action: str,
         created_at: str,
         expires_at: str,
+        authority_kind: str = LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
     ) -> str | None:
+        """Mint exact one-shot authority for an approval granted on this install.
+
+        The row written here is the authority a later native review reads to
+        allow an execution without asking again, so the resident signs it where
+        the verdict is decided. This side reads the install key out of the
+        keyring and ships it; it signs nothing and decides nothing. An install
+        with no key material has no authority to mint, which is why that case
+        answers ``None`` rather than calling.
+        """
+
         key, key_id = self._policy_integrity_secret_material(create=True)
         if key is None or key_id is None:
             return None
-        with self._connect() as connection:
-            return persist_local_once_approval(
-                connection,
-                request_id=request_id,
-                harness=harness,
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=publisher,
-                action=action,
-                created_at=created_at,
-                expires_at=expires_at,
-                integrity_key=key,
-                integrity_key_id=key_id,
-            )
+        approval_id = self._native_store_call(
+            "record_local_once_approval",
+            {
+                "request_id": request_id,
+                "harness": harness,
+                "artifact_id": artifact_id,
+                "artifact_hash": artifact_hash,
+                "workspace": workspace,
+                "publisher": publisher,
+                "action": action,
+                "created_at": created_at,
+                "expires_at": expires_at,
+                "authority_kind": authority_kind,
+                "integrity_key_b64": encode_key(key),
+                "integrity_key_id": key_id,
+            },
+        )
+        return None if approval_id is None else str(approval_id)
 
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
         query, params = _list_events_query(limit, event_name)

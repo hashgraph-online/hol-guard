@@ -466,6 +466,13 @@ pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
 mod contained_git;
+
+/// Whether `argv` is a protected Git read the contained planner admits, for
+/// the `contained_path` fuzz target, which no operation reaches it through.
+#[doc(hidden)]
+pub fn git_read_only_invocation(argv: &[String]) -> bool {
+    contained_git::read_only_invocation(argv).is_some()
+}
 mod contained_node_tool;
 mod contained_package_test;
 mod contained_prefix;

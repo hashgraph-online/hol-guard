@@ -16,6 +16,8 @@ pub(super) struct Plan {
     pub(super) capabilities: Value,
     pub(super) argv: Vec<String>,
     pub(super) prefix: Option<String>,
+    /// The Git steps a publish chain runs on the host once the checks pass.
+    pub(super) suffix: Option<String>,
     pub(super) bootstrap: Option<Value>,
     pub(super) backend_executable: String,
     pub(super) sandbox_path: String,
@@ -25,10 +27,13 @@ pub(super) struct Plan {
     pub(super) write_denials: Value,
 }
 
+/// With `publish`, the plan runs only the checks before the Git steps it
+/// names, and neither bootstraps nor prefixes them.
 pub(super) fn validated_plan(
     plan: Value,
     command: &str,
     workspace: &str,
+    publish: bool,
     grant: Option<&ExpectedGrant>,
 ) -> Outcome<Plan> {
     let Value::Object(mut plan) = plan else {
@@ -44,10 +49,19 @@ pub(super) fn validated_plan(
     // A base plan without a decided grant; with one, a plan widened by it.
     let scripts = crate::contained_workspace_grant_plan::grant_script_roots(&plan, grant)
         .ok_or_else(|| Failure::invalid(INVALID_PLAN))?;
-    if !plan["native_suffix"].is_null() {
-        return Err(Failure::invalid(PLAN_MISMATCH));
-    }
     let mismatch = || Failure::invalid(PLAN_MISMATCH);
+    let suffix = match &plan["native_suffix"] {
+        Value::Null if !publish => None,
+        Value::String(suffix) if publish => Some(suffix.clone()),
+        _ => return Err(mismatch()),
+    };
+    let command = match &suffix {
+        Some(suffix) if plan["prefix_command"].is_null() && plan["bootstrap_git"].is_null() => {
+            super::split::checks(command, suffix).ok_or_else(mismatch)?
+        }
+        Some(_) => return Err(mismatch()),
+        None => command,
+    };
     let argv: Vec<String> = match &plan["command"] {
         Value::Array(items) => items
             .iter()
@@ -100,6 +114,7 @@ pub(super) fn validated_plan(
             .ok_or_else(|| Failure::invalid(INVALID_PLAN))?,
         capabilities: plan["capabilities"].clone(),
         prefix,
+        suffix,
         bootstrap,
         backend_executable: text(&plan["backend_executable"])
             .ok_or_else(|| Failure::invalid(INVALID_PLAN))?,
@@ -143,3 +158,61 @@ pub(super) fn plan_paths(value: &Value) -> Outcome<Vec<String>> {
         .collect::<Option<_>>()
         .ok_or_else(|| Failure::invalid(INVALID_PLAN))
 }
+
+/// The sibling repository the call runs in: the one a plain command's
+/// absolute script or tool lies in, or the one a leading `cd` enters below
+/// its root. The edge roots that call's sandbox there, so the sink plans and
+/// runs the whole text, `cd` included, from that root, as Guard's own sink
+/// does.
+pub(super) fn sibling_root(
+    payload: &Map<String, Value>,
+    workspace: &str,
+    home: &Path,
+) -> Option<PathBuf> {
+    let command = payload.get("tool_input")?.get("command")?.as_str()?;
+    let home = home.to_str()?;
+    let plan =
+        guard_command::pretool::contained_wrapper_plan(command, workspace, None, Some(home), None);
+    let root = match plan.anchored_sibling_root {
+        Some(root) => root,
+        None => entered_sibling_root(&plan.plan?.directory, workspace, home)?,
+    };
+    root.is_dir().then_some(root)
+}
+
+/// The sibling repository a call's leading `cd` enters below its root, which
+/// the native sink runs the call from (`sibling_root`).
+pub(crate) fn entered_sibling(command: &str, workspace: &str, home: &str) -> Option<PathBuf> {
+    let plan =
+        guard_command::pretool::contained_wrapper_plan(command, workspace, None, Some(home), None);
+    if plan.anchored_sibling_root.is_some() {
+        return None;
+    }
+    entered_sibling_root(&plan.plan?.directory, workspace, home)
+}
+
+/// The sibling repository a peeled `cd` enters, when the directory lies
+/// below that repository's root. A `cd` to the root itself is authorized
+/// again for the command after it, which only Guard's sink does, so it has
+/// none here, as does a directory inside the workspace or in no repository.
+fn entered_sibling_root(directory: &Path, workspace: &str, home: &str) -> Option<PathBuf> {
+    let directory = std::fs::canonicalize(directory).ok()?;
+    if directory.starts_with(std::fs::canonicalize(workspace).ok()?) {
+        return None;
+    }
+    let query = directory.to_str()?;
+    let root = guard_command::pretool::contained_wrapper_plan(
+        "",
+        workspace,
+        None,
+        Some(home),
+        Some(query),
+    )
+    .project_root?;
+    let root = std::fs::canonicalize(root).ok()?;
+    (root != directory && directory.starts_with(&root)).then_some(root)
+}
+
+#[cfg(test)]
+#[path = "contained_workspace_sink_sibling_tests.rs"]
+mod sibling_tests;

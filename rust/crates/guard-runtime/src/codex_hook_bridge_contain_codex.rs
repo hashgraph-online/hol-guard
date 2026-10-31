@@ -1,11 +1,14 @@
 //! Which Codex launched the hook, and whether it applies `updatedInput`:
 //! `launching_codex_executable` and `codex_applies_updated_input` from
-//! `tests/codex_containment_route.py`.
+//! `tests/codex_containment_route.py`, and the hint a Codex that does not
+//! gets.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use super::{string, UPDATE_HINT};
 use crate::claude_hook_bridge_render::py_strip;
+use crate::pyjson::PyVal;
 
 const MIN_VERSION: (u128, u128, u128) = (0, 131, 0);
 const VERSION_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -297,4 +300,34 @@ pub(super) fn version_supported(stdout: &str) -> bool {
         (Some(major), Some(minor), Some(patch)) => (major, minor, patch) >= MIN_VERSION,
         _ => false,
     }
+}
+
+/// `_with_update_hint(response)`.
+pub(super) fn with_update_hint(response: PyVal) -> PyVal {
+    let PyVal::Dict(mut entries) = response else {
+        return response;
+    };
+    let output = entries
+        .iter_mut()
+        .find(|(name, _)| name == "hookSpecificOutput")
+        .map(|(_, value)| value);
+    if let Some(PyVal::Dict(output)) = output {
+        let reason = output
+            .iter()
+            .find(|(name, _)| name == "permissionDecisionReason")
+            .and_then(|(_, value)| value.as_str())
+            .filter(|reason| !reason.is_empty());
+        let hinted = string(&match reason {
+            Some(reason) => format!("{reason} {UPDATE_HINT}"),
+            None => UPDATE_HINT.to_owned(),
+        });
+        match output
+            .iter_mut()
+            .find(|(name, _)| name == "permissionDecisionReason")
+        {
+            Some(slot) => slot.1 = hinted,
+            None => output.push(("permissionDecisionReason".to_owned(), hinted)),
+        }
+    }
+    PyVal::Dict(entries)
 }

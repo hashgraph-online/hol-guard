@@ -11,8 +11,8 @@ mod cwd;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
 pub(super) use cwd::{
-    after_read_prefix, cwd_read_executable, exact_safe_cwd_compound, git_read_cwd_compound_context,
-    verified_cwd_compound_context, verified_cwd_list_context,
+    after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
+    git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
 };
 
 pub(crate) fn benign_command_segments(
@@ -295,7 +295,8 @@ pub(super) fn exact_safe_segment_with_context(
         || (executable.contains(['/', '\\'])
             && !super::postgres_reads::trusted_pg_ctl_path(executable, context)
             && !super::guard_diagnostics::guard_install_executable(executable, context)
-            && !super::venv_program_path::environment_program(executable, context))
+            && !super::venv_program_path::environment_program(executable, context)
+            && !super::installed_program_path::installed_program(segment, executable, context))
     {
         return false;
     }

@@ -199,6 +199,7 @@ mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+mod contained_test_request;
 #[cfg(unix)]
 mod contained_workspace_grant_plan;
 #[cfg(unix)]
@@ -399,6 +400,7 @@ mod guard_store_local_cli_mcp_snapshot;
 mod guard_store_local_cli_vectors_tests;
 mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
+mod guard_store_local_once_mint;
 mod guard_store_mcp_provider_reads;
 #[cfg(test)]
 mod guard_store_mcp_reads_tests;
@@ -429,6 +431,7 @@ mod guard_store_policy_source_labels;
 mod guard_store_policy_source_rows;
 mod guard_store_policy_upsert;
 mod guard_store_queue_live_wait;
+mod guard_store_read_state;
 mod guard_store_receipt_analytics;
 mod guard_store_receipt_approval;
 mod guard_store_receipt_decision;

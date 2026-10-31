@@ -114,6 +114,12 @@ _REASON_CODE_HINTS = {
         "--ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this "
         "was already that form, reuse dependencies that are already installed where you can."
     ),
+    # Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
+    "native_package_cloud_unavailable": (
+        "Guard Cloud could not check this package, so Guard paused the install instead of "
+        "treating it as safe. This is not a finding about the package, and another form of the "
+        "same install is paused the same way until Guard Cloud can check it."
+    ),
     "native_network_review": "This makes a network request that Guard has not seen before.",
     "native_file_read_review": (
         "This reads a file outside what Guard treats as safe to read. A search is checked "

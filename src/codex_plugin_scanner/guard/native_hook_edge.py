@@ -50,6 +50,9 @@ _REVIEW_EVIDENCE_KEYS = frozenset({"policy_binding_valid", "binding", "token", "
 # envelope carries the argv that starts Guard's CLI: `routed` means the
 # response runs the call in the sink, `kept` that the receipt stands.
 CONTAINMENT_REWRITE_FEATURE = "edge-containment-rewrite-v1"
+# Cursor's route probe may name the runtime's own sink, which this daemon
+# admits on `beforeShellExecution` (`cursor_shell_route`).
+_CURSOR_NATIVE_SINK_FEATURE = "edge-cursor-native-sink-v1"
 _CONTAINMENT_REWRITES = frozenset({"routed", "kept"})
 # The resident echoes the envelope's request id verbatim and stamps the same
 # id on the receipt, so an id minted here names one request and no other.
@@ -86,6 +89,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "local_cli_rule",
         "review_evidence",
         "receipt_recorded",
+        "exact_command_block",
     }
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
@@ -104,6 +108,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not isinstance(payload.get("result"), dict)
         or not isinstance(payload.get("harness_response"), dict)
         or not isinstance(payload.get("receipt_recorded", False), bool)
+        or not isinstance(payload.get("exact_command_block", False), bool)
     ):
         return None
     # Every resident stamps its containment route; an edge without one would
@@ -161,6 +166,7 @@ def _encode_hook_envelope(
     record_receipt: bool = False,
     structured_output_config: Mapping[str, object] | None = None,
     containment_sink: Sequence[str] | None = None,
+    native_sink: bool = False,
 ) -> bytes | None:
     from .hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 
@@ -202,6 +208,8 @@ def _encode_hook_envelope(
         envelope["structured_output_config"] = dict(structured_output_config)
     if containment_sink is not None:
         envelope["containment_sink"] = {"sink_command": list(containment_sink)}
+        if native_sink:
+            envelope["containment_sink"]["native_sink"] = True
     if execution_context_supported:
         # Direct CLI calls capture locally; daemon workers explicitly pass
         # None when caller context is unavailable instead of using daemon env.
@@ -331,6 +339,7 @@ def review_raw_hook_native(
         record_receipt=record_receipt and _RECEIPT_RECORD_FEATURE in status.capabilities.features,
         structured_output_config=structured_output_config,
         containment_sink=sink_command,
+        native_sink=harness == "cursor" and _CURSOR_NATIVE_SINK_FEATURE in status.capabilities.features,
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)

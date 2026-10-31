@@ -14,6 +14,7 @@ regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+zeroize = "1.9.0"
 
 # `precommit` ports the Python `dir_fd` filesystem operations (openat/fstatat/
 # renameat/unlinkat); those primitives are POSIX-only.
@@ -22,6 +23,9 @@ nix.workspace = true
 
 [dev-dependencies]
 base64ct.workspace = true
+# Reading the source of a copy is not proof of how many buffers it touched, so
+# the scrubbing tests install the counting allocator and measure.
+guard-alloc-probe = { path = "../guard-alloc-probe" }
 
 [lints]
 workspace = true

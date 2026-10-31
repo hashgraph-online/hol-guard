@@ -407,6 +407,10 @@ pub struct GuardHookEnvelopeV2 {
 pub struct GuardHookContainmentSinkV1 {
     /// The argv prefix that starts Guard's CLI; the sink command follows it.
     pub sink_command: Vec<String>,
+    /// The daemon admits the runtime's own sink command on Cursor's
+    /// `beforeShellExecution`, so the probe answer may route there.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub native_sink: bool,
 }
 
 /// Where the daemon's custom extension rules live and what a command's
@@ -477,6 +481,12 @@ pub struct GuardHookEdgeResultV2 {
     /// its `harness_response` instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_cli_rule: Option<GuardHookLocalCliRuleV1>,
+    /// Whether a saved artifact-scoped block may name the exact command of a
+    /// `PreToolUse` the daemon sent its rules for, outside Watch. `false` lets
+    /// the daemon skip its saved exact-command block lookup; `true`, or an
+    /// absent answer, leaves the lookup to decide.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_command_block: Option<bool>,
     /// The edge queued `receipt` with the running hook evidence writer for
     /// the request's Guard home, as the envelope's `record_receipt` asked, so
     /// the daemon does not submit it again.

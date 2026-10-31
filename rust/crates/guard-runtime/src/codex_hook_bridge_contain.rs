@@ -16,11 +16,12 @@ use sha2::{Digest, Sha256};
 
 #[cfg(unix)]
 use self::codex::user_home;
-use self::codex::{codex_applies_updated_input, launching_codex_executable};
+use self::codex::{codex_applies_updated_input, launching_codex_executable, with_update_hint};
 use super::approval::pending_pretool_approval;
 use super::{BridgeConfig, Prepared, Route, STATE_FILE};
 use crate::codex_hook_bridge_direct::unquote_plus;
 use crate::codex_hook_response::{codex_hook_response, fail_closed, PRE_TOOL_USE};
+use crate::hook_direct::contained::{unprojected_sink_command, NativeSink};
 use crate::hook_env_stamp::dumps;
 use crate::pyjson::{self, PyVal};
 
@@ -141,6 +142,7 @@ fn contain(
         prefix: &config.fallback_command,
         guard_home: &guard_home,
         home: &home,
+        native: crate::hook_direct::contained::native_sink,
     };
     match routed(response, &payload.value, payload.mapped, &target) {
         Some(routed) => Contained::Routed(routed, payload.mapped),
@@ -226,6 +228,8 @@ struct Target<'a> {
     prefix: &'a [String],
     guard_home: &'a str,
     home: &'a str,
+    /// The runtime's own sink for the calls it reproduces.
+    native: NativeSink,
 }
 
 /// `isolated_guard_cli_command(python, package_root, ())`, read from the
@@ -310,20 +314,37 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     ]);
     let mut serialized = String::new();
     dumps(&snapshot, true, mapped, &mut serialized);
+    // The sink reads the snapshot as strict JSON: a lone surrogate or a
+    // non-finite number would be refused there, so such a call keeps its
+    // denial instead of being handed to a sink that cannot run it.
     if serialized.len() > MAX_REQUEST_BYTES {
         return None;
     }
+    let strict = serde_json::from_str::<serde_json::Value>(&serialized).ok()?;
+    let native = strict
+        .pointer("/payload/tool_input")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|original| {
+            let answer = serde_json::json!({
+                "reason_code": text(response, "reason_code"),
+                "required_execution_profile": text(response, "required_execution_profile"),
+                "reason": text(response, "reason"),
+            });
+            unprojected_sink_command(&answer, original, &workspace, target.home, target.native)
+        });
     let request = write_snapshot(serialized.as_bytes())?;
     let Some(request_text) = request.to_str().map(str::to_owned) else {
         discard(&request);
         return None;
     };
     let digest = hex::encode(Sha256::digest(serialized.as_bytes()));
-    let mut command = command_prefix(prefix);
+    let mut command = native.unwrap_or_else(|| {
+        let mut command = command_prefix(prefix);
+        command.extend(["guard", "execute-contained-test"].map(str::to_owned));
+        command
+    });
     command.extend(
         [
-            "guard",
-            "execute-contained-test",
             "--harness",
             "codex",
             "--guard-home",
@@ -396,36 +417,6 @@ fn routed_response(original: &PyVal, joined: &str) -> PyVal {
     ])
 }
 
-/// `_with_update_hint(response)`.
-fn with_update_hint(response: PyVal) -> PyVal {
-    let PyVal::Dict(mut entries) = response else {
-        return response;
-    };
-    let output = entries
-        .iter_mut()
-        .find(|(name, _)| name == "hookSpecificOutput")
-        .map(|(_, value)| value);
-    if let Some(PyVal::Dict(output)) = output {
-        let reason = output
-            .iter()
-            .find(|(name, _)| name == "permissionDecisionReason")
-            .and_then(|(_, value)| value.as_str())
-            .filter(|reason| !reason.is_empty());
-        let hinted = string(&match reason {
-            Some(reason) => format!("{reason} {UPDATE_HINT}"),
-            None => UPDATE_HINT.to_owned(),
-        });
-        match output
-            .iter_mut()
-            .find(|(name, _)| name == "permissionDecisionReason")
-        {
-            Some(slot) => slot.1 = hinted,
-            None => output.push(("permissionDecisionReason".to_owned(), hinted)),
-        }
-    }
-    PyVal::Dict(entries)
-}
-
 /// `Path(value).expanduser().resolve(strict=True)`, when it is a directory
 /// named in UTF-8.
 #[cfg(unix)]
@@ -483,4 +474,4 @@ mod codex;
 mod tests;
 #[cfg(windows)]
 #[path = "codex_hook_bridge_contain_windows.rs"]
-mod windows;
+pub(crate) mod windows;

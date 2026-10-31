@@ -109,3 +109,28 @@ fn a_program_named_cd_spends_no_descent() {
         assert!(!shaped(command, &ws), "{command}");
     }
 }
+
+/// The walk carries the spelling the shell prints so that a later `cd ..` is
+/// read the way the shell spends it. A `..` in an ordinary operand is spent
+/// by the kernel instead, on what the spelling points to, so a link that
+/// leads back to its own directory leaves the two readings at different
+/// depths and only the shallower one may be spent.
+#[test]
+fn a_step_the_kernel_will_not_grant_is_not_spent() {
+    let ws = workspace("cwd-link-depth", true);
+    std::fs::create_dir_all(ws.join("app")).unwrap();
+    std::os::unix::fs::symlink(".", ws.join("here")).unwrap();
+    for command in [
+        // Two names deep by the shell's reckoning, still at the root by the
+        // kernel's, so neither step is there to spend.
+        "cd here/here && cat ../../package.json",
+        "cd here/here && ls ../..",
+        "cd here && ls ..",
+        // One name of the descent is the link, so one step is real.
+        "cd here/app && ls ../..",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+    // The step the link does grant is still spent.
+    assert!(shaped("cd here/app && ls ..", &ws));
+}

@@ -87,9 +87,8 @@ pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String
 }
 
 /// The full source material of a request. `execution_intent_digest` carries a
-/// deliberately narrower source, so anything that has to stay bound to the
-/// guard home, the home directory or the external source-ref flag builds its
-/// commitment from this instead.
+/// deliberately narrower source, so anything bound to the guard home, the home
+/// directory or the external source-ref flag builds its commitment from this.
 fn request_source(envelope: &GuardHookEnvelopeV2, error: &str) -> Result<Value, String> {
     let mut source = serde_json::json!({
         "cwd": envelope.source.cwd,
@@ -441,6 +440,7 @@ fn evaluate_validated_envelope(
         || edge_local_cli::settle(&envelope, &harness, &event_name, &result),
     );
     let mut edge = GuardHookEdgeResultV2 {
+        exact_command_block: None,
         review_evidence,
         // Every edge carries its route so no hook asks again; only PreToolUse is routed.
         containment_route: Some(edge_route(&event_name, &result, envelope.recording_only)),
@@ -457,6 +457,7 @@ fn evaluate_validated_envelope(
         harness_response,
         receipt,
     };
+    edge_local_cli::attach_exact_command_block(&envelope, &mut edge);
     edge_result_check::check(&edge)?;
     // After the check, so a refused edge leaves no sink snapshot behind.
     edge_containment::attach(&envelope, &mut edge);

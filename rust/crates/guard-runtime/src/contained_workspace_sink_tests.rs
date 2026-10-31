@@ -198,7 +198,7 @@ fn validate_granted(
     command: &str,
     grant: Option<&crate::contained_workspace_grant_plan::ExpectedGrant>,
 ) -> Result<(), String> {
-    validated_plan(Value::Object(plan), command, "/w", grant)
+    validated_plan(Value::Object(plan), command, "/w", false, grant)
         .map(|_| ())
         .map_err(|failure| failure.message)
 }
@@ -269,8 +269,14 @@ fn a_bootstrapped_plan_runs_the_rest_after_git_init() {
     let mut bootstrapped = plan("/w", "pytest");
     bootstrapped["bootstrap_git"] = json!([]);
     bootstrapped["prefix_command"] = json!("npm ci");
-    let accepted =
-        validated_plan(Value::Object(bootstrapped.clone()), command, "/w", None).unwrap();
+    let accepted = validated_plan(
+        Value::Object(bootstrapped.clone()),
+        command,
+        "/w",
+        false,
+        None,
+    )
+    .unwrap();
     assert_eq!(accepted.profile_version, WORKSPACE_PROFILE);
     assert_eq!(accepted.prefix.as_deref(), Some("npm ci"));
     assert_eq!(accepted.bootstrap, Some(json!([])));
@@ -284,6 +290,39 @@ fn a_bootstrapped_plan_runs_the_rest_after_git_init() {
         validate(unbootstrapped, command),
         Err(PLAN_MISMATCH.to_owned())
     );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_publish_plan_runs_only_the_checks_before_its_git_steps() {
+    let command = "  pytest -q &&  git push origin main ";
+    let publish = |plan: &Map<String, Value>| {
+        validated_plan(Value::Object(plan.clone()), command, "/w", true, None)
+            .map(|plan| plan.suffix)
+            .map_err(|failure| failure.message)
+    };
+    let mut split = plan("/w", "pytest -q");
+    split["native_suffix"] = json!("git push origin main");
+    assert_eq!(publish(&split), Ok(Some("git push origin main".to_owned())));
+    // A publish receipt needs the Git steps named, and only after `&&`.
+    let mismatch = Err(PLAN_MISMATCH.to_owned());
+    assert_eq!(publish(&plan("/w", "pytest -q")), mismatch);
+    let mut other_steps = split.clone();
+    other_steps["native_suffix"] = json!("git push --force");
+    assert_eq!(publish(&other_steps), mismatch);
+    let mut sequenced = split.clone();
+    sequenced["native_suffix"] = json!("origin main");
+    assert_eq!(publish(&sequenced), mismatch);
+    let mut whole = plan("/w", command.trim());
+    whole["native_suffix"] = json!("git push origin main");
+    assert_eq!(publish(&whole), mismatch);
+    // The checks are never bootstrapped or prefixed.
+    let mut bootstrapped = split.clone();
+    bootstrapped["bootstrap_git"] = json!([]);
+    assert_eq!(publish(&bootstrapped), mismatch);
+    let mut prefixed = split;
+    prefixed["prefix_command"] = json!("pytest");
+    assert_eq!(publish(&prefixed), mismatch);
 }
 
 #[test]

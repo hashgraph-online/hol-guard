@@ -112,8 +112,10 @@ pub fn prompt_text(data: &[u8]) {
 /// corpus carries seeds of all these shapes, so a campaign reaches the lexer
 /// behind the string-reading ones too.
 ///
-/// A seed names its screen by this list's index, so adding one in the middle
-/// renumbers every seed after it and the screens behind them stop being read.
+/// A seed names its screen by this list's index, so adding or removing one in
+/// the middle renumbers every seed after it and the screens behind them stop
+/// being read unless the seeds are renumbered with it. The index just past the
+/// list is the Git read parser, so appending one renumbers its seeds too.
 ///
 /// `contained_target` is deliberately absent. It resolves a virtual-environment
 /// activation against the filesystem, so a campaign would be probing the
@@ -123,19 +125,15 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "node_runtime_args",
     "python_runtime_args",
     "inline_eval",
-    "test_script",
     "bun_vitest_invocation",
     "tsx_test_invocation",
     "vitest_arguments",
     "contained_kind",
-    "launcher_program",
-    "transparent_prefix",
     "command_prefix_split",
     "run_prefix_peel",
     "node_tool_route",
     "pytest_command",
     "package_test_resolve",
-    "git_read_only_argv",
     "script_words",
     "command_words",
     "command_absolute_words",
@@ -151,9 +149,24 @@ pub fn contained_path(data: &[u8]) {
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(rest) else {
         return;
     };
-    let operation =
-        CONTAINED_ARGV_OPERATIONS[usize::from(*selector) % CONTAINED_ARGV_OPERATIONS.len()];
-    let _ = guard_command::contained_argv::evaluate(operation, &value);
+    match contained_screen(*selector) {
+        Some(operation) => {
+            let _ = guard_command::contained_argv::evaluate(operation, &value);
+        }
+        None => {
+            if let Ok(command) = serde_json::from_value::<Vec<String>>(value["command"].clone()) {
+                let _ = guard_command::git_read_only_invocation(&command);
+            }
+        }
+    }
+}
+
+/// The screen a `contained_path` seed's leading byte picks: an operation by
+/// its index in `CONTAINED_ARGV_OPERATIONS`, or, for the index just past the
+/// list, the protected Git read parser the planner reads directly (`None`).
+pub(crate) fn contained_screen(selector: u8) -> Option<&'static str> {
+    let index = usize::from(selector) % (CONTAINED_ARGV_OPERATIONS.len() + 1);
+    CONTAINED_ARGV_OPERATIONS.get(index).copied()
 }
 
 /// A package registry's response body. It arrives over the network from a host

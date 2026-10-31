@@ -113,9 +113,14 @@ def test_before_shell_asks_the_resident_about_a_call_naming_the_sink(tmp_path: P
     assert params["workspace"] == str(tmp_path)
     assert "edge" not in params
     assert params["sink_command"] and all(isinstance(part, str) for part in params["sink_command"])  # type: ignore[union-attr]
+    assert params["native_sink"] is True
+    # The runtime's own sink is admitted the same way.
+    native = {**_BEFORE_SHELL, "tool_input": {"command": "/opt/hol/runtime contained-workspace-sink --harness cursor"}}
+    assert _respond(native, tmp_path) == admitted
+    assert calls[-1][2]["payload"] == native
     # Without a workspace the sink cannot be bound, so the call is reviewed.
     assert _respond(payload, None) is None
-    assert len(calls) == 2
+    assert len(calls) == 3
 
 
 @posix_only

@@ -242,6 +242,12 @@ fn reason_code_hint(reason_code: &str) -> &'static str {
              the lockfile and settings. If this was already that form, reuse dependencies that \
              are already installed where you can."
         }
+        // Cloud gave no verdict, so the lockfile-only advice above would be paused the same way.
+        "native_package_cloud_unavailable" => {
+            "Guard Cloud could not check this package, so Guard paused the install instead of \
+             treating it as safe. This is not a finding about the package, and another form of \
+             the same install is paused the same way until Guard Cloud can check it."
+        }
         "native_network_review" => "This makes a network request that Guard has not seen before.",
         "native_file_read_review" => {
             "This reads a file outside what Guard treats as safe to read. A search is checked \
@@ -404,5 +410,19 @@ mod tests {
             Some(true),
         );
         assert!(install.contains("--ignore-scripts"), "{install}");
+    }
+
+    #[test]
+    fn a_cloud_outage_pause_does_not_offer_the_lockfile_form() {
+        let text = safe_alternative_reason(
+            "HOL Guard requires review before this package or script command can execute.",
+            Some("native_package_cloud_unavailable"),
+            Some(true),
+        );
+        assert!(
+            text.contains("Guard Cloud could not check this package"),
+            "{text}"
+        );
+        assert!(!text.contains("--ignore-scripts"), "{text}");
     }
 }

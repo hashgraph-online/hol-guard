@@ -171,16 +171,16 @@ fn lockfile_warnings(
         if !ECOSYSTEM_BY_LOCKFILE.contains_key(name) {
             continue;
         }
-        match reader.dependencies(path) {
+        match reader.parsed(path) {
             None => warnings.push(warning(
                 "lockfile_unreadable",
                 format!("Guard could not read {name} for workspace audit."),
             )),
-            Some(map) if map.is_empty() => warnings.push(warning(
+            Some(false) => warnings.push(warning(
                 "lockfile_parse_warning",
                 format!("Guard could not parse {name} for workspace audit."),
             )),
-            Some(_) => {}
+            Some(true) => {}
         }
     }
     warnings

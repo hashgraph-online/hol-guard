@@ -261,7 +261,7 @@ jobs:
   daemon-edge:
     name: Daemon edge descriptor budget and admission soak
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -292,6 +292,19 @@ jobs:
         run: |
           ulimit -n 128
           uv run --no-sync pytest -q tests/test_daemon_bounded_http.py --tb=short
+
+      - name: Replay the transport chaos gate at full volume
+        env:
+          HOL_GUARD_DAEMON_CHAOS: full
+        run: |
+          ulimit -n 256
+          uv run --no-sync pytest -q tests/test_guard_daemon_chaos_gate.py --tb=short
+
+      - name: Soak the daemon at full volume
+        env:
+          HOL_GUARD_DAEMON_SOAK: full
+        timeout-minutes: 40
+        run: uv run --no-sync pytest -q tests/test_guard_daemon_soak_gate.py --tb=short
 
   native-platform:
     name: Native workspace and hook client (${{ matrix.os }})

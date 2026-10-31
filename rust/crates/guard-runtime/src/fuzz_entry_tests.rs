@@ -139,8 +139,14 @@ fn the_corpus_carries_a_seed_each_screen_reads_as_its_own_request() {
         let Ok(request) = serde_json::from_slice::<serde_json::Value>(rest) else {
             continue;
         };
-        let operation = super::CONTAINED_ARGV_OPERATIONS
-            [usize::from(*selector) % super::CONTAINED_ARGV_OPERATIONS.len()];
+        let Some(operation) = super::contained_screen(*selector) else {
+            let command = serde_json::from_value::<Vec<String>>(request["command"].clone())
+                .expect("the Git read seed is a command array");
+            if guard_command::git_read_only_invocation(&command) {
+                let _ = answered.insert("git_read_only_invocation");
+            }
+            continue;
+        };
         if guard_command::contained_argv::evaluate(operation, &request)
             .is_some_and(|reply| reply.get("value").is_some())
         {
@@ -151,7 +157,14 @@ fn the_corpus_carries_a_seed_each_screen_reads_as_its_own_request() {
     // string rather than the `command` array every other screen reads, so a
     // corpus of command requests would replay their seeds into an early error
     // and never reach the lexer behind them.
-    for screen in ["script_words", "command_words", "command_absolute_words"] {
+    // The Git read parser is reached by no operation, so its seed is the one
+    // way a campaign reads it.
+    for screen in [
+        "script_words",
+        "command_words",
+        "command_absolute_words",
+        "git_read_only_invocation",
+    ] {
         assert!(
             answered.contains(screen),
             "no seed reaches the {screen} screen as a request it answers: {answered:?}"

@@ -22,14 +22,39 @@ use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::LazyLock;
+use zeroize::{Zeroize, Zeroizing};
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// How the scan tells two candidates apart without keeping either one.
+///
+/// Deduplication only ever asks whether it has seen these exact bytes before,
+/// and a digest answers that. Keying on the candidate itself would put a second
+/// copy of every secret in a set that lives as long as the scan does.
+pub(crate) type CandidateDigest = [u8; 32];
+
+pub(crate) fn candidate_digest(candidate: &str) -> CandidateDigest {
+    let mut digest = [0u8; 32];
+    digest.copy_from_slice(&Sha256::digest(candidate.as_bytes()));
+    digest
+}
 
 const DETECTOR_VERSION: &str = "guard-secrets-v1";
 const GENERIC_CANDIDATE_POLICY_VERSION: &str = "credential-expression-filter-v2";
 
 /// `max_findings` default mirroring `scan_secret_text(..., max_findings=200)`.
 pub const DEFAULT_MAX_FINDINGS: usize = 200;
+
+/// Most findings the detector will return from a single text.
+///
+/// This sits one above `repository_scanner::MAX_FINDINGS_CEILING`, the most a
+/// caller's own `max_findings` can be. A scanner that has filled its budget
+/// cannot tell a file that ended exactly on the cap from one that held more, so
+/// it asks for one finding past its budget and reads the extra as the cut. A
+/// caller sitting on the ceiling has to be able to ask for that one too, which
+/// is what the headroom here is for; clamping it away is what let a repository
+/// scanned at the ceiling report complete coverage over a file that was cut.
+pub const MAX_FINDINGS_PER_TEXT: usize = 10_001;
 
 // Python `re` flag integers captured verbatim for `detector_version` parity:
 // plain `re.compile` on a `str` pattern reports UNICODE(32); MULTILINE adds 8;
@@ -338,6 +363,13 @@ fn secret_rule(
 
 /// Provider-format rules in Python tuple order; iteration order drives finding
 /// emit order and dedup identity.
+/// How many provider rules the retired Python detector published.
+///
+/// Rules added since then append after these, so the leading slice stays the
+/// set Python hashed into `guard-secrets-v1:1d8dc93ef4fc2a04` and the recorded
+/// parity vectors stay checkable against it.
+pub const PYTHON_ERA_PROVIDER_RULES: usize = 17;
+
 pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
     vec![
         secret_rule(
@@ -527,6 +559,199 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "JWT-like bearer token in credential context.",
             Some(&JWT),
         ),
+        // Rules added after the Python detector was retired. They append
+        // after the set Python published so `detector_version` keeps a
+        // checkable prefix, and the synthetic `credential-assignment` entry
+        // stays last in both the catalog and the digest material.
+        //
+        // A rule whose token has no fixed length is written open-ended rather
+        // than capped. A cap with nothing to close the match against stops
+        // part-way through a longer value, and the part it captured is not the
+        // value the generic assignment rule sees, so the same credential is
+        // reported twice and the provider finding fingerprints a fragment of
+        // it. Where the token's length is fixed the cap stays, because the
+        // trailing `\b` then refuses the longer value outright instead of
+        // cutting it.
+        secret_rule(
+            "atlassian-api-token",
+            "Atlassian API token",
+            "critical",
+            r"\b(?P<secret>ATATT[A-Za-z0-9_\-=]{20,})",
+            FLAG_UNICODE,
+            "atlassian",
+            true,
+            "Atlassian API token for Jira, Confluence, or Bitbucket Cloud.",
+            None,
+        ),
+        secret_rule(
+            "telegram-bot-token",
+            "Telegram bot token",
+            "high",
+            r"\b(?P<secret>[0-9]{8,10}:AA[A-Za-z0-9_-]{30,})",
+            FLAG_UNICODE,
+            "telegram",
+            true,
+            "Telegram bot token granting full control of the bot.",
+            None,
+        ),
+        secret_rule(
+            "discord-webhook",
+            "Discord incoming webhook",
+            "critical",
+            r"(?P<secret>https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]{17,20}/[A-Za-z0-9_-]{60,})",
+            FLAG_UNICODE,
+            "discord",
+            true,
+            "Discord incoming webhook that posts to a channel without further authentication.",
+            None,
+        ),
+        secret_rule(
+            "doppler-token",
+            "Doppler token",
+            "critical",
+            r"\b(?P<secret>dp\.(?:ct|pt|said|sa|scim|audit)\.[A-Za-z0-9]{40,44}|dp\.st\.(?:[a-z0-9_-]{2,35}\.)?[A-Za-z0-9]{40,44})\b",
+            FLAG_UNICODE,
+            "doppler",
+            true,
+            "Doppler personal, service, service-account, service-account identity, SCIM, or audit token.",
+            None,
+        ),
+        secret_rule(
+            "vault-token",
+            "HashiCorp Vault token",
+            "critical",
+            r"\b(?P<secret>hv[sbr]\.[A-Za-z0-9_-]{20,})",
+            FLAG_UNICODE,
+            "vault",
+            true,
+            "HashiCorp Vault service, batch, or recovery token.",
+            None,
+        ),
+        secret_rule(
+            "shopify-access-token",
+            "Shopify access token",
+            "critical",
+            r"\b(?P<secret>shp(?:at|ca|pa|ss)_[0-9a-fA-F]{32})\b",
+            FLAG_UNICODE,
+            "shopify",
+            true,
+            "Shopify access, custom-app, private-app, or shared-secret token.",
+            None,
+        ),
+        secret_rule(
+            "grafana-service-account-token",
+            "Grafana service account token",
+            "high",
+            r"\b(?P<secret>glsa_[A-Za-z0-9]{32}_[0-9a-fA-F]{8})\b",
+            FLAG_UNICODE,
+            "grafana",
+            true,
+            "Grafana service account token.",
+            None,
+        ),
+        secret_rule(
+            "linear-api-key",
+            "Linear API key",
+            "high",
+            r"\b(?P<secret>lin_api_[A-Za-z0-9]{40,50})\b",
+            FLAG_UNICODE,
+            "linear",
+            true,
+            "Linear personal API key.",
+            None,
+        ),
+        secret_rule(
+            "dockerhub-pat",
+            "Docker Hub access token",
+            "critical",
+            r"\b(?P<secret>dckr_pat_[A-Za-z0-9_-]{20,})",
+            FLAG_UNICODE,
+            "dockerhub",
+            true,
+            "Docker Hub personal access token able to push images.",
+            None,
+        ),
+        secret_rule(
+            "postman-api-key",
+            "Postman API key",
+            "high",
+            r"\b(?P<secret>PMAK-[0-9a-fA-F]{24}-[0-9a-fA-F]{34})\b",
+            FLAG_UNICODE,
+            "postman",
+            true,
+            "Postman API key.",
+            None,
+        ),
+        secret_rule(
+            "databricks-token",
+            "Databricks access token",
+            "critical",
+            r"\b(?P<secret>dapi[0-9a-fA-F]{32}(?:-[0-9]+)?)\b",
+            FLAG_UNICODE,
+            "databricks",
+            true,
+            "Databricks personal access token.",
+            None,
+        ),
+        secret_rule(
+            "planetscale-token",
+            "PlanetScale token",
+            "critical",
+            r"\b(?P<secret>pscale_(?:tkn|pw)_[A-Za-z0-9_\-]{32,})",
+            FLAG_UNICODE,
+            "planetscale",
+            true,
+            "PlanetScale service token or database password.",
+            None,
+        ),
+        secret_rule(
+            "figma-token",
+            "Figma access token",
+            "high",
+            r"\b(?P<secret>figd_[A-Za-z0-9_-]{40,})",
+            FLAG_UNICODE,
+            "figma",
+            true,
+            "Figma personal access token.",
+            None,
+        ),
+        secret_rule(
+            "square-access-token",
+            "Square access token",
+            "critical",
+            r"\b(?P<secret>(?:sq0atp-[A-Za-z0-9_-]{22,}|EAAA[A-Za-z0-9_-]{60,}))",
+            FLAG_UNICODE,
+            "square",
+            true,
+            "Square production access token.",
+            None,
+        ),
+        secret_rule(
+            "mailgun-api-key",
+            "Mailgun API key",
+            "critical",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>key-[0-9a-f]{32})\b",
+            FLAG_UNICODE,
+            "mailgun",
+            true,
+            // `key-` before a hex digest also spells a cache key, an
+            // idempotency key and half the object keys in a storage bucket, so
+            // the match has to start where a word does. Anything carrying its
+            // own prefix is somebody else's key, not Mailgun's.
+            "Mailgun private API key able to send mail for the domain.",
+            None,
+        ),
+        secret_rule(
+            "flyio-token",
+            "Fly.io API token",
+            "critical",
+            r"\b(?P<secret>(?:fm1a|fm1r|fm2)_[A-Za-z0-9+/]{40,}={0,3})",
+            FLAG_UNICODE,
+            "flyio",
+            true,
+            "Fly.io deploy or personal access token.",
+            None,
+        ),
     ]
 });
 
@@ -562,7 +787,13 @@ const GENERIC_RULE_META: RuleMeta = RuleMeta {
 
 /// One detected secret. `candidate` is excluded from `Debug` and `PartialEq`,
 /// mirroring `field(repr=False, compare=False)` on the Python dataclass so the
-/// raw secret can never leak through formatting or equality.
+/// raw secret can never leak through formatting or equality, and it is
+/// overwritten when the finding is dropped so it does not sit in a freed
+/// allocation for the rest of the process. The detector keeps no second copy of
+/// those bytes that outlives the scan: deduplication keys on a digest, the
+/// fingerprint hashes the field in place, and the line and context strings the
+/// matching path builds are zeroized when they go out of scope. The text handed
+/// to the scan is the caller's own allocation and stays the caller's to manage.
 #[derive(Clone)]
 pub struct SecretFinding {
     pub rule_id: &'static str,
@@ -617,29 +848,66 @@ impl PartialEq for SecretFinding {
     }
 }
 
-/// Raised when a fingerprint is requested without a key, mirroring the Python
-/// `ValueError("secret fingerprint key must not be empty")`.
+/// Raised when a finding cannot be fingerprinted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EmptyFingerprintKeyError;
+pub enum FingerprintError {
+    /// No key was supplied, mirroring the Python
+    /// `ValueError("secret fingerprint key must not be empty")`.
+    EmptyKey,
+    /// The candidate was already scrubbed. Hashing what is left would bind the
+    /// identity to the rule alone, so every scrubbed finding of one rule would
+    /// answer to the same fingerprint.
+    CandidateScrubbed,
+}
 
-impl fmt::Display for EmptyFingerprintKeyError {
+impl fmt::Display for FingerprintError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("secret fingerprint key must not be empty")
+        match self {
+            Self::EmptyKey => formatter.write_str("secret fingerprint key must not be empty"),
+            Self::CandidateScrubbed => formatter
+                .write_str("secret fingerprint is unavailable once the candidate is scrubbed"),
+        }
     }
 }
 
-impl Error for EmptyFingerprintKeyError {}
+impl Error for FingerprintError {}
+
+impl Drop for SecretFinding {
+    fn drop(&mut self) {
+        self.scrub_candidate();
+    }
+}
 
 impl SecretFinding {
     /// Tenant/caller-scoped HMAC of the finding, never exposing candidate bytes.
-    pub fn fingerprint(&self, key: &[u8]) -> Result<String, EmptyFingerprintKeyError> {
+    pub fn fingerprint(&self, key: &[u8]) -> Result<String, FingerprintError> {
         if key.is_empty() {
-            return Err(EmptyFingerprintKeyError);
+            return Err(FingerprintError::EmptyKey);
         }
-        let material = format!("{}\u{0}{}", self.rule_id, self.candidate);
+        // A detected candidate is never empty, so an empty one here means the
+        // caller already scrubbed it. Refuse rather than return the identity of
+        // the rule wearing this finding's name.
+        if self.candidate.is_empty() {
+            return Err(FingerprintError::CandidateScrubbed);
+        }
+        // Fed in three pieces rather than joined into one string: the bytes
+        // the HMAC sees are the same, and the candidate is never copied into a
+        // temporary that outlives this call unscrubbed.
         let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts keys of any length");
-        mac.update(material.as_bytes());
+        mac.update(self.rule_id.as_bytes());
+        mac.update(&[0]);
+        mac.update(self.candidate.as_bytes());
         Ok(hex::encode(mac.finalize().into_bytes()))
+    }
+
+    /// Overwrite the raw secret in place.
+    ///
+    /// `Drop` runs this, so a finding that goes out of scope leaves nothing
+    /// behind in the allocation it frees. A caller that holds a finding past
+    /// the point where it still needs the raw bytes — to report the family and
+    /// the line, say — can run it early and keep the rest of the finding.
+    pub fn scrub_candidate(&mut self) {
+        self.candidate.zeroize();
     }
 
     /// Public, non-sensitive payload. Field order matches the Python dict
@@ -647,7 +915,7 @@ impl SecretFinding {
     pub fn to_public_dict(
         &self,
         fingerprint_key: Option<&[u8]>,
-    ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    ) -> Result<PublicFinding, FingerprintError> {
         let fingerprint = match fingerprint_key {
             Some(key) => Some(self.fingerprint(key)?),
             None => None,
@@ -713,7 +981,7 @@ impl SecretScanSummary {
     pub fn to_public_dict(
         &self,
         fingerprint_key: Option<&[u8]>,
-    ) -> Result<PublicScanSummary<'_>, EmptyFingerprintKeyError> {
+    ) -> Result<PublicScanSummary<'_>, FingerprintError> {
         let mut findings = Vec::with_capacity(self.findings.len());
         for finding in &self.findings {
             findings.push(finding.to_public_dict(fingerprint_key)?);
@@ -748,22 +1016,30 @@ fn round4(value: f64) -> f64 {
 /// Detector version digest, byte-identical to the Python implementation: the
 /// SHA-256 hex digest of the rule material truncated to 16 hex characters.
 pub fn detector_version() -> String {
-    let mut material_parts: Vec<String> = SECRET_RULES
-        .iter()
-        .map(|rule| {
-            format!(
-                "{}|{}|{}|{}|{}",
-                rule.rule_id,
-                rule.severity,
-                rule.validation,
-                rule.pattern_source,
-                rule.pattern_flags
-            )
-        })
-        .collect();
-    material_parts.push(format!(
+    let mut material_parts: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
+    material_parts.push(assignment_material_line());
+    detector_version_over(&material_parts)
+}
+
+/// One rule's contribution to the detector digest.
+fn rule_material_line(rule: &SecretRule) -> String {
+    format!(
+        "{}|{}|{}|{}|{}",
+        rule.rule_id, rule.severity, rule.validation, rule.pattern_source, rule.pattern_flags
+    )
+}
+
+/// The synthetic `credential-assignment` contribution, always last.
+fn assignment_material_line() -> String {
+    format!(
         "credential-assignment|{ASSIGNMENT_PATTERN_SOURCE}|{FLAG_IGNORECASE_MULTILINE_UNICODE}|{GENERIC_CANDIDATE_POLICY_VERSION}"
-    ));
+    )
+}
+
+/// Digest over an explicit material list. Hashing a subset is how the rules
+/// Python published stay checkable against the version Python published once
+/// later rules have been appended.
+fn detector_version_over(material_parts: &[String]) -> String {
     let digest = hex::encode(Sha256::digest(material_parts.join("\n").as_bytes()));
     format!("{DETECTOR_VERSION}:{digest:.16}")
 }
@@ -1230,7 +1506,7 @@ fn python_splitlines(text: &str) -> Vec<&str> {
 
 /// Python `_surrounding_context`: the three lines on each side of the match
 /// line (counted by `\n`, sliced from `splitlines()`), capped at 4096 chars.
-fn surrounding_context(text: &str, match_start: usize) -> String {
+fn surrounding_context(text: &str, match_start: usize) -> Zeroizing<String> {
     let lines = python_splitlines(text);
     let line_index = text.as_bytes()[..match_start]
         .iter()
@@ -1238,13 +1514,13 @@ fn surrounding_context(text: &str, match_start: usize) -> String {
         .count();
     let start = line_index.saturating_sub(3);
     let end = (line_index + 4).min(lines.len());
-    let joined = if start < end {
+    let joined = Zeroizing::new(if start < end {
         lines[start..end].join("\n")
     } else {
         String::new()
-    };
+    });
     match joined.char_indices().nth(4096) {
-        Some((index, _)) => joined[..index].to_string(),
+        Some((index, _)) => Zeroizing::new(joined.as_str()[..index].to_string()),
         None => joined,
     }
 }
@@ -1323,12 +1599,22 @@ fn line_number(text: &str, match_start: usize) -> usize {
     text[..match_start].bytes().filter(|b| *b == b'\n').count() + 1
 }
 
-fn line_text(text: &str, match_start: usize) -> String {
+fn line_text(text: &str, match_start: usize) -> Zeroizing<String> {
     let start = text[..match_start].rfind('\n').map_or(0, |index| index + 1);
     let end = text[match_start..]
         .find('\n')
         .map_or(text.len(), |index| match_start + index);
-    text[start..end].chars().take(1024).collect()
+    // Collecting the characters would grow the string from a quarter-length
+    // guess, and every grow frees a buffer still holding the head of the line,
+    // which is where a secret usually sits. Finding the cut first and copying
+    // the slice once allocates exactly what the line needs, so the only buffer
+    // that ever held the text is the one `Zeroizing` wipes.
+    let line = &text[start..end];
+    let cut = line
+        .char_indices()
+        .nth(1024)
+        .map_or(line.len(), |(index, _)| index);
+    Zeroizing::new(line[..cut].to_string())
 }
 
 #[allow(clippy::too_many_arguments)] // Mirrors the Python keyword arguments verbatim.
@@ -1351,10 +1637,10 @@ fn finding_from_match(
                 return None;
             }
         }
-    } else if obvious_sample(candidate, &line_text, path) {
+    } else if obvious_sample(candidate, line_text.as_str(), path) {
         return None;
     }
-    let (score, reasons) = context_score(candidate, path, &line_text, rule.strong_format);
+    let (score, reasons) = context_score(candidate, path, line_text.as_str(), rule.strong_format);
     let minimum_score = if rule.strong_format { 0.56 } else { 0.64 };
     if score < minimum_score {
         return None;
@@ -1401,22 +1687,23 @@ pub fn scan_secret_text(
             findings: Vec::new(),
         };
     }
-    let bounded_max = max_findings.clamp(1, 10_000);
+    let bounded_max = max_findings.clamp(1, MAX_FINDINGS_PER_TEXT);
     let mut findings: Vec<SecretFinding> = Vec::new();
-    let mut seen: HashSet<(&'static str, usize, String)> = HashSet::new();
+    let mut seen: HashSet<(&'static str, usize, CandidateDigest)> = HashSet::new();
 
     for rule in SECRET_RULES.iter() {
         for captures in rule.pattern.captures_iter(text) {
-            let candidate = captures
+            // The finding is anchored on the secret itself, not on the whole
+            // match. A rule may consume a character ahead of the secret to
+            // prove it starts where a word does, and when that character is
+            // the newline ending the line above, the whole match begins on the
+            // previous line. Reporting from there would name the wrong line
+            // and score the wrong line's text.
+            let matched = captures
                 .name("secret")
-                .map(|m| m.as_str())
-                .unwrap_or_else(|| {
-                    captures
-                        .get(0)
-                        .expect("whole match always present")
-                        .as_str()
-                });
-            let match_start = captures.get(0).expect("whole match always present").start();
+                .unwrap_or_else(|| captures.get(0).expect("whole match always present"));
+            let candidate = matched.as_str();
+            let match_start = matched.start();
             let finding = finding_from_match(
                 &RuleMeta::of(rule),
                 candidate,
@@ -1428,7 +1715,11 @@ pub fn scan_secret_text(
                 Some(rule),
             );
             let Some(finding) = finding else { continue };
-            if !seen.insert((finding.rule_id, finding.line, finding.candidate.clone())) {
+            if !seen.insert((
+                finding.rule_id,
+                finding.line,
+                candidate_digest(&finding.candidate),
+            )) {
                 continue;
             }
             findings.push(finding);
@@ -1444,9 +1735,9 @@ pub fn scan_secret_text(
 
     // Generic assignments are intentionally evaluated after provider formats so
     // the structured detector wins when both identify the same token.
-    let provider_candidates: HashSet<String> = findings
+    let provider_candidates: HashSet<CandidateDigest> = findings
         .iter()
-        .map(|finding| finding.candidate.clone())
+        .map(|finding| candidate_digest(&finding.candidate))
         .collect();
     for captures in ASSIGNMENT.captures_iter(text) {
         let candidate = captures
@@ -1455,7 +1746,7 @@ pub fn scan_secret_text(
             .or_else(|| captures.name("secret_uq"))
             .map(|m| m.as_str());
         let Some(candidate) = candidate else { continue };
-        if provider_candidates.contains(candidate) {
+        if provider_candidates.contains(&candidate_digest(candidate)) {
             continue;
         }
         let name = captures.name("name").map(|m| m.as_str()).unwrap_or("");
@@ -1485,7 +1776,11 @@ pub fn scan_secret_text(
             None,
         );
         let Some(finding) = finding else { continue };
-        if !seen.insert((finding.rule_id, finding.line, finding.candidate.clone())) {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
             continue;
         }
         findings.push(finding);
@@ -1504,6 +1799,14 @@ pub fn scan_secret_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use guard_alloc_probe::CountingAllocator;
+
+    // Installed for this crate's unit tests so a copy that silently grows is
+    // visible as an extra allocation call rather than something a reader has
+    // to take on trust.
+    #[global_allocator]
+    static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator;
 
     // Built in parts so a literal JWT never appears in source.
     fn jwt_fixture() -> String {
@@ -1527,10 +1830,52 @@ mod tests {
         .join("\n")
     }
 
+    /// The provider rules Python published, in the order it published them.
+    const PYTHON_ERA_RULE_IDS: [&str; PYTHON_ERA_PROVIDER_RULES] = [
+        "github-token",
+        "gitlab-token",
+        "aws-access-key",
+        "slack-token",
+        "slack-webhook",
+        "stripe-secret-key",
+        "openai-api-key",
+        "anthropic-api-key",
+        "huggingface-token",
+        "npm-token",
+        "pypi-token",
+        "google-api-key",
+        "sendgrid-api-key",
+        "pem-private-key",
+        "database-url-password",
+        "basic-auth-url-password",
+        "jwt-token",
+    ];
+
+    /// The version string the Python detector published for its own rule set.
+    const PYTHON_DETECTOR_VERSION: &str = "guard-secrets-v1:1d8dc93ef4fc2a04";
+
     #[test]
-    fn detector_version_matches_python() {
+    fn the_rules_python_published_still_hash_to_the_version_python_published() {
         // Oracle: python3 detector_version() -> guard-secrets-v1:1d8dc93ef4fc2a04
-        assert_eq!(detector_version(), "guard-secrets-v1:1d8dc93ef4fc2a04");
+        //
+        // Later rules append after the set Python shipped, so the live digest
+        // moves with them. Hashing exactly the material Python hashed keeps
+        // that oracle checkable: a rule Python published that is renamed,
+        // reseverityed or has its pattern edited still breaks this.
+        let mut material: Vec<String> = SECRET_RULES
+            .iter()
+            .take(PYTHON_ERA_PROVIDER_RULES)
+            .map(rule_material_line)
+            .collect();
+        material.push(assignment_material_line());
+        assert_eq!(detector_version_over(&material), PYTHON_DETECTOR_VERSION);
+    }
+
+    #[test]
+    fn a_rule_added_after_python_moves_the_detector_version() {
+        // The digest is what a consumer compares to decide whether a cached
+        // scan is still current, so appending rules has to change it.
+        assert_ne!(detector_version(), PYTHON_DETECTOR_VERSION);
     }
 
     #[test]
@@ -1571,9 +1916,19 @@ mod tests {
     }
 
     #[test]
-    fn catalog_has_18_entries_with_python_order() {
+    fn catalog_keeps_the_python_entries_in_python_order() {
         let catalog = secret_rule_catalog();
-        assert_eq!(catalog.len(), 18);
+        // The provider rules Python published lead, later ones follow, and the
+        // synthetic contextual entry stays last however many are appended.
+        assert!(catalog.len() > PYTHON_ERA_PROVIDER_RULES);
+        assert_eq!(
+            catalog
+                .iter()
+                .take(PYTHON_ERA_PROVIDER_RULES)
+                .map(|rule| rule.rule_id)
+                .collect::<Vec<_>>(),
+            PYTHON_ERA_RULE_IDS,
+        );
         assert_eq!(
             serde_json::to_value(&catalog[0]).unwrap(),
             serde_json::json!({
@@ -1597,7 +1952,7 @@ mod tests {
             })
         );
         assert_eq!(
-            serde_json::to_value(&catalog[17]).unwrap(),
+            serde_json::to_value(catalog.last().unwrap()).unwrap(),
             serde_json::json!({
                 "rule_id": "credential-assignment",
                 "family": "Contextual credential assignment",
@@ -1619,10 +1974,7 @@ mod tests {
             200,
         );
         assert_eq!(summary.findings.len(), 4);
-        assert_eq!(
-            summary.detector_version,
-            "guard-secrets-v1:1d8dc93ef4fc2a04"
-        );
+        assert_eq!(summary.detector_version, detector_version());
 
         let github = &summary.findings[0];
         assert_eq!(github.rule_id, "github-token");
@@ -1686,22 +2038,24 @@ mod tests {
         );
         let public = summary.to_public_dict(Some(b"oracle-key")).unwrap();
         let json = serde_json::to_string(&public).unwrap();
-        let expected = concat!(
-            r#"{"schema":"guard-secret-scan.v1","detector_version":"guard-secrets-v1:1d8dc93ef4fc2a04","#,
+        let expected = format!(
+            r#"{{"schema":"guard-secret-scan.v1","detector_version":"{}","#,
+            detector_version()
+        ) + concat!(
             r#""finding_count":4,"findings":[{"rule_id":"github-token","family":"GitHub token","#,
             r#""severity":"critical","confidence":"high","confidence_score":1.0,"line":2,"#,
             r#""path":"config/prod.env","source":"working_tree","commit":null,"validation":"github","#,
             r#""entropy":5.0588,"context_reasons":["provider-format","high-token-rarity","#,
             r#""credential-name-context"],"fingerprint":"b018734dfa08a0099c84c484d37b473f5a14095e14a647584993f1b2c6d9a100"},"#,
         );
-        assert!(json.starts_with(expected), "mismatch: {json}");
+        assert!(json.starts_with(&expected), "mismatch: {json}");
         // Without a key, `fingerprint` is absent (not null).
         let no_key = serde_json::to_string(&summary.to_public_dict(None).unwrap()).unwrap();
         assert!(!no_key.contains("fingerprint"));
         // An explicitly empty key is an error, mirroring the Python ValueError.
         assert_eq!(
             summary.findings[0].fingerprint(b""),
-            Err(EmptyFingerprintKeyError)
+            Err(FingerprintError::EmptyKey)
         );
         assert!(summary.to_public_dict(Some(b"")).is_err());
     }
@@ -1871,5 +2225,364 @@ mod tests {
         assert_eq!(summary.findings.len(), 2);
         assert_eq!(summary.findings[0].line, 1);
         assert_eq!(summary.findings[1].line, 2);
+    }
+
+    #[test]
+    fn scrubbing_a_finding_keeps_everything_but_the_secret() {
+        let summary = scan_secret_text(
+            &fixture_text(),
+            "config/prod.env",
+            "working_tree",
+            None,
+            200,
+        );
+        let mut finding = summary.findings.into_iter().next().expect("a finding");
+        let rule_id = finding.rule_id;
+        let line = finding.line;
+        assert!(!finding.candidate.is_empty());
+
+        finding.scrub_candidate();
+
+        assert!(finding.candidate.is_empty());
+        assert_eq!(finding.rule_id, rule_id);
+        assert_eq!(finding.line, line);
+        assert_eq!(finding.path, "config/prod.env");
+        // The rest of the finding survives, but its identity does not: a
+        // fingerprint taken now would name the rule, not the secret.
+        assert_eq!(
+            finding.fingerprint(b"tenant-key"),
+            Err(FingerprintError::CandidateScrubbed)
+        );
+        assert_eq!(
+            finding.to_public_dict(Some(b"tenant-key")).err(),
+            Some(FingerprintError::CandidateScrubbed)
+        );
+        // Without a key the public payload carries no fingerprint, so it is
+        // still the honest way to report a scrubbed finding.
+        assert!(finding.to_public_dict(None).is_ok());
+    }
+
+    #[test]
+    fn feeding_the_fingerprint_in_pieces_matches_the_joined_form() {
+        let summary = scan_secret_text(
+            &fixture_text(),
+            "config/prod.env",
+            "working_tree",
+            None,
+            200,
+        );
+        let finding = summary.findings.first().expect("a finding");
+        let key = b"fingerprint-key";
+
+        // What the finding used to build and hash in one allocation.
+        let mut joined = HmacSha256::new_from_slice(key).expect("HMAC accepts this key");
+        joined.update(format!("{}\u{0}{}", finding.rule_id, finding.candidate).as_bytes());
+
+        assert_eq!(
+            finding.fingerprint(key).expect("the key is not empty"),
+            hex::encode(joined.finalize().into_bytes())
+        );
+    }
+
+    #[test]
+    fn a_matched_line_reaches_the_zeroizing_buffer_in_one_copy() {
+        // Collecting characters starts from a guess of about a quarter of the
+        // line's bytes and grows from there, and every grow frees a buffer that
+        // still holds the head of the line, which is where the secret sits. The
+        // allocator is the only honest witness to that, so measure it: one call
+        // is the copy, and anything more is a freed buffer nobody wiped.
+        let line = format!("API_KEY=sk_live_{}", "e\u{301}".repeat(400));
+        let text = format!("harmless line\n{line}\ntrailing line");
+        let match_start = text.find("sk_live_").expect("the fixture carries the line");
+
+        let (copied, measured) = guard_alloc_probe::measure(|| line_text(&text, match_start));
+
+        assert_eq!(copied.as_str(), line);
+        assert_eq!(
+            measured.alloc_calls, 1,
+            "the line was copied through more than one buffer"
+        );
+    }
+
+    #[test]
+    fn a_long_line_is_cut_on_a_character_boundary() {
+        let line = format!("API_KEY=sk_live_{}", "e\u{301}".repeat(2000));
+        let text = format!("harmless line\n{line}\n");
+        let match_start = text.find("sk_live_").expect("the fixture carries the line");
+
+        let copied = line_text(&text, match_start);
+
+        // The cut counts characters, so a multi-byte character is never halved
+        // and the kept text is still a prefix of the line it came from.
+        assert_eq!(copied.chars().count(), 1024);
+        assert!(line.starts_with(copied.as_str()));
+    }
+
+    #[test]
+    fn the_dedup_digest_tells_candidates_apart() {
+        assert_eq!(
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345")
+        );
+        assert_ne!(
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012346")
+        );
+    }
+
+    /// One synthetic credential per rule added after the Python detector was
+    /// retired, in the order the rules appear. None of these is a live secret:
+    /// each is assembled to satisfy its own pattern and nothing else. Each is
+    /// held in two pieces, as `jwt_fixture` is, so no complete provider-shaped
+    /// token ever appears as a literal in this file.
+    const RULES_ADDED_AFTER_PYTHON: [(&str, &str, &str); 16] = [
+        (
+            "atlassian-api-token",
+            "ATATT3xFfGF0A1b2C3d4E5",
+            "f6G7h8I9j0K1l2M",
+        ),
+        (
+            "telegram-bot-token",
+            "7645120398:AAH9kQ2vL8nP4wR",
+            "7tY1uI6oP3aS5dFgHj",
+        ),
+        (
+            "discord-webhook",
+            "https://discord.com/api/webhooks/1298374650192837465/qZ2vL8nP4wR7tY1uI6o",
+            "P3aS5dFgHjK9mQ2vL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ2vL8",
+        ),
+        (
+            "doppler-token",
+            "dp.pt.a7Kq2VL8nP4wR7tY1uI6oP3",
+            "aS5dFgHjK9mQ2vL8nP4w",
+        ),
+        ("vault-token", "hvs.CAESIJq2VL8nP4wR7t", "Y1uI6oP3aS5dFgHj"),
+        (
+            "shopify-access-token",
+            "shpat_9f3b7c2a1d4e8f60",
+            "b5a9c7d3e1f2a4b6",
+        ),
+        (
+            "grafana-service-account-token",
+            "glsa_Qq2VL8nP4wR7tY1uI6oP3a",
+            "S5dFgHjK9m_3f7b1c9d",
+        ),
+        (
+            "linear-api-key",
+            "lin_api_Qq2VL8nP4wR7tY1uI6oP3a",
+            "S5dFgHjK9mQ2vL8nP4wR",
+        ),
+        (
+            "dockerhub-pat",
+            "dckr_pat_Qq2VL8nP4wR7tY1uI6",
+            "oP3aS5dFgHjK9mQ2vL",
+        ),
+        (
+            "postman-api-key",
+            "PMAK-6f3b7c2a1d4e8f60b5a9c7d3-e1f2a4b6",
+            "9c8d7e5f3a1b2c4d6e8f0a2b4c",
+        ),
+        (
+            "databricks-token",
+            "dapi9f3b7c2a1d4e8f60b",
+            "5a9c7d3e1f2a4b6",
+        ),
+        (
+            "planetscale-token",
+            "pscale_tkn_Qq2VL8nP4wR7tY1uI6o",
+            "P3aS5dFgHjK9mQ2vL8nP4",
+        ),
+        (
+            "figma-token",
+            "figd_Qq2VL8nP4wR7tY1uI6oP3aS5",
+            "dFgHjK9mQ2vL8nP4wR7t",
+        ),
+        ("square-access-token", "sq0atp-Qq2VL8nP4w", "R7tY1uI6oP3a"),
+        (
+            "mailgun-api-key",
+            "key-9f3b7c2a1d4e8f60b",
+            "5a9c7d3e1f2a4b6",
+        ),
+        (
+            "flyio-token",
+            "fm2_Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ",
+            "2vL8nP4wR7tY1uI6oP3aS5dFgH",
+        ),
+    ];
+
+    #[test]
+    fn the_sample_set_covers_every_rule_added_after_python() {
+        // A rule appended without a sample would be a pattern nothing ever
+        // runs, so the list above has to track the table.
+        assert_eq!(
+            SECRET_RULES
+                .iter()
+                .skip(PYTHON_ERA_PROVIDER_RULES)
+                .map(|rule| rule.rule_id)
+                .collect::<Vec<_>>(),
+            RULES_ADDED_AFTER_PYTHON
+                .iter()
+                .map(|(rule_id, _, _)| *rule_id)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn every_rule_added_after_python_finds_its_own_credential() {
+        for (rule_id, head, tail) in RULES_ADDED_AFTER_PYTHON {
+            let text = format!("SERVICE_CREDENTIAL = \"{head}{tail}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            let found: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(found.contains(&rule_id), "{rule_id}: {found:?}");
+        }
+    }
+
+    #[test]
+    fn an_overlong_value_is_never_reported_as_a_fragment_of_itself() {
+        // A value longer than the provider's own token must not come back as
+        // the provider's token with its tail cut off: the fragment carries a
+        // fingerprint of something that was never a credential, and the
+        // generic rule reports the whole value alongside it as a second
+        // finding for the same secret. Either the provider claims the whole
+        // value or it claims nothing and the generic rule speaks for it, so
+        // one line holds one finding.
+        for (rule_id, head, tail) in RULES_ADDED_AFTER_PYTHON {
+            let value = format!("{head}{tail}Zz9Qq2Vv");
+            let text = format!("SERVICE_CREDENTIAL = \"{value}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            for finding in &summary.findings {
+                if finding.rule_id != rule_id {
+                    continue;
+                }
+                assert_eq!(
+                    finding.candidate, value,
+                    "{rule_id} reported a fragment of the value"
+                );
+            }
+            // The fragment is what splits one credential into two findings:
+            // the provider rule fingerprints the part it took and the generic
+            // rule reports the whole value it did not recognise.
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(
+                !(claimed.contains(&rule_id) && claimed.contains(&"credential-assignment")),
+                "{rule_id}: {claimed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_mailgun_rule_leaves_an_ordinary_cache_key_alone() {
+        // `key-` with a hex digest after it is a common shape for keys that
+        // open nothing.
+        // Held in two pieces, as every other sample in this file is.
+        let digest = format!("{}{}", "9f3b7c2a1d4e8f60b", "5a9c7d3e1f2a4b6");
+        for name in ["cache-key-", "idempotency-key-", "object_key-"] {
+            let text = format!("entry = \"{name}{digest}\"");
+            let summary = scan_secret_text(&text, "src/cache.rs", "working_tree", None, 200);
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(!claimed.contains(&"mailgun-api-key"), "{name}: {claimed:?}");
+        }
+    }
+
+    #[test]
+    fn a_mailgun_key_opening_a_line_is_reported_on_its_own_line() {
+        // The rule consumes the character before the key to prove the key
+        // starts where a word does. On every line but the first that
+        // character is the newline that ended the line above, so a finding
+        // anchored on the whole match would name the previous line and score
+        // that line's text.
+        // The line above carries a sample marker and the key's own line carries
+        // a credential name, so the scoring reasons say which line was read.
+        let digest = format!("{}{}", "9f3b7c2a1d4e8f60b", "5a9c7d3e1f2a4b6");
+        let text = format!("# example configuration\nMAILGUN_API_KEY = key-{digest}\n");
+        let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+        let finding = summary
+            .findings
+            .iter()
+            .find(|finding| finding.rule_id == "mailgun-api-key")
+            .expect("the key on the second line is still a finding");
+        assert_eq!(finding.line, 2);
+        assert!(
+            finding.context_reasons.contains(&"credential-name-context"),
+            "{:?}",
+            finding.context_reasons
+        );
+        assert!(
+            !finding.context_reasons.contains(&"sample-marker-context"),
+            "{:?}",
+            finding.context_reasons
+        );
+    }
+
+    #[test]
+    fn the_doppler_rule_reads_cli_and_config_scoped_tokens() {
+        // A Doppler service token carries the config it was cut for, a CLI
+        // token uses its own `ct` kind, and a service account identity token
+        // uses `said`, which the `sa` kind does not cover. All three were
+        // missed while only the shorter kinds were listed.
+        for (head, tail) in [
+            ("dp.ct.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
+            ("dp.st.dev.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
+            ("dp.said.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
+        ] {
+            let text = format!("SERVICE_CREDENTIAL = \"{head}{tail}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(claimed.contains(&"doppler-token"), "{head}: {claimed:?}");
+        }
+    }
+
+    #[test]
+    fn a_doppler_identity_token_is_read_without_a_credential_name_beside_it() {
+        // A token pasted on its own, with no assignment to name it, is the
+        // shape a leaked credential most often takes. The rule's format is
+        // specific enough to stand alone, so the finding must not depend on
+        // surrounding text.
+        let head = "dp.said.a7Kq2VL8nP4wR7tY1uI6oP3";
+        let tail = "aS5dFgHjK9mQ2vL8nP4w";
+        let text = format!("{head}{tail}\n");
+        let summary = scan_secret_text(&text, "notes/scratch.txt", "working_tree", None, 200);
+        let claimed: Vec<&str> = summary
+            .findings
+            .iter()
+            .map(|finding| finding.rule_id)
+            .collect();
+        assert!(claimed.contains(&"doppler-token"), "{claimed:?}");
+    }
+
+    #[test]
+    fn a_rule_added_after_python_does_not_claim_another_rules_credential() {
+        // Each sample belongs to exactly one provider. A pattern loose enough
+        // to swallow a neighbour's token would mislabel a real finding.
+        for (rule_id, head, tail) in RULES_ADDED_AFTER_PYTHON {
+            let text = format!("SERVICE_CREDENTIAL = \"{head}{tail}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            for finding in &summary.findings {
+                let claimed = finding.rule_id;
+                let is_own = claimed == rule_id;
+                let is_python_era = PYTHON_ERA_RULE_IDS.contains(&claimed);
+                let is_contextual = claimed == "credential-assignment";
+                assert!(
+                    is_own || is_python_era || is_contextual,
+                    "{rule_id} also matched {claimed}"
+                );
+            }
+        }
     }
 }
