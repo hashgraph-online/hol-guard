@@ -806,12 +806,18 @@ class StorePolicyMixin:
                 decision,
                 remote_write_authorized=remote_write_authorized,
             )
-            require_policy_write(
-                self.guard_home,
-                decision=decision,
-                approval_gate_grant=approval_gate_grant,
-                now=normalized_now,
-            )
+            # The approval password stops a local process from writing its own
+            # allow rules. A verified bundle row carries the workspace's
+            # signature instead, which no local process can produce, and a
+            # background sync never holds a password grant: gating these rows
+            # left every password-protected device without its team policy.
+            if not (remote_write_authorized and is_remote_policy_source(decision.source)):
+                require_policy_write(
+                    self.guard_home,
+                    decision=decision,
+                    approval_gate_grant=approval_gate_grant,
+                    now=normalized_now,
+                )
             expires_at = _canonical_utc_timestamp(decision.expires_at) if decision.expires_at is not None else None
             _validate_scoped_policy_artifact_target(decision.scope, decision.artifact_id)
             artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)

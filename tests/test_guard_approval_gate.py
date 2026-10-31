@@ -1973,7 +1973,7 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     assert store.list_receipts(limit=5) == []
 
 
-def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashing(
+def test_approval_gate_background_sync_applies_signed_remote_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1992,7 +1992,7 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
         {
             "ruleId": "cloud-allow",
             "action": "allow",
-            "reason": "Exercise approval-gated activation of signed remote policy.",
+            "reason": "Exercise signed remote policy activation behind the approval gate.",
             "artifactId": "codex:project:cloud-allow",
             "scope": {
                 "agents": [],
@@ -2040,11 +2040,14 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
     }
     payload = guard_runner_module.sync_receipts(store, auth_context=auth_context)
 
-    assert payload["remote_policies_stored"] == 0
-    assert payload["remote_policy_sync_blocked"] is True
-    assert store.list_policy_decisions("codex") == []
-    events = store.list_events(event_name="approval_gate/remote_policy_sync_blocked")
-    assert events[0]["payload"]["error"] == "approval_gate_required"
+    # A background sync holds no password grant. The workspace signature is
+    # the authority for these rows, so the team policy still lands.
+    assert payload["remote_policies_stored"] == 1
+    assert payload["remote_policy_sync_blocked"] is False
+    decisions = store.list_policy_decisions("codex")
+    assert ("codex:project:cloud-allow", "allow") in {(item["artifact_id"], item["action"]) for item in decisions}
+    assert store.list_events(event_name="approval_gate/remote_policy_sync_blocked") == []
+    assert not store.get_sync_payload("policy_bundle_last_error")
 
 
 def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
