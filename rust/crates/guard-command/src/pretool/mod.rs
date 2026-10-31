@@ -129,6 +129,7 @@ mod glob_words;
 mod guard_diagnostics;
 mod guard_names;
 mod help_probes;
+mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;

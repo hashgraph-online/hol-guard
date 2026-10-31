@@ -48,8 +48,15 @@ pub(super) fn run(
         environment.insert("ESBUILD_BINARY_PATH".into(), path_text(&image.image)?);
     }
     // Node preloads and search paths from the host are not project input.
-    environment.remove("NODE_OPTIONS");
-    environment.remove("NODE_PATH");
+    readonly::node_runtime::settle(
+        payload,
+        workspace,
+        authority,
+        &plan,
+        &mut environment,
+        signals,
+        timeout,
+    )?;
     for root in &plan.output_roots {
         let asked = json!({
             "path": root,
