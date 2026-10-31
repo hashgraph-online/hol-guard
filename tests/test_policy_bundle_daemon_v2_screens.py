@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.policy_document_types import PolicyCompilationError
 from codex_plugin_scanner.guard.runtime import runner
@@ -105,3 +106,23 @@ def test_daemon_still_activates_a_candidate_that_agrees_with_the_shadow(
     acknowledgement = store.get_sync_payload("policy_bundle_ack")
     assert isinstance(acknowledgement, dict)
     assert all(acknowledgement[key] == value for key, value in delivery.items())
+
+
+def test_daemon_answers_a_rollout_lookup_outage_with_503(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable(monkeypatch)
+    store = _store(tmp_path)
+    bundle, delivery = _fixture(store)
+
+    def _resident_down(**_kwargs: object) -> bool:
+        raise NativeRunnerAuthorityError("unavailable")
+
+    monkeypatch.setattr(native_sync, "canonical_policy_enforcement_enabled", _resident_down)
+    status, response = _sync(store, bundle=bundle, delivery=delivery)
+
+    assert status == 503, response
+    assert response["error"] == NATIVE_UNAVAILABLE_REJECTION
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.get_sync_payload("policy_bundle_ack") is None
