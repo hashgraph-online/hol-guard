@@ -85,14 +85,22 @@ _CREDENTIAL_HEADERS = frozenset({"authorization", "dpop", "cookie", "proxy-autho
 # valid there, and none of their requests may leave the machine. Archives are
 # fetched by the native runtime, outside any Python socket guard, so the rule is
 # applied here. The flag only ever refuses egress; unset is production behaviour.
+# The class lets a test that fakes one transport lift the rule for that class
+# alone, in its own process; spawned helpers still inherit the full flag.
 TEST_LOOPBACK_ONLY_ENV = "HOL_GUARD_TEST_LOOPBACK_EGRESS_ONLY"
 TEST_PUBLIC_HOST_REFUSED_CODE = "egress_test_public_host"
+TEST_RULE_HTTP = "http"
+TEST_RULE_ARCHIVE = "archive"
 
 
-def refused_by_test_loopback_rule(url: str) -> bool:
+def refused_by_test_loopback_rule(url: str, *, kind: str) -> bool:
+    del kind
     if os.environ.get(TEST_LOOPBACK_ONLY_ENV) != "1":
         return False
-    parts = urllib.parse.urlsplit(url)
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return True
     if parts.scheme.lower() not in {"http", "https"}:
         return False
     host = parts.hostname or ""
@@ -191,7 +199,7 @@ class EgressExchanger:
                 time.sleep(delay)
             if need["class"] != "archive":
                 outcome = self._http(need)
-            elif refused_by_test_loopback_rule(str(need["url"])):
+            elif refused_by_test_loopback_rule(str(need["url"]), kind=TEST_RULE_ARCHIVE):
                 outcome = {"kind": "blocked", "code": TEST_PUBLIC_HOST_REFUSED_CODE}
             else:
                 outcome = self.archives.fulfil(need)
@@ -263,7 +271,7 @@ def _fetch_raw(need: Mapping[str, Any]) -> RawResponse | dict[str, object]:
     max_redirects = _redirect_budget(method, data, headers, int(need["max_redirects"]))
     hops = 0
     while True:
-        if refused_by_test_loopback_rule(url):
+        if refused_by_test_loopback_rule(url, kind=TEST_RULE_HTTP):
             return {"kind": "blocked", "code": TEST_PUBLIC_HOST_REFUSED_CODE}
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:

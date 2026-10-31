@@ -18,6 +18,12 @@ def test_a_public_name_is_not_resolved() -> None:
         socket.getaddrinfo("hol.org", 443)
 
 
+@pytest.mark.parametrize("lookup", ["gethostbyname", "gethostbyname_ex"])
+def test_a_public_name_is_not_resolved_by_the_legacy_lookups(lookup: str) -> None:
+    with pytest.raises(ConnectionRefusedError, match=r"resolve hol\.org"):
+        getattr(socket, lookup)("hol.org")
+
+
 def test_a_public_address_is_not_connected() -> None:
     with (
         socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock,
@@ -50,3 +56,4 @@ def test_a_background_thread_is_refused_too() -> None:
 def test_loopback_stays_open() -> None:
     assert socket.getaddrinfo("127.0.0.1", 80)
     assert socket.getaddrinfo("localhost", 80)
+    assert socket.gethostbyname("127.0.0.1") == "127.0.0.1"

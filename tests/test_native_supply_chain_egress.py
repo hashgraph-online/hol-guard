@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.native_package_authority import _RESULT_SCHEMA
 from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.restricted_archive_contract import RestrictedArchiveFailure
+from tests.support.network import lift_test_loopback_rule, stub_authenticated_urlopen
 
 # Read at import, before the autouse fixture below lifts it for this module.
 _SUITE_LOOPBACK_ONLY = os.environ.get(egress.TEST_LOOPBACK_ONLY_ENV)
@@ -635,3 +636,34 @@ def test_under_the_suite_rule_loopback_is_still_reached(
     exchanger.fulfil({"needs": [_need(final, klass="cloud")]})
     assert performed == [final]
     assert exchanger.supplied[0]["outcome"]["kind"] == "response"  # type: ignore[index]
+
+
+@pytest.mark.parametrize("kind", [egress.TEST_RULE_HTTP, egress.TEST_RULE_ARCHIVE])
+def test_under_the_suite_rule_a_url_that_does_not_parse_is_refused(monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    monkeypatch.setenv(egress.TEST_LOOPBACK_ONLY_ENV, "1")
+    assert egress.refused_by_test_loopback_rule("http://[::1/x", kind=kind)
+
+
+@pytest.mark.parametrize(
+    ("lifted", "kept"),
+    [(egress.TEST_RULE_HTTP, egress.TEST_RULE_ARCHIVE), (egress.TEST_RULE_ARCHIVE, egress.TEST_RULE_HTTP)],
+)
+def test_a_fake_lifts_the_suite_rule_for_its_own_class_only(
+    monkeypatch: pytest.MonkeyPatch, lifted: str, kept: str
+) -> None:
+    monkeypatch.setenv(egress.TEST_LOOPBACK_ONLY_ENV, "1")
+    lift_test_loopback_rule(monkeypatch, lifted)
+    public = "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz"
+    assert not egress.refused_by_test_loopback_rule(public, kind=lifted)
+    assert egress.refused_by_test_loopback_rule(public, kind=kept)
+    # Helpers the test spawns inherit the flag untouched and keep refusing both.
+    assert os.environ[egress.TEST_LOOPBACK_ONLY_ENV] == "1"
+
+
+def test_a_urllib_double_leaves_archive_downloads_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv(egress.TEST_LOOPBACK_ONLY_ENV, "1")
+    stub_authenticated_urlopen(monkeypatch, lambda *_args: pytest.fail("the double must not be asked for an archive"))
+    _unmanaged(monkeypatch)
+    exchanger = _exchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need("https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz", klass="archive")]})
+    assert exchanger.supplied[0]["outcome"] == {"kind": "blocked", "code": egress.TEST_PUBLIC_HOST_REFUSED_CODE}
