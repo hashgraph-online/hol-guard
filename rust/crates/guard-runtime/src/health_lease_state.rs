@@ -23,7 +23,7 @@ const OUTBOX_NAME: &str = "health-lease-outbox.json";
 const ACK_NAME: &str = "health-lease-ack.json";
 /// `mdm/health_lease_contract.py`: a base64 snapshot, a signed lease and
 /// framing.
-const MAX_OUTBOX_BYTES: u64 = 4 * ((256 * 1024 + 2) / 3) + 32 * 1024 + 4096;
+const MAX_OUTBOX_BYTES: u64 = 4 * (256 * 1024_u64).div_ceil(3) + 32 * 1024 + 4096;
 /// `mdm/health_lease_ack.py`.
 const MAX_ACK_BYTES: u64 = 4096;
 /// The largest outbox, base64 encoded, and the request around it.
