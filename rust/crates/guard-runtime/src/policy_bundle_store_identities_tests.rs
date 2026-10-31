@@ -125,6 +125,15 @@ fn an_identity_is_keyed_the_way_the_store_saves_the_row() {
     );
 }
 
+#[cfg(any(unix, windows))]
+#[test]
+fn the_host_name_a_generic_label_yields_to_is_read() {
+    // Off Unix this was unknown, which left the bundle's identities to the
+    // Python store.
+    let name = device_display_name(&store(), "localhost").expect("host name");
+    assert!(!name.is_empty());
+}
+
 #[test]
 fn a_generic_label_yields_to_the_host_name() {
     assert_eq!(

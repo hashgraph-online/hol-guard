@@ -308,11 +308,16 @@ fn host_name() -> Option<String> {
     nix::unistd::gethostname().ok()?.into_string().ok()
 }
 
-/// Off Unix, `platform.node()` is the DNS host name, which `COMPUTERNAME`
-/// (the upper-cased, 15-character NetBIOS name) does not match. The resident
-/// cannot read it yet, so the device name is unknown and the bundle's
-/// identities are left to the store.
-#[cfg(not(unix))]
+/// On Windows `platform.node()` is the DNS host name, which `COMPUTERNAME`
+/// (the upper-cased, 15-character NetBIOS name) does not match.
+#[cfg(windows)]
+fn host_name() -> Option<String> {
+    guard_runtime_windows_process::dns_host_name()?
+        .into_string()
+        .ok()
+}
+
+#[cfg(not(any(unix, windows)))]
 fn host_name() -> Option<String> {
     None
 }
