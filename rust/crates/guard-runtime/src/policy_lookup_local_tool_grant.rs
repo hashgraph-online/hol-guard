@@ -25,7 +25,7 @@ pub(crate) fn evaluate(
     request: &PolicyDecisionLookupRequestV1,
     grant: &LocalToolGrantLookupV1,
 ) -> Result<Value, String> {
-    if !REVIEWABLE.contains(&grant.current_action.as_str()) {
+    if !reads_store(grant) {
         // No store read happens, so there is no trust or integrity evidence to
         // report; the result still has to be the shape every caller decodes.
         return Ok(no_grant());
@@ -60,6 +60,11 @@ pub(crate) fn evaluate(
     };
     object.insert("decision".to_owned(), Value::Null);
     Ok(last)
+}
+
+/// Whether the probe reads the store: only a reviewable action may be lifted.
+pub(crate) fn reads_store(grant: &LocalToolGrantLookupV1) -> bool {
+    REVIEWABLE.contains(&grant.current_action.as_str())
 }
 
 /// The result of a probe that answered nothing, in the shape every caller

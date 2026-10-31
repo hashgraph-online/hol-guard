@@ -688,3 +688,32 @@ fn a_lookup_without_bundle_identities_derives_them_from_its_store() {
     request.policy_bundle_decision_identities = Some(Vec::new());
     assert_eq!(lookup_code(&request), "ok");
 }
+
+/// A lookup that never reads policy rows never derives bundle identities, so a
+/// bundle the resident cannot read does not fail it: the local-once peek and a
+/// trusted-tool grant probe for an action no review asked for.
+#[test]
+fn a_lookup_that_reads_no_policy_rows_skips_bundle_derivation() {
+    let store = unreadable_bundle_store("bundle-ids-skip", true);
+    let mut once = base_request(&store);
+    once.local_once_only = true;
+    once.consume_one_shot = false;
+    assert_eq!(lookup_code(&once), "ok");
+
+    let mut grant = base_request(&store);
+    grant.artifact_id = None;
+    grant.artifact_hash = None;
+    grant.consume_one_shot = false;
+    grant.probe_groups = Some(
+        serde_json::from_value(json!({
+            "groups": [],
+            "local_tool_grant": {
+                "tool_identity_hash": "a1".repeat(32),
+                "capability": "read-only-inspect",
+                "current_action": "block",
+            },
+        }))
+        .unwrap(),
+    );
+    assert_eq!(lookup_code(&grant), "ok");
+}

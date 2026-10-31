@@ -236,6 +236,26 @@ def test_a_chosen_label_that_reads_like_a_default_is_kept(store: GuardStore, mon
     assert tools.device_display_name(store, "Local machine") == "Ada-MacBook-Pro"
 
 
+def test_policy_matching_and_approval_checks_use_one_machine_name(
+    store: GuardStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    monkeypatch.setattr(naming.platform, "node", lambda: "Ada-MacBook-Pro.local")
+    captured: list[str] = []
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_bundle_decisions.build_policy_bundle_decisions",
+        lambda bundle, *, device_id, device_name: captured.append(device_name) or [],
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.synced_policy.cached_policy_bundle_validation",
+        lambda *args, **kwargs: ({"bundle": True}, None),
+    )
+    monkeypatch.setattr(store, "get_sync_payload", lambda key: {"bundle": True} if key == "policy_bundle" else None)
+    store._cached_policy_bundle_decision_identities()  # type: ignore[attr-defined]
+    assert captured == [runner._guard_device_metadata(store)[1]] == ["Ada-MacBook-Pro"]
+
+
 def test_a_generic_label_stays_when_the_host_has_no_usable_name(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(naming.platform, "node", lambda: "localhost")
     assert naming.effective_device_label("Local machine") == "Local machine"

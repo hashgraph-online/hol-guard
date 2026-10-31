@@ -1341,13 +1341,20 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
 
 /// Python ships no bundle identities: the resident derives them from the store
 /// the lookup reads, and hands the bundle it validated on the way to the
-/// request's exception cache. A request that carries them, or one `evaluate`
-/// refuses before opening the store, is left as sent.
+/// request's exception cache. A request that carries them, one that never
+/// reads policy rows (a local-once peek, a grant probe with nothing to lift),
+/// or one `evaluate` refuses before opening the store, is left as sent.
 fn with_bundle_identities(
     request: &PolicyDecisionLookupRequestV1,
 ) -> Result<Cow<'_, PolicyDecisionLookupRequestV1>, String> {
+    let grant = request
+        .probe_groups
+        .as_ref()
+        .and_then(|groups| groups.local_tool_grant.as_ref());
     if request.policy_bundle_decision_identities.is_some()
         || request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA
+        || request.local_once_only
+        || grant.is_some_and(|grant| !crate::policy_lookup_local_tool_grant::reads_store(grant))
     {
         return Ok(Cow::Borrowed(request));
     }

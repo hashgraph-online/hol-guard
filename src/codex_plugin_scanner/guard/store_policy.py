@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -92,6 +93,8 @@ class PolicyLookupEvidence:
     integrity_key_id: str | None = None
     local_once_integrity_key_b64: str | None = None
     local_once_integrity_key_id: str | None = None
+    # Shipped only where the resident cannot derive them itself (off Unix).
+    policy_bundle_decision_identities: list[list[Any]] | None = None
     # The store-resident sources this evidence was gathered against, named
     # before it was derived. Only a lookup that may claim ships one.
     evidence_binding: dict[str, Any] | None = None
@@ -183,6 +186,56 @@ class StorePolicyMixin:
                 local_keyring_json=json.dumps(dict(quarantined_local_keyring), allow_nan=False),
             )
         return bool(self._native_store_call("managed_keyring_reconcile", arguments))
+
+    def _cached_policy_bundle_decision_identities(
+        self,
+        *,
+        now: float | None = None,
+    ) -> frozenset[tuple[object, ...]]:
+        """Return only rows derivable from the currently authorized signed bundle."""
+
+        from .policy_bundle_decisions import build_policy_bundle_decisions
+        from .synced_policy import SyncPayloadReader, cached_policy_bundle_validation
+
+        policy_bundle = self.get_sync_payload("policy_bundle")
+        if not isinstance(policy_bundle, dict) or not policy_bundle:
+            return frozenset()
+        validated_bundle, _reason = cached_policy_bundle_validation(
+            cast(SyncPayloadReader, cast(object, self)),
+            policy_bundle,
+            now=now,
+        )
+        if validated_bundle is None:
+            return frozenset()
+        try:
+            device_metadata = self.get_device_metadata()
+            decisions = build_policy_bundle_decisions(
+                validated_bundle,
+                device_id=str(device_metadata["installation_id"]),
+                # The same name policy sync matched against; see ``_guard_device_metadata``.
+                device_name=cast("GuardStore", self).device_display_name(str(device_metadata["device_label"])),
+            )
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+            return frozenset()
+        identities: set[tuple[object, ...]] = set()
+        for decision in decisions:
+            artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
+            identities.add(
+                (
+                    decision.harness,
+                    decision.scope,
+                    artifact_id,
+                    artifact_hash,
+                    workspace,
+                    publisher,
+                    decision.action,
+                    decision.reason,
+                    decision.owner,
+                    decision.source,
+                    (_canonical_utc_timestamp(decision.expires_at) if decision.expires_at is not None else None),
+                )
+            )
+        return frozenset(identities)
 
     def upsert_policy(
         self,
@@ -919,6 +972,8 @@ class StorePolicyMixin:
             "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
             "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
         }
+        if evidence.policy_bundle_decision_identities:
+            request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
         if portable_workspace is not None:
             request["portable_workspace"] = portable_workspace
             # Unset options are omitted, never sent as null: the resident
@@ -1110,9 +1165,20 @@ class StorePolicyMixin:
                 else None
             ),
             local_once_integrity_key_id=local_once_key_id,
+            policy_bundle_decision_identities=self._lookup_bundle_identities(current_time),
             evidence_binding=evidence_binding,
             has_saved_rows=has_saved_rows,
         )
+
+    def _lookup_bundle_identities(self, current_time: str) -> list[list[Any]] | None:
+        # The resident derives these from the store it reads, except off Unix,
+        # where it cannot read the host name a generic device label yields to.
+        if os.name != "nt":
+            return None
+        identities = self._cached_policy_bundle_decision_identities(
+            now=_parse_utc_timestamp(current_time).timestamp(),
+        )
+        return [list(identity) for identity in identities] or None
 
     def resolve_policy_decision(
         self,
@@ -1234,6 +1300,14 @@ class StorePolicyMixin:
                 bundle=needs_bundle,
                 cloud_workspace_id=self._cloud_workspace_id_from_connection(connection) if needs_bundle else None,
             )
+        # The resident derives these itself, except off Unix, where it cannot
+        # read the host name a generic device label yields to.
+        if needs_bundle and os.name == "nt":
+            identities = self._cached_policy_bundle_decision_identities(
+                now=_parse_utc_timestamp(current_time).timestamp(),
+            )
+            if identities:
+                evidence["policy_bundle_decision_identities"] = [list(identity) for identity in identities]
         return evidence
 
     def approval_reuse_validation_reason(
