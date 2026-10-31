@@ -321,20 +321,15 @@ fn a_comparison_verb_that_defines_no_diff_option_carries_no_screen() {
 
 #[test]
 fn a_comparison_verb_is_refused_the_helpers_and_the_output_file() {
-    for verb in ["diff-tree"] {
-        assert_eq!(read(&["git", verb, "--ext-diff", "HEAD"]), None, "{verb}");
-        assert_eq!(read(&["git", verb, "--textconv", "HEAD"]), None, "{verb}");
-        assert_eq!(
-            read(&["git", verb, "--output=patch.txt", "HEAD"]),
-            None,
-            "{verb}"
-        );
-        // An unambiguous prefix names the same option Git would resolve it to.
-        assert_eq!(read(&["git", verb, "--out", "patch.txt"]), None, "{verb}");
-        assert_eq!(read(&["git", verb, "-O", "order.txt"]), None, "{verb}");
-        // `--text` is the verb's own "treat the file as text", not a prefix of
-        // `--textconv`.
-        assert!(read(&["git", verb, "--text", "HEAD"]).is_some(), "{verb}");
-    }
+    let verb = "diff-tree";
+    assert_eq!(read(&["git", verb, "--ext-diff", "HEAD"]), None);
+    assert_eq!(read(&["git", verb, "--textconv", "HEAD"]), None);
+    assert_eq!(read(&["git", verb, "--output=patch.txt", "HEAD"]), None);
+    // An unambiguous prefix names the same option Git would resolve it to.
+    assert_eq!(read(&["git", verb, "--out", "patch.txt"]), None);
+    assert_eq!(read(&["git", verb, "-O", "order.txt"]), None);
+    // `--text` is the verb's own "treat the file as text", not a prefix of
+    // `--textconv`.
+    assert!(read(&["git", verb, "--text", "HEAD"]).is_some());
     assert_eq!(read(&["git", "cherry", "-o", "names.txt"]), None);
 }
