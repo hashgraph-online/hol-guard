@@ -10,13 +10,26 @@
 //! are not carried into the flat list, and each is taken only when it plainly
 //! starts no command of its own.
 //!
-//! A loop is only the same shape when it is known to stop and its body cannot
-//! build up across iterations, because one flattened pass stands for every
-//! iteration. `while read NAME; do ...; done < FILE` is that shape, for a
-//! plain relative `FILE`: the read ends at that file's end, and a body that
-//! writes nothing leaves each iteration doing the work the single pass
-//! already describes. A device or a path outside the workspace need never
-//! end, so neither is taken. Every other loop keeps its review.
+//! A loop is only the same shape when one flattened pass stands for every
+//! iteration it could run. `while read NAME; do ...; done < FILE` is that
+//! shape, for a plain relative `FILE`: the read ends at that file's end, and
+//! a body that writes nothing leaves each iteration doing the work the single
+//! pass already describes. A device or a path outside the workspace need
+//! never end, so neither is taken.
+//!
+//! A wait is the other shape. `until pg_isready -h 127.0.0.1; do sleep 1;
+//! done` asks one question over and over and waits between the asks, which is
+//! how a developer holds a test suite until its fixture server answers. The
+//! loop never ends on its own, but it reaches nothing a single pass does not:
+//! the body only sleeps, so it reads no input and opens no output, and the
+//! one command the test runs is the same command each time. Sleeping twice is
+//! sleeping longer, so a flat `TEST; sleep N` holds everything the loop can
+//! do however long it runs, and that command still faces the ordinary proofs.
+//! The test is taken as one command with no redirection of its own, because a
+//! list or a redirection would make the iterations differ from the pass; the
+//! body is taken only as plain `sleep` calls with a literal duration, since
+//! anything else could build up across them. Every other loop keeps its
+//! review.
 //!
 //! The loop's redirection is the file its `read` consumes, so the flat list
 //! opens with a read of that file and then the body's own commands. Carrying
@@ -53,6 +66,9 @@ pub(super) fn flatten(command: &str) -> Option<String> {
     }
     if let Some(rest) = keyword(text, "while") {
         return flatten_loop(rest);
+    }
+    if let Some(rest) = keyword(text, "until") {
+        return flatten_wait(rest);
     }
     if let Some(rest) = keyword(text, "case") {
         return flatten_case(rest);
@@ -316,17 +332,23 @@ fn closing(text: &str) -> Option<&str> {
     (rest.is_empty() || rest.starts_with([' ', '\t', '\n', ';', '<', '>'])).then_some(rest)
 }
 
+/// The two `while` shapes one flattened pass describes: a read that empties a
+/// redirected file, and a wait that asks one question until it succeeds.
+fn flatten_loop(rest: &str) -> Option<String> {
+    flatten_read_loop(rest).or_else(|| flatten_wait(rest))
+}
+
 /// `while read NAME...; do LIST; done < FILE`, the one loop shape a single
 /// flattened pass describes. The read ends at the file's end, so the loop
 /// stops on its own, and a body that opens no output keeps every iteration
 /// doing the work that one pass already stands for. A loop whose test is
 /// anything else may never end, and a body that writes would repeat its
-/// effect for as long as it runs, so neither is flattened.
+/// effect for as long as it runs, so neither is flattened here.
 ///
 /// The flat list reads the redirected file and then runs the body. `read`
 /// itself only binds a name from that file, so the read of the file is the
 /// whole of what the loop's test reaches.
-fn flatten_loop(rest: &str) -> Option<String> {
+fn flatten_read_loop(rest: &str) -> Option<String> {
     // The loop binds a name of its own, and the flat list does not, so an
     // expansion inside it would stand for different text than the one the
     // loop ran. No expansion at all is the rule that keeps the two the same
@@ -349,6 +371,80 @@ fn flatten_loop(rest: &str) -> Option<String> {
     let mut parts: Vec<(String, &'static str)> = vec![(format!("cat {source}"), "; ")];
     collect(&mut parts, body)?;
     assemble(&parts, "")
+}
+
+/// `until TEST; do sleep N; done`, and the same shape written with `while`.
+///
+/// A developer holds the next step until a service answers, and writes the
+/// wait as the loop that asks again after a pause. One flattened pass holds
+/// everything that loop can reach: the test is one command, so every
+/// iteration runs the command the flat list already carries, and the body
+/// only sleeps, so no iteration leaves anything behind for the next one to
+/// build on. The command still faces the ordinary proofs, which is what
+/// decides the wait.
+///
+/// The test is taken as a single item with no redirection of its own. A list
+/// would run its later commands only on the outcome of the ones before them,
+/// which a flat pass does not say, and a redirection opens a file the second
+/// iteration would reach again. Both keep their review.
+fn flatten_wait(rest: &str) -> Option<String> {
+    // The loop reads its test again on every pass, and an expansion could
+    // name different text each time once the body or the test writes one.
+    // No expansion at all keeps the flat list the work the loop ran, which
+    // is the rule the read-driven loop above follows for the same reason.
+    if rest.contains(['$', '`']) {
+        return None;
+    }
+    let (test, _, after_test) = body_items(rest, "", &["do"])?;
+    let (body, _, tail) = body_items(after_test, "", &["done"])?;
+    let [(probe, _)] = test.as_slice() else {
+        return None;
+    };
+    if probe.contains(['<', '>']) {
+        return None;
+    }
+    if !body.iter().all(|(text, _)| only_waits(text)) {
+        return None;
+    }
+    let mut parts: Vec<(String, &'static str)> = Vec::new();
+    collect(&mut parts, test)?;
+    collect(&mut parts, body)?;
+    assemble(&parts, tail)
+}
+
+/// Whether this body item is a plain `sleep` that waits and does nothing else.
+///
+/// A second argument is another duration on GNU `sleep` and an error
+/// elsewhere, and neither is the pause this shape stands for, so only the
+/// single-argument spelling is taken.
+fn only_waits(text: &str) -> bool {
+    let mut words = text.split_whitespace();
+    if words.next() != Some("sleep") {
+        return false;
+    }
+    let Some(duration) = words.next() else {
+        return false;
+    };
+    words.next().is_none() && plain_duration(duration)
+}
+
+/// A literal pause: a number, whole or fractional, under an optional unit.
+///
+/// `sleep 1`, `sleep 0.5`, `sleep 30s` and `sleep 5m` are the spellings a
+/// developer writes for the same wait. An option, an expansion and any other
+/// word are left out, because each names something this reading cannot call a
+/// pause, and a pause is the whole of what the body may do.
+fn plain_duration(value: &str) -> bool {
+    let digits = match value.as_bytes() {
+        [rest @ .., b's' | b'm' | b'h' | b'd'] => rest,
+        rest => rest,
+    };
+    !digits.is_empty()
+        && digits.iter().any(u8::is_ascii_digit)
+        && digits
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || *byte == b'.')
+        && digits.iter().filter(|byte| **byte == b'.').count() <= 1
 }
 
 /// Whether a loop's test is the single `read` that empties the redirected
