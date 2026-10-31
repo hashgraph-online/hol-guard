@@ -19210,6 +19210,51 @@
       "expect": "allow"
     },
     {
+      "id": "brew-search-name",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search node"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "brew-search-desc",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --desc json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "brew-search-cask",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --cask docker"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "brew-leaves",
       "fix_area": "package",
       "harnesses": [
@@ -19253,6 +19298,51 @@
       },
       "cwd": "org_app",
       "expect": "allow"
+    },
+    {
+      "id": "neg-brew-search-pull-request",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --pull-request widget-cli"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-brew-search-debian",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --debian widget-cli"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-brew-search-tap-qualified",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search acme/tools/widget"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
     },
     {
       "id": "neg-brew-install",
