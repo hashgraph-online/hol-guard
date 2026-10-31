@@ -2445,29 +2445,6 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/runtime/_shell_execution_context_support.py",
-   "source_sha256": "4a9321dd3c0b42da089ddc14d0ba67869752d5116fef2890985c197e2eaf4bd4",
-   "forbidden_symbols": [
-    "DIRECTORY_COMMANDS",
-    "DirectoryOperation",
-    "_ESCAPED_SEMICOLON_SENTINEL",
-    "_FD_AMPERSAND_SENTINEL",
-    "_FIND_PLACEHOLDER_SENTINEL",
-    "_NEWLINE_SENTINEL",
-    "_NOCLOBBER_PIPE_SENTINEL",
-    "_REDIRECTION_TOKEN",
-    "_SHELL_ASSIGNMENT",
-    "_UNMODELED_SHELL_CONTROL_WORDS",
-    "_directory_arguments",
-    "_operand_is_dynamic",
-    "_path_contains_symlink",
-    "directory_operation"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/shell_execution_context_support.rs"
-   ]
-  },
-  {
    "path": "src/codex_plugin_scanner/guard/inventory_contract_metadata.py",
    "source_sha256": "33d04296fa0f81e2dfdc261f047aa4bdab6918efeed1ffc09c47340d20594e70",
    "forbidden_symbols": [

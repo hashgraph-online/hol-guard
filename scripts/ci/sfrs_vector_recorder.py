@@ -52,12 +52,6 @@ _OVERRIDE_GUARDS: tuple[tuple[str, str, str, str], ...] = (
         f"{_SRC}.runtime.command_evaluation",
         "evaluate_command",
     ),
-    (
-        f"{_SRC}.runtime.secret_file_requests",
-        "model_shell_execution_context",
-        f"{_SRC}.runtime.shell_execution_context",
-        "model_shell_execution_context",
-    ),
 )
 
 _state = {"depth": [0, 0], "sha": OrderedDict(), "order": 0, "last_evaluation": None}
