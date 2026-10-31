@@ -114,7 +114,7 @@ const REGISTRY_VERBS: &[&str] = &[
 
 /// Where a literal `target` below the workspace moves a run that stands in
 /// `directory`, or `None` when the sandbox cannot follow it there.
-fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
+pub(super) fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
     super::cd::below(target, workspace).then(|| {
         let path = Path::new(target);
         if path.is_absolute() {
@@ -223,6 +223,7 @@ pub(super) fn local_package_work(
                 executable,
                 &segment.arguments,
                 directory,
+                workspace,
             );
         }
         if name == "uv" {

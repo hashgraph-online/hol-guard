@@ -50,6 +50,7 @@ pub(super) fn local_python_work(
     executable: &str,
     arguments: &[String],
     directory: &Path,
+    workspace: &Path,
 ) -> bool {
     match name {
         "pip" | "pip3" => {
@@ -57,7 +58,7 @@ pub(super) fn local_python_work(
             virtual_environment_executable(executable, directory)
                 && super::super::pip_reads::environment_read_words(&words)
         }
-        "poetry" => local_poetry_work(arguments, directory),
+        "poetry" => local_poetry_work(arguments, directory, workspace),
         "pipenv" => local_pipenv_work(arguments, directory),
         _ => false,
     }
@@ -70,27 +71,88 @@ pub(super) fn local_python_work(
 /// `poetry run pytest` runs.
 const POETRY_INERT_FLAGS: &[&str] = &["--no-ansi", "--no-interaction", "-n", "--quiet", "-q"];
 
+/// Poetry's option for the directory a command runs in, in the spellings it
+/// takes a separate word in.
+const POETRY_DIRECTORY_OPTIONS: &[&str] = &["-C", "--directory"];
+
+/// Poetry's option for the project root a command reads, the same pair `uv`
+/// carries. Poetry enters `--directory` before it resolves this one.
+const POETRY_PROJECT_OPTIONS: &[&str] = &["-P", "--project"];
+
+/// Where Poetry's leading options leave the run, and where the verb stands
+/// behind them: the index of the verb, the directory `--directory` moves to,
+/// and the project `--project` names.
+///
+/// Poetry reads these in front of the subcommand, so a verb behind one is
+/// still the verb and the project it works on is the one they name — the move
+/// `poetry -C api run pytest` makes is the one `cd api && poetry run pytest`
+/// makes. Behind the verb they are left where they were: after `run` the
+/// words belong to the nested program, where `-C` is that program's flag
+/// rather than Poetry's, and behind a read they are already kept out by that
+/// read's own word list. The attached short spelling `-Capi` names no project
+/// here either, so it keeps the review it has.
+fn poetry_leading<'a>(words: &[&'a str]) -> Option<(usize, Option<&'a str>, Option<&'a str>)> {
+    let mut moved = None;
+    let mut named = None;
+    let mut index = 0;
+    while let Some(word) = words.get(index) {
+        if POETRY_INERT_FLAGS.contains(word) {
+            index += 1;
+            continue;
+        }
+        let (name, value, step) = match word.strip_prefix("--").and(word.split_once('=')) {
+            Some((name, value)) => (name, Some(value), 1),
+            None => (*word, words.get(index + 1).copied(), 2),
+        };
+        let target = if POETRY_DIRECTORY_OPTIONS.contains(&name) {
+            &mut moved
+        } else if POETRY_PROJECT_OPTIONS.contains(&name) {
+            &mut named
+        } else {
+            break;
+        };
+        // Of each option only the last one counts, which is Poetry's own
+        // answer, and one with nothing behind it names no project at all.
+        *target = Some(value.filter(|value| !value.is_empty())?);
+        index += step;
+    }
+    let verb = words.get(index)?;
+    (!verb.starts_with('-')).then_some((index, moved, named))
+}
+
 /// Poetry verbs the sandbox bounds: the two reads that are provable without
 /// launching anything, and `run`, which launches out of the project's
 /// environment the way `uv run` does.
 ///
-/// Poetry accepts its global project-moving options before the subcommand as
-/// well as after it. One standing in front is rejected here by arriving as
-/// the verb, which matches no arm; one standing behind a read is rejected by
-/// that read's own word list, which also keeps out `--`: `poetry version --
-/// patch` writes the manifest rather than reporting it.
-fn local_poetry_work(arguments: &[String], directory: &Path) -> bool {
+/// A leading `--directory` or `--project` is read first, because the project
+/// whose environment the verb reaches is the one they name rather than the
+/// one the command was typed in. Each is followed only where the sandbox can
+/// follow it, so a project outside the workspace keeps the review it has, for
+/// the same reason the matching `cd` target does. A read standing behind one
+/// of them is still rejected by its own word list, which also keeps out `--`:
+/// `poetry version -- patch` writes the manifest rather than reporting it.
+fn local_poetry_work(arguments: &[String], directory: &Path, workspace: &Path) -> bool {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    let mut rest = words
-        .iter()
-        .copied()
-        .skip_while(|word| POETRY_INERT_FLAGS.contains(word));
-    let Some(verb) = rest.next() else {
+    let Some((at, moved, named)) = poetry_leading(&words) else {
         return false;
     };
-    let tail: Vec<&str> = rest.collect();
+    let run = match moved {
+        Some(target) => match super::package::entered(directory, target, workspace) {
+            Some(entered) => entered,
+            None => return false,
+        },
+        None => directory.to_owned(),
+    };
+    let project = match named {
+        Some(target) => match super::package::entered(&run, target, workspace) {
+            Some(entered) => entered,
+            None => return false,
+        },
+        None => run,
+    };
+    let tail: Vec<&str> = words[at + 1..].to_vec();
 
-    match verb {
+    match words[at] {
         "run" => {
             // The program is the first word after the verb that is not one of
             // Poetry's own reporting flags. The project-moving options are
@@ -101,7 +163,7 @@ fn local_poetry_work(arguments: &[String], directory: &Path) -> bool {
                 .copied()
                 .skip_while(|word| POETRY_INERT_FLAGS.contains(word))
                 .collect();
-            launches_a_materialized_environment(&launched, directory)
+            launches_a_materialized_environment(&launched, &project)
         }
         "check" => bounded_read(&tail, "--lock", POETRY_INERT_FLAGS),
         "version" => bounded_read(&tail, "--short", POETRY_INERT_FLAGS),

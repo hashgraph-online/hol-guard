@@ -30159,6 +30159,54 @@
       "expect": "allow"
     },
     {
+      "id": "poetry-directory-run-project-tests",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "poetry -C . run pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "poetry-directory-check-manifest",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "poetry --directory=. check"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "poetry-project-version-report",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "poetry -P . version --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-poetry-add-dependency",
       "fix_area": "negative",
       "harnesses": [
