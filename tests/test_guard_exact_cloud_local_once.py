@@ -412,21 +412,11 @@ def test_live_authority_with_published_evidence_and_no_allow_answers_none() -> N
     assert len(store.steps) == 1
 
 
-def test_live_authority_gathers_the_evidence_for_a_resident_that_predates_it() -> None:
-    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
-    store = _OneCallStore(native=None, reply=allow)
+@pytest.mark.parametrize("reply", [None, {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}])
+def test_live_authority_reads_no_allow_from_a_reply_without_native_evidence(reply: object) -> None:
+    store = _OneCallStore(native=reply, reply={"action": "allow"})
 
-    assert _authority(store) == allow
-    calls = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
-    assert len(calls) == 1
-    assert "lookup" in calls[0][1]
-
-
-def test_live_authority_takes_an_exact_allow_from_a_resident_that_predates_native_evidence() -> None:
-    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
-    store = _OneCallStore(native=allow)
-
-    assert _authority(store) == allow
+    assert _authority(store) is None
     assert len(store.steps) == 1
 
 
