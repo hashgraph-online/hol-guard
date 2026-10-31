@@ -43489,7 +43489,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-fd-exec-sibling-checkout-root",
+      "id": "neg-fd-exec-linked-root-leaves-workspace",
       "fix_area": "negative",
       "harnesses": [
         "codex",
@@ -43500,9 +43500,9 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "fd -t f -e ts . app-portal -x cat"
+        "command": "fd -t f -e ts . dashboard/node_modules -x cat"
       },
-      "cwd": "org",
+      "cwd": "worktree",
       "expect": "not_allow"
     },
     {
