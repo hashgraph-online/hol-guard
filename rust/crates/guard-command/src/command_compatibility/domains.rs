@@ -304,6 +304,8 @@ pub(super) fn observe(
         // reads a transfer source, so it names no host and no path either.
         let proven_read = (executable == "curl"
             && crate::pretool::curl_reads::proven_read_segment(command, segment, context))
+            || (executable == "wget"
+                && crate::pretool::wget_reads::proven_read_segment(command, segment, context))
             || crate::pretool::port_probes::proven_probe_segment(command, segment, context)
             || (executable == "rsync" && crate::pretool::rsync_local::local_copy_segment(segment))
             || lone_usage_probe(segment, &executable, arguments, context);

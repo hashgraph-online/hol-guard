@@ -625,6 +625,7 @@
       "src/pretool/worktree_maintenance.rs",
       "src/pretool/worktree_maintenance_chain.rs",
       "src/pretool/worktree_writes.rs",
+      "src/pretool/wget_reads.rs",
       "src/pretool/wrangler_reads.rs",
       "src/pretool/write_target_screens.rs",
       "src/prompt_analysis.rs",
