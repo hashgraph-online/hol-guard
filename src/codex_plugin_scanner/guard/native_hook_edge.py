@@ -28,11 +28,6 @@ _RESPONSE_FEATURE = "hook-harness-response-v1"
 # Python no longer re-checks the edge result or receipt; only a resident that
 # checks its own answer may be trusted with it.
 _SELF_CHECK_FEATURE = "edge-self-check-v1"
-# The resident records the CLI an answered PreToolUse launches, off the answer path.
-_LOCAL_CLI_OBSERVATION_FEATURE = "edge-local-cli-observation-v1"
-_RECEIPT_RECORD_FEATURE = "edge-receipt-record-v1"
-_ACTIVITY_RECORD_FEATURE = "edge-activity-record-v1"
-_PRE_TOOL_ACTIVITY_RECORD_FEATURE = "edge-pre-tool-activity-record-v1"
 # The edge answers the Oh My Pi / Pi structured-output mediation itself when
 # the envelope carries the daemon's managed-policy view.
 STRUCTURED_OUTPUT_FEATURE = "edge-structured-output-v1"
@@ -51,10 +46,6 @@ _REVIEW_EVIDENCE_KEYS = frozenset({"policy_binding_valid", "binding", "token", "
 # The edge rewrites a call it routes to the contained sink itself when the
 # envelope carries the argv that starts Guard's CLI: `routed` means the
 # response runs the call in the sink, `kept` that the receipt stands.
-CONTAINMENT_REWRITE_FEATURE = "edge-containment-rewrite-v1"
-# Cursor's route probe may name the runtime's own sink, which this daemon
-# admits on `beforeShellExecution` (`cursor_shell_route`).
-_CURSOR_NATIVE_SINK_FEATURE = "edge-cursor-native-sink-v1"
 _CONTAINMENT_REWRITES = frozenset({"routed", "kept"})
 # The resident echoes the envelope's request id verbatim and stamps the same
 # id on the receipt, so an id minted here names one request and no other.
@@ -168,8 +159,6 @@ def _encode_hook_envelope(
     local_cli_rules: Mapping[str, object] | None = None,
     observe_local_cli: bool = False,
     record_receipt: bool = False,
-    record_activity: bool = False,
-    record_pre_tool_activity: bool = False,
     structured_output_config: Mapping[str, object] | None = None,
     containment_sink: Sequence[str] | None = None,
     native_sink: bool = False,
@@ -209,11 +198,11 @@ def _encode_hook_envelope(
     if observe_local_cli:
         envelope["observe_local_cli"] = True
     if record_receipt:
+        # The caller that asks for its receipt also skips a tool activity the
+        # edge says it queued.
         envelope["record_receipt"] = True
-        if record_activity:
-            envelope["record_activity"] = True
-        if record_pre_tool_activity:
-            envelope["record_pre_tool_activity"] = True
+        envelope["record_activity"] = True
+        envelope["record_pre_tool_activity"] = True
     if structured_output_config is not None:
         envelope["structured_output_config"] = dict(structured_output_config)
     if containment_sink is not None:
@@ -320,14 +309,8 @@ def review_raw_hook_native(
     if isinstance(generation, bool) or not isinstance(generation, int) or generation <= 0:
         return record_native_hook_result("native_fail_safe", None)
     sink_command: tuple[str, ...] | None = None
-    if (
-        containment_sink
-        and tool_call
-        and cwd is not None
-        and CONTAINMENT_REWRITE_FEATURE in status.capabilities.features
-    ):
-        # Without a workspace there is no snapshot to write, and the receipt
-        # stands; an older resident leaves the rewrite to the hook.
+    if containment_sink and tool_call and cwd is not None:
+        # Without a workspace there is no snapshot to write, and the receipt stands.
         from .adapters.zcode_contained_tests import contained_sink_command_prefix
 
         sink_command = contained_sink_command_prefix()
@@ -345,15 +328,13 @@ def review_raw_hook_native(
         request_id=bound_request_id,
         recording_only=observe_mode,
         local_cli_rules=local_cli_rules,
-        observe_local_cli=observe_local_cli and _LOCAL_CLI_OBSERVATION_FEATURE in status.capabilities.features,
-        record_receipt=record_receipt and _RECEIPT_RECORD_FEATURE in status.capabilities.features,
-        # The caller that asks for its receipt also skips a tool activity the
-        # edge says it queued.
-        record_activity=_ACTIVITY_RECORD_FEATURE in status.capabilities.features,
-        record_pre_tool_activity=_PRE_TOOL_ACTIVITY_RECORD_FEATURE in status.capabilities.features,
+        observe_local_cli=observe_local_cli,
+        record_receipt=record_receipt,
         structured_output_config=structured_output_config,
         containment_sink=sink_command,
-        native_sink=harness == "cursor" and _CURSOR_NATIVE_SINK_FEATURE in status.capabilities.features,
+        # Cursor's route probe may name the runtime's own sink, which this
+        # daemon admits on `beforeShellExecution` (`cursor_shell_route`).
+        native_sink=harness == "cursor",
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)
