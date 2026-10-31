@@ -1714,7 +1714,7 @@
       "expect": "allow"
     },
     {
-      "id": "bun-add-help-text",
+      "id": "neg-uvx-help-text-verb",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -1725,13 +1725,30 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "bun add --help"
+        "command": "uvx build --help"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
     },
     {
-      "id": "docker-build-help-text",
+      "id": "neg-bun-script-name-help-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun check --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-docker-help-text",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -1745,7 +1762,41 @@
         "command": "docker build --help"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-helm-plugin-help-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm audit --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-npm-init-help-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm init --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "bun-version",

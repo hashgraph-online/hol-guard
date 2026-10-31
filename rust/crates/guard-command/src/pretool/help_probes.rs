@@ -11,14 +11,23 @@
 //! [`super::segment_proof::exact_safe_segment_with_context`] enforces those
 //! preconditions before it asks.
 //!
-//! The verbs in front of the flag are an allow-list rather than a shape,
-//! because a manager verb that names a program to run hands the flag to that
-//! program instead of printing its own usage: `uv run pytest --help` loads
-//! every `conftest.py` the collection reaches. So `run`, `exec`, `x`, `dlx`
-//! and `tool` are deliberately absent, and only the install-family verbs that
-//! never name a program are listed.
+//! The verb in front of the flag is read against the manager that owns it,
+//! never a shared list, because the same word means different things to
+//! different launchers: `uv run pytest --help` loads every `conftest.py` the
+//! collection reaches, `bun check --help` runs the workspace's `check`
+//! script, and `helm audit --help` dispatches to a plugin of that name. So
+//! each manager admits only verbs that are its own built-ins and that name no
+//! program to run.
 //!
 //! Deliberately absent:
+//! - `uvx`: it is `uv tool run`, so its first word is a package to fetch and
+//!   execute. `uvx build --help` runs `build` from the index.
+//! - `bun`: `bun <word>` falls back to `bun run <word>`, which runs the
+//!   workspace's `package.json` script or a file of that name.
+//! - `helm`: a plugin whose name matches the verb takes the command, so the
+//!   usage text would come from a binary the command never names.
+//! - `docker`: `docker --help` lists CLI plugins, and it discovers them by
+//!   executing each one's metadata command.
 //! - `yarn` and `pnpm`: Yarn's `yarnPath` and Corepack's `packageManager`
 //!   field select a workspace-supplied binary that the probe would execute,
 //!   for the same reason the version probe refuses them.
@@ -28,66 +37,132 @@
 //!   pager, which runs a program the command never names.
 //! - `npm help <verb>`: the `help` verb opens npm's configured viewer, which
 //!   is `man` on Unix. Only the `--help` flag prints to stdout.
-//! - `-h` for `docker`: it is `--hostname` on `docker run`, not help.
+//! - `npm init` and `npm create`: they resolve a `create-*` package and run
+//!   it, so the word after them is a program.
 
-/// The managers whose usage text goes to stdout, and whether `-h` is their
-/// own help flag rather than something else.
+/// The tools whose usage text goes to stdout, with `-h` as their own help
+/// flag rather than something else.
 fn help_flag(basename: &str, flag: &str) -> bool {
-    let short = match basename {
-        "uv" | "uvx" | "pip" | "pip3" | "npm" | "bun" | "deno" | "ruff" | "black" | "mypy"
-        | "rg" | "fd" | "jq" | "tsc" | "helm" => true,
-        "docker" => false,
-        _ => return false,
-    };
-    flag == "--help" || (short && flag == "-h")
-}
-
-/// A manager verb that names no program to run, so the help flag after it is
-/// read by the manager itself.
-fn usage_only_verb(verb: &str) -> bool {
     matches!(
-        verb,
-        "add"
-            | "audit"
-            | "build"
-            | "check"
-            | "ci"
-            | "export"
-            | "format"
-            | "freeze"
-            | "i"
-            | "init"
-            | "install"
-            | "link"
-            | "list"
-            | "lock"
-            | "ls"
-            | "outdated"
-            | "pip"
-            | "prune"
-            | "publish"
-            | "remove"
-            | "rm"
-            | "search"
-            | "show"
-            | "sync"
-            | "tree"
-            | "uninstall"
-            | "unlink"
-            | "update"
-            | "upgrade"
-            | "venv"
-            | "view"
-            | "why"
-    )
+        basename,
+        "uv" | "pip"
+            | "pip3"
+            | "npm"
+            | "deno"
+            | "ruff"
+            | "black"
+            | "mypy"
+            | "rg"
+            | "fd"
+            | "jq"
+            | "tsc"
+    ) && matches!(flag, "--help" | "-h")
 }
 
-/// A lone help flag, or one behind at most two usage-only verbs.
-pub(super) fn safe_help_probe(basename: &str, arguments: &[String]) -> bool {
+/// A built-in verb of this manager that names no program to run, so the help
+/// flag after it is read by the manager itself.
+fn usage_only_verb(basename: &str, verb: &str) -> bool {
+    match basename {
+        "uv" => matches!(
+            verb,
+            "add"
+                | "build"
+                | "cache"
+                | "export"
+                | "init"
+                | "install"
+                | "lock"
+                | "pip"
+                | "publish"
+                | "python"
+                | "remove"
+                | "sync"
+                | "tree"
+                | "uninstall"
+                | "venv"
+                | "version"
+        ),
+        "pip" | "pip3" => matches!(
+            verb,
+            "cache"
+                | "check"
+                | "config"
+                | "download"
+                | "freeze"
+                | "index"
+                | "inspect"
+                | "install"
+                | "list"
+                | "show"
+                | "uninstall"
+                | "wheel"
+        ),
+        "npm" => matches!(
+            verb,
+            "audit"
+                | "ci"
+                | "dedupe"
+                | "i"
+                | "install"
+                | "link"
+                | "ls"
+                | "outdated"
+                | "pkg"
+                | "prune"
+                | "publish"
+                | "rm"
+                | "uninstall"
+                | "unlink"
+                | "update"
+                | "view"
+                | "why"
+        ),
+        "deno" => matches!(
+            verb,
+            "add"
+                | "check"
+                | "fmt"
+                | "info"
+                | "install"
+                | "lint"
+                | "outdated"
+                | "publish"
+                | "remove"
+                | "uninstall"
+                | "upgrade"
+        ),
+        "ruff" => matches!(verb, "check" | "clean" | "config" | "format" | "linter"),
+        // The single-purpose tools take no verb at all.
+        _ => false,
+    }
+}
+
+/// Whether this manager's startup reads a configuration the session could
+/// have pointed elsewhere. npm and pip both load their configuration before
+/// they print usage, so the probe asks for the same inert environment the
+/// read proofs next door require.
+fn configuration_inert(basename: &str, context: super::PathContext<'_>) -> bool {
+    match basename {
+        "npm" => context.npm_config_inert,
+        "pip" | "pip3" => context.pip_config_inert,
+        _ => true,
+    }
+}
+
+/// A lone help flag, or one behind at most two of the manager's own
+/// usage-only verbs.
+pub(super) fn safe_help_probe(
+    basename: &str,
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> bool {
     let Some((flag, verbs)) = arguments.split_last() else {
         return false;
     };
-    help_flag(basename, flag) && verbs.len() <= 2 && verbs.iter().all(|verb| usage_only_verb(verb))
+    help_flag(basename, flag)
+        && verbs.len() <= 2
+        && verbs.iter().all(|verb| usage_only_verb(basename, verb))
+        && configuration_inert(basename, context)
 }
 
 #[cfg(test)]
@@ -96,6 +171,14 @@ mod tests {
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    fn context() -> super::super::PathContext<'static> {
+        super::super::PathContext {
+            npm_config_inert: true,
+            pip_config_inert: true,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -110,13 +193,12 @@ mod tests {
             ("npm", vec!["i", "-h"]),
             ("pip", vec!["install", "--help"]),
             ("pip3", vec!["install", "-h"]),
-            ("bun", vec!["add", "--help"]),
             ("deno", vec!["install", "--help"]),
-            ("docker", vec!["build", "--help"]),
             ("ruff", vec!["check", "--help"]),
+            ("jq", vec!["--help"]),
         ] {
             assert!(
-                safe_help_probe(tool, &args(&arguments)),
+                safe_help_probe(tool, &args(&arguments), context()),
                 "{tool} {arguments:?}"
             );
         }
@@ -131,12 +213,17 @@ mod tests {
             ("uv", vec!["tool", "run", "--help"]),
             ("npm", vec!["exec", "--help"]),
             ("npm", vec!["run", "test", "--help"]),
-            ("bun", vec!["x", "--help"]),
+            // `npm init <name>` resolves and runs a `create-*` package.
+            ("npm", vec!["init", "--help"]),
+            // `uvx` is `uv tool run`: the verb is a package to fetch and run.
+            ("uvx", vec!["build", "--help"]),
+            ("uvx", vec!["pip", "--help"]),
+            ("uvx", vec!["--help"]),
             // The script, not the manager, reads the flag.
             ("uv", vec!["run", "script.py", "--help"]),
         ] {
             assert!(
-                !safe_help_probe(tool, &args(&arguments)),
+                !safe_help_probe(tool, &args(&arguments), context()),
                 "{tool} {arguments:?}"
             );
         }
@@ -151,8 +238,15 @@ mod tests {
             ("go", vec!["install", "--help"]),
             ("git", vec!["commit", "--help"]),
             ("poetry", vec!["add", "--help"]),
-            // `-h` is `--hostname` on `docker run`.
-            ("docker", vec!["build", "-h"]),
+            // `bun <word>` falls back to running that script or file.
+            ("bun", vec!["add", "--help"]),
+            ("bun", vec!["check", "--help"]),
+            ("bun", vec!["init", "-h"]),
+            // A plugin of the same name takes the command.
+            ("helm", vec!["audit", "--help"]),
+            // Help discovers Docker's CLI plugins by executing them.
+            ("docker", vec!["build", "--help"]),
+            ("docker", vec!["--help"]),
             // The flag has to be the last word; anything after it is an
             // operand the manager would act on.
             ("npm", vec!["install", "--help", "left-pad"]),
@@ -160,9 +254,54 @@ mod tests {
             ("npm", vec!["install"]),
         ] {
             assert!(
-                !safe_help_probe(tool, &args(&arguments)),
+                !safe_help_probe(tool, &args(&arguments), context()),
                 "{tool} {arguments:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_verb_belonging_to_another_manager_is_refused() {
+        for (tool, arguments) in [
+            // `npm sync` and `npm venv` are not npm commands; admitting them
+            // from a shared list is what let a launcher's fallback through.
+            ("npm", vec!["sync", "--help"]),
+            ("npm", vec!["venv", "--help"]),
+            ("pip", vec!["add", "--help"]),
+            ("deno", vec!["sync", "--help"]),
+            ("ruff", vec!["install", "--help"]),
+            // The single-purpose tools take no verb at all.
+            ("jq", vec!["install", "--help"]),
+            ("rg", vec!["check", "--help"]),
+        ] {
+            assert!(
+                !safe_help_probe(tool, &args(&arguments), context()),
+                "{tool} {arguments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_redirected_manager_configuration_keeps_the_question() {
+        let npm_moved = super::super::PathContext {
+            pip_config_inert: true,
+            ..Default::default()
+        };
+        assert!(!safe_help_probe(
+            "npm",
+            &args(&["install", "--help"]),
+            npm_moved
+        ));
+        let pip_moved = super::super::PathContext {
+            npm_config_inert: true,
+            ..Default::default()
+        };
+        assert!(!safe_help_probe(
+            "pip",
+            &args(&["install", "--help"]),
+            pip_moved
+        ));
+        // A tool with no configuration of its own is unaffected.
+        assert!(safe_help_probe("jq", &args(&["--help"]), pip_moved));
     }
 }

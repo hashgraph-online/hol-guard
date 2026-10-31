@@ -301,7 +301,7 @@ pub(super) fn exact_safe_segment_with_context(
         return false;
     }
     if super::version_probes::safe_version_probe(basename, &segment.arguments)
-        || super::help_probes::safe_help_probe(basename, &segment.arguments)
+        || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
     {
         return true;
     }
