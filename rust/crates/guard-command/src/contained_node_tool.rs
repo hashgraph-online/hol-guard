@@ -267,13 +267,17 @@ pub(crate) fn node_tool_route(
     }
     let mut runtime_arguments = Vec::new();
     let mut expected_entry = None;
-    if arguments
+    if crate::contained_argv::manager_reporting_options_peeled(&name, &arguments)
         .first()
         .is_some_and(|word| local_bin_verb(&name, word))
     {
         // `npm exec`, `npm x`, `pnpm exec` and `yarn exec` are each manager's
         // spelling of a local-bin run. A manager option before the tool (`-c`
-        // runs a shell, `-r`/`--filter` fan out) is not accepted.
+        // runs a shell, `-r`/`--filter` fan out) is not accepted. An option
+        // that only chooses how much the manager prints names no verb, so the
+        // subcommand is read behind it, the same way the admission reads it:
+        // otherwise a quiet `exec` the admission routed here would arrive as
+        // a package script and never start its tool.
         let Some(peeled) = manager_local_bin_arguments(&name, &arguments).map(|local_run| {
             let (runner, rest) = local_run.split_first().expect("a peeled run names a tool");
             (runner.clone(), rest.to_vec())

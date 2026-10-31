@@ -408,11 +408,15 @@ const MANAGER_SUBCOMMANDS: &[&str] = &[
 /// tool, so the separator belongs to the spelling. `bun exec` runs a shell
 /// string rather than a binary, so it is not one of these, and a manager
 /// option before the subcommand (`pnpm -r`, `--filter`) fans the run out past
-/// one package and keeps the review.
+/// one package and keeps the review. An option that only chooses how much the
+/// manager prints names no package, so it is peeled before the subcommand is
+/// read and `npm --silent exec tsc` or `pnpm --silent exec tsc` stays the
+/// local-bin run it is.
 pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<&'a [String]> {
+    let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
     let mut rest = match (manager, arguments) {
         ("npm", [subcommand, rest @ ..]) if subcommand == "exec" || subcommand == "x" => rest,
         ("pnpm" | "yarn", [subcommand, rest @ ..]) if subcommand == "exec" => rest,
@@ -423,9 +427,10 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     // the cache and the registry, or set how much the runner prints. None of
     // them names a package, so the tool behind them is still the workspace's
     // own one and the run is the same local-bin run either spelling makes.
-    // `pnpm exec` and `yarn exec` keep reading only the separator, because
-    // their own options (`--recursive`, `--filter`, `--parallel`) choose
-    // which packages the run reaches.
+    // `pnpm exec` and `yarn exec` keep reading only the separator past the
+    // reporting options already peeled above, because their remaining options
+    // (`--recursive`, `--filter`, `--parallel`) choose which packages the run
+    // reaches.
     if manager == "npm" {
         while let [option, tail @ ..] = rest {
             if !npm_exec_inert_option(option) {

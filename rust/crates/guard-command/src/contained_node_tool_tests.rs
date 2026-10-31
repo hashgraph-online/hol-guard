@@ -46,6 +46,10 @@ fn a_local_runner_spelling_reaches_the_tool_it_names() {
         ["npm", "x", "eslint", "src"].as_slice(),
         ["pnpm", "exec", "eslint", "src"].as_slice(),
         ["yarn", "exec", "--", "eslint", "src"].as_slice(),
+        ["npm", "--silent", "exec", "eslint", "src"].as_slice(),
+        ["pnpm", "--silent", "exec", "eslint", "src"].as_slice(),
+        ["pnpm", "--reporter=silent", "exec", "eslint", "src"].as_slice(),
+        ["yarn", "--silent", "exec", "--", "eslint", "src"].as_slice(),
         ["/usr/local/bin/eslint", "src"].as_slice(),
     ] {
         let route = route(command);

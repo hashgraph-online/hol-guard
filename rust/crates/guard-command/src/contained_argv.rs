@@ -408,13 +408,112 @@ fn runner_tail_or_error(
     }
 }
 
+/// pnpm options that change only what the run prints. `--stream`,
+/// `--aggregate-output` and `--use-stderr` say where the lines go rather than
+/// which packages produce them, so they are here with `--silent` and the
+/// colour pair. Every option that chooses packages — `-r`, `--recursive`,
+/// `--filter`, `-F`, `--filter-prod`, `--parallel`,
+/// `--workspace-concurrency` — is absent, along with the options that move
+/// the directory or the registry.
+const PNPM_REPORTING_FLAGS: &[&str] = &[
+    "--silent",
+    "-s",
+    "--color",
+    "--no-color",
+    "--stream",
+    "--aggregate-output",
+    "--use-stderr",
+];
+
+/// pnpm reporting options that take a value, in either spelling.
+const PNPM_REPORTING_VALUES: &[&str] = &["--reporter", "--loglevel"];
+
+/// npm's output options. The workspace options (`--workspace`, `-w`,
+/// `--workspaces`, `--ws`) are absent because they choose which packages the
+/// run reaches, and `--prefix` and `-C` are absent because they move the
+/// directory it runs in; both are read where a directory or a package set is
+/// decided rather than peeled here.
+const NPM_REPORTING_FLAGS: &[&str] = &[
+    "--silent",
+    "-s",
+    "--quiet",
+    "--color",
+    "--no-color",
+    "--verbose",
+    "--no-progress",
+    "--no-update-notifier",
+    "--timing",
+    "--no-timing",
+    "-d",
+    "-dd",
+    "-ddd",
+];
+
+/// npm's one reporting option that takes a value.
+const NPM_REPORTING_VALUES: &[&str] = &["--loglevel"];
+
+/// yarn's output options. yarn classic chooses packages with a `workspace`
+/// verb rather than an option, so there is no fan-out spelling to exclude.
+const YARN_REPORTING_FLAGS: &[&str] = &[
+    "--silent",
+    "-s",
+    "--no-progress",
+    "--non-interactive",
+    "--no-color",
+    "--verbose",
+];
+
+/// `arguments` with the leading npm, pnpm or yarn options that only change
+/// what the run prints removed, so the `exec` behind them is read as the verb it
+/// is. A reporting option names no package and moves no directory, so
+/// `pnpm --silent exec tsc` runs the same local bin `pnpm exec tsc` does.
+///
+/// A value option whose value is written separately eats the next word, so
+/// `pnpm --reporter exec tsc` consumes `exec` and leaves `tsc`, which is not
+/// a verb and keeps the review. That is the right answer: pnpm reads that
+/// line the same way.
+pub(crate) fn manager_reporting_options_peeled<'a>(
+    manager: &str,
+    mut arguments: &'a [String],
+) -> &'a [String] {
+    let (flags, values): (&[&str], &[&str]) = match manager {
+        "npm" => (NPM_REPORTING_FLAGS, NPM_REPORTING_VALUES),
+        "pnpm" => (PNPM_REPORTING_FLAGS, PNPM_REPORTING_VALUES),
+        "yarn" => (YARN_REPORTING_FLAGS, &[]),
+        _ => return arguments,
+    };
+    while let [option, tail @ ..] = arguments {
+        if flags.contains(&option.as_str()) {
+            arguments = tail;
+            continue;
+        }
+        let (name, written_inline) = match option.split_once('=') {
+            Some((name, _)) => (name, true),
+            None => (option.as_str(), false),
+        };
+        if !values.contains(&name) {
+            break;
+        }
+        arguments = match (written_inline, tail) {
+            (true, tail) => tail,
+            (false, [value, rest @ ..]) if !value.starts_with('-') => rest,
+            (false, _) => break,
+        };
+    }
+    arguments
+}
+
 /// The arguments from the tool on, when `command` is a manager's bare `exec`
 /// spelling of a local-bin run: `npm exec`, `npm x`, `pnpm exec` or
 /// `yarn exec`, each with an optional `--`. The sink runs the project's own
 /// tool, never the manager, so a manager option before the tool (`-c` runs a
-/// shell, `-r`/`--filter` fan out) is not a local-bin run.
+/// shell, `-r`/`--filter` fan out) is not a local-bin run. The options that
+/// only choose how much the manager prints are the exception, peeled by
+/// [`manager_reporting_options_peeled`] before the verb is read.
 fn manager_exec_tool(command: &[String]) -> Option<&[String]> {
-    let (npm, mut rest) = match (basename(command), command.get(1..)?) {
+    let manager = basename(command);
+    let arguments = manager_reporting_options_peeled(manager, command.get(1..)?);
+    let (npm, mut rest) = match (manager, arguments) {
         ("npm", [verb, rest @ ..]) if verb == "exec" || verb == "x" => (true, rest),
         ("pnpm" | "yarn", [verb, rest @ ..]) if verb == "exec" => (false, rest),
         _ => return None,
@@ -423,8 +522,8 @@ fn manager_exec_tool(command: &[String]) -> Option<&[String]> {
     // the registry before the tool, the way `npx` does. None of those options
     // names a package, so the tool behind them is still the workspace's own
     // one, and the route that admits the run has to read the same argv the
-    // sink will. `pnpm exec` and `yarn exec` options choose which packages
-    // the run reaches, so they are not peeled.
+    // sink will. The pnpm and yarn options left after the reporting peel
+    // choose which packages the run reaches, so they are not peeled here.
     if npm {
         while let [option, tail @ ..] = rest {
             if !npm_exec_inert_option(option) {
