@@ -101,6 +101,8 @@ def _record_native_pre_activity(
     payload: Mapping[str, object],
     response: dict[str, object],
     receipt: Mapping[str, object] | None = None,
+    *,
+    recorded: bool = False,
 ) -> dict[str, object]:
     from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
 
@@ -110,7 +112,8 @@ def _record_native_pre_activity(
     if observation is not None:
         response = {**response, OBSERVATION_FIELD: observation}
     submit = getattr(host.activity_writer, "submit_command_activity", None)
-    if callable(submit):
+    # An edge that queued this activity behind its receipt says so.
+    if callable(submit) and not recorded:
         receipt_id = receipt.get("decision_id") if receipt is not None else None
         # The hook has its verdict; the activity row records it. The writer
         # lives in the resident, so submitting here would spend a round trip
@@ -407,12 +410,20 @@ class HookWorkerNativeMixin:
             # The edge already carries Guard's Claude Code notice outside Watch.
             return (_edge_harness_response(edge), True)
         if native_event == "PreToolUse":
+            # The edge queues the activity only for an answer returned as it
+            # rendered it: recorded only, a custom block, or the final one.
+            recorded = edge.get("activity_recorded") is True
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
                     return (
                         _record_native_pre_activity(
-                            self, native_harness, payload, _edge_harness_response(edge), accepted_receipt
+                            self,
+                            native_harness,
+                            payload,
+                            _edge_harness_response(edge),
+                            accepted_receipt,
+                            recorded=recorded,
                         ),
                         True,
                     )
@@ -450,6 +461,7 @@ class HookWorkerNativeMixin:
                         payload,
                         dict(cast("Mapping[str, object]", custom_block["harness_response"])),
                         accepted_receipt,
+                        recorded=recorded,
                     ),
                     True,
                 )
@@ -499,6 +511,7 @@ class HookWorkerNativeMixin:
                     payload,
                     rendered,
                     accepted_receipt,
+                    recorded=recorded,
                 ),
                 True,
             )

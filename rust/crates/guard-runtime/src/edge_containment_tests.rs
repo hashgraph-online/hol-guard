@@ -45,6 +45,7 @@ fn envelope(workspace: &Path, sink: bool) -> GuardHookEnvelopeV2 {
         observe_local_cli: false,
         record_receipt: false,
         record_activity: false,
+        record_pre_tool_activity: false,
         structured_output_config: None,
         containment_sink: sink.then(|| GuardHookContainmentSinkV1 {
             sink_command: SINK_COMMAND.map(str::to_owned).to_vec(),

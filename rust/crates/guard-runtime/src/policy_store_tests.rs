@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use super::normalize_scope_text;
 use super::{
     authority_fingerprint, now_ms, read_private_json, scope_digest, GenerationFloorV1,
     PersistBoundary, PolicySnapshotStore, AUTHORITY_RECORD_MAX_BYTES, AUTHORITY_RECORD_SCHEMA,
@@ -20,9 +22,6 @@ use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-
-#[cfg(windows)]
-use super::normalize_scope_text;
 
 #[path = "policy_store_business_floor_tests.rs"]
 mod business_floor_tests;
@@ -170,6 +169,7 @@ fn pre_tool_envelope(
         observe_local_cli: false,
         record_receipt: false,
         record_activity: false,
+        record_pre_tool_activity: false,
         structured_output_config: None,
         containment_sink: None,
     }

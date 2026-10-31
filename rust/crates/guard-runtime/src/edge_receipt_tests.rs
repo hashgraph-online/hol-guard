@@ -214,7 +214,8 @@ fn the_edge_leaves_the_activity_to_the_daemon_unless_it_can_record_it() {
     let answer = encoded(&envelope, true, edge);
     assert_eq!(answer["receipt_recorded"], json!(true));
     assert!(answer.get("activity_recorded").is_none());
-    // A `PreToolUse` activity cites what the daemon renders, so it stays there.
+    // `record_activity` asks only for a `PostToolUse` activity, which is all
+    // an older daemon skips, so a `PreToolUse` one stays with the daemon.
     let (mut envelope, edge) = answered(&home, true);
     envelope.record_activity = true;
     assert!(encoded(&envelope, true, edge)
@@ -490,3 +491,6 @@ fn a_post_tool_call_fails_only_on_the_signals_the_drain_reads() {
         assert_eq!(post_succeeded(&payload), succeeded, "{payload:?}");
     }
 }
+
+#[path = "edge_receipt_pre_tool_tests.rs"]
+mod pre_tool;
