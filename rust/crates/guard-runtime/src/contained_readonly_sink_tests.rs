@@ -176,7 +176,8 @@ fn any_other_plain_program_is_planned_as_pytest() {
     let pytest = Value::Object(response(ROUTES[6].0, ROUTES[6].1));
     assert!(plain_call(&pytest, &call("pytest -q")));
     assert!(!plain_call(&pytest, &call("python3 -c 0")));
-    assert!(!plain_call(&pytest, &call("PYTEST_ADDOPTS=-x pytest")));
+    assert!(!plain_call(&pytest, &call("cd x && pytest -q")));
+    assert!(!plain_call(&pytest, &call("pytest -q > report.txt")));
 }
 
 #[test]

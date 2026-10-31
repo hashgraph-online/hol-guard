@@ -90,3 +90,19 @@ fn a_command_with_nothing_to_carry_is_not_a_carried_run() {
     assert_eq!(carried_program("vitest run"), None);
     assert_eq!(carried_program("CI=1"), None);
 }
+
+#[test]
+fn a_chain_or_redirection_is_not_one_command() {
+    assert!(one_command("python3 -c 'print(1)'"));
+    assert!(one_command("timeout 20 pytest -q"));
+    for command in [
+        "cd x && python3 -c 0",
+        "pytest; echo done",
+        "pytest -q | tail -5",
+        "pytest -q > report.txt",
+        "pytest -q 2>&1",
+        "pytest -q &",
+    ] {
+        assert!(!one_command(command), "{command}");
+    }
+}

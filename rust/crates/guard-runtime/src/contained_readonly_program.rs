@@ -29,6 +29,9 @@ pub(crate) type Program = (Vec<String>, Option<u64>, Kind);
 /// own sink reads it with. `None` for anything else: a setting, carried or
 /// dropped, or a program of another kind.
 pub(crate) fn plain_program(command: &str) -> Option<Program> {
+    if !one_command(command) {
+        return None;
+    }
     let words = strings(native("command_words", json!({ "command_text": command })).ok()?)?;
     let peeled = native(
         "command_prefix_split",
@@ -55,6 +58,27 @@ pub(crate) fn plain_program(command: &str) -> Option<Program> {
     };
     let kind = kind(&core)?;
     Some((core, seconds, kind))
+}
+
+/// Whether the shell reads `command` as one simple command: a single
+/// segment with no word that redirects it or joins another. Any other
+/// program is planned as pytest, so a chain such as `cd x && python3 -c 0`
+/// must never reach the planner as one argv.
+fn one_command(command: &str) -> bool {
+    let request = guard_command::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "guard-shell".into(),
+    };
+    guard_command::parse_command(&request).is_ok_and(|model| match model.segments.as_slice() {
+        [segment] => !segment.tokens.iter().any(|token| {
+            token
+                .trim_start_matches(|character: char| character.is_ascii_digit())
+                .starts_with(['<', '>', '&', '|', ';'])
+        }),
+        _ => false,
+    })
 }
 
 /// The settings an inert prefix carries into a read-only run, and the
