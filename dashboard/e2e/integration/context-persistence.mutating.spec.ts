@@ -14,7 +14,7 @@ async function save(page: Page, state: IntegrationState) {
   await expect(page.getByText("Settings saved successfully.")).toBeVisible();
 }
 async function grant(page: Page, state: IntegrationState) {
-  await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
+  await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
   await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
   await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
   await page.getByRole("button", { name: "Grant review source access", exact: true }).click();
