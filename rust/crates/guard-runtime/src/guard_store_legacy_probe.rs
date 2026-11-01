@@ -44,9 +44,12 @@ const QUERY: &str = "select r.*, a.occurred_at as activity_occurred_at, \
      order by a.occurred_at desc, a.activity_id limit ?";
 
 /// Args: `key_id` and `digest` of the request correlation, `since`, the
-/// aware launch boundary in UTC as `datetime.isoformat` spells it, and
-/// `budget_ms`, the admission time left. Answers the one matching receipt or
-/// null.
+/// aware launch boundary in UTC as `datetime.isoformat` spells it,
+/// `budget_ms`, the admission time left when the caller asked, and
+/// `deadline_unix_ms`, the caller's admission deadline on the wall clock.
+/// Resident startup can spend part of the budget before this runs, so the
+/// lookup gets only what the deadline leaves. Answers the one matching
+/// receipt or null.
 pub(crate) fn read_legacy_codex_probe_receipt(
     connection: &Connection,
     args: &Args<'_>,
@@ -55,13 +58,19 @@ pub(crate) fn read_legacy_codex_probe_receipt(
     let digest = args.str("digest")?;
     let since_text = args.str("since")?;
     let budget_ms = args.int("budget_ms")?;
+    let deadline_unix_ms = args.int("deadline_unix_ms")?;
     let Some(since) = aware_epoch_micros(since_text) else {
         return value_error("legacy_probe_identity_invalid");
     };
     if !(1..=MAX_BUDGET_MS).contains(&budget_ms) {
         return value_error("legacy_probe_identity_invalid");
     }
-    let budget = Duration::from_millis(budget_ms.unsigned_abs());
+    // `budget_ms` still caps the lookup if the wall clock steps back.
+    let left_ms = deadline_unix_ms.saturating_sub(now_millis());
+    if left_ms <= 0 {
+        return value_error(DEADLINE_EXPIRED);
+    }
+    let budget = Duration::from_millis(budget_ms.min(left_ms).unsigned_abs());
     let started = Instant::now();
     let rows = interrupted_after(connection, budget, || {
         query_all(
@@ -250,6 +259,10 @@ fn truthy(value: &Value) -> bool {
         Value::Array(items) => !items.is_empty(),
         Value::Object(fields) => !fields.is_empty(),
     }
+}
+
+fn now_millis() -> i64 {
+    i64::try_from(now_micros() / 1_000).unwrap_or(i64::MAX)
 }
 
 fn now_micros() -> i128 {

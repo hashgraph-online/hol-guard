@@ -335,11 +335,16 @@ fn read(home: &Path, since: &str) -> Value {
 }
 
 fn read_within(home: &Path, since: &str, budget_ms: i64) -> Value {
+    read_until(home, since, budget_ms, super::now_millis() + budget_ms)
+}
+
+fn read_until(home: &Path, since: &str, budget_ms: i64, deadline_unix_ms: i64) -> Value {
     let mut args = Map::new();
     args.insert("key_id".to_owned(), json!(KEY_ID));
     args.insert("digest".to_owned(), json!(DIGEST));
     args.insert("since".to_owned(), json!(since));
     args.insert("budget_ms".to_owned(), json!(budget_ms));
+    args.insert("deadline_unix_ms".to_owned(), json!(deadline_unix_ms));
     let request = GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "legacy-probe".to_owned(),
@@ -394,5 +399,9 @@ fn the_store_op_reads_the_request_from_writer_shaped_rows() {
             "legacy_probe_identity_invalid"
         );
     }
+    // Resident startup that spent the caller's deadline leaves no lookup.
+    let spent = read_until(&home, SINCE, 5_000, super::now_millis() - 1);
+    assert_eq!(spent["code"], "native_guard_store_value_error", "{spent}");
+    assert_eq!(spent["payload"]["message"], "admission_deadline_expired");
     let _ = std::fs::remove_dir_all(&home);
 }
