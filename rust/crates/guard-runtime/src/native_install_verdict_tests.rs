@@ -384,6 +384,16 @@ fn windows_rejects_an_unpinned_or_invalid_signer() {
         "",
     )]);
     assert_eq!(answer(&windows(&[PIN]), &mut runner)["status"], "healthy");
+    let mut runner = FakeRunner::answering(vec![ran(
+        true,
+        &format!("{{\"Status\":\"Valid\",\"Thumbprint\":\"{PIN}\",\"Version\":\"3.0.0\"}}"),
+        "",
+    )]);
+    let lower_pin = PIN.to_lowercase();
+    assert_eq!(
+        answer(&windows(&[lower_pin.as_str()]), &mut runner)["status"],
+        "healthy"
+    );
 
     for payload in [
         json!({"Status": "Valid", "Thumbprint": "A".repeat(40), "Version": "3.0.0a1"}),

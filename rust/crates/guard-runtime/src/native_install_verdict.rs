@@ -337,9 +337,16 @@ fn verify_windows(request: &Request, runner: &mut impl Runner) -> Verdict {
         return absent();
     };
     let field = |name: &str| payload.get(name).and_then(Value::as_str);
-    let thumbprint = field("Thumbprint").map(|value| value.replace(' ', "").to_uppercase());
-    let pinned =
-        thumbprint.is_some_and(|value| request.windows_signer_thumbprints.contains(&value));
+    // Both sides are compared space-free and upper-case: the managed-policy
+    // loader already normalizes its pins, but a pin from any other caller
+    // must not fail a valid signer over its spelling.
+    let thumbprint = field("Thumbprint").map(normalized_thumbprint);
+    let pinned = thumbprint.is_some_and(|value| {
+        request
+            .windows_signer_thumbprints
+            .iter()
+            .any(|pin| normalized_thumbprint(pin) == value)
+    });
     match field("Version").and_then(|value| validated_version(value.to_owned())) {
         Some(version) if payload.is_object() && field("Status") == Some("Valid") && pinned => {
             verdict("healthy", "native_install_valid", identity, "valid").with_version(version)
@@ -351,6 +358,10 @@ fn verify_windows(request: &Request, runner: &mut impl Runner) -> Verdict {
             "invalid",
         ),
     }
+}
+
+fn normalized_thumbprint(value: &str) -> String {
+    value.replace(' ', "").to_uppercase()
 }
 
 /// A non-blank PEP 440 version, without surrounding whitespace.
