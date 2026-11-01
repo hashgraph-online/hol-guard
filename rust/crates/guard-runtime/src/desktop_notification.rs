@@ -384,55 +384,13 @@ $Notifier.Show($Toast)"
 /// U+2018 to U+201B, so each one is doubled into a literal apostrophe.
 fn powershell_literal(value: &str) -> String {
     let mut literal = String::with_capacity(value.len());
-    for character in unescape_html(value).chars() {
+    for character in crate::html_unescape::unescape(value).chars() {
         match character {
             '\'' | '\u{2018}' | '\u{2019}' | '\u{201a}' | '\u{201b}' => literal.push_str("''"),
             other => literal.push(other),
         }
     }
     literal
-}
-
-/// Decode the character references approval text can carry: numeric ones
-/// and the five XML names. Anything else is left as written.
-fn unescape_html(value: &str) -> String {
-    let mut decoded = String::with_capacity(value.len());
-    let mut rest = value;
-    while let Some(start) = rest.find('&') {
-        decoded.push_str(&rest[..start]);
-        rest = &rest[start..];
-        let reference = rest[1..]
-            .find(';')
-            .filter(|end| *end <= 10)
-            .and_then(|end| decode_reference(&rest[1..=end]).map(|character| (end, character)));
-        if let Some((end, character)) = reference {
-            decoded.push(character);
-            rest = &rest[end + 2..];
-        } else {
-            decoded.push('&');
-            rest = &rest[1..];
-        }
-    }
-    decoded.push_str(rest);
-    decoded
-}
-
-fn decode_reference(name: &str) -> Option<char> {
-    let code = if let Some(hex) = name.strip_prefix("#x").or_else(|| name.strip_prefix("#X")) {
-        u32::from_str_radix(hex, 16).ok()?
-    } else if let Some(decimal) = name.strip_prefix('#') {
-        decimal.parse().ok()?
-    } else {
-        return match name {
-            "amp" => Some('&'),
-            "lt" => Some('<'),
-            "gt" => Some('>'),
-            "quot" => Some('"'),
-            "apos" => Some('\''),
-            _ => None,
-        };
-    };
-    char::from_u32(code).filter(|character| *character != '\0')
 }
 
 #[cfg(test)]

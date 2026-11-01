@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import platform
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -160,7 +161,7 @@ def send_desktop_approval_notification(notification: DesktopApprovalNotification
             },
         },
         output_limit=_NATIVE_OUTPUT_LIMIT,
-        timeout_seconds=_SEND_TIMEOUT_SECONDS,
+        deadline=time.monotonic() + _SEND_TIMEOUT_SECONDS,
     )
     return answer is not None and answer.get("sent") is True
 

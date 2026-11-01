@@ -177,14 +177,6 @@ fn only_a_drive_windows_root_is_trusted() {
 }
 
 #[test]
-fn character_references_are_decoded_once() {
-    assert_eq!(
-        unescape_html("&lt;a&gt; &quot;b&quot; &#65;&#x42; &amp;amp; &bogus; & &#0;"),
-        "<a> \"b\" AB &amp; &bogus; & &#0;"
-    );
-}
-
-#[test]
 fn other_platforms_show_nothing() {
     let mut host = FakeHost::default();
     let sent = answer(&send_request(&notification()), Platform::Other, &mut host).expect("answer");

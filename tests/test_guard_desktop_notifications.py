@@ -6,6 +6,7 @@ The notifier commands themselves are covered by the native runtime's
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -36,9 +37,13 @@ class _Runtime:
     def __init__(self, answer: dict[str, object] | None) -> None:
         self.answer = answer
         self.calls: list[tuple[str, str, dict[str, object]]] = []
+        self.options: list[dict[str, Any]] = []
 
-    def __call__(self, feature: str, command: str, request: dict[str, object], **_: Any) -> dict[str, object] | None:
+    def __call__(
+        self, feature: str, command: str, request: dict[str, object], **options: Any
+    ) -> dict[str, object] | None:
         self.calls.append((feature, command, request))
+        self.options.append(options)
         return self.answer
 
 
@@ -71,6 +76,23 @@ def test_notification_is_sent_by_the_native_runtime(monkeypatch: pytest.MonkeyPa
             },
         )
     ]
+
+
+def test_the_runtime_check_and_the_send_share_one_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A slow runtime check spends the send's time instead of adding its own.
+
+    With a timeout for the command alone, the status check before it had a
+    separate allowance, so a notification could stay in flight for nearly
+    twice the send timeout and hold back another attempt meanwhile.
+    """
+
+    runtime = _install(monkeypatch, "Darwin", {"sent": True})
+    before = time.monotonic()
+
+    assert send_desktop_approval_notification(_notification()) is True
+    [options] = runtime.options
+    assert "timeout_seconds" not in options
+    assert before < options["deadline"] <= time.monotonic() + desktop_notifications._SEND_TIMEOUT_SECONDS
 
 
 @pytest.mark.parametrize("answer", [None, {"sent": False}, {"sent": "yes"}])
