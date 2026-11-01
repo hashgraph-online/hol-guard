@@ -869,6 +869,7 @@ mod windows_process_lifecycle;
 mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
+mod windows_trusted_directories;
 mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;

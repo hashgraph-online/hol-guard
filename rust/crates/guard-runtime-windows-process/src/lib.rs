@@ -25,6 +25,8 @@ mod owner;
 mod registry;
 #[cfg(windows)]
 mod secure_storage;
+#[cfg(windows)]
+mod trusted_directories;
 #[cfg(all(test, windows))]
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
@@ -59,7 +61,14 @@ pub use drives::local_drive_letters;
 pub use host_name::dns_host_name;
 
 #[cfg(windows)]
-pub use known_folders::{trusted_install_roots, user_profile_directory, windows_directory};
+pub use known_folders::{
+    roaming_appdata_directory, trusted_install_roots, user_profile_directory, windows_directory,
+};
+
+#[cfg(windows)]
+pub use trusted_directories::{
+    kernel_system_directory, kernel_windows_directory, real_directory, real_regular_file,
+};
 
 #[cfg(windows)]
 pub use owner::owned_by_current_user;
@@ -131,6 +140,37 @@ pub fn terminate_if_creation_time(
     _timeout: Option<std::time::Duration>,
 ) -> bool {
     false
+}
+
+/// Only Windows has known folders.
+#[cfg(not(windows))]
+pub fn user_profile_directory() -> Option<std::path::PathBuf> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn roaming_appdata_directory() -> Option<std::path::PathBuf> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn kernel_windows_directory() -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn kernel_system_directory() -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn real_directory(_path: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn real_regular_file(_path: &str) -> Option<String> {
+    None
 }
 
 #[cfg(not(windows))]
