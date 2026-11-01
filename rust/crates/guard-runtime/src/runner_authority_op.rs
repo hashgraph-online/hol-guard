@@ -91,6 +91,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_legacy"
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
+        "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
