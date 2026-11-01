@@ -164,6 +164,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if store_quarantine_forensics::is_command(command) && flag == "--stdin" => {
+            let response = store_quarantine_forensics::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if network_status_validation::is_command(command) && flag == "--stdin" => {
             let response = network_status_validation::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
