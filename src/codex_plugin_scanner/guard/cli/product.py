@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext, _artifact_uses_guard
@@ -37,6 +37,7 @@ from .status_review_count import count_review_artifacts
 
 _LOGGER = logging.getLogger(__name__)
 GUARD_COMMAND = "hol-guard"
+_DOCTOR_COMMAND = f"{GUARD_COMMAND} doctor"
 _PRODUCT_COPY_UNAVAILABLE = (
     "Guard could not load its status copy from the native runtime. Run `hol-guard doctor` to repair it."
 )
@@ -180,21 +181,44 @@ def _product_copy(
         )
     except NativeRunnerAuthorityError as error:
         _LOGGER.debug("guard product copy unavailable: %s", error)
-    if isinstance(reply, dict):
-        copies = reply.get("harnesses")
-        if isinstance(copies, list) and len(copies) == len(facts) and all(isinstance(item, dict) for item in copies):
-            return reply
+    if _is_product_copy(reply, harness_count=len(facts), include_steps=include_steps):
+        return reply
     return {
-        "harnesses": [dict.fromkeys(_HARNESS_COPY_FIELDS) for _ in facts],
+        "harnesses": [
+            {**dict.fromkeys(_HARNESS_COPY_FIELDS), "next_action": "unavailable", "review_command": _DOCTOR_COMMAND}
+            for _ in facts
+        ],
         "recommended": None,
         "runtime_status": "unavailable",
         "cloud_state_label": "Status unavailable",
         "cloud_state_detail": _PRODUCT_COPY_UNAVAILABLE,
         **dict.fromkeys(_URL_FIELDS),
-        "next_steps": [
-            {"title": "Repair Guard", "command": f"{GUARD_COMMAND} doctor", "detail": _PRODUCT_COPY_UNAVAILABLE}
-        ],
+        "next_steps": [{"title": "Repair Guard", "command": _DOCTOR_COMMAND, "detail": _PRODUCT_COPY_UNAVAILABLE}],
     }
+
+
+def _is_product_copy(reply: object, *, harness_count: int, include_steps: bool) -> TypeGuard[dict[str, Any]]:
+    """Whether a native reply carries every field the payload reads."""
+
+    if not isinstance(reply, dict):
+        return False
+    copies = reply.get("harnesses")
+    recommended = reply.get("recommended")
+    steps = reply.get("next_steps")
+    return (
+        isinstance(copies, list)
+        and len(copies) == harness_count
+        and all(
+            isinstance(item, dict) and all(isinstance(item.get(field), str) for field in _HARNESS_COPY_FIELDS)
+            for item in copies
+        )
+        and (recommended is None or (type(recommended) is int and 0 <= recommended < harness_count))
+        and all(
+            isinstance(reply.get(field), str) for field in ("runtime_status", "cloud_state_label", "cloud_state_detail")
+        )
+        and all(isinstance(reply.get(field), str) for field in _URL_FIELDS)
+        and (isinstance(steps, list) if include_steps else steps is None)
+    )
 
 
 def _with_copy(item: dict[str, object], item_copy: dict[str, Any]) -> dict[str, object]:
