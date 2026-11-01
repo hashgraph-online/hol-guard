@@ -110,6 +110,10 @@ def recorded_resident(monkeypatch: pytest.MonkeyPatch) -> None:
         "codex_plugin_scanner.guard.native_local_cli_help_parse.native_local_cli_help_commands",
         _answer,
     )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_local_cli_help_parse.resident_reads_sources_first",
+        lambda: False,
+    )
 
 
 def _command(command_id: str, description: str = "", parent_id: str | None = None) -> LocalCliCommand:
@@ -166,6 +170,13 @@ def _stand_in_resident(monkeypatch: pytest.MonkeyPatch, answer) -> list[dict[str
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_local_cli_help_parse.native_local_cli_help_commands",
         _answer,
+    )
+    # These cover a resident without the source-first read, which runs --help
+    # before it reads anything; tests/test_guard_local_cli_source_first.py
+    # covers one that reads first.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_local_cli_help_parse.resident_reads_sources_first",
+        lambda: False,
     )
     return calls
 

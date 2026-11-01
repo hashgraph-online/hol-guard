@@ -527,6 +527,34 @@ with `script_source`; it never runs anything to get it. The grant answer
 blocked option blocks the call, and a call with options and no subcommand is
 allowed only when every option it passes is allowed.
 
+A resident that advertises `local-cli-help-source-first-v1` reads an
+interpreter script's source before Guard runs it at all
+(`local_cli_help_script*.rs`). For `.js`, `.mjs`, `.ts`, `.py`, `.rb` and
+shell scripts it names the subcommands the code compares its first argument
+against (`switch`, `match`, `case`/`when`, `if` comparisons and membership
+tests, followed through destructuring, slices, `shift` and the parameter of a
+function given the arguments), the options it checks for, the commands a
+parser library declares (Commander, yargs, argparse, Click, Typer), the
+`./`-relative modules it imports, and whether anything in it handles `--help`:
+`none`, `script` (the code checks for the flag itself) or `framework` (a parser
+library that answers `--help` for each subcommand). Python
+(`local_cli_script_source.py`) only finds the files: the verified script, and
+at most four imported modules that resolve, through symlinks, to script files
+inside the script's own folder. On the answer it runs nothing for `none`, only
+the top-level `--help` for `script`, and nested `<command> --help` probes only
+for `framework`. A parser in the entry script answers only for the commands
+the script does not compare by hand, so a script that dispatches its own
+subcommands is `script` even when it also builds a parser. An imported module
+can raise `none` to `script`, never to `framework`, and a module the resident
+cannot read fails the whole discovery. Each module is opened without following
+a final symlink and read only when the open file is the one its path resolves
+to inside the script's folder. A script in a language the resident does not
+read (Perl, PHP, Lua) has `none`, so it is never run. A resident that cannot read the source leaves the CLI with no
+commands and runs nothing, and so does a runtime whose status cannot be read:
+a busy or missing resident is never taken for an older one. Only a resident
+whose capabilities list lacks the feature, or a compiled program that is not
+a script, takes the help-first path above.
+
 Two consequences are worth naming. Discovery fails closed: a resident that
 cannot answer leaves the CLI with no commands found, and the grant falls back
 to its "other" bucket rather than to a Python parse. And the port keeps a
