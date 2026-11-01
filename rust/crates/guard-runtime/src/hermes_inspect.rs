@@ -127,18 +127,25 @@ fn resolves_within(path: &Path, root: &Path) -> bool {
 /// Whether the opened `file` is the file `path` names inside `root`.
 ///
 /// On Windows an ancestor junction swapped between the scope check and the
-/// open would let `path` open a file outside the scope. The canonical path
-/// is checked against the scope again and opened one component at a time,
-/// holding each ancestor and refusing every link, and the read handle must be
-/// that same file (volume and file ID).
+/// open would let `path` open a file outside the scope. The path the read
+/// handle itself resolves to must lie inside the scope: a second open by
+/// path proves nothing about where the first one landed, since the same
+/// junction can be swapped back in before it. The canonical path is then
+/// opened one component at a time, holding each ancestor and refusing every
+/// link, and must be that same file (volume and file ID).
 #[cfg(windows)]
 pub(crate) fn handle_within(file: &File, path: &Path, root: &Path) -> bool {
-    use guard_runtime_windows_process::{handle_file_id, open_bound_executable_file};
+    use guard_runtime_windows_process::{
+        handle_file_id, handle_final_path, open_bound_executable_file,
+    };
     let (Ok(canonical), Ok(canonical_root)) = (fs::canonicalize(path), fs::canonicalize(root))
     else {
         return false;
     };
     if !canonical.starts_with(&canonical_root) {
+        return false;
+    }
+    if !handle_final_path(file).is_ok_and(|opened| opened.starts_with(&canonical_root)) {
         return false;
     }
     // The bound open allows extra directory entries, as the path check does.
