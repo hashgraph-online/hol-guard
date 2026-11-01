@@ -301,7 +301,7 @@ fn other_trailing_commands_plan_nothing() {
 /// install tests.
 #[test]
 fn the_safety_guide_install_reaches_the_evaluator() {
-    let guide = include_str!("../../../../src/codex_plugin_scanner/guard/agent-safety-guidance.md");
+    let guide = include_str!("agent_safety_guidance.md");
     let guide = guide.split_whitespace().collect::<Vec<_>>().join(" ");
     let command = "npm install --ignore-scripts";
     assert!(guide.contains(&format!("`{command}`")));

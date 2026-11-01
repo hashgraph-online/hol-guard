@@ -1,10 +1,10 @@
 import { j as jsxRuntimeExports, r as reactExports, A as ActionButton, v as HiMiniCheckCircle, g as HiMiniChevronDown, al as HiMiniExclamationCircle } from "../guard-dashboard.js";
-import { r as resolveSupplyChainIssues } from "./supply-chain-issues-DSiny_P9.js";
-import { r as resolveHomeProtectionStatus } from "./home-protection-module-D5_hG3QH.js";
-import { b as buildSupplyChainStats } from "./supply-chain-protection-stats-fPS2dg9t.js";
+import { r as resolveSupplyChainIssues } from "./supply-chain-issues-BmIVuTz_.js";
+import { r as resolveHomeProtectionStatus } from "./home-protection-module-CgfgfOJQ.js";
+import { b as buildSupplyChainStats } from "./supply-chain-protection-stats-C7fAEb4P.js";
 import { B as BrandHero, b as BrandHeroBadge, a as BrandHeroFacts } from "./brand-hero-COty1p6U.js";
-import { s as supplyChainFixAllIsPending, a as supplyChainFixAllNeedsCloudConnect, b as supplyChainFixAllButtonLabel } from "./supply-chain-hub-workspace-BlbTNCTo.js";
-import "./feed-health-workspace-C7zH2d-T.js";
+import { s as supplyChainFixAllIsPending, a as supplyChainFixAllNeedsCloudConnect, b as supplyChainFixAllButtonLabel } from "./supply-chain-hub-workspace-B1NukboL.js";
+import "./feed-health-workspace-2eyTKPFE.js";
 const PROTECTION_BADGE = {
   protected: "Protected",
   partial: "Partly protected",

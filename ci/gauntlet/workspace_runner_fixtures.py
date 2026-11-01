@@ -43,6 +43,10 @@ WORKSPACE_NAMED_TEST_SCRIPT_CASE = "omp-native-workspace-named-test-script"
 # words after `--` to the script, so the run is the tool the manifest names
 # holding them.
 WORKSPACE_SCRIPT_PASSED_OPTION_CASE = "omp-native-workspace-script-passed-option"
+# The same checking script, asked for quietly. The option names no script and
+# only chooses how much the manager prints, so the run has to reach the script
+# the plain spelling reaches.
+WORKSPACE_QUIET_SCRIPT_RUN_CASE = "omp-native-workspace-quiet-script-run"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -52,6 +56,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_MOCHA_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
+        WORKSPACE_QUIET_SCRIPT_RUN_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -163,6 +168,14 @@ _ESLINT_FILES = {
         f"console.log(strict ? '{ESLINT_MARKER}' : 'eslint: {ESLINT_PASSED_OPTION} was not forwarded');\n"
     ),
 }
+# The one line the quiet case's ESLint prints. That case forwards no option, so
+# its executable answers to the launch itself; a separate line keeps the two
+# ESLint cases from passing for each other's reason.
+QUIET_LINT_MARKER = f"eslint {_ESLINT_VERSION} ran quietly"
+_QUIET_LINT_FILES = {
+    **_ESLINT_FILES,
+    "node_modules/eslint/bin/eslint.js": (f"#!/usr/bin/env node\nconsole.log('{QUIET_LINT_MARKER}');\n"),
+}
 
 
 class _Install(NamedTuple):
@@ -177,6 +190,7 @@ _JEST_INSTALL = _Install("jest", _FILES, RUNNER_MARKER)
 _INSTALLS = {
     WORKSPACE_MOCHA_CASE: _Install("mocha", _MOCHA_FILES, MOCHA_MARKER),
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
+    WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
 }
 
 

@@ -270,6 +270,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-windows-process-command-lines-v1",
     "native-onefile-extraction-reclaim-v1",
     "native-policy-effective-v1",
+    "native-policy-file-io-v1",
     "native-hook-removal-sweep-v1",
     "native-release-manifest-verify-v1",
     "native-ownership-acl-v1",
@@ -288,5 +289,5 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-process-identity-v1",
     "native-macos-code-signing-v1",
     "native-business-source-current-fence-v2",
-    "native-policy-file-io-v1",
+    "native-agent-safety-guidance-v1",
 ];
