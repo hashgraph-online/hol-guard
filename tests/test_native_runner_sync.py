@@ -85,6 +85,7 @@ def test_value_metrics_accepts_a_store_wider_than_the_resident_array_limit() -> 
     assert digest["generated_at"] == "2026-01-02T00:00:00Z"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_runtime_session_payload_ignores_fields_the_runtime_never_reads() -> None:
     # A session carrying an unused field the transport cannot carry (a set, or a
     # list past the resident array limit) used to fail before the Cloud request.
