@@ -1,7 +1,8 @@
 //! Managed proxy authentication from the native operating-system credential store.
 //!
-//! Port of `mdm/network_credentials.py` and `load_proxy_credentials`
-//! (mdm/network_transport.py:199). The record is keyed by the digest of the
+//! The native caller reads it through `load_proxy_credentials`, and the
+//! runtime's `proxy-credentials` command answers the Python managed transport
+//! through `load_proxy_record`. The record is keyed by the digest of the
 //! already-validated proxy URL, so the store holds authorization for one proxy
 //! endpoint and nothing else: never a policy secret, never a credential for the
 //! destination. Nothing here ever logs or returns the record's contents in an
@@ -19,14 +20,17 @@ use crate::egress_caller::EgressProxyCredentials;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::egress_caller_policy::probe_output;
 
-/// `_PROXY_CREDENTIAL_SERVICE` (mdm/network_credentials.py:11).
-#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+/// The credential-store service every proxy record is filed under.
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "linux", windows)),
+    allow(dead_code)
+)]
 const PROXY_CREDENTIAL_SERVICE: &str = "hol-guard-enterprise-proxy-v1";
-/// `_MAX_PROXY_CREDENTIAL_BYTES`: past this the record is malformed, not a
+/// Past this the record is malformed, not a
 /// credential, and the policy fails closed rather than exchanging without it.
 const MAX_PROXY_CREDENTIAL_BYTES: usize = 16 * 1024;
 
-/// `proxy_credential_key` (mdm/network_transport.py:195): the account the
+/// The account the
 /// record is stored under, so the store never holds the proxy URL itself.
 pub fn proxy_credential_key(proxy_url: &str) -> String {
     hex::encode(Sha256::digest(proxy_url.as_bytes()))
@@ -40,20 +44,32 @@ pub fn proxy_credential_key(proxy_url: &str) -> String {
 pub fn load_proxy_credentials(
     proxy_url: &str,
 ) -> Result<Option<EgressProxyCredentials>, &'static str> {
+    load_proxy_record(proxy_url)?.map(uri_carriable).transpose()
+}
+
+/// The store's record for this proxy with its shape checked, for a caller that
+/// sends it in a `Proxy-Authorization` header rather than a proxy URI.
+pub fn load_proxy_record(proxy_url: &str) -> Result<Option<EgressProxyCredentials>, &'static str> {
     let Some(raw) = read_proxy_credential_record(&proxy_credential_key(proxy_url)) else {
         return Ok(None);
     };
     if raw.len() > MAX_PROXY_CREDENTIAL_BYTES {
         return Err("managed_proxy_credentials_invalid");
     }
-    parse_proxy_credentials(&raw).map(Some)
+    parse_proxy_record(&raw).map(Some)
+}
+
+/// `parse_proxy_record` plus the URI-authority check the native caller needs.
+#[cfg(test)]
+fn parse_proxy_credentials(raw: &[u8]) -> Result<EgressProxyCredentials, &'static str> {
+    parse_proxy_record(raw).and_then(uri_carriable)
 }
 
 /// The record's own shape: exactly `username` and `password`, both non-empty
 /// strings, with no `:` in the username and no newline in either - a credential
 /// that cannot be spelled into a `Proxy-Authorization` header is refused here
 /// rather than truncated into one.
-fn parse_proxy_credentials(raw: &[u8]) -> Result<EgressProxyCredentials, &'static str> {
+fn parse_proxy_record(raw: &[u8]) -> Result<EgressProxyCredentials, &'static str> {
     let invalid = "managed_proxy_credentials_invalid";
     let payload: serde_json::Value = serde_json::from_slice(raw).map_err(|_| invalid)?;
     let object = payload.as_object().ok_or(invalid)?;
@@ -70,20 +86,28 @@ fn parse_proxy_credentials(raw: &[u8]) -> Result<EgressProxyCredentials, &'stati
     {
         return Err(invalid);
     }
-    // ureq carries proxy authorization in the proxy's own URI and reads the
-    // username and password back out of that authority verbatim, with no
-    // percent-decoding (ureq-3.3.0 src/proxy.rs:436, src/unversioned/transport/
-    // connect.rs:113). A credential holding a character that a URI authority
-    // does not carry literally would reach the proxy as something other than
-    // what the store holds, so it is refused by a code of its own rather than
-    // mangled, dropped, or sent as a different credential.
-    if !username.bytes().all(uri_userinfo_byte) || !password.bytes().all(uri_userinfo_byte) {
-        return Err("managed_proxy_credentials_unsupported");
-    }
     Ok(EgressProxyCredentials {
         username: username.to_owned(),
         password: password.to_owned(),
     })
+}
+
+/// ureq carries proxy authorization in the proxy's own URI and reads the
+/// username and password back out of that authority verbatim, with no
+/// percent-decoding (ureq-3.3.0 src/proxy.rs:436, src/unversioned/transport/
+/// connect.rs:113). A credential holding a character that a URI authority
+/// does not carry literally would reach the proxy as something other than
+/// what the store holds, so it is refused by a code of its own rather than
+/// mangled, dropped, or sent as a different credential.
+fn uri_carriable(
+    credentials: EgressProxyCredentials,
+) -> Result<EgressProxyCredentials, &'static str> {
+    if !credentials.username.bytes().all(uri_userinfo_byte)
+        || !credentials.password.bytes().all(uri_userinfo_byte)
+    {
+        return Err("managed_proxy_credentials_unsupported");
+    }
+    Ok(credentials)
 }
 
 /// The bytes a URI authority carries literally: RFC 3986 `unreserved` and
@@ -93,8 +117,7 @@ fn uri_userinfo_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || b"-._~!$&'()*+,;=:".contains(&byte)
 }
 
-/// `read_proxy_credential_record` (mdm/network_credentials.py:121): one bounded
-/// read of the platform's own credential store, or `None` where there is no
+/// One bounded read of the platform's own credential store, or `None` where there is no
 /// record and on every failure to reach it.
 #[cfg(target_os = "macos")]
 fn read_proxy_credential_record(account: &str) -> Option<Vec<u8>> {
@@ -106,12 +129,39 @@ fn read_proxy_credential_record(account: &str) -> Option<Vec<u8>> {
     read_secret_tool(account)
 }
 
-/// Windows stores the record through `CredReadW`, which the native caller does
-/// not read yet, so a proxy that demands authentication there answers 407
-/// rather than being reached with a guessed credential.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+/// `_read_windows`: the generic credential `<service>:<account>` from the
+/// Windows Credential Manager, read as UTF-8 or else UTF-16LE text.
+#[cfg(windows)]
+fn read_proxy_credential_record(account: &str) -> Option<Vec<u8>> {
+    let target = format!("{PROXY_CREDENTIAL_SERVICE}:{account}");
+    let raw = guard_runtime_windows_process::credential_read(&target).ok()??;
+    windows_credential_text(raw)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 fn read_proxy_credential_record(_account: &str) -> Option<Vec<u8>> {
     None
+}
+
+/// A Credential Manager blob as UTF-8 bytes: UTF-8 as stored, or else
+/// UTF-16LE, and `None` when it is empty or neither.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn windows_credential_text(raw: Vec<u8>) -> Option<Vec<u8>> {
+    let text = match String::from_utf8(raw) {
+        Ok(text) => text,
+        Err(error) => {
+            let raw = error.into_bytes();
+            if raw.len() % 2 != 0 {
+                return None;
+            }
+            let units: Vec<u16> = raw
+                .chunks_exact(2)
+                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .collect();
+            String::from_utf16(&units).ok()?
+        }
+    };
+    (!text.is_empty()).then(|| text.into_bytes())
 }
 
 /// `/usr/bin/security find-generic-password -s <service> -a <account> -w`.
@@ -133,7 +183,7 @@ fn read_keychain(account: &str) -> Option<Vec<u8>> {
 }
 
 /// `secret-tool lookup service <service> account <account>`, from its absolute
-/// path: the Python port requires `/usr/bin/secret-tool` to be a file and runs
+/// path: Guard requires `/usr/bin/secret-tool` to be a file and runs
 /// that, never whatever the search path offers.
 #[cfg(target_os = "linux")]
 fn read_secret_tool(account: &str) -> Option<Vec<u8>> {

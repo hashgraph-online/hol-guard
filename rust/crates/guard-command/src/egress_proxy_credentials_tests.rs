@@ -84,3 +84,36 @@ fn a_credential_a_uri_authority_cannot_carry_is_refused_by_its_own_code() {
     assert_eq!(credentials.username, "svc-1_x");
     assert_eq!(credentials.password, "a:b!$&'()*+,;=~.-_");
 }
+
+#[test]
+fn a_header_caller_keeps_a_credential_a_uri_authority_cannot_carry() {
+    let credentials =
+        parse_proxy_record(br#"{"username":"svc@corp","password":"p\u00e4ss word%40"}"#)
+            .expect("parsed");
+    assert_eq!(credentials.username, "svc@corp");
+    assert_eq!(credentials.password, "p\u{e4}ss word%40");
+    assert_eq!(
+        parse_proxy_record(br#"{"username":"svc:admin","password":"secret"}"#).err(),
+        Some("managed_proxy_credentials_invalid")
+    );
+}
+
+#[test]
+fn a_credential_manager_blob_reads_as_utf8_or_utf16le_text() {
+    let utf16: Vec<u8> = "{\"u\":\"\u{e4}\"}"
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    assert_eq!(
+        windows_credential_text(br#"{"u":"x"}"#.to_vec()),
+        Some(br#"{"u":"x"}"#.to_vec())
+    );
+    assert_eq!(
+        windows_credential_text(utf16),
+        Some("{\"u\":\"\u{e4}\"}".as_bytes().to_vec())
+    );
+    // Empty, an odd UTF-16 length, and a lone surrogate are no record.
+    assert_eq!(windows_credential_text(Vec::new()), None);
+    assert_eq!(windows_credential_text(vec![0xff, 0xfe, 0x41]), None);
+    assert_eq!(windows_credential_text(vec![0x00, 0xd8]), None);
+}
