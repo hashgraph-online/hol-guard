@@ -90,6 +90,8 @@ mod contained_run_prefix;
 #[cfg(unix)]
 #[path = "../../guard-command/src/contained_runner/mod.rs"]
 pub mod contained_runner;
+#[path = "../../guard-command/src/containment_compatibility.rs"]
+mod containment_compatibility;
 #[path = "../../guard-command/src/contributed_mcp_decision.rs"]
 pub mod contributed_mcp_decision;
 #[path = "../../guard-command/src/contributed_mcp_url.rs"]

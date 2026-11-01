@@ -112,6 +112,7 @@
       "src/contained_runner/script_evidence.rs",
       "src/contained_runner/snapshot.rs",
       "src/contained_runner/ts_inputs.rs",
+      "src/containment_compatibility.rs",
       "src/contributed_mcp_decision.rs",
       "src/contributed_mcp_url.rs",
       "src/credential_patterns.rs",
