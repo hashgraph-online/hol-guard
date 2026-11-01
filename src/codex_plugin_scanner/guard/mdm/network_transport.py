@@ -73,7 +73,11 @@ def resolved_network_policy(policy: ManagedNetworkPolicy | None) -> tuple[Manage
 
 
 def platform_system_proxies() -> dict[str, str]:
-    """Read OS proxy configuration without treating user environment as managed authority."""
+    """Read OS proxy configuration without treating user environment as managed authority.
+
+    An empty map means the OS has no proxy. A runtime that cannot answer raises instead,
+    so a managed system-proxy request is refused rather than sent direct.
+    """
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
@@ -86,10 +90,10 @@ def platform_system_proxies() -> dict[str, str]:
         or status.capabilities is None
         or _SYSTEM_PROXIES_FEATURE not in status.capabilities.features
     ):
-        return {}
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        return {}
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
     output = _run_native_process(
         status.identity.path,
         ("system-proxies", "--stdin"),
@@ -97,23 +101,30 @@ def platform_system_proxies() -> dict[str, str]:
         timeout_seconds=remaining,
         output_limit=_MAX_SYSTEM_PROXIES_OUTPUT_BYTES,
     )
-    if output is None:
-        return {}
     try:
-        answer = cast(object, json.loads(output))
+        answer = cast(object, json.loads(output)) if output is not None else None
     except ValueError:
-        return {}
-    if not isinstance(answer, dict):
-        return {}
-    payload = cast(dict[str, object], answer)
+        answer = None
+    payload = cast(dict[str, object], answer) if isinstance(answer, dict) else {}
     proxies = payload.get("proxies")
     if payload.get("ok") is not True or not isinstance(proxies, dict):
-        return {}
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
     return {
         scheme: proxy
         for scheme, proxy in cast(dict[object, object], proxies).items()
         if isinstance(scheme, str) and scheme in {"http", "https"} and isinstance(proxy, str)
     }
+
+
+def available_system_proxies(*, managed: bool) -> dict[str, str]:
+    """Refuse a failed lookup under a managed policy; otherwise fall back to a direct connection."""
+
+    try:
+        return platform_system_proxies()
+    except ManagedNetworkError:
+        if managed:
+            raise
+        return {}
 
 
 def request_url(request: str | urllib.request.Request) -> str:
@@ -277,8 +288,10 @@ def managed_opener(
     *,
     redirect_handler: urllib.request.HTTPRedirectHandler | None = None,
 ) -> ManagedOpener:
-    resolved = policy or active_network_policy()
-    proxies = proxy_map(resolved)
+    resolved, managed = resolved_network_policy(policy)
+    proxies = (
+        proxy_map(resolved) if managed or resolved.proxy_mode != "system" else available_system_proxies(managed=False)
+    )
     context = managed_ssl_context(resolved)
     direct_handlers: list[urllib.request.BaseHandler] = [
         urllib.request.ProxyHandler({}),
@@ -428,6 +441,7 @@ __all__ = [
     "ManagedNetworkError",
     "ProxyCredentials",
     "active_network_policy",
+    "available_system_proxies",
     "basic_proxy_authorization",
     "load_proxy_credentials",
     "managed_opener",

@@ -473,8 +473,30 @@ def test_system_proxies_come_from_the_native_runtime(monkeypatch: pytest.MonkeyP
     assert calls == [(("system-proxies", "--stdin"), json.dumps({"schema": "system-proxies.v1"}))]
 
     status.capabilities = SimpleNamespace(features=())
-    assert platform_system_proxies() == {}
+    with pytest.raises(ManagedNetworkError, match="managed_system_proxy_unavailable"):
+        platform_system_proxies()
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("output", [None, "not json", json.dumps({"ok": False}), json.dumps({"ok": True})])
+def test_a_failed_native_proxy_lookup_refuses_instead_of_going_direct(
+    monkeypatch: pytest.MonkeyPatch, output: str | None
+) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("hol-guard-runtime")),
+        capabilities=SimpleNamespace(features=("native-system-proxies-v1",)),
+    )
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", lambda *_args, **_kwargs: output)
+
+    with pytest.raises(ManagedNetworkError, match="managed_system_proxy_unavailable"):
+        transport_module.proxy_map(ManagedNetworkPolicy(proxy_mode="system"))
+    # Without a managed policy the old direct-connection fallback still applies.
+    assert transport_module.available_system_proxies(managed=False) == {}
 
 
 def test_proxy_credentials_come_from_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
