@@ -162,8 +162,13 @@ static MCP_SERVER: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// The one import of an entry-point wrapper, `from package import function`.
-static WRAPPER_IMPORT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^from\s+([A-Za-z_][\w.]*)\s+import\s+(\w+)$").unwrap());
+/// Its module follows the dotted-name grammar the Python bridge accepts.
+static WRAPPER_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^from\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+import\s+(\w+)$").unwrap()
+});
+
+/// The longest `entry_point` the Python bridge accepts.
+const ENTRY_POINT_CHARS: usize = 200;
 
 /// The wrapper's last line, `sys.exit(function())` or `sys.exit(object.attr())`.
 static WRAPPER_EXIT: LazyLock<Regex> =
@@ -192,6 +197,13 @@ static RUBY_IMPORT: LazyLock<Regex> =
 
 static PY_FROM_IMPORT: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^from\s+(\.?[A-Za-z_][\w.]*)\s+import\b").unwrap());
+
+/// `from . import server, tools as t`: the names are modules beside this one.
+static PY_FROM_DOT_IMPORT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^from\s+\.\s+import\s+\(?([^()]+)\)?$").unwrap());
+
+static PY_NAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([A-Za-z_]\w*)(?:\s+as\s+\w+)?$").unwrap());
 
 static PY_IMPORT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^import\s+(.+)$").unwrap());
 
@@ -249,7 +261,9 @@ fn entry_point(code: &[&str]) -> Option<String> {
         }
     }
     match (imported, called) {
-        (Some((module, name)), Some(call)) if name == call => Some(module.to_owned()),
+        (Some((module, name)), Some(call)) if name == call && module.len() <= ENTRY_POINT_CHARS => {
+            Some(module.to_owned())
+        }
         _ => None,
     }
 }
@@ -340,7 +354,13 @@ fn imports(line: &str) -> Vec<String> {
     // package's own modules import each other.
     let python_module =
         |module: &str| format!("./{}.py", module.trim_start_matches('.').replace('.', "/"));
-    if let Some(captures) = PY_FROM_IMPORT.captures(line) {
+    if let Some(captures) = PY_FROM_DOT_IMPORT.captures(line) {
+        for part in captures[1].split(',') {
+            if let Some(name) = PY_NAME.captures(py_strip(part)) {
+                found.push(python_module(&name[1]));
+            }
+        }
+    } else if let Some(captures) = PY_FROM_IMPORT.captures(line) {
         found.push(python_module(&captures[1]));
     } else if let Some(captures) = PY_IMPORT.captures(line) {
         for part in captures[1].split(',') {

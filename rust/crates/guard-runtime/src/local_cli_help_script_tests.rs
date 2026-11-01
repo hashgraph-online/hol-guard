@@ -314,12 +314,21 @@ fn only_imports_inside_the_scripts_folder_are_local() {
     );
     assert_eq!(imports(node), vec!["./lib/run.mjs", "./lazy.mjs"]);
     let python = concat!(
-        "from helpers import usage\nimport os, tools.cli as cli\nfrom . import nope\n",
-        "from .server import serve\nfrom ..up import nope\n",
+        "from helpers import usage\nimport os, tools.cli as cli\n",
+        "from .server import serve\nfrom ..up import nope\nfrom .. import nope\n",
+        "from . import config, tools as t\nfrom . import (state)\n",
     );
     assert_eq!(
         imports(python),
-        vec!["./helpers.py", "./os.py", "./tools/cli.py", "./server.py"]
+        vec![
+            "./helpers.py",
+            "./os.py",
+            "./tools/cli.py",
+            "./server.py",
+            "./config.py",
+            "./tools.py",
+            "./state.py",
+        ]
     );
     let ruby = "require_relative 'lib/cmd'\nrequire_relative \"../up\"\n";
     assert_eq!(imports(ruby), vec!["./lib/cmd.rb"]);
@@ -469,6 +478,9 @@ fn only_a_generated_wrapper_is_an_entry_point() {
         PIP_WRAPPER.replace("from mcp_server_git import main\n", ""),
         "from ship import deploy\ndeploy()\n".to_owned(),
         "import sys\nprint(sys.argv)\n".to_owned(),
+        PIP_WRAPPER.replace("from mcp_server_git", "from mcp..git"),
+        PIP_WRAPPER.replace("from mcp_server_git", "from mcp_server_git."),
+        PIP_WRAPPER.replace("mcp_server_git", &"a".repeat(201)),
     ] {
         assert_eq!(wraps(&source), None, "{source}");
     }

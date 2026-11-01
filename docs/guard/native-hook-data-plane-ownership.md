@@ -568,7 +568,8 @@ an MCP library (`@modelcontextprotocol/sdk/server/*`,
 script imports when every code line belongs to the console-script wrapper pip,
 uv or Poetry writes for an installed package (one `from module import function`,
 `sys.exit` of that function, and the `__main__` guard and `sys.argv[0]` fix-ups
-around them), else null. Python imports report `from .server import` as
+around them, its module a dotted name of at most 200 characters), else null.
+Python imports report `from .server import` and `from . import server` as
 `./server.py`, beside the script.
 Python (`local_mcp_source_evidence.py`) takes the
 script from the launch identity, so `bash ship.sh` reads `ship.sh`, not the
