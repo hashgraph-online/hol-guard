@@ -21,18 +21,47 @@
   "launch": {
     "kind": "remote-http",
     "url": "https://mcp.vulnify.io/mcp",
-    "serverNames": ["vulnify"]
+    "serverNames": [
+      "vulnify"
+    ]
   },
-  "riskClasses": ["external-network-read", "external-shared-state-write"],
+  "riskClasses": [
+    "external-network-read",
+    "external-shared-state-write"
+  ],
   "tools": [
-    { "name": "check_action", "state": "inherit" },
-    { "name": "decide_action", "state": "review" },
-    { "name": "get_decision", "state": "inherit" },
-    { "name": "list_policies", "state": "inherit" },
-    { "name": "test_policies", "state": "inherit" },
-    { "name": "plan_policy_changes", "state": "inherit" },
-    { "name": "check_mcp_tool_call", "state": "review" },
-    { "name": "other", "state": "review" }
+    {
+      "name": "check_action",
+      "state": "inherit"
+    },
+    {
+      "name": "decide_action",
+      "state": "review"
+    },
+    {
+      "name": "get_decision",
+      "state": "inherit"
+    },
+    {
+      "name": "list_policies",
+      "state": "inherit"
+    },
+    {
+      "name": "test_policies",
+      "state": "inherit"
+    },
+    {
+      "name": "plan_policy_changes",
+      "state": "inherit"
+    },
+    {
+      "name": "check_mcp_tool_call",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
   ],
   "referenceUrls": [
     "https://github.com/vulnify/vulnify-mcp",
@@ -41,7 +70,7 @@
     "https://www.npmjs.com/package/@vulnify/mcp"
   ],
   "saferAlternatives": [
-    "Use check_action or test_policies for a dry run: they skip the PII scan and record nothing. plan_policy_changes always runs with dryRun true and has no apply path.",
-    "A REVIEW result waits for a person in the Vulnify app or Slack; this server cannot approve or deny one. Treat tool errors as not allowed, never as ALLOW."
+    "Use check_action or test_policies for a dry run: they skip the PII scan, record nothing, and a REVIEW from those tools does not open a human review. Call decide_action or check_mcp_tool_call to record a decision that can wait for a person.",
+    "A recorded REVIEW result waits for a person in the Vulnify app or Slack; this server cannot approve or deny one. Treat tool errors as not allowed, never as ALLOW."
   ]
 }
