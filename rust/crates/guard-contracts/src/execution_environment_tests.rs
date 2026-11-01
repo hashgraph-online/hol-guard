@@ -50,3 +50,43 @@ fn the_flag_is_omitted_when_false() {
     let read: GuardExecutionEnvironmentV1 = serde_json::from_str(&text).unwrap();
     assert!(read.node_options_inert, "{text}");
 }
+
+#[test]
+fn only_the_default_cargo_home_moves_nothing() {
+    assert!(cargo_home_default(
+        Some("/Users/dev"),
+        Some("/Users/dev/.cargo")
+    ));
+    assert!(cargo_home_default(
+        Some("/Users/dev/"),
+        Some("/Users/dev/.cargo/")
+    ));
+    for (home, cargo_home) in [
+        (Some("/Users/dev"), Some("/opt/cargo")),
+        (Some("/Users/dev"), Some("/Users/dev/.cargo/vendor")),
+        (Some("/Users/dev"), Some(".cargo")),
+        (Some("/Users/dev"), Some("")),
+        (Some("/Users/dev"), None),
+        (None, Some("/Users/dev/.cargo")),
+        (Some("/"), Some("/.cargo")),
+    ] {
+        assert!(
+            !cargo_home_default(home, cargo_home),
+            "{home:?} {cargo_home:?}"
+        );
+    }
+}
+
+#[test]
+fn the_cargo_home_flag_is_omitted_when_false() {
+    let stamp = GuardExecutionEnvironmentV1::unavailable();
+    let text = serde_json::to_string(&stamp).unwrap();
+    assert!(!text.contains("cargo_home_default"), "{text}");
+    let stamp = GuardExecutionEnvironmentV1 {
+        cargo_home_default: true,
+        ..stamp
+    };
+    let text = serde_json::to_string(&stamp).unwrap();
+    let read: GuardExecutionEnvironmentV1 = serde_json::from_str(&text).unwrap();
+    assert!(read.cargo_home_default, "{text}");
+}

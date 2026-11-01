@@ -38,6 +38,7 @@ pub(crate) fn benign_command_segments(
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
+        cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
@@ -332,7 +333,8 @@ pub(super) fn exact_safe_segment_with_context(
         "type" | "command" => {
             super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)
         }
-        "cargo" | "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
+        "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
+        "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
         "sleep" => safe_reads::safe_sleep_arguments(&segment.arguments),
         "uptime" => segment.arguments.is_empty(),

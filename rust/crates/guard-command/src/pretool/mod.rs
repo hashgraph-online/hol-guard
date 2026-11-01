@@ -12,6 +12,10 @@ pub struct PathContext<'a> {
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
     /// toolchain the rustup proxy runs. Literal contexts leave this false.
     pub rustup_override_absent: bool,
+    /// No inherited Cargo registry, transport, credential or alias variable
+    /// can move the registry a Cargo query contacts, the index it reads or
+    /// the credential provider it starts. Literal contexts leave this false.
+    pub cargo_config_inert: bool,
     /// No inherited npm or Node variable can move npm's registry, config
     /// files or loaded code. Literal contexts leave this false.
     pub npm_config_inert: bool,

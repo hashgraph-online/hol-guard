@@ -48,6 +48,13 @@ def _stamp_hook_input(text: str) -> str:
     # Heap and diagnostics flags only; the value itself is never stamped.
     if re.fullmatch(__INERT_NODE_OPTIONS__, os.environ.get("NODE_OPTIONS", "")):
         stamp["node_options_inert"] = True
+    # `CARGO_HOME` naming `<home>/.cargo` moves no configuration file, so the
+    # settings a reading proof checks are where Cargo reads them anyway. The
+    # value itself is never stamped.
+    _home = (os.environ.get("HOME") or "").rstrip("/")
+    _cargo_home = (os.environ.get("CARGO_HOME") or "").rstrip("/")
+    if _home and _cargo_home == _home + "/.cargo":
+        stamp["cargo_home_default"] = True
     payload["guard_execution_environment"] = stamp
     stamped = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     return stamped if len(stamped) <= 1_000_000 else text

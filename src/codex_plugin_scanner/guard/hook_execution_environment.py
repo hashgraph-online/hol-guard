@@ -70,6 +70,18 @@ def _loader_value_fits(value: str | None) -> bool:
         return False
 
 
+def cargo_home_default(home: str | None, cargo_home: str | None) -> bool:
+    """Report whether CARGO_HOME names the directory Cargo reads anyway.
+
+    The verdict is owned by `guard_contracts::cargo_home_default`; this sender
+    only mirrors it so a Python-stamped hook and a Rust-stamped one agree.
+    """
+    if not cargo_home or not home:
+        return False
+    home = home.rstrip("/")
+    return bool(home) and cargo_home.rstrip("/") == f"{home}/.cargo"
+
+
 def library_search_paths() -> dict[str, str]:
     """Return the exported loader search paths that fit the native path bound."""
     return {
@@ -102,6 +114,8 @@ def collect_hook_execution_environment() -> dict[str, object]:
     # Present only when true, so stamps from hosts without it stay unchanged.
     if node_options_inert(os.environ.get("NODE_OPTIONS")):
         stamp["node_options_inert"] = True
+    if cargo_home_default(os.environ.get("HOME"), os.environ.get("CARGO_HOME")):
+        stamp["cargo_home_default"] = True
     return stamp
 
 

@@ -60,6 +60,29 @@ pub fn node_options_inert(value: &str) -> bool {
         })
 }
 
+/// Whether `cargo_home`, a `CARGO_HOME` value, names the directory Cargo
+/// would read anyway: `<home>/.cargo`. Cargo merges the configuration file in
+/// `CARGO_HOME` with the ones above the working directory, so a value that
+/// moves the file hides the settings a reading proof checks -- but the default
+/// spelling moves nothing. Continuous-integration images and devcontainers
+/// export it at its own default, and refusing that spelling would take the
+/// reading away on hosts whose configuration is exactly where it always was.
+///
+/// Only an absolute value matching the default counts. A relative value is
+/// resolved against a working directory this function does not know, and any
+/// other directory is a move.
+pub fn cargo_home_default(home: Option<&str>, cargo_home: Option<&str>) -> bool {
+    let Some(cargo_home) = cargo_home.filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    let Some(home) = home.filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    let trimmed = |value: &str| value.trim_end_matches('/').to_owned();
+    let home = trimmed(home);
+    !home.is_empty() && trimmed(cargo_home) == format!("{home}/.cargo")
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GuardExecutionEnvironmentV1 {
@@ -85,6 +108,10 @@ pub struct GuardExecutionEnvironmentV1 {
     /// accepts. The value itself is never stamped.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub node_options_inert: bool,
+    /// The hook saw an exported `CARGO_HOME` that [`cargo_home_default`]
+    /// accepts. The value itself is never stamped.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cargo_home_default: bool,
 }
 
 impl GuardExecutionEnvironmentV1 {
@@ -123,6 +150,7 @@ impl GuardExecutionEnvironmentV1 {
             git_config_no_system: false,
             library_search_paths: BTreeMap::new(),
             node_options_inert: false,
+            cargo_home_default: false,
         }
     }
 }
