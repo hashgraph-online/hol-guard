@@ -10,6 +10,7 @@ and the CLI's commands stay undiscovered.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal, NamedTuple
@@ -38,6 +39,7 @@ _MAX_REQUEST_BYTES = 256 * 1024
 
 _FIELDS = ("command_id", "name", "usage", "description", "parent_id")
 _HELP_HANDLERS = ("none", "script", "framework")
+_MODULE_NAME = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
 _MAX_IMPORTS = 32
 
 HelpHandler = Literal["none", "script", "framework"]
@@ -55,9 +57,9 @@ class SourceRead(NamedTuple):
     # Whether the code imports an MCP server library or answers tools/list.
     # Read only when the request asked for it; False otherwise.
     mcp_server: bool = False
-    # Whether the whole script is a generated wrapper for an installed
-    # package's entry point. Read with mcp_server; False otherwise.
-    entry_point: bool = False
+    # When the whole script is a generated wrapper for an installed package's
+    # entry point, the module it imports. Read with mcp_server; None otherwise.
+    entry_point: str | None = None
 
 
 def resident_reads_sources_first() -> bool | None:
@@ -121,7 +123,7 @@ def native_local_cli_source_read(
 
     Besides the commands, the answer says whether the script handles --help
     and which local modules it imports, and with ``mcp_evidence`` whether it
-    serves MCP or is an installed package's entry-point wrapper. Each decides
+    serves MCP and which installed module an entry-point wrapper runs. Each decides
     what Guard runs next, so a reply whose fields are missing or malformed is
     discarded whole.
     """
@@ -141,8 +143,8 @@ def native_local_cli_source_read(
     if any(not isinstance(entry, str) or not entry.startswith("./") for entry in imports):
         return _unusable(home)
     mcp_server = payload.get("mcp_server") if mcp_evidence else False
-    entry_point = payload.get("entry_point") if mcp_evidence else False
-    if not isinstance(mcp_server, bool) or not isinstance(entry_point, bool):
+    entry_point = payload.get("entry_point") if mcp_evidence else None
+    if not isinstance(mcp_server, bool) or not (entry_point is None or _is_module_name(entry_point)):
         return _unusable(home)
     return SourceRead(
         rows=rows,
@@ -151,6 +153,10 @@ def native_local_cli_source_read(
         mcp_server=mcp_server,
         entry_point=entry_point,
     )
+
+
+def _is_module_name(value: object) -> bool:
+    return isinstance(value, str) and len(value) <= 200 and _MODULE_NAME.fullmatch(value) is not None
 
 
 def _request(

@@ -3,9 +3,9 @@
 Recognizing a pasted command as MCP launches it with its real arguments, so a
 script that is not a server would do its normal work. For a readable script
 the resident reads the source first, without running it, and only a script
-that imports an MCP server library or answers ``tools/list`` is launched. The
-wrapper pip or uv writes for an installed package's command is launched like
-the package itself, as ``uvx`` would run it.
+that imports an MCP server library or answers ``tools/list`` is launched. For
+the wrapper pip or uv writes for an installed command, that evidence must come
+from the installed package the wrapper runs.
 """
 
 from __future__ import annotations
@@ -22,16 +22,20 @@ from .local_cli_script_source import (
     safe_probe_path,
 )
 
+# Python files read from the package an entry-point wrapper runs.
+MAX_PACKAGE_FILES = 24
+
 
 def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guard_home: Path) -> bool:
     """Whether Guard may launch ``command`` to ask it for MCP tools.
 
-    True for a compiled program, a project bin run through a package launcher,
-    and an installed package's generated entry-point wrapper. Any other script
-    is launched only when its source, or a local module it imports, shows an
-    MCP server. A lookup that fails, a script whose source cannot be read, or
-    a resident that cannot be asked never launches; an older resident that
-    cannot read MCP evidence keeps the launch.
+    True for a compiled program and a project bin run through a package
+    launcher. A script is launched only when its source, or a local module it
+    imports, shows an MCP server; for an installed command's entry-point
+    wrapper, the installed package it runs must show one. A lookup that fails,
+    a script whose source cannot be read, or a resident that cannot be asked
+    never launches; an older resident that cannot read MCP evidence keeps the
+    launch.
     """
 
     identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
@@ -59,8 +63,8 @@ def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guar
     if read.mcp_server:
         return True
     modules = local_import_paths(launched, read.imports)
-    if read.entry_point and not modules:
-        return True
+    if read.entry_point is not None and not modules:
+        return _package_serves_mcp(read.entry_point, launched, text, invocation, guard_home)
     for module in modules:
         module_text = read_local_module(module, launched)
         if module_text is None:
@@ -69,6 +73,54 @@ def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guar
         if imported is not None and imported.mcp_server:
             return True
     return False
+
+
+def _package_serves_mcp(module: str, wrapper: str, text: str, invocation: tuple[str, ...], guard_home: Path) -> bool:
+    """Whether the installed package an entry-point wrapper runs shows an MCP server.
+
+    The package is looked up in the ``site-packages`` of the environment that
+    holds the wrapper or its ``#!`` interpreter, as pip, pipx and ``uv tool``
+    lay them out, and up to ``MAX_PACKAGE_FILES`` of its Python files are read.
+    A package Guard cannot find is not launched.
+    """
+
+    top = module.split(".", 1)[0]
+    for site in _site_packages(wrapper, text):
+        package = site / top
+        if (package / "__init__.py").is_file():
+            anchor = package / "__init__.py"
+            files = sorted(package.glob("*.py")) + sorted(package.glob("*/*.py"))
+        elif (site / f"{top}.py").is_file():
+            anchor = site / f"{top}.py"
+            files = [anchor]
+        else:
+            continue
+        for path in files[:MAX_PACKAGE_FILES]:
+            source = read_local_module(str(path), str(anchor))
+            if source is None:
+                continue
+            read = _source_read(source, invocation, guard_home)
+            if read is not None and read.mcp_server:
+                return True
+        return False
+    return False
+
+
+def _site_packages(wrapper: str, text: str) -> list[Path]:
+    """The ``site-packages`` folders of the environments a wrapper may belong to."""
+
+    prefixes = [Path(wrapper).parent.parent, Path(wrapper).resolve().parent.parent]
+    first = text.split("\n", 1)[0]
+    if first.startswith("#!"):
+        interpreter = first[2:].strip().split(" ", 1)[0]
+        if interpreter.startswith("/") and Path(interpreter).name.startswith("python"):
+            prefixes.append(Path(interpreter).parent.parent)
+    found: list[Path] = []
+    for prefix in dict.fromkeys(prefixes):
+        for site in [*sorted(prefix.glob("lib/python3*/site-packages")), prefix / "Lib" / "site-packages"]:
+            if site.is_dir() and site not in found:
+                found.append(site)
+    return found
 
 
 def _launched_script(command: str, *, cwd: Path, home_dir: Path | None) -> str | None:

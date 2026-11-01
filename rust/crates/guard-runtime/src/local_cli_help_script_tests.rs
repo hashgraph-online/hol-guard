@@ -452,8 +452,8 @@ const UV_WRAPPER: &str = "#!/opt/tools/bin/python\nimport sys\nfrom pkg.cli impo
 #[test]
 fn only_a_generated_wrapper_is_an_entry_point() {
     let wraps = |source: &str| script_facts(source, &["tool".to_owned()]).entry_point;
-    assert!(wraps(PIP_WRAPPER));
-    assert!(wraps(UV_WRAPPER));
+    assert_eq!(wraps(PIP_WRAPPER).as_deref(), Some("mcp_server_git"));
+    assert_eq!(wraps(UV_WRAPPER).as_deref(), Some("pkg.cli"));
     for source in [
         PIP_WRAPPER.replace("sys.exit(main())", "main()\n    sys.exit(main())"),
         PIP_WRAPPER.replace("sys.exit(main())", "sys.exit(other())"),
@@ -467,6 +467,6 @@ fn only_a_generated_wrapper_is_an_entry_point() {
         "from ship import deploy\ndeploy()\n".to_owned(),
         "import sys\nprint(sys.argv)\n".to_owned(),
     ] {
-        assert!(!wraps(&source), "{source}");
+        assert_eq!(wraps(&source), None, "{source}");
     }
 }

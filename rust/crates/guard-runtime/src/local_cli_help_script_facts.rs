@@ -54,10 +54,10 @@ pub(crate) struct Facts {
     /// The code imports an MCP server library or answers `tools/list`, so
     /// launching it with its own arguments starts a server, not a command.
     pub(crate) mcp_server: bool,
-    /// The whole script is the console-script wrapper pip, uv or Poetry writes
-    /// for a package's entry point: it imports one function and exits with
-    /// its result, so the code that runs lives in that package.
-    pub(crate) entry_point: bool,
+    /// When the whole script is the console-script wrapper pip, uv or Poetry
+    /// writes for a package's entry point, the module it imports its function
+    /// from: the code that runs lives in that installed package.
+    pub(crate) entry_point: Option<String>,
     /// Local modules the script imports, as `./`-relative paths.
     pub(crate) imports: Vec<String>,
     /// Commander, yargs, cac or sade: `.command('name')` names a subcommand.
@@ -163,7 +163,7 @@ static MCP_SERVER: LazyLock<Regex> = LazyLock::new(|| {
 
 /// The one import of an entry-point wrapper, `from package import function`.
 static WRAPPER_IMPORT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^from\s+[A-Za-z_][\w.]*\s+import\s+(\w+)$").unwrap());
+    LazyLock::new(|| Regex::new(r"^from\s+([A-Za-z_][\w.]*)\s+import\s+(\w+)$").unwrap());
 
 /// The wrapper's last line, `sys.exit(function())` or `sys.exit(object.attr())`.
 static WRAPPER_EXIT: LazyLock<Regex> =
@@ -225,28 +225,33 @@ pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
     facts
 }
 
-/// Whether `code` is a generated entry-point wrapper and nothing else: one
-/// `from package import function`, a `sys.exit` that calls that function,
-/// and only wrapper boilerplate around them.
-fn entry_point(code: &[&str]) -> bool {
-    let mut imported: Option<&str> = None;
+/// The module a generated entry-point wrapper imports from, when `code` is
+/// that wrapper and nothing else: one `from module import function`, a
+/// `sys.exit` that calls that function, and only wrapper boilerplate around
+/// them.
+fn entry_point(code: &[&str]) -> Option<String> {
+    let mut imported: Option<(&str, &str)> = None;
     let mut called: Option<&str> = None;
     for &line in code {
         if let Some(found) = WRAPPER_IMPORT.captures(line) {
-            let name = found.get(1).map_or("", |name| name.as_str());
-            if imported.replace(name).is_some() {
-                return false;
+            let module = found.get(1).map_or("", |module| module.as_str());
+            let name = found.get(2).map_or("", |name| name.as_str());
+            if imported.replace((module, name)).is_some() {
+                return None;
             }
         } else if let Some(found) = WRAPPER_EXIT.captures(line) {
             let name = found.get(1).map_or("", |name| name.as_str());
             if called.replace(name).is_some() {
-                return false;
+                return None;
             }
         } else if !WRAPPER_LINE.is_match(line) {
-            return false;
+            return None;
         }
     }
-    imported.is_some() && imported == called
+    match (imported, called) {
+        (Some((module, name)), Some(call)) if name == call => Some(module.to_owned()),
+        _ => None,
+    }
 }
 
 /// The code before a trailing `#` or `//` comment, outside any quotes. Cutting

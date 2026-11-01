@@ -25,8 +25,8 @@ pub const LOCAL_CLI_HELP_VARIATIONS_FEATURE: &str = "local-cli-help-variations-v
 pub const LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE: &str = "local-cli-help-source-first-v1";
 /// Capability advertised when a script-source read also reports whether the
 /// script serves MCP (`mcp_server`): it imports an MCP server library or
-/// answers `tools/list`, and whether the script is an installed package's
-/// entry-point wrapper (`entry_point`). A caller that sees it launches a
+/// answers `tools/list`, and, for an installed package's entry-point wrapper,
+/// the module it imports (`entry_point`, else null). A caller that sees it launches a
 /// readable script as an MCP server only on that evidence, since the launch
 /// passes the script its own arguments.
 pub const LOCAL_CLI_HELP_MCP_EVIDENCE_FEATURE: &str = "local-cli-help-mcp-evidence-v1";

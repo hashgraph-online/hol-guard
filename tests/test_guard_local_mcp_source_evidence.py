@@ -51,10 +51,10 @@ def _resident(
     *,
     reads_evidence: bool | None = True,
     unreadable: bool = False,
-    wrappers: frozenset[str] = frozenset(),
+    wrappers: dict[str, str] | None = None,
 ) -> list[str]:
     """Stand in a resident; ``serving`` holds the source texts it calls MCP servers
-    and ``wrappers`` the ones it calls entry-point wrappers."""
+    and ``wrappers`` maps entry-point wrapper texts to the module each imports."""
 
     read: list[str] = []
 
@@ -69,7 +69,7 @@ def _resident(
             help_handler="none",
             imports=imports,
             mcp_server=bool(kwargs.get("mcp_evidence")) and text in serving,
-            entry_point=bool(kwargs.get("mcp_evidence")) and text in wrappers,
+            entry_point=(wrappers or {}).get(text) if kwargs.get("mcp_evidence") else None,
         )
 
     monkeypatch.setattr(f"{BRIDGE}.resident_reads_mcp_evidence", lambda: reads_evidence)
@@ -135,22 +135,45 @@ def test_a_failed_lookup_or_unreadable_script_never_launches(tmp_path: Path, mon
     assert read == []
 
 
-def test_an_installed_entry_point_keeps_the_launch(tmp_path: Path, monkeypatch) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    wrapper = _script(
+def _wrapper(bin_dir: Path, name: str, module: str) -> Path:
+    path = _script(
         bin_dir,
-        "mcp-server-demo",
-        "#!/usr/bin/python3\nimport sys\nfrom mcp_server_demo import main\n"
+        name,
+        f"#!/usr/bin/python3\nimport sys\nfrom {module} import main\n"
         "if __name__ == '__main__':\n    sys.exit(main())\n",
     )
-    wrapper.chmod(0o755)
+    path.chmod(0o755)
+    return path
+
+
+def test_an_entry_point_launches_only_when_its_installed_package_serves_mcp(tmp_path: Path, monkeypatch) -> None:
+    venv = tmp_path / "venv"
+    bin_dir = venv / "bin"
+    bin_dir.mkdir(parents=True)
+    site = venv / "lib" / "python3.12" / "site-packages"
+    package = site / "mcp_server_demo"
+    package.mkdir(parents=True)
+    _script(package, "__init__.py", "from .server import main\n")
+    server = _script(package, "server.py", "from mcp.server import Server\n")
+    (site / "twine").mkdir()
+    _script(site / "twine", "__init__.py", "import sys\n")
+    demo = _wrapper(bin_dir, "mcp-server-demo", "mcp_server_demo")
+    twine = _wrapper(bin_dir, "twine", "twine.__main__")
+    missing = _wrapper(bin_dir, "gone", "gone")
     local = _script(bin_dir, "ship-it", "#!/usr/bin/python3\n#import ./ship.py\nfrom ship import main\n")
     local.chmod(0o755)
     _script(bin_dir, "ship.py", "def main():\n    deploy()\n")
     monkeypatch.setenv("PATH", os.pathsep.join((str(bin_dir), "/usr/bin", "/bin")))
-    _resident(monkeypatch, set(), wrappers=frozenset({wrapper.read_text(), local.read_text()}))
+    wrappers = {
+        demo.read_text(): "mcp_server_demo",
+        twine.read_text(): "twine.__main__",
+        missing.read_text(): "gone",
+        local.read_text(): "ship",
+    }
+    _resident(monkeypatch, {server.read_text()}, wrappers=wrappers)
     assert _serves("mcp-server-demo --repository .", tmp_path)
+    assert not _serves("twine upload dist/*", tmp_path)
+    assert not _serves("gone --force", tmp_path)
     assert not _serves("ship-it deploy", tmp_path)
 
 
