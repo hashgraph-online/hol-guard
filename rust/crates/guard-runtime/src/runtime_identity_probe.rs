@@ -21,7 +21,9 @@
 //! A request that sets `instances` also gets the running processes launched
 //! from the identified paths (see `runtime_identity_instances`), passing back
 //! the earlier reply's instances as `known_instances` so a replaced file keeps
-//! its old processes bound to the old artifact.
+//! its old processes bound to the old artifact. Naming an `instance_home`
+//! instead has the probe read and update the record kept there (see
+//! `runtime_identity_instance_store`).
 //!
 //! The reply's `artifacts`, `locations` and `instances` are valid input for
 //! `runtime-identity-assess`; `observations` carries the paths for display.
@@ -29,12 +31,13 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use crate::runtime_identity_instance_store as instance_store;
 use crate::runtime_identity_instances::{self as instances, KnownInstance, Probed};
 use crate::runtime_identity_launch::{
     self as launch, Environment, LaunchSpec, DEFAULT_CANDIDATE_LIMIT, MAX_LAUNCHES,
@@ -69,6 +72,10 @@ struct Request {
     instances: bool,
     #[serde(default)]
     known_instances: Vec<KnownInstance>,
+    /// The Guard home whose instance record the probe reads and updates, in
+    /// place of `known_instances`.
+    #[serde(default)]
+    instance_home: Option<PathBuf>,
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Result<Value, String> {
@@ -118,7 +125,20 @@ fn probe(request: &Request) -> Result<Value, String> {
     if !request.known_instances.is_empty() && !request.instances {
         return Err("runtime_identity_probe_request_invalid".to_owned());
     }
+    if let Some(home) = &request.instance_home {
+        if !request.instances || !request.known_instances.is_empty() || !home.is_absolute() {
+            return Err("runtime_identity_probe_request_invalid".to_owned());
+        }
+    }
     instances::validate_known(&request.known_instances)?;
+    let stored;
+    let known: &[KnownInstance] = match &request.instance_home {
+        Some(home) => {
+            stored = instance_store::load(home);
+            &stored
+        }
+        None => &request.known_instances,
+    };
     let collected = launch::collect(&request.launches, &Environment(&request.environment), limit);
     let mut requested_paths: Vec<&String> = request.paths.iter().collect();
     requested_paths.extend(&collected.paths);
@@ -168,7 +188,7 @@ fn probe(request: &Request) -> Result<Value, String> {
             })
             .collect();
         let location_ids = seen.keys().map(String::as_str).collect();
-        instances::enumerate(&probed, &location_ids, &request.known_instances)
+        instances::enumerate(&probed, &location_ids, known)
     });
     let mut reply = json!({
         "schema": RESULT_SCHEMA,
@@ -190,6 +210,9 @@ fn probe(request: &Request) -> Result<Value, String> {
         reply["instance_limit_reached"] = json!(running.limit_reached);
     }
     reply["artifacts"] = json!(artifacts.into_values().collect::<Vec<_>>());
+    if let Some(home) = &request.instance_home {
+        instance_store::remember(home, &reply);
+    }
     Ok(reply)
 }
 
