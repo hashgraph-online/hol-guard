@@ -2313,6 +2313,22 @@
    "item": "pub(crate) fn secure_open(_path: &Path, _canonical_path: &Path) -> Result<File, SecureOpenError>",
    "cfg": "not(any(unix, windows))",
    "body": "6b310cc8c25c"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn current_uid() -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "43e9f362db32"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "5efc5e13f499"
   }
  ]
 }
