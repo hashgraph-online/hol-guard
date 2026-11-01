@@ -1768,19 +1768,19 @@
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/policy_document_io.py",
         "symbols": [
-          "_POLICY_FILE_MODE",
-          "_POLICY_DIRECTORY_MODE_MASK",
+          "_FEATURE",
+          "_SCHEMA",
+          "_TIMEOUT_SECONDS",
+          "_OUTPUT_LIMIT",
+          "_PARENT_CODES",
           "PolicyFileTrustError",
-          "_assert_trusted_parent_metadata",
-          "_open_trusted_parent",
-          "_assert_trusted_file_metadata",
-          "read_trusted_policy_bytes",
+          "_policy_file_io",
           "read_trusted_policy_text",
           "write_private_policy_text",
           "load_trusted_policy_document"
         ],
         "entry_points": [],
-        "reason": "Trusted reads and private writes of policy document files back the hol-guard policy import and export commands. Policy compilation (compile_policy_document, CompiledPolicyRow) stays counted because Cloud sync and the policy store use it.",
+        "reason": "Thin shims over the native runtime's policy-file-io command, which does the trusted reads and private writes of policy document files behind the hol-guard policy import and export commands. Policy compilation (compile_policy_document, CompiledPolicyRow) stays counted because Cloud sync and the policy store use it.",
         "evidence": "rg -n 'PolicyFileTrustError|read_trusted_policy_text|write_private_policy_text|load_trusted_policy_document' src -g '*.py' lists only cli/commands_dispatch_policy_document.py, cli/commands_dispatch_policy_dx.py and policy_document_diagnostics.py (used by the local policy commands) outside policy_document_io.py; mcp/policy_tools.py, runtime/runner.py and store_policy_document.py import only CompiledPolicyRow, PolicyCompilationError and compile_policy_document."
       },
       {
