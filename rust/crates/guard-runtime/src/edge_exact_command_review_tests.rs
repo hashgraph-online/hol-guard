@@ -36,6 +36,13 @@ fn result(action_type: PreToolActionTypeV1, minimum_action: &str) -> PreToolResu
     }
 }
 
+fn call(command: &str) -> Call<'_> {
+    Call {
+        commands: vec![command],
+        workspace: None,
+    }
+}
+
 fn allowed() -> PreToolResultV1 {
     result(PreToolActionTypeV1::Command, "allow")
 }
@@ -46,6 +53,7 @@ struct Row<'a> {
     action: &'a str,
     source: &'a str,
     expires_at: Option<&'a str>,
+    workspace: Option<&'a str>,
 }
 
 fn rule(command: &str) -> Row<'_> {
@@ -55,6 +63,7 @@ fn rule(command: &str) -> Row<'_> {
         action: "review",
         source: "policy-bundle",
         expires_at: None,
+        workspace: None,
     }
 }
 
@@ -76,19 +85,25 @@ fn home(rows: &[Row<'_>]) -> tempfile::TempDir {
     connection
         .execute_batch(
             "create table policy_decisions (harness text, scope text, artifact_id text, \
-             action text, source text, expires_at text)",
+             action text, source text, expires_at text, workspace text)",
         )
         .unwrap();
     for row in rows {
         connection
             .execute(
-                "insert into policy_decisions values (?1, 'artifact', ?2, ?3, ?4, ?5)",
+                "insert into policy_decisions values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     row.harness,
+                    if row.workspace.is_some() {
+                        "workspace"
+                    } else {
+                        "artifact"
+                    },
                     exact_id(row.command),
                     row.action,
                     row.source,
-                    row.expires_at
+                    row.expires_at,
+                    row.workspace
                 ],
             )
             .unwrap();
@@ -99,7 +114,7 @@ fn home(rows: &[Row<'_>]) -> tempfile::TempDir {
 #[test]
 fn a_cloud_review_rule_asks_before_its_exact_command() {
     let home = home(&[rule("git status")]);
-    let raised = apply(home.path(), "git status", Some(NOW), allowed());
+    let raised = apply(home.path(), &call("git status"), Some(NOW), allowed());
     assert_eq!(raised.decision, "deny");
     assert_eq!(raised.minimum_action, "review");
     assert_eq!(raised.policy_action, "review");
@@ -115,7 +130,7 @@ fn another_command_runs_as_before() {
     let home = home(&[rule("git status")]);
     for command in ["git status --short", "git  status", "git status "] {
         assert_eq!(
-            apply(home.path(), command, Some(NOW), allowed()),
+            apply(home.path(), &call(command), Some(NOW), allowed()),
             allowed(),
             "{command}"
         );
@@ -127,7 +142,7 @@ fn a_warning_is_raised_and_a_stronger_result_is_kept() {
     let home = home(&[rule("git status")]);
     let warned = apply(
         home.path(),
-        "git status",
+        &call("git status"),
         Some(NOW),
         result(PreToolActionTypeV1::Command, "warn"),
     );
@@ -136,7 +151,12 @@ fn a_warning_is_raised_and_a_stronger_result_is_kept() {
     for minimum in ["review", "require-reapproval", "sandbox-required", "block"] {
         let stronger = result(PreToolActionTypeV1::Command, minimum);
         assert_eq!(
-            apply(home.path(), "git status", Some(NOW), stronger.clone()),
+            apply(
+                home.path(),
+                &call("git status"),
+                Some(NOW),
+                stronger.clone()
+            ),
             stronger,
             "{minimum}"
         );
@@ -148,7 +168,7 @@ fn a_raised_policy_action_is_never_lowered() {
     let home = home(&[rule("git status")]);
     let mut stronger_policy = allowed();
     stronger_policy.policy_action = "require-reapproval".into();
-    let raised = apply(home.path(), "git status", Some(NOW), stronger_policy);
+    let raised = apply(home.path(), &call("git status"), Some(NOW), stronger_policy);
     assert_eq!(raised.policy_action, "require-reapproval");
     assert_eq!(raised.minimum_action, "review");
     validate_pre_tool_result_matrix(&raised).unwrap();
@@ -164,7 +184,7 @@ fn only_shell_actions_are_checked() {
     ] {
         let raised = apply(
             home.path(),
-            "git status",
+            &call("git status"),
             Some(NOW),
             result(action_type, "allow"),
         );
@@ -173,7 +193,12 @@ fn only_shell_actions_are_checked() {
     for action_type in [PreToolActionTypeV1::FileRead, PreToolActionTypeV1::McpTool] {
         let untouched = result(action_type, "allow");
         assert_eq!(
-            apply(home.path(), "git status", Some(NOW), untouched.clone()),
+            apply(
+                home.path(),
+                &call("git status"),
+                Some(NOW),
+                untouched.clone()
+            ),
             untouched,
             "{action_type:?}"
         );
@@ -187,7 +212,7 @@ fn harness_scope_is_honored() {
         ..rule("git status")
     }]);
     assert_eq!(
-        apply(other.path(), "git status", Some(NOW), allowed()),
+        apply(other.path(), &call("git status"), Some(NOW), allowed()),
         allowed()
     );
     let own = home(&[Row {
@@ -195,7 +220,7 @@ fn harness_scope_is_honored() {
         ..rule("git status")
     }]);
     assert_eq!(
-        apply(own.path(), "git status", Some(NOW), allowed()).minimum_action,
+        apply(own.path(), &call("git status"), Some(NOW), allowed()).minimum_action,
         "review"
     );
 }
@@ -207,7 +232,7 @@ fn an_expired_rule_no_longer_asks() {
         ..rule("git status")
     }]);
     assert_eq!(
-        apply(expired.path(), "git status", Some(NOW), allowed()),
+        apply(expired.path(), &call("git status"), Some(NOW), allowed()),
         allowed()
     );
     // A live row beside an expired one still asks.
@@ -222,7 +247,7 @@ fn an_expired_rule_no_longer_asks() {
         },
     ]);
     assert_eq!(
-        apply(mixed.path(), "git status", Some(NOW), allowed()).minimum_action,
+        apply(mixed.path(), &call("git status"), Some(NOW), allowed()).minimum_action,
         "review"
     );
     // An expiry Guard cannot read keeps the rule.
@@ -231,7 +256,7 @@ fn an_expired_rule_no_longer_asks() {
         ..rule("git status")
     }]);
     assert_eq!(
-        apply(unreadable.path(), "git status", Some(NOW), allowed()).minimum_action,
+        apply(unreadable.path(), &call("git status"), Some(NOW), allowed()).minimum_action,
         "review"
     );
 }
@@ -242,7 +267,7 @@ fn a_local_rule_names_itself() {
         source: "local",
         ..rule("git status")
     }]);
-    let raised = apply(home.path(), "git status", Some(NOW), allowed());
+    let raised = apply(home.path(), &call("git status"), Some(NOW), allowed());
     assert_eq!(raised.reason_code, "saved_exact_command_review");
     assert!(is_review_finding(&raised.reason_code));
 }
@@ -255,7 +280,7 @@ fn other_rule_actions_are_left_to_the_daemon() {
             ..rule("git status")
         }]);
         assert_eq!(
-            apply(home.path(), "git status", Some(NOW), allowed()),
+            apply(home.path(), &call("git status"), Some(NOW), allowed()),
             allowed(),
             "{action}"
         );
@@ -266,7 +291,7 @@ fn other_rule_actions_are_left_to_the_daemon() {
 fn a_missing_store_or_table_changes_nothing() {
     let empty = tempfile::tempdir().unwrap();
     assert_eq!(
-        apply(empty.path(), "git status", Some(NOW), allowed()),
+        apply(empty.path(), &call("git status"), Some(NOW), allowed()),
         allowed()
     );
     let bare = tempfile::tempdir().unwrap();
@@ -275,13 +300,100 @@ fn a_missing_store_or_table_changes_nothing() {
         .execute_batch("create table other (x text)")
         .unwrap();
     assert_eq!(
-        apply(bare.path(), "git status", Some(NOW), allowed()),
+        apply(bare.path(), &call("git status"), Some(NOW), allowed()),
         allowed()
     );
+}
+
+#[test]
+fn the_command_is_read_from_every_native_alias() {
+    let home = home(&[rule("git status")]);
+    for payload in [
+        serde_json::json!({"tool_input": {"command_line": "git status"}}),
+        serde_json::json!({"tool_input": {"commandLine": "git status"}}),
+        serde_json::json!({"tool_input": {"commands": ["git status"]}}),
+        serde_json::json!({"arguments": {"command": "  git status  "}}),
+    ] {
+        let mut envelope = envelope(home.path());
+        envelope.raw_payload = payload.clone();
+        let raised = apply_to_envelope(&envelope, None, allowed());
+        assert_eq!(raised.minimum_action, "review", "{payload}");
+    }
+}
+
+#[test]
+fn a_folder_rule_asks_only_in_its_folder() {
+    let home = home(&[Row {
+        workspace: Some("/work/app"),
+        ..rule("git status")
+    }]);
+    let inside = Call {
+        commands: vec!["git status"],
+        workspace: Some("/work/app/"),
+    };
+    assert_eq!(
+        apply(home.path(), &inside, Some(NOW), allowed()).minimum_action,
+        "review"
+    );
+    for workspace in [Some("/work/other"), None] {
+        let outside = Call {
+            commands: vec!["git status"],
+            workspace,
+        };
+        assert_eq!(
+            apply(home.path(), &outside, Some(NOW), allowed()),
+            allowed(),
+            "{workspace:?}"
+        );
+    }
+    let keyed = home_keyed("/work/app");
+    assert_eq!(
+        apply(keyed.path(), &inside, Some(NOW), allowed()).minimum_action,
+        "review"
+    );
+}
+
+#[test]
+fn a_store_guard_cannot_read_asks() {
+    let home = tempfile::tempdir().unwrap();
+    std::fs::write(home.path().join(STORE_FILE_NAME), b"not a database at all").unwrap();
+    let raised = apply(home.path(), &call("git status"), Some(NOW), allowed());
+    assert_eq!(raised.minimum_action, "review");
+    assert_eq!(raised.reason_code, "exact_command_rules_unreadable");
+    assert!(is_review_finding(&raised.reason_code));
+    validate_pre_tool_result_matrix(&raised).unwrap();
 }
 
 #[test]
 fn other_finding_codes_are_not_this_step() {
     assert!(!is_review_finding("native_command_unproven"));
     assert!(!is_review_finding("network_known_bad_host"));
+}
+
+/// A store whose folder rule names `place` by its workspace key.
+fn home_keyed(place: &str) -> tempfile::TempDir {
+    let key = crate::policy_decision_lookup_op::workspace_policy_key(Some(place)).unwrap();
+    let home = home(&[]);
+    rusqlite::Connection::open(home.path().join(STORE_FILE_NAME))
+        .unwrap()
+        .execute(
+            "insert into policy_decisions values ('*', 'workspace', ?1, 'review', \
+             'policy-bundle', null, ?2)",
+            params![exact_id("git status"), key],
+        )
+        .unwrap();
+    home
+}
+
+fn envelope(guard_home: &std::path::Path) -> GuardHookEnvelopeV2 {
+    serde_json::from_value(serde_json::json!({
+        "schema": "guard-hook-envelope.v2",
+        "harness": "claude-code",
+        "event": "PreToolUse",
+        "raw_payload": {},
+        "policy_generation": 0,
+        "policy_snapshot": {},
+        "source": {"home_dir": "/home/user", "guard_home": guard_home.to_str().unwrap()},
+    }))
+    .unwrap()
 }

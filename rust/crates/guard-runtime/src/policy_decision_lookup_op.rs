@@ -132,7 +132,7 @@ fn b64url_decode(s: &str) -> Option<Vec<u8>> {
 
 /// `_normalized_workspace_path` (`store_base.py`): strip, `\`→`/`, trim
 /// trailing `/`, lowercase a `X:` drive prefix.
-fn normalized_workspace_path(value: &str) -> String {
+pub(crate) fn normalized_workspace_path(value: &str) -> String {
     let mut normalized = value.trim().replace('\\', "/");
     while normalized.len() > 1 && normalized.ends_with('/') {
         normalized.pop();
