@@ -18,7 +18,9 @@ fn claims() -> Claims {
     }
 }
 
-fn snapshot() -> Value {
+/// A canonical machine snapshot bound to `claims()`; the lease contract
+/// tests carry it in an outbox.
+pub(crate) fn snapshot() -> Value {
     let component =
         json!({"state": "healthy", "healthy": true, "reasonCode": "release_manifest_valid"});
     let mut components = serde_json::Map::new();

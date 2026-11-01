@@ -94,8 +94,26 @@ fn the_command_answers_a_framed_request() {
         run(framed(json!({"op": "unregister", "home": fixture.home}))),
         Ok(json!({"ok": true}))
     );
+    assert_eq!(
+        run(framed(
+            json!({"op": "write-request", "home": fixture.home, "installs": []})
+        )),
+        Ok(
+            json!({"ok": false, "error_class": "os", "reason_code": "harness_coverage_request_io_failed"})
+        )
+    );
+    assert_eq!(
+        run(framed(
+            json!({"op": "register-request", "home": fixture.home})
+        )),
+        Ok(
+            json!({"ok": false, "error_class": "value", "reason_code": "harness_coverage_request_absent"})
+        )
+    );
     for refused in [
         json!({"op": "verify"}),
+        json!({"op": "register-request", "home": "x", "installs": []}),
+        json!({"op": "write-request", "home": "x"}),
         json!({"op": "verify", "required_harnesses": [], "home": "x"}),
         json!({"op": "unregister", "home": "x", "installs": []}),
         json!({"op": "delete", "home": "x"}),
