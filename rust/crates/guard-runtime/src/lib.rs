@@ -202,6 +202,7 @@ mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+mod contained_output_match;
 mod contained_test_request;
 #[cfg(unix)]
 mod contained_workspace_grant_plan;
@@ -765,6 +766,7 @@ mod policy_document_decide_op;
 mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
+mod policy_file_io;
 mod policy_integrity_generation;
 mod policy_integrity_resolver;
 mod policy_integrity_rows_op;
@@ -834,6 +836,7 @@ mod runner_sync_url;
 mod runtime_artifact_identity_op;
 mod runtime_cli;
 mod runtime_detector_run_op;
+mod runtime_fingerprint;
 mod runtime_identity;
 mod runtime_identity_instances;
 mod runtime_identity_launch;

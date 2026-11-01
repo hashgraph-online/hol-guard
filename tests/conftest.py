@@ -215,6 +215,38 @@ def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pyte
     monkeypatch.setattr(mcp_relay_native, "native_mcp_relay", lambda guard_home=None: None)
 
 
+_session_daemon_runtime_fingerprint: list[tuple[str, str]] = []
+_daemon_runtime_fingerprint_attempts: list[None] = []
+
+
+@pytest.fixture(autouse=True)
+def _pinned_daemon_runtime_fingerprint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer the daemon runtime identity from one measurement per session.
+
+    The runtime measures it with a native call, which a test that fakes
+    ``subprocess.Popen`` would intercept. The measurement runs before the
+    test's own fakes and is retried by the next few tests when a loaded
+    runner times it out: a stand-in digest would never match the identity a
+    real daemon child measures, so a failed measurement leaves the memo for
+    the daemon code to fill. Tests of the measurement reset the memo
+    themselves.
+    """
+    from codex_plugin_scanner.guard.daemon import manager
+
+    if not _session_daemon_runtime_fingerprint:
+        if len(_daemon_runtime_fingerprint_attempts) >= 3:
+            return
+        _daemon_runtime_fingerprint_attempts.append(None)
+        # Measured without the cache file, which lives under the real home.
+        source_root = Path(manager._current_guard_daemon_source_root())
+        try:
+            _tree_sig, fingerprint, _reused = manager._measure_runtime_fingerprint(source_root, None)
+        except RuntimeError:
+            return
+        _session_daemon_runtime_fingerprint.append(("session", fingerprint))
+    monkeypatch.setattr(manager, "_runtime_fingerprint_cache", _session_daemon_runtime_fingerprint[0])
+
+
 @pytest.fixture(autouse=True)
 def _reset_registry_cache() -> None:
     """A registry document one test cached must not answer another test."""
