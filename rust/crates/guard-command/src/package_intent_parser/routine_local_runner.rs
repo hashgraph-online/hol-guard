@@ -342,9 +342,16 @@ impl PnpmEntry {
 /// in lockfile 6 and `/name/version` in lockfile 5. A key may also carry the
 /// peers it was resolved against in parentheses, which still names that
 /// release.
+///
+/// A patched runner gives no versions at all. The top-level
+/// `patchedDependencies` block names every patch in every lockfile version,
+/// which the `patch_hash=` key suffix does not: lockfile 9 moved that suffix
+/// onto the `snapshots` keys, leaving the `packages` key spelled like an
+/// ordinary release.
 fn pnpm_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<String>> {
     let mut versions = BTreeSet::new();
     let mut inside_packages = false;
+    let mut inside_patched = false;
     let mut entry: Option<PnpmEntry> = None;
     for line in text.lines() {
         let line = line.trim_end();
@@ -357,8 +364,26 @@ fn pnpm_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<St
                 versions.insert(entry.finish()?);
             }
             inside_packages = line == "packages:";
+            inside_patched = line == "patchedDependencies:";
             continue;
         };
+        if inside_patched {
+            // Only the block's own keys name a patch; its body lines, which
+            // carry the hash and the patch file, are indented further.
+            if indented.starts_with(' ') {
+                continue;
+            }
+            let key = indented.strip_suffix(':').unwrap_or(indented);
+            let key = key.trim_matches(['\'', '"']);
+            if key == dependency_name
+                || key
+                    .strip_prefix(dependency_name)
+                    .is_some_and(|rest| rest.starts_with('@'))
+            {
+                return None;
+            }
+            continue;
+        }
         if !inside_packages {
             continue;
         }
@@ -387,8 +412,8 @@ fn pnpm_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<St
         };
         // A patch rewrites the package's own files after the registry served
         // them, so the version it carries no longer describes what is on
-        // disk. pnpm marks that in the key, in parentheses since lockfile 9
-        // and after an underscore before it.
+        // disk. Lockfile 6 and older mark that in this key; lockfile 9 marks
+        // it in `patchedDependencies` and on the `snapshots` key instead.
         if spec.contains("patch_hash=") {
             return None;
         }

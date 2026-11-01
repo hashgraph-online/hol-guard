@@ -365,6 +365,42 @@ fn a_patched_pnpm_entry_is_not_the_release_it_names() {
 }
 
 #[test]
+fn a_lockfile_9_patch_is_read_from_the_patched_dependencies_block() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // Lockfile 9 splits the package metadata from the resolved graph, and it
+    // is the `snapshots` key that carries `patch_hash=`. The `packages` key
+    // is spelled like any other release, so the patch is only visible in the
+    // top-level block that every lockfile version writes.
+    let value = only_lockfile(
+        root,
+        "pnpm-lock.yaml",
+        &format!(
+            "lockfileVersion: '9.0'\n\npatchedDependencies:\n  eslint@{INSTALLED_VERSION}:\n    hash: abc123\n    path: patches/eslint.patch\n\npackages:\n\n  eslint@{INSTALLED_VERSION}:\n    resolution: {{integrity: sha512-x}}\n\nsnapshots:\n\n  eslint@{INSTALLED_VERSION}(patch_hash=abc123): {{}}\n"
+        ),
+    );
+    assert!(!routine_local_runner(&value));
+}
+
+#[test]
+fn a_patched_dependency_block_naming_another_package_still_pins() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // Patching something else says nothing about the runner, and the block's
+    // own body lines must not be read as patch keys either.
+    let value = only_lockfile(
+        root,
+        "pnpm-lock.yaml",
+        &format!(
+            "lockfileVersion: '9.0'\n\npatchedDependencies:\n  eslint-plugin-demo@1.0.0:\n    hash: abc123\n    path: patches/demo.patch\n\npackages:\n\n  eslint@{INSTALLED_VERSION}:\n    resolution: {{integrity: sha512-x}}\n"
+        ),
+    );
+    assert!(routine_local_runner(&value));
+}
+
+#[test]
 fn a_pnpm_entry_resolved_from_a_checkout_is_not_a_release() {
     let dir = workspace();
     let root = dir.path();
