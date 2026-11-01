@@ -552,6 +552,7 @@
       "src/pretool/search_pattern_clearance.rs",
       "src/pretool/search_pattern_text.rs",
       "src/pretool/search_scope.rs",
+      "src/pretool/search_scope_budget.rs",
       "src/pretool/search_scope_filter.rs",
       "src/pretool/search_scope_glob.rs",
       "src/pretool/search_scope_ignore.rs",
