@@ -274,17 +274,21 @@ fn a_member_in_an_unreadable_codec_is_skipped_and_the_rest_is_read() {
 }
 
 #[test]
-fn a_zip64_member_is_skipped_rather_than_read_at_a_sentinel_offset() {
+fn a_zip64_offset_is_not_followed_and_the_member_is_read_anyway() {
     // `0xFFFFFFFF` in the offset field means the real one lives in an extra
     // field this reader does not parse. Reading it as an offset would point
-    // four gigabytes past the end of every archive that uses it.
+    // four gigabytes past the end of every archive that uses it, so the
+    // record is dropped - and the member is then found through its own local
+    // header, the way a member no directory accounts for is. A credential
+    // does not stop being one because the record naming it was unusable.
     let member = credential_line();
     let mut entry = stored("prod.env", member.as_bytes());
     entry.zip64_offset = true;
     let archive = zip_bytes(&[entry]);
     let (paths, scanned) = scan(&archive, "large.zip");
-    assert!(paths.is_empty());
-    assert_eq!(scanned, 0);
+    assert_eq!(paths, ["large.zip!/prod.env"]);
+    // Once, by the second pass, not twice.
+    assert_eq!(scanned, member.len());
 }
 
 #[test]
