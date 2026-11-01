@@ -342,6 +342,7 @@ fn a_package_script_run_keeps_the_words_it_passes_on() {
     // run is still the read-only tool the script names.
     for command in [
         "npm run lint -- --max-warnings=0",
+        "npm run lint -- --max-warnings 0",
         "npm run typecheck -- --pretty",
         "pnpm lint -- --max-warnings=0",
         "yarn typecheck -- --pretty",
@@ -360,6 +361,39 @@ fn a_package_script_run_keeps_the_words_it_passes_on() {
         "npm run lint -- --output-file out.txt",
         "npm run lint -- --max-warnings=0 && rm -rf dist",
         "npm run lint extra",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_passed_on_word_cannot_turn_a_reporting_tool_into_a_writing_one() {
+    // The tail is the agent's own text, and the tool reads it as part of its
+    // own command line. TypeScript takes an optional `true`/`false` after a
+    // boolean option, so `tsc --noEmit false` compiles and writes while the
+    // script's `--noEmit` is still there; `--init`, `--outDir` and the trace
+    // options write without touching `--noEmit` at all. Each is refused at
+    // the admission and left to ordinary review rather than reaching the sink
+    // as a read-only run.
+    for command in [
+        "npm run typecheck -- false",
+        "npm run typecheck -- --noEmit false",
+        "npm run typecheck -- --init",
+        "npm run typecheck -- --outDir dist",
+        "npm run typecheck -- --outFile bundle.js",
+        "npm run typecheck -- --build",
+        "npm run typecheck -- --generateTrace trace",
+        "npm run typecheck -- --generateCpuProfile profile.cpuprofile",
+        "npm run typecheck -- --declaration",
+        "pnpm typecheck -- false",
+        "yarn typecheck -- --init",
+        "bun run typecheck -- --noEmit false",
+        // ESLint's formatter is a module the run loads, and a count is a
+        // count: neither a path nor a word of another shape is a value this
+        // option takes.
+        "npm run lint -- --format ./reporter.js",
+        "npm run lint -- --max-warnings false",
+        "npm run lint -- src",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

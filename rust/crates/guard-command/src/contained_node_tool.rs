@@ -165,6 +165,78 @@ pub(crate) fn supported_tool(
     Some((tool, entries, mode))
 }
 
+/// Whether every word a manager passed on after `--` only changes how the
+/// tool reports what it found.
+///
+/// The tail is the agent's own text rather than the manifest's, so it is read
+/// against the options each tool may be handed instead of screened for the
+/// writes it must not contain. A refused-word list would have to keep up with
+/// every spelling that turns writing back on, and tsc alone defeats one:
+/// its parser reads an optional `true`/`false` after a boolean option, so
+/// `tsc --noEmit false` emits while still carrying `--noEmit`. A word this
+/// list has not met is refused, and the run is left to ordinary review.
+pub(crate) fn passed_tail_reports_only(tool: &str, tail: &[String]) -> bool {
+    // An entry ending in `=` admits that option with a value attached. The
+    // separated spelling is not accepted: its value is a bare word, and a bare
+    // word is what turns a boolean option around or names a file to write.
+    let allowed: &[&str] = match tool {
+        "eslint" => &[
+            "--quiet",
+            "--color",
+            "--no-color",
+            "--no-warn-ignored",
+            "--max-warnings=",
+        ],
+        "tsc" => &[
+            "--noEmit",
+            "--pretty",
+            "--noErrorTruncation",
+            "--listFilesOnly",
+            "--explainFiles",
+            "--diagnostics",
+            "--extendedDiagnostics",
+            "--skipLibCheck",
+            "--strict",
+        ],
+        "prettier" => &["--check", "--list-different", "-l", "--no-color"],
+        // `vite build` writes its output, and every option it takes moves or
+        // widens that write, so it is run as the manifest spells it.
+        _ => &[],
+    };
+    // The one option whose value a run may spell as a separate word, and the
+    // only shape that value may take. A count is not a file name and not the
+    // `true`/`false` a boolean option reads back, so admitting it carries
+    // nothing the attached spelling does not already carry.
+    let counted: &[&str] = if tool == "eslint" {
+        &["--max-warnings"]
+    } else {
+        &[]
+    };
+    let mut words = tail.iter();
+    while let Some(word) = words.next() {
+        if counted.contains(&word.as_str()) {
+            if !words
+                .next()
+                .is_some_and(|value| !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()))
+            {
+                return false;
+            }
+            continue;
+        }
+        let known = allowed.iter().any(|option| match option.strip_suffix('=') {
+            Some(name) => word
+                .strip_prefix(name)
+                .and_then(|rest| rest.strip_prefix('='))
+                .is_some_and(|value| !value.is_empty()),
+            None => word == option,
+        });
+        if !known {
+            return false;
+        }
+    }
+    true
+}
+
 /// Whether an argument list rewrites the files it visits or runs more than
 /// the one tool. A value spelling enables the same write: `--write=true`
 /// turns Prettier's rewrite on just as `--write` does.
@@ -270,7 +342,13 @@ pub(crate) fn node_tool_route(
         // back off the command gates them with the run they belong to instead
         // of losing them between the two readings.
         let mut arguments = arguments.to_vec();
-        arguments.extend_from_slice(script_tail(command, windows));
+        let tail = script_tail(command, windows);
+        if !passed_tail_reports_only(name, tail) {
+            return invalid(
+                "The requested local script was passed an option the tool may not take.",
+            );
+        }
+        arguments.extend_from_slice(tail);
         return gate(name, arguments, Vec::new(), None);
     }
     let Some((program, rest)) = command.split_first() else {

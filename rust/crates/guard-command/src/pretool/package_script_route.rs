@@ -382,6 +382,9 @@ fn tool_script(
     // The words after `--` are the run's own arguments, so the tool is gated
     // holding them: an `--outDir` or a redirection arriving that way is read
     // here rather than reaching the sink unseen.
+    if !crate::contained_node_tool::passed_tail_reports_only(tool, tail) {
+        return None;
+    }
     let passed = [body, tail].concat();
     let arguments = passed.as_slice();
     let (_, entries, mode) = crate::contained_node_tool::supported_tool(tool, arguments)?;

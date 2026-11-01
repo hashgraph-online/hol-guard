@@ -127,7 +127,11 @@ _MOCHA_FILES = {
 
 
 _ESLINT_VERSION = "9.33.0"
-# The one line the workspace's own ESLint prints, which only a real launch produces.
+# The option the case's script forwards to the linter. The scenario spells it on
+# the command line, and the installed executable below answers only to it.
+ESLINT_PASSED_OPTION = "--max-warnings=0"
+# The one line the workspace's own ESLint prints, which only a real launch
+# carrying the forwarded option produces.
 ESLINT_MARKER = f"eslint {_ESLINT_VERSION}"
 _ESLINT_FILES = {
     "package.json": (
@@ -149,7 +153,15 @@ _ESLINT_FILES = {
     "node_modules/eslint/package.json": (
         f'{{"name": "eslint", "version": "{_ESLINT_VERSION}", "bin": {{"eslint": "bin/eslint.js"}}}}\n'
     ),
-    "node_modules/eslint/bin/eslint.js": (f"#!/usr/bin/env node\nconsole.log('{ESLINT_MARKER}');\n"),
+    # A launch that dropped the forwarded tail would still start this file, so
+    # the version line is printed only when the option actually arrives. The
+    # oracle reads that line, which makes the case fail when the tail is lost
+    # instead of passing on the launch alone.
+    "node_modules/eslint/bin/eslint.js": (
+        "#!/usr/bin/env node\n"
+        f"const strict = process.argv.slice(2).includes('{ESLINT_PASSED_OPTION}');\n"
+        f"console.log(strict ? '{ESLINT_MARKER}' : 'eslint: {ESLINT_PASSED_OPTION} was not forwarded');\n"
+    ),
 }
 
 
