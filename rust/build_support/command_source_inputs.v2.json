@@ -171,7 +171,6 @@
       "src/launch_identity_common.rs",
       "src/launch_identity_stub.rs",
       "src/launch_identity_windows.rs",
-      "src/launch_screen.rs",
       "src/local_supply_chain.rs",
       "src/mcp_decision.rs",
       "src/mcp_package_sources.rs",

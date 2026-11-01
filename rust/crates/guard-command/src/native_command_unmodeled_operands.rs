@@ -1,7 +1,7 @@
 //! Telling an interpreter the text runs from one it only hands another program.
 use super::xargs::command_index;
 use super::{command_basename, INTERPRETERS};
-use crate::launch_screen::PRIVILEGE_WRAPPERS;
+use crate::parser_wrappers::PRIVILEGE_WRAPPERS;
 
 /// Words that run the program their own operands name without standing among
 /// the interpreters.

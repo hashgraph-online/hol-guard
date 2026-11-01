@@ -9,6 +9,7 @@
 //! same way everywhere. Windows `cmd /c` and PowerShell scripts are not read.
 
 use crate::parser_segments::{shell_tokens, split_pipelines_including_background};
+use crate::parser_wrappers::PRIVILEGE_WRAPPERS;
 use crate::pretool::pipe_attacks::{pipe_attacks, ENVIRONMENT_EXFILTRATION, REMOTE_CODE};
 use crate::{parse_command, CommandModelRequestV1};
 
@@ -25,7 +26,6 @@ pub struct LaunchRisk {
 }
 
 const SHELLS: &[&str] = &["ash", "bash", "dash", "fish", "ksh", "mksh", "sh", "zsh"];
-pub(crate) const PRIVILEGE_WRAPPERS: &[&str] = &["doas", "gsudo", "pkexec", "run0", "sudo"];
 const PRIVILEGE_VALUE_OPTIONS: &[&str] = &[
     "-C", "-D", "-U", "-g", "-h", "-p", "-r", "-t", "-u", "--chdir", "--group", "--user",
 ];
