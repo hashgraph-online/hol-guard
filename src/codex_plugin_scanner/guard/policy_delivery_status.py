@@ -193,10 +193,12 @@ def policy_status_payload(store: GuardStore, *, offline: bool) -> dict[str, obje
     return payload
 
 
-def _live_version_text(version: object, delivery: dict[str, object], *, numbered: bool) -> str:
+def _live_version_text(version: object, delivery: dict[str, object], *, numbered: bool, acked: bool) -> str:
     """A v1 bundle names its publication by id; show Cloud's number once Cloud says this device applied it.
 
-    A version-two bundle already carries a number, so it is shown as it is.
+    Cloud does not say which bundle it saw applied, so the number is shown only
+    after this device acknowledged the bundle it holds now. A version-two bundle
+    already carries a number, so it is shown as it is.
     """
 
     if not version:
@@ -206,6 +208,7 @@ def _live_version_text(version: object, delivery: dict[str, object], *, numbered
     if (
         isinstance(cloud_version, int)
         and not numbered
+        and acked
         and str(version) != str(cloud_version)
         and isinstance(mine, dict)
         and mine.get("state") == "applied"
@@ -220,9 +223,15 @@ def format_policy_status(payload: dict[str, object]) -> str:
     delivery = payload["delivery"] if isinstance(payload["delivery"], dict) else {}
     local_value = payload.get("local")
     local = local_value if isinstance(local_value, dict) else None
+    live_version = _live_version_text(
+        live.get("version"),
+        delivery,
+        numbered=live.get("numbered") is True,
+        acked=ack.get("status") == "applied" and ack.get("currentVersion") is True,
+    )
     lines = [
         f"Local policy: {local['documentId']} ({local['rules']} rules)" if local else "Local policy: none",
-        f"Live version: {_live_version_text(live.get('version'), delivery, numbered=live.get('numbered') is True)}",
+        f"Live version: {live_version}",
         f"Mode: {live.get('mode') or 'unknown'}",
         f"Last sync: {payload.get('lastSync') or 'never'}",
         f"Last ACK: {ack.get('status') or 'none'}"

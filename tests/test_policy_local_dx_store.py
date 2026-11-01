@@ -163,6 +163,9 @@ def test_status_includes_cloud_delivery_for_this_device(tmp_path: Path, monkeypa
 def test_status_names_cloud_version_for_an_applied_v1_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "home")
     store.set_sync_payload("policy_bundle", {"bundleVersion": "policy-1793516302845-a", "bundleHash": "ab" * 32}, NOW)
+    store.set_sync_payload(
+        "policy_bundle_ack", {"status": "applied", "appliedAt": NOW, "bundleVersion": "policy-1793516302845-a"}, NOW
+    )
     applied = {"id": "a", "name": "laptop", "state": "applied", "reason": None}
     delivery = {"available": True, "versionNumber": 1, "devices": [applied], "thisDevice": applied}
     monkeypatch.setattr(
@@ -174,6 +177,16 @@ def test_status_names_cloud_version_for_an_applied_v1_bundle(tmp_path: Path, mon
     assert "Live version: 1 (bundle policy-1793516302845-a)" in text
 
     delivery["thisDevice"] = {**applied, "state": "pending"}
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Live version: policy-1793516302845-a\n" in text
+
+    # A bundle activated before its acknowledgement reached Cloud keeps its id:
+    # Cloud's applied state may still describe the bundle before it.
+    delivery["thisDevice"] = applied
+    store.set_sync_payload(
+        "policy_bundle_ack", {"status": "applied", "appliedAt": NOW, "bundleVersion": "policy-1793516000000-z"}, NOW
+    )
     text = format_policy_status(policy_status_payload(store, offline=False))
 
     assert "Live version: policy-1793516302845-a\n" in text
@@ -198,6 +211,7 @@ def test_status_names_cloud_version_for_a_legacy_bundle_id_made_of_digits(
 ) -> None:
     store = GuardStore(tmp_path / "home")
     store.set_sync_payload("policy_bundle", {"bundleVersion": "7", "bundleHash": "ab" * 32}, NOW)
+    store.set_sync_payload("policy_bundle_ack", {"status": "applied", "appliedAt": NOW, "bundleVersion": "7"}, NOW)
     applied = {"id": "a", "name": "laptop", "state": "applied", "reason": None}
     delivery = {"available": True, "versionNumber": 1, "devices": [applied], "thisDevice": applied}
     monkeypatch.setattr(
