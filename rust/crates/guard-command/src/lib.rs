@@ -383,6 +383,9 @@ pub mod shell_request_authority;
 #[cfg(test)]
 mod shell_secret_read_containment_tests;
 mod shell_secret_read_flow;
+mod shell_secret_read_glob;
+#[cfg(test)]
+mod shell_secret_read_glob_tests;
 #[cfg(test)]
 mod shell_secret_read_script_operand_tests;
 mod shell_secret_read_support;
