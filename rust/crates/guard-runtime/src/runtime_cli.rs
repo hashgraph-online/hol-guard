@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if codex_hook_trust::is_command(command) && flag == "--stdin" => {
+            let response = codex_hook_trust::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if desktop_notification::is_command(command) && flag == "--stdin" => {
             let response = desktop_notification::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -160,6 +164,14 @@ pub(super) fn run() -> Result<(), String> {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if store_quarantine_forensics::is_command(command) && flag == "--stdin" => {
+            let response = store_quarantine_forensics::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if network_status_validation::is_command(command) && flag == "--stdin" => {
+            let response = network_status_validation::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
             let response = local_skill_index::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -168,8 +180,8 @@ pub(super) fn run() -> Result<(), String> {
             let response = windows_private_state::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
-        [command, flag] if onefile_open_paths::is_command(command) && flag == "--stdin" => {
-            let response = onefile_open_paths::run_command(io::stdin().lock())?;
+        [command, flag] if onefile_extraction_reclaim::is_command(command) && flag == "--stdin" => {
+            let response = onefile_extraction_reclaim::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
@@ -232,6 +244,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if orphaned_worker_reap::is_command(command) && flag == "--stdin" => {
             let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if process_identity::is_command(command) && flag == "--stdin" => {
+            let response = process_identity::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if storage_retention::is_command(command) && flag == "--stdin" => {

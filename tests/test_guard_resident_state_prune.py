@@ -230,26 +230,42 @@ def test_harness_scoped_repair_only_touches_that_harness(tmp_path: Path, monkeyp
     assert stale.exists()
 
 
-def test_repair_onefile_step_uses_injected_root_and_fails_closed(tmp_path: Path) -> None:
+def test_repair_onefile_step_uses_injected_root_and_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from datetime import datetime, timezone
 
-    leaked = tmp_path / "_MEIabc123"
-    leaked.mkdir()
-    (leaked / "codex_plugin_scanner" / "guard" / "daemon" / "static").mkdir(parents=True)
-    (leaked / "codex_plugin_scanner" / "guard" / "daemon" / "static" / "index.html").write_text("x")
+    from codex_plugin_scanner.guard import onefile_extraction
+    from codex_plugin_scanner.guard.onefile_extraction import ExtractionReclaimResult
+
     moment = datetime.fromtimestamp(NOW, tz=timezone.utc)
-    _age(leaked, OLD - 3600)
-    unavailable = repair_onefile_leaks(dry_run=False, temp_root=tmp_path, now=moment, scanner=lambda _root: None)
-    assert unavailable["status"] == "skipped" and leaked.exists()
-    in_use = repair_onefile_leaks(
-        dry_run=False, temp_root=tmp_path, now=moment, scanner=lambda _root: frozenset({leaked.name})
-    )
-    assert in_use["status"] == "ok" and leaked.exists()
-    planned = repair_onefile_leaks(dry_run=True, temp_root=tmp_path, now=moment, scanner=lambda _root: frozenset())
-    assert planned["status"] == "planned" and leaked.exists()
-    assert planned["unmarked_remaining"] == 0
-    done = repair_onefile_leaks(dry_run=False, temp_root=tmp_path, now=moment, scanner=lambda _root: frozenset())
-    assert done["status"] == "changed" and not leaked.exists()
+    calls: list[dict[str, object]] = []
+    results: list[ExtractionReclaimResult] = []
+
+    def fake_reclaim(**kwargs: object) -> ExtractionReclaimResult:
+        calls.append(kwargs)
+        return results.pop(0)
+
+    monkeypatch.setattr(onefile_extraction, "reclaim_orphaned_extraction_dirs", fake_reclaim)
+    results.append(ExtractionReclaimResult(unmarked_count=1, unmarked_scan="unavailable"))
+    unavailable = repair_onefile_leaks(dry_run=False, temp_root=tmp_path, now=moment)
+    assert unavailable["status"] == "skipped"
+    assert calls[0]["temp_root"] == tmp_path and calls[0]["now"] == moment
+    assert calls[0]["scan_open_paths"] is True
+    results.append(ExtractionReclaimResult(unmarked_count=1, unmarked_scan="ok"))
+    assert repair_onefile_leaks(dry_run=False, temp_root=tmp_path, now=moment)["status"] == "ok"
+    results.append(ExtractionReclaimResult(reclaimed_count=1, unmarked_scan="ok"))
+    planned = repair_onefile_leaks(dry_run=True, temp_root=tmp_path, now=moment)
+    assert planned["status"] == "planned" and planned["unmarked_remaining"] == 0
+    assert calls[2]["dry_run"] is True
+    results.append(ExtractionReclaimResult(reclaimed_count=1, unmarked_scan="ok"))
+    assert repair_onefile_leaks(dry_run=False, temp_root=tmp_path, now=moment)["status"] == "changed"
+
+    def unavailable_runtime(**_kwargs: object) -> ExtractionReclaimResult:
+        raise onefile_extraction.ExtractionReclaimUnavailableError("onefile_extraction_reclaim_unavailable")
+
+    monkeypatch.setattr(onefile_extraction, "reclaim_orphaned_extraction_dirs", unavailable_runtime)
+    assert repair_onefile_leaks(dry_run=False, temp_root=tmp_path, now=moment)["status"] == "error"
 
 
 def test_report_status_rollup() -> None:

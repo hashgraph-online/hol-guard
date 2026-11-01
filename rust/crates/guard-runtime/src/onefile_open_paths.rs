@@ -1,5 +1,5 @@
-//! `onefile-open-paths --stdin`: the names of the PyInstaller `_MEI*`
-//! extraction directories under a temp root that some process still uses
+//! The names of the PyInstaller `_MEI*` extraction directories under a temp
+//! root that some process still uses, for `onefile_extraction_reclaim`
 //! (`guard/onefile_open_paths.py` before it moved here).
 //!
 //! An unmarked extraction directory records no owner pid, so the only proof
@@ -7,8 +7,8 @@
 //! uses it as its working directory, executable or root. The scan is one pass
 //! over the whole machine and fails closed: Linux reads `/proc` and falls back
 //! to `lsof`, macOS runs `lsof`, and any error, timeout or missing tool
-//! answers `{"in_use": null}`. Callers read `null` as "unknown" and skip every
-//! unmarked reclaim. Other platforms always answer `null`.
+//! answers `None`. The caller reads `None` as "unknown" and skips every
+//! unmarked reclaim. Other platforms always answer `None`.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -18,25 +18,12 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use serde::Deserialize;
-use serde_json::{json, Value};
-
-const SCHEMA: &str = "onefile-open-paths.v1";
-const MAX_REQUEST_BYTES: u64 = 64 * 1024;
-const MAX_IN_USE_NAMES: usize = 4096;
 const EXTRACTION_PREFIX: &[u8] = b"_MEI";
 /// `lsof` resolved only from fixed operating-system locations.
 const TRUSTED_LSOF_PATHS: [&str; 2] = ["/usr/sbin/lsof", "/usr/bin/lsof"];
 const LSOF_TIMEOUT: Duration = Duration::from_secs(90);
 const LSOF_OUTPUT_LIMIT: u64 = 256 * 1024 * 1024;
 const ESRCH: i32 = 3;
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Request {
-    schema: String,
-    temp_root: String,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Platform {
@@ -57,48 +44,15 @@ impl Platform {
     }
 }
 
-pub(crate) fn is_command(command: &str) -> bool {
-    command == "onefile-open-paths"
-}
-
-pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    reader
-        .take(MAX_REQUEST_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "onefile_open_paths_request_unreadable".to_owned())?;
-    if bytes.len() as u64 > MAX_REQUEST_BYTES {
-        return Err("onefile_open_paths_request_too_large".to_owned());
-    }
-    let request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    let temp_root = temp_root(&request)?;
-    let in_use = scan(
-        &temp_root,
+/// The names in use on this machine, or `None` when the scan could not be
+/// completed.
+pub(crate) fn scan_system(temp_root: &Path) -> Option<BTreeSet<String>> {
+    scan(
+        temp_root,
         Platform::current(),
         Path::new("/proc"),
         system_lsof,
-    );
-    serde_json::to_vec(&answer(in_use))
-        .map_err(|_| "onefile_open_paths_response_encode_failed".to_owned())
-}
-
-fn invalid() -> String {
-    "onefile_open_paths_request_invalid".to_owned()
-}
-
-fn temp_root(request: &Request) -> Result<PathBuf, String> {
-    let temp_root = PathBuf::from(&request.temp_root);
-    if request.schema != SCHEMA || !temp_root.is_absolute() {
-        return Err(invalid());
-    }
-    Ok(temp_root)
-}
-
-fn answer(in_use: Option<BTreeSet<String>>) -> Value {
-    match in_use {
-        Some(names) if names.len() <= MAX_IN_USE_NAMES => json!({ "in_use": names }),
-        _ => json!({ "in_use": Value::Null }),
-    }
+    )
 }
 
 /// The names in use, or `None` when the scan could not be completed.
@@ -242,24 +196,24 @@ fn collect_link(
 }
 
 #[cfg(unix)]
-fn current_uid() -> Option<u32> {
+pub(crate) fn current_uid() -> Option<u32> {
     Some(nix::unistd::getuid().as_raw())
 }
 
 #[cfg(not(unix))]
-fn current_uid() -> Option<u32> {
+pub(crate) fn current_uid() -> Option<u32> {
     None
 }
 
 #[cfg(unix)]
-fn metadata_uid(metadata: &fs::Metadata) -> Option<u32> {
+pub(crate) fn metadata_uid(metadata: &fs::Metadata) -> Option<u32> {
     use std::os::unix::fs::MetadataExt;
 
     Some(metadata.uid())
 }
 
 #[cfg(not(unix))]
-fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32> {
+pub(crate) fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32> {
     None
 }
 
