@@ -555,6 +555,8 @@ def test_runtime_snapshot_reports_cloud_status_unavailable_without_the_native_ru
     assert snapshot["proof_status"]["state"] == "failed"
     assert snapshot["proof_status"]["label"] == "Cloud status unavailable"
     assert snapshot["proof_status"]["first_synced_at"] is None
+    assert snapshot["dashboard_url"] == "https://hol.org/guard"
+    assert snapshot["cloud_pairing_state"]["connect_url"] == "https://hol.org/guard/connect"
 
 
 def test_runtime_snapshot_trust_status_does_not_refresh_integrity_state(tmp_path: Path) -> None:

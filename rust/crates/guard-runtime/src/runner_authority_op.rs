@@ -77,6 +77,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "approval_wait_hint" => crate::blocked_request_mode::wait_hint_projection(args),
         "approval_link" => crate::approval_link::dispatch(args),
         "runtime_cloud_status" => crate::runtime_cloud_status::dispatch(args),
+        "runtime_headline" => crate::runtime_headline::dispatch(args),
         "developer_inspection_authority" => {
             crate::developer_inspection_authority_op::dispatch(args)
         }

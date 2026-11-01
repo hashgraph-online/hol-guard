@@ -232,11 +232,10 @@ def test_an_unreachable_runtime_leaves_the_snapshot_without_a_verdict(
     # asked for. The state an unreachable runtime leaves behind is the one a
     # registered machine falls to, and that is the headline resolver's own
     # branch: an empty protection state is never rendered as protection.
-    assert (
-        approvals_module._resolve_runtime_headline_state(
-            pending_count=0,
-            runtime_state={"session_id": "session"},
-            protection_state="",
-        )
-        == "degraded"
+    headline = approvals_module._runtime_headline(
+        GuardStore(tmp_path / "guard-home"),
+        pending_count=0,
+        runtime_state_present=True,
+        protection_state="",
     )
+    assert headline["headline_state"] == "degraded"
