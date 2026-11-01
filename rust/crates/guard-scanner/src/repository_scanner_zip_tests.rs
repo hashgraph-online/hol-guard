@@ -6,7 +6,7 @@ use crate::repository_scanner::scan_blob;
 
 /// Assembled rather than written out, so no whole provider-shaped token is a
 /// literal in this file.
-fn credential_line() -> String {
+pub(super) fn credential_line() -> String {
     format!(
         "GH_TOKEN = {}{}",
         "ghp_", "Jd2RmVe9XtB4kPdW7LcZsY6JhG3uA1oF5rT8"
@@ -14,7 +14,7 @@ fn credential_line() -> String {
 }
 
 /// A second, different token, for the cases that need two findings told apart.
-fn other_credential_line() -> String {
+pub(super) fn other_credential_line() -> String {
     format!(
         "GH_TOKEN = {}{}",
         "ghp_", "Ks4TcJx6ZbQ1nK8vD3mYpL9gH5rE7uA2fN0i"
@@ -28,7 +28,7 @@ const DEFLATE: u16 = 8;
 /// One member, as the builder below will write it. The fields a well-formed
 /// archive derives are separate from the ones a malformed archive lies about,
 /// so a test can set either on its own.
-struct Entry {
+pub(super) struct Entry {
     name: String,
     /// The bytes written into the file, already in whatever codec `method`
     /// names.
@@ -52,7 +52,7 @@ fn crc32(body: &[u8]) -> u32 {
     crc.sum()
 }
 
-fn stored(name: &str, body: &[u8]) -> Entry {
+pub(super) fn stored(name: &str, body: &[u8]) -> Entry {
     Entry {
         name: name.to_string(),
         stored: body.to_vec(),
@@ -64,7 +64,7 @@ fn stored(name: &str, body: &[u8]) -> Entry {
     }
 }
 
-fn deflated(name: &str, body: &[u8]) -> Entry {
+pub(super) fn deflated(name: &str, body: &[u8]) -> Entry {
     Entry {
         name: name.to_string(),
         stored: deflate(body),
@@ -83,11 +83,11 @@ fn deflate(body: &[u8]) -> Vec<u8> {
     encoder.finish().unwrap()
 }
 
-fn zip_bytes(entries: &[Entry]) -> Vec<u8> {
+pub(super) fn zip_bytes(entries: &[Entry]) -> Vec<u8> {
     zip_bytes_with_comment(entries, b"")
 }
 
-fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
+pub(super) fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
     let named: Vec<usize> = (0..entries.len()).collect();
     zip_bytes_naming(entries, &named, comment)
 }
@@ -183,13 +183,13 @@ fn claim_encrypted_in_the_directory(archive: &mut [u8], name: &str) {
     }
 }
 
-fn gzip_bytes(data: &[u8]) -> Vec<u8> {
+pub(super) fn gzip_bytes(data: &[u8]) -> Vec<u8> {
     let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(data).unwrap();
     encoder.finish().unwrap()
 }
 
-fn scan(archive: &[u8], path: &str) -> (Vec<String>, usize) {
+pub(super) fn scan(archive: &[u8], path: &str) -> (Vec<String>, usize) {
     let (findings, scanned) = scan_blob(
         archive,
         path,
@@ -851,95 +851,6 @@ fn a_member_whose_sizes_follow_its_data_is_left_to_the_directory() {
     hidden.flags = 1 << 3;
     let omitted = zip_bytes_naming(&[hidden], &[], b"");
     let (paths, scanned) = scan(&omitted, "streamed.zip");
-    assert!(paths.is_empty());
-    assert_eq!(scanned, 0);
-}
-
-/// An executable stub, binary enough that the blob reaches the archive walk as
-/// a binary rather than as text.
-fn stub(len: usize) -> Vec<u8> {
-    let mut bytes = b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00".to_vec();
-    bytes.resize(len, 0);
-    bytes
-}
-
-#[test]
-fn a_self_extracting_archive_is_read_from_where_its_zip_begins() {
-    // The common shape of a secret leaving a repository in something no reader
-    // opens: an executable with a zip appended to it. Nothing at byte zero
-    // says archive, and every offset the archive records counts from where the
-    // zip begins rather than from the start of the file.
-    let member = credential_line();
-    let archive = zip_bytes(&[deflated("prod.env", member.as_bytes())]);
-    let mut sfx = stub(512);
-    sfx.extend_from_slice(&archive);
-
-    assert!(!is_zip(&sfx));
-    assert_eq!(super::embedded_start(&sfx), Some(512));
-
-    let (paths, scanned) = scan(&sfx, "installer.exe");
-    assert_eq!(paths, ["installer.exe!/prod.env"]);
-    assert_eq!(scanned, member.len());
-}
-
-#[test]
-fn a_self_extracting_archive_is_read_after_inflation_too() {
-    // A stub-carrying zip compressed again, which a mail gateway or a backup
-    // script produces without meaning to.
-    let member = credential_line();
-    let archive = zip_bytes(&[stored("prod.env", member.as_bytes())]);
-    let mut sfx = stub(256);
-    sfx.extend_from_slice(&archive);
-
-    let (paths, _) = scan(&gzip_bytes(&sfx), "installer.exe.gz");
-    assert_eq!(paths, ["installer.exe.gz!/prod.env"]);
-}
-
-#[test]
-fn a_binary_carrying_no_archive_is_not_read_as_one() {
-    // The searching this does over the tail of every binary blob has to end
-    // somewhere. An end record that names an empty directory reaches nothing
-    // behind the stub, and one whose figures do not land on an archive is an
-    // end record that fell inside a binary rather than one that names a zip.
-    let mut empty = stub(256);
-    empty.extend_from_slice(b"PK\x05\x06");
-    empty.extend_from_slice(&[0u8; 18]);
-    assert_eq!(super::embedded_start(&empty), None);
-    let (paths, scanned) = scan(&empty, "tool.bin");
-    assert!(paths.is_empty());
-    assert_eq!(scanned, 0);
-
-    let mut nonsense = stub(256);
-    nonsense.extend_from_slice(b"PK\x05\x06");
-    nonsense.extend_from_slice(&[0, 0, 0, 0, 1, 0, 1, 0]);
-    nonsense.extend_from_slice(&40u32.to_le_bytes());
-    nonsense.extend_from_slice(&8u32.to_le_bytes());
-    nonsense.extend_from_slice(&[0, 0]);
-    assert_eq!(super::embedded_start(&nonsense), None);
-    let (paths, scanned) = scan(&nonsense, "tool.bin");
-    assert!(paths.is_empty());
-    assert_eq!(scanned, 0);
-}
-
-#[test]
-fn a_prefixed_archive_with_slack_before_its_end_record_is_left_unread() {
-    // The arithmetic that finds the prefix rests on the directory being
-    // written immediately before the end record, which is how every archiver
-    // writes one. Where something sits between them the subtraction lands in
-    // the wrong place, and the result is checked against the archive before it
-    // is used rather than acted on: a prefix that does not reach a member's
-    // own local header is no prefix at all.
-    let member = credential_line();
-    let archive = zip_bytes(&[stored("prod.env", member.as_bytes())]);
-    let (directory, end) = archive.split_at(archive.len() - 22);
-
-    let mut padded = stub(128);
-    padded.extend_from_slice(directory);
-    padded.extend_from_slice(&[0u8; 16]);
-    padded.extend_from_slice(end);
-
-    assert_eq!(super::embedded_start(&padded), None);
-    let (paths, scanned) = scan(&padded, "installer.exe");
     assert!(paths.is_empty());
     assert_eq!(scanned, 0);
 }

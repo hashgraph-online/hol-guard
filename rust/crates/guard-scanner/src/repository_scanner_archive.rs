@@ -175,7 +175,9 @@ pub(super) fn scan_archive_members(
 /// A self-extracting archive is an executable carrying a zip, and it reached
 /// this module as a binary blob with nothing in it to read. It is read as the
 /// archive it is now, from where the archive starts; the stub itself is not a
-/// member and is not reported as one.
+/// member and is not reported as one. Where a builder has already rewritten the
+/// archive's offsets to count from the start of the whole file, as `zip -A`
+/// does, that start is byte zero even though the file opens with a stub.
 fn zip_start(bytes: &[u8]) -> Option<usize> {
     if zip::is_zip(bytes) {
         return Some(0);
