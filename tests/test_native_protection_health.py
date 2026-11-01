@@ -9,11 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_execution, native_protection_health
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
-from codex_plugin_scanner.guard.runtime.protection_health import (
-    PROTECTION_CHECK_IDS,
-    ProtectionCheckStatus,
-    ProtectionSignal,
-)
+from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus, ProtectionSignal
 
 _PAYLOAD: dict[str, Any] = {
     "schema_version": "guard.protection-health.v1",
@@ -43,10 +39,15 @@ def _app(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-def _signals() -> dict[str, ProtectionSignal]:
+def _facts() -> dict[str, Any]:
     return {
-        check_id: ProtectionSignal(ProtectionCheckStatus.PASS, f"{check_id}_proven")
-        for check_id in PROTECTION_CHECK_IDS
+        "now": "2026-07-19T15:00:00+00:00",
+        "managed_installs": [{"harness": "codex", "active": True}],
+        "hook_verification": {"codex": True},
+        "daemon": None,
+        "remembered_rules": "enforced",
+        "runtime_protection": "protected",
+        "decision_stream": {"active_error_count": 0, "activity_count": 1},
     }
 
 
@@ -57,6 +58,8 @@ def _install(monkeypatch: pytest.MonkeyPatch, mutate) -> tuple[list[tuple[str, o
     def fake(*, request, response_schema, record_success, status, **_kwargs) -> dict[str, Any]:
         assert record_success is False
         assert status.identity.sha256 == "0" * 64
+        assert _kwargs["operation"] == "protection_health_facts"
+        assert _kwargs["required_feature"] == "protection-health-facts-v1"
         sent.append(request)
         result: dict[str, Any] = {
             "schema": response_schema,
@@ -90,14 +93,8 @@ def _install(monkeypatch: pytest.MonkeyPatch, mutate) -> tuple[list[tuple[str, o
     return recorded, sent
 
 
-def _call(tmp_path, *, harness_signals=None):
-    return native_protection_health.protection_health_report(
-        _signals(),
-        harness_signals={"codex": ProtectionSignal(ProtectionCheckStatus.PASS, "hooks_verified")}
-        if harness_signals is None
-        else harness_signals,
-        guard_home=tmp_path,
-    )
+def _call(tmp_path):
+    return native_protection_health.protection_health_report(_facts(), guard_home=tmp_path)
 
 
 def test_a_bound_reply_returns_the_report_and_records_success(monkeypatch, tmp_path) -> None:
@@ -113,14 +110,22 @@ def test_a_harness_row_the_resident_published_is_returned_whole(monkeypatch, tmp
     assert recorded == [("success", None)]
 
 
-def test_the_request_carries_every_signal_as_a_status_and_a_reason(monkeypatch, tmp_path) -> None:
+def test_the_request_carries_the_facts_under_the_facts_schema(monkeypatch, tmp_path) -> None:
     _recorded, sent = _install(monkeypatch, lambda result: None)
     _call(tmp_path)
-    request = sent[0]
-    assert request["schema"] == "guard-protection-health-report-request.v1"
-    assert set(request["signals"]) == set(PROTECTION_CHECK_IDS)
-    assert request["signals"]["daemon"] == {"status": "pass", "reason_code": "daemon_proven"}
-    assert request["harness_signals"] == {"codex": {"status": "pass", "reason_code": "hooks_verified"}}
+    request = dict(sent[0])
+    assert request.pop("schema") == "guard-protection-health-facts-request.v1"
+    assert isinstance(request.pop("request_id"), str)
+    assert request == _facts()
+
+
+def test_the_facts_cannot_replace_the_schema_or_request_id(monkeypatch, tmp_path) -> None:
+    _recorded, sent = _install(monkeypatch, lambda result: None)
+    native_protection_health.protection_health_report(
+        {**_facts(), "schema": "other", "request_id": "chosen"}, guard_home=tmp_path
+    )
+    assert sent[0]["schema"] == "guard-protection-health-facts-request.v1"
+    assert sent[0]["request_id"] != "chosen"
 
 
 def test_a_free_form_reason_is_refused_before_it_can_be_sent() -> None:

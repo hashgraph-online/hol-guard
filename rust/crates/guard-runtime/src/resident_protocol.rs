@@ -356,6 +356,7 @@ pub(crate) enum ResidentOperationV1 {
     RetryLineageCapture(guard_contracts::RetryLineageCaptureRequestV1),
     AdapterStateIntegrity(guard_contracts::AdapterStateIntegrityRequestV1),
     ProtectionHealthReport(guard_contracts::ProtectionHealthReportRequestV1),
+    ProtectionHealthFacts(guard_contracts::ProtectionHealthFactsRequestV1),
     ResidentHealth(guard_contracts::ResidentHealthRequestV1),
     Health(Value),
     Shutdown(Value),
