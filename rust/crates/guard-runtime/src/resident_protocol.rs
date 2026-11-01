@@ -111,6 +111,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-installation-continuity-v1".into(),
         "native-managed-policy-load-v1".into(),
         "native-health-lease-state-v1".into(),
+        "native-user-health-state-v1".into(),
         "native-policy-effective-v1".into(),
         "native-release-manifest-verify-v1".into(),
         "native-ownership-acl-v1".into(),
