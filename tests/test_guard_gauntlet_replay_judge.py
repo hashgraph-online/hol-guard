@@ -168,6 +168,13 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # A ref write under the worktree's own admin directory, which a contained run
         # keeps inside the sandbox.
         "neg-git-branch-create",
+        # An abbreviated `--ext-diff` or `--textconv` put back after the long
+        # spelling turned it off: Git resolves the prefix and runs the driver
+        # the repository configuration names. The command keeps its review, and
+        # a contained run gives that driver only the sandbox's reach, with no
+        # network and no home.
+        "neg-git-diff-abbreviated-ext-diff",
+        "neg-git-log-abbreviated-textconv",
         # The sandbox has no network for the push to reach the remote over, and no home access
         # for the widened search, so a contained run sends nothing and prints no key.
         "neg-git-push-to-tmp-chain",

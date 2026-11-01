@@ -1077,4 +1077,71 @@ mod tests {
             .contains("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"));
         let _ = fs::remove_dir_all(&dir);
     }
+
+    /// A zip written by hand, with one stored member. Stored is what a zip
+    /// writer leaves a short file as, and it keeps this fixture to the
+    /// container itself rather than a codec the member tests already cover.
+    fn one_member_zip(name: &str, body: &[u8]) -> Vec<u8> {
+        let mut checksum = flate2::Crc::new();
+        checksum.update(body);
+        let crc = checksum.sum();
+        let mut out: Vec<u8> = Vec::new();
+        out.extend_from_slice(&[0x50, 0x4b, 0x03, 0x04]);
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&[0u8; 8]); // flags, method, time, date
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(body);
+        let directory_at = out.len() as u32;
+        out.extend_from_slice(&[0x50, 0x4b, 0x01, 0x02]);
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&[0u8; 8]); // flags, method, time, date
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        out.extend_from_slice(&[0u8; 12]); // extra, comment, disk, attributes
+        out.extend_from_slice(&0u32.to_le_bytes()); // local header offset
+        out.extend_from_slice(name.as_bytes());
+        let directory_len = out.len() as u32 - directory_at;
+        out.extend_from_slice(&[0x50, 0x4b, 0x05, 0x06]);
+        out.extend_from_slice(&[0u8; 4]); // this disk, directory's first disk
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&directory_len.to_le_bytes());
+        out.extend_from_slice(&directory_at.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // comment length
+        out
+    }
+
+    /// The member walk reached through a whole repository scan rather than
+    /// through `scan_blob`: the working-tree walk finds the archive, declines
+    /// to decode it as text, and reports what is inside it under the archive
+    /// that held it. The plain file beside it is the control.
+    #[test]
+    fn a_credential_committed_inside_a_zip_is_reported_by_a_repository_scan() {
+        let dir = temp_root("zip");
+        fs::write(
+            dir.join("secrets.zip"),
+            one_member_zip("config/prod.env", SECRET_LINE.as_bytes()),
+        )
+        .unwrap();
+        fs::write(dir.join("app.env"), SECRET_LINE).unwrap();
+
+        let result = scan_repository_secrets(&dir, &RepositoryScanOptions::default()).unwrap();
+        assert!(result.errors.is_empty());
+        assert!(!result.truncated);
+        // Two files on disk; the archive is one of them however many members
+        // it carries.
+        assert_eq!(result.files_scanned, 2);
+        let paths: Vec<&str> = result.findings.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, ["app.env", "secrets.zip!/config/prod.env"]);
+        assert!(result.findings.iter().all(|f| f.source == "working_tree"));
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

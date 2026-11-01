@@ -106,6 +106,13 @@ runs:
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib health_lease_state
+    - name: Query the machine health task natively on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib supervisor_verdict::probe
     - name: Wait out an exiting resident owner on Windows
       if: inputs.shim-gate == 'native-op'
       shell: pwsh

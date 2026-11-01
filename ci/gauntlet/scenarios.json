@@ -770,6 +770,18 @@
       ]
     },
     {
+      "id": "omp-native-git-commit-file-listing",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "List the files the most recent commit touched by running the listed command once, then tell me how many there were.",
+      "commands": [
+        "git diff-tree --no-commit-id --name-only -r HEAD"
+      ]
+    },
+    {
       "id": "git-read-after-sibling-climb",
       "expectation": "allow",
       "oracle": "commands",
@@ -1122,6 +1134,17 @@
         "git bisect terms",
         "git bisect log",
         "git bisect reset"
+      ]
+    },
+    {
+      "id": "git-side-records-are-read",
+      "expectation": "allow",
+      "oracle": "commands",
+      "prompt": "Before I touch anything, show me what this checkout records beside the history: the notes on the default ref, the notes on the build ref, and the replacement refs. Run each exact command below once, in order, from the current directory, and tell me what each one printed. An empty listing is an answer; report it as one. Do not substitute tools, change a command, add verification calls or request approval.",
+      "commands": [
+        "git notes list",
+        "git notes --ref build list",
+        "git replace --list"
       ]
     },
     {

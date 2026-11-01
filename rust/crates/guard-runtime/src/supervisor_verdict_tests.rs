@@ -213,7 +213,7 @@ fn a_modified_loaded_job_is_refused() {
     );
 }
 
-fn task_xml() -> String {
+pub(super) fn task_xml() -> String {
     format!(
         "<?xml version='1.0' encoding='utf-16'?>\n<Task xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\" version=\"1.4\"><RegistrationInfo><URI>\\HOL Guard\\Machine Health</URI><SecurityDescriptor>D:P(A;;FA;;;SY)(A;;FA;;;BA)</SecurityDescriptor></RegistrationInfo><Triggers><TimeTrigger><Enabled>true</Enabled><StartBoundary>2000-01-01T00:00:00</StartBoundary><Repetition><Interval>PT5M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition></TimeTrigger></Triggers><Principals><Principal id=\"System\"><UserId>S-1-5-18</UserId><LogonType>ServiceAccount</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals><Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><Enabled>true</Enabled><Hidden>true</Hidden><ExecutionTimeLimit>PT5M</ExecutionTimeLimit></Settings><Actions Context=\"System\"><Exec><Command>{}</Command><Arguments>mdm health-report --scope machine --json</Arguments></Exec></Actions></Task>",
         r"C:\Program Files\HOL Guard\hol-guard\hol-guard.exe"
