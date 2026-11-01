@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import Any, ParamSpec, TypeGuard, TypeVar, cast
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from ..version import __version__
@@ -1443,8 +1443,9 @@ def _runtime_cloud_status(
     pending_events = store.count_guard_events_v1(uploaded=False)
     event_summary = _sync_payload_dict(store, "guard_events_v1_summary")
     proof = _connect_state_proof(latest_connect_state.get("proof") if latest_connect_state is not None else None)
+    reply: object = None
     try:
-        status = native_runner_authority(
+        reply = native_runner_authority(
             "runtime_cloud_status",
             {
                 "connect_state": latest_connect_state,
@@ -1466,7 +1467,13 @@ def _runtime_cloud_status(
         )
     except NativeRunnerAuthorityError as error:
         _LOGGER.debug("runtime cloud status unavailable: %s", error)
-        unavailable = {"state": "unavailable", "label": "Cloud status unavailable", "detail": _CLOUD_STATUS_UNAVAILABLE}
+    status: dict[str, Any]
+    if _is_runtime_cloud_status(reply):
+        status = reply
+    else:
+        # `failed` is a state every status surface already shows with its own
+        # label and detail, so the load error stays visible.
+        unavailable = {"state": "failed", "label": "Cloud status unavailable", "detail": _CLOUD_STATUS_UNAVAILABLE}
         request_id = latest_connect_state.get("request_id") if latest_connect_state is not None else None
         status = {
             "proof_status": {**unavailable, "request_id": request_id},
@@ -1479,9 +1486,20 @@ def _runtime_cloud_status(
                 "next_retry_after": None,
             },
         }
-    proof_status = status.get("proof_status")
-    status["proof_status"] = {**(proof_status if isinstance(proof_status, dict) else {}), **proof}
+    status["proof_status"] = {**status["proof_status"], **proof}
     return status
+
+
+def _is_runtime_cloud_status(status: object) -> TypeGuard[dict[str, Any]]:
+    """Whether a native reply carries every field the snapshot reads."""
+
+    return (
+        isinstance(status, dict)
+        and isinstance(status.get("proof_status"), dict)
+        and isinstance(status.get("cloud_state_label"), str)
+        and isinstance(status.get("cloud_state_detail"), str)
+        and isinstance(status.get("cloud_sync_health"), dict)
+    )
 
 
 def _sync_payload_dict(store: GuardStore, key: str) -> dict[str, object]:

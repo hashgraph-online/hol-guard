@@ -9,6 +9,7 @@ import urllib.error
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -517,9 +518,15 @@ def test_runtime_snapshot_cloud_status_copy_comes_from_the_native_runtime(tmp_pa
     assert snapshot["proof_status"]["receipts_stored"] == 0
 
 
+@pytest.mark.parametrize(
+    "reply",
+    [None, {}, {"proof_status": {}, "cloud_state_label": "Connected", "cloud_state_detail": 1}],
+    ids=["refused", "empty", "malformed"],
+)
 def test_runtime_snapshot_reports_cloud_status_unavailable_without_the_native_runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    reply: dict[str, object] | None,
 ) -> None:
     from codex_plugin_scanner.guard import native_runner_authority as authority_module
 
@@ -527,10 +534,12 @@ def test_runtime_snapshot_reports_cloud_status_unavailable_without_the_native_ru
     asked: list[str] = []
     original = authority_module.native_runner_authority
 
-    def refuse_cloud_status(kind: str, args: object, **kwargs: object) -> dict[str, object]:
+    def refuse_cloud_status(kind: str, args: Any, **kwargs: Any) -> dict[str, object]:
         if kind == "runtime_cloud_status":
             asked.append(kind)
-            raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+            if reply is None:
+                raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+            return reply
         return original(kind, args, **kwargs)
 
     monkeypatch.setattr(authority_module, "native_runner_authority", refuse_cloud_status)
@@ -540,9 +549,11 @@ def test_runtime_snapshot_reports_cloud_status_unavailable_without_the_native_ru
     assert asked == ["runtime_cloud_status"]
     assert snapshot["cloud_state"] == "local_only"
     assert snapshot["cloud_state_label"] == "Cloud status unavailable"
-    assert snapshot["cloud_sync_health"]["state"] == "unavailable"
+    assert snapshot["cloud_sync_health"]["state"] == "failed"
+    assert snapshot["cloud_sync_health"]["label"] == "Cloud status unavailable"
     assert snapshot["cloud_sync_health"]["pending_events"] == 0
-    assert snapshot["proof_status"]["state"] == "unavailable"
+    assert snapshot["proof_status"]["state"] == "failed"
+    assert snapshot["proof_status"]["label"] == "Cloud status unavailable"
     assert snapshot["proof_status"]["first_synced_at"] is None
 
 
