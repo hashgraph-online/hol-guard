@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
-from codex_plugin_scanner.guard.mdm import continuity, health_lease
+from codex_plugin_scanner.guard.mdm import continuity, health_lease, state_file
 from codex_plugin_scanner.guard.mdm.contracts import LocalIntegritySnapshot, MachinePaths
 from codex_plugin_scanner.guard.mdm.device_key import KeyGeneration
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
@@ -148,7 +148,7 @@ def _prepare(
     paths.state_root.mkdir(parents=True)
     private, key = _key()
     monkeypatch.setattr(continuity, "_private_regular_file", lambda _metadata: True)
-    monkeypatch.setattr(health_lease, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
+    monkeypatch.setattr(state_file, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
     monkeypatch.setattr(health_lease, "verified_machine_device_key_by_id", lambda *_args, **_kwargs: key)
     monkeypatch.setattr(
         health_lease,
@@ -495,7 +495,7 @@ def test_malformed_and_symlink_outbox_fail_closed(tmp_path: Path, monkeypatch: p
 
 def test_lease_state_fails_closed_without_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths, private, _key_generation = _prepare(tmp_path, monkeypatch)
-    monkeypatch.setattr(health_lease, "HEALTH_LEASE_STATE_FEATURE", "native-health-lease-state-absent")
+    monkeypatch.setattr(state_file, "HEALTH_LEASE_STATE_FEATURE", "native-health-lease-state-absent")
 
     with pytest.raises(OSError, match="health_lease_state_native_unavailable"):
         health_lease.issue_or_load_pending_health_lease(

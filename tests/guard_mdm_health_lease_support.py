@@ -11,7 +11,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from codex_plugin_scanner.guard.mdm import continuity, health_lease
+from codex_plugin_scanner.guard.mdm import continuity, health_lease, state_file
 from codex_plugin_scanner.guard.mdm.contracts import LocalIntegritySnapshot, MachinePaths
 from codex_plugin_scanner.guard.mdm.device_key import KeyGeneration
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
@@ -136,7 +136,7 @@ def prepare(
     machine_paths.state_root.mkdir(parents=True)
     private, generation = key()
     monkeypatch.setattr(continuity, "_private_regular_file", lambda _metadata: True)
-    monkeypatch.setattr(health_lease, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
+    monkeypatch.setattr(state_file, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
     monkeypatch.setattr(health_lease, "verified_machine_device_key_by_id", lambda *_args, **_kwargs: generation)
     monkeypatch.setattr(
         health_lease,

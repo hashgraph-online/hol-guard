@@ -1,16 +1,14 @@
 """Protected installation identity and read-only lease-continuity evidence.
 
-The native runtime parses the continuity record and decides what a
-verification reports. This module keeps the privileged reads (the bounded,
-owner-checked record read, the device-key lookup and the boot probe), the
-lock and the atomic write.
+The native runtime reads, parses and writes the continuity record and decides
+what a verification reports. This module keeps the device-key lookup, the
+boot probe and the lock.
 """
 
 from __future__ import annotations
 
 import base64
 import ctypes
-import errno
 import json
 import os
 import platform
@@ -19,7 +17,7 @@ import stat
 import time
 import uuid
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,11 +31,10 @@ from .file_lock import (
 from .file_lock import (
     release_file_lock as _release_lock,
 )
+from .state_file import read_state, replace_state
 
 _SCHEMA = "hol-guard-installation-continuity.v1"
-_STATE_NAME = "installation-continuity.json"
 _LOCK_NAME = ".installation-continuity.lock"
-_MAX_STATE_BYTES = 64 * 1024
 _MAX_UINT64 = (1 << 64) - 1
 INSTALLATION_CONTINUITY_FEATURE = "native-installation-continuity-v1"
 INSTALLATION_CONTINUITY_COMMAND = "installation-continuity"
@@ -101,10 +98,6 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _state_path(paths: MachinePaths) -> Path:
-    return paths.state_root / _STATE_NAME
-
-
 def _lock_path(paths: MachinePaths) -> Path:
     return paths.state_root / _LOCK_NAME
 
@@ -113,28 +106,6 @@ def _private_regular_file(metadata: os.stat_result) -> bool:
     if not stat.S_ISREG(metadata.st_mode):
         return False
     return os.name == "nt" or (metadata.st_uid == 0 and not stat.S_IMODE(metadata.st_mode) & 0o077)
-
-
-def _bounded_private_file(path: Path) -> bytes:
-    try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
-    except OSError as exc:
-        if exc.errno == errno.ELOOP:
-            raise PermissionError("installation_identity_acl_invalid") from exc
-        raise
-    try:
-        before = os.fstat(descriptor)
-        if before.st_size > _MAX_STATE_BYTES or not _private_regular_file(before):
-            raise PermissionError("installation_identity_acl_invalid")
-        payload = os.read(descriptor, _MAX_STATE_BYTES + 1)
-        after = os.fstat(descriptor)
-        before_identity = (before.st_dev, before.st_ino, before.st_size, before.st_ctime_ns)
-        after_identity = (after.st_dev, after.st_ino, after.st_size, after.st_ctime_ns)
-        if len(payload) > _MAX_STATE_BYTES or len(payload) != before.st_size or before_identity != after_identity:
-            raise OSError("installation_identity_invalid")
-        return payload
-    finally:
-        os.close(descriptor)
 
 
 def _native_answer(request: dict[str, object]) -> dict[str, Any]:
@@ -185,36 +156,13 @@ def _parse_record(payload: bytes) -> InstallationContinuityRecord:
 
 
 def _read_record(paths: MachinePaths) -> InstallationContinuityRecord | None:
-    try:
-        return _parse_record(_bounded_private_file(_state_path(paths)))
-    except FileNotFoundError:
-        return None
+    content = read_state(paths.state_root, "continuity")
+    return None if content is None else _parse_record(content)
 
 
 def _atomic_write(paths: MachinePaths, record: InstallationContinuityRecord) -> None:
-    parent = paths.state_root
-    if parent.is_symlink() or not parent.is_dir():
-        raise OSError("installation_identity_state_root_invalid")
-    target = _state_path(paths)
-    temporary = parent / f".{target.name}.{secrets.token_hex(16)}.tmp"
     payload = json.dumps(record.to_dict(), sort_keys=True, separators=(",", ":")).encode("utf-8")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, target)
-        if os.name != "nt":
-            parent_descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(parent_descriptor)
-            finally:
-                os.close(parent_descriptor)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
+    replace_state(paths.state_root, "continuity", payload)
 
 
 @contextmanager
@@ -332,13 +280,13 @@ def verify_installation_continuity(
         "unknown", "installation_identity_probe_failed", "lease_continuity_probe_failed"
     )
     try:
-        content = _bounded_private_file(_state_path(paths))
-    except FileNotFoundError:
-        return ContinuityVerification("absent", "installation_identity_absent", "lease_continuity_absent")
+        content = read_state(paths.state_root, "continuity")
     except PermissionError:
         return ContinuityVerification("tampered", "installation_identity_acl_invalid", "lease_continuity_invalid")
     except OSError:
         return probe_failed
+    if content is None:
+        return ContinuityVerification("absent", "installation_identity_absent", "lease_continuity_absent")
     encoded = base64.b64encode(content).decode("ascii")
     try:
         # A record the runtime cannot read never costs a key or boot probe.
