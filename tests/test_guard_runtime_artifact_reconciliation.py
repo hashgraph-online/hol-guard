@@ -406,67 +406,7 @@ def test_a_hook_artifact_outside_config_path_is_read(tmp_path: Path) -> None:
     assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(yaml_config)}}, _NEW_DIGEST)
 
 
-def test_a_pin_past_the_first_chunk_is_read(tmp_path: Path) -> None:
-    config = tmp_path / "config.json"
-    filler = "x" * (reconciliation._PINNED_SCAN_CHUNK_BYTES * 4 + 7)
-    config.write_text(
-        '{"notes": "' + filler + '", "command": "/g/native-runtime/' + _OLD_DIGEST + '/hol-guard-runtime"}',
-        encoding="utf-8",
-    )
-    manifest = {"config_path": str(config)}
-
-    assert reconciliation._pins_stale_native_runtime({"manifest": manifest}, _NEW_DIGEST)
-
-
-def test_a_pin_split_across_a_chunk_boundary_is_read(tmp_path: Path) -> None:
-    config = tmp_path / "config.json"
-    prefix = '{"command": "/g'
-    pad = "x" * (reconciliation._PINNED_SCAN_CHUNK_BYTES - len(prefix) - 20)
-    config.write_text(
-        prefix + pad + "/native-runtime/" + _OLD_DIGEST + '/hol-guard-runtime"}',
-        encoding="utf-8",
-    )
-
-    assert reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _NEW_DIGEST)
-
-
-def test_a_preserved_user_field_naming_a_runtime_path_is_not_a_stale_pin(tmp_path: Path) -> None:
-    config = tmp_path / "config.json"
-    config.write_text(
-        '{"notes": "archived under /home/u/.hol-guard/native-runtime/' + _OLD_DIGEST + '/ before the upgrade"}',
-        encoding="utf-8",
-    )
-
-    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _NEW_DIGEST)
-
-
-def test_a_note_beside_a_current_hook_command_is_not_a_stale_pin(tmp_path: Path) -> None:
-    config = tmp_path / "config.json"
-    config.write_text(
-        '{"notes": "old copy: /home/u/.hol-guard/native-runtime/'
-        + _OLD_DIGEST
-        + '/", "command": "/home/u/.hol-guard/native-runtime/'
-        + _NEW_DIGEST
-        + '/hol-guard-runtime bounded-hook-bridge"}',
-        encoding="utf-8",
-    )
-
-    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _NEW_DIGEST)
-
-
-def test_a_file_past_the_scan_budget_is_not_read_to_the_end(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(reconciliation, "_PINNED_SCAN_CHUNK_BYTES", 64)
-    monkeypatch.setattr(reconciliation, "_PINNED_SCAN_MAX_BYTES", 128)
-    config = tmp_path / "config.json"
-    config.write_text(
-        '{"notes": "' + "x" * 256 + '", "command": "/g/native-runtime/' + _OLD_DIGEST + '/hol-guard-runtime"}',
-        encoding="utf-8",
-    )
-
-    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _NEW_DIGEST)
+# The pin grammar and scan budget are covered by hook_launch_scan_tests.rs.
 
 
 def test_a_malformed_persisted_path_does_not_stop_the_remaining_harnesses(

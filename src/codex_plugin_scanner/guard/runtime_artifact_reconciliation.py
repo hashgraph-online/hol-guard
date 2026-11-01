@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 import sys
 from collections.abc import Mapping
@@ -16,21 +15,12 @@ from .adapters.base import HarnessContext
 from .approvals import _live_hook_verification
 from .cli.install_commands import apply_managed_install
 from .cursor_hook_rebind import rebind_stale_cursor_hooks
-from .foreign_hook_interpreter import current_guard_python, names_foreign_interpreter
 from .shim_refresh import refresh_stale_harness_shims
 from .shims import package_shim_dashboard_status, package_shim_status, repair_package_shims
 from .store import GuardStore
 
-# A hook command launches the frozen build's runtime from its content-addressed
-# durable copy, ``native-runtime/<sha256>/hol-guard-runtime[.exe]``; JSON
-# configs may escape the separator. Requiring the executable name keeps a
-# preserved user field that only names the directory from counting as a pin.
-_PINNED_RUNTIME = re.compile(r"native-runtime[/\\]+([0-9a-f]{64})[/\\]+hol-guard-runtime(?:\.exe)?(?![\w.-])")
-_PINNED_SCAN_CHUNK_BYTES = 1024 * 1024
-# Guard writes hook artifacts of a few kilobytes. A manifest path that names a
-# far larger file is not one of them; stop there rather than read it to EOF.
-_PINNED_SCAN_MAX_BYTES = 16 * _PINNED_SCAN_CHUNK_BYTES
-_PINNED_SCAN_CARRY = 256
+_LAUNCH_SCAN_TIMEOUT_SECONDS = 10.0
+_LAUNCH_SCAN_FEATURE = "native-hook-launch-scan-v1"
 _MANIFEST_SCAN_MAX_PATHS = 16
 _MANIFEST_SCAN_MAX_NODES = 512
 
@@ -141,25 +131,6 @@ def _manifest_file_paths(manifest: object) -> tuple[Path, ...]:
     return tuple(found)
 
 
-def _names_stale_runtime(path: Path, current_digest: str) -> bool:
-    """Whether one Guard-owned artifact still launches an older runtime copy."""
-
-    # Each chunk keeps the previous tail so a pin can span the boundary.
-    pinned: set[str] = set()
-    tail = ""
-    scanned = 0
-    try:
-        with path.open("rb") as handle:
-            while scanned < _PINNED_SCAN_MAX_BYTES and (chunk := handle.read(_PINNED_SCAN_CHUNK_BYTES)):
-                scanned += len(chunk)
-                text = tail + chunk.decode("utf-8", errors="replace")
-                pinned.update(match.group(1) for match in _PINNED_RUNTIME.finditer(text))
-                tail = text[-_PINNED_SCAN_CARRY:]
-    except (OSError, ValueError):
-        return False
-    return bool(pinned) and pinned != {current_digest}
-
-
 def _planned_artifact_paths(harness: str, context: HarnessContext) -> tuple[Path, ...]:
     """Existing files a fresh install would rewrite that the stored manifest may not name.
 
@@ -194,6 +165,55 @@ def _scanned_paths(install: Mapping[str, object], extra_paths: tuple[Path, ...])
     return (*named, *(path for path in extra_paths if path not in named))
 
 
+def current_guard_python() -> str | None:
+    """The interpreter this process bakes into hook artifacts, or None when frozen.
+
+    A frozen Guard has no Python install of its own, so every launcher that
+    runs the Guard package through an interpreter belongs to another install.
+    """
+
+    if bool(getattr(sys, "frozen", False)):
+        return None
+    return str(Path(sys.executable).absolute())
+
+
+def _scan_launchers(
+    paths: tuple[Path, ...],
+    *,
+    current_digest: str | None,
+    guard_home: Path | None,
+) -> Mapping[str, object] | None:
+    """``hook_launch_scan.rs`` over the install's artifacts; None when the scan did not answer.
+
+    A scan that never answered is not a clean one: callers treat it as a
+    launcher that still needs repair, so the harness reports as failed rather
+    than keeping a stale or foreign launcher in place. A runtime that does not
+    offer the scan (none installed yet, or an older one mid-upgrade) skips it,
+    since no reinstall could make it answer.
+    """
+
+    if not paths or (current_digest is None and guard_home is None):
+        return {}
+    from .mdm.runtime_request import runtime_answer, runtime_offers
+
+    interpreter = None if guard_home is None else {"current": current_guard_python(), "guard_home": str(guard_home)}
+    answer = runtime_answer(
+        _LAUNCH_SCAN_FEATURE,
+        "hook-launch-scan",
+        {
+            "schema": "hook-launch-scan.v1",
+            "paths": [str(path) for path in paths],
+            "runtime_digest": current_digest,
+            "interpreter": interpreter,
+        },
+        output_limit=4 * 1024,
+        timeout_seconds=_LAUNCH_SCAN_TIMEOUT_SECONDS,
+    )
+    if answer is None and not runtime_offers(_LAUNCH_SCAN_FEATURE):
+        return {}
+    return answer
+
+
 def _pins_stale_native_runtime(
     install: Mapping[str, object],
     current_digest: str | None,
@@ -205,29 +225,8 @@ def _pins_stale_native_runtime(
     own, so a stale pin silently sends every hook to the slower Python path.
     """
 
-    if current_digest is None:
-        return False
-    return any(_names_stale_runtime(path, current_digest) for path in _scanned_paths(install, extra_paths))
-
-
-def _launches_foreign_interpreter(
-    install: Mapping[str, object],
-    context: HarnessContext,
-    extra_paths: tuple[Path, ...] = (),
-) -> bool:
-    """Whether the install's hook artifacts still run another Guard install's Python.
-
-    The install-time file proof only hashes what it recorded, and the runtime
-    pin above only knows a frozen build's own copy. A launcher left by a
-    different Guard install keeps both of them satisfied while every hook
-    reaches a client the resident no longer serves.
-    """
-
-    current = current_guard_python()
-    return any(
-        names_foreign_interpreter(path, current=current, guard_home=context.guard_home)
-        for path in _scanned_paths(install, extra_paths)
-    )
+    scan = _scan_launchers(_scanned_paths(install, extra_paths), current_digest=current_digest, guard_home=None)
+    return scan is None or scan.get("stale_runtime") is True
 
 
 def _launches_stale_client(
@@ -236,10 +235,17 @@ def _launches_stale_client(
     context: HarnessContext,
     current_digest: str | None,
 ) -> bool:
-    extra_paths = _planned_artifact_paths(harness, context)
-    return _pins_stale_native_runtime(install, current_digest, extra_paths) or _launches_foreign_interpreter(
-        install, context, extra_paths
-    )
+    """Whether the install's hook artifacts pin an older runtime or run another Guard install's Python.
+
+    The install-time file proof only hashes what it recorded, and the runtime
+    pin only knows a frozen build's own copy. A launcher left by a different
+    Guard install keeps both of them satisfied while every hook reaches a
+    client the resident no longer serves.
+    """
+
+    paths = _scanned_paths(install, _planned_artifact_paths(harness, context))
+    scan = _scan_launchers(paths, current_digest=current_digest, guard_home=context.guard_home)
+    return scan is None or scan.get("stale_runtime") is True or scan.get("foreign_interpreter") is True
 
 
 def _managed_install_needs_artifact_repair(
