@@ -20,6 +20,7 @@ from .shims import package_shim_dashboard_status, package_shim_status, repair_pa
 from .store import GuardStore
 
 _LAUNCH_SCAN_TIMEOUT_SECONDS = 10.0
+_LAUNCH_SCAN_FEATURE = "native-hook-launch-scan-v1"
 _MANIFEST_SCAN_MAX_PATHS = 16
 _MANIFEST_SCAN_MAX_NODES = 512
 
@@ -182,20 +183,22 @@ def _scan_launchers(
     current_digest: str | None,
     guard_home: Path | None,
 ) -> Mapping[str, object] | None:
-    """``hook_launch_scan.rs`` over the install's artifacts; None when the scan did not run.
+    """``hook_launch_scan.rs`` over the install's artifacts; None when the scan did not answer.
 
     A scan that never answered is not a clean one: callers treat it as a
     launcher that still needs repair, so the harness reports as failed rather
-    than keeping a stale or foreign launcher in place.
+    than keeping a stale or foreign launcher in place. A runtime that does not
+    offer the scan (none installed yet, or an older one mid-upgrade) skips it,
+    since no reinstall could make it answer.
     """
 
     if not paths or (current_digest is None and guard_home is None):
         return {}
-    from .mdm.runtime_request import runtime_answer
+    from .mdm.runtime_request import runtime_answer, runtime_offers
 
     interpreter = None if guard_home is None else {"current": current_guard_python(), "guard_home": str(guard_home)}
     answer = runtime_answer(
-        "native-hook-launch-scan-v1",
+        _LAUNCH_SCAN_FEATURE,
         "hook-launch-scan",
         {
             "schema": "hook-launch-scan.v1",
@@ -206,6 +209,8 @@ def _scan_launchers(
         output_limit=4 * 1024,
         timeout_seconds=_LAUNCH_SCAN_TIMEOUT_SECONDS,
     )
+    if answer is None and not runtime_offers(_LAUNCH_SCAN_FEATURE):
+        return {}
     return answer
 
 

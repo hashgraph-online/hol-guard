@@ -142,11 +142,27 @@ def test_a_scan_that_never_answers_reports_the_harness_failed(
     store, launcher = _cline_store(tmp_path, _current())
     applied = _patch_reconciliation(monkeypatch, launcher, store.guard_home)
     monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
 
     repaired, failed = reconciliation.repair_failing_managed_harness_hooks(store, home_dir=tmp_path / "home")
 
     assert (repaired, failed) == ((), ("cline",))
     assert applied == ["cline"]
+
+
+def test_a_runtime_without_the_scan_skips_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, launcher = _cline_store(tmp_path, _current())
+    applied = _patch_reconciliation(monkeypatch, launcher, store.guard_home)
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: False)
+
+    repaired, failed = reconciliation.repair_failing_managed_harness_hooks(store, home_dir=tmp_path / "home")
+
+    assert (repaired, failed) == ((), ())
+    assert applied == []
 
 
 def test_a_launcher_beyond_the_path_bound_is_still_read(tmp_path: Path) -> None:
