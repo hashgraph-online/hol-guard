@@ -136,6 +136,23 @@ pub(crate) fn script_tokens(
     Ok(tokens.iter().chain(passthrough.iter()).cloned().collect())
 }
 
+/// The tool call a test-named script body spells, when the body is a
+/// read-only tool run rather than one of the runners read above.
+///
+/// `script_tokens` admits such a body on the tool's own name and arguments
+/// alone. Whether that tool is installed where the sink resolves it is a
+/// question about a directory this module never sees, so the body comes back
+/// out for the route to answer.
+pub(crate) fn script_tool_body(
+    arguments: &[String],
+    scripts: Option<&Map<String, Value>>,
+) -> Option<(String, Vec<String>)> {
+    let tokens = script_tokens(arguments, scripts).ok()?;
+    let (runner, rest) = tokens.split_first()?;
+    crate::contained_node_tool::supported_tool(runner, rest)?;
+    Some((runner.clone(), rest.to_vec()))
+}
+
 /// The whole alias: the manager's command and the manifest's scripts in, the
 /// words the run spells out.
 pub(crate) fn resolve(
