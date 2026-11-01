@@ -395,6 +395,8 @@ mod shell_secret_read_glob;
 mod shell_secret_read_glob_tests;
 #[cfg(test)]
 mod shell_secret_read_script_operand_tests;
+#[cfg(test)]
+mod shell_secret_read_search_reader_tests;
 mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
