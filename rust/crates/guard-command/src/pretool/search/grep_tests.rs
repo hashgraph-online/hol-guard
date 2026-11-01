@@ -405,6 +405,10 @@ fn an_include_narrows_the_recursive_walk_below_the_root() {
         // A glob holding a separator is matched against a name this walk
         // does not render.
         ("-rn KEY --include docs/*.md .".to_owned(), false),
+        // `fnmatch` has no brace expansion, so `grep` selects the one file
+        // whose name is spelled with the braces while the filter would stand
+        // for the two suffixes around them.
+        ("-rn KEY --include *.{md,rs} docs".to_owned(), false),
     ] {
         let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
         assert_eq!(

@@ -192,9 +192,15 @@ pub(super) fn grep_include_walk_proven(
 /// The walk filter for a grep include, or nothing when the globs reach past
 /// what it models. A separator makes the glob match against a base this walk
 /// does not model, and the implementations differ on what it is.
+///
+/// Braces are refused because the filter below expands them the way ripgrep
+/// does, while both greps match the glob through `fnmatch`, which carries no
+/// brace expansion and reads `{` and `}` as the bytes they are. The expansion
+/// would stand for a set of names the search never selects, and miss the one
+/// name -- the literal spelling -- that it does.
 fn include_filter(globs: &[&str], operand: &str) -> Option<SearchFilter> {
     if globs.iter().any(|glob| {
-        glob.contains(['/', '\\'])
+        glob.contains(['/', '\\', '{', '}'])
             || !(matches_only_a_name(glob) || misses_every_rendered_path(glob, operand))
     }) {
         return None;
