@@ -8511,6 +8511,54 @@
       "expect": "allow"
     },
     {
+      "id": "queue-curl-loopback-ipv6-literal",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s http://[::1]:8080/health"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-curl-loopback-ipv6-expanded",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s http://[0:0:0:0:0:0:0:1]:3000/api/items"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-curl-loopback-ipv6-range-glob",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s 'http://[::1]:8080/item[1-9].json'"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-curl-schemeless-guard-port",
       "fix_area": "negative",
       "harnesses": [
