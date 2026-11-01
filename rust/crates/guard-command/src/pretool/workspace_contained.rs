@@ -114,7 +114,9 @@ const PRIVILEGE_DENY: &[&str] = &[
     "pkill",
 ];
 // The sandbox cannot undo losing work, committed or not, so these stay at
-// review.
+// review. A note and a replacement ref are work the repository keeps and
+// nothing else holds: the sandbox writes inside the same worktree, so
+// containing a write to either would hide it rather than hold it back.
 const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.hard-reset",
     "command.git.force-clean",
@@ -128,6 +130,8 @@ const UNRECOVERABLE_RULES: &[&str] = &[
     "command.git.unsafe-read",
     "command.git.reflog",
     "command.git.tag",
+    "command.git.notes",
+    "command.git.replace",
 ];
 // Remote changes: with no network, containing them only hides a consent prompt.
 const REMOTE_RULES: &[&str] = &["command.git.force-push", "command.git.remote-branch-delete"];
