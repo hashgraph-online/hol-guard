@@ -1,16 +1,17 @@
 //! `ownership-acl --stdin`: decide ownership and ACL health for the machine's
 //! protected surfaces (`mdm/acl.py` before the decisions moved here).
 //!
-//! Python still runs the pinned PowerShell probe on Windows. This module owns
-//! what that probe means, and walks the macOS path chain itself:
+//! This module runs the pinned PowerShell probe on Windows, decides what its
+//! rows mean, and walks the macOS path chain itself:
 //!
 //! - `macos-verify` walks each surface's chain with `lstat` and `ls -lde`
 //!   (see `ownership_acl_macos.rs`) and folds the results into one verdict.
-//! - `windows-payload` lists the Windows surfaces to probe: each protected
-//!   file, directory and registry key, and every ancestor up to the drive or
-//!   `HKLM:\` root, once each regardless of case.
-//! - `windows-verify` checks the probe's rows against that list and classifies
-//!   each row by owner SID, attributes, container type and access rules.
+//! - `windows-probe` and `windows-file-probe` list the Windows surfaces to
+//!   probe (each protected file, directory and registry key, and every
+//!   ancestor up to the drive or `HKLM:\` root, once each regardless of
+//!   case), run the pinned probe over them, and classify each row by owner
+//!   SID, attributes, container type and access rules (see
+//!   `ownership_acl_windows.rs`).
 //! - `aggregate` folds per-surface results into one verdict.
 //!
 //! A malformed or incomplete Windows probe never reports health: the verdict
@@ -64,7 +65,7 @@ struct Request {
     #[serde(default)]
     managed_file: Option<String>,
     #[serde(default)]
-    rows: Option<Value>,
+    windows_directory: Option<String>,
     #[serde(default)]
     surfaces: Option<Vec<Surface>>,
     #[serde(default)]
@@ -156,27 +157,22 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 fn respond(request: Request) -> Result<Value, String> {
     let invalid = || "ownership_acl_request_invalid".to_owned();
     match request.op.as_str() {
-        "windows-payload" => {
+        "windows-probe" => {
             let paths = request.windows_paths.ok_or_else(invalid)?;
-            let payload = windows_payload(&paths).map_err(|_| invalid())?;
-            Ok(json!({"ok": true, "payload": payload.iter().map(payload_json).collect::<Vec<_>>()}))
+            let windows_directory = request.windows_directory.ok_or_else(invalid)?;
+            Ok(verdict_json(&windows_probe::probe(
+                windows_payload(&paths),
+                &windows_directory,
+                &mut windows_probe::SystemRunner::default(),
+            )))
         }
-        "windows-verify" => {
-            let paths = request.windows_paths.ok_or_else(invalid)?;
-            let rows = request.rows.ok_or_else(invalid)?;
-            Ok(verdict_json(&windows_verify(windows_payload(&paths), rows)))
-        }
-        "windows-file-payload" => {
+        "windows-file-probe" => {
             let file = request.managed_file.ok_or_else(invalid)?;
-            let payload = managed_file_payload(&file).map_err(|_| invalid())?;
-            Ok(json!({"ok": true, "payload": payload.iter().map(payload_json).collect::<Vec<_>>()}))
-        }
-        "windows-file-verify" => {
-            let file = request.managed_file.ok_or_else(invalid)?;
-            let rows = request.rows.ok_or_else(invalid)?;
-            Ok(verdict_json(&windows_verify(
+            let windows_directory = request.windows_directory.ok_or_else(invalid)?;
+            Ok(verdict_json(&windows_probe::probe(
                 managed_file_payload(&file),
-                rows,
+                &windows_directory,
+                &mut windows_probe::SystemRunner::default(),
             )))
         }
         "macos-verify" => {
@@ -493,6 +489,9 @@ fn verdict_json(verdict: &Verdict) -> Value {
 
 #[path = "ownership_acl_macos.rs"]
 mod macos;
+
+#[path = "ownership_acl_windows.rs"]
+mod windows_probe;
 
 #[cfg(test)]
 #[path = "ownership_acl_verdict_tests.rs"]

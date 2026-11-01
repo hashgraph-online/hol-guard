@@ -4,23 +4,15 @@ use super::*;
 
 const MANAGED_FILE: &str = r"C:\ProgramData\HOL\Guard\ca-bundle.pem";
 
-fn managed_file_payload_for(file: &str) -> Result<Vec<Value>, String> {
-    let response = run(json!({
-        "schema": SCHEMA,
-        "op": "windows-file-payload",
-        "managed_file": file,
-    }))?;
-    Ok(response["payload"].as_array().unwrap().clone())
+fn managed_file_payload_for(file: &str) -> Result<Vec<Value>, ()> {
+    Ok(managed_file_payload(file)?
+        .iter()
+        .map(payload_json)
+        .collect())
 }
 
 fn verify_managed_file(rows: Value) -> Value {
-    run(json!({
-        "schema": SCHEMA,
-        "op": "windows-file-verify",
-        "managed_file": MANAGED_FILE,
-        "rows": rows,
-    }))
-    .unwrap()
+    verdict_json(&windows_verify(managed_file_payload(MANAGED_FILE), rows))
 }
 
 #[test]
@@ -47,10 +39,7 @@ fn a_managed_file_payload_walks_every_ancestor_to_the_file() {
     ]
     .map(|(name, path, container, leaf)| (name.to_owned(), path.to_owned(), container, leaf));
     assert_eq!(rows, expected);
-    assert_eq!(
-        managed_file_payload_for(r"relative\ca.pem"),
-        Err("ownership_acl_request_invalid".to_owned())
-    );
+    assert_eq!(managed_file_payload_for(r"relative\ca.pem"), Err(()));
 }
 
 #[test]

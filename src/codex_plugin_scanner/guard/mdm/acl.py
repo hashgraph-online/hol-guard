@@ -1,19 +1,15 @@
 """Fail-honest ownership and ACL verification for machine protection surfaces.
 
 The native runtime walks each macOS surface's path chain with ``lstat`` and
-``ls -lde``. On Windows this module runs the pinned PowerShell probe; the
-runtime lists the surfaces to probe, classifies the probe's rows and folds the
-per-surface results into one verdict. Without the runtime no surface reports
-health.
+``ls -lde``, runs the pinned PowerShell probe over the Windows surfaces, and
+folds the per-surface results into one verdict. Without the runtime no surface
+reports health.
 """
 
 from __future__ import annotations
 
-import base64
 import json
-import ntpath
 import platform
-import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -191,68 +187,6 @@ def _windows_paths(paths: MachinePaths) -> dict[str, str]:
     }
 
 
-def _windows_surface_payload(paths: MachinePaths, *, deadline: float) -> list[dict[str, str | bool]]:
-    answer = _native_answer({"op": "windows-payload", "windows_paths": _windows_paths(paths)}, deadline=deadline)
-    payload = None if answer is None else answer.get("payload")
-    if not isinstance(payload, list):
-        raise OSError("ownership_acl_native_unavailable")
-    return cast(list[dict[str, str | bool]], payload)
-
-
-def _windows_acl_script(encoded_items: str) -> str:
-    return (
-        "$ErrorActionPreference='Stop';"
-        f"$items=ConvertFrom-Json([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded_items}')));"
-        "$out=@();foreach($item in $items){"
-        "if(-not(Test-Path -LiteralPath $item.path)){$out+=@{Name=$item.name;Kind=$item.kind;"
-        "ExpectedContainer=$item.expectedContainer;Leaf=$item.leaf;Exists=$false};continue};"
-        "$acl=Get-Acl -LiteralPath $item.path;"
-        "$owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value;"
-        "$rawRules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])|"
-        "Select-Object -First 257);"
-        "$truncated=$rawRules.Count -gt 256;"
-        "$rules=@($rawRules|Select-Object -First 256|ForEach-Object{"
-        "$rights=if($item.kind -eq 'registry'){[int64]$_.RegistryRights}else{[int64]$_.FileSystemRights};"
-        "@{Sid=$_.IdentityReference.Value;Type=$_.AccessControlType.ToString();Rights=$rights;"
-        "Propagation=$_.PropagationFlags.ToString()}});"
-        "$raw=[Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(),0);"
-        "$target=if($item.kind -eq 'registry'){$null}else{Get-Item -LiteralPath $item.path -Force};"
-        "$attributes=if($null -eq $target){0}else{[int64]$target.Attributes};"
-        "$container=if($item.kind -eq 'registry'){$true}else{[bool]$target.PSIsContainer};"
-        "$out+=@{Name=$item.name;Kind=$item.kind;ExpectedContainer=$item.expectedContainer;Leaf=$item.leaf;"
-        "Exists=$true;Owner=$owner;Rules=$rules;Truncated=$truncated;"
-        "Attributes=$attributes;Container=$container;NullDacl=($null -eq $raw.DiscretionaryAcl)}};"
-        "$out|ConvertTo-Json -Compress -Depth 6"
-    )
-
-
-def _run_windows_acl_payload(payload: list[dict[str, str | bool]]) -> object:
-    encoded = base64.b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode()
-    windows_directory = _windows_directory()
-    system_directory = ntpath.join(windows_directory, "System32")
-    powershell = ntpath.join(system_directory, "WindowsPowerShell", "v1.0", "powershell.exe")
-    result = subprocess.run(
-        [powershell, "-NoProfile", "-NonInteractive", "-Command", _windows_acl_script(encoded)],
-        check=True,
-        capture_output=True,
-        cwd=system_directory,
-        env={
-            "ComSpec": ntpath.join(system_directory, "cmd.exe"),
-            "SystemRoot": windows_directory,
-            "WINDIR": windows_directory,
-        },
-        text=True,
-        timeout=15,
-    )
-    if len(result.stdout.encode("utf-8")) > _MAX_ACL_OUTPUT_BYTES:
-        raise ValueError("Windows ACL output exceeds limit")
-    return json.loads(result.stdout)
-
-
-def _run_windows_acl_probe(paths: MachinePaths, *, deadline: float) -> object:
-    return _run_windows_acl_payload(_windows_surface_payload(paths, deadline=deadline))
-
-
 def verify_protected_ownership_and_acl(
     paths: MachinePaths,
     *,
@@ -270,13 +204,13 @@ def verify_protected_ownership_and_acl(
         )
         return verdict or _probe_failed()
     if resolved_system == "Windows":
-        deadline = _native_deadline()
         try:
-            rows = _run_windows_acl_probe(paths, deadline=deadline)
-        except (OSError, subprocess.SubprocessError, ValueError):
+            directory = _windows_directory()
+        except OSError:
             return _probe_failed()
         verdict = _native_verdict(
-            {"op": "windows-verify", "windows_paths": _windows_paths(paths), "rows": rows}, deadline=deadline
+            {"op": "windows-probe", "windows_paths": _windows_paths(paths), "windows_directory": directory},
+            deadline=_native_deadline(),
         )
         return verdict or _probe_failed()
     return OwnershipAclVerification(

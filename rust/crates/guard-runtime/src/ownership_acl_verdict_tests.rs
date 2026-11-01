@@ -16,14 +16,16 @@ fn run(request: Value) -> Result<Value, String> {
     Ok(serde_json::from_slice(&bytes).unwrap())
 }
 
+fn windows_paths(paths: Value) -> WindowsPaths {
+    serde_json::from_value(paths).unwrap()
+}
+
 fn payload_for(paths: Value) -> Vec<Value> {
-    let response = run(json!({
-        "schema": SCHEMA,
-        "op": "windows-payload",
-        "windows_paths": paths,
-    }))
-    .unwrap();
-    response["payload"].as_array().unwrap().clone()
+    windows_payload(&windows_paths(paths))
+        .unwrap()
+        .iter()
+        .map(payload_json)
+        .collect()
 }
 
 /// One healthy probe row per payload item: SYSTEM owns it and users may read.
@@ -59,13 +61,10 @@ fn healthy_rows_for(payload: Vec<Value>) -> Vec<Value> {
 }
 
 fn verify(rows: Value) -> Value {
-    run(json!({
-        "schema": SCHEMA,
-        "op": "windows-verify",
-        "windows_paths": default_paths(),
-        "rows": rows,
-    }))
-    .unwrap()
+    verdict_json(&windows_verify(
+        windows_payload(&windows_paths(default_paths())),
+        rows,
+    ))
 }
 
 fn row_named<'a>(rows: &'a mut [Value], kind: &str, path: &str) -> &'a mut Value {
@@ -213,16 +212,10 @@ fn paths_that_are_not_drive_or_share_absolute_are_refused() {
     ] {
         let mut paths = default_paths();
         paths["runtime_root"] = json!(spelling);
-        let error = run(json!({"schema": SCHEMA, "op": "windows-payload", "windows_paths": paths}));
-        assert_eq!(error, Err("ownership_acl_request_invalid".to_owned()));
-        let verdict = run(json!({
-            "schema": SCHEMA,
-            "op": "windows-verify",
-            "windows_paths": paths,
-            "rows": healthy_rows(),
-        }))
-        .unwrap();
-        assert_eq!(verdict["reason_code"], PROBE_FAILED);
+        let payload = windows_payload(&windows_paths(paths));
+        assert!(payload.is_err(), "{spelling}");
+        let verdict = windows_verify(payload, Value::Array(healthy_rows()));
+        assert_eq!(verdict.reason_code, PROBE_FAILED);
     }
 }
 
@@ -428,12 +421,19 @@ fn malformed_requests_are_refused() {
     );
     assert_eq!(run(json!({"schema": SCHEMA, "op": "probe"})), invalid);
     assert_eq!(run(json!({"schema": SCHEMA, "op": "aggregate"})), invalid);
+    for op in [
+        "windows-payload",
+        "windows-verify",
+        "windows-file-payload",
+        "windows-file-verify",
+    ] {
+        assert_eq!(
+            run(json!({"schema": SCHEMA, "op": op, "windows_paths": default_paths()})),
+            invalid
+        );
+    }
     assert_eq!(
-        run(json!({"schema": SCHEMA, "op": "windows-verify", "windows_paths": default_paths()})),
-        invalid
-    );
-    assert_eq!(
-        run(json!({"schema": SCHEMA, "op": "windows-payload"})),
+        run(json!({"schema": SCHEMA, "op": "windows-probe", "windows_paths": default_paths()})),
         invalid
     );
     assert_eq!(
