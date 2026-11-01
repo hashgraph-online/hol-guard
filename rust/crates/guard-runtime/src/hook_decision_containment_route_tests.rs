@@ -297,6 +297,32 @@ fn codex_is_routed_only_by_its_bridge() {
 }
 
 #[test]
+fn grok_is_routed_by_its_own_hook_and_never_on_windows() {
+    // Grok applies a `PreToolUse` `updatedInput`, so its hook rewrites the
+    // call to the sink command the same way Claude Code and Z Code do. It
+    // sends shell work as `run_terminal_command`.
+    let grok = with(
+        workspace_inputs("macos", "grok"),
+        "tool_name",
+        json!("run_terminal_command"),
+    );
+    assert_eq!(sink(&grok).0.as_deref(), Some("workspace-contained-v1"));
+    let linux = with(grok.clone(), "platform", json!("linux"));
+    assert_eq!(sink(&linux).0.as_deref(), Some("workspace-contained-v1"));
+    // Windows has no sink for Grok, so the requirement stays an approvable
+    // review there rather than becoming a deny nothing can lift.
+    let windows = with(grok, "platform", json!("windows"));
+    assert_eq!(kept(&windows), "platform_has_no_sink");
+    // Muse is deliberately absent: it applies `updatedInput` only from an
+    // `onFailure` correction, so a routed requirement would record a contained
+    // run it ran uncontained.
+    assert_eq!(
+        kept(&workspace_inputs("macos", "muse")),
+        "harness_not_routed"
+    );
+}
+
+#[test]
 fn cursor_is_routed_only_by_its_shell_probe_and_never_on_windows() {
     let probe = with(
         with(pytest_inputs("macos", "cursor"), "bridge", json!(true)),
