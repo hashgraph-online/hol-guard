@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections.abc import Callable, Mapping
 from typing import cast
@@ -20,6 +21,7 @@ def runtime_answer(
     deadline: float | None = None,
     status_timeout_seconds: float = _STATUS_TIMEOUT_SECONDS,
     extra_features: tuple[str, ...] = (),
+    stop_event: threading.Event | None = None,
 ) -> dict[str, object] | None:
     """The runtime's JSON object answer to one request.
 
@@ -30,7 +32,8 @@ def runtime_answer(
     the command gets `timeout_seconds` of its own. The status check alone
     never takes longer than `status_timeout_seconds`. A callable request is
     built after the status check, so it can size itself to what is left of
-    the deadline; it returns `None` to send nothing.
+    the deadline; it returns `None` to send nothing. Setting `stop_event`
+    kills the command and answers `None`.
     """
 
     from ..native_runtime import _run_native_process, native_runtime_status
@@ -63,6 +66,7 @@ def runtime_answer(
         input_text=input_text,
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
+        **({"stop_event": stop_event} if stop_event is not None else {}),
     )
     try:
         answer = cast(object, json.loads(output)) if output is not None else None
