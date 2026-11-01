@@ -278,6 +278,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = process_identity::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if local_risk_report::is_command(command) && flag == "--stdin" => {
+            let response = local_risk_report::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if storage_retention::is_command(command) && flag == "--stdin" => {
             let response = storage_retention::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
