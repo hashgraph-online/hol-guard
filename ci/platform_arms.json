@@ -2316,19 +2316,35 @@
   },
   {
    "verdict": "posix-primitive",
-   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "note": "uid is a POSIX concept. Off Unix, the Linux `/proc` scan never runs (`Platform::current()` picks it only on Linux), and `SystemHost::owned_by_current_user` in `onefile_extraction_reclaim.rs` sees no owner, so no unmarked extraction directory is ever reclaimed on Windows, exactly as `onefile_extraction.py` skipped them when `os.getuid` was missing. `scan` answers `None` for every non-Linux, non-macOS platform, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
    "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
-   "item": "fn current_uid() -> Option<u32>",
+   "item": "pub(crate) fn current_uid() -> Option<u32>",
    "cfg": "not(unix)",
-   "body": "43e9f362db32"
+   "body": "e328c4c48e79"
   },
   {
    "verdict": "posix-primitive",
-   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "note": "uid is a POSIX concept. Off Unix, the Linux `/proc` scan never runs (`Platform::current()` picks it only on Linux), and `SystemHost::owned_by_current_user` in `onefile_extraction_reclaim.rs` sees no owner, so no unmarked extraction directory is ever reclaimed on Windows, exactly as `onefile_extraction.py` skipped them when `os.getuid` was missing. `scan` answers `None` for every non-Linux, non-macOS platform, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
    "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
-   "item": "fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32>",
+   "item": "pub(crate) fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32>",
    "cfg": "not(unix)",
-   "body": "5efc5e13f499"
+   "body": "1a5e369a5a54"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Inode identity is a POSIX concept with no stable std accessor on Windows. The recheck only runs before an unmarked delete, and unmarked directories are never reclaimed off Unix because `onefile_open_paths::metadata_uid` sees no owner there, so the Windows arm is unreachable. The mtime recheck and the marker check stay in force on every platform.",
+   "file": "rust/crates/guard-runtime/src/onefile_extraction_reclaim.rs",
+   "item": "fn same_inode(_left: &Metadata, _right: &Metadata) -> bool",
+   "cfg": "not(unix)",
+   "body": "62da48b4c030"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows asks `guard_runtime_windows_process::process_liveness`, the same OpenProcess-based check `onefile_extraction.py` reached through `windows_process_is_running`, and keeps the fail-closed rule: a pid that is not provably exited (`Some(false)`), or does not fit a process id, counts as alive, so a marked directory is never deleted on an unknown answer. `liveness_fails_closed` runs on every platform.",
+   "file": "rust/crates/guard-runtime/src/onefile_extraction_reclaim.rs",
+   "item": "fn pid_alive(pid: i64) -> bool",
+   "cfg": "not(unix)",
+   "body": "aeb9e90f0af4"
   }
  ]
 }

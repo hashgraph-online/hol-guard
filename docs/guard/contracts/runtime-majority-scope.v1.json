@@ -315,14 +315,13 @@
       {
         "id": "self-update",
         "category": "install_config",
-        "reason": "Guard self-update orchestration (release download, staging, desktop apply, repair); CLI/daemon lifecycle, not request path. onefile_open_paths.py is reached only from GuardDaemonServer._reclaim_onefile_extraction_dirs_once, the hourly (3600 s) _onefile_extraction_reclaim_loop thread, and the excluded repair engine.",
+        "reason": "Guard self-update orchestration (release download, staging, desktop apply, repair); CLI/daemon lifecycle, not request path. onefile_extraction.py is reached only from GuardDaemonServer._reclaim_onefile_extraction_dirs_once, the hourly (3600 s) _onefile_extraction_reclaim_loop thread, and the excluded repair engine.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/update_*.py",
           "src/codex_plugin_scanner/guard/update_staging.py",
           "src/codex_plugin_scanner/guard/daemon/dashboard_update*.py",
           "src/codex_plugin_scanner/guard/daemon/update_refresh_program.py",
-          "src/codex_plugin_scanner/guard/onefile_extraction.py",
-          "src/codex_plugin_scanner/guard/onefile_open_paths.py"
+          "src/codex_plugin_scanner/guard/onefile_extraction.py"
         ]
       },
       {

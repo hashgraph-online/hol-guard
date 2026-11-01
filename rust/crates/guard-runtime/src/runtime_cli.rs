@@ -144,8 +144,8 @@ pub(super) fn run() -> Result<(), String> {
             let response = windows_private_state::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
-        [command, flag] if onefile_open_paths::is_command(command) && flag == "--stdin" => {
-            let response = onefile_open_paths::run_command(io::stdin().lock())?;
+        [command, flag] if onefile_extraction_reclaim::is_command(command) && flag == "--stdin" => {
+            let response = onefile_extraction_reclaim::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
