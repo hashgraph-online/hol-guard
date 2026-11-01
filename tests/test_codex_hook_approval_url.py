@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -134,7 +135,11 @@ def test_unavailable_runtime_leaves_review_copy_unchanged(monkeypatch: pytest.Mo
     from codex_plugin_scanner.guard import native_runner_authority
     from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _localize_pending_approval_copy
 
-    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+    resolve = native_runner_authority.native_runner_authority
+
+    def unavailable(kind: str, args: dict[str, object], **kwargs: Any) -> dict[str, object]:
+        if kind != "approval_copy":
+            return resolve(kind, args, **kwargs)
         raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
     monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
@@ -157,9 +162,11 @@ def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.
     from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
 
     calls: list[dict[str, object]] = []
+    resolve = native_runner_authority.native_runner_authority
 
-    def route(kind: str, args: dict[str, object]) -> dict[str, object]:
-        assert kind == "approval_copy"
+    def route(kind: str, args: dict[str, object], **kwargs: Any) -> dict[str, object]:
+        if kind != "approval_copy":
+            return resolve(kind, args, **kwargs)
         calls.append(args)
         if len(calls) == 2:
             raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_invalid")
