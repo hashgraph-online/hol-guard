@@ -115,7 +115,7 @@ def _v2_document(bundle: Mapping[str, object]) -> tuple[str, set[str]] | None:
     spec = payload.get("spec")
     revision = metadata.get("revision") if isinstance(metadata, Mapping) else None
     rules = spec.get("rules") if isinstance(spec, Mapping) else None
-    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1 or not isinstance(rules, list):
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0 or not isinstance(rules, list):
         return None
     rule_ids = {rule_id for rule in rules if isinstance(rule, dict) and (rule_id := _identifier(rule.get("id")))}
     return f"{_V2_ATTRIBUTION_PREFIX}{revision}", rule_ids

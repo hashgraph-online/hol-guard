@@ -279,19 +279,20 @@ def _v2_bundle(*, issued_at: datetime, revision: int = 7) -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("revision", [7, 0])
 def test_claim_names_the_v2_document_revision_for_a_canonical_review(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revision: int
 ) -> None:
     store, row, _lookups = _setup(
         tmp_path, monkeypatch, bundle=None, lookup=_decision(source="policy-bundle-canonical")
     )
-    bundle = _v2_bundle(issued_at=_created(row) - timedelta(minutes=5))
+    bundle = _v2_bundle(issued_at=_created(row) - timedelta(minutes=5), revision=revision)
     monkeypatch.setattr(attribution_module, "validated_synced_policy_bundle", lambda _store: bundle)
 
     claim = build_local_review_request_claim(request_row=row, oauth=_oauth_metadata(store), store=store)
 
     assert claim["policyRuleId"] == _RULE_ID
-    assert claim["policyBundleVersion"] == "guard-policy-bundle.v2:7"
+    assert claim["policyBundleVersion"] == f"guard-policy-bundle.v2:{revision}"
 
 
 @pytest.mark.parametrize(

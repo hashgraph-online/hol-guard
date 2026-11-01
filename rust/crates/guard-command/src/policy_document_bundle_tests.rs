@@ -202,6 +202,6 @@ fn a_review_rule_on_an_exact_command_is_refused_rather_than_left_unenforced() {
     ask["effect"] = json!("review");
     assert_eq!(
         refusal(&request(json!([ask])))["code"],
-        "unsupported_policy_effect"
+        "unsupported_exact_command_review"
     );
 }

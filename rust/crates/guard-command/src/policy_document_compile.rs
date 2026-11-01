@@ -439,7 +439,7 @@ fn compile_range(
         // The hook applies only a block saved under an exact command, so a
         // review there would let the command run without asking anyone.
         if exact_command && rule["effect"] == "review" {
-            return Err(error("unsupported_policy_effect", id));
+            return Err(error("unsupported_exact_command_review", id));
         }
         let artifacts = match command_artifacts {
             Some(artifacts) => artifacts,
