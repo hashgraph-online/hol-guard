@@ -85,11 +85,14 @@ def decide_compatibility(
         contracts=_contracts(),
     )
     if answer is None:
+        from ..mdm.runtime_request import runtime_offers
+
+        # A runtime that offers the decision but gave no answer failed; say so instead of "unavailable".
         return {
             "schema": PAYLOAD_SCHEMA,
             "harness": harness,
             "state": STATE_VERSION_UNKNOWN,
-            "reason": "runtime_unavailable",
+            "reason": "runtime_error" if runtime_offers(_FEATURE) else "runtime_unavailable",
             "enforcement_effect": "none",
         }
     return answer

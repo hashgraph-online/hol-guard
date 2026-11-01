@@ -149,6 +149,31 @@ class TestManifestValidation:
         assert payload["reason"] != "manifest_invalid"
         assert payload["coverage_revision"] == bundled["revision"]
 
+    @pytest.mark.parametrize(
+        ("observed_at", "accepted"),
+        [
+            ("2026-10-16T00:00:00Z", True),
+            ("2026-10-16 00:00+05:30", True),
+            ("2026-10-16T00:00:00.123456-07:00", True),
+            ("2026-10-16T00:00:00+0000", False),
+            ("20261016T000000Z", False),
+            ("2026-10-16T00:00:00.1234567Z", False),
+            ("2026-02-30T00:00:00Z", False),
+        ],
+    )
+    def test_ci_and_native_validators_agree_on_timestamps(
+        self, decide: Callable[..., dict[str, object]], observed_at: str, accepted: bool
+    ) -> None:
+        manifest = _manifest(_record("18.4.12", observed_at=observed_at))
+        native = decide(_observed("18.4.12"), manifest)
+        assert (native["state"] == STATE_TESTED) is accepted
+        if accepted:
+            parse_manifest(manifest)
+        else:
+            assert native["state"] == STATE_COVERAGE_UNAVAILABLE
+            with pytest.raises(ManifestError, match="observed_at"):
+                parse_manifest(manifest)
+
     @pytest.mark.parametrize("version", ["18.x", "^18.4.12", ">=18.4.12 <19", "18.4.12 - 18.8.3", "*"])
     def test_rejects_ranges(self, version: str) -> None:
         with pytest.raises(ManifestError, match="exact version"):
