@@ -185,6 +185,14 @@ fn exec_site(words: &[&str], program: usize) -> Option<FdExecSite> {
 /// so `rg fd src` and `echo fd -x rm` are the ordinary empty answer.
 pub(super) fn fd_exec_programs(shell: &str) -> Option<BTreeSet<String>> {
     let mut programs = BTreeSet::new();
+    // fd ends an `--exec` body at the single argument `;`, which the shell
+    // spells `\;`, `';'` or `";"`. Only the escaped spelling survives the
+    // split below as the lone backslash [`exec_site`] stops at; a quoted pair
+    // leaves a stray quote this walk reads as an ordinary word, so the body
+    // would run past a terminator fd honours and the `-x` after it would land
+    // in a piece nothing reads as fd's. Spell all three the one way the split
+    // below reads.
+    let shell = shell.replace("';'", "\\;").replace("\";\"", "\\;");
     for piece in shell.split(['\n', ';', '&', '|', '(', ')', '`']) {
         let words: Vec<&str> = piece.split_whitespace().collect();
         let names_fd = words

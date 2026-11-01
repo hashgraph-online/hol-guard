@@ -202,15 +202,25 @@ fn a_brace_in_a_walk_that_runs_nothing_is_ordinary_text() {
 /// `\;` ends one body and starts whatever fd reads after it. The split this
 /// reader walks over cuts the piece at that terminator, so a second walk lands
 /// where nothing reads it as fd's: naming only the first program would call
-/// `fd -x echo \; -x gh pr merge` bounded while `gh` runs unseen.
+/// `fd -x echo \; -x gh pr merge` bounded while `gh` runs unseen. `';'` and
+/// `";"` reach fd as the same single argument, so they end a body too.
 #[test]
 fn a_body_that_ends_at_an_escaped_terminator_stays_unbounded() {
     for text in [
         r"fd -e ts -x echo \; -x gh pr merge",
         r"fd -e ts -x wc -l \;",
+        "fd -e ts -x echo ';' -x gh pr merge",
+        "fd -e ts -x echo \";\" -x gh pr merge",
+        "fd -e ts -x wc -l ';'",
     ] {
         assert_eq!(programs(text), None, "{text}");
     }
+    // A quoted `;` inside an option's value is that option's text, not a
+    // terminator: `cut -d';'` still runs `cut` over the paths fd found.
+    assert_eq!(
+        programs("fd -e csv -x cut -d';' -f1"),
+        Some(vec!["cut".to_string()])
+    );
 }
 
 /// The shell joins adjacent literals and drops their quotes before fd reads
