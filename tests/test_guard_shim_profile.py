@@ -101,6 +101,7 @@ def test_shell_profile_without_the_runtime_asks_for_a_manual_path(tmp_path, monk
     prepared = prepare_guard_shim_shell_profile(ctx)
     assert prepared.files == ()
     assert prepared.manifest["manual_path_required"] is True
+    assert prepared.manifest["manual_path_reason"] == "native_runtime_unavailable"
     assert ensure_guard_shim_path_in_shell_profile(ctx) == prepared.manifest
     assert not (ctx.home_dir / ".zshrc").exists()
 
@@ -195,6 +196,7 @@ class TestEnsureSkipsOnWindows:
         result = ensure_guard_shim_path_in_shell_profile(ctx)
         assert result["changed"] is False
         assert result["manual_path_required"] is True
+        assert result["manual_path_reason"] == "unsupported_shell"
         assert not (ctx.home_dir / ".zshrc").exists()
 
 

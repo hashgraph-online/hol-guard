@@ -253,8 +253,10 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
     from .runtime_transition import TransitionFile
 
     shim_dir = context.guard_home / "bin"
-    if os.name == "nt" or _is_transient_path(shim_dir):
-        return _manual_guard_shim_profile(shim_dir)
+    if os.name == "nt":
+        return _manual_guard_shim_profile(shim_dir, "unsupported_shell")
+    if _is_transient_path(shim_dir):
+        return _manual_guard_shim_profile(shim_dir, "transient_guard_home")
     shell = Path(os.environ.get("SHELL", "")).name
     profile_path = context.home_dir.joinpath(*_GUARD_SHIM_PROFILE_FILES.get(shell, (".zshrc",)))
     _ensure_path_within_root(context.home_dir, profile_path, label="Guard shell profile")
@@ -270,7 +272,7 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
     )
     content = answer.get("content") if answer is not None else None
     if not isinstance(content, str):
-        return _manual_guard_shim_profile(shim_dir)
+        return _manual_guard_shim_profile(shim_dir, "native_runtime_unavailable")
     after = content.encode("utf-8")
     mode = profile_path.stat().st_mode & 0o777 if before is not None else 0o600
     change = TransitionFile(
@@ -288,7 +290,7 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
     )
 
 
-def _manual_guard_shim_profile(shim_dir: Path) -> PreparedGuardShim:
+def _manual_guard_shim_profile(shim_dir: Path, reason: str) -> PreparedGuardShim:
     return PreparedGuardShim(
         (),
         {
@@ -297,6 +299,7 @@ def _manual_guard_shim_profile(shim_dir: Path) -> PreparedGuardShim:
             "shim_dir": str(shim_dir),
             "restart_shell_required": False,
             "manual_path_required": True,
+            "manual_path_reason": reason,
         },
     )
 

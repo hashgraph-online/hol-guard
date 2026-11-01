@@ -742,6 +742,7 @@
       "src/shims/path_order.rs",
       "src/shims/probe.rs",
       "src/shims/profile.rs",
+      "src/shims/profile_block.rs",
       "src/shims/pyfs.rs",
       "src/shims/pyfs_nt.rs",
       "src/shims/status.rs",
