@@ -41,10 +41,12 @@ pub(crate) fn process_identity_matches(value: &serde_json::Value) -> bool {
 #[path = "codex_hook_identity_windows.rs"]
 mod windows_identity;
 #[cfg(windows)]
-pub(crate) use windows_identity::process_start_token;
+pub(crate) use windows_identity::{
+    process_owner_marker, process_start_token, process_start_token_within,
+};
 
 #[cfg(unix)]
 #[path = "codex_hook_identity_posix.rs"]
 mod posix;
 #[cfg(unix)]
-pub(crate) use posix::process_start_token;
+pub(crate) use posix::{process_owner_marker, process_start_token, process_start_token_within};
