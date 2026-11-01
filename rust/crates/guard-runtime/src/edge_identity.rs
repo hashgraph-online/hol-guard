@@ -67,7 +67,8 @@ pub(super) fn request_payload_identity(
     // `tool_call_id`, and the `tool_use_id` Claude Code, Codex and Cursor stamp
     // on each tool-use block the model emits. Claude Code also stamps the user
     // turn as `prompt_id`, and Cursor stamps every attempt with a fresh
-    // `generation_id`, the request id its own adapter documents; the retry an
+    // `generation_id`, the request id its own adapter documents, while ZCode
+    // moves `tool_use_id`, `toolCallId` and `turnId` together; the retry an
     // approval unblocks comes in the turn after the user answers. Dropping them
     // lets an Allow once approval reach the agent's own retry. Nested tool
     // arguments and session identity stay in the commitment, and a request
@@ -95,6 +96,11 @@ fn transport_call_id_keys(harness: &str) -> &'static [&'static str] {
         // its pre- and post-execution evidence by. It moves on every attempt,
         // so an identical retry never reached the approval the user gave.
         "cursor" => &["generation_id", "tool_use_id"],
+        // ZCode spells the same tool call twice, `tool_use_id` and
+        // `toolCallId`, and stamps the surrounding turn as `turnId`. All three
+        // move on every attempt, so no ZCode approval could be reused and an
+        // unchanged retry asked again as a reapproval.
+        "zcode" => &["tool_use_id", "toolCallId", "turnId"],
         _ => &[],
     }
 }
