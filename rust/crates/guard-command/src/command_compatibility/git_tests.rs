@@ -360,12 +360,117 @@ fn printing_a_bisect_session_stays_silent() {
     assert!(observations("git bisect log").rule_matches.is_empty());
 }
 
-/// Naming bisect narrows only bisect. A subcommand with no owner still
+/// A commit's notes, a replacement ref and a maintenance run each move
+/// something the repository keeps, so each has its own owner. Before they had
+/// one they fell to the blanket attribution every unnamed subcommand reaches,
+/// which reports each git rule as uncertain and leaves nothing an approval
+/// can settle.
+#[test]
+fn the_records_beside_the_history_carry_their_own_rules() {
+    for (command, rule) in [
+        ("git notes add -m fix HEAD", "command.git.notes"),
+        ("git notes edit HEAD", "command.git.notes"),
+        ("git notes remove HEAD", "command.git.notes"),
+        ("git notes prune", "command.git.notes"),
+        ("git replace HEAD~1 HEAD", "command.git.replace"),
+        ("git replace --edit HEAD", "command.git.replace"),
+        ("git replace -d HEAD", "command.git.replace"),
+        ("git maintenance run", "command.git.maintenance"),
+        ("git maintenance start", "command.git.maintenance"),
+        ("git maintenance register", "command.git.maintenance"),
+    ] {
+        let result = observations(command);
+        assert_eq!(
+            result
+                .rule_matches
+                .iter()
+                .map(|item| item.rule_id)
+                .collect::<Vec<_>>(),
+            vec![rule],
+            "{command}"
+        );
+        assert!(
+            result.rule_matches.iter().all(|item| !item.uncertainty),
+            "{command}"
+        );
+    }
+}
+
+/// `git replace` with no object prints the replacements the repository has,
+/// and that read is recognised before any rule is attributed, so naming
+/// replace does not take its silence away.
+///
+/// The routed spellings are here because they are recognised on a different
+/// path: a bare listing is admitted by the bounded inspection, while one
+/// behind `-C` is admitted only if the subcommand is also on the read path
+/// the pretool proofs use. A listing recognised on one path and not the other
+/// would put the routed form back on the uncertainty floor this rule exists
+/// to remove.
+#[test]
+fn printing_the_replacement_refs_stays_silent() {
+    for command in [
+        "git replace",
+        "git replace -l",
+        "git replace --list refs/replace/*",
+        "git replace --format=long -l",
+    ] {
+        assert!(observations(command).rule_matches.is_empty(), "{command}");
+    }
+    // A `-C` route is only admitted into a checkout, so the listing behind one
+    // is read where git enters.
+    let worktree = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(worktree.path().join(".git")).unwrap();
+    std::fs::create_dir_all(worktree.path().join("sub")).unwrap();
+    for command in ["git -C sub replace --list", "git -C sub replace"] {
+        assert!(
+            observations_in(command, worktree.path())
+                .rule_matches
+                .is_empty(),
+            "{command}"
+        );
+    }
+    // The spellings that write a replacement ref keep their rule wherever they
+    // are routed from.
+    for command in ["git replace HEAD HEAD~1", "git -C sub replace -d HEAD"] {
+        assert_eq!(
+            observations_in(command, worktree.path())
+                .rule_matches
+                .iter()
+                .map(|item| item.rule_id)
+                .collect::<Vec<_>>(),
+            vec!["command.git.replace"],
+            "{command}"
+        );
+    }
+}
+
+fn settles(command: &str) -> bool {
+    let model = crate::parse_command(
+        &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+    )
+    .unwrap();
+    subcommand_settles_uncertainty(&model.segments[0])
+}
+
+/// A maintenance run installs scheduler jobs, so an explicit Allow cannot
+/// settle it even though it now has a definite owner. Naming it turns an
+/// uncertainty floor into a review a contained workspace can carry.
+#[test]
+fn a_maintenance_run_stays_outside_the_allow_scope() {
+    for command in ["git maintenance run", "git maintenance start"] {
+        assert!(!settles(command), "{command}");
+    }
+    for command in ["git notes add -m fix HEAD", "git replace -d HEAD"] {
+        assert!(settles(command), "{command}");
+    }
+}
+
+/// Naming a subcommand narrows only that subcommand. One with no owner still
 /// reports every git rule as uncertain, which is what keeps an unmodelled
 /// spelling from passing as a modelled one.
 #[test]
 fn a_subcommand_without_an_owner_still_reaches_every_rule() {
-    for command in ["git notes add -m note", "git replace --list"] {
+    for command in ["git gc --aggressive", "git repack -ad"] {
         let result = observations(command);
         assert!(result.rule_matches.len() > 1, "{command}");
         assert!(

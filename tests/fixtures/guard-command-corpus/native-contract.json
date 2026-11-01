@@ -1244,7 +1244,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited Git apply fallback attributes all seventeen compatibility owners as uncertain. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
+      "basis": "inherited Git apply fallback attributes all twenty compatibility owners as uncertain. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
       "expected": {
         "decision_plane_floor": "review",
         "evaluation_error": null,
@@ -1264,10 +1264,13 @@
           "command.git.grep",
           "command.git.log",
           "command.git.ls-files",
+          "command.git.maintenance",
+          "command.git.notes",
           "command.git.pull",
           "command.git.push",
           "command.git.reflog",
           "command.git.remote",
+          "command.git.replace",
           "command.git.show",
           "command.git.status",
           "command.git.worktree"
