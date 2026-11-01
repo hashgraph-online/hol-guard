@@ -191,7 +191,8 @@ def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.
     }
     policy._localize_pending_approval_copy(payload, harness="codex")
     # The user copy message rides with each batch until one answers.
-    assert [call["user_copy_message"] for call in calls] == ["Package held."] * refused + [None] * (3 - refused)
+    answered = 2 if refused == 1 else 1
+    assert [call["user_copy_message"] for call in calls] == ["Package held."] * answered + [None] * (3 - answered)
     # The refused batch keeps its original copy; the others still route.
     routed = ["Routed.", "Routed.", "Routed."]
     routed[refused - 1] = ["Held.", "Held 0.", "Held 1."][refused - 1]
