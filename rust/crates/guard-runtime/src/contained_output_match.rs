@@ -22,6 +22,9 @@ const SCHEMA: &str = "contained-output-match.v1";
 const MAX_REQUEST_BYTES: u64 = 192 * 1024 * 1024;
 const MATCHERS: [&str; 4] = ["grep", "egrep", "fgrep", "rg"];
 const FILTER_FAILED: &str = "contained_output_filter_failed";
+/// The most matcher output an answer carries. Base64 makes it a third
+/// larger, which still fits the Python client's 384 MiB answer limit.
+const MAX_STDOUT_BYTES: u64 = 256 * 1024 * 1024;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -70,7 +73,8 @@ fn answer(input: &[u8], program: &str, arguments: &[String]) -> Value {
 
 #[cfg(unix)]
 fn matched(input: &[u8], program: &str, arguments: &[String]) -> Option<(Vec<u8>, Vec<u8>, i32)> {
-    crate::contained_workspace_sink::matched(input, program, arguments).ok()
+    crate::contained_workspace_sink::matched_within(input, program, arguments, MAX_STDOUT_BYTES)
+        .ok()
 }
 
 #[cfg(not(unix))]

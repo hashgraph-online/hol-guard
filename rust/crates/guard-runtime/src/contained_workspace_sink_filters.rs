@@ -138,6 +138,17 @@ pub(crate) fn matched(
     program: &str,
     arguments: &[String],
 ) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
+    matched_within(text, program, arguments, u64::MAX)
+}
+
+/// `matched`, failing once the matcher writes more than `stdout_limit`
+/// bytes: the reader stops there, so the matcher's next write fails.
+pub(crate) fn matched_within(
+    text: &[u8],
+    program: &str,
+    arguments: &[String],
+    stdout_limit: u64,
+) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     let located = match program {
         "rg" => trusted_ripgrep().map(|binary| (binary, None)),
         "grep" => trusted_grep().map(|binary| (binary, None)),
@@ -163,7 +174,7 @@ pub(crate) fn matched(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let (stdout, stderr, code) = run(command, text)?;
+    let (stdout, stderr, code) = run(command, text, stdout_limit)?;
     let stderr = String::from_utf8_lossy(&stderr).into_owned().into_bytes();
     Ok((stdout, stderr, code))
 }
@@ -171,7 +182,7 @@ pub(crate) fn matched(
 /// Run `command` with `input` on its standard input, within the filter's
 /// deadline: its output, its error output and its status, negative for a
 /// signal.
-fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
+fn run(mut command: Command, input: &[u8], stdout_limit: u64) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     let mut child = command.spawn().map_err(|_| failed())?;
     let (Some(mut stdin), Some(mut stdout), Some(mut stderr)) =
         (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -186,7 +197,9 @@ fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     });
     let reader = std::thread::spawn(move || {
         let mut bytes = Vec::new();
-        let _ = stdout.read_to_end(&mut bytes);
+        let _ = (&mut stdout)
+            .take(stdout_limit.saturating_add(1))
+            .read_to_end(&mut bytes);
         bytes
     });
     let errors = std::thread::spawn(move || {
@@ -211,6 +224,9 @@ fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     let _ = writer.join();
     let stdout = reader.join().map_err(|_| failed())?;
     let stderr = errors.join().map_err(|_| failed())?;
+    if stdout.len() as u64 > stdout_limit {
+        return Err(failed());
+    }
     let code = status
         .code()
         .or_else(|| status.signal().map(|signal| -signal))

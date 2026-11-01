@@ -145,3 +145,17 @@ fn a_grep_root_does_not_own_is_refused() {
         None
     );
 }
+
+#[test]
+fn a_matcher_past_its_output_budget_fails() {
+    if trusted_grep().is_none() {
+        return;
+    }
+    let text = b"a\n".repeat(64 * 1024);
+    let arguments = stage(&["-n", "a"]);
+    let (stdout, _, status) =
+        matched_within(&text, "grep", &arguments, 1024 * 1024).expect("within budget");
+    assert_eq!(status, 0);
+    assert!(stdout.len() > text.len());
+    assert!(matched_within(&text, "grep", &arguments, text.len() as u64).is_err());
+}
