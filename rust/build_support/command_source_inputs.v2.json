@@ -228,6 +228,7 @@
       "src/native_command_unmodeled_case.rs",
       "src/native_command_unmodeled_compound.rs",
       "src/native_command_unmodeled_expansion.rs",
+      "src/native_command_unmodeled_fd_exec.rs",
       "src/native_command_unmodeled_find_exec.rs",
       "src/native_command_unmodeled_functions.rs",
       "src/native_command_unmodeled_heredoc.rs",
