@@ -26,6 +26,7 @@ fn home(name: &str) -> PathBuf {
     let home = root.join("home");
     for directory in [
         ".agents/skills/release-check/scripts",
+        ".agents/skills/release-check/secrets",
         ".cargo/registry/src/index.crates.io/serde-1.0.0/src/bin",
         ".bun/install/global/node_modules/pkg/bin",
         ".certs",
