@@ -486,3 +486,36 @@ fn a_subcommand_without_an_owner_still_reaches_every_rule() {
         );
     }
 }
+
+/// `git diff-index --quiet HEAD` is the dirty-tree check scripts run before
+/// they commit, and `git diff-index --cached --name-only HEAD` lists what is
+/// staged. Both read the comparison `diff` owns, so each names that one rule
+/// instead of leaving every git rule uncertain, and a staged read that writes
+/// a patch file still answers to the index owner.
+#[test]
+fn the_scripted_index_comparison_reads_what_diff_owns() {
+    let worktree = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(worktree.path().join(".git")).unwrap();
+
+    let rules = |command: &str| {
+        let mut names: Vec<&str> = observations_in(command, worktree.path())
+            .rule_matches
+            .iter()
+            .map(|item| item.rule_id)
+            .collect();
+        names.sort_unstable();
+        names
+    };
+    for command in [
+        "git diff-index --quiet HEAD",
+        "git diff-index --cached --name-only HEAD",
+        "git diff-index -r --name-status HEAD",
+    ] {
+        assert_eq!(rules(command), ["command.git.diff"], "{command}");
+    }
+    // Writing the comparison to a file is not the read the diff proof admits.
+    assert!(
+        rules("git diff-index --cached --output=/tmp/staged.patch HEAD")
+            .contains(&"command.git.index-inspection")
+    );
+}

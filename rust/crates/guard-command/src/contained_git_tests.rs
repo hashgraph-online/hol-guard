@@ -15,7 +15,7 @@ fn routed(words: &[&str]) -> Option<(String, Vec<String>, Vec<String>)> {
 
 #[test]
 fn the_diff_family_carries_both_helper_screens() {
-    for verb in ["diff", "log", "show"] {
+    for verb in ["diff", "diff-index", "diff-tree", "log", "show"] {
         assert_eq!(
             read(&["git", verb, "--stat"]),
             Some((
@@ -115,6 +115,7 @@ fn an_everyday_read_authority_contains_is_planned_here_too() {
         "check-ignore",
         "count-objects",
         "describe",
+        "diff-index",
         "for-each-ref",
         "ls-tree",
         "merge-base",
@@ -332,4 +333,34 @@ fn a_comparison_verb_is_refused_the_helpers_and_the_output_file() {
     // `--textconv`.
     assert!(read(&["git", verb, "--text", "HEAD"]).is_some());
     assert_eq!(read(&["git", "cherry", "-o", "names.txt"]), None);
+}
+
+/// `git diff-index` is the scripted dirty-tree check, and it defines the same
+/// diff options `git diff` does. Its helper screens, its refused output
+/// options and the letters that swallow a value all have to read the same way,
+/// so `-S` keeps its search string and `--outp=` is still the output file.
+#[test]
+fn the_scripted_index_comparison_screens_what_the_diff_family_does() {
+    assert_eq!(
+        read(&["git", "diff-index", "--cached", "--name-only", "HEAD"]),
+        Some((
+            "diff-index".to_owned(),
+            vector(&[
+                "--no-ext-diff",
+                "--no-textconv",
+                "--cached",
+                "--name-only",
+                "HEAD"
+            ])
+        ))
+    );
+    // A value written against the letter is that value, not the pager switch.
+    assert!(read(&["git", "diff-index", "-SOPENSSL", "HEAD"]).is_some());
+    assert!(read(&["git", "diff-index", "--text", "HEAD"]).is_some());
+    for refused in ["--output=/tmp/staged.patch", "--outp=/tmp/x", "-o", "--ext"] {
+        assert!(
+            read(&["git", "diff-index", refused, "HEAD"]).is_none(),
+            "{refused}"
+        );
+    }
 }

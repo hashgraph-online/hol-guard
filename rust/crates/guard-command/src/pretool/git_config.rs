@@ -83,6 +83,7 @@ pub(super) fn execution_free_paging(
         "status"
             | "cherry"
             | "diff"
+            | "diff-index"
             | "diff-tree"
             | "log"
             | "show"
@@ -418,7 +419,7 @@ fn probe(
     // check prints names, and a configured driver leaves all of them alone.
     let renders_diff = matches!(
         rendering,
-        "diff" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+        "diff" | "diff-index" | "diff-tree" | "log" | "show" | "reflog" | "stash"
     );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
@@ -431,11 +432,13 @@ fn probe(
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
         // `clean` prints its preview, and `apply` its check report, without
-        // a pager. `rev-parse` and `ls-files` are plumbing: Git starts no
-        // pager for either, so only their own `pager.*` key can ask for one.
+        // a pager. `rev-parse`, `ls-files` and `diff-index` are plumbing: Git
+        // starts no pager for any of them, so only their own `pager.*` key
+        // can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files" => false,
+        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
+        | "diff-index" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -474,6 +477,7 @@ fn probe(
         .flatten()
         .filter(|_| !super::git_hash_object::filters_disabled(&remaining[1..]));
     let filtered = matches!(operation, "status" | "diff")
+        || (operation == "diff-index" && compares_working_tree(&remaining[1..]))
         || super::git_history_reads::cleans_working_tree(operation, &remaining[1..])
         || hashed.is_some();
     let has_filters = filtered
@@ -499,11 +503,12 @@ fn probe(
             // Reading the index can start the monitor; grep reads it too, a
             // clean preview refreshes the index before it walks the untracked
             // tree, and a patch check refreshes it before it reads the files
-            // the patch names.
+            // the patch names. A scripted index comparison loads the index
+            // whether or not `--cached` keeps the working tree out of it.
             "core.fsmonitor" => {
                 (matches!(
                     operation,
-                    "status" | "diff" | "grep" | "clean" | "apply" | "submodule"
+                    "status" | "diff" | "diff-index" | "grep" | "clean" | "apply" | "submodule"
                 ) || super::git_listing_reads::reads_index(operation, &remaining[1..])
                     || super::git_history_reads::cleans_working_tree(operation, &remaining[1..]))
                     && !disabled
@@ -606,6 +611,20 @@ const PATHSPEC_MAGIC: [&str; 4] = [
 
 /// The probe runs Git without a shell, so a `-C ~/repo` target the shell
 /// would expand must be expanded here or the probe inspects nothing.
+/// Whether the index comparison also reads the files on disk.
+///
+/// `git diff-index HEAD` compares the index against the working tree, so Git
+/// runs a configured clean filter over every file it has to re-examine.
+/// `--cached` compares the index against the named tree alone and never opens
+/// a working-tree file, so that spelling consumes no filter. `diff-tree`
+/// compares two trees and reaches neither the index nor the working tree.
+fn compares_working_tree(rest: &[String]) -> bool {
+    !rest
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
+}
+
 fn expand_home_targets(leading: &[String], home: &Path) -> Vec<String> {
     let mut expanded = Vec::with_capacity(leading.len());
     let mut directory_next = false;
