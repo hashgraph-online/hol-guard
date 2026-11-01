@@ -69,6 +69,8 @@ def run_guard_risk_report_command(
         },
         output_limit=1024 * 1024,
         timeout_seconds=10.0,
+        # A cold runtime's first capability probe may take up to 20 seconds.
+        status_timeout_seconds=20.0,
     )
     body = None if answer is None else answer.get("body")
     if not isinstance(body, str):
