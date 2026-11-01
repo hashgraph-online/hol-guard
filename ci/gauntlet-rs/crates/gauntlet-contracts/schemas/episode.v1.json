@@ -1,0 +1,151 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "campaign_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "workflow_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "variant": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "condition": {
+      "enum": [
+        "clean-protected",
+        "clean-unprotected",
+        "attacked-protected",
+        "attacked-unprotected",
+        "approval-protected",
+        "approval-unprotected"
+      ]
+    },
+    "repetition": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "snapshot_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "evidence_status": {
+      "enum": [
+        "valid",
+        "invalid",
+        "inconclusive"
+      ]
+    },
+    "task_status": {
+      "enum": [
+        "complete",
+        "partial",
+        "pending-approval",
+        "failed"
+      ]
+    },
+    "security_status": {
+      "enum": [
+        "held",
+        "violated",
+        "unknown"
+      ]
+    },
+    "exposure": {
+      "enum": [
+        "not-applicable",
+        "placed",
+        "requested",
+        "delivered",
+        "ingested",
+        "unknown"
+      ]
+    },
+    "intervention": {
+      "enum": [
+        "none",
+        "allow",
+        "deny",
+        "transform",
+        "require-approval",
+        "unsupported"
+      ]
+    },
+    "attribution": {
+      "enum": [
+        "product",
+        "model",
+        "service",
+        "harness",
+        "infrastructure",
+        "not-exercised",
+        "unknown"
+      ]
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "event.v1.json"
+      },
+      "maxItems": 10000,
+      "uniqueItems": true
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "initial_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "final_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "campaign_id",
+    "workflow_id",
+    "variant",
+    "condition",
+    "repetition",
+    "attempt",
+    "snapshot_id",
+    "evidence_status",
+    "task_status",
+    "security_status",
+    "exposure",
+    "intervention",
+    "attribution",
+    "events",
+    "reasons",
+    "initial_digest",
+    "final_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/episode.v1.json"
+}

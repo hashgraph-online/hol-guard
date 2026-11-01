@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "accepted": true,
+      "value": "3.43.1"
+    },
+    {
+      "accepted": true,
+      "value": "3.49.0"
+    },
+    {
+      "accepted": true,
+      "value": "3.50.0a1"
+    },
+    {
+      "accepted": true,
+      "value": "3.50.0b2"
+    },
+    {
+      "accepted": true,
+      "value": "3.50.0rc3"
+    },
+    {
+      "accepted": true,
+      "value": "3.50.0.post4"
+    },
+    {
+      "accepted": true,
+      "value": "3.50.0.dev5"
+    },
+    {
+      "accepted": true,
+      "value": "0.0.0"
+    },
+    {
+      "accepted": true,
+      "value": "01.002.0003"
+    },
+    {
+      "accepted": false,
+      "value": "3.50"
+    },
+    {
+      "accepted": false,
+      "value": "3.50.0-alpha"
+    },
+    {
+      "accepted": false,
+      "value": "v3.50.0"
+    },
+    {
+      "accepted": false,
+      "value": "3.50.0+local"
+    },
+    {
+      "accepted": false,
+      "value": "3.50.0rc"
+    },
+    {
+      "accepted": false,
+      "value": "3.50.0.1"
+    },
+    {
+      "accepted": false,
+      "value": "3.50.0\n"
+    },
+    {
+      "accepted": false,
+      "value": "11111111111111111111111111111111111111111111111111111111111111111.0.0"
+    },
+    {
+      "accepted": false,
+      "value": ""
+    }
+  ],
+  "source_sha": "b4efd8171b06d0e13cbe12a077c376ecdc891fd1"
+}
