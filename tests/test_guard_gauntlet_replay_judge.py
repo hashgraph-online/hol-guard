@@ -175,9 +175,17 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # network and no home.
         "neg-git-diff-abbreviated-ext-diff",
         "neg-git-log-abbreviated-textconv",
+        # A pager named on the line for a ref reading: Git runs the program the
+        # `core.pager` value names, so the reading keeps its review, and a
+        # contained run gives that program only the sandbox's reach.
+        "neg-git-name-rev-configured-pager",
         # The sandbox has no network for the push to reach the remote over, and no home access
         # for the widened search, so a contained run sends nothing and prints no key.
         "neg-git-push-to-tmp-chain",
+        # `symbolic-ref` with a value is a ref write, not a reading, and the ref
+        # it rewrites lives under the worktree's own admin directory, which a
+        # contained run keeps inside the sandbox.
+        "neg-git-symbolic-ref-write",
         # `gh config set` changes only the CLI configuration under the home directory, which a
         # contained run cannot write.
         "neg-github-config-set",
