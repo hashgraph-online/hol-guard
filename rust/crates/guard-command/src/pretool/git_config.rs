@@ -477,6 +477,7 @@ fn probe(
         .flatten()
         .filter(|_| !super::git_hash_object::filters_disabled(&remaining[1..]));
     let filtered = matches!(operation, "status" | "diff")
+        || (operation == "diff-index" && compares_working_tree(&remaining[1..]))
         || super::git_history_reads::cleans_working_tree(operation, &remaining[1..])
         || hashed.is_some();
     let has_filters = filtered
@@ -502,11 +503,12 @@ fn probe(
             // Reading the index can start the monitor; grep reads it too, a
             // clean preview refreshes the index before it walks the untracked
             // tree, and a patch check refreshes it before it reads the files
-            // the patch names.
+            // the patch names. A scripted index comparison loads the index
+            // whether or not `--cached` keeps the working tree out of it.
             "core.fsmonitor" => {
                 (matches!(
                     operation,
-                    "status" | "diff" | "grep" | "clean" | "apply" | "submodule"
+                    "status" | "diff" | "diff-index" | "grep" | "clean" | "apply" | "submodule"
                 ) || super::git_listing_reads::reads_index(operation, &remaining[1..])
                     || super::git_history_reads::cleans_working_tree(operation, &remaining[1..]))
                     && !disabled
@@ -609,6 +611,20 @@ const PATHSPEC_MAGIC: [&str; 4] = [
 
 /// The probe runs Git without a shell, so a `-C ~/repo` target the shell
 /// would expand must be expanded here or the probe inspects nothing.
+/// Whether the index comparison also reads the files on disk.
+///
+/// `git diff-index HEAD` compares the index against the working tree, so Git
+/// runs a configured clean filter over every file it has to re-examine.
+/// `--cached` compares the index against the named tree alone and never opens
+/// a working-tree file, so that spelling consumes no filter. `diff-tree`
+/// compares two trees and reaches neither the index nor the working tree.
+fn compares_working_tree(rest: &[String]) -> bool {
+    !rest
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
+}
+
 fn expand_home_targets(leading: &[String], home: &Path) -> Vec<String> {
     let mut expanded = Vec::with_capacity(leading.len());
     let mut directory_next = false;

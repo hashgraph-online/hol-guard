@@ -129,3 +129,80 @@ fn status_outside_any_repository_runs_nothing() {
         Some(false)
     );
 }
+
+#[test]
+fn a_scripted_index_comparison_keeps_the_file_monitor_screen() {
+    let fixture = Fixture::new();
+    let declared = fixture.declared.canonicalize().unwrap();
+    let declared_text = declared.to_str().unwrap();
+    let environment = environment(&declared);
+    let repo = declared.join("repo");
+    let repo_text = repo.to_str().unwrap();
+    let inside = PathContext {
+        home_dir: Some(declared_text),
+        cwd: Some(repo_text),
+        ..PathContext::default()
+    };
+    let compares = ["diff-index", "--quiet", "HEAD"].map(str::to_owned);
+    let cached = ["diff-index", "--cached", "--name-only", "HEAD"].map(str::to_owned);
+    assert_eq!(
+        execution_free("git", &compares, inside, None, Some(&environment), false),
+        Some(true),
+        "a repository that configures nothing starts nothing"
+    );
+
+    let config = repo.join(".git/config");
+    let existing = fs::read_to_string(&config).unwrap();
+    fs::write(
+        &config,
+        format!("{existing}[core]\n\tfsmonitor = /bin/true\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        execution_free("git", &compares, inside, None, Some(&environment), false),
+        Some(false),
+        "comparing the index against the working tree can start the monitor"
+    );
+    assert_eq!(
+        execution_free("git", &cached, inside, None, Some(&environment), false),
+        Some(false),
+        "--cached still loads the index, so it still reaches the monitor"
+    );
+}
+
+#[test]
+fn an_index_comparison_against_the_working_tree_keeps_the_filter_screen() {
+    let fixture = Fixture::new();
+    let declared = fixture.declared.canonicalize().unwrap();
+    let declared_text = declared.to_str().unwrap();
+    let environment = environment(&declared);
+    let repo = declared.join("repo");
+    let repo_text = repo.to_str().unwrap();
+    let inside = PathContext {
+        home_dir: Some(declared_text),
+        cwd: Some(repo_text),
+        ..PathContext::default()
+    };
+    fs::write(repo.join(".gitattributes"), "* filter=payload\n").unwrap();
+    let config = repo.join(".git/config");
+    let existing = fs::read_to_string(&config).unwrap();
+    fs::write(
+        &config,
+        format!("{existing}[filter \"payload\"]\n\tclean = /bin/true\n"),
+    )
+    .unwrap();
+
+    let compares = ["diff-index", "-p", "HEAD"].map(str::to_owned);
+    assert_eq!(
+        execution_free("git", &compares, inside, None, Some(&environment), false),
+        Some(false),
+        "re-examining a working-tree file runs its configured clean filter"
+    );
+
+    let cached = ["diff-index", "--cached", "-p", "HEAD"].map(str::to_owned);
+    assert_eq!(
+        execution_free("git", &cached, inside, None, Some(&environment), false),
+        Some(true),
+        "--cached compares the index against a tree and opens no file"
+    );
+}
