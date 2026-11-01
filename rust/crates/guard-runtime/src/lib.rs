@@ -150,6 +150,7 @@ mod codex_hook_identity;
 mod codex_hook_manifest_iso_time;
 mod codex_hook_manifest_verify_op;
 mod codex_hook_response;
+mod codex_hook_trust;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
