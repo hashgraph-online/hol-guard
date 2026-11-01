@@ -18947,7 +18947,14 @@ def test_sync_receipts_enforces_an_exact_command_rule_from_a_v2_bundle(tmp_path,
     ] == [("codex", "artifact", "block", f"memory:exact-shell-command:{digest}", "rule.block-install")]
 
 
-def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True, mode="prompt"):
+def _prepare_shadow_candidate_sync(
+    tmp_path,
+    monkeypatch,
+    *,
+    canonical=True,
+    mode="prompt",
+    legacy_issued_at="2026-06-05T13:30:00+00:00",
+):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     if canonical:
@@ -18964,7 +18971,7 @@ def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True, mod
             }
         ],
         bundle_version="policy-2026-06-05.4",
-        issued_at="2026-06-05T13:29:00+00:00",
+        issued_at=legacy_issued_at,
     )
     store.set_sync_payload(
         "policy_bundle_keyring",
@@ -19090,6 +19097,28 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
         "reasonCodes": ["action"],
         "status": "mismatch",
     }
+
+
+def test_sync_receipts_activates_v2_over_a_shadow_from_an_older_publication(
+    tmp_path,
+    monkeypatch,
+):
+    # The stored v1 bundle was issued for an earlier publication, so its rows
+    # are a different policy, not a second compile of this one. Holding the
+    # candidate against them left canonical devices on the old policy forever.
+    store, _legacy = _prepare_shadow_candidate_sync(
+        tmp_path,
+        monkeypatch,
+        legacy_issued_at="2026-06-05T13:29:00+00:00",
+    )
+
+    guard_runner_module.sync_receipts(store)
+
+    applied = store.get_sync_payload("policy_bundle")
+    assert isinstance(applied, dict)
+    assert applied["contractVersion"] == "guard-policy-bundle.v2"
+    assert not store.get_sync_payload("policy_bundle_last_error")
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["allow"]
 
 
 def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
