@@ -192,19 +192,29 @@ def remove_foreign_installs(
 
     if inventory.empty:
         return RemovalResult(removed=(), removed_entry_dirs=frozenset(), notes=())
+    asked: list[bool] = []
+
+    def request() -> dict[str, object]:
+        asked.append(True)
+        return _removal_request(inventory, retire_runtime)
+
     answer = runtime_answer(
         _REMOVAL_FEATURE,
         "desktop-foreign-remove",
-        lambda: _removal_request(inventory, retire_runtime),
+        request,
         output_limit=_INVENTORY_OUTPUT_LIMIT,
         timeout_seconds=_REMOVAL_BASE_TIMEOUT_SECONDS
         + _REMOVAL_VENV_TIMEOUT_SECONDS * len(inventory.venvs)
         + _REMOVAL_USER_SITE_TIMEOUT_SECONDS * len(inventory.user_site),
     )
     try:
-        return _removal_from_answer(answer) if answer is not None else _unanswered_removal(inventory)
+        if answer is not None:
+            return _removal_from_answer(answer)
     except (KeyError, TypeError, ValueError):
-        return _unanswered_removal(inventory)
+        pass
+    # Residents stop only while the request is built, so a runtime that never
+    # asked for it removed nothing.
+    return _unanswered_removal(inventory) if asked else _NOTHING_REMOVED
 
 
 def _removal_request(inventory: ForeignInventory, retire_runtime: Callable[[Path], bool]) -> dict[str, object]:
@@ -234,10 +244,14 @@ def _removal_request(inventory: ForeignInventory, retire_runtime: Callable[[Path
 def _unanswered_removal(inventory: ForeignInventory) -> RemovalResult:
     """What a removal the runtime did not finish left behind, read from disk."""
 
-    if not foreign_removal_available():
-        return _NOTHING_REMOVED
     removed = [{"kind": venv.kind, "path": str(venv.root)} for venv in inventory.venvs if not _lexists(venv.root)]
     removed += [{"kind": "stale_link", "path": str(entry)} for entry in inventory.stale_entries if not _lexists(entry)]
+    # pip removes a user-site copy's entry points with it.
+    removed += [
+        {"kind": "pip_user", "path": str(interpreter)}
+        for interpreter, entries in inventory.user_site
+        if entries and not any(_lexists(entry) for entry in entries)
+    ]
     entries = [
         *(entry for venv in inventory.venvs for entry in venv.entries),
         *inventory.stale_entries,

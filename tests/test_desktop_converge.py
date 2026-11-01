@@ -179,6 +179,55 @@ def test_reports_what_an_unfinished_removal_already_deleted(
     assert payload["_package_refreshes"] == 1
 
 
+def test_an_unfinished_removal_reports_a_user_site_uninstall_without_a_second_status_probe(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _launcher(home)
+    interpreter = home / "python3"
+    entry = home / ".local" / "bin" / "hol-guard"
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    _ = entry.write_text("#!/bin/sh\n", encoding="utf-8")
+    inventory = desktop_foreign_installs.ForeignInventory(
+        venvs=(), stale_entries=(), user_site=((interpreter, (entry,)),)
+    )
+    monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
+    offers = iter([True])
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: next(offers, False))
+
+    def interrupted(_feature: str, _command: str, request: object, **_kwargs: object) -> None:
+        assert callable(request)
+        _ = request()
+        entry.unlink()
+        return None
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", interrupted)
+
+    payload = _converge(home, tmp_path)
+
+    assert payload["removed"] == [{"kind": "pip_user", "path": str(interpreter)}]
+    assert "did not finish removing" in str(payload["notes"])
+    assert payload["_package_refreshes"] == 1
+
+
+def test_a_runtime_that_never_asked_for_the_removal_removed_nothing(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _launcher(home)
+    venv = _pipx_venv(home)
+    inventory = desktop_foreign_installs.ForeignInventory(
+        venvs=(desktop_foreign_installs.ToolVenv("pipx", venv, (), ()),), stale_entries=(), user_site=()
+    )
+    monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+
+    payload = _converge(home, tmp_path)
+
+    assert payload["removed"] == []
+    assert venv.exists()
+    assert payload["_package_refreshes"] == 0
+
+
 def test_leaves_everything_when_desktop_has_no_core(home: Path, tmp_path: Path) -> None:
     venv = _pipx_venv(home)
 
