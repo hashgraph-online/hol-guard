@@ -12,9 +12,10 @@ fn qualified_catalog() -> TrustedCatalog {
     let mut doc = super::super::actual::approved_catalog_requirement(None)
         .document()
         .clone();
-    let receipt = fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join(
-        "../../../docs/guard/cigar-integration/evidence/receipts.json",
-    ))
+    let receipt = fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../docs/guard/cigar-integration/evidence/receipts.json"),
+    )
     .unwrap();
     doc.interpreters[0].qualification = Qualification::GuardQualified;
     doc.interpreters[0].qualification_receipt_sha256 =
