@@ -3,8 +3,150 @@ use super::xargs::{command_index, plain_program};
 use super::{command_basename, INTERPRETERS};
 use std::collections::BTreeSet;
 
-/// fd's options that run a program named by the words after them.
-pub(super) const FD_EXEC_ACTIONS: &[&str] = &["-x", "-X", "--exec", "--exec-batch"];
+/// fd's long options that take their value as the next word.
+///
+/// The list is the one [`crate::parser_executables::fd_arguments_execute_command`]
+/// walks with, because the two readers have to agree on where an option's
+/// value ends: a word this walk skips as a value while that one reads it as
+/// `-x` would bound a walk the parser still calls a nested command executor.
+const LONG_VALUE_OPTIONS: &[&str] = &[
+    "--base-directory",
+    "--changed-after",
+    "--changed-before",
+    "--changed-within",
+    "--color",
+    "--exact-depth",
+    "--exclude",
+    "--extension",
+    "--format",
+    "--ignore-file",
+    "--max-depth",
+    "--max-results",
+    "--min-depth",
+    "--owner",
+    "--path-separator",
+    "--search-path",
+    "--size",
+    "--threads",
+    "--type",
+];
+
+/// fd's short options that take their value as the next word when the letter
+/// ends the cluster, and as the rest of the cluster when it does not.
+const VALUE_LETTERS: &[char] = &['c', 'd', 'E', 'e', 'j', 'o', 'S', 't'];
+
+/// One `--exec` body: the word that names the program, and the end of the
+/// argument run fd hands that program.
+struct FdExecSite {
+    program: usize,
+    body_end: usize,
+}
+
+/// The word with one layer of matching shell quotes removed.
+///
+/// The shell strips them before fd sees the word, so `fd "-x" echo` runs
+/// `echo` and `"nohup" fd -x rm` launches the walk through `nohup`. Reading
+/// the raw token missed both.
+fn unquote(word: &str) -> &str {
+    let mut characters = word.chars();
+    match (characters.next(), characters.next_back()) {
+        (Some(first), Some(last)) if first == last && matches!(first, '\'' | '"') => {
+            characters.as_str()
+        }
+        _ => word,
+    }
+}
+
+/// Every `--exec` body one `fd` piece runs, or `None` when a word leaves the
+/// walk unreadable.
+///
+/// fd takes its options the way clap reads them, so an exec can be spelled
+/// `-x`, `-X`, `--exec`, `--exec-batch`, bundled into a cluster (`-HX sh`),
+/// or carrying its program attached to the option (`-xbash`, `--exec=rm`).
+/// The attached spellings keep the program out of a word of its own, so this
+/// walk refuses them rather than naming a program it has not isolated, and
+/// the piece stays unbounded. An option whose value is a separate word is
+/// stepped over, so `fd --exclude -x SKILL.md` names no exec at all, and the
+/// words after a program are its arguments, so the second `-x` in
+/// `fd -x echo -x sh` is echo's argument rather than another walk.
+fn fd_exec_sites(words: &[&str], start: usize) -> Option<Vec<FdExecSite>> {
+    let mut sites: Vec<FdExecSite> = Vec::new();
+    let mut index = start;
+    while index < words.len() {
+        let word = unquote(words[index]);
+        index += 1;
+        if word == "--" {
+            // Every remaining word is a pattern or a path: `fd -- -x src`
+            // searches for the text `-x`.
+            break;
+        }
+        if word == "--exec" || word == "--exec-batch" {
+            let Some(site) = exec_site(words, index) else {
+                return None;
+            };
+            index = (site.body_end + 1).min(words.len());
+            sites.push(site);
+            continue;
+        }
+        if word.starts_with("--exec=") || word.starts_with("--exec-batch=") {
+            // The program is attached to the option, so it never stands in a
+            // word of its own for this reader to bind.
+            return None;
+        }
+        if word.starts_with("--") {
+            // A long option's value is attached by `=` or stands in the next
+            // word. An option named nowhere here takes no value, which is the
+            // reading the parser's own fd walk already uses.
+            if !word.contains('=') && LONG_VALUE_OPTIONS.contains(&word) {
+                index += 1;
+            }
+            continue;
+        }
+        let Some(cluster) = word.strip_prefix('-').filter(|rest| !rest.is_empty()) else {
+            // A positional: the pattern, or a path to walk.
+            continue;
+        };
+        for (offset, letter) in cluster.char_indices() {
+            let letter_ends_cluster = offset + letter.len_utf8() == cluster.len();
+            if matches!(letter, 'x' | 'X') {
+                if !letter_ends_cluster {
+                    // `-xbash` carries the program inside the option word.
+                    return None;
+                }
+                let Some(site) = exec_site(words, index) else {
+                    return None;
+                };
+                index = (site.body_end + 1).min(words.len());
+                sites.push(site);
+                break;
+            }
+            if VALUE_LETTERS.contains(&letter) {
+                if letter_ends_cluster {
+                    index += 1;
+                }
+                // Anything further in the cluster is this option's value.
+                break;
+            }
+        }
+    }
+    Some(sites)
+}
+
+/// The body that starts at `program`, ending where fd ends one: at an escaped
+/// `;` or at the end of the command.
+///
+/// The caller split the text at every unquoted `;` already, so a terminator
+/// reaches this walk as a lone backslash.
+fn exec_site(words: &[&str], program: usize) -> Option<FdExecSite> {
+    if program >= words.len() {
+        return None;
+    }
+    let mut body_end = program + 1;
+    while body_end < words.len() && unquote(words[body_end]) != "\\" {
+        body_end += 1;
+    }
+    Some(FdExecSite { program, body_end })
+}
 
 /// The programs every `fd` in the text runs, by basename, or `None` when one
 /// of them is not named here.
@@ -26,7 +168,9 @@ pub(super) fn fd_exec_programs(shell: &str) -> Option<BTreeSet<String>> {
     let mut programs = BTreeSet::new();
     for piece in shell.split(['\n', ';', '&', '|', '(', ')', '`']) {
         let words: Vec<&str> = piece.split_whitespace().collect();
-        let names_fd = words.iter().any(|word| command_basename(word) == "fd");
+        let names_fd = words
+            .iter()
+            .any(|word| command_basename(unquote(word)) == "fd");
         let Some(command) = command_index(&words) else {
             // A piece with no command position starts nothing of its own, so
             // an `fd` among its words belongs to the piece before it. One
@@ -36,12 +180,12 @@ pub(super) fn fd_exec_programs(shell: &str) -> Option<BTreeSet<String>> {
             }
             continue;
         };
-        if command_basename(words[command]) != "fd" {
+        if command_basename(unquote(words[command])) != "fd" {
             // The piece runs something else, and an `fd` among its operands
             // is that program's argument: `rg fd src` searches for the text.
             // A launcher is not read past, so `sudo fd -x rm` and
             // `xargs fd -x rm` stay unbounded under their own names.
-            if names_fd && runs_something_else(words[command]) {
+            if names_fd && runs_something_else(unquote(words[command])) {
                 return None;
             }
             continue;
@@ -64,14 +208,8 @@ pub(super) fn fd_exec_programs(shell: &str) -> Option<BTreeSet<String>> {
         {
             return None;
         }
-        let actions: Vec<usize> = words
-            .iter()
-            .enumerate()
-            .filter(|(_, word)| FD_EXEC_ACTIONS.contains(*word))
-            .map(|(index, _)| index)
-            .collect();
-        for action in actions {
-            let operand = *words.get(action + 1)?;
+        for site in fd_exec_sites(&words, command + 1)? {
+            let operand = unquote(words[site.program]);
             // `\;` and `+` end a body rather than naming a program.
             if matches!(operand, "+" | "\\") {
                 return None;
@@ -129,29 +267,25 @@ pub(super) fn text_outside_fd_exec_arguments(shell: &str) -> String {
     let mut pieces: Vec<String> = Vec::new();
     for piece in shell.split(['\n', ';', '&', '|', '(', ')', '`']) {
         let words: Vec<&str> = piece.split_whitespace().collect();
-        let mut kept: Vec<&str> = Vec::new();
-        let mut index = 0;
-        while index < words.len() {
-            let word = words[index];
-            kept.push(word);
-            index += 1;
-            if !FD_EXEC_ACTIONS.contains(&word) {
-                continue;
+        let sites = command_index(&words)
+            .filter(|command| command_basename(unquote(words[*command])) == "fd")
+            .and_then(|command| fd_exec_sites(&words, command + 1));
+        let Some(sites) = sites else {
+            pieces.push(words.join(" "));
+            continue;
+        };
+        let mut is_argument = vec![false; words.len()];
+        for site in sites {
+            for position in site.program + 1..site.body_end {
+                is_argument[position] = true;
             }
-            // The operand names the program, and it stays: it is what the
-            // option runs.
-            if index < words.len() {
-                kept.push(words[index]);
-                index += 1;
-            }
-            // fd ends a body at the end of the command or at an escaped `;`,
-            // and the split above already ended the piece at an unquoted one.
-            while index < words.len() && words[index] != "\\" {
-                index += 1;
-            }
-            // The terminator itself names nothing.
-            index += 1;
         }
+        let kept: Vec<&str> = words
+            .iter()
+            .enumerate()
+            .filter(|(position, _)| !is_argument[*position])
+            .map(|(_, word)| *word)
+            .collect();
         pieces.push(kept.join(" "));
     }
     pieces.join("\n")

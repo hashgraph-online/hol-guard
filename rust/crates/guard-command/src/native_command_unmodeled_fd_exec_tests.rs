@@ -36,6 +36,17 @@ fn an_exec_that_names_its_program_reads_that_program() {
         ("fd -e ts --exec-batch wc -l", vec!["wc"]),
         ("fd . src -x /usr/bin/wc -l", vec!["wc"]),
         ("fd -e ts -x wc -l; fd -e rs -x rg TODO", vec!["rg", "wc"]),
+        // A bundled exec still names its program in the next word.
+        ("fd -e ts -HX wc -l", vec!["wc"]),
+        // The shell strips the quotes before fd reads the option.
+        ("fd -e ts \"-x\" echo sh", vec!["echo"]),
+        // The second `-x` is echo's argument, not another walk.
+        ("fd -e ts -x echo -x sh", vec!["echo"]),
+        // `--` ends the options, so `-x` is the pattern to search for.
+        ("fd -- -x src", vec![]),
+        // An option's value is not read as an option.
+        ("fd --exclude -x SKILL.md src", vec![]),
+        ("fd --type f --exec wc -l", vec!["wc"]),
     ] {
         let expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
         assert_eq!(programs(text), Some(expected), "{text}");
@@ -64,9 +75,19 @@ fn an_exec_that_names_no_program_stays_unbounded() {
         // A batch script whose body nobody has read.
         "fd -e ts -x ./bin/report.cmd",
         // A launcher this reader does not read past starts the walk, so the
-        // text that reaches `fd` is text nobody bound.
+        // text that reaches `fd` is text nobody bound. The shell strips the
+        // quotes before it looks the launcher up, so a quoted one launches
+        // the walk just the same.
         "sudo fd -x rm",
         "cat list.txt | xargs fd -x rm",
+        "\"nohup\" fd -x rm",
+        // fd takes the program attached to the option as readily as in a word
+        // of its own. This walk never isolates an attached one, so it refuses
+        // the piece instead of reading a walk it has not bound.
+        "fd -e sh -xbash",
+        "fd -e sh -HXsh",
+        "fd -e sh --exec=bash",
+        "fd -e sh --exec-batch=bash",
     ] {
         assert_eq!(programs(text), None, "{text}");
     }
@@ -83,6 +104,12 @@ fn the_words_after_the_program_an_exec_names_are_its_arguments() {
     assert_eq!(
         text_outside_fd_exec_arguments("fd -e ts -x wc -l; git status"),
         "fd -e ts -x wc\ngit status"
+    );
+    // The words after the program are its arguments even when one of them
+    // spells an exec option.
+    assert_eq!(
+        text_outside_fd_exec_arguments("fd -e ts -x echo -x sh"),
+        "fd -e ts -x echo"
     );
 }
 
