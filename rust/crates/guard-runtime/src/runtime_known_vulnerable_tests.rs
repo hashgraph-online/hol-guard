@@ -282,6 +282,42 @@ fn launches_resolve_the_way_the_shell_would() {
     assert!(launches("npm test && python3 -V && echo node").is_empty());
 }
 
+#[cfg(unix)]
+#[test]
+fn a_version_probe_is_not_a_launch_the_advisories_reach() {
+    let root = tempfile::tempdir().unwrap();
+    let bin = root.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    executable(&bin.join("node"));
+    let search = bin.to_string_lossy().into_owned();
+    let launches = |command: &str| {
+        runtime_launches(command, Some(root.path()), root.path(), Some(&search))
+            .into_iter()
+            .map(|path| path.strip_prefix(root.path()).unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    for command in [
+        "node -v",
+        "node --version",
+        "exec node -v",
+        "exec -a app node --version",
+        "echo hi && node -v",
+    ] {
+        assert!(launches(command).is_empty(), "{command}");
+    }
+    // Anything that can load a script, evaluate an argument or open a REPL
+    // is still the launch the advisories describe.
+    for command in [
+        "node",
+        "node -v a.js",
+        "node --version-check a.js",
+        "node -e 'process.exit(0)'",
+        "node a.js -v",
+    ] {
+        assert_eq!(launches(command), [Path::new("bin/node")], "{command}");
+    }
+}
+
 #[test]
 fn runtime_names_cover_node_and_its_windows_spelling_only() {
     assert!(is_runtime_name("node"));

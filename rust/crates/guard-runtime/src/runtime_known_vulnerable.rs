@@ -160,7 +160,10 @@ fn runtime_launches(
             true,
         );
         for segment in &model.segments {
-            if let Some(executable) = launched(segment).filter(|name| is_runtime_name(name)) {
+            if let Some(executable) = launched(segment)
+                .filter(|name| is_runtime_name(name))
+                .filter(|_| !version_probe(segment))
+            {
                 let cwd = cwd.filter(|_| known.cwd);
                 let search_path = search_path.filter(|_| known.path && !segment.path_overridden);
                 if let Some(path) = resolve(executable, cwd, search_path) {
@@ -251,6 +254,36 @@ fn launched(segment: &CommandSegment) -> Option<&str> {
         }
     }
     None
+}
+
+/// Whether a segment only asks the runtime its version. `node -v` loads no
+/// script and evaluates no argument, so nothing the advisories describe is
+/// reachable through it, and printing the version is how an operator checks
+/// for exactly these advisories.
+fn version_probe(segment: &CommandSegment) -> bool {
+    let mut arguments = segment.arguments.iter().map(String::as_str);
+    if segment.executable.as_deref() == Some("exec") {
+        // Step over `exec`'s own options to the program it starts, the way
+        // `launched` finds it, so the probe is read from the arguments after.
+        loop {
+            match arguments.next() {
+                Some("-a") => {
+                    arguments.next();
+                }
+                Some("--") => {
+                    arguments.next();
+                    break;
+                }
+                Some(flag) if flag.starts_with('-') => {}
+                Some(_) => break,
+                None => return false,
+            }
+        }
+    }
+    matches!(
+        (arguments.next(), arguments.next()),
+        (Some("-v" | "--version"), None)
+    )
 }
 
 fn is_runtime_name(executable: &str) -> bool {
