@@ -10,6 +10,8 @@
 mod artifacts;
 #[path = "harness_coverage_registry.rs"]
 mod registry;
+#[path = "harness_coverage_request.rs"]
+mod request;
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -22,6 +24,7 @@ use artifacts::{
     artifact_digest, managed_manifest_paths, relative_text, resolve_lenient, Evidence,
 };
 use registry::{artifact_fields, read_registry, write_registry};
+pub(crate) use request::write_request;
 
 const SCHEMA_VERSION: &str = "hol-guard-harness-coverage-registry.v1";
 const REGISTRY_NAME: &str = "harness-coverage-registry.json";
@@ -256,6 +259,17 @@ pub(crate) fn register(
     }
     users.sort_by(|left, right| home_of(left).cmp(home_of(right)));
     write_registry(state_root, &registry)
+}
+
+/// Register the user at `home` from the coverage request they left there.
+/// `home` is already resolved.
+pub(crate) fn register_requested(
+    state_root: &Path,
+    owner_uid: u32,
+    home: &Path,
+) -> Result<(), CoverageError> {
+    let installs = request::read_request(home)?;
+    register(state_root, owner_uid, home, &installs)
 }
 
 fn harness_artifacts(
