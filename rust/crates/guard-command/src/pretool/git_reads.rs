@@ -120,8 +120,12 @@ pub(super) fn safe_git_arguments(
     // `-S`, `-G` and `--grep` values are search text too.
     let listed = log_names::pathspec_start(arguments, context);
     let search_text = super::git_search_text::pattern_positions(arguments);
+    // A replacement listing's pattern is matched against the refs under
+    // `refs/replace/`, not expanded over the files that are there.
+    let replacement = super::git_side_record_reads::listing_pattern_position(arguments, context);
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
+            && replacement != Some(index)
             && (value.starts_with(':')
                 || (super::sensitive_read_path_argument(value)
                     && listed.is_none_or(|start| index < start)))
@@ -197,11 +201,11 @@ pub(super) fn safe_git_arguments(
         // that moves work keep their own review.
         return allow_helper_context && super::git_submodule_reads::read_form(&arguments[1..]);
     }
-    if matches!(subcommand, "bisect" | "notes") {
-        // A bisect log and a note print through the pager (core.pager), so
-        // the configuration probe has to clear it first. Every spelling of
-        // either subcommand that moves a ref, runs a program or opens the
-        // editor keeps its own review.
+    if matches!(subcommand, "bisect" | "notes" | "replace") {
+        // A bisect log, a note and the replacement refs print through the
+        // pager (core.pager), so the configuration probe has to clear it
+        // first. Every spelling of any of the three that moves a ref, runs a
+        // program or opens the editor keeps its own review.
         return allow_helper_context
             && super::git_side_record_reads::read_form(subcommand, &arguments[1..]);
     }
