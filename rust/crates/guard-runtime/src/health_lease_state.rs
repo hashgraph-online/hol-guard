@@ -10,7 +10,8 @@
 //! temporary file that is synced before it takes the file's name, and the
 //! directory is synced after. `mdm/health_lease.py`, `mdm/continuity.py` and
 //! `mdm/device_key.py` keep their contracts, signatures and locks, and only
-//! ask this command to move bytes.
+//! ask this command to move bytes. `read-metadata` also checks the device-key
+//! metadata it reads.
 
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read, Write};
@@ -37,6 +38,7 @@ const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 const STATE_ROOT_INVALID: &str = "health_lease_state_root_invalid";
 const PENDING_CONFLICT: &str = "health_lease_pending_conflict";
 const IO_FAILED: &str = "health_lease_state_io_failed";
+const DEVICE_KEY_METADATA_INVALID: &str = "device_key_metadata_invalid";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -172,6 +174,15 @@ fn respond(request: Request) -> Result<Value, String> {
             let content = content.map(|bytes| Base64::encode_string(&bytes));
             json!({"ok": true, "content": content})
         }),
+        ("read-metadata", Kind::DeviceKey, None) => read_private(root, kind, request.owner_uid)
+            .and_then(|content| {
+                let metadata = match content {
+                    Some(bytes) => device_key_metadata::parse(&bytes)
+                        .ok_or_else(|| refused("value", DEVICE_KEY_METADATA_INVALID))?,
+                    None => Value::Null,
+                };
+                Ok(json!({"ok": true, "metadata": metadata}))
+            }),
         ("create", Kind::Outbox, Some(content)) => {
             let payload = Base64::decode_vec(&content).map_err(|_| invalid())?;
             create_new(root, kind, &payload).map(|()| json!({"ok": true}))
@@ -413,6 +424,9 @@ fn sync_directory(directory: &Path) -> io::Result<()> {
 fn sync_directory(_directory: &Path) -> io::Result<()> {
     Ok(())
 }
+
+#[path = "device_key_metadata.rs"]
+mod device_key_metadata;
 
 #[cfg(test)]
 #[path = "health_lease_state_tests.rs"]
