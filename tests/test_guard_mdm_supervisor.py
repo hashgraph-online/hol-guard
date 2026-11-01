@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -23,10 +22,6 @@ def _paths(root: Path) -> MachinePaths:
         log_root=root / "logs",
         manifest_path=root / "runtime" / "release-manifest.json",
     )
-
-
-def _completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(["native"], returncode, stdout, stderr)
 
 
 def _native_runtime(
@@ -91,46 +86,104 @@ def test_windows_supervisor_asks_the_runtime_to_query_the_task(tmp_path: Path, m
     run.assert_not_called()
 
 
-def test_windows_probe_uses_pinned_schtasks_and_bounded_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = Mock(return_value=_completed(stdout="<Task />"))
-    monkeypatch.setattr(supervisor, "_windows_directory", lambda: r"D:\Windows")
-    monkeypatch.setattr(supervisor.subprocess, "run", run)
-
-    supervisor._run_schtasks("/Query")
-
-    command = run.call_args.args[0]
-    kwargs = run.call_args.kwargs
-    assert command[0] == r"D:\Windows\System32\schtasks.exe"
-    assert kwargs["cwd"] == r"D:\Windows\System32"
-    assert kwargs["env"] == {
-        "ComSpec": r"D:\Windows\System32\cmd.exe",
-        "SystemDrive": "D:",
-        "SystemRoot": r"D:\Windows",
-        "WINDIR": r"D:\Windows",
-    }
+_TASK_FEATURES = frozenset({supervisor.SUPERVISOR_VERDICT_FEATURE, supervisor.SUPERVISOR_INSTALL_FEATURE})
 
 
-def test_windows_supervisor_install_uses_protected_temporary_xml(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _windows_installer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MachinePaths:
     paths = _paths(tmp_path)
-    executable = paths.runtime_root / "hol-guard" / "hol-guard.exe"
-    executable.parent.mkdir(parents=True)
-    executable.write_bytes(b"exe")
-    paths.state_root.mkdir()
-    run = Mock(return_value=_completed())
     monkeypatch.setattr(supervisor.platform, "system", lambda: "Windows")
     monkeypatch.setattr(supervisor, "_windows_is_administrator", lambda: True)
     monkeypatch.setattr(supervisor, "default_machine_paths", lambda **_kwargs: paths)
-    monkeypatch.setattr(supervisor, "_run_schtasks", run)
+    monkeypatch.setattr(supervisor, "_windows_directory", lambda: r"D:\Windows")
+    return paths
+
+
+def test_windows_supervisor_install_asks_the_runtime_to_register_the_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _windows_installer(tmp_path, monkeypatch)
+    process = _native_runtime(
+        monkeypatch, '{"ok": true, "state": "running", "reason_code": "supervisor_running"}', _TASK_FEATURES
+    )
+    run = Mock()
+    monkeypatch.setattr(supervisor.subprocess, "run", run)
 
     result = supervisor.install_machine_supervisor()
 
-    task_xml_path = Path(run.call_args.args[4])
     assert result["healthy"] is True
-    assert run.call_args.args[:4] == ("/Create", "/TN", r"\HOL Guard\Machine Health", "/XML")
-    assert not task_xml_path.exists()
-    assert list(paths.state_root.iterdir()) == []
+    assert result["reasonCodes"] == ["supervisor_running"]
+    assert _sent(process) == {
+        "schema": "supervisor-verdict.v1",
+        "op": "windows-install",
+        "executable": str(paths.runtime_root / "hol-guard" / "hol-guard.exe"),
+        "windows_directory": r"D:\Windows",
+        "state_root": str(paths.state_root),
+    }
+    run.assert_not_called()
+
+
+def test_windows_supervisor_remove_asks_the_runtime_to_delete_the_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _windows_installer(tmp_path, monkeypatch)
+    process = _native_runtime(monkeypatch, '{"ok": true, "state": "absent"}', _TASK_FEATURES)
+
+    result = supervisor.remove_machine_supervisor()
+
+    assert (result["operation"], result["state"]) == ("supervisor-remove", "absent")
+    assert _sent(process) == {
+        "schema": "supervisor-verdict.v1",
+        "op": "windows-remove",
+        "executable": str(paths.runtime_root / "hol-guard" / "hol-guard.exe"),
+        "windows_directory": r"D:\Windows",
+    }
+
+
+@pytest.mark.parametrize(
+    ("output", "error"),
+    [
+        ('{"ok": false, "error": "supervisor_runtime_absent"}', "supervisor_runtime_absent"),
+        ('{"ok": false, "error": "supervisor_registration_failed"}', "supervisor_registration_failed"),
+        ('{"ok": false, "error": "something_else"}', "supervisor_verdict_native_unavailable"),
+        ('{"ok": false, "error": ["supervisor_runtime_absent"]}', "supervisor_verdict_native_unavailable"),
+        ('{"ok": true, "state": "absent"}', "supervisor_verdict_native_unavailable"),
+        ("not json", "supervisor_verdict_native_unavailable"),
+        (None, "supervisor_verdict_native_unavailable"),
+    ],
+)
+def test_windows_supervisor_install_reports_why_the_runtime_could_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, output: str | None, error: str
+) -> None:
+    _ = _windows_installer(tmp_path, monkeypatch)
+    _ = _native_runtime(monkeypatch, output, _TASK_FEATURES)
+
+    with pytest.raises(OSError, match=f"^{error}$"):
+        _ = supervisor.install_machine_supervisor()
+
+
+@pytest.mark.parametrize("operation", ["install_machine_supervisor", "remove_machine_supervisor"])
+def test_windows_task_changes_need_a_runtime_that_installs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    _ = _windows_installer(tmp_path, monkeypatch)
+    process = _native_runtime(monkeypatch, '{"ok": true, "state": "running"}')
+
+    with pytest.raises(OSError, match=r"^supervisor_verdict_native_unavailable$"):
+        _ = getattr(supervisor, operation)()
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["install_machine_supervisor", "remove_machine_supervisor"])
+def test_windows_task_changes_need_an_administrator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    _ = _windows_installer(tmp_path, monkeypatch)
+    monkeypatch.setattr(supervisor, "_windows_is_administrator", lambda: False)
+    process = _native_runtime(monkeypatch, None, _TASK_FEATURES)
+
+    with pytest.raises(PermissionError, match=r"^supervisor_administrator_required$"):
+        _ = getattr(supervisor, operation)()
+    process.assert_not_called()
 
 
 def test_supervisor_cli_dispatches_installer_only_commands(

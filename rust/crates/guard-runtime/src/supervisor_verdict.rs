@@ -6,7 +6,8 @@
 //! `macos` and `windows` ops decide what evidence a caller sent says. A macOS
 //! verdict can need more evidence than it has, so it answers with the next
 //! probe to run (`disabled`, then `loaded`) until it can decide, and no probe
-//! the registration already ruled out ever runs.
+//! the registration already ruled out ever runs. The `windows-install` and
+//! `windows-remove` ops register and delete the task (`supervisor_install.rs`).
 
 use std::io::Read;
 use std::sync::LazyLock;
@@ -66,6 +67,10 @@ struct Request {
     /// `System32\schtasks.exe`.
     #[serde(default)]
     windows_directory: Option<String>,
+    /// The machine state root `windows-install` writes the task definition
+    /// under before `schtasks` registers it.
+    #[serde(default)]
+    state_root: Option<String>,
     #[serde(default)]
     stdout_log: Option<String>,
     #[serde(default)]
@@ -117,6 +122,12 @@ fn answer(bytes: &[u8]) -> Result<Value, String> {
         }
         "windows-verify" => {
             probe::windows_verify(&request, &mut probe::SystemRunner).ok_or_else(invalid)
+        }
+        "windows-install" => {
+            install::windows_install(&request, &mut probe::SystemRunner).ok_or_else(invalid)
+        }
+        "windows-remove" => {
+            install::windows_remove(&request, &mut probe::SystemRunner).ok_or_else(invalid)
         }
         "windows" => request
             .task
@@ -463,6 +474,11 @@ fn action_status(root: Node, executable: &str) -> Option<Verdict> {
 
 /// `ntpath.normcase(ntpath.normpath(path))`.
 fn nt_normcase_normpath(path: &str) -> String {
+    nt_normpath(path).to_lowercase()
+}
+
+/// `ntpath.normpath(path)`.
+fn nt_normpath(path: &str) -> String {
     let characters: Vec<char> = path
         .chars()
         .map(|character| if character == '/' { '\\' } else { character })
@@ -482,12 +498,11 @@ fn nt_normcase_normpath(path: &str) -> String {
             part => parts.push(part),
         }
     }
-    let joined = if prefix.is_empty() && parts.is_empty() {
+    if prefix.is_empty() && parts.is_empty() {
         ".".to_owned()
     } else {
         format!("{prefix}{}", parts.join("\\"))
-    };
-    joined.to_lowercase()
+    }
 }
 
 /// `D:P` with exactly the SYSTEM and Administrators full-control entries, in
@@ -530,6 +545,9 @@ fn security_descriptor_valid(descriptor: &str) -> bool {
         && normalized.iter().any(|ace| ace == system)
         && normalized.iter().any(|ace| ace == administrators)
 }
+
+#[path = "supervisor_install.rs"]
+mod install;
 
 #[path = "supervisor_probe.rs"]
 mod probe;
