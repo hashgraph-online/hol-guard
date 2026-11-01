@@ -218,6 +218,40 @@ fn a_lone_surrogate_escape_is_not_rewritten() {
 }
 
 #[test]
+fn a_lone_surrogate_escape_in_a_key_is_not_rewritten() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("settings.json");
+    let text = format!("{{\"\\udc00\": 1, \"hooks\": [{{\"command\": \"{GUARD_COMMAND}\"}}]}}");
+    fs::write(&path, &text).expect("write");
+
+    let swept = sweep_file(&path, false);
+
+    assert_eq!(swept["error"], json!("rewrite_not_lossless"));
+    assert_eq!(swept["wrote"], json!(false));
+    assert_eq!(fs::read_to_string(&path).expect("read"), text);
+}
+
+#[test]
+fn an_unrelated_nan_does_not_keep_the_guard_hook() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("settings.json");
+    let text = format!(
+        "{{\"ratio\": NaN, \"hooks\": {{\"Stop\": [{{\"hooks\": [{{\"type\": \"command\", \"command\": \"{GUARD_COMMAND}\"}}]}}]}}}}"
+    );
+    fs::write(&path, &text).expect("write");
+
+    let swept = sweep_file(&path, false);
+
+    assert_eq!(swept["error"], Value::Null);
+    assert_eq!(swept["removed"], json!(1));
+    assert_eq!(swept["wrote"], json!(true));
+    assert_eq!(
+        fs::read_to_string(&path).expect("read"),
+        "{\n  \"ratio\": NaN\n}\n"
+    );
+}
+
+#[test]
 fn toml_edit_keeps_comments_and_unrelated_tables() {
     let directory = tempfile::tempdir().expect("tempdir");
     let path = directory.path().join("config.toml");

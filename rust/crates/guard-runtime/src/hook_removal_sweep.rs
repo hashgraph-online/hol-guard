@@ -25,7 +25,7 @@ use crate::encrypted_secret_store::random_bytes;
 use crate::hook_removal_prune::{
     prune_document, prune_guard_hooks, same, table_value, write_indented,
 };
-use crate::pyjson::{parse, parse_marking_lone_surrogates, PyVal};
+use crate::pyjson::{parse, parse_mapping_lone_surrogates, PyVal};
 
 const SCHEMA: &str = "hook-removal-sweep.v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
@@ -277,9 +277,10 @@ fn sweep_config_file<'a>(text: &'a str, path: &Path, dry_run: bool) -> SweepResu
 fn render(config: Config, pruned: &PyVal, removed: usize) -> Option<String> {
     match config {
         Config::Json(_, text) => {
-            // CPython keeps a lone surrogate escape and writes it back; the
-            // decoder here cannot, so such a file is left alone.
-            if parse_marking_lone_surrogates(&text).ok()? != parse(&text).ok()? {
+            // CPython keeps a lone surrogate escape, in a key or a value, and
+            // writes it back; the decoder here cannot, so such a file is left
+            // alone.
+            if parse_mapping_lone_surrogates(&text).ok()?.mapped {
                 return None;
             }
             let mut out = Vec::new();
@@ -334,10 +335,12 @@ fn write_temporary(
     bytes: &[u8],
     permissions: fs::Permissions,
 ) -> std::io::Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(temporary)?;
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    // Owner-only until the rewrite is complete, as `mkstemp` created it.
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options.open(temporary)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     drop(file);
