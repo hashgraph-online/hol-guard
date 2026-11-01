@@ -860,6 +860,7 @@ mod skill_identity_walk;
 mod skill_workflow_preflight_op;
 #[cfg(unix)]
 mod state_directory_lock;
+mod store_quarantine_forensics;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;

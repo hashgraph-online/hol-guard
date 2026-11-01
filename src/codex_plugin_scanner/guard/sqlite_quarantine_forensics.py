@@ -2,21 +2,20 @@
 
 Each quarantine event writes a small owner-only JSON record before the store
 files move, then updates it with the recovery outcome afterwards. Records carry
-no absolute paths so they are safe to retain indefinitely.
+no absolute paths so they are safe to retain indefinitely. The native runtime
+(`store-quarantine-forensics --stdin`) diagnoses the store header and writes
+the records; without it, nothing is recorded.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sqlite3
 import sys
-from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 if TYPE_CHECKING:
     from .sqlite_recovery import SQLiteStoreProbeDetail
@@ -25,7 +24,9 @@ QUARANTINE_FORENSICS_SCHEMA = "guard.store-quarantine-forensics.v1"
 QUARANTINE_FORENSICS_SUFFIX = ".forensics.json"
 _QUARANTINE_FILE_LABELS = (("db", ""), ("wal", "-wal"), ("shm", "-shm"))
 _FORENSICS_PROCESS_PATTERN = re.compile(r"^[a-z][a-z-]{0,31}$")
-_FORENSICS_MESSAGE_LIMIT = 500
+_FEATURE = "native-store-quarantine-forensics-v1"
+_SCHEMA = "store-quarantine-forensics.v1"
+_TIMEOUT_SECONDS = 10.0
 
 
 def quarantine_forensics_path(guard_home: Path, quarantine_id: str) -> Path:
@@ -68,75 +69,6 @@ def quarantine_file_stats(path: Path) -> dict[str, dict[str, int]]:
     return stats
 
 
-_SQLITE_MAGIC = b"SQLite format 3\x00"
-_BTREE_PAGE_KINDS = {
-    0x02: "interior-index",
-    0x05: "interior-table",
-    0x0A: "leaf-index",
-    0x0D: "leaf-table",
-}
-# SQLite 3.7.0 through 3.51.2 can corrupt a WAL database when several
-# connections write and checkpoint concurrently (the "WAL-reset" bug).
-_WAL_RESET_BUG_FIXED_IN = (3, 51, 3)
-
-
-def sqlite_wal_reset_bug_possible(version: tuple[int, ...] | None = None) -> bool:
-    """True when the linked SQLite predates the WAL-reset corruption fix."""
-
-    return (version if version is not None else sqlite3.sqlite_version_info) < _WAL_RESET_BUG_FIXED_IN
-
-
-def sqlite_header_diagnosis(path: Path) -> dict[str, object]:
-    """Classify the first database page without recording any file content.
-
-    Distinguishes a store whose page 1 was overwritten by another page (a
-    stray write or stale WAL checkpoint) from a truncated, zeroed or foreign
-    file. Only magic-match, page-kind label and sizes are returned.
-    """
-
-    diagnosis: dict[str, object] = {}
-    try:
-        if path.is_symlink() or not path.is_file():
-            return diagnosis
-        size = path.stat().st_size
-        with path.open("rb") as handle:
-            head = handle.read(100)
-    except OSError:
-        return diagnosis
-    diagnosis["file_size"] = size
-    diagnosis["header_magic_ok"] = head[:16] == _SQLITE_MAGIC
-    if head and not any(head):
-        diagnosis["header_zeroed"] = True
-    if len(head) >= 100 and diagnosis["header_magic_ok"]:
-        raw_page_size = int.from_bytes(head[16:18], "big")
-        page_size = 65536 if raw_page_size == 1 else raw_page_size
-        diagnosis["page_size_field"] = page_size
-        if 512 <= page_size <= 65536 and page_size & (page_size - 1) == 0:
-            diagnosis["size_multiple_of_page"] = size % page_size == 0
-        diagnosis["wal_mode_header"] = head[18] == 2 and head[19] == 2
-    if not diagnosis["header_magic_ok"] and head:
-        kind = _BTREE_PAGE_KINDS.get(head[0])
-        if kind is not None:
-            diagnosis["page1_looks_like_btree_page"] = kind
-    return diagnosis
-
-
-def _atomic_owner_only_json_write(path: Path, payload: dict[str, object]) -> None:
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", closefd=True) as handle:
-            handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")))
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, path)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
-
-
 def write_quarantine_forensics(
     *,
     guard_home: Path,
@@ -145,16 +77,19 @@ def write_quarantine_forensics(
     error: BaseException,
     probe: SQLiteStoreProbeDetail | None,
     files: dict[str, dict[str, int]],
-    header: dict[str, object] | None = None,
+    store_path: Path | None = None,
 ) -> Path:
-    """Persist why a store was quarantined before the store files move."""
+    """Persist why a store was quarantined before the store files move.
 
-    payload: dict[str, object] = {
-        "schema": QUARANTINE_FORENSICS_SCHEMA,
-        "quarantine_id": quarantine_id,
+    The native runtime redacts the Guard home from the message, diagnoses the
+    store's first page at `store_path` and writes the owner-only record.
+    """
+
+    record: dict[str, object] = {
+        "store_path": None if store_path is None else str(store_path),
         "quarantined_at": quarantined_at.isoformat(),
         "error_class": type(error).__name__,
-        "error_message": str(error).replace(str(guard_home), "<guard_home>")[:_FORENSICS_MESSAGE_LIMIT],
+        "error_message": str(error).encode("utf-8", "replace").decode("utf-8"),
         "probe": (
             None
             if probe is None
@@ -169,22 +104,12 @@ def write_quarantine_forensics(
         "pid": os.getpid(),
         "guard_version": _guard_version(),
         "sqlite_version": sqlite3.sqlite_version,
-        "sqlite_wal_reset_bug_possible": sqlite_wal_reset_bug_possible(),
+        "sqlite_errorcode": _int_or_none(getattr(error, "sqlite_errorcode", None)),
+        "sqlite_errorname": _text_or_none(getattr(error, "sqlite_errorname", None)),
+        "process": _forensics_process_name(),
     }
-    if header:
-        payload["header"] = header
-    sqlite_errorcode = getattr(error, "sqlite_errorcode", None)
-    sqlite_errorname = getattr(error, "sqlite_errorname", None)
-    if sqlite_errorcode is not None:
-        payload["sqlite_errorcode"] = sqlite_errorcode
-    if sqlite_errorname is not None:
-        payload["sqlite_errorname"] = sqlite_errorname
-    process = _forensics_process_name()
-    if process is not None:
-        payload["process"] = process
-    path = quarantine_forensics_path(guard_home, quarantine_id)
-    _atomic_owner_only_json_write(path, payload)
-    return path
+    _record(guard_home, quarantine_id, {"op": "record", "record": record})
+    return quarantine_forensics_path(guard_home, quarantine_id)
 
 
 def update_quarantine_forensics_outcome(
@@ -196,15 +121,30 @@ def update_quarantine_forensics_outcome(
 ) -> None:
     """Record the recovery outcome on the matching forensics record."""
 
-    path = quarantine_forensics_path(guard_home, quarantine_id)
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-        payload = loaded if isinstance(loaded, dict) else {}
-    except (OSError, ValueError):
-        payload = {}
-    payload.setdefault("schema", QUARANTINE_FORENSICS_SCHEMA)
-    payload.setdefault("quarantine_id", quarantine_id)
-    payload["outcome"] = outcome
-    if salvage:
-        payload["salvage"] = dict(salvage)
-    _atomic_owner_only_json_write(path, payload)
+    _record(
+        guard_home,
+        quarantine_id,
+        {"op": "outcome", "outcome": outcome, "salvage": dict(salvage) if salvage else None},
+    )
+
+
+def _int_or_none(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _text_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _record(guard_home: Path, quarantine_id: str, request: dict[str, object]) -> None:
+    from .mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(
+        _FEATURE,
+        "store-quarantine-forensics",
+        {"schema": _SCHEMA, "guard_home": str(guard_home), "quarantine_id": quarantine_id, **request},
+        output_limit=256,
+        timeout_seconds=_TIMEOUT_SECONDS,
+    )
+    if answer is None or answer.get("written") is not True:
+        raise RuntimeError("quarantine forensics require the native runtime")
