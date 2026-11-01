@@ -878,6 +878,7 @@ mod verified_read_execute_op;
 mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
+mod windows_private_state;
 mod windows_process_command_lines;
 mod windows_process_lifecycle;
 #[cfg(windows)]

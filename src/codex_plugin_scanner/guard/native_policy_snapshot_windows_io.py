@@ -6,6 +6,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from ..safe_output_windows import _FileDispositionInformation
 from .native_policy_snapshot_constants import (
     _WINDOWS_CREATE_NEW,
     _WINDOWS_DELETE,
@@ -34,10 +35,6 @@ from .native_policy_snapshot_constants import (
     _WINDOWS_WRITE_DAC,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_windows_atomic import (
-    _windows_delete_file_handle,
-    _windows_handle_value,
-)
 
 
 def _snapshot_api() -> Any:
@@ -46,6 +43,35 @@ def _snapshot_api() -> Any:
     from . import native_policy_snapshot
 
     return native_policy_snapshot
+
+
+_WINDOWS_FILE_DISPOSITION_INFO = 4
+
+
+def _windows_handle_value(handle: Any) -> int:
+    value = getattr(handle, "value", handle)
+    if not isinstance(value, int) or value < 0:
+        raise NativePolicySnapshotError("native_policy_windows_handle_invalid")
+    return value
+
+
+def _windows_delete_file_handle(kernel32: Any, handle: Any) -> None:
+    """Delete a new file only through its still-open, identity-bound handle."""
+
+    import ctypes
+    from ctypes import wintypes
+
+    disposition = _FileDispositionInformation(delete_file=True)
+    set_information = kernel32.SetFileInformationByHandle
+    set_information.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    set_information.restype = wintypes.BOOL
+    if not set_information(
+        handle,
+        _WINDOWS_FILE_DISPOSITION_INFO,
+        ctypes.byref(disposition),
+        ctypes.sizeof(disposition),
+    ):
+        raise NativePolicySnapshotError("native_policy_windows_temporary_cleanup_failed")
 
 
 class _WindowsOpenFunctions(NamedTuple):
