@@ -53,7 +53,7 @@ def test_triggering_version_and_sha_come_from_the_same_immutable_run() -> None:
     read_identity = _step(resolve, "Read the triggering run's exact version")
     dispatch = workflow["jobs"]["dispatch_plugin_sync"]
 
-    assert download["uses"] == ("actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c")
+    assert download["uses"] == ("actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333")
     assert download["with"] == {
         "name": "release-toolchain-sbom",
         "path": "triggering-release",
