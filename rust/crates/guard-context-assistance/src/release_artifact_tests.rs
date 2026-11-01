@@ -31,6 +31,7 @@ fn catalog(fixture: &Fixture, sdk: &str, core: &str, qualified: bool) -> Trusted
     doc.issued_at = 900;
     doc.expires_at = 2000;
     let build = &mut doc.builds[0];
+    build.platforms.truncate(1);
     build.identity.build_id = "synthetic-catalog-build".into();
     build.identity.sdk_version = sdk.into();
     build.identity.core_version = core.into();

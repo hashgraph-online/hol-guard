@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.harness_versions.compatibility import (
 )
 from codex_plugin_scanner.guard.harness_versions.discovery import VersionObservation
 from codex_plugin_scanner.guard.harness_versions.service import _manifest_path
+from codex_plugin_scanner.guard.mdm import runtime_request
 from scripts.ci.harness_version_manifest import ManifestError, bundled_manifest_path, parse_manifest, parse_version
 
 GUARD = "9.9.9"
@@ -133,6 +134,31 @@ class TestManifestValidation:
         payload = decide(_observed("0.0.1"), bundled)
         assert payload["reason"] != "manifest_invalid"
         assert payload["coverage_revision"] == bundled["revision"]
+
+    @pytest.mark.parametrize(
+        ("observed_at", "accepted"),
+        [
+            ("2026-10-16T00:00:00Z", True),
+            ("2026-10-16 00:00+05:30", True),
+            ("2026-10-16T00:00:00.123456-07:00", True),
+            ("2026-10-16T00:00:00+0000", False),
+            ("20261016T000000Z", False),
+            ("2026-10-16T00:00:00.1234567Z", False),
+            ("2026-02-30T00:00:00Z", False),
+        ],
+    )
+    def test_ci_and_native_validators_agree_on_timestamps(
+        self, decide: Callable[..., dict[str, object]], observed_at: str, accepted: bool
+    ) -> None:
+        manifest = _manifest(_record("18.4.12", observed_at=observed_at))
+        native = decide(_observed("18.4.12"), manifest)
+        assert (native["state"] == STATE_TESTED) is accepted
+        if accepted:
+            parse_manifest(manifest)
+        else:
+            assert native["state"] == STATE_COVERAGE_UNAVAILABLE
+            with pytest.raises(ManifestError, match="observed_at"):
+                parse_manifest(manifest)
 
     @pytest.mark.parametrize("version", ["18.x", "^18.4.12", ">=18.4.12 <19", "18.4.12 - 18.8.3", "*"])
     def test_rejects_ranges(self, version: str) -> None:
@@ -249,8 +275,18 @@ class TestDecision:
         self, decide: Callable[..., dict[str, object]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(compatibility, "runtime_request", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: False)
         payload = decide(_observed("18.8.3"))
         assert (payload["state"], payload["reason"]) == (STATE_VERSION_UNKNOWN, "runtime_unavailable")
+        assert payload["enforcement_effect"] == "none"
+
+    def test_a_runtime_that_offers_the_decision_but_fails_reports_an_error(
+        self, decide: Callable[..., dict[str, object]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(compatibility, "runtime_request", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
+        payload = decide(_observed("18.8.3"))
+        assert (payload["state"], payload["reason"]) == (STATE_VERSION_UNKNOWN, "runtime_error")
         assert payload["enforcement_effect"] == "none"
 
 

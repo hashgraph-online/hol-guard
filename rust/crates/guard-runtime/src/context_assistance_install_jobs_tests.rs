@@ -224,6 +224,9 @@ mod private_python;
 #[path = "context_assistance_install_jobs_actual_tests.rs"]
 mod actual;
 
+#[path = "context_assistance_one_click_actual_tests.rs"]
+mod one_click_actual;
+
 fn metadata_interpreter(fixture: &Fixture) -> interpreters::Interpreter {
     let python = PathBuf::from("/not-executed/python3.14");
     let facts = InterpreterFacts {

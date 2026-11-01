@@ -183,13 +183,15 @@ def _fixture_manifest(context: HarnessContext) -> Path:
 class TestService:
     def _compat(self, context: HarnessContext, **kwargs: object) -> dict[str, object]:
         options: dict[str, object] = {
-            "manifest_path": _fixture_manifest(context),
             "guard_version": GUARD,
             "platform": PLATFORM,
             "observe": lambda harness, ctx, clock: _observe(ctx, clock=clock),
             "clock": lambda: 1000.0,
         }
         options.update(kwargs)
+        if "manifest_path" not in options:
+            # Writing the fixture again would change its stamp and miss the decision cache.
+            options["manifest_path"] = _fixture_manifest(context)
         return service.compatibility_for("omp", context, **options)  # type: ignore[arg-type]
 
     def test_acknowledge_flow_and_version_change(self, tmp_path: Path) -> None:
@@ -254,6 +256,46 @@ class TestService:
         service.invalidate(context.guard_home, "omp")
         self._compat(context, observe=observe)
         assert len(calls) == 3
+
+    def test_identical_inputs_reuse_one_decision(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        context = _context(tmp_path)
+        _link_bun(context, _install(tmp_path / "bun", "18.11.2"))
+        manifest = _fixture_manifest(context)
+        decide = service.decide_compatibility
+        calls: list[object] = []
+
+        def counted(**fields: object) -> dict[str, object]:
+            calls.append(fields["now"])
+            return decide(**fields)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(service, "decide_compatibility", counted)
+        first = self._compat(context, manifest_path=manifest)
+        first["state"] = "tampered"
+        assert self._compat(context, manifest_path=manifest)["state"] == STATE_UNTESTED
+        assert len(calls) == 1, "a list read must not ask the runtime again for an unchanged row"
+
+        later = 1000.0 + service.DECISION_TTL_SECONDS
+        key = self._compat(context, manifest_path=manifest, clock=lambda: later)["acknowledgement"]["key"]  # type: ignore[index]
+        assert len(calls) == 2, "a decision expires"
+
+        service.acknowledge(
+            "omp",
+            key,
+            context,
+            manifest_path=manifest,
+            guard_version=GUARD,
+            platform=PLATFORM,
+            observe=lambda harness, ctx, clock: _observe(ctx, clock=clock),
+            clock=lambda: later,
+        )
+        acked = self._compat(context, manifest_path=manifest, clock=lambda: later)
+        assert acked["acknowledgement"]["acknowledged"] is True  # type: ignore[index]
+
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        os.utime(manifest, ns=(1, 1))
+        before = len(calls)
+        _ = self._compat(context, manifest_path=manifest, clock=lambda: later)
+        assert len(calls) == before + 1, "an edited manifest is decided again"
 
 
 def _imports(path: Path) -> set[str]:

@@ -238,8 +238,11 @@ impl Walk<'_> {
                 return Err(InstallError::EntryUnsafe);
             }
             if metadata.is_dir() {
-                let name =
-                    paths::admit_name(format!("{name}/").as_bytes(), true, &mut self.namespace)?;
+                let name = paths::admit_interpreter_name(
+                    format!("{name}/").as_bytes(),
+                    true,
+                    &mut self.namespace,
+                )?;
                 self.directories.push(name);
                 self.walk(&path, depth + 1)?;
             } else if metadata.is_file() {
@@ -252,7 +255,8 @@ impl Walk<'_> {
                         return Err(InstallError::DestinationUnsafe);
                     }
                 }
-                let name = paths::admit_name(name.as_bytes(), false, &mut self.namespace)?;
+                let name =
+                    paths::admit_interpreter_name(name.as_bytes(), false, &mut self.namespace)?;
                 if metadata.len() > MAX_FILE_BYTES {
                     return Err(InstallError::LimitExceeded);
                 }

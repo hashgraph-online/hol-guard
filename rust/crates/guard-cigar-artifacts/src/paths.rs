@@ -54,6 +54,31 @@ pub fn admit_name(
     directory: bool,
     namespace: &mut BTreeMap<String, (String, bool)>,
 ) -> Result<String, InstallError> {
+    admit_name_folding(raw, directory, namespace, true)
+}
+
+/// Interpreter trees are only unpacked on the host they were built for.
+/// Linux CPython ships names that differ only by case (terminfo), so case
+/// aliases are refused only where the host filesystem folds case.
+pub fn admit_interpreter_name(
+    raw: &[u8],
+    directory: bool,
+    namespace: &mut BTreeMap<String, (String, bool)>,
+) -> Result<String, InstallError> {
+    admit_name_folding(
+        raw,
+        directory,
+        namespace,
+        cfg!(any(target_os = "macos", windows)),
+    )
+}
+
+fn admit_name_folding(
+    raw: &[u8],
+    directory: bool,
+    namespace: &mut BTreeMap<String, (String, bool)>,
+    fold_case: bool,
+) -> Result<String, InstallError> {
     let raw = std::str::from_utf8(raw).map_err(|_| InstallError::EntryUnsafe)?;
     let name = if directory {
         raw.strip_suffix('/').ok_or(InstallError::EntryUnsafe)?
@@ -91,7 +116,11 @@ pub fn admit_name(
         }
         prefix.push_str(part);
         let is_directory = index + 1 < parts.len() || directory;
-        let key = prefix.to_ascii_lowercase();
+        let key = if fold_case {
+            prefix.to_ascii_lowercase()
+        } else {
+            prefix.clone()
+        };
         if let Some((previous, previous_directory)) = namespace.get(&key) {
             if previous != &prefix || !previous_directory || !is_directory {
                 return Err(InstallError::EntryUnsafe);
@@ -101,4 +130,21 @@ pub fn admit_name(
         }
     }
     Ok(name.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn case_aliases_are_refused_only_where_the_host_folds_case() {
+        let mut namespace = BTreeMap::new();
+        admit_name(b"share/terminfo/e/eterm", false, &mut namespace).unwrap();
+        assert!(admit_name(b"share/terminfo/E/Eterm", false, &mut namespace).is_err());
+        let mut namespace = BTreeMap::new();
+        admit_interpreter_name(b"share/terminfo/e/eterm", false, &mut namespace).unwrap();
+        let alias = admit_interpreter_name(b"share/terminfo/E/Eterm", false, &mut namespace);
+        assert_eq!(alias.is_err(), cfg!(any(target_os = "macos", windows)));
+        assert!(admit_interpreter_name(b"share/terminfo/e/eterm", false, &mut namespace).is_err());
+    }
 }

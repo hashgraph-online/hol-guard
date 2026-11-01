@@ -126,6 +126,7 @@ mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
+mod cline_hook_worker;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
 mod cloud_exception_lift;
@@ -236,6 +237,7 @@ mod contributed_mcp_catalog_test_support;
 mod contributed_mcp_decision_op;
 #[path = "adapters/detection/copilot_detect.rs"]
 mod copilot_detect;
+mod copilot_hook_commands;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
@@ -822,6 +824,7 @@ mod resident_protocol;
 mod resident_runtime_verification;
 mod resident_state;
 mod resident_state_encoding;
+mod resident_state_prune;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;

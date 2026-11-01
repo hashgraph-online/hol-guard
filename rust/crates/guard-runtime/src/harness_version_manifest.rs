@@ -314,10 +314,7 @@ fn reviewed_https_link(url: &str) -> bool {
         return false;
     }
     let rest = &url[scheme_end + 3..];
-    let authority = rest
-        .split(|ch| matches!(ch, '/' | '?' | '#'))
-        .next()
-        .unwrap_or_default();
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     if authority.contains('@') || authority.contains(':') {
         return false;
     }
