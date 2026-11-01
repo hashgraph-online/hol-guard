@@ -167,3 +167,45 @@ fn the_request_reads_the_command_the_sink_sends() {
     .unwrap();
     assert_eq!(refusal["reason_code"], INVALID);
 }
+
+#[test]
+fn a_quiet_spelling_resolves_the_script_the_loud_one_names() {
+    // The admission reads a manager's reporting options as no part of the
+    // script it names, so the sink has to resolve the same run. A sink that
+    // refused the quiet spelling would fail a run the admission admitted.
+    let manifest = scripts(json!({"test": "node --test"}));
+    for command in [
+        words(&["npm", "--silent", "test"]),
+        words(&["npm", "-s", "test"]),
+        words(&["npm", "--loglevel", "error", "test"]),
+        words(&["npm", "--loglevel=error", "test"]),
+        words(&["npm", "run", "--silent", "test"]),
+        words(&["pnpm", "--reporter", "silent", "test"]),
+        words(&["yarn", "--silent", "run", "test"]),
+        words(&["bun", "run", "--silent", "test"]),
+    ] {
+        assert!(is_package_test(&command), "{command:?}");
+        assert_eq!(
+            resolve(&command, Some(&manifest)).unwrap(),
+            words(&["node", "--test"]),
+            "{command:?}"
+        );
+    }
+    // The tail still has to follow an explicit `--`, and an option that moves
+    // or fans the run out is not a reporting option.
+    assert!(resolve(
+        &words(&["npm", "--silent", "test", "extra"]),
+        Some(&manifest)
+    )
+    .is_err());
+    for command in [
+        words(&["npm", "--prefix", "../other", "test"]),
+        words(&["npm", "--workspaces", "test"]),
+        words(&["pnpm", "--filter", "web", "test"]),
+        // Bun's own runner is not the script, and a reporting option does
+        // not turn it into one.
+        words(&["bun", "--silent", "test"]),
+    ] {
+        assert!(!is_package_test(&command), "{command:?}");
+    }
+}

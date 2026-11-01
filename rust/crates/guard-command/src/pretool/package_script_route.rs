@@ -216,7 +216,7 @@ fn resolved(
         // so a test-named entry keeps the package route even when the body is
         // a read-only tool rather than a runner. A body the sink refuses
         // leaves the command on the generic route.
-        if !test_script(scripts, arguments) {
+        if !test_script(manager, scripts, arguments) {
             return None;
         }
         // A tool body is gated as that tool, and the tool's own gate includes
@@ -225,7 +225,7 @@ fn resolved(
         // route with no local TypeScript, and the sink would fail the run
         // that the generic route would have put to the user instead.
         if let Some((tool, tool_arguments)) =
-            crate::contained_package_test::script_tool_body(arguments, Some(scripts))
+            crate::contained_package_test::script_tool_body(manager, arguments, Some(scripts))
         {
             let (_, entries, _) =
                 crate::contained_node_tool::supported_tool(&tool, &tool_arguments)?;
@@ -359,8 +359,8 @@ fn nearest(directory: &Path, workspace: &Path, relative: &str) -> PathBuf {
 #[cfg(unix)]
 /// `resolve_package_test`: the sink's own reading of the declared script, so
 /// the route offers the narrow receipt only for a run the sink will resolve.
-fn test_script(scripts: &Map<String, Value>, arguments: &[String]) -> bool {
-    crate::contained_package_test::script_tokens(arguments, Some(scripts)).is_ok()
+fn test_script(manager: &str, scripts: &Map<String, Value>, arguments: &[String]) -> bool {
+    crate::contained_package_test::script_tokens(manager, arguments, Some(scripts)).is_ok()
 }
 
 #[cfg(unix)]
