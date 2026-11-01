@@ -129,7 +129,8 @@ fn live_rule(
         .ok()?;
     let mut rows = statement.query(params![harness, artifact_id]).ok()?;
     while let Ok(Some(row)) = rows.next() {
-        let (Ok(source), Ok(expires_at)) = (row.get::<_, String>(0), row.get::<_, Option<String>>(1))
+        let (Ok(source), Ok(expires_at)) =
+            (row.get::<_, String>(0), row.get::<_, Option<String>>(1))
         else {
             continue;
         };
@@ -166,8 +167,7 @@ fn raise(mut result: PreToolResultV1, source: &str) -> PreToolResultV1 {
             "A saved Guard rule asks a person to approve this exact command before it runs.",
         )
     };
-    if ActionFloor::parse(&result.policy_action).is_none_or(|policy| policy < ActionFloor::Review)
-    {
+    if ActionFloor::parse(&result.policy_action).is_none_or(|policy| policy < ActionFloor::Review) {
         result.policy_action = "review".into();
     }
     result.minimum_action = "review".into();
