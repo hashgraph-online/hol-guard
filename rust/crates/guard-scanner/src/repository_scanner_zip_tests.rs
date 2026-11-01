@@ -526,6 +526,39 @@ fn a_gzipped_zip_is_read_as_the_zip_it_is() {
 }
 
 #[test]
+fn a_zip_inside_a_zip_is_not_opened_twice() {
+    // The search for local headers runs over the whole archive, and a member
+    // stored verbatim holds whatever bytes it holds, so an inner zip's own
+    // headers sit in the outer archive's bytes. Reading them here would
+    // report the inner members under the outer archive's path, which is a
+    // place no one could go to remove the secret, and would charge the same
+    // bytes twice. One level of nesting is read, as it is for a tar.
+    let inner = zip_bytes(&[stored("prod.env", credential_line().as_bytes())]);
+    let archive = zip_bytes(&[stored("nested.zip", &inner)]);
+    let (paths, scanned) = scan(&archive, "outer.zip");
+    assert!(paths.is_empty());
+    // The inner archive was read as the one file it is.
+    assert_eq!(scanned, inner.len());
+}
+
+#[test]
+fn a_zip_inside_a_headless_zip_is_not_opened_twice_either() {
+    // Without a directory the outer member is found through its own local
+    // header instead, and the bound has to hold there too: what the first
+    // header's member carries is that member's business whichever pass found
+    // it.
+    let inner = zip_bytes(&[stored("prod.env", credential_line().as_bytes())]);
+    let whole = zip_bytes(&[stored("nested.zip", &inner)]);
+    let tail = 46 + "nested.zip".len() + 22;
+    let headers = &whole[..whole.len() - tail];
+    assert!(super::central_directory(headers).is_none());
+
+    let (paths, scanned) = scan(headers, "headless.zip");
+    assert!(paths.is_empty());
+    assert_eq!(scanned, inner.len());
+}
+
+#[test]
 fn a_zip_inside_a_tar_is_not_opened_twice() {
     // One level of nesting is read, which is what a committed archive is.
     // Walking an archive inside an archive inside an archive is how a bounded

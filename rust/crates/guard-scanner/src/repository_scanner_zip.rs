@@ -25,6 +25,14 @@
 //! not account for is read from its own header. What the directory names is
 //! read on the directory's terms; what it omits is read anyway.
 //!
+//! What a member carries is that member's own business. A zip stored verbatim
+//! inside this one holds local signatures of its own, and reading them here
+//! would report the inner archive's members under this archive's path, where
+//! no one removing the secret could find them. A header inside the data of a
+//! member the directory named is left alone, so one level of nesting is read
+//! and an archive within an archive is read as the file it is - the same bound
+//! the tar walk beside this one keeps.
+//!
 //! A local header's sizes are the ones a bomb lies about, which is why the
 //! directory's are preferred where there are two. Where the local header is
 //! all there is, the lie cannot grow the read: a member is inflated under a
@@ -129,6 +137,7 @@ pub(super) fn scan_members(
         scanned: 0,
         read: HashSet::new(),
         taken: HashSet::new(),
+        spans: Vec::new(),
         seen: 0,
     };
     // An archive whose end record is missing or unreadable still has its
@@ -161,6 +170,11 @@ struct Walk<'a> {
     /// The local headers whose data the directory pass already read, so the
     /// second pass spends the budget only on what the first one missed.
     taken: HashSet<usize>,
+    /// Where each member the directory accounted for keeps its data. A member
+    /// stored verbatim may carry a local signature inside those bytes - a zip
+    /// inside a zip is the ordinary case - and a signature found there belongs
+    /// to the inner archive, not to this one.
+    spans: Vec<(usize, usize)>,
     seen: usize,
 }
 
@@ -193,15 +207,40 @@ impl Walk<'_> {
         }
     }
 
+    /// Where a member the directory accounted for keeps its data, so a
+    /// signature found inside those bytes is read as the inner archive's and
+    /// not as this archive's.
+    fn note_span(&mut self, member: &Member<'_>) {
+        let Some(end) = member.data_at.checked_add(member.compressed as usize) else {
+            return;
+        };
+        if end > member.data_at {
+            self.spans.push((member.data_at, end));
+        }
+    }
+
+    /// Whether this header sits inside the data of a member the directory
+    /// already named.
+    fn inside_a_member(&self, header: usize) -> bool {
+        self.spans
+            .iter()
+            .any(|&(from, to)| header >= from && header < to)
+    }
+
     /// Every member whose data the directory did not account for, found
     /// through the local header that owns it.
     ///
     /// The search is for the signature rather than a walk by arithmetic,
     /// because the lengths that would carry a walk from one member to the next
-    /// are exactly what an archive hiding a member gets wrong. A member stored
-    /// verbatim may hold a local signature of its own - a zip inside a zip,
-    /// uncompressed - and the search finds that one too, which reads the inner
-    /// archive's members rather than missing them.
+    /// are exactly what an archive hiding a member gets wrong. The cost of
+    /// searching is that a member stored verbatim holds whatever bytes it
+    /// holds, and a zip stored inside this one carries local signatures of its
+    /// own. Those belong to the inner archive: reading them here would report
+    /// the inner members under this archive's path, where no one removing the
+    /// secret could find them, and would charge their bytes twice. So a header
+    /// inside the data of a member the directory named is left alone, and an
+    /// archive within an archive is read as the file it is, the same way the
+    /// tar walk beside this one reads one.
     fn local_headers(&mut self) {
         let mut at = 0usize;
         while self.more() {
@@ -209,13 +248,14 @@ impl Walk<'_> {
                 break;
             };
             at = header + LOCAL_SIGNATURE.len();
-            if self.taken.contains(&header) {
+            if self.taken.contains(&header) || self.inside_a_member(header) {
                 continue;
             }
             let Some(member) = local_member(self.data, header) else {
                 continue;
             };
             self.seen += 1;
+            self.note_span(&member);
             self.take(&member);
         }
     }
@@ -232,6 +272,7 @@ impl Walk<'_> {
             return;
         };
         self.taken.insert(member.header_at);
+        self.note_span(member);
         self.scanned = self.scanned.saturating_add(bytes.len());
         let member_path = member_path(self.path, &name);
         let Some(text) = decode_text(&member_path, &bytes) else {
