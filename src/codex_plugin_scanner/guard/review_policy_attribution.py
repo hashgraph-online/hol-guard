@@ -31,6 +31,11 @@ from .synced_policy import SyncPayloadReader, validated_synced_policy_bundle
 ATTRIBUTION_STATE_PREFIX = "review_policy_attribution:"
 _LOGGER = logging.getLogger(__name__)
 _REMOTE_POLICY_SOURCE = "policy-bundle"
+_CANONICAL_POLICY_SOURCE = "policy-bundle-canonical"
+_V2_CONTRACT = "guard-policy-bundle.v2"
+# A v2 bundle names the published document it carries, so its attribution
+# names that document revision rather than the v1 bundle version string.
+_V2_ATTRIBUTION_PREFIX = f"{_V2_CONTRACT}:"
 _REVIEW_ACTIONS = frozenset({"review", "require-reapproval"})
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -100,6 +105,34 @@ def _bundle_rule_ids(bundle: Mapping[str, object]) -> set[str]:
     return {rule_id for rule in rules if isinstance(rule, dict) and (rule_id := _identifier(rule.get("ruleId")))}
 
 
+def _v2_document(bundle: Mapping[str, object]) -> tuple[str, set[str]] | None:
+    """The attribution version and rule ids of the document a v2 bundle carries."""
+
+    payload = bundle.get("payload")
+    if not isinstance(payload, Mapping):
+        return None
+    metadata = payload.get("metadata")
+    spec = payload.get("spec")
+    revision = metadata.get("revision") if isinstance(metadata, Mapping) else None
+    rules = spec.get("rules") if isinstance(spec, Mapping) else None
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0 or not isinstance(rules, list):
+        return None
+    rule_ids = {rule_id for rule in rules if isinstance(rule, dict) and (rule_id := _identifier(rule.get("id")))}
+    return f"{_V2_ATTRIBUTION_PREFIX}{revision}", rule_ids
+
+
+def _bundle_identity(bundle: Mapping[str, object]) -> tuple[str, str, set[str]] | None:
+    """The decision source, attribution version and rule ids a bundle publishes."""
+
+    if bundle.get("contractVersion") == _V2_CONTRACT:
+        document = _v2_document(bundle)
+        return None if document is None else (_CANONICAL_POLICY_SOURCE, *document)
+    bundle_version = _identifier(bundle.get("bundleVersion"))
+    if bundle_version is None:
+        return None
+    return _REMOTE_POLICY_SOURCE, bundle_version, _bundle_rule_ids(bundle)
+
+
 def _resolve(store: _AttributionStore, request_row: Mapping[str, object]) -> dict[str, str]:
     policy_action = _text(request_row.get("policy_action"))
     harness = _text(request_row.get("harness"))
@@ -110,11 +143,12 @@ def _resolve(store: _AttributionStore, request_row: Mapping[str, object]) -> dic
     bundle = validated_synced_policy_bundle(store)
     if bundle is None:
         return {}
-    bundle_version = _identifier(bundle.get("bundleVersion"))
+    identity = _bundle_identity(bundle)
     issued = _timestamp(bundle.get("issuedAt"))
     # A bundle that arrived after the request cannot be the one that queued it.
-    if bundle_version is None or issued is None or issued > created:
+    if identity is None or issued is None or issued > created:
         return {}
+    source, bundle_version, rule_ids = identity
     lookup = store.resolve_policy_decision_lookup(
         harness,
         _text(request_row.get("artifact_id")),
@@ -125,13 +159,13 @@ def _resolve(store: _AttributionStore, request_row: Mapping[str, object]) -> dic
         consume_one_shot=False,
     )
     decision = lookup.get("decision")
-    if not isinstance(decision, Mapping) or decision.get("source") != _REMOTE_POLICY_SOURCE:
+    if not isinstance(decision, Mapping) or decision.get("source") != source:
         return {}
     # The hook queues either review action for a review row.
     if _text(decision.get("action")) not in _REVIEW_ACTIONS:
         return {}
     rule_id = _identifier(decision.get("owner"))
-    if rule_id is None or rule_id not in _bundle_rule_ids(bundle):
+    if rule_id is None or rule_id not in rule_ids:
         return {}
     return {"policyBundleVersion": bundle_version, "policyRuleId": rule_id}
 

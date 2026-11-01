@@ -177,6 +177,32 @@ def test_compiled_rows_reject_invalid_native_dto_fields(monkeypatch, mutation):
         compiler.compile_policy_document(source)
 
 
+def _review_rows(query, body, **kwargs):
+    return [
+        {
+            "rule_id": "ask-a-person",
+            "provenance_json": "{}",
+            "decision": {"harness": "pi", "scope": "harness", "action": "review"},
+        }
+    ]
+
+
+def test_a_signed_bundle_review_rule_reaches_the_hook_as_a_review_row(monkeypatch):
+    monkeypatch.setattr(compiler, "policy_query", _review_rows)
+
+    rows = compiler.compile_policy_bundle_document({}, device_id="device-1", device_name="Workstation")
+
+    assert [(row.rule_id, row.decision.action) for row in rows] == [("ask-a-person", "review")]
+
+
+def test_a_local_policy_document_never_carries_a_review_row(monkeypatch):
+    source, _ = _compile_transport(monkeypatch)
+    monkeypatch.setattr(compiler, "policy_query", _review_rows)
+
+    with pytest.raises(client.NativePolicyDocumentError):
+        compiler.compile_policy_document(source)
+
+
 def test_native_document_dto_never_runs_python_command_normalization():
     assert not hasattr(document.CommandCondition, "__post_init__")
     expression = {

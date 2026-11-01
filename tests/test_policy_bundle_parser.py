@@ -218,6 +218,14 @@ def test_policy_bundle_rejection_message_does_not_blame_guard_version_for_downgr
     assert "policy record on this device may be damaged" in message
 
 
+def test_policy_bundle_rejection_message_names_the_exact_command_review_restriction() -> None:
+    message = policy_bundle_rejection_message("canonical_compile_unsupported_exact_command_review")
+
+    assert message is not None
+    assert "review on an exact command" in message
+    assert "allow and block" in message
+
+
 def test_policy_bundle_rejection_message_ignores_unknown_reason() -> None:
     assert policy_bundle_rejection_message("not_a_policy_bundle_reason") is None
 

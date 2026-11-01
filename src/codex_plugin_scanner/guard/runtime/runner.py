@@ -162,6 +162,10 @@ _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
 # exact-shell-command rows the hook looks up, so Guard Cloud may deliver exact
 # command rules in a v2 bundle to a device that advertises this.
 POLICY_EXACT_COMMAND_RULES_CAPABILITY = "policy-document-exact-commands.v1"
+# The canonical compiler turns a signed bundle's `review` rule into the same
+# review row a v1 bundle materializes, so Guard Cloud may deliver review rules
+# in a v2 bundle to a device that advertises this.
+POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY = "policy-document-review-rules.v1"
 # Accepts Cloud exceptions signed into a v2 bundle (``cloudExceptions``).
 POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY = "policy-bundle-v2-cloud-exceptions.v1"
 # Re-exported for the supply-chain services; the resident derives the endpoint.
@@ -1883,6 +1887,7 @@ def _local_guard_runtime_session(
         # Exact command rules reach the hook through canonical decisions,
         # which every device activates from a verified v2 bundle.
         POLICY_EXACT_COMMAND_RULES_CAPABILITY,
+        POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY,
     ]
     session: dict[str, object] = {
         "harness": "hol-guard",
