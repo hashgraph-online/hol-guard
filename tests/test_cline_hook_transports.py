@@ -176,6 +176,29 @@ def test_cline_canary_uses_only_the_canonical_managed_slot(tmp_path: Path, monke
     assert observed["shell"] is False
 
 
+def test_cline_install_replaces_legacy_python_workers_and_reports_the_new_ones(tmp_path: Path, monkeypatch) -> None:
+    context = _context(tmp_path)
+    runtime = tmp_path / "native-runtime"
+    runtime.write_bytes(b"")
+    legacy = context.guard_home / "managed" / "cline" / "hook-workers" / "PreToolUse.py"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("# HOL_GUARD_MANAGED_CLINE_HOOK_V1\n", encoding="utf-8")
+    foreign = legacy.with_name("PostToolUse.py")
+    foreign.write_text("print('user file')\n", encoding="utf-8")
+    monkeypatch.setattr(cline_hooks_module, "native_hook_bridge_executable", lambda *_args, **_kwargs: runtime)
+    monkeypatch.setattr(cline_hooks_module, "_bounded_hook_argv", lambda *_args: ("guard", "hook"))
+    monkeypatch.setattr(cline_hooks_module, "run_cline_hook_canary", lambda _context: {"ok": True})
+
+    manifest = cline_hooks_module.install_cline_hooks(context)
+
+    assert not legacy.exists()
+    assert foreign.exists()
+    workers = manifest["managed_hook_workers"]
+    assert isinstance(workers, dict)
+    assert workers["PreToolUse"] == str(legacy.with_suffix(".json"))
+    assert Path(workers["PreToolUse"]).is_file()
+
+
 def test_cline_powershell_command_never_uses_ambient_path(tmp_path: Path, monkeypatch) -> None:
     attacker_dir = tmp_path / "attacker-bin"
     attacker_dir.mkdir()

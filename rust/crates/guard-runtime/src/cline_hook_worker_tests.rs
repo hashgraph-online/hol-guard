@@ -4,7 +4,7 @@ use std::path::Path;
 use guard_command::hook_adapter_value::{parse_python_json, OMap, OValue};
 
 use super::{
-    answer, explicitly_allows, parse_config, parse_output, py_splitlines, Config, AMBIGUOUS,
+    answer, explicitly_allows, parse_config, parse_output, Config, AMBIGUOUS,
     EVALUATION_UNAVAILABLE, INVALID, INVALID_DECISION, OVERSIZED, OVERSIZED_PRETOOL,
     TRANSPORT_UNAVAILABLE, UNPARSEABLE,
 };
@@ -265,8 +265,6 @@ fn reads_the_last_decision_line() {
         parse_output("log line\r\n{\"decision\": \"deny\"}\u{2028}{bad\n  ").expect("decision");
     assert_eq!(decision.get_str("decision"), Some("deny"));
     assert!(parse_output("{\"a\": 1} trailing").is_none());
-    assert_eq!(py_splitlines("a\r\nb\rc\u{85}d\n"), ["a", "b", "c", "d"]);
-    assert_eq!(py_splitlines("\n\nb"), ["", "", "b"]);
 }
 
 #[test]

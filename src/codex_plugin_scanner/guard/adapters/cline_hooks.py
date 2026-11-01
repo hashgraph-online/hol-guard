@@ -199,6 +199,9 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
         ensure_safe_cline_destination(context, worker)
         worker_source = _worker_config(context, event_name=event, guard_cli=guard)
         _write(worker, worker_source)
+        legacy_worker = worker.with_suffix(".py")
+        if _managed(legacy_worker):
+            legacy_worker.unlink()
         if os.name == "nt":
             launcher = _powershell_wrapper(worker=worker, runtime=str(runtime), blocking=event == "PreToolUse")
             _write(slot, launcher)
@@ -228,6 +231,7 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
         "transport": "hooks",
         "managed_hooks_root": str(root),
         "managed_hook_paths": paths,
+        "managed_hook_workers": workers,
         "managed_hook_sha256": digests,
         "guard_cli_identity": attested.manifest_payload(),
         "synthetic_canary": canary,
