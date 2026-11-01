@@ -20,8 +20,10 @@ fn duplicate_keys_are_rejected_at_any_depth() {
         .replacen('{', "{\"request_id\":\"req-0009\",", 1);
     assert_error(&evaluator.evaluate(top_level.as_bytes()), "duplicate_key");
     // An escaped spelling is the same key.
-    let escaped =
-        line_with_raw_arguments(&base, r#"{"channel":"C0SYNTH01","channel":"C0SYNTH02"}"#);
+    let escaped = line_with_raw_arguments(
+        &base,
+        r#"{"channel":"C0SYNTH01","\u0063hannel":"C0SYNTH02"}"#,
+    );
     assert_error(&evaluator.evaluate(escaped.as_bytes()), "duplicate_key");
 }
 
