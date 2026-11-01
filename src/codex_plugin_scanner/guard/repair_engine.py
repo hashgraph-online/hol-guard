@@ -163,19 +163,17 @@ def repair_onefile_leaks(
     guard_home: Path | None = None,
     temp_root: Path | None = None,
     now: datetime | None = None,
-    scanner: Callable[[Path], frozenset[str] | None] | None = None,
 ) -> dict[str, object]:
     if temp_root is None and guard_home is not None and not owns_system_scope(guard_home):
         return _step("onefile_leaks", "skipped", "Shared temp folders are only reclaimed for the default Guard home.")
     try:
         from .onefile_extraction import reclaim_orphaned_extraction_dirs
-        from .onefile_open_paths import scan_open_extraction_dirs
 
         result = reclaim_orphaned_extraction_dirs(
             temp_root=temp_root if temp_root is not None else Path(tempfile.gettempdir()),
             current_meipass=getattr(sys, "_MEIPASS", None),
             now=now if now is not None else datetime.now(timezone.utc),
-            open_path_scanner=scanner if scanner is not None else scan_open_extraction_dirs,
+            scan_open_paths=True,
             max_unmarked_reclaims=_REPAIR_UNMARKED_BUDGET,
             unmarked_time_budget=_REPAIR_TIME_BUDGET,
             dry_run=dry_run,
