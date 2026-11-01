@@ -34498,6 +34498,23 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-control-flow-while-read-braced-name-glued",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do echo \"${line}_backup\"; done < README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "control-flow-conditional-body-expansion",
       "fix_area": "shell",
       "harnesses": [

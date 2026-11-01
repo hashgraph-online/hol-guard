@@ -211,6 +211,8 @@ fn an_unmodeled_construct_keeps_its_review() {
         "while read line path; do echo \"$line\"; done < README.md",
         "while read -r; do echo \"$REPLY\"; done < README.md",
         "while read -r line; do cat \"$line/$other\"; done < README.md",
+        "while read -r line; do echo \"${line}_backup\"; done < README.md",
+        "while read -r f; do cat \"${f}2\"; done < list.txt",
         "while read -r line; do \"$line\" --version; done < README.md",
         "if true; then echo a\\ ; rm -rf build; fi",
         "while read line; do echo a\\ ; rm -rf build; done < README.md",

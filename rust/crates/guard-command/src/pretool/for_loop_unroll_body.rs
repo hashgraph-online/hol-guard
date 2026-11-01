@@ -485,7 +485,23 @@ fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool)
             format!("${ident}")
         });
     }
-    (ident == name).then(|| MARKER.to_string())
+    if ident != name {
+        return None;
+    }
+    // Once the braces come off, `${name}` glued to a word character spells a
+    // different name: the rewritten list writes the reference back as
+    // `$name`, so `${line}_suffix` would become `$line_suffix`, an expansion
+    // of a name the construct never bound. Only the braced spelling can reach
+    // here glued -- an unbraced `$line_suffix` reads its whole identifier
+    // above and fails the name comparison -- so only it is checked.
+    if braced
+        && chars
+            .get(*i)
+            .is_some_and(|(_, c)| c.is_ascii_alphanumeric() || *c == '_')
+    {
+        return None;
+    }
+    Some(MARKER.to_string())
 }
 
 /// Where the loop variable stood in the body, kept out of the shell's own
