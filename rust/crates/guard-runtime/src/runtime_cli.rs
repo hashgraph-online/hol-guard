@@ -282,6 +282,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_home_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if hook_launch_scan::is_command(command) && flag == "--stdin" => {
+            let response = hook_launch_scan::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&business_document_compile::compile_bytes(&bytes)?)

@@ -11,8 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard import runtime_artifact_reconciliation as reconciliation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import _posix_wrapper, _powershell_wrapper
-from codex_plugin_scanner.guard.foreign_hook_interpreter import current_guard_python, names_foreign_interpreter
+from codex_plugin_scanner.guard.adapters.cline_hooks import _posix_wrapper
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 
 _FOREIGN = "/home/u/.local/pipx/venvs/hol-guard/bin/python"
@@ -32,7 +31,7 @@ class _Store:
 
 
 def _current() -> str:
-    current = current_guard_python()
+    current = reconciliation.current_guard_python()
     assert current is not None
     return current
 
@@ -147,120 +146,7 @@ def test_a_launcher_beyond_the_path_bound_is_still_read(tmp_path: Path) -> None:
     assert reconciliation._manifest_file_paths(manifest)[0] == launcher
 
 
-def _scan(tmp_path: Path, text: str, *, current: str | None = None) -> bool:
-    artifact = tmp_path / "artifact"
-    artifact.write_text(text, encoding="utf-8")
-    return names_foreign_interpreter(artifact, current=current or _current(), guard_home=tmp_path / "guard")
-
-
-def _bootstrap(package_root: str) -> str:
-    return (
-        f"import sys;sys.path.insert(0,{package_root!r});"
-        "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import main_from_argv;"
-        "raise SystemExit(main_from_argv(sys.argv[1:]))"
-    )
-
-
-@pytest.mark.parametrize("interpreter", [_FOREIGN, _SPACED_FOREIGN])
-def test_a_json_argv_hook_naming_another_interpreter_is_foreign(tmp_path: Path, interpreter: str) -> None:
-    argv = [interpreter, "-I", "-c", _bootstrap("/site"), '{"harness":"zcode"}']
-    config = json.dumps({"hooks": {"PreToolUse": [{"command": argv}]}})
-
-    assert _scan(tmp_path, config)
-    assert not _scan(tmp_path, config.replace(json.dumps(interpreter)[1:-1], _current()))
-
-
-def test_a_shell_command_inside_json_names_its_interpreter(tmp_path: Path) -> None:
-    command = f"{_FOREIGN} -I -c '{_bootstrap('/site')}' '{{\"harness\": \"zcode\"}}'"
-    config = json.dumps({"hooks": {"PreToolUse": [{"command": command}]}})
-
-    assert _scan(tmp_path, config)
-    assert not _scan(tmp_path, config.replace(_FOREIGN, _current()))
-
-
-def test_a_native_bridge_prefix_does_not_hide_the_interpreter(tmp_path: Path) -> None:
-    argv = ["/g/native-runtime/" + "a" * 64 + "/hol-guard-runtime", "bounded-hook-bridge", _FOREIGN, "-I", "-c"]
-    config = json.dumps({"command": [*argv, _bootstrap("/site")]})
-
-    assert _scan(tmp_path, config)
-
-
-def test_the_source_cli_form_names_its_interpreter(tmp_path: Path) -> None:
-    config = json.dumps({"command": [_FOREIGN, "-I", "-s", "-m", "codex_plugin_scanner.cli", "guard", "hook"]})
-
-    assert _scan(tmp_path, config)
-
-
-def test_a_user_hook_before_guards_entry_is_not_read_with_it(tmp_path: Path) -> None:
-    guard = tmp_path / "guard"
-    user = {"type": "command", "command": "/usr/bin/python3 -I -c 'print(1)'"}
-    managed = [
-        f"{_current()} -I -c '{_bootstrap('/site')}'",
-        f"{guard}/native-runtime/{'a' * 64}/hol-guard-runtime bounded-hook-bridge",
-    ]
-    for command in managed:
-        handler = {"type": "command", "command": command}
-        config = json.dumps({"hooks": {"events": {"PreToolUse": [{"hooks": [user, handler]}]}}}, indent=2)
-
-        assert not _scan(tmp_path, config)
-
-
-def test_a_posix_launcher_for_an_interpreter_path_with_an_apostrophe_is_read(tmp_path: Path) -> None:
-    interpreter = "/opt/O'Brien/venv/bin/python"
-    worker = tmp_path / "guard" / "managed" / "cline" / "hook-workers" / "PreToolUse.py"
-    launcher = _posix_wrapper(worker=worker, python=interpreter)
-
-    assert _scan(tmp_path, launcher)
-    assert not _scan(tmp_path, launcher, current=interpreter)
-
-
-def test_a_windows_launcher_names_its_interpreter(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard"
-    worker = guard_home / "managed" / "cline" / "hook-workers" / "PreToolUse.py"
-    launcher = _powershell_wrapper(
-        worker=worker, python=r"C:\Users\u\pipx\venvs\hol-guard\Scripts\python.exe", blocking=True
-    )
-
-    assert _scan(tmp_path, launcher)
-    assert not _scan(tmp_path, launcher, current=r"C:\Users\u\pipx\venvs\hol-guard\Scripts\python.exe")
-
-
-def test_a_windows_json_escaped_path_is_compared_unescaped(tmp_path: Path) -> None:
-    interpreter = r"C:\Users\u\pipx\venvs\hol-guard\Scripts\python.exe"
-    config = json.dumps({"command": [interpreter, "-I", "-s", "-m", "codex_plugin_scanner.cli"]})
-
-    assert _scan(tmp_path, config)
-    assert not _scan(tmp_path, config, current=interpreter)
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        # A stdlib-only client does not depend on which Guard install owns the interpreter.
-        json.dumps({"command": ["/usr/bin/python3", "-I", "{guard}/managed/bounded-hooks/grok.py"]}),
-        # A user's own hook is not Guard's client.
-        json.dumps({"command": ["/usr/bin/python3", "-I", "-c", "print('ok')"]}),
-        json.dumps({"command": ["/usr/bin/python3", "-I", "-s", "/home/u/my_hook.py"]}),
-        "grep -I -c needle haystack\n",
-        # No interpreter path precedes the flag.
-        json.dumps({"args": ["-I", "-s", "-m", "codex_plugin_scanner.cli"]}),
-        "",
-    ],
-)
-def test_other_invocations_are_not_foreign(tmp_path: Path, text: str) -> None:
-    assert not _scan(tmp_path, text.replace("{guard}", str(tmp_path / "guard")))
-
-
-def test_a_binary_or_missing_file_is_not_foreign(tmp_path: Path) -> None:
-    binary = tmp_path / "python"
-    binary.write_bytes(b"\x7fELF\0\0" + f"{_FOREIGN} -I -s -m codex_plugin_scanner.cli".encode())
-
-    assert not names_foreign_interpreter(binary, current=_current(), guard_home=tmp_path / "guard")
-    assert not names_foreign_interpreter(tmp_path / "absent", current=_current(), guard_home=tmp_path / "guard")
-
-
-def test_a_long_unbroken_file_is_scanned_in_linear_time(tmp_path: Path) -> None:
-    assert not _scan(tmp_path, "x" * (1024 * 1024) + " -I -s " + "y" * 4096)
+# The launcher grammar itself is covered by hook_launch_scan_tests.rs.
 
 
 _OLD_DIGEST = "8" * 64
