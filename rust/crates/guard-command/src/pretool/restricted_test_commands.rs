@@ -194,13 +194,33 @@ pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
     let Some(executable) = segment.executable.as_deref() else {
         return false;
     };
-    match super::executable_basename(executable) {
-        "pytest" | "py.test" => true,
-        "python" | "python3" => {
-            matches!(segment.arguments.as_slice(), [module, target, ..] if module == "-m" && target == "pytest")
-        }
-        _ => false,
+    let name = super::executable_basename(executable);
+    if matches!(name, "pytest" | "py.test") {
+        return true;
     }
+    python_interpreter_name(name)
+        && crate::pytest_argv::python_args_target_pytest(&segment.arguments)
+}
+
+/// Whether `name` is an installed Python interpreter's own name.
+///
+/// A host that holds several Pythons is told which one to run by naming its
+/// version, so `python3.12 -m pytest` is the same read-only run as
+/// `python3 -m pytest` and the delegation reads both. The sink resolves the
+/// interpreter and applies pytest-readonly-v2 either way; this reading only
+/// decides whether the run is handed to it rather than reviewed.
+///
+/// The `pythonw` and `.exe` spellings the sink also answers to are left out:
+/// the contained route has no Windows backend, so reporting containment there
+/// would replace a review with a capability that cannot run the command.
+fn python_interpreter_name(name: &str) -> bool {
+    let Some(version) = name.strip_prefix("python") else {
+        return false;
+    };
+    version.is_empty()
+        || version
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 fn executable_is_bunx(executable: &str) -> bool {
