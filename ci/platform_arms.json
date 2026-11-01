@@ -1467,6 +1467,14 @@
    "body": "2fd3a565b13a"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Orphaned hook workers are reaped only on Unix, as before the move: the selection reads POSIX `ps` output and the daemon manager returns before it asks on Windows. The Windows arm answers `orphaned_worker_reap_unsupported`, pinned by `reaping_is_unsupported_off_unix`.",
+   "file": "rust/crates/guard-runtime/src/orphaned_worker_reap.rs",
+   "item": "fn answer(_request: &Request) -> Value",
+   "cfg": "not(unix)",
+   "body": "4fbf180853ce"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private`, so no error code needs classifying there.",
    "file": "rust/crates/guard-runtime/src/user_health_state.rs",

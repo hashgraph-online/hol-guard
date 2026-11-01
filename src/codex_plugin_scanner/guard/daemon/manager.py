@@ -1128,58 +1128,39 @@ def _retire_guard_daemons_for_home(
     return retired
 
 
+_ORPHAN_REAP_TIMEOUT_SECONDS = 15.0
+_ORPHAN_REAP_LAUNCH_RESERVE_SECONDS = 0.25
+_ORPHAN_REAP_MAX_BUDGET_MS = 60_000
+_ORPHAN_REAP_OUTPUT_LIMIT = 64 * 1024
+
+
 def reap_orphaned_daemon_workers(*, deadline: float | None = None) -> None:
-    """Stop hook workers whose daemon parent is already gone."""
+    """Stop hook workers whose daemon parent is already gone.
+
+    The native runtime lists the processes, selects the orphaned workers and
+    stops them. A runtime that cannot answer leaves them for the next start.
+    """
 
     if os.name == "nt":
         return
-    if deadline is not None and time.monotonic() >= deadline:
-        return
-    from .orphaned_daemon_workers import (
-        orphaned_daemon_workers,
-        parse_process_snapshot,
-        terminate_orphaned_daemon_workers,
-    )
+    from ..mdm.runtime_request import runtime_answer
 
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return
-    query_timeout = _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS
+    request: dict[str, object] = {"schema": "orphaned-worker-reap.v1", "self_pid": os.getpid()}
+    timeout_seconds: float | None = _ORPHAN_REAP_TIMEOUT_SECONDS
     if deadline is not None:
-        query_timeout = min(query_timeout, deadline - time.monotonic())
-    if query_timeout <= 0:
-        return
-    output = _bounded_process_query_stdout(
-        [ps_path, "-axww", "-o", "pid=,ppid=,state=,command="],
-        timeout_seconds=query_timeout,
+        budget = deadline - time.monotonic() - _ORPHAN_REAP_LAUNCH_RESERVE_SECONDS
+        if budget <= 0:
+            return
+        request["budget_ms"] = min(int(budget * 1000), _ORPHAN_REAP_MAX_BUDGET_MS)
+        timeout_seconds = None
+    runtime_answer(
+        "native-orphaned-worker-reap-v1",
+        "orphaned-worker-reap",
+        request,
+        output_limit=_ORPHAN_REAP_OUTPUT_LIMIT,
+        timeout_seconds=timeout_seconds,
+        deadline=deadline,
     )
-    if output is None:
-        return
-    grace_seconds = 1.0
-    if deadline is not None:
-        grace_seconds = min(grace_seconds, max(0.0, deadline - time.monotonic()))
-    terminate_orphaned_daemon_workers(
-        orphaned_daemon_workers(parse_process_snapshot(output)),
-        command_for_pid=_orphan_worker_command,
-        start_token_for_pid=process_start_token,
-        grace_seconds=grace_seconds,
-    )
-
-
-def _orphan_worker_command(pid: int) -> str | None:
-    if pid <= 1:
-        return None
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    output = _bounded_process_query_stdout(
-        [ps_path, "-p", str(pid), "-ww", "-o", "command="],
-        timeout_seconds=0.5,
-    )
-    if output is None:
-        return None
-    command = output.strip()
-    return command or None
 
 
 def guard_daemon_retirement_is_complete(guard_home: Path) -> bool:

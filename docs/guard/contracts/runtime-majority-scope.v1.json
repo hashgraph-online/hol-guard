@@ -419,7 +419,6 @@
           "src/codex_plugin_scanner/guard/daemon/policy_authority_api.py",
           "src/codex_plugin_scanner/guard/daemon/dashboard_reconnect.py",
           "src/codex_plugin_scanner/guard/daemon/diagnostics.py",
-          "src/codex_plugin_scanner/guard/daemon/orphaned_daemon_workers.py",
           "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
           "src/codex_plugin_scanner/guard/daemon/approval_connector_recommendation.py",
           "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
