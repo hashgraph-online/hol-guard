@@ -94,9 +94,13 @@ def read_state(state_root: Path, kind: StateKind) -> bytes | None:
     content = native_state("read", kind, state_root).get("content")
     if content is None:
         return None
-    if not isinstance(content, str):
-        raise OSError(_UNAVAILABLE[kind])
-    return base64.b64decode(content, validate=True)
+    try:
+        if not isinstance(content, str):
+            raise ValueError(kind)
+        return base64.b64decode(content, validate=True)
+    except ValueError as exc:
+        # Bytes the runtime cannot have sent are an unavailable runtime, never a record.
+        raise OSError(_UNAVAILABLE[kind]) from exc
 
 
 def replace_state(state_root: Path, kind: StateKind, content: bytes) -> None:

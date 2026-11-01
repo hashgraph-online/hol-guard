@@ -382,6 +382,20 @@ def test_continuity_fails_closed_without_the_native_runtime(tmp_path: Path, monk
         continuity.provision_machine_continuity()
 
 
+@pytest.mark.parametrize("content", ["not base64!", 7])
+def test_undecodable_native_content_is_a_failed_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, content: object
+) -> None:
+    paths = _prepare(tmp_path, monkeypatch)
+    monkeypatch.setattr(state_file, "native_state", lambda *_args: {"ok": True, "content": content})
+
+    result = continuity.verify_installation_continuity(paths, system_name="Darwin")
+
+    assert (result.state, result.identity_reason_code) == ("unknown", "installation_identity_probe_failed")
+    with pytest.raises(OSError, match="installation_identity_native_unavailable"):
+        state_file.read_state(paths.state_root, "continuity")
+
+
 def test_continuity_sends_each_probe_outcome_to_the_native_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
