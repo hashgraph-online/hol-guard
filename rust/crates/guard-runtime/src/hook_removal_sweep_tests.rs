@@ -192,7 +192,8 @@ fn json_rewrite_matches_python_indent_two() {
             "u" => "\"u\": \"\\u00e9\\u2028\"",
             "e" => "\"e\": {}",
             "l" => "\"l\": []",
-            "hooks" => "\"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"matcher\": \"Bash\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"/usr/local/bin/my-audit-hook --log\"\n          }\n        ]\n      }\n    ]\n  }",
+            // serde_json writes nested keys sorted too.
+            "hooks" => "\"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"command\": \"/usr/local/bin/my-audit-hook --log\",\n            \"type\": \"command\"\n          }\n        ],\n        \"matcher\": \"Bash\"\n      }\n    ]\n  }",
             other => panic!("unexpected key {other}"),
         });
     }
