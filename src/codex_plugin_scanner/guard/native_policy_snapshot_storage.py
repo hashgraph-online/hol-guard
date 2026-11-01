@@ -11,15 +11,12 @@ import stat
 from pathlib import Path
 from typing import Any, cast
 
-from . import native_policy_snapshot_storage_windows as _windows_storage
 from .native_policy_snapshot_authority import _authority_snapshot_v3
 from .native_policy_snapshot_constants import (
     POLICY_SNAPSHOT_AUTHORITY_SCHEMA,
     POLICY_SNAPSHOT_MAX_BYTES,
     NativePolicySnapshotError,
 )
-
-_windows_read_snapshot_bytes = _windows_storage._windows_read_snapshot_bytes
 
 
 def _snapshot_api() -> Any:

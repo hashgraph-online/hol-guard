@@ -418,7 +418,7 @@ class NativePolicySnapshotDirectLaneAck:
     def _unlink_direct_lane_ack(self) -> None:
         try:
             if os.name == "nt":
-                unlink_windows_ack(self._direct_lane_ack_path())
+                unlink_windows_ack(self.guard_home, self._direct_lane_ack_path())
             else:
                 self._direct_lane_ack_path().unlink()
         except FileNotFoundError:

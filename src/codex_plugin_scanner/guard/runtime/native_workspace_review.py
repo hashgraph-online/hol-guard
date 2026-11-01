@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import secrets
 import tempfile
 from collections.abc import Mapping
 from contextlib import suppress
@@ -110,11 +109,7 @@ def _private_request_directory(guard_home: Path) -> Path:
     state_base = guard_home / "native-runtime"
     request_directory = state_base / _REQUEST_DIRECTORY
     if os.name == "nt":
-        try:
-            for directory in (guard_home, state_base, request_directory):
-                _native_policy_snapshot._windows_ensure_private_directory(directory)
-        except (OSError, RuntimeError, TypeError, ValueError) as error:
-            raise NativeWorkspaceReviewError("native_workspace_review_request_unavailable") from error
+        # The runtime's private-state writer creates and repairs these.
         return request_directory
     for directory in (state_base, request_directory):
         if directory.is_symlink():
@@ -296,18 +291,13 @@ def _stage_workspace_review_request(
     temporary_path: Path | None = None
     try:
         if os.name == "nt":
-            temporary_name = f".request-{secrets.token_hex(16)}.tmp"
-            with _native_policy_snapshot._windows_private_directory_binding(directory) as binding:
-                _native_policy_snapshot._windows_write_private_file_atomic(
-                    parent_path=binding.path,
-                    parent_handle=binding.handle,
-                    directory_handles=binding.handles,
-                    temporary_name=temporary_name,
-                    destination_name=path.name,
-                    payload=encoded,
-                    maximum_bytes=_MAX_REQUEST_STATE_BYTES,
-                    kind="workspace_review_request",
-                )
+            _native_policy_snapshot._windows_write_private_file_atomic(
+                directory=directory,
+                name=path.name,
+                payload=encoded,
+                maximum_bytes=_MAX_REQUEST_STATE_BYTES,
+                private_root=guard_home,
+            )
         else:
             descriptor, temporary_name = tempfile.mkstemp(prefix=".request-", dir=directory)
             temporary_path = Path(temporary_name)
