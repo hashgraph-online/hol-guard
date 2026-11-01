@@ -298,6 +298,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = sqlite_store_salvage::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if sqlite_store_probe::is_command(command) && flag == "--stdin" => {
+            let response = sqlite_store_probe::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if guard_home_resolve::is_command(command) && flag == "--stdin" => {
             let response = guard_home_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
