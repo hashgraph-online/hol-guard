@@ -450,14 +450,15 @@ fn git_blob(
         return None;
     }
     let blob_result = run_git_os(root, &blob_args("blob"), GIT_TIMEOUT_SECONDS).ok()?;
-    if blob_result.stdout.len() > max_file_bytes {
+    // The blob is a file's whole contents and may be the secret itself. The
+    // buffer is moved rather than copied, and it is wrapped before the size
+    // check so an oversized blob is wiped on the way out too rather than
+    // dropped intact for a crash dump to carry.
+    let blob = Zeroizing::new(blob_result.stdout);
+    if blob.len() > max_file_bytes {
         return None;
     }
-    // The blob is a file's whole contents and may be the secret itself. The
-    // buffer is moved rather than copied, so the wrapper owns the only copy
-    // and it is wiped when the caller is done with it rather than left in
-    // freed memory for a crash dump to carry.
-    Some(Zeroizing::new(blob_result.stdout))
+    Some(blob)
 }
 // ---------------------------------------------------------------------------
 

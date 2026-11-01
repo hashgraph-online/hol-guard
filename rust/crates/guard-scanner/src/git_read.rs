@@ -23,6 +23,8 @@ use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use zeroize::Zeroizing;
+
 /// `_GIT_TIMEOUT_SECONDS` from the Python module.
 pub const GIT_TIMEOUT_SECONDS: u64 = 20;
 
@@ -104,6 +106,50 @@ fn raw_returncode(status: &std::process::ExitStatus) -> i32 {
     status.code().unwrap_or(-1)
 }
 
+/// Read a pipe to its end without leaving partial copies in freed memory.
+///
+/// `read_to_end` grows its buffer by reallocating, and every growth frees an
+/// allocation that still holds the bytes read so far. `git cat-file blob`
+/// hands back a file's plaintext, so those freed allocations are exactly what
+/// a crash dump would carry. Reading into fixed chunks never reallocates a
+/// filled buffer, each chunk is wiped when it drops, and the result is
+/// allocated once at the size the chunks already add up to.
+fn read_whole_pipe(pipe: &mut impl Read) -> io::Result<Vec<u8>> {
+    const CHUNK_BYTES: usize = 64 * 1024;
+    let mut chunks: Vec<Zeroizing<Vec<u8>>> = Vec::new();
+    let mut last_used = 0usize;
+    loop {
+        let mut chunk = Zeroizing::new(vec![0u8; CHUNK_BYTES]);
+        let mut used = 0usize;
+        while used < CHUNK_BYTES {
+            let read = pipe.read(&mut chunk[used..])?;
+            if read == 0 {
+                break;
+            }
+            used += read;
+        }
+        let filled = used == CHUNK_BYTES;
+        if used > 0 {
+            chunks.push(chunk);
+            last_used = used;
+        }
+        if !filled {
+            break;
+        }
+    }
+    let total = chunks.len().saturating_sub(1) * CHUNK_BYTES + last_used;
+    let mut whole = Vec::with_capacity(total);
+    for (index, chunk) in chunks.iter().enumerate() {
+        let used = if index + 1 == chunks.len() {
+            last_used
+        } else {
+            CHUNK_BYTES
+        };
+        whole.extend_from_slice(&chunk[..used]);
+    }
+    Ok(whole)
+}
+
 /// Drain one piped stream into the `Ok(stdout)`/`Ok(stderr)` buffers, mapping
 /// reader failures the same way Python maps `OSError`.
 fn drain(reader: Option<JoinHandle<io::Result<Vec<u8>>>>) -> Result<Vec<u8>, GitError> {
@@ -136,18 +182,14 @@ fn run_program(
 
     // Drain both pipes concurrently with the poll loop: `try_wait` alone
     // would leave a child blocked on a full pipe buffer past the deadline.
-    let stdout_reader = child.stdout.take().map(|mut pipe| {
-        thread::spawn(move || {
-            let mut buffer = Vec::new();
-            pipe.read_to_end(&mut buffer).map(|_| buffer)
-        })
-    });
-    let stderr_reader = child.stderr.take().map(|mut pipe| {
-        thread::spawn(move || {
-            let mut buffer = Vec::new();
-            pipe.read_to_end(&mut buffer).map(|_| buffer)
-        })
-    });
+    let stdout_reader = child
+        .stdout
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_whole_pipe(&mut pipe)));
+    let stderr_reader = child
+        .stderr
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_whole_pipe(&mut pipe)));
 
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
     let status = loop {
@@ -269,5 +311,20 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(error, GitError::Spawn(_)));
+    }
+
+    #[test]
+    fn a_pipe_longer_than_one_chunk_is_read_whole() {
+        let source: Vec<u8> = (0..200_000usize).map(|index| (index % 251) as u8).collect();
+        let mut cursor = std::io::Cursor::new(source.clone());
+        let read = read_whole_pipe(&mut cursor).unwrap();
+        assert_eq!(read, source);
+        assert_eq!(read.capacity(), source.len());
+    }
+
+    #[test]
+    fn an_empty_pipe_reads_as_no_bytes() {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        assert!(read_whole_pipe(&mut cursor).unwrap().is_empty());
     }
 }
