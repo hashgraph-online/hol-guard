@@ -255,6 +255,23 @@ def windows_process_owner_sid(pid: int) -> str | None:
     return owner_sid if isinstance(owner_sid, str) and owner_sid.startswith("sid:") and owner_sid != "sid:" else None
 
 
+def windows_current_owner_sid() -> str | None:
+    """Return the SID this process's token runs as, read by the native runtime.
+
+    The runtime inherits this process's primary token and reads its own, so a
+    restricted token that keeps it from opening this process by id still
+    answers. A runtime too old for the op is asked for this process by id.
+    """
+
+    if os.name != "nt":
+        return None
+    answer = _lifecycle_answer({"op": "current_owner_sid"}, output_limit=_LIFECYCLE_OUTPUT_LIMIT)
+    if answer is None:
+        return windows_process_owner_sid(os.getpid())
+    owner_sid = answer.get("owner_sid")
+    return owner_sid if isinstance(owner_sid, str) and owner_sid.startswith("sid:") and owner_sid != "sid:" else None
+
+
 def windows_process_creation_time(pid: int) -> int | None:
     """Return the kernel process creation timestamp used to defeat PID reuse."""
 
