@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import subprocess
+import shutil
 import sys
 from pathlib import Path
 
@@ -18,8 +18,8 @@ from codex_plugin_scanner.guard.cli.desktop_converge import converge_on_desktop_
 from codex_plugin_scanner.guard.desktop_foreign_installs import (
     DESKTOP_PATH_SHIM_MARKER,
     inventory_foreign_installs,
-    remove_foreign_installs,
 )
+from codex_plugin_scanner.guard.mdm import runtime_request
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX venv and bin layout")
 
@@ -120,6 +120,111 @@ def test_keeps_install_whose_resident_will_not_stop(home: Path, tmp_path: Path) 
     assert payload["status"] == "partial"
     assert venv.exists()
     assert (home / ".local" / "bin" / "hol-guard").is_symlink()
+    assert payload["_package_refreshes"] == 0
+
+
+def test_keeps_installs_when_the_native_runtime_is_unavailable(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _launcher(home)
+    venv = _pipx_venv(home)
+    inventory = inventory_foreign_installs(home, path_env=str(home / ".local" / "bin"))
+    assert inventory.venvs
+    monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: False)
+
+    payload = _converge(home, tmp_path)
+
+    assert payload["status"] == "partial"
+    assert payload["removed"] == []
+    assert venv.exists()
+    assert payload["_retired"] == []
+    assert "Guard's native runtime is unavailable" in str(payload["notes"])
+
+
+def test_reports_what_an_unfinished_removal_already_deleted(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _launcher(home)
+    gone = _pipx_venv(home)
+    kept = _pipx_venv(home, "hol-guard-old")
+    stale = home / ".local" / "bin" / "plugin-guard"
+    stale.symlink_to(home / "gone" / "plugin-guard")
+    inventory = desktop_foreign_installs.ForeignInventory(
+        venvs=(
+            desktop_foreign_installs.ToolVenv("pipx", gone, (), ()),
+            desktop_foreign_installs.ToolVenv("pipx", kept, (), ()),
+        ),
+        stale_entries=(stale,),
+        user_site=(),
+    )
+    monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
+
+    def interrupted(_feature: str, _command: str, request: object, **_kwargs: object) -> None:
+        assert callable(request)
+        _ = request()
+        shutil.rmtree(gone)
+        stale.unlink()
+        return None
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", interrupted)
+
+    payload = _converge(home, tmp_path)
+
+    assert payload["status"] == "partial"
+    assert kept.exists()
+    assert payload["removed"] == [{"kind": "pipx", "path": str(gone)}, {"kind": "stale_link", "path": str(stale)}]
+    assert "did not finish removing" in str(payload["notes"])
+    assert payload["_package_refreshes"] == 1
+
+
+def test_an_unfinished_removal_reports_a_user_site_uninstall_without_a_second_status_probe(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _launcher(home)
+    interpreter = home / "python3"
+    entry = home / ".local" / "bin" / "hol-guard"
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    _ = entry.write_text("#!/bin/sh\n", encoding="utf-8")
+    inventory = desktop_foreign_installs.ForeignInventory(
+        venvs=(), stale_entries=(), user_site=((interpreter, (entry,)),)
+    )
+    monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
+    offers = iter([True])
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: next(offers, False))
+
+    def interrupted(_feature: str, _command: str, request: object, **_kwargs: object) -> None:
+        assert callable(request)
+        _ = request()
+        entry.unlink()
+        return None
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", interrupted)
+
+    payload = _converge(home, tmp_path)
+
+    assert payload["removed"] == [{"kind": "pip_user", "path": str(interpreter)}]
+    assert "did not finish removing" in str(payload["notes"])
+    assert payload["_package_refreshes"] == 1
+
+
+def test_a_runtime_that_never_asked_for_the_removal_removed_nothing(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _launcher(home)
+    venv = _pipx_venv(home)
+    inventory = desktop_foreign_installs.ForeignInventory(
+        venvs=(desktop_foreign_installs.ToolVenv("pipx", venv, (), ()),), stale_entries=(), user_site=()
+    )
+    monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+
+    payload = _converge(home, tmp_path)
+
+    assert payload["removed"] == []
+    assert venv.exists()
     assert payload["_package_refreshes"] == 0
 
 
@@ -265,48 +370,6 @@ def test_removes_a_relative_link_left_by_a_deleted_venv(home: Path) -> None:
     inventory = inventory_foreign_installs(home, path_env=str(link.parent))
 
     assert inventory.stale_entries == (link,)
-
-
-@pytest.mark.parametrize(
-    ("probe_exit", "probe_stdout", "expected_kind", "uninstalled", "script_kept"),
-    [
-        (0, "{user_site}", "pip_user", True, True),
-        (3, "", "stale_script", False, False),
-        (4, "", None, False, True),
-    ],
-)
-def test_pip_user_removal_checks_where_hol_guard_is_installed(
-    home: Path,
-    tmp_path: Path,
-    probe_exit: int,
-    probe_stdout: str,
-    expected_kind: str | None,
-    uninstalled: bool,
-    script_kept: bool,
-) -> None:
-    python = tmp_path / "system" / "bin" / "python3.12"
-    python.parent.mkdir(parents=True)
-    _ = python.write_text("")
-    script = home / ".local" / "bin" / "hol-guard"
-    _ = script.write_text(f"#!{python}\nfrom codex_plugin_scanner.cli import main\n")
-    script.chmod(0o755)
-    user_site = tmp_path / "user-site"
-    commands: list[list[str]] = []
-
-    def run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-        commands.append(command)
-        if command[1] == "-c":
-            return subprocess.CompletedProcess(command, probe_exit, probe_stdout.format(user_site=user_site), "")
-        return subprocess.CompletedProcess(command, 0, "", "")
-
-    inventory = inventory_foreign_installs(home, path_env=str(script.parent))
-    result = remove_foreign_installs(inventory, retire_runtime=lambda _: True, run=run)
-
-    assert inventory.user_site_interpreters == (python,)
-    assert [item["kind"] for item in result.removed] == ([expected_kind] if expected_kind else [])
-    assert any(command[1:3] == ["-m", "pip"] for command in commands) is uninstalled
-    assert script.exists() is script_kept
-    assert bool(result.notes) is (expected_kind is None)
 
 
 def test_ignores_a_users_own_shell_wrapper(home: Path) -> None:
