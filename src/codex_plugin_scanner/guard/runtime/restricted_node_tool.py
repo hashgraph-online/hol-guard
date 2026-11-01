@@ -181,13 +181,22 @@ class _ToolRoute(NamedTuple):
     build: bool
 
 
-def _native_route(command: Sequence[str], script_body: Sequence[str] | None) -> _ScriptRoute | _ToolRoute:
+def _native_route(
+    command: Sequence[str],
+    script_body: Sequence[str] | None,
+    *,
+    cwd: Path,
+) -> _ScriptRoute | _ToolRoute:
     """The route the classifier already read out of this command.
 
     The spelling, the tool it names and the mode gate are one reading in the
     native runtime, so the sink never recomputes a verdict the pre-tool scan
     has already produced. A reply this side cannot read is unavailability, not
     a weaker plan.
+
+    The run directory travels with the request: a `tsc` run reads its no-emit
+    mode from the project it names, so the route has to see the same project
+    the run will, exactly as the admission that let it through did.
     """
     reply = restricted_native(
         "node_tool_route",
@@ -195,6 +204,7 @@ def _native_route(command: Sequence[str], script_body: Sequence[str] | None) -> 
             "command": list(command),
             "script_body": None if script_body is None else list(script_body),
             "windows": sys.platform == "win32",
+            "cwd": str(cwd),
         },
         dict,
     )
@@ -261,11 +271,13 @@ def prepare_restricted_node_tool(
 
 def _prepare_windows_route(command: Sequence[str], *, workspace: Path, cwd: Path) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
-    route = _native_route(argv, None)
+    route = _native_route(argv, None, cwd=cwd)
     if isinstance(route, _ScriptRoute):
         # Only the manifest read is this side's work: the script's own words go
         # back to the classifier, which gates them as the run they spell.
-        route = _native_route(argv, _script_body(route.task, workspace=workspace, cwd=cwd))
+        route = _native_route(
+            argv, _script_body(route.task, workspace=workspace, cwd=cwd), cwd=cwd
+        )
     if isinstance(route, _ScriptRoute):
         raise RestrictedPytestError("node_tool_invalid_command", "Only a single named package script is supported.")
     expected_entry = None if route.expected_entry is None else Path(route.expected_entry)

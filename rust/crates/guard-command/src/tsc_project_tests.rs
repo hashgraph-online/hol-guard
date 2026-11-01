@@ -368,3 +368,22 @@ fn a_base_a_symlink_moved_outside_gives_no_verdict() {
 
     assert!(!reads_no_emit(&[], &directory));
 }
+
+#[cfg(unix)]
+#[test]
+fn a_directory_a_symlink_moved_outside_gives_no_verdict() {
+    use std::os::unix::fs::symlink;
+
+    let (root, directory) = project();
+    plant(
+        root.path(),
+        "outside/tsconfig.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+    // The name the run gives steps through a link, not onto one: only the
+    // resolved path shows that the config it reaches is outside.
+    symlink(root.path().join("outside"), directory.join("config")).expect("symlink");
+
+    assert!(!reads_no_emit(&["-p", "config/tsconfig.json"], &directory));
+    assert!(!reads_no_emit(&["-p", "config"], &directory));
+}

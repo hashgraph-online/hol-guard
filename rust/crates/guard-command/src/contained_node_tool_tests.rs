@@ -1,6 +1,7 @@
+use super::node_tool_modes::{prettier_checks, PRETTIER_ENTRIES};
 use super::{
-    entry_tool, local_package_entry, node_tool_route, prettier_checks, program_name,
-    supported_tool, tool_entries, writes_or_chains, NodeToolRoute, ToolMode, PRETTIER_ENTRIES,
+    entry_tool, local_package_entry, node_tool_route, program_name, supported_tool, tool_entries,
+    writes_or_chains, NodeToolRoute, ToolMode,
 };
 
 fn words(command: &[&str]) -> Vec<String> {

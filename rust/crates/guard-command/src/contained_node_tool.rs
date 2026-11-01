@@ -17,6 +17,14 @@
 #[path = "contained_node_tool_tests.rs"]
 mod tests;
 
+#[path = "node_tool_modes.rs"]
+pub(crate) mod node_tool_modes;
+
+pub(crate) use node_tool_modes::{
+    config_declares_no_emit, entry_tool, local_package_entry, supported_tool, supported_tool_in,
+    tool_entries,
+};
+
 use crate::pretool::{manager_local_bin_arguments, manager_script_task};
 use crate::restricted_command::RestrictedPytestError;
 use serde_json::{json, Value};
@@ -102,100 +110,6 @@ fn program_name(argument: &str, windows: bool) -> String {
         }
         _ => name.to_owned(),
     }
-}
-
-/// Prettier publishes one entrypoint per major, and version 2 remains common
-/// enough to name: Prettier 3 moved its executable into `bin/`.
-pub(crate) const PRETTIER_ENTRIES: [&str; 2] =
-    ["prettier/bin/prettier.cjs", "prettier/bin-prettier.js"];
-
-/// Every supported tool and the entrypoints its published versions install.
-/// A tool that publishes one entrypoint per major is installed under
-/// whichever spelling its version uses, so every spelling is named and the
-/// caller keeps the one the nearest project installs.
-const TOOL_ENTRIES: &[(&str, &[&str])] = &[
-    ("eslint", &["eslint/bin/eslint.js"]),
-    ("tsc", &["typescript/bin/tsc"]),
-    ("vite", &["vite/bin/vite.js"]),
-    ("prettier", &PRETTIER_ENTRIES),
-];
-
-/// A local file path with a `node_modules` component naming one tool's
-/// published entrypoint: `node_modules/<entry>`, `./node_modules/<entry>` or
-/// `<dir>/node_modules/<entry>`.
-pub(crate) fn local_package_entry(entry: &str, package_entry: &str) -> bool {
-    entry
-        .strip_suffix(package_entry)
-        .and_then(|prefix| prefix.strip_suffix("node_modules/"))
-        .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
-}
-
-/// Whether a Prettier command asks only whether the files are formatted.
-/// `--check` and `--list-different` print and exit; every other spelling may
-/// reach `--write`, which rewrites each file it visits.
-pub(crate) fn prettier_checks(arguments: &[String]) -> bool {
-    arguments.iter().any(|argument| {
-        matches!(
-            argument.as_str(),
-            "--check" | "-c" | "--list-different" | "-l"
-        )
-    })
-}
-
-/// The admitted tool of this name and the entrypoints it publishes.
-pub(crate) fn tool_entries(name: &str) -> Option<(&'static str, &'static [&'static str])> {
-    TOOL_ENTRIES.iter().copied().find(|(tool, _)| *tool == name)
-}
-
-/// Whether a `tsc` run emits nothing because the project it reads says so
-/// rather than because the command line does.
-///
-/// The answer is the config's, so it is read only when the command line is
-/// silent, and only when the run directory is known. A caller that has no
-/// directory reads the command line alone, which is the answer this route
-/// has always given.
-pub(crate) fn config_declares_no_emit(
-    name: &str,
-    arguments: &[String],
-    directory: Option<&Path>,
-) -> bool {
-    name == "tsc"
-        && !arguments.iter().any(|word| word == "--noEmit")
-        && crate::tsc_project::declares_no_emit(arguments, directory)
-}
-
-/// The supported tool a name stands for, the entrypoints it publishes and
-/// the mode it runs in, or `None` when the tool or its mode is not one of the
-/// supported runs.
-pub(crate) fn supported_tool(
-    name: &str,
-    arguments: &[String],
-) -> Option<(&'static str, &'static [&'static str], ToolMode)> {
-    supported_tool_in(name, arguments, None)
-}
-
-/// [`supported_tool`] for a run whose directory is known, so a `tsc` run can
-/// be read against the project it names as well as the options it carries.
-pub(crate) fn supported_tool_in(
-    name: &str,
-    arguments: &[String],
-    directory: Option<&Path>,
-) -> Option<(&'static str, &'static [&'static str], ToolMode)> {
-    let mode = match name {
-        "eslint" => ToolMode::Report,
-        "tsc"
-            if arguments.iter().any(|word| word == "--noEmit")
-                || config_declares_no_emit(name, arguments, directory) =>
-        {
-            ToolMode::Report
-        }
-        // Only a checking mode reports instead of rewriting the files it visits.
-        "prettier" if prettier_checks(arguments) => ToolMode::Report,
-        "vite" if arguments.first().is_some_and(|word| word == "build") => ToolMode::Build,
-        _ => return None,
-    };
-    let (tool, entries) = tool_entries(name)?;
-    Some((tool, entries, mode))
 }
 
 /// Whether any supported tool could take every word the manager passed on.
@@ -330,19 +244,6 @@ fn bounded_heap(argument: &str) -> Option<bool> {
     Some(bounded)
 }
 
-/// The tool a `node` command starts, from the entrypoint it names, or `""`
-/// when the entrypoint belongs to no supported tool.
-pub(crate) fn entry_tool(entry: &str) -> &'static str {
-    TOOL_ENTRIES
-        .iter()
-        .find(|(_, entries)| {
-            entries
-                .iter()
-                .any(|published| local_package_entry(entry, published))
-        })
-        .map_or("", |(tool, _)| *tool)
-}
-
 /// Where the gate lands once a tool name and its arguments are known.
 fn gate(
     name: &str,
@@ -351,8 +252,15 @@ fn gate(
     expected_entry: Option<String>,
     directory: Option<&Path>,
 ) -> NodeToolRoute {
+    // One reading of the project answers both questions: whether the run is
+    // one this route admits, and whether the `--noEmit` it is admitted for
+    // has to be written back onto its command line. Asking the filesystem
+    // twice would let a config written between the two answers admit a run
+    // whose arguments never carried the option.
     let from_config = config_declares_no_emit(name, &arguments, directory);
-    let Some((name, entries, mode)) = supported_tool_in(name, &arguments, directory) else {
+    let Some((name, entries, mode)) =
+        node_tool_modes::supported_tool_declared(name, &arguments, from_config)
+    else {
         return invalid(
             "Only local ESLint, no-emit TypeScript and Prettier in a checking mode are supported.",
         );

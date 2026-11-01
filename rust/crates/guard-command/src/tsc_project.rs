@@ -89,12 +89,22 @@ fn config_path(arguments: &[String], directory: &Path) -> Option<PathBuf> {
     }
     let path = directory.join(relative);
     // tsc reads a directory's own `tsconfig.json`; a path naming neither a
-    // file nor a directory is a run that will not start at all.
-    if resolved_file(&path).is_some() {
-        return Some(path);
+    // file nor a directory is a run that will not start at all. The name is
+    // resolved before it is read, so a link anywhere along it, and not only
+    // at the file itself, has to land back inside the run directory.
+    if let Some(config) = contained_file(&path, directory) {
+        return Some(config);
     }
-    let inside = path.join("tsconfig.json");
-    resolved_file(&inside).map(|_| inside)
+    contained_file(&path.join("tsconfig.json"), directory)
+}
+
+/// `path` when every link along it lands on a readable config inside `root`,
+/// under the name that survived them.
+fn contained_file(path: &Path, root: &Path) -> Option<PathBuf> {
+    let resolved = std::fs::canonicalize(path).ok()?;
+    let inside = std::fs::canonicalize(root).ok()?;
+    resolved.strip_prefix(&inside).ok()?;
+    resolved_file(&resolved).map(|_| resolved)
 }
 
 /// `path` when it is a regular file reached without a symlink, and its size
@@ -137,13 +147,9 @@ fn extends_path(from: &Path, specifier: &str, root: &Path) -> Option<PathBuf> {
     } else {
         format!("{specifier}.json")
     };
-    let candidate = from.parent()?.join(named);
-    let resolved = std::fs::canonicalize(&candidate).ok()?;
-    let inside = std::fs::canonicalize(root).ok()?;
-    resolved.strip_prefix(&inside).ok()?;
-    // `canonicalize` followed the links the containment check needs to see,
-    // so the file is opened under the name that survived them.
-    resolved_file(&resolved).map(|_| resolved)
+    // `contained_file` follows the links the containment check needs to see,
+    // so the base is opened under the name that survived them.
+    contained_file(&from.parent()?.join(named), root)
 }
 
 /// Records a declared boolean, keeping the first answer seen. The chain is
