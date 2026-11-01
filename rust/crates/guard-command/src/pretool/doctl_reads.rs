@@ -588,13 +588,7 @@ mod tests {
                     || name == "available-regions",
                 "{row}"
             );
-            for denied in [
-                "databases",
-                "kubeconfig",
-                "docker-config",
-                "login",
-                "key",
-            ] {
+            for denied in ["databases", "kubeconfig", "docker-config", "login", "key"] {
                 assert!(
                     !row.split_whitespace().any(|word| word.starts_with(denied)),
                     "{row}"
@@ -603,10 +597,7 @@ mod tests {
             // The `auth` group is the credential store itself. Listing the
             // contexts it holds prints no token; every other verb there
             // writes the store or reads a token out of it.
-            assert!(
-                !row.starts_with("auth ") || row == "auth list|ls",
-                "{row}"
-            );
+            assert!(!row.starts_with("auth ") || row == "auth list|ls", "{row}");
         }
     }
 }
