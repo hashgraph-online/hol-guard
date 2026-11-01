@@ -1,5 +1,5 @@
 use super::*;
-use crate::grok_executable_paths::{chain_secure, lenient};
+use crate::grok_executable_paths::{chain_secure, lenient, relative_to};
 
 struct Fixture {
     _directory: tempfile::TempDir,
@@ -33,9 +33,15 @@ impl Fixture {
     }
 
     /// Whether a launcher under this fixture can pass the ownership checks.
+    /// A developer checkout may not; in CI a skip would hide lost coverage,
+    /// so there it fails instead.
     fn secure(&self) -> bool {
         let secure = chain_secure(&self.root);
         if !secure {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "the CI checkout path is writable by another account"
+            );
             eprintln!("skipping: the checkout path is writable by another account");
         }
         secure
@@ -387,6 +393,35 @@ fn the_launch_environment_drops_loaders_and_unsafe_path_entries() {
     );
 }
 
+/// An unsearchable directory cannot be resolved below, so the rest of the
+/// path is judged as spelled, as `os.path.realpath` judges it.
+#[cfg(unix)]
+#[test]
+fn a_grok_home_under_an_unsearchable_workspace_directory_is_dropped() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = Fixture::new();
+    let locked = fixture.workspace().join("locked");
+    fs::create_dir_all(locked.join(".grok")).expect("locked home");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("lock");
+    let answer = fixture.request(
+        "launch-env",
+        json!({ "grok_home": locked.join(".grok"), "env_keys": ["GROK_HOME"] }),
+    );
+    let resolved = lenient(&locked.join(".grok/x"), &fixture.root);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).expect("unlock");
+    assert_eq!(answer.expect("launch answer")["drop"], json!(["GROK_HOME"]));
+    assert_eq!(resolved, locked.join(".grok/x"));
+}
+
+#[test]
+fn containment_compares_whole_components() {
+    let root = Path::new("/home/user/bin");
+    assert!(relative_to(Path::new("/home/user/bin/grok"), root));
+    assert!(!relative_to(Path::new("/home/user/bin-evil/grok"), root));
+    assert!(!relative_to(Path::new("/home/user/binary"), root));
+}
+
 #[test]
 fn a_grok_home_outside_the_refused_locations_is_kept() {
     let fixture = Fixture::new();
@@ -419,11 +454,11 @@ fn lenient_resolution_appends_what_does_not_exist() {
     let root = &fixture.root;
     assert_eq!(
         lenient(&root.join("missing/../workspace/new"), root),
-        Some(root.join("workspace/new"))
+        root.join("workspace/new")
     );
     assert_eq!(
         lenient(Path::new("workspace"), root),
-        Some(root.join("workspace"))
+        root.join("workspace")
     );
     #[cfg(unix)]
     {
@@ -431,7 +466,7 @@ fn lenient_resolution_appends_what_does_not_exist() {
         std::os::unix::fs::symlink(fixture.workspace(), &link).expect("symlink");
         assert_eq!(
             lenient(&link.join("later"), root),
-            Some(fixture.workspace().join("later"))
+            fixture.workspace().join("later")
         );
     }
 }

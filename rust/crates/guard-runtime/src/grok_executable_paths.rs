@@ -4,11 +4,10 @@
 //!
 //! Paths are compared the way `pathlib` compares them: lexically, component by
 //! component, and without case on Windows. `Path.resolve(strict=False)` is
-//! emulated by canonicalising the longest existing prefix and appending the
-//! rest.
+//! emulated by canonicalising the longest prefix that resolves and appending
+//! the rest.
 
 use std::fs;
-use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
 const FIXED_ROOTS: [&str; 4] = [
@@ -49,8 +48,8 @@ pub(crate) struct Context {
     pub(crate) cwd: PathBuf,
     pub(crate) windows_roots: Vec<PathBuf>,
     /// The workspace, Guard home and (unless it is the anchor or holds the
-    /// home directory) the cwd, each with its resolved form.
-    blocked: Vec<(PathBuf, Option<PathBuf>)>,
+    /// home directory) the cwd, each resolved.
+    blocked: Vec<PathBuf>,
 }
 
 impl Context {
@@ -63,20 +62,12 @@ impl Context {
     ) -> Self {
         let mut roots: Vec<PathBuf> = workspace.into_iter().collect();
         roots.push(guard_home.clone());
-        let (resolved_cwd, resolved_home) = match (lenient(&cwd, &cwd), lenient(&home, &cwd)) {
-            (Some(resolved_cwd), Some(resolved_home)) => (resolved_cwd, resolved_home),
-            _ => (cwd.clone(), home.clone()),
-        };
+        let resolved_cwd = lenient(&cwd, &cwd);
+        let resolved_home = lenient(&home, &cwd);
         if resolved_cwd.parent().is_some() && !relative_to(&resolved_home, &resolved_cwd) {
             roots.push(resolved_cwd);
         }
-        let blocked = roots
-            .into_iter()
-            .map(|root| {
-                let resolved = lenient(&root, &cwd);
-                (root, resolved)
-            })
-            .collect();
+        let blocked = roots.iter().map(|root| lenient(root, &cwd)).collect();
         Self {
             home,
             guard_home,
@@ -90,12 +81,7 @@ impl Context {
     /// home or the cwd once both sides are resolved.
     pub(crate) fn blocked(&self, path: &Path) -> bool {
         let target = lenient(path, &self.cwd);
-        self.blocked
-            .iter()
-            .any(|(root, resolved)| match (&target, resolved) {
-                (Some(target), Some(resolved)) => relative_to(target, resolved),
-                _ => same(path, root),
-            })
+        self.blocked.iter().any(|root| relative_to(&target, root))
     }
 
     /// `_automatic_install_root`: whether an automatic PATH match sits in a
@@ -195,10 +181,6 @@ pub(crate) fn relative_to(path: &Path, root: &Path) -> bool {
     }
 }
 
-fn same(path: &Path, other: &Path) -> bool {
-    relative_to(path, other) && relative_to(other, path)
-}
-
 /// The components of `path` below `root`, as `PurePath.relative_to(...).parts`.
 fn relative_parts(path: &Path, root: &Path) -> Option<Vec<String>> {
     if !relative_to(path, root) {
@@ -218,9 +200,11 @@ pub(crate) fn strict(path: &Path) -> Option<PathBuf> {
     fs::canonicalize(path).ok().map(strip_verbatim)
 }
 
-/// `Path.resolve(strict=False)` with a relative path taken from `cwd`; `None`
-/// when a component cannot be inspected for a reason other than absence.
-pub(crate) fn lenient(path: &Path, cwd: &Path) -> Option<PathBuf> {
+/// `Path.resolve(strict=False)` with a relative path taken from `cwd`. As
+/// `os.path.realpath` does when it is not strict, a prefix that cannot be
+/// resolved, because it is missing or for any other reason, is skipped and
+/// the remainder is kept as spelled.
+pub(crate) fn lenient(path: &Path, cwd: &Path) -> PathBuf {
     let joined = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -229,26 +213,21 @@ pub(crate) fn lenient(path: &Path, cwd: &Path) -> Option<PathBuf> {
     let parts: Vec<Component> = joined.components().collect();
     for end in (1..=parts.len()).rev() {
         let prefix: PathBuf = parts[..end].iter().collect();
-        match fs::canonicalize(&prefix) {
-            Ok(base) => {
-                let mut resolved = strip_verbatim(base);
-                for part in &parts[end..] {
-                    match part {
-                        Component::ParentDir => {
-                            resolved.pop();
-                        }
-                        Component::Normal(name) => resolved.push(name),
-                        _ => {}
+        if let Ok(base) = fs::canonicalize(&prefix) {
+            let mut resolved = strip_verbatim(base);
+            for part in &parts[end..] {
+                match part {
+                    Component::ParentDir => {
+                        resolved.pop();
                     }
+                    Component::Normal(name) => resolved.push(name),
+                    _ => {}
                 }
-                return Some(resolved);
             }
-            Err(error)
-                if matches!(error.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {}
-            Err(_) => return None,
+            return resolved;
         }
     }
-    Some(joined)
+    joined
 }
 
 #[cfg(windows)]
