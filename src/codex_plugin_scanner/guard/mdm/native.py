@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import cast
 
 from .runtime_request import runtime_answer
-from .windows_support import windows_directory
 
 NATIVE_INSTALL_FEATURE = "native-install-verdict-v1"
 NATIVE_INSTALL_COMMAND = "native-install-verdict"
@@ -68,10 +67,6 @@ def verify_native_install(
         request["macos_team_id"] = macos_team_id
     else:
         request["windows_signer_thumbprints"] = list(windows_signer_thumbprints)
-        try:
-            request["windows_directory"] = windows_directory()
-        except OSError:
-            request["windows_directory"] = None
     answer = _native_answer(request)
     if answer is None:
         return _PROBE_FAILED

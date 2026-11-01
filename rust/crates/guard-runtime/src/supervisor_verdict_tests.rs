@@ -440,3 +440,16 @@ fn malformed_requests_fail_the_command() {
     }
     assert!(answer(b"[]").is_err());
 }
+
+#[test]
+fn a_windows_verify_reads_the_system_directory_itself() {
+    let request =
+        json!({"schema": "supervisor-verdict.v1", "op": "windows-verify", "executable": "x"});
+    let result = answer(&serde_json::to_vec(&request).expect("request"));
+    if cfg!(windows) {
+        assert!(result.is_ok(), "{result:?}");
+    } else {
+        // Off Windows there is no system directory, so no task tool runs.
+        assert_eq!(result, Err("supervisor_verdict_request_invalid".to_owned()));
+    }
+}

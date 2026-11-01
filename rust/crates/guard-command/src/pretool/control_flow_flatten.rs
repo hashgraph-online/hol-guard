@@ -38,7 +38,12 @@
 //!
 //! A conditional binds no name, so an expansion inside one reads the same
 //! value in the flat list that it read in the construct, and it is written
-//! back as it stood. A loop that binds a name carries no expansion at all.
+//! back as it stood. A read-driven loop binds the one name its `read` fills,
+//! and the body's references to that name are written back too: a line drawn
+//! from the file is no more text a proof can resolve than whatever the shell
+//! already holds, so the flat list reads the same unresolved expansion the
+//! loop ran. Every other expansion in a loop body would stand for a value the
+//! loop never bound, and keeps the construct's review.
 //!
 //! Each list item still faces the ordinary proofs, and anything this
 //! recognizer does not fully understand returns `None`, which keeps the
@@ -163,7 +168,7 @@ pub(super) fn conditional_parts(rest: &str) -> Option<(Vec<(String, &'static str
     loop {
         let (test, _, after_test) = body_items(rest, "", &["then"])?;
         let from = parts.len();
-        collect(&mut parts, test)?;
+        collect(&mut parts, test, "")?;
         // `then` reads the last test item. Tag a plain `;` join so a negated
         // `cd` (or another state change) keeps the `!`: the branch runs when
         // that change failed, from the directory the shell was already in.
@@ -175,12 +180,12 @@ pub(super) fn conditional_parts(rest: &str) -> Option<(Vec<(String, &'static str
             }
         }
         let (branch, closer, after_branch) = body_items(after_test, "", &["elif", "else", "fi"])?;
-        collect(&mut parts, branch)?;
+        collect(&mut parts, branch, "")?;
         match closer {
             "elif" => rest = after_branch,
             "else" => {
                 let (alternative, _, after_alternative) = body_items(after_branch, "", &["fi"])?;
-                collect(&mut parts, alternative)?;
+                collect(&mut parts, alternative, "")?;
                 return Some((parts, after_alternative));
             }
             _ => return Some((parts, after_branch)),
@@ -215,7 +220,7 @@ fn flatten_case(rest: &str) -> Option<String> {
             return None;
         }
         let (list, after) = arm_list(body)?;
-        collect(&mut parts, list)?;
+        collect(&mut parts, list, "")?;
         rest = after;
     }
 }
@@ -337,15 +342,21 @@ fn closing(text: &str) -> Option<&str> {
 /// Add a list's items, rejecting an empty list and any item whose command
 /// word is not a plain word. A nested construct leaves its keyword in command
 /// position, so this is also what keeps nesting on the unmodeled path.
+///
+/// `reference` is the text a carried reference is written back as. Only the
+/// read-driven loop carries one, and it writes the name its `read` binds back
+/// as the expansion it was; every other construct holds no placeholder and
+/// passes nothing.
 fn collect(
     parts: &mut Vec<(String, &'static str)>,
     items: Vec<(String, &'static str)>,
+    reference: &str,
 ) -> Option<()> {
     if items.is_empty() || parts.len() + items.len() > MAX_ITEMS {
         return None;
     }
     for (text, separator) in items {
-        parts.push((substitute(&text, "")?, separator));
+        parts.push((substitute(&text, reference)?, separator));
     }
     Some(())
 }

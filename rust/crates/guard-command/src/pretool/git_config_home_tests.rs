@@ -258,3 +258,59 @@ fn the_unstaged_index_comparison_keeps_both_screens() {
         "re-examining a working-tree file runs its configured clean filter"
     );
 }
+
+/// `name-rev`, `show-branch`, `check-ref-format` and `symbolic-ref` are
+/// plumbing: Git starts no pager for any of them, so an ambient `core.pager`
+/// leaves them alone and only the verb's own `pager.<verb>` key can name a
+/// program for them to run.
+#[test]
+fn the_ref_readings_page_only_under_their_own_key() {
+    let fixture = Fixture::new();
+    let declared = fixture.declared.canonicalize().unwrap();
+    let declared_text = declared.to_str().unwrap();
+    let environment = environment(&declared);
+    let repo = declared.join("repo");
+    let repo_text = repo.to_str().unwrap();
+    let inside = PathContext {
+        home_dir: Some(declared_text),
+        cwd: Some(repo_text),
+        ..PathContext::default()
+    };
+    let config = repo.join(".git/config");
+    let pristine = fs::read_to_string(&config).unwrap();
+    for (verb, words) in [
+        ("name-rev", vec!["name-rev", "--name-only", "HEAD"]),
+        ("show-branch", vec!["show-branch"]),
+        (
+            "check-ref-format",
+            vec!["check-ref-format", "--branch", "main"],
+        ),
+        ("symbolic-ref", vec!["symbolic-ref", "--short", "HEAD"]),
+    ] {
+        let reading: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        fs::write(&config, &pristine).unwrap();
+        assert_eq!(
+            execution_free("git", &reading, inside, None, Some(&environment), false),
+            Some(true),
+            "{verb} in a repository that configures nothing starts nothing"
+        );
+
+        fs::write(&config, format!("{pristine}[core]\n\tpager = /bin/true\n")).unwrap();
+        assert_eq!(
+            execution_free("git", &reading, inside, None, Some(&environment), false),
+            Some(true),
+            "{verb} never starts the ambient pager"
+        );
+
+        fs::write(
+            &config,
+            format!("{pristine}[pager]\n\t{verb} = /bin/true\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            execution_free("git", &reading, inside, None, Some(&environment), false),
+            Some(false),
+            "{verb} runs the program its own pager key names"
+        );
+    }
+}

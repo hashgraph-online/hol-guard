@@ -6,7 +6,9 @@
 //! question until it succeeds, whose body only sleeps. Every other loop keeps
 //! its review, and the reasons each shape is taken are written beside it.
 
-use super::super::for_loop_unroll::body::{body_items, redirect_tail};
+use super::super::for_loop_unroll::body::{
+    body_items, body_items_rewriting_references, redirect_tail,
+};
 use super::super::for_loop_unroll::{ordinary_loop_name, valid_identifier};
 use super::{assemble, collect};
 
@@ -26,17 +28,26 @@ pub(super) fn flatten_loop(rest: &str) -> Option<String> {
 /// The flat list reads the redirected file and then runs the body. `read`
 /// itself only binds a name from that file, so the read of the file is the
 /// whole of what the loop's test reaches.
+///
+/// The body keeps its references to the one name the `read` binds. Reading a
+/// line of a file into a name leaves text no proof resolves, and so does the
+/// value the surrounding shell holds under that name, so the flat list and
+/// the loop are read the same way. `while read -r line; do echo "$line";
+/// done < list.txt` is the shape a developer writes to walk a list, and it
+/// reaches nothing `cat list.txt; echo "$line"` does not.
 fn flatten_read_loop(rest: &str) -> Option<String> {
-    // The loop binds a name of its own, and the flat list does not, so an
-    // expansion inside it would stand for different text than the one the
-    // loop ran. No expansion at all is the rule that keeps the two the same
-    // work. A conditional binds nothing, so it carries its expansions.
-    if rest.contains(['$', '`']) {
-        return None;
-    }
     let (test, _, after_test) = body_items(rest, "", &["do"])?;
-    let (body, _, tail) = body_items(after_test, "", &["done"])?;
-    if !driven_by_a_read(&test) {
+    let name = read_bound_name(&test)?;
+    // The body reads the name the `read` binds, and the flat list reads an
+    // expansion of that same name. Neither is text a proof resolves -- a line
+    // of the file is as unknown as whatever the shell already holds -- so the
+    // two are read the same way and the flat list stands for the work the
+    // loop did. The body grammar refuses any other expansion, because it
+    // would name a value the loop never bound.
+    let (body, _, tail) = body_items_rewriting_references(after_test, &name, &["done"])?;
+    // A `read` that fills several names, or none, leaves no single name to
+    // carry, so a body that expands anything at all keeps its review.
+    if name.is_empty() && body.iter().any(|(text, _)| text.contains('$')) {
         return None;
     }
     let source = read_source(&redirect_tail(tail)?)?;
@@ -47,7 +58,12 @@ fn flatten_read_loop(rest: &str) -> Option<String> {
         return None;
     }
     let mut parts: Vec<(String, &'static str)> = vec![(format!("cat {source}"), "; ")];
-    collect(&mut parts, body)?;
+    let reference = if name.is_empty() {
+        String::new()
+    } else {
+        format!("${name}")
+    };
+    collect(&mut parts, body, &reference)?;
     assemble(&parts, "")
 }
 
@@ -92,8 +108,8 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
         return None;
     }
     let mut parts: Vec<(String, &'static str)> = Vec::new();
-    collect(&mut parts, test)?;
-    collect(&mut parts, body)?;
+    collect(&mut parts, test, "")?;
+    collect(&mut parts, body, "")?;
     assemble(&parts, "")
 }
 
@@ -132,9 +148,10 @@ fn plain_duration(value: &str) -> bool {
         && digits.iter().filter(|byte| **byte == b'.').count() <= 1
 }
 
-/// Whether a loop's test is the single `read` that empties the redirected
-/// input, which is what makes the iteration count finite. A test that opens a
-/// file of its own is some other loop.
+/// The one name a loop's test binds, when that test is the single `read`
+/// that empties the redirected input -- which is what makes the iteration
+/// count finite. A test that opens a file of its own is some other loop, and
+/// `None` keeps it on the unmodeled path.
 ///
 /// The names the `read` binds matter as much as the word itself. `read` fills
 /// them for every line of the input, so `while read PATH` rebinds `PATH` for
@@ -143,12 +160,17 @@ fn plain_duration(value: &str) -> bool {
 /// ordinary lowercase names `for` already admits as loop variables are taken,
 /// and `-r`, which only stops backslash processing, is the one option allowed
 /// before them.
-fn driven_by_a_read(test: &[(String, &'static str)]) -> bool {
+///
+/// An empty name is still a read-driven test. `read` with no name of its own
+/// fills `REPLY`, and `read -r a b` splits each line across several names;
+/// neither leaves one name for the body to carry, so the caller refuses a
+/// body that expands anything.
+fn read_bound_name(test: &[(String, &'static str)]) -> Option<String> {
     let [(text, _)] = test else {
-        return false;
+        return None;
     };
     if text.contains(['<', '>']) {
-        return false;
+        return None;
     }
     let mut words = text.split_whitespace();
     let mut word = words.next();
@@ -160,13 +182,23 @@ fn driven_by_a_read(test: &[(String, &'static str)]) -> bool {
         word = words.next();
     }
     if word != Some("read") {
-        return false;
+        return None;
     }
     let mut names = words.peekable();
     if names.peek() == Some(&"-r") {
         names.next();
     }
-    names.all(|name| valid_identifier(name) && ordinary_loop_name(name))
+    let names: Vec<&str> = names.collect();
+    if !names
+        .iter()
+        .all(|name| valid_identifier(name) && ordinary_loop_name(name))
+    {
+        return None;
+    }
+    Some(match names.as_slice() {
+        [name] => (*name).to_owned(),
+        _ => String::new(),
+    })
 }
 
 /// The file a loop's input redirection names, for the plain `< FILE` tail and
