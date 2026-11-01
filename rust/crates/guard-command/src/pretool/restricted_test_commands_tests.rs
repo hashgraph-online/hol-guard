@@ -77,6 +77,88 @@ fn a_relative_jest_entry_reads_as_the_project_runner() {
 }
 
 #[test]
+fn a_relative_mocha_entry_reads_as_the_project_runner() {
+    for command in [
+        "node node_modules/mocha/bin/mocha.js",
+        "node ./node_modules/mocha/bin/mocha.js test/unit",
+        "node /work/app/node_modules/mocha/bin/mocha.js",
+        // Mocha 8 and 9 publish the same shim without the extension, and the
+        // sink runs whichever of the two the workspace holds.
+        "node node_modules/mocha/bin/mocha",
+        "node ./node_modules/mocha/bin/mocha test/unit",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_mocha_run_that_does_not_watch_is_contained() {
+    // Mocha runs once unless it is told to watch, so the plain call is the
+    // contained one and a `--watch false` beside it reads the same way:
+    // yargs-parser spends the next word on a declared boolean, which is the
+    // spelling Vitest's mri would have read as a test filter instead.
+    for command in [
+        "npx mocha",
+        "mocha",
+        "mocha test/unit",
+        "npx mocha --reporter spec test/unit",
+        "npx mocha --watch=false",
+        "npx mocha --watch false",
+        "npx mocha --watch-files src",
+        "npx mocha --w=false",
+        "npx mocha -- --watch",
+        "bunx mocha --require ./test/setup.js",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_mocha_run_that_watches_or_leaves_its_workspace_keeps_its_review() {
+    // `init` scaffolds a configuration rather than running tests, `-w` is
+    // Mocha's short `--watch` unlike Jest's, and a value naming a path this
+    // workspace does not hold would load a module the read-only admission
+    // never covered.
+    for command in [
+        "npx mocha --watch",
+        "npx mocha -w",
+        "npx mocha --watch=true",
+        "npx mocha --watch true",
+        "npx mocha --watch=0",
+        "npx mocha init",
+        "npx mocha --config /etc/mocharc.json",
+        "npx mocha --require ../../outside/setup.js",
+        "node node_modules/mocha/bin/mocha.js --watch",
+        // yargs-parser answers an option by its alias, so the long spelling
+        // of Mocha's `-w` turns the watch on under its own name.
+        "npx mocha --w",
+        "npx mocha --w=true",
+        // Mocha restores the dashes on a `--node-option` value and hands it
+        // to Node, which has a watch mode of its own and a debugger that
+        // holds the process until a client attaches.
+        "npx mocha -n watch",
+        "npx mocha --node-option watch",
+        "npx mocha --node-option=watch",
+        "npx mocha --node-option=--inspect-brk",
+        "npx mocha -n --inspect-brk",
+        // yargs-parser answers `-n` by its long spelling too, so `--n` hands
+        // Node the same option the short group does.
+        "npx mocha --n watch",
+        "npx mocha --n=--inspect-brk",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
 fn a_lookalike_entry_reads_as_no_runner() {
     for command in [
         "node xnode_modules/vitest/vitest.mjs run",
@@ -87,6 +169,8 @@ fn a_lookalike_entry_reads_as_no_runner() {
         "node node_modules/vite/dist/cli.js run",
         "node node_modules/xvitest/dist/cli.js run",
         "node node_modules/vitest/dist/cli.mjs run",
+        "node node_modules/xmocha/bin/mocha",
+        "node node_modules/mocha/bin/mocha.sh",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

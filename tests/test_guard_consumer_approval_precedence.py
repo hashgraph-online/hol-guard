@@ -15,7 +15,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_remote_control
 from codex_plugin_scanner.guard.adapters import grok as grok_adapter_module
-from codex_plugin_scanner.guard.adapters import grok_executable as grok_executable_module
 from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter
@@ -36,6 +35,8 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     build_approval_context_token,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+from .grok_native_fake import install_grok_native_fake
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
@@ -866,7 +867,7 @@ def test_grok_previews_do_not_register_and_final_setup_registers_once_after_clai
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
+    install_grok_native_fake(monkeypatch)
     monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
@@ -936,7 +937,7 @@ def test_no_saved_grok_preview_registers_once_only_in_authorized_finalizer(
         events.append("execute")
         return subprocess.CompletedProcess(args=command, returncode=0)
 
-    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
+    install_grok_native_fake(monkeypatch)
     monkeypatch.setattr(grok_adapter_module, "register_trusted_grok_executable", register_once)
     monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
     monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: RecordingGrokAdapter())
