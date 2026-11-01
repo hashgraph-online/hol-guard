@@ -21,6 +21,15 @@ pub(crate) fn local_vitest_entry(argument: &str) -> bool {
         || local_package_entry(argument, "vitest/dist/cli.js")
 }
 
+/// Mocha's installed entry point. `bin/mocha.js` is the package's declared
+/// `bin` shim from Mocha 10 on, which is the spelling this containment reads;
+/// the extensionless `bin/mocha` of Mocha 8 and 9 is left at review rather
+/// than guessed at, since a bare `bin/mocha` names nothing a resolver can
+/// check for a module.
+pub(crate) fn local_mocha_entry(argument: &str) -> bool {
+    local_package_entry(argument, "mocha/bin/mocha.js")
+}
+
 /// The program a word names; on Windows without `.exe`, as the pre-tool parser
 /// reads it, so `node.exe` and a resolved `C:\...\python.exe` name `node` and
 /// `python`. Every reading of a program name goes through here, so a
@@ -270,7 +279,8 @@ fn bun_runner_invocation(
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
 pub(crate) use runner_calls::{
-    contained_runner_call, jest_contained_call, jest_runs_once, vitest_runs_once,
+    contained_runner_call, jest_contained_call, jest_runs_once, mocha_contained_call,
+    mocha_runs_once, vitest_runs_once,
 };
 
 /// The runner a contained call names, with the arguments the sink hands it.
@@ -280,7 +290,11 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
     };
     contained_runner_call(arguments).then(|| {
         (
-            if tool == "jest" { "jest" } else { "vitest" },
+            match tool.as_str() {
+                "jest" => "jest",
+                "mocha" => "mocha",
+                _ => "vitest",
+            },
             rest.to_vec(),
         )
     })
@@ -306,6 +320,14 @@ fn runner_tail_or_error(
             Some("jest") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected Jest reads its configuration and modules from this workspace.",
+            )),
+            Some("mocha") if !mocha_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Mocha requires a run that does not watch.",
+            )),
+            Some("mocha") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Mocha reads its configuration and modules from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -485,7 +507,7 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if let Some(args) = manager_exec_tool(&argv) {
             args.to_vec()
-        } else if matches!(name, "vitest" | "jest") {
+        } else if matches!(name, "vitest" | "jest" | "mocha") {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
             call
@@ -499,6 +521,8 @@ pub fn contained_runner_invocation(
                 "vitest"
             } else if local_package_entry(&entry, "jest/bin/jest.js") {
                 "jest"
+            } else if local_mocha_entry(&entry) {
+                "mocha"
             } else {
                 return invalid_vitest();
             };
@@ -734,14 +758,16 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let bun = bun_vitest_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
-        && (matches!(name, "bunx" | "npx" | "vitest" | "jest")
+        && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
             || manager_exec_runner(command).is_some()
             || bun.is_some()
             || tsx_test_invocation(command)?.is_some()
             || (matches!(name, "node" | "nodejs")
                 && entries.clone().any(|v| {
                     let entry = v.replace('\\', "/");
-                    local_vitest_entry(&entry) || local_package_entry(&entry, "jest/bin/jest.js")
+                    local_vitest_entry(&entry)
+                        || local_package_entry(&entry, "jest/bin/jest.js")
+                        || local_mocha_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && manager_exec_runner(command).is_none()

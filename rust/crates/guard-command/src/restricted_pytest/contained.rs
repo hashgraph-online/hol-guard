@@ -310,6 +310,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
     // Each contained runner is the workspace's own installed entry point.
     let package_entry = match tool {
         "jest" => "jest/bin/jest.js",
+        "mocha" => "mocha/bin/mocha.js",
         _ => "vitest/vitest.mjs",
     };
     let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{package_entry}"))?
@@ -332,7 +333,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
         .iter()
         .cloned()
         .chain(
-            (tool != "jest")
+            (tool == "vitest")
                 .then(|| {
                     modules
                         .join("vitest/dist/cli.js")
@@ -354,16 +355,18 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             "vitest_restricted_dependency_unavailable",
             match tool {
                 "jest" => "Jest is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "mocha" => "Mocha is not installed inside this workspace. Guard did not download or execute a replacement.",
                 _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
             },
         ));
     }
     let entry = entry.unwrap();
-    // The config loader argument is Vitest's own; Jest takes its arguments as given.
-    let args = if tool == "jest" {
-        args
-    } else {
+    // The config loader argument is Vitest's own; Jest and Mocha take their
+    // arguments as given.
+    let args = if tool == "vitest" {
         readonly_config_arguments(&args, &entry.parent().unwrap().join("package.json"))
+    } else {
+        args
     };
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);

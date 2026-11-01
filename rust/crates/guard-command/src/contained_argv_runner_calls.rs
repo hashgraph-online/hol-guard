@@ -1,17 +1,20 @@
 //! Reading a Node test runner's own call.
 //!
-//! Vitest and Jest both watch by default and both parse their own options, so
-//! a contained run is only the call whose spelling their parser reads as one
-//! pass over the workspace's tests. The two parsers disagree about what a
-//! boolean option takes, so each runner is read against its own.
+//! A contained run is only the call whose spelling the runner's own parser
+//! reads as one pass over the workspace's tests, so each runner is read
+//! against the parser it ships with. Vitest and Jest watch by default, so
+//! theirs is the call that turns the watch off; Mocha runs once by default,
+//! so its is the call that does not turn the watch on. Vitest reads mri
+//! through CAC while Jest and Mocha read yargs-parser, and the two disagree
+//! about what a boolean option takes.
 
 /// True when `arguments` name a contained Node test runner and a call that
-/// runs once. Both runners watch by default, so each one is read for the
-/// spelling that takes this call out of watch mode.
+/// runs once.
 pub(crate) fn contained_runner_call(arguments: &[String]) -> bool {
     matches!(arguments, [tool, rest @ ..]
         if (tool == "vitest" && vitest_runs_once(rest))
-            || (tool == "jest" && jest_contained_call(rest)))
+            || (tool == "jest" && jest_contained_call(rest))
+            || (tool == "mocha" && mocha_contained_call(rest)))
 }
 
 /// True when a Vitest call finishes on its own.
@@ -77,9 +80,11 @@ fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
     arguments.iter().any(turns_watch_off) && !arguments.iter().any(turns_watch_on)
 }
 
-/// Whether a short option turns the watch on. `-w` is Vitest's short
-/// `--watch`, and mri reads a cluster one letter at a time, so `-uw` carries
-/// it too.
+/// Whether a short option turns the watch on. `-w` is the short `--watch` of
+/// both Vitest and Mocha, and mri and yargs-parser each read a cluster one
+/// letter at a time, so `-uw` carries it too. A word attached to a short
+/// option that happens to hold a `w` is read as carrying it as well, which
+/// leaves that call at review rather than running it unwatched.
 fn short_options_carry_watch(argument: &str) -> bool {
     argument
         .strip_prefix('-')
@@ -89,7 +94,38 @@ fn short_options_carry_watch(argument: &str) -> bool {
 /// True when a Jest call both finishes on its own and takes everything it
 /// loads from the workspace.
 pub(crate) fn jest_contained_call(arguments: &[String]) -> bool {
-    jest_runs_once(arguments) && jest_reads_its_own_workspace(arguments)
+    jest_runs_once(arguments) && reads_its_own_workspace(arguments)
+}
+
+/// True when a Mocha call both finishes on its own and takes everything it
+/// loads from the workspace.
+pub(crate) fn mocha_contained_call(arguments: &[String]) -> bool {
+    mocha_runs_once(arguments) && reads_its_own_workspace(arguments)
+}
+
+/// Mocha is the one runner here that does not watch by default, so a plain
+/// `mocha` already runs once and the reading looks for the spelling that
+/// turns the watch on rather than the one that turns it off.
+///
+/// Mocha reads yargs-parser, so `--watch` is read with its separators removed
+/// and a declared boolean takes a following `true` or `false`; `--watch false`
+/// and `--watch=false` are both a run that finishes. `-w` is Mocha's short
+/// `--watch`, unlike Jest's, where the letter names `--maxWorkers`.
+/// `--watch-files` and `--watch-ignore` name globs rather than the mode and
+/// read as `watchfiles` and `watchignore`, so they leave the call alone.
+///
+/// `init` scaffolds a configuration rather than running tests, and Mocha
+/// takes its command from the first operand. The reading cannot tell an
+/// operand from the value of an option it does not model, so the word
+/// anywhere on the line keeps the call at review.
+pub(crate) fn mocha_runs_once(arguments: &[String]) -> bool {
+    let arguments = before_terminator(arguments);
+    !arguments.iter().any(|argument| argument == "init")
+        && !arguments.iter().enumerate().any(|(index, argument)| {
+            short_options_carry_watch(argument)
+                || (option_name(argument) == "watch"
+                    && jest_boolean(argument, arguments.get(index + 1)) != Some(false))
+        })
 }
 
 /// A watching Jest run never finishes inside the sink, so only a call that
@@ -160,19 +196,21 @@ fn option_name(argument: &str) -> String {
 }
 
 /// Jest loads its config, transforms, reporters, environment and test runner
-/// from option values, so any of them can name a module. The workspace's own
-/// files are what the read-only sandbox was admitted for; a value that leaves
-/// it would run code the admission never covered. This screen reads every
-/// argument rather than a list of the options that take a module, because a
-/// Jest release adds options faster than the list would follow.
-pub(crate) fn jest_reads_its_own_workspace(arguments: &[String]) -> bool {
+/// from option values, and Mocha its config, requires, reporters and node
+/// options, so any of them can name a module. The workspace's own files are
+/// what the read-only sandbox was admitted for; a value that leaves it would
+/// run code the admission never covered. This screen reads every argument
+/// rather than a list of the options that take a module, because a release of
+/// either runner adds options faster than the list would follow. Both read
+/// yargs-parser, so one screen answers for both.
+pub(crate) fn reads_its_own_workspace(arguments: &[String]) -> bool {
     !arguments
         .iter()
         .any(|argument| leaves_the_workspace(argument))
 }
 
-/// Whether any part of an argument names a path outside the workspace. Jest
-/// reads its options through yargs-parser, which takes a value joined with
+/// Whether any part of an argument names a path outside the workspace. Both
+/// runners read their options through yargs-parser, which takes a value joined with
 /// `=`, attached straight to a short alias (`-c/etc/jest.config.js`), or
 /// spelled as inline JSON (`--config '{"setupFiles":["/tmp/x.js"]}'`), so the
 /// argument is screened whole and in pieces rather than as one path. Short
