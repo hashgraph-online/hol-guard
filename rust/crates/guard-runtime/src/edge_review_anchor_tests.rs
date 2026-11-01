@@ -277,3 +277,39 @@ fn anchor_without_a_snapshot_keeps_the_claimed_policy_identity() {
     );
     assert_ne!(baseline, anchor(&request, &snapshot()));
 }
+
+/// Cursor stamps every attempt with a fresh `generation_id` and a fresh
+/// `tool_use_id`. Both are the transport's per-attempt identity, so an
+/// identical retry inside one conversation has to reach the approval the user
+/// already gave, while another command or another session stays another
+/// action.
+#[test]
+fn anchor_reaches_a_cursor_retry_under_a_new_generation_id() {
+    let published = snapshot();
+    let mut request = review_envelope();
+    request.0.harness = "cursor".into();
+    request.0.raw_payload["session_id"] = serde_json::json!("conversation-one");
+    request.0.raw_payload["generation_id"] = serde_json::json!("generation-first");
+    request.0.raw_payload["tool_use_id"] = serde_json::json!("call-first");
+    let baseline = anchor(&request, &published);
+    let mut retry = request.0.clone();
+    retry.raw_payload["generation_id"] = serde_json::json!("generation-retry");
+    retry.raw_payload["tool_use_id"] = serde_json::json!("call-retry");
+    assert_eq!(anchor(&retry, &published), baseline);
+    let mut other_conversation = retry.clone();
+    other_conversation.raw_payload["session_id"] = serde_json::json!("conversation-two");
+    assert_ne!(anchor(&other_conversation, &published), baseline);
+    let mut other_command = retry.clone();
+    other_command.raw_payload["tool_input"]["command"] = serde_json::json!("rm -rf /");
+    assert_ne!(anchor(&other_command, &published), baseline);
+    // Without a conversation the attempt IDs are all that tie a retry to its
+    // request, so they stay in the commitment.
+    let mut sessionless = request.0.clone();
+    sessionless.raw_payload["session_id"] = serde_json::json!("");
+    let mut sessionless_retry = sessionless.clone();
+    sessionless_retry.raw_payload["generation_id"] = serde_json::json!("generation-retry");
+    assert_ne!(
+        anchor(&sessionless_retry, &published),
+        anchor(&sessionless, &published)
+    );
+}
