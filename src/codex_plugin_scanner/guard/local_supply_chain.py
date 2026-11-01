@@ -520,6 +520,13 @@ def _build_package_protect_authority(
     )
     if intent is None:
         return None
+    if intent.routine_local_runner:
+        # A runner the project already pins locally fetches nothing: the native
+        # parser resolved the executable inside the installed package and read
+        # the lockfile entry that binds it to a published release. The shim has
+        # already offered this command to containment by the time it reaches
+        # protect, so there is no package request left to review.
+        return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
     artifact = build_package_request_artifact(
         _LOCAL_SUPPLY_CHAIN_HARNESS,

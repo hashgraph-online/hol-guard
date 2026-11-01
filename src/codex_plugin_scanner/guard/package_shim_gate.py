@@ -68,31 +68,6 @@ def package_shim_command_requires_guard(
     return intent is not None
 
 
-def package_shim_command_is_routine_local_runner(
-    manager: str,
-    argv: Sequence[str],
-    *,
-    workspace: Path | None = None,
-    guard_home: Path | None = None,
-) -> bool:
-    """Return whether the command runs a runner this project already pins locally.
-
-    The native parser reaches that verdict from the manifest, the installed
-    package's own manifest and every lockfile: the runner is the lint, test or
-    TypeScript entry point this project declared, resolved under this
-    workspace's ``node_modules``. Nothing is fetched, so the shim has no
-    install to ask about. It is not a reason to skip contained execution, so
-    the shim consults this only once containment has declined the command.
-    """
-
-    normalized_manager = manager.strip().lower()
-    if normalized_manager not in {"bunx", "npx"}:
-        return False
-    command = [normalized_manager, *[str(argument) for argument in argv]]
-    intent = _parse_shim_package_intent(shlex.join(command), workspace=workspace, guard_home=guard_home)
-    return bool(intent is not None and intent.routine_local_runner)
-
-
 def package_shim_command_requires_external_archive_binding(
     manager: str,
     argv: Sequence[str],

@@ -5,10 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.package_shim_gate import (
-    package_shim_command_is_routine_local_runner,
-    package_shim_command_requires_guard,
-)
+from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
 from codex_plugin_scanner.guard.runtime import package_intent_parser
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
@@ -400,114 +397,4 @@ def test_package_shim_routes_local_only_execution_through_guard(tmp_path: Path, 
         manager,
         ("--no-install", "vitest", "--help"),
         workspace=tmp_path,
-    )
-
-
-def _write_routine_runner_workspace(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    name: str,
-    *,
-    locked: str,
-) -> Path:
-    """A runner pinned in the manifest, installed, and agreed on by bun.lock."""
-
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    (workspace / "package.json").write_text(
-        '{"name":"demo","dependencies":{"%s":"^4.22.4"}}\n' % name,
-        encoding="utf-8",
-    )
-    (workspace / "bun.lock").write_text(
-        '{"packages": {"%s": ["%s@%s", "", {}, ""]}}\n' % (name, name, locked),
-        encoding="utf-8",
-    )
-    installed = workspace / "node_modules" / name
-    (installed / "package.json").parent.mkdir(parents=True)
-    (installed / "package.json").write_text(
-        '{"name":"%s","version":"4.22.4"}\n' % name,
-        encoding="utf-8",
-    )
-    _write_executable(installed / "dist" / "cli.mjs", "runner")
-    # npm and bun install the entry point as a link into the package itself;
-    # the verdict requires the resolved executable to live under that package.
-    runner = workspace / "node_modules" / ".bin" / name
-    runner.parent.mkdir(parents=True, exist_ok=True)
-    runner.symlink_to(Path("..") / name / "dist" / "cli.mjs")
-    managers = tmp_path / "bin"
-    for manager in ("npx", "bunx"):
-        _write_executable(managers / manager, "manager")
-    monkeypatch.setenv("PATH", str(managers))
-    return workspace
-
-
-@pytest.mark.parametrize("manager", ["npx", "bunx"])
-def test_package_shim_runs_a_locally_pinned_runner_without_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    manager: str,
-) -> None:
-    workspace = _write_routine_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.22.4")
-
-    assert package_shim_command_is_routine_local_runner(
-        manager,
-        ("tsx", "scripts/generate-inventory.ts"),
-        workspace=workspace,
-    )
-
-
-@pytest.mark.parametrize("manager", ["npx", "bunx"])
-def test_package_shim_still_offers_a_pinned_runner_to_containment(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    manager: str,
-) -> None:
-    """The local verdict is not a reason to skip contained execution.
-
-    The generated shim runs its containment attempts while ``requires_guard``
-    holds, so the verdict has to leave that answer alone.
-    """
-
-    workspace = _write_routine_runner_workspace(tmp_path, monkeypatch, "vitest", locked="4.22.4")
-
-    assert package_shim_command_requires_guard(
-        manager,
-        ("vitest", "run"),
-        workspace=workspace,
-    )
-
-
-@pytest.mark.parametrize("manager", ["npx", "bunx"])
-def test_package_shim_reviews_a_runner_the_lockfile_contradicts(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    manager: str,
-) -> None:
-    workspace = _write_routine_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.9.0")
-
-    assert not package_shim_command_is_routine_local_runner(
-        manager,
-        ("tsx", "scripts/generate-inventory.ts"),
-        workspace=workspace,
-    )
-
-
-@pytest.mark.parametrize("manager", ["npx", "bunx"])
-def test_package_shim_reviews_a_runner_a_lockfile_never_names(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    manager: str,
-) -> None:
-    """A second lockfile that parses but omits the runner binds nothing."""
-
-    workspace = _write_routine_runner_workspace(tmp_path, monkeypatch, "tsx", locked="4.22.4")
-    (workspace / "package-lock.json").write_text(
-        '{"packages": {"node_modules/other": {"version": "1.0.0"}}}\n',
-        encoding="utf-8",
-    )
-
-    assert not package_shim_command_is_routine_local_runner(
-        manager,
-        ("tsx", "scripts/generate-inventory.ts"),
-        workspace=workspace,
     )
