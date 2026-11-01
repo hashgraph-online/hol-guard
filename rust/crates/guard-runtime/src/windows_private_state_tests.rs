@@ -70,6 +70,16 @@ impl PrivateStore for FakeStore {
             .remove(&(fold(directory), name.to_owned()))
             .is_some())
     }
+
+    fn ensure(&self, directory: &str, private_root: &str) -> Result<(), String> {
+        self.calls
+            .borrow_mut()
+            .push(format!("ensure {directory} {private_root}"));
+        match self.failure {
+            Some(code) => Err(code.to_owned()),
+            None => Ok(()),
+        }
+    }
 }
 
 fn ask(store: &FakeStore, request: Value) -> Result<Value, String> {
@@ -148,6 +158,55 @@ fn written_state_reads_back_and_deletes() {
 }
 
 #[test]
+fn ensure_binds_from_the_private_root() {
+    let store = FakeStore::default();
+    assert_eq!(
+        ask(&store, json!({"op": "ensure", "directory": STATE})),
+        Ok(json!({"ensured": true}))
+    );
+    assert_eq!(
+        ask(
+            &store,
+            json!({"op": "ensure", "directory": STATE, "private_root": HOME})
+        ),
+        Ok(json!({"ensured": true}))
+    );
+    assert_eq!(
+        *store.calls.borrow(),
+        vec![
+            format!("ensure {STATE} {STATE}"),
+            format!("ensure {STATE} {HOME}"),
+        ]
+    );
+    for extra in [
+        json!({"name": "a"}),
+        json!({"maximum_bytes": 4}),
+        json!({"content_b64": "YQ=="}),
+    ] {
+        let mut request = json!({"op": "ensure", "directory": STATE});
+        for (key, value) in extra.as_object().unwrap() {
+            request[key] = value.clone();
+        }
+        assert_eq!(ask(&store, request), Err(invalid()));
+    }
+    assert_eq!(
+        ask(
+            &store,
+            json!({"op": "ensure", "directory": HOME, "private_root": STATE})
+        ),
+        Err(invalid())
+    );
+    assert_eq!(
+        ask(
+            &store,
+            json!({"op": "read", "directory": STATE, "maximum_bytes": 4})
+        ),
+        Err(invalid())
+    );
+    assert_eq!(store.calls.borrow().len(), 2);
+}
+
+#[test]
 fn operational_failures_answer_their_code() {
     let store = FakeStore {
         failure: Some("native_resident_windows_access_denied"),
@@ -163,6 +222,7 @@ fn operational_failures_answer_their_code() {
             "content_b64": encoded(b"ab"),
         }),
         json!({"op": "delete", "directory": STATE, "name": "a"}),
+        json!({"op": "ensure", "directory": STATE}),
     ] {
         assert_eq!(
             ask(&store, request),
@@ -388,5 +448,11 @@ fn private_state_round_trips_on_windows() {
         ),
         Ok(false)
     );
+    // Missing ancestors above the private root are created private too.
+    let nested = home.join("missing").join("deeper").join("state");
+    let nested_text = nested.to_str().unwrap().to_owned();
+    assert_eq!(store.ensure(&nested_text, &nested_text), Ok(()));
+    assert!(nested.is_dir());
+    assert_eq!(store.ensure(&state_text, &home_text), Ok(()));
     let _ = std::fs::remove_dir_all(&home);
 }

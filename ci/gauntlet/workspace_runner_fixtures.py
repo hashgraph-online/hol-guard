@@ -34,6 +34,11 @@ WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
 # The other runner a Node project installs for itself. Mocha runs its suite once
 # and exits unless it is told to watch, so the plain launch is the routine one.
 WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
+# The same install, launched through the project's own name for one part of its
+# suite. A project with more than one kind of test names them `test:unit`,
+# `test:types` and so on, and npm runs whatever the entry holds, so the named
+# entry has to be read the way the plain `test` entry is.
+WORKSPACE_NAMED_TEST_SCRIPT_CASE = "omp-native-workspace-named-test-script"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -41,6 +46,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_NPM_EXEC_CASE,
         WORKSPACE_HEAP_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
+        WORKSPACE_NAMED_TEST_SCRIPT_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -57,6 +63,7 @@ RUNNER_MARKER = f"jest-cli {_VERSION}"
 _FILES = {
     "package.json": (
         '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "test:unit": "jest --ci"\n  },\n'
         f'  "devDependencies": {{\n    "jest": "{_VERSION}"\n  }}\n}}\n'
     ),
     "package-lock.json": (

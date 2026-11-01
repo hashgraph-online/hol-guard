@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -235,98 +234,38 @@ def test_dirs_owned_by_other_users_are_skipped(tmp_path: Path, monkeypatch: pyte
 # --- open-path scanner -------------------------------------------------------
 
 
-def _completed(stdout: bytes, returncode: int = 0) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.CompletedProcess(args=["lsof"], returncode=returncode, stdout=stdout, stderr=b"")
+_Call = tuple[str, str, object, dict[str, object]]
 
 
-def test_lsof_scan_extracts_extraction_names_and_ignores_other_paths(tmp_path: Path) -> None:
-    root = tmp_path.resolve()
-    output = (
-        f"p100\nn{root}/_MEIaaaa11/Python.framework/Python\n"
-        f"n{root}/_MEIbbbb22\n"
-        f"n{root}/other/_MEIcccc33/x\n"
-        "n/usr/lib/libSystem.dylib\n"
-        f"n{root}/_MEIshort/x\n"
-    ).encode()
-    seen: list[list[str]] = []
+def _answer(monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None) -> list[_Call]:
+    calls: list[_Call] = []
 
-    def runner(argv, **kwargs):
-        seen.append(argv)
-        return _completed(output)
+    def fake(feature: str, command: str, request: object, **kwargs: object) -> dict[str, object] | None:
+        calls.append((feature, command, request, kwargs))
+        return answer
 
-    found = scan_open_extraction_dirs(tmp_path, runner=runner, lsof_path="/fake/lsof", platform="darwin")
-    assert found == frozenset({"_MEIaaaa11", "_MEIbbbb22", "_MEIshort"})
-    assert seen[0][0] == "/fake/lsof"
-    assert "-F" in seen[0]
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", fake)
+    return calls
 
 
-def test_lsof_scan_fails_closed(tmp_path: Path) -> None:
-    def boom(argv, **kwargs):
-        raise subprocess.TimeoutExpired(argv, 1)
+def test_open_path_scan_asks_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _answer(monkeypatch, {"in_use": ["_MEIaaaa11", "_MEIbbbb22"]})
 
-    assert scan_open_extraction_dirs(tmp_path, runner=boom, lsof_path="/fake/lsof", platform="darwin") is None
-
-    def missing(argv, **kwargs):
-        raise FileNotFoundError(argv[0])
-
-    assert scan_open_extraction_dirs(tmp_path, runner=missing, lsof_path="/fake/lsof", platform="darwin") is None
-    assert (
-        scan_open_extraction_dirs(
-            tmp_path, runner=lambda argv, **kw: _completed(b"", 0), lsof_path="/fake/lsof", platform="darwin"
-        )
-        is None
-    )
-    assert (
-        scan_open_extraction_dirs(
-            tmp_path, runner=lambda argv, **kw: _completed(b"n/x\n", 2), lsof_path="/fake/lsof", platform="darwin"
-        )
-        is None
-    )
-    assert (
-        scan_open_extraction_dirs(
-            tmp_path, runner=lambda argv, **kw: _completed(b"n/x\n", 1), lsof_path="/fake/lsof", platform="darwin"
-        )
-        is None
-    )
-    assert scan_open_extraction_dirs(tmp_path, platform="win32") is None
+    assert scan_open_extraction_dirs(tmp_path) == frozenset({"_MEIaaaa11", "_MEIbbbb22"})
+    feature, command, request, kwargs = calls[0]
+    assert (feature, command) == ("native-onefile-open-paths-v1", "onefile-open-paths")
+    assert request == {"schema": "onefile-open-paths.v1", "temp_root": str(tmp_path)}
+    timeout = kwargs["timeout_seconds"]
+    assert isinstance(timeout, float) and timeout > 90
 
 
-def test_proc_scan_reads_maps_cwd_and_fds(tmp_path: Path) -> None:
-    root = tmp_path / "tmp"
-    root.mkdir()
-    proc = tmp_path / "proc"
-    first = proc / "10"
-    (first / "fd").mkdir(parents=True)
-    (first / "maps").write_text(
-        f"7f00-7f01 r-xp 00000000 00:01 5 {root}/_MEImaps001/libpython3.12.so (deleted)\n", encoding="utf-8"
-    )
-    (first / "cwd").symlink_to(root / "_MEIcwd0001")
-    (first / "fd" / "3").symlink_to(root / "_MEIfd00001" / "data")
-    second = proc / "11"
-    (second / "fd").mkdir(parents=True)
-    (second / "maps").write_text("", encoding="utf-8")
-    (proc / "self-not-numeric").mkdir()
-    found = scan_open_extraction_dirs(root, proc_root=proc, platform="linux")
-    assert found == frozenset({"_MEImaps001", "_MEIcwd0001", "_MEIfd00001"})
+@pytest.mark.parametrize(
+    "answer",
+    [None, {}, {"in_use": None}, {"in_use": "_MEIaaaa11"}, {"in_use": ["_MEIaaaa11", 3]}],
+)
+def test_open_path_scan_is_unknown_without_a_clean_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
+) -> None:
+    _ = _answer(monkeypatch, answer)
 
-
-def test_proc_scan_unreadable_own_process_fails_closed_to_lsof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    root = tmp_path / "tmp"
-    root.mkdir()
-    proc = tmp_path / "proc"
-    (proc / "10" / "fd").mkdir(parents=True)
-    # No maps file: FileNotFoundError means the process vanished, which is fine.
-    assert scan_open_extraction_dirs(root, proc_root=proc, platform="linux") == frozenset()
-
-    original = Path.read_text
-
-    def deny(self: Path, *args, **kwargs):
-        if self.name == "maps":
-            raise PermissionError("denied")
-        return original(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "read_text", deny)
-    (proc / "10" / "maps").write_text("", encoding="utf-8")
-    monkeypatch.setattr("codex_plugin_scanner.guard.onefile_open_paths.shutil.which", lambda name: None)
-    monkeypatch.setattr("codex_plugin_scanner.guard.onefile_open_paths.os.path.isfile", lambda path: False)
-    assert scan_open_extraction_dirs(root, proc_root=proc, platform="linux") is None
+    assert scan_open_extraction_dirs(tmp_path) is None

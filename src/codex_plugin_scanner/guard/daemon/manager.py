@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import logging
 import math
 import ntpath
 import os
@@ -85,6 +86,7 @@ from .start_heartbeat import (
 from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 from .startup_phase import timed_phase
 
+_LOGGER = logging.getLogger(__name__)
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
 # Slowest observed cold start on a loaded host.  The resident adds its own
@@ -2536,12 +2538,12 @@ def _set_private_mode(path: Path, mode: int) -> None:
 
 def _set_windows_private_directory(path: Path) -> None:
     from ..native_policy_snapshot import NativePolicySnapshotError
-    from ..native_policy_snapshot_windows_state import _windows_ensure_private_directory
+    from ..native_policy_snapshot_windows_atomic import _windows_ensure_private_directory
 
     try:
         _windows_ensure_private_directory(path)
-    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError):
-        return
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _LOGGER.warning("Could not make a Windows daemon directory private: %s", type(exc).__name__)
 
 
 def _guard_home_is_ephemeral(guard_home: Path) -> bool:
