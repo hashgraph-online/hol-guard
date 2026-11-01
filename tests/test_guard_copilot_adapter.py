@@ -520,6 +520,30 @@ def test_copilot_install_and_uninstall_preserve_existing_inline_hook_content(tmp
     }
 
 
+def _tree(root: Path) -> dict[str, bytes]:
+    return {str(path.relative_to(root)): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+
+
+def test_copilot_without_a_hook_ownership_answer_changes_no_file(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    _write_json(
+        context.home_dir / ".copilot" / "config.json",
+        {"hooks": {"preToolUse": [{"command": "python existing-pre.py"}]}},
+    )
+    adapter.install(context)
+    before = _tree(tmp_path)
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(copilot_module.CopilotHookOwnershipError):
+        adapter.uninstall(context)
+    assert _tree(tmp_path) == before
+
+    with pytest.raises(copilot_module.CopilotHookOwnershipError):
+        adapter.install(context)
+    assert _tree(tmp_path) == before
+
+
 def test_copilot_install_and_uninstall_parse_jsonc_config_comments(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()

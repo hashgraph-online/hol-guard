@@ -582,6 +582,30 @@ class CopilotHarnessAdapter(HarnessAdapter):
             change.payload()
             prepared_files.append(change)
 
+        # Read which hook commands Guard owns before anything is written, so a
+        # runtime that cannot answer leaves every file as it was.
+        config_path = self._config_path(context)
+        _ensure_path_within_root(context.home_dir, config_path, label="Copilot config")
+        config_payload = (
+            self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
+            if prepared_files is None
+            else parsed(config_path)
+        )
+        hooks_payload = _inline_hooks_payload(config_payload)
+        managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
+        managed_hook_path = self._hook_path(context)
+        managed_hook_payload: _ManagedHookPayload | None = None
+        workspace_managed: set[str] = set()
+        if managed_hook_path is not None:
+            if context.workspace_dir is None:
+                raise ValueError("Copilot workspace hook requires a workspace root")
+            _ensure_path_within_root(context.workspace_dir, managed_hook_path, label="Copilot hook")
+            managed_hook_payload = _managed_hook_payload(
+                _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path),
+            )
+            workspace_managed = _managed_hook_commands(
+                _hooks_commands(managed_hook_payload["hooks"]), guard_home=context.guard_home
+            )
         detection = self.detect(context, config_contents=config_contents)
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
@@ -688,16 +712,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_target_mcp_path = target_mcp_paths[0]
         primary_backup_path = backup_paths[0]
         primary_state_path = state_paths[0]
-        config_path = self._config_path(context)
-        _ensure_path_within_root(context.home_dir, config_path, label="Copilot config")
-        config_payload = (
-            self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
-            if prepared_files is None
-            else parsed(config_path)
-        )
-        hooks_payload = _inline_hooks_payload(config_payload)
         hook_entry = _hook_entry(context, include_workspace=False, prepared_files=prepared_files)
-        managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
         for hook_name in _MANAGED_HOOK_EVENTS:
             hooks_payload[hook_name] = _merge_hook_entries(hooks_payload.get(hook_name), hook_entry, managed=managed)
         if prepared_files is None:
@@ -707,19 +722,9 @@ class CopilotHarnessAdapter(HarnessAdapter):
             prepare_file(
                 config_path, (json.dumps(config_payload, indent=2) + "\n").encode("utf-8"), before=captured(config_path)
             )
-        managed_hook_path = self._hook_path(context)
-        if managed_hook_path is not None:
-            if context.workspace_dir is None:
-                raise ValueError("Copilot workspace hook requires a workspace root")
-            _ensure_path_within_root(context.workspace_dir, managed_hook_path, label="Copilot hook")
-            managed_hook_payload = _managed_hook_payload(
-                _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path),
-            )
+        if managed_hook_path is not None and managed_hook_payload is not None:
             managed_workspace_hooks = managed_hook_payload["hooks"]
             managed_workspace_entry = _hook_entry(context, include_workspace=True, prepared_files=prepared_files)
-            workspace_managed = _managed_hook_commands(
-                _hooks_commands(managed_workspace_hooks), guard_home=context.guard_home
-            )
             for hook_name in _MANAGED_HOOK_EVENTS:
                 managed_workspace_hooks[hook_name] = _merge_hook_entries(
                     managed_workspace_hooks.get(hook_name),
@@ -758,6 +763,20 @@ class CopilotHarnessAdapter(HarnessAdapter):
 
     @copilot_lifecycle_uninstall
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        # Read which hook commands Guard owns before anything is restored or
+        # removed, so a runtime that cannot answer leaves every file as it was.
+        config_path = self._config_path(context)
+        config_payload = self._strict_json_object(config_path, label="Copilot config")
+        hooks_payload = _inline_hooks_payload(config_payload)
+        managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
+        managed_hook_path = self._hook_path(context)
+        managed_hook_payload: _ManagedHookPayload | None = None
+        workspace_managed: set[str] = set()
+        if managed_hook_path is not None and managed_hook_path.is_file():
+            managed_hook_payload = _managed_hook_payload(_json_payload(managed_hook_path))
+            workspace_managed = _managed_hook_commands(
+                _hooks_commands(managed_hook_payload["hooks"]), guard_home=context.guard_home
+            )
         uninstall_targets = self._uninstall_targets(context)
         for state_path, target_mcp_path, backup_path in uninstall_targets:
             cleanup_complete = False
@@ -787,12 +806,8 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_target_mcp_path = managed_config_paths[0] if managed_config_paths else ""
         primary_backup_path = backup_paths[0] if backup_paths else ""
         primary_state_path = state_paths[0] if state_paths else ""
-        config_path = self._config_path(context)
-        config_payload = self._strict_json_object(config_path, label="Copilot config")
-        hooks_payload = _inline_hooks_payload(config_payload)
         bash_command, powershell_command = _hook_shell_commands(context, include_workspace=False)
         if len(remaining_state_entries) == 0:
-            managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
             for hook_name in _MANAGED_HOOK_EVENTS:
                 updated_entries = _remove_hook_entries(
                     hooks_payload.get(hook_name),
@@ -808,16 +823,11 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 config_payload.pop("hooks", None)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
-        managed_hook_path = self._hook_path(context)
-        if managed_hook_path is not None and managed_hook_path.is_file():
-            managed_hook_payload = _managed_hook_payload(_json_payload(managed_hook_path))
+        if managed_hook_path is not None and managed_hook_payload is not None:
             managed_workspace_hooks = managed_hook_payload["hooks"]
             managed_bash_command, managed_powershell_command = _hook_shell_commands(
                 context,
                 include_workspace=True,
-            )
-            workspace_managed = _managed_hook_commands(
-                _hooks_commands(managed_workspace_hooks), guard_home=context.guard_home
             )
             for hook_name in _MANAGED_HOOK_EVENTS:
                 updated_entries = _remove_hook_entries(
