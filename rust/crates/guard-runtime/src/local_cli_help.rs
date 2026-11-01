@@ -59,13 +59,25 @@ pub(crate) fn evaluate_local_cli_help_parse_request(
         parent_id: command.parent_id,
     })
     .collect();
+    let payload = if request.script_source {
+        // What the source says about running it, so the caller decides from
+        // the code whether `script --help` is safe to ask for at all.
+        let facts = options::script_facts(&request.text);
+        json!({
+            "commands": commands,
+            "help_handler": facts.help.as_str(),
+            "imports": facts.imports,
+        })
+    } else {
+        json!({ "commands": commands })
+    };
     crate::encode_response(&LocalCliHelpParseResultV1 {
         schema: LOCAL_CLI_HELP_PARSE_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
         request_sha256,
         status: "ok".to_owned(),
         code: "ok".to_owned(),
-        payload: Some(json!({ "commands": commands })),
+        payload: Some(payload),
     })
 }
 

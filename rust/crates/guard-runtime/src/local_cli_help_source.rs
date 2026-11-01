@@ -8,11 +8,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::super::{is_skipped, COMMAND_NAME};
-use super::{
-    is_option_name, Found, LocalCliCommand, DESCRIPTION_CHARS, MAX_SOURCE_COMMANDS,
-    VALUE_PLACEHOLDER,
-};
+use super::{is_option_name, Found, VALUE_PLACEHOLDER};
 use crate::daemon_lifecycle_text::py_strip;
 
 static CASE_OPTION_ARM: LazyLock<Regex> = LazyLock::new(|| {
@@ -72,10 +68,10 @@ static COMPARED_OPTION: LazyLock<Regex> = LazyLock::new(|| {
 static PARSER_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?:add_argument|add_option|\.option)\s*\(").unwrap());
 
-static STRING_LITERAL: LazyLock<Regex> =
+pub(super) static STRING_LITERAL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#""([^"\\]*)"|'([^'\\]*)'"#).unwrap());
 
-static HELP_KEYWORD: LazyLock<Regex> =
+pub(super) static HELP_KEYWORD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\bhelp\s*=\s*(?:"([^"\\]*)"|'([^'\\]*)')"#).unwrap());
 
 static METAVAR_KEYWORD: LazyLock<Regex> =
@@ -240,7 +236,7 @@ pub(super) fn source_line(line: &str, rest: &[&str], shell: &mut ShellState, fou
 
 /// Whether text ending here leaves a quoted string open, so what follows it
 /// on the line is part of that string.
-fn inside_quotes(before: &str) -> bool {
+pub(super) fn inside_quotes(before: &str) -> bool {
     let mut open: Option<char> = None;
     let mut escaped = false;
     for c in before.chars() {
@@ -275,27 +271,12 @@ fn case_option_arm(arms: &str, body: &str, found: &mut Found) {
 
 /// `build|b)` under a `case` on the first argument: a subcommand.
 fn case_word_arm(arms: &str, body: &str, found: &mut Found) {
-    let description: String = trailing_comment(body)
-        .chars()
-        .take(DESCRIPTION_CHARS)
-        .collect();
+    let description = trailing_comment(body);
     for arm in arms.split('|') {
-        let name = arm.trim().trim_matches(|c: char| c == '"' || c == '\'');
-        let known = found.commands.iter().any(|command| command.name == name);
-        if !COMMAND_NAME.is_match(name)
-            || is_skipped(name)
-            || known
-            || found.commands.len() >= MAX_SOURCE_COMMANDS
-        {
-            continue;
-        }
-        found.commands.push(LocalCliCommand {
-            command_id: name.to_owned(),
-            name: name.to_owned(),
-            usage: name.to_owned(),
-            description: description.clone(),
-            parent_id: None,
-        });
+        found.command(
+            arm.trim().trim_matches(|c: char| c == '"' || c == '\''),
+            description,
+        );
     }
 }
 
@@ -307,7 +288,7 @@ fn trailing_comment(body: &str) -> &str {
 }
 
 /// A parser call's arguments, joined across the next few lines when it wraps.
-fn call_text(first: &str, following: &[&str]) -> String {
+pub(super) fn call_text(first: &str, following: &[&str]) -> String {
     let mut text = first.to_owned();
     let mut depth: i32 = 1 + paren_balance(first);
     for line in following.iter().take(6) {

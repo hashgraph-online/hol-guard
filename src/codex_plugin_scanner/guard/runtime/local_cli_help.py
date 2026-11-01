@@ -11,20 +11,32 @@ import tempfile
 import threading
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .approval_context import build_runtime_launch_identity
 from .command_model import parse_shell_command
 from .local_cli_commands import LocalCliCommand, merge_discovered_commands
 from .local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
+from .local_cli_script_source import (
+    local_import_paths,
+    read_script_source,
+    script_source_path,
+)
+from .local_cli_script_source import (
+    safe_probe_path as _safe_probe_path,
+)
+
+if TYPE_CHECKING:
+    from ..native_local_cli_help_parse import SourceRead
 
 HelpStatus = Literal["ok", "empty", "failed"]
+_HelpHandler = Literal["none", "script", "framework"]
 
 _COMMAND_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,40}$")
 _HELP_TIMEOUT_SECONDS = 2.5
 _HELP_OUTPUT_LIMIT = 8192
 _MAX_NESTED_PROBES = 8
-_SCRIPT_SOURCE_LIMIT = 32 * 1024
+_HANDLER_STRENGTH: dict[str, int] = {"none": 0, "script": 1, "framework": 2}
 _SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
 
 
@@ -74,6 +86,10 @@ def parse_cli_help_text(
         return None
     if rows is None:
         return None
+    return _commands(rows)
+
+
+def _commands(rows: Iterable[dict[str, object]]) -> tuple[LocalCliCommand, ...]:
     return tuple(
         LocalCliCommand(
             command_id=str(row["command_id"]),
@@ -147,6 +163,11 @@ def discover_local_cli_commands(
     """
 
     probe: Callable[[Sequence[str]], str] = runner if runner is not None else run_cli_help
+    source = script_source_path(identity, argv)
+    if source is not None and _resident_reads_sources_first():
+        text = read_script_source(source[0], shebang_only=source[1])
+        if text is not None:
+            return _discover_from_source(identity, argv, source[0], text, probe, guard_home=guard_home)
     output = str(probe(tuple(argv)))
     empty: tuple[LocalCliCommand, ...] = ()
     # The probe printed nothing, so there is no help to send anywhere.
@@ -180,32 +201,101 @@ def _script_source_commands(
 ) -> tuple[LocalCliCommand, ...] | None:
     """What a script's own source names, read from the verified script path.
 
-    A script launched through its interpreter has ``argv`` of
-    ``(interpreter, script, "--help")``. One run directly has ``(script,
-    "--help")`` and counts only when the file starts with a ``#!`` line, so a
-    compiled program is never read as text. Either path already passed the
-    probe's checks. Nothing in the file is run.
+    This is the fallback for a resident without the source-first read, after
+    --help already ran. Nothing in the file is run by reading it.
     """
 
-    if identity.kind == "script" and len(argv) == 3:
-        path, shebang_only = str(argv[1]), False
-    elif identity.kind == "executable" and len(argv) == 2:
-        path, shebang_only = str(argv[0]), True
-    else:
+    source = script_source_path(identity, argv)
+    if source is None:
         return None
-    if not _safe_probe_path(path):
+    text = read_script_source(source[0], shebang_only=source[1])
+    if text is None:
         return None
+    return parse_cli_help_text(text, invocation=(identity.name,), guard_home=guard_home, script_source=True)
+
+
+def _discover_from_source(
+    identity: UnlistedCliIdentity,
+    argv: Sequence[str],
+    script: str,
+    text: str,
+    probe: Callable[[Sequence[str]], str],
+    *,
+    guard_home: Path | None,
+) -> tuple[tuple[LocalCliCommand, ...], HelpStatus]:
+    """Read a script before running it, and run it only as far as its source allows.
+
+    A script that never looks for --help would do its normal work when given
+    it, so it is not run at all: what its source names is all Guard learns.
+    A script whose own code answers --help is run once with it. Only a
+    parser library such as argparse or Commander answers ``<command> --help``
+    for each command without running that command, so only then are the
+    commands probed one by one. A resident that cannot read the source runs
+    nothing.
+    """
+
+    invocation = (identity.name,)
+    read = _source_read(text, invocation, guard_home)
+    empty: tuple[LocalCliCommand, ...] = ()
+    if read is None:
+        return merge_discovered_commands(identity.name, empty), "failed"
+    from_source = list(_commands(read.rows))
+    handler: _HelpHandler = read.help_handler
+    for module in local_import_paths(script, read.imports):
+        module_text = read_script_source(module, shebang_only=False)
+        if module_text is None:
+            continue
+        imported = _source_read(module_text, invocation, guard_home)
+        if imported is None:
+            break
+        from_source.extend(_commands(imported.rows))
+        if _HANDLER_STRENGTH[imported.help_handler] > _HANDLER_STRENGTH[handler]:
+            handler = imported.help_handler
+    if handler == "none":
+        found = _distinct(from_source)
+        return merge_discovered_commands(identity.name, found), "ok" if found else "empty"
+    output = str(probe(tuple(argv)))
+    discovered = parse_cli_help_text(output, invocation=invocation, guard_home=guard_home) if output.strip() else None
+    if discovered and handler == "framework" and len(discovered) <= _MAX_NESTED_PROBES:
+        discovered = _with_nested_commands(
+            tuple(argv), discovered, probe, program=identity.name, parent_help=output, guard_home=guard_home
+        )
+    found = _distinct([*(discovered or ()), *from_source])
+    if found:
+        return merge_discovered_commands(identity.name, found), "ok"
+    return merge_discovered_commands(identity.name, empty), "failed" if discovered is None else "empty"
+
+
+def _resident_reads_sources_first() -> bool:
+    from ..native_local_cli_help_parse import resident_reads_sources_first
+
     try:
-        with open(path, "rb") as handle:
-            raw = handle.read(_SCRIPT_SOURCE_LIMIT)
-    except OSError:
+        return resident_reads_sources_first()
+    except Exception:
+        return False
+
+
+def _source_read(text: str, invocation: Sequence[str], guard_home: Path | None) -> SourceRead | None:
+    from ..config import resolve_guard_home
+    from ..native_local_cli_help_parse import native_local_cli_source_read
+
+    home = guard_home if guard_home is not None else resolve_guard_home()
+    try:
+        return native_local_cli_source_read(guard_home=home, text=text, invocation=tuple(invocation))
+    except Exception:
         return None
-    if shebang_only and not raw.startswith(b"#!"):
-        return None
-    source = raw.decode("utf-8", errors="replace")
-    if not source.strip():
-        return None
-    return parse_cli_help_text(source, invocation=(identity.name,), guard_home=guard_home, script_source=True)
+
+
+def _distinct(commands: Iterable[LocalCliCommand]) -> tuple[LocalCliCommand, ...]:
+    """The first of each command id: help output over the source, the script over its modules."""
+
+    seen: set[str] = set()
+    kept: list[LocalCliCommand] = []
+    for command in commands:
+        if command.command_id not in seen:
+            seen.add(command.command_id)
+            kept.append(command)
+    return tuple(kept)
 
 
 def run_cli_help(argv: Sequence[str]) -> str:
@@ -369,17 +459,3 @@ def _help_env(tmp: str) -> dict[str, str]:
         if system_root:
             env["SYSTEMROOT"] = system_root
     return env
-
-
-def _safe_probe_path(path_text: str) -> bool:
-    path = Path(path_text)
-    if not path.is_absolute():
-        return False
-    try:
-        resolved = path.resolve()
-    except OSError:
-        return False
-    if not resolved.is_file():
-        return False
-    parts = [part.lower() for part in resolved.parts]
-    return not (len(parts) > 1 and parts[0] == "/" and parts[1] in {"proc", "dev", "sys"})

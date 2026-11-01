@@ -224,3 +224,58 @@ fn python_line_boundaries_and_whitespace_are_honoured() {
     let help = "Commands:\u{1c}\u{1f}build  Build it\u{1c}";
     assert_eq!(names(help), vec!["build"]);
 }
+
+#[test]
+fn a_python_docstring_is_read_as_help_text() {
+    let script = concat!(
+        "\"\"\"Usage: tool.py [--force]\n",
+        "\n",
+        "Commands:\n",
+        "  build   Build it\n",
+        "\"\"\"\n",
+        "import sys\n",
+    );
+    assert_eq!(ids(script, None, true), vec!["build", "--force"]);
+}
+
+#[test]
+fn a_javascript_template_literal_is_read_as_help_text() {
+    let script = concat!(
+        "const HELP = `\n",
+        "Usage: tool.mjs <command> [--watch]\n",
+        "\n",
+        "Commands:\n",
+        "  dev   Start the dev server\n",
+        "`;\n",
+        "console.log(HELP);\n",
+    );
+    assert_eq!(ids(script, None, true), vec!["dev", "--watch"]);
+}
+
+fn payload(text: &str, script_source: bool) -> serde_json::Value {
+    let request = LocalCliHelpParseRequestV1 {
+        schema: LOCAL_CLI_HELP_PARSE_REQUEST_SCHEMA.to_owned(),
+        request_id: "local-cli-help-parse-test".to_owned(),
+        text: text.to_owned(),
+        parent_id: None,
+        invocation: vec!["tool".to_owned()],
+        script_source,
+    };
+    let bytes = evaluate_local_cli_help_parse_request(&request).expect("request answers");
+    let result: serde_json::Value = serde_json::from_slice(&bytes).expect("result is JSON");
+    result["payload"].clone()
+}
+
+#[test]
+fn a_script_source_read_says_how_the_script_answers_help() {
+    let script = "import { run } from './lib/run.mjs';\nif (process.argv[2] === 'go') run();\n";
+    let read = payload(script, true);
+    assert_eq!(read["help_handler"], "none");
+    assert_eq!(read["imports"], serde_json::json!(["./lib/run.mjs"]));
+    assert_eq!(read["commands"][0]["command_id"], "go");
+
+    // Help output carries neither field, so older callers see what they did.
+    let help = payload("Commands:\n  build  Build it\n", false);
+    assert!(help.get("help_handler").is_none());
+    assert!(help.get("imports").is_none());
+}
