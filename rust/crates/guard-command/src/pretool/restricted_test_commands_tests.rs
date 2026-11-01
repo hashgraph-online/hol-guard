@@ -1,15 +1,44 @@
-use super::readonly_test_reason;
+use super::{package_permission_contained, readonly_test_reason};
 use crate::contained_node_tool::{node_tool_route, NodeToolRoute, ToolMode};
 
-fn reason(command: &str) -> Option<&'static str> {
-    let model = crate::parse_command(&crate::CommandModelRequestV1 {
+fn parsed(command: &str) -> crate::CanonicalCommandV1 {
+    crate::parse_command(&crate::CommandModelRequestV1 {
         command: command.to_owned(),
         dialect: "posix".to_owned(),
         transport: "shell_string".to_owned(),
         extraction_provenance: "guard-shell".to_owned(),
     })
-    .unwrap();
-    readonly_test_reason(&model)
+    .unwrap()
+}
+
+fn reason(command: &str) -> Option<&'static str> {
+    readonly_test_reason(&parsed(command))
+}
+
+#[test]
+fn the_node_test_reason_carries_bun_s_package_protection_permission() {
+    // Bun is a package-manager image, so the package firewall reports its
+    // package-protection permission on every Bun launch. `bun test` resolves to
+    // the Node test reason, and a reason that does not accept that permission
+    // leaves the run at review however well the rest of the screen reads.
+    for command in [
+        "bun test",
+        "bun test src/parser.test.ts",
+        "bun test --coverage",
+        "bun test -t adds",
+    ] {
+        let model = parsed(command);
+        let found = readonly_test_reason(&model);
+        assert_eq!(
+            found,
+            Some("native_node_test_readonly_containment_required"),
+            "{command}"
+        );
+        assert!(
+            package_permission_contained(found, Some(&model)),
+            "{command}"
+        );
+    }
 }
 
 #[test]

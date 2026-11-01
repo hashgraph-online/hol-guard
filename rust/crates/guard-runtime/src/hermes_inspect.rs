@@ -81,10 +81,10 @@ pub(crate) fn decode_ignoring_errors(bytes: &[u8]) -> String {
     out
 }
 
-type StatKey = (u64, u64, u32, u64, u64, i128, i128, u32);
+pub(crate) type StatKey = (u64, u64, u32, u64, u64, i128, i128, u32);
 
 #[cfg(unix)]
-fn stat_key(metadata: &Metadata) -> StatKey {
+pub(crate) fn stat_key(metadata: &Metadata) -> StatKey {
     use std::os::unix::fs::MetadataExt;
     (
         metadata.dev(),
@@ -99,7 +99,7 @@ fn stat_key(metadata: &Metadata) -> StatKey {
 }
 
 #[cfg(windows)]
-fn stat_key(metadata: &Metadata) -> StatKey {
+pub(crate) fn stat_key(metadata: &Metadata) -> StatKey {
     use std::os::windows::fs::MetadataExt;
     (
         0,

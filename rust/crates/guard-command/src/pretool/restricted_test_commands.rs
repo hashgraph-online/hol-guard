@@ -235,6 +235,7 @@ pub(super) fn package_permission_contained(
         Some(
             "native_vitest_readonly_containment_required"
             | "native_package_test_readonly_containment_required"
+            | "native_node_test_readonly_containment_required"
             | "native_node_tool_readonly_containment_required"
             | "native_node_build_output_containment_required",
         ) => true,
@@ -548,6 +549,15 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         }
         // Same evaluation boundary as Node; the sink approves the Bun image.
         ("bun", args) if bun_eval_args(args) => return Some(BUN_EVAL_REASON),
+        // `bun test` is Bun's own runner rather than the package `test`
+        // script, so it is admitted as the direct test run it is. This sits
+        // ahead of the manager-`test` arm below, which would otherwise hand
+        // the command a package-test receipt no manifest can resolve.
+        ("bun", [test, args @ ..])
+            if test == "test" && crate::contained_argv::bun_test_runs_once(args) =>
+        {
+            return Some("native_node_test_readonly_containment_required");
+        }
         (name, args) if tsx_test_script_args(name, args) => {
             return Some("native_vitest_readonly_containment_required");
         }

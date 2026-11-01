@@ -281,9 +281,21 @@ fn bun_runner_invocation(
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
 pub(crate) use runner_calls::{
-    contained_runner_call, jest_contained_call, jest_runs_once, mocha_contained_call,
-    mocha_runs_once, vitest_runs_once,
+    bun_test_runs_once, contained_runner_call, jest_contained_call, jest_runs_once,
+    mocha_contained_call, mocha_runs_once, vitest_runs_once,
 };
+
+/// True when a command is Bun's own test runner taking one contained pass.
+///
+/// `bun test` runs Bun's runner, never the package `test` script, so the
+/// package-test alias leaves it alone and it is read here as the direct run
+/// it is. The Node test profile carries it: Bun reads files through the same
+/// syscalls, and the runner needs nothing from outside the workspace.
+pub fn bun_test_invocation(command: &[String]) -> bool {
+    basename(command) == "bun"
+        && command.get(1).is_some_and(|word| word == "test")
+        && bun_test_runs_once(&command[2..])
+}
 
 /// The runner a contained call names, with the arguments the sink hands it.
 fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
@@ -755,9 +767,10 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
         vec![]
     };
     let index = 1 + runtime.len();
-    let node_test =
+    let node_test_argv =
         command.get(index).is_some_and(|v| v == "--test") && matches!(name, "node" | "nodejs");
     let bun = bun_vitest_invocation(command);
+    let bun_test = bun_test_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
         && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
@@ -772,6 +785,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                         || local_mocha_entry(&entry)
                 })));
     let node_tool = bun.is_none()
+        && !bun_test
         && manager_exec_runner(command).is_none()
         && !command.is_empty()
         && (matches!(
@@ -798,7 +812,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     // run never pays for a second reading to learn it is not an alias.
     Ok(json!({
         "inline_eval": inline,
-        "node_test": node_test,
+        "node_test": node_test_argv || bun_test,
         "vitest": vitest,
         "git": name == "git",
         "node_tool": node_tool,

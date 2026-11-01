@@ -169,6 +169,11 @@ fn nearest_project_root(
 
 fn prepare_node(input: &Input) -> Result<Value, RestrictedPytestError> {
     let argv = normalized_command(&input.command)?;
+    // `bun test` shares this profile: the same read-only boundary, a
+    // different image approval.
+    if Path::new(&argv[0]).file_name().and_then(OsStr::to_str) == Some("bun") {
+        return bun::prepare_test(input, &argv);
+    }
     let runtime = node_runtime_args(&argv)?;
     let index = 1 + runtime.len();
     if argv.len() <= index
