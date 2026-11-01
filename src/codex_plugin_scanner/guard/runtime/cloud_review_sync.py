@@ -21,9 +21,9 @@ from .cloud_review_batching import (
 from .cloud_review_event_delivery import post_review_events
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
 from .cloud_review_retry_recovery import (
-    dead_letter_exhausted_review_events,
-    recover_rejected_review_events,
+    forget_rejection_counts,
     retry_result_message,
+    settle_rejected_review_events,
 )
 from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
 from .native_workspace_review_context import NativeWorkspaceReviewContextProbeState
@@ -271,7 +271,7 @@ def sync_cloud_review_events_once(
     # A batch that Cloud answered without accepting, acknowledging, or
     # dead-lettering anything ends the run so the worker can back off the whole
     # queue instead of sending the next due batch straight away.
-    made_progress = stalled_batch = False
+    stalled_batch = False
     retry_after_ms = 0
     native_context_probe_state = getattr(store, _PROBE_STATE_ATTRIBUTE, None)
     setattr(store, _PROBE_STATE_ATTRIBUTE, None)
@@ -389,33 +389,16 @@ def sync_cloud_review_events_once(
                         _retry_review_events(store, sequences, error=message, binding=delivery_binding)
                         continue
                     store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
-                    rejected_before_recovery = len(retry_sequences)
-                    retry_sequences, retry_results = recover_rejected_review_events(
+                    retry_sequences, retry_results, progressed = settle_rejected_review_events(
                         store,
                         sequences=retry_sequences,
                         results=retry_results,
                         events=dict(zip(sequences, events, strict=True)),
-                        binding=delivery_binding,
-                        acknowledged_through=response.get("acknowledgedThrough"),
-                    )
-                    resolved_locally = rejected_before_recovery - len(retry_sequences)
-                    still_retryable, dead_lettered = dead_letter_exhausted_review_events(
-                        store,
-                        sequences=retry_sequences,
                         acknowledged=acknowledged_sequences,
+                        acknowledged_through=response.get("acknowledgedThrough"),
                         binding=delivery_binding,
                     )
-                    retryable = set(still_retryable)
-                    retry_results = [
-                        result
-                        for sequence, result in zip(retry_sequences, retry_results, strict=True)
-                        if sequence in retryable
-                    ]
-                    retry_sequences = still_retryable
-                    if acknowledged_sequences or resolved_locally or dead_lettered:
-                        made_progress = True
-                    else:
-                        stalled_batch = True
+                    stalled_batch = not progressed
                     if retry_sequences:
                         message = retry_result_message(retry_results)
                         all_errors.append(message)
@@ -428,7 +411,7 @@ def sync_cloud_review_events_once(
                     if snapshot_repairs and store.requeue_pending_review_events(
                         changed_at=_now(), require_binding=True, snapshot_repair_sequences=snapshot_repairs
                     ):
-                        made_progress, stalled_batch = True, False
+                        stalled_batch = False
                     if stalled_batch:
                         break
                     continue
@@ -447,6 +430,7 @@ def sync_cloud_review_events_once(
                 stalled_batch = True
                 break
             store.acknowledge_review_events(sequences, **delivery_binding)
+            forget_rejection_counts(store, sequences)
 
         _, outbox_status = _complete_sync_state(
             store,
@@ -474,7 +458,7 @@ def sync_cloud_review_events_once(
             errors=all_errors,
             batches=batches,
             outbox=outbox_status,
-            stalled=stalled_batch and not made_progress,
+            stalled=stalled_batch,
             retry_after_ms=retry_after_ms if stalled_batch else 0,
         )
     except urllib.error.HTTPError as error:

@@ -212,3 +212,214 @@ def test_batch_without_progress_reports_a_queue_wide_stall_with_the_server_hint(
 
     assert result["stalled"] is True
     assert result["retry_after_ms"] == 45_000
+
+
+def _rejection_counts(store: object) -> dict[str, int]:
+    from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import _REJECTION_COUNTS_KEY
+
+    payload = store.get_sync_payload(f"{_REJECTION_COUNTS_KEY}:{store.guard_source}")  # type: ignore[attr-defined]
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _release_backoff(store: object) -> None:
+    with store._connect() as connection:  # type: ignore[attr-defined]
+        connection.execute(
+            "update guard_review_outbox_events set next_attempt_at = null where binding_status = 'ready'"
+        )
+
+
+def test_stall_after_an_accepted_batch_still_reports_a_queue_wide_stall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("first-request"))
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    auth: dict[str, object] = {"sync_url": "https://guard.example", **binding}
+    calls: list[int] = []
+
+    def post(_auth: dict[str, object], *, path: str, payload: dict[str, object]) -> dict[str, object]:
+        del path
+        events = payload["events"]
+        assert isinstance(events, list)
+        calls.append(len(events))
+        if len(calls) == 1:
+            add_review_request(store, review_request("second-request"))
+            results = [{"eventId": event["eventId"], "status": "accepted"} for event in events]
+            return {
+                "protocolVersion": 2,
+                "acknowledgedThrough": 100,
+                "accepted": len(events),
+                "rejected": 0,
+                "results": results,
+            }
+        results = [
+            {"eventId": event["eventId"], "status": "rejected", "code": "review_event_unrecognized_failure"}
+            for event in events
+        ]
+        return {
+            "protocolVersion": 2,
+            "acknowledgedThrough": 100,
+            "accepted": 0,
+            "rejected": len(events),
+            "retryAfterMs": 30_000,
+            "results": results,
+        }
+
+    monkeypatch.setattr(delivery, "_post_json", post)
+
+    result = cloud_review_sync.sync_cloud_review_events_once(store, auth)
+
+    assert len(calls) == 2
+    assert result["stalled"] is True
+    assert result["retry_after_ms"] == 30_000
+
+
+def test_per_event_retry_hints_never_exhaust_the_attempt_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import MAX_REJECTED_DELIVERY_ATTEMPTS
+
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("busy-request"))
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    auth: dict[str, object] = {"sync_url": "https://guard.example", **binding}
+
+    def post(_auth: dict[str, object], *, path: str, payload: dict[str, object]) -> dict[str, object]:
+        del path
+        events = payload["events"]
+        assert isinstance(events, list)
+        results = [
+            {"eventId": event["eventId"], "status": "rejected", "code": "review_event_busy", "retryAfterMs": 1_000}
+            for event in events
+        ]
+        return {
+            "protocolVersion": 2,
+            "acknowledgedThrough": 100,
+            "accepted": 0,
+            "rejected": len(events),
+            "results": results,
+        }
+
+    monkeypatch.setattr(delivery, "_post_json", post)
+    for _ in range(MAX_REJECTED_DELIVERY_ATTEMPTS + 3):
+        _release_backoff(store)
+        _ = cloud_review_sync.sync_cloud_review_events_once(store, auth)
+
+    rows = _outbox_rows(store)
+    assert rows and all(row["binding_status"] == "ready" and row["quarantine_reason"] is None for row in rows)
+
+
+def test_snapshot_repair_for_a_pending_request_does_not_count_toward_the_cap(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import (
+        MAX_REJECTED_DELIVERY_ATTEMPTS,
+        dead_letter_exhausted_review_events,
+    )
+
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("repairing-request"))
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    with store._connect() as connection:
+        rows = connection.execute("select stream_sequence, local_request_id from guard_review_outbox_events").fetchall()
+    sequences = [int(row["stream_sequence"]) for row in rows]
+    events = {int(row["stream_sequence"]): {"localRequestId": row["local_request_id"]} for row in rows}
+    results: list[dict[str, object]] = [{"code": "review_event_snapshot_required", "status": "rejected"}] * len(rows)
+
+    for _ in range(MAX_REJECTED_DELIVERY_ATTEMPTS + 3):
+        retained, dead_lettered = dead_letter_exhausted_review_events(
+            store, sequences=sequences, results=results, events=events, cleared=[], binding=binding
+        )
+        assert retained == sequences and dead_lettered == 0
+    assert _rejection_counts(store) == {}
+
+
+def test_rejection_counts_survive_a_backlog_larger_than_the_tracking_window(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.cloud_review_retry_recovery import dead_letter_exhausted_review_events
+
+    store = connected_exact_review_store(tmp_path)
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    sequences = list(range(1, 4100))
+    results: list[dict[str, object]] = [{"code": "review_event_unrecognized_failure"}] * len(sequences)
+
+    for _ in range(2):
+        _ = dead_letter_exhausted_review_events(
+            store, sequences=sequences, results=results, events={}, cleared=[], binding=binding
+        )
+
+    counts = _rejection_counts(store)
+    assert counts["1"] == 2 and len(counts) == len(sequences)
+
+
+@pytest.mark.parametrize("acknowledgement", ["per-event", "whole-batch"])
+def test_rejection_counts_are_cleared_when_events_leave_the_retry_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, acknowledgement: str
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("recovering-request"))
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    auth: dict[str, object] = {"sync_url": "https://guard.example", **binding}
+    accepting = {"value": False}
+
+    def post(_auth: dict[str, object], *, path: str, payload: dict[str, object]) -> dict[str, object]:
+        del path
+        events = payload["events"]
+        assert isinstance(events, list)
+        status = "accepted" if accepting["value"] else "rejected"
+        code = None if accepting["value"] else "review_event_unrecognized_failure"
+        results = [{"eventId": event["eventId"], "status": status, "code": code} for event in events]
+        accepted = len(events) if accepting["value"] else 0
+        return {
+            "protocolVersion": 2,
+            "acknowledgedThrough": 100,
+            "accepted": accepted,
+            "rejected": len(events) - accepted,
+            "results": results,
+        }
+
+    monkeypatch.setattr(delivery, "_post_json", post)
+    _ = cloud_review_sync.sync_cloud_review_events_once(store, auth)
+    assert _rejection_counts(store)
+
+    if acknowledgement == "whole-batch":
+        # A reply without per-event results acknowledges the whole batch.
+        monkeypatch.setattr(
+            cloud_review_sync,
+            "_post_events_with_oauth_refresh",
+            lambda _store, context, events: ({"accepted": len(events), "rejected": 0}, context),
+        )
+    accepting["value"] = True
+    _release_backoff(store)
+    _ = cloud_review_sync.sync_cloud_review_events_once(store, auth)
+
+    assert _rejection_counts(store) == {}
+    assert all(row["acknowledged_at"] is not None for row in _outbox_rows(store))
+
+
+def test_snapshot_required_is_retried_while_an_earlier_snapshot_is_still_queued(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("queued-snapshot"))
+    assert store.requeue_pending_review_events(
+        changed_at=datetime.now(timezone.utc).isoformat(), request_ids={"queued-snapshot"}
+    )
+    with store._connect() as connection:
+        connection.execute("update approval_requests set status = 'resolved' where request_id = 'queued-snapshot'")
+        connection.execute(
+            "update guard_review_outbox_events set next_attempt_at = '2099-01-01T00:00:00+00:00' "
+            "where stream_sequence = (select min(stream_sequence) from guard_review_outbox_events)"
+        )
+    binding = store.get_review_event_oauth_binding()
+    assert binding is not None
+    auth: dict[str, object] = {"sync_url": "https://guard.example", **binding}
+    posts: list[int] = []
+    monkeypatch.setattr(delivery, "_post_json", _quarantine_poster("review_event_snapshot_required", "rejected", posts))
+
+    _ = cloud_review_sync.sync_cloud_review_events_once(store, auth)
+
+    assert posts
+    rows = _outbox_rows(store)
+    assert len(rows) >= 2
+    assert all(row["binding_status"] == "ready" and row["quarantine_reason"] is None for row in rows)

@@ -191,8 +191,14 @@ def _cloud_sync_sync_loop(
                 stalled_streak += 1
                 # The retry bookkeeping of this run bumped the wake generation.
                 # Re-read it so that self-inflicted wake does not cancel the
-                # queue-wide backoff and resend the next due batch at once.
-                wake_signal.wait(wake_signal.generation(), _stalled_wait(stalled_streak, result.get("retry_after_ms")))
+                # queue-wide backoff and resend the next due batch at once. A
+                # stop request sets the event before it notifies, so check it
+                # after the re-read: a notification the re-read absorbed is
+                # then still visible instead of sleeping through shutdown.
+                stalled_generation = wake_signal.generation()
+                if stop_event.is_set():
+                    break
+                wake_signal.wait(stalled_generation, _stalled_wait(stalled_streak, result.get("retry_after_ms")))
                 continue
             stalled_streak = 0
             synced = result.get("synced", 0)
@@ -205,6 +211,7 @@ def _cloud_sync_sync_loop(
                     continue
         except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
             error_streak += 1
+            stalled_streak = 0
             state = sync._load_sync_state(store)
             state.update(
                 {
@@ -221,6 +228,7 @@ def _cloud_sync_sync_loop(
             sync._save_sync_state(store, state)
         except Exception as error:
             error_streak += 1
+            stalled_streak = 0
             _LOGGER.exception("Unexpected error in Cloud Review sync loop")
             state = sync._load_sync_state(store)
             # A sync attempt clears the stored code when it starts, so a surviving
