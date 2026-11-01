@@ -145,11 +145,16 @@ pub(crate) fn mocha_runs_once(arguments: &[String]) -> bool {
 /// own watch mode and `--node-option=--inspect-brk` stops the process until a
 /// debugger attaches. Either leaves a run that never finishes, and the value
 /// names a Node option rather than a path, so the workspace screen does not
-/// answer for it. The reading does not model which values are safe: a call
-/// that forwards anything to Node keeps its review.
+/// answer for it. yargs-parser answers an option by its alias whichever way
+/// it is spelled, so the long `--n` forwards the same option the short group
+/// does. The reading does not model which values are safe: a call that
+/// forwards anything to Node keeps its review.
 fn forwards_a_node_option(argument: &str) -> bool {
     short_options_carry(argument, 'n')
-        || matches!(option_name(argument).as_str(), "nodeoption" | "nodeoptions")
+        || matches!(
+            option_name(argument).as_str(),
+            "n" | "nodeoption" | "nodeoptions"
+        )
 }
 
 /// A watching Jest run never finishes inside the sink, so only a call that

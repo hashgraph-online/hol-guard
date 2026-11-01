@@ -120,6 +120,10 @@ fn a_mocha_run_that_watches_or_leaves_its_workspace_keeps_its_review() {
         "npx mocha --node-option=watch",
         "npx mocha --node-option=--inspect-brk",
         "npx mocha -n --inspect-brk",
+        // yargs-parser answers `-n` by its long spelling too, so `--n` hands
+        // Node the same option the short group does.
+        "npx mocha --n watch",
+        "npx mocha --n=--inspect-brk",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }
