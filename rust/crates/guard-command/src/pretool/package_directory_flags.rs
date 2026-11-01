@@ -176,7 +176,11 @@ pub(in crate::pretool) fn as_cd_list(
     {
         return None;
     }
-    let index = usize::from(arguments.first() == Some(&"run"));
+    let index = usize::from(
+        arguments
+            .first()
+            .is_some_and(|word| crate::contained_argv::names_script_run_verb(executable, word)),
+    );
     let flag = *arguments.get(index)?;
     let (directory, consumed) = if root_flags.contains(&flag) {
         (workspace_root(context.cwd?)?, 1)

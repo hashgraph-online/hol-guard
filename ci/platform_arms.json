@@ -376,7 +376,7 @@
    "verdict": "windows-unsupported",
    "note": "Only the Node build and Node tool reasons are filtered here; every other contained reason is passed through for `generic.rs::windows_contained` to decide. That allowlist is where a Windows containment profile is actually admitted.",
    "cfg": "not(unix)",
-   "body": "2d8559fe0d22"
+   "body": "af913c8cf3ae"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",

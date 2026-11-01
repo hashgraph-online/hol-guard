@@ -470,6 +470,37 @@ pub(crate) fn manager_reporting_options_peeled<'a>(
     arguments
 }
 
+/// Whether `word` is the verb that runs a package script. npm and pnpm both
+/// list `run-script` as an alias of `run`, and npm's table carries the two
+/// transposed spellings `rum` and `urn` as well, so every one of them starts
+/// the same script the same way. yarn and bun spell it `run` alone.
+///
+/// An alias runs exactly what the canonical spelling runs, so the containment
+/// routes read them as one verb. Reading only `run` would send
+/// `npm run-script lint` to review while the `npm run lint` beside it stays
+/// quiet.
+pub(crate) fn names_script_run_verb(manager: &str, word: &str) -> bool {
+    let manager = program_name(manager);
+    word == "run"
+        || (matches!(manager, "npm" | "pnpm") && word == "run-script")
+        || (manager == "npm" && matches!(word, "rum" | "urn"))
+}
+
+/// The script a bare verb names when the manager reads it as its own `test`
+/// command. `t` and `tst` are documented aliases of `test` for npm and pnpm,
+/// and both run the manifest's `test` entry, so the name this returns is the
+/// key the sink looks up rather than the word the line spells.
+///
+/// Both managers resolve these in their command table, before any lookup
+/// against the manifest's scripts, so a project that declares a script named
+/// `t` cannot reach it this way either. yarn and bun have no such alias, and
+/// pass a bare word straight to the manifest, so reading `t` as `test` for
+/// them would run an entry the line never named.
+pub(crate) fn aliased_test_script_name(manager: &str, word: &str) -> Option<&'static str> {
+    (matches!(program_name(manager), "npm" | "pnpm") && matches!(word, "t" | "tst"))
+        .then_some("test")
+}
+
 /// The arguments from the tool on, when `command` is a manager's bare `exec`
 /// spelling of a local-bin run: `npm exec`, `npm x`, `pnpm exec` or
 /// `yarn exec`, each with an optional `--`. The sink runs the project's own
