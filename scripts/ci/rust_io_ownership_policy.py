@@ -277,7 +277,6 @@ _PERSISTENCE_PATH_PREFIXES: Final = (
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
-    "src/codex_plugin_scanner/guard/guard_home_state.py",
     "src/codex_plugin_scanner/guard/store_base.py",
     "src/codex_plugin_scanner/guard/store_mcp_catalog.py",
     "src/codex_plugin_scanner/guard/store_storage_gate.py",

@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import shutil
-import sqlite3
-import tempfile
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
 from datetime import datetime, timedelta, timezone
@@ -22,7 +18,6 @@ from .config_constants import (
 )
 from .config_file_io import ConfigFileTrustError
 from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
-from .guard_home_state import database_has_custom_extension_state
 from .harness_posture import (
     HARNESS_POSTURES_KEY,
     effective_harness_postures,
@@ -83,33 +78,12 @@ def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) ->
 
 
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
-NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
-    {
-        "daemon-state.json",
-        "guard.db-journal",
-        "guard.db-shm",
-        "guard.db-wal",
-        "schema-migration.lock",
-        "storage-access.lock",
-    }
-)
-GUARD_HOME_METADATA_FILES = frozenset(
-    {
-        "oauth-keychain-access.json",
-        "schema-migration.lock",
-        "storage-access.lock",
-        "system-keyring-availability.json",
-    }
-)
-GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
-GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
+# One legacy home's move can back up a large guard.db; the runtime caps
+# each database copy at five seconds.
+_GUARD_HOME_RESOLVE_TIMEOUT_SECONDS = 30.0
 
 DEFAULT_SECURITY_LEVEL = "balanced"
 VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
-
-
-class GuardHomeMigrationError(RuntimeError):
-    """Raised when legacy Guard state cannot be migrated safely."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,17 +213,22 @@ def resolve_guard_home_for_user_home(user_home: Path) -> Path:
     legacy_home = _existing_legacy_guard_home(user_home)
     if legacy_home is None:
         return canonical_home
-    if _guard_home_has_sync_credentials(canonical_home):
-        return canonical_home
-    if _guard_home_has_state(canonical_home):
-        return canonical_home
-    if _guard_home_has_sync_credentials(legacy_home) or _guard_home_has_state(legacy_home):
-        try:
-            _migrate_guard_home_transactionally(source=legacy_home, destination=canonical_home)
-        except GuardHomeMigrationError:
-            return legacy_home
-        return canonical_home
-    return canonical_home
+    # `guard_home_resolve.rs` picks between the homes and moves a legacy home
+    # with state into the canonical one.
+    from .mdm.runtime_request import runtime_answer
+
+    answer = runtime_answer(
+        "native-guard-home-resolve-v1",
+        "guard-home-resolve",
+        {"schema": "guard-home-resolve.v1", "user_home": str(user_home.absolute())},
+        output_limit=64 * 1024,
+        timeout_seconds=_GUARD_HOME_RESOLVE_TIMEOUT_SECONDS,
+    )
+    guard_home = None if answer is None else answer.get("guard_home")
+    if isinstance(guard_home, str) and guard_home:
+        return Path(guard_home)
+    # An older runtime: use the canonical home once it exists, the legacy one until then.
+    return canonical_home if canonical_home.exists() else legacy_home
 
 
 def _effective_managed_policy(managed_state: ManagedPolicyState) -> ManagedPolicy | None:
@@ -621,179 +600,3 @@ def _existing_legacy_guard_home(user_home: Path) -> Path | None:
         if candidate.exists():
             return candidate
     return None
-
-
-def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
-    if not source.exists():
-        return
-    destination.mkdir(parents=True, exist_ok=True)
-    replace_database = not _guard_home_has_sync_credentials(destination) and not _guard_home_has_state(destination)
-    for entry in source.iterdir():
-        if entry.name in NON_MIGRATED_GUARD_RUNTIME_FILES:
-            continue
-        target = destination / entry.name
-        if target.exists():
-            if replace_database and entry.name == "secrets" and entry.is_dir() and target.is_dir():
-                shutil.rmtree(target)
-                shutil.copytree(entry, target)
-                continue
-            if entry.is_dir() and target.is_dir():
-                _migrate_guard_home_state(source=entry, destination=target)
-                continue
-            if replace_database and entry.name == "guard.db" and entry.is_file():
-                _copy_guard_database(source=entry, destination=target)
-            continue
-        if entry.is_dir():
-            shutil.copytree(entry, target)
-            continue
-        if entry.name == "guard.db" and entry.is_file():
-            _copy_guard_database(source=entry, destination=target)
-            continue
-        shutil.copy2(entry, target)
-
-
-def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
-            staging_root = Path(temp_dir) / destination.name
-            _migrate_guard_home_state(source=source, destination=staging_root)
-            if destination.exists():
-                _refuse_live_database_companions(destination)
-                _remove_guard_home_destination(destination)
-            shutil.move(str(staging_root), str(destination))
-    except OSError:
-        raise GuardHomeMigrationError("guard home migration failed") from None
-
-
-def _refuse_live_database_companions(destination: Path) -> None:
-    """Never swap guard.db out from under a non-empty WAL or rollback journal.
-
-    A later checkpoint of the old log would write stale pages into the new
-    database, and another Guard process may still hold the old files open.
-    """
-
-    for suffix in ("-wal", "-journal"):
-        companion = destination / f"guard.db{suffix}"
-        try:
-            if companion.is_file() and companion.stat().st_size > 0:
-                raise GuardHomeMigrationError("guard home has a live database log")
-        except OSError:
-            raise GuardHomeMigrationError("guard home migration failed") from None
-
-
-def _remove_guard_home_destination(path: Path) -> None:
-    for entry in path.iterdir():
-        if entry.is_dir():
-            shutil.rmtree(entry)
-            continue
-        entry.unlink()
-    path.rmdir()
-
-
-def _copy_guard_database(*, source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary_destination = destination.with_name(f"{destination.name}.migrating")
-    deadline = time.monotonic() + GUARD_DB_BACKUP_TIMEOUT_SECONDS
-    try:
-        with (
-            sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection,
-            sqlite3.connect(temporary_destination) as destination_connection,
-        ):
-            source_connection.backup(
-                destination_connection,
-                pages=128,
-                progress=lambda *_: _raise_when_backup_deadline_elapsed(deadline),
-                sleep=GUARD_DB_BACKUP_SLEEP_SECONDS,
-            )
-        _prune_retired_guard_db_sync_state(temporary_destination)
-        temporary_destination.replace(destination)
-    except (TimeoutError, sqlite3.Error):
-        if temporary_destination.exists():
-            temporary_destination.unlink()
-        raise GuardHomeMigrationError("guard.db migration failed") from None
-
-
-def _prune_retired_guard_db_sync_state(database_path: Path) -> None:
-    try:
-        with sqlite3.connect(database_path) as connection:
-            connection.execute("delete from sync_state where state_key = 'credentials'")
-    except sqlite3.Error:
-        return
-
-
-def _raise_when_backup_deadline_elapsed(deadline: float) -> None:
-    if time.monotonic() >= deadline:
-        raise TimeoutError("guard.db migration timed out")
-
-
-def _guard_home_has_state(path: Path) -> bool:
-    if not path.exists():
-        return False
-    entries = list(path.iterdir())
-    if not entries:
-        return False
-    if any(
-        entry.name
-        not in {
-            "guard.db",
-            "secrets",
-            *GUARD_HOME_METADATA_FILES,
-            *NON_MIGRATED_GUARD_RUNTIME_FILES,
-        }
-        for entry in entries
-    ):
-        return True
-    secrets_dir = path / "secrets"
-    if secrets_dir.is_dir() and any(entry.name not in {"key.bin", ".key-init.lock"} for entry in secrets_dir.iterdir()):
-        return True
-    database_path = path / "guard.db"
-    if not database_path.is_file():
-        return True
-    try:
-        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
-            tables = {str(row[0]) for row in connection.execute("select name from sqlite_master where type = 'table'")}
-            for table_name in (
-                "harness_installations",
-                "artifact_snapshots",
-                "artifact_hashes",
-                "artifact_diffs",
-                "artifact_inventory",
-                "policy_decisions",
-                "runtime_receipts",
-                "publisher_cache",
-                "guard_events",
-                "managed_installs",
-                "guard_sessions",
-                "guard_operations",
-                "guard_operation_items",
-                "guard_client_attachments",
-                "guard_surface_opens",
-                "approval_requests",
-            ):
-                if table_name not in tables:
-                    continue
-                if connection.execute(f"select 1 from {table_name} limit 1").fetchone() is not None:
-                    return True
-            return database_has_custom_extension_state(connection, tables)
-    except sqlite3.Error:
-        return True
-
-
-def _guard_home_has_sync_credentials(path: Path) -> bool:
-    database_path = path / "guard.db"
-    if not database_path.is_file():
-        return False
-    try:
-        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
-            row = connection.execute(
-                """
-                select 1
-                from sync_state
-                where state_key = 'oauth_local_credentials'
-                limit 1
-                """
-            ).fetchone()
-    except sqlite3.Error:
-        return False
-    return row is not None
