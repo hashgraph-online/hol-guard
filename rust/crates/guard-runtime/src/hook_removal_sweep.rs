@@ -122,18 +122,18 @@ fn answer(request: &Request) -> Result<Value, String> {
     }
 }
 
+/// Candidate paths, each with the text the request spelled it as.
+type Candidates = Vec<(String, PathBuf)>;
+
 /// Existing candidates with a sweepable suffix, split into regular files
 /// inside a root and symlinks, each kept once in request order.
-fn split_candidates(
-    candidates: Vec<(String, PathBuf)>,
-    roots: &[PathBuf],
-) -> (Vec<(String, PathBuf)>, Vec<(String, PathBuf)>) {
+fn split_candidates(candidates: Candidates, roots: &[PathBuf]) -> (Candidates, Candidates) {
     let roots: Vec<PathBuf> = roots
         .iter()
         .filter_map(|root| fs::canonicalize(root).ok())
         .collect();
-    let mut files: Vec<(String, PathBuf)> = Vec::new();
-    let mut links: Vec<(String, PathBuf)> = Vec::new();
+    let mut files: Candidates = Vec::new();
+    let mut links: Candidates = Vec::new();
     for (text, path) in candidates {
         let sweepable = matches!(
             path.extension().and_then(|suffix| suffix.to_str()),

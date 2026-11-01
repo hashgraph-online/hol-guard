@@ -48,7 +48,7 @@ fn guard_signatures_match() {
     for command in [
         GUARD_COMMAND,
         "/Users/x/.local/bin/hol-guard hook --harness codex",
-        "C:\\Users\\x\\bin\\hol-guard.exe hook --harness codex",
+        "\"C:\\Users\\x\\bin\\hol-guard.exe\" hook --harness codex",
         "python -m codex_plugin_scanner.cli guard hook --harness codex",
         "python -c \"main(['guard', 'hook'])\" -m codex_plugin_scanner.cli",
         "bash -c '/home/x/.hol-guard/managed/bounded-hooks/run.sh'",
