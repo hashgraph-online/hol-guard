@@ -8,7 +8,7 @@
 #[path = "contained_package_test_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{jest_contained_call, program_name};
+use crate::contained_argv::{jest_contained_call, mocha_contained_call, program_name};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, SCRIPT_LEXER};
 use serde_json::{Map, Value};
@@ -117,7 +117,11 @@ pub(crate) fn script_tokens(
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         jest_contained_call(&call)
     };
-    if !node && !vitest && !jest {
+    let mocha = program_name(runner) == "mocha" && {
+        let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+        mocha_contained_call(&call)
+    };
+    if !node && !vitest && !jest && !mocha {
         // A project may name a read-only tool run for the suite it checks,
         // such as a `test:types` entry holding `tsc --noEmit`. The words the
         // manifest declares are the run either way, so the body goes back as

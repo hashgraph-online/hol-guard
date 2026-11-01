@@ -278,6 +278,8 @@ mod sfrs_git_fetch;
 mod sfrs_git_index;
 mod sfrs_git_routines;
 #[cfg(all(test, unix))]
+mod sfrs_git_routines_tests;
+#[cfg(all(test, unix))]
 mod sfrs_github_body_vectors;
 #[cfg(all(test, not(windows)))]
 mod sfrs_github_vectors;
@@ -381,6 +383,9 @@ pub mod shell_request_authority;
 #[cfg(test)]
 mod shell_secret_read_containment_tests;
 mod shell_secret_read_flow;
+mod shell_secret_read_glob;
+#[cfg(test)]
+mod shell_secret_read_glob_tests;
 #[cfg(test)]
 mod shell_secret_read_script_operand_tests;
 mod shell_secret_read_support;
