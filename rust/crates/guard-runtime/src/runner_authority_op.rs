@@ -106,6 +106,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
         "sync_url" => sync_url::sync_url(args),
+        "cloud_http_error" => super::runner_cloud_http_error::cloud_http_error(args),
         "network_check" => crate::network_protection::check_op(args),
         "pain_signal_batch" => signals::pain_signal_batch(args),
         "value_metrics" => signals::value_metrics(args),

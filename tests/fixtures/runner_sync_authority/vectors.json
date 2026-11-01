@@ -14818,6 +14818,2620 @@
      "stale": false
     }
    }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 empty / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 403: Forbidden",
+    "retryable": false,
+    "sync_message": "HTTP Error 403: Forbidden",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 403: Forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "524 empty / plain",
+   "args": {
+    "status": 524,
+    "reason": "",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 524: ",
+    "retryable": true,
+    "sync_message": "HTTP Error 524: ",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 524: ",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 empty / cloudflare html",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 401: Unauthorized",
+    "retryable": false,
+    "sync_message": "HTTP Error 401: Unauthorized",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 401: Unauthorized",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 empty / cloudflare html",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 403: Forbidden",
+    "retryable": false,
+    "sync_message": "HTTP Error 403: Forbidden",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 403: Forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 empty / mitigated",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 401: Unauthorized",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 empty / mitigated",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 403: Forbidden",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 empty / bad ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 401: Unauthorized",
+    "retryable": false,
+    "sync_message": "HTTP Error 401: Unauthorized",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 401: Unauthorized",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 empty / bad ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 403: Forbidden",
+    "retryable": false,
+    "sync_message": "HTTP Error 403: Forbidden",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 403: Forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 empty / empty ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 401: Unauthorized",
+    "retryable": false,
+    "sync_message": "HTTP Error 401: Unauthorized",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 401: Unauthorized",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 empty / empty ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 403: Forbidden",
+    "retryable": false,
+    "sync_message": "HTTP Error 403: Forbidden",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 403: Forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 empty / server only",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 401: Unauthorized",
+    "retryable": false,
+    "sync_message": "HTTP Error 401: Unauthorized",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 401: Unauthorized",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 empty / server only",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": ""
+   },
+   "expected": {
+    "message": "HTTP Error 403: Forbidden",
+    "retryable": false,
+    "sync_message": "HTTP Error 403: Forbidden",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 403: Forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 blank / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "  \n\t "
+   },
+   "expected": {
+    "message": "HTTP Error 403: Forbidden",
+    "retryable": false,
+    "sync_message": "HTTP Error 403: Forbidden",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 403: Forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 blank / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "  \n\t "
+   },
+   "expected": {
+    "message": "HTTP Error 503: Service Unavailable",
+    "retryable": true,
+    "sync_message": "HTTP Error 503: Service Unavailable",
+    "plan_restricted": false,
+    "plan_message": "HTTP Error 503: Service Unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 seps / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "\u001c\u001d text \u001f"
+   },
+   "expected": {
+    "message": "text",
+    "retryable": false,
+    "sync_message": "text",
+    "plan_restricted": false,
+    "plan_message": "text",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 seps / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "\u001c\u001d text \u001f"
+   },
+   "expected": {
+    "message": "text",
+    "retryable": true,
+    "sync_message": "text",
+    "plan_restricted": false,
+    "plan_message": "text",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 raw / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 raw / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": true,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 raw / cloudflare html",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 raw / cloudflare html",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 raw / mitigated",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 raw / mitigated",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 raw / bad ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 raw / bad ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 raw / empty ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 raw / empty ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 raw / server only",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 raw / server only",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "upstream unavailable"
+   },
+   "expected": {
+    "message": "upstream unavailable",
+    "retryable": false,
+    "sync_message": "upstream unavailable",
+    "plan_restricted": false,
+    "plan_message": "upstream unavailable",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 err / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"err\": \"Guard sync paused\"}"
+   },
+   "expected": {
+    "message": "Guard sync paused",
+    "retryable": false,
+    "sync_message": "Guard sync paused",
+    "plan_restricted": false,
+    "plan_message": "{\"err\": \"Guard sync paused\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 err / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"err\": \"Guard sync paused\"}"
+   },
+   "expected": {
+    "message": "Guard sync paused",
+    "retryable": true,
+    "sync_message": "Guard sync paused",
+    "plan_restricted": false,
+    "plan_message": "{\"err\": \"Guard sync paused\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 guard msg / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"msg\": \" nested msg \"}, \"error\": \"top\"}"
+   },
+   "expected": {
+    "message": "nested msg",
+    "retryable": false,
+    "sync_message": "nested msg",
+    "plan_restricted": false,
+    "plan_message": "top",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 guard msg / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"msg\": \" nested msg \"}, \"error\": \"top\"}"
+   },
+   "expected": {
+    "message": "nested msg",
+    "retryable": true,
+    "sync_message": "nested msg",
+    "plan_restricted": false,
+    "plan_message": "top",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 guard message / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"message\": \"nested message\"}}"
+   },
+   "expected": {
+    "message": "nested message",
+    "retryable": false,
+    "sync_message": "nested message",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"message\": \"nested message\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 guard message / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"message\": \"nested message\"}}"
+   },
+   "expected": {
+    "message": "nested message",
+    "retryable": true,
+    "sync_message": "nested message",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"message\": \"nested message\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 guard blank / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"msg\": \"  \"}, \"message\": \"fallback message\"}"
+   },
+   "expected": {
+    "message": "fallback message",
+    "retryable": false,
+    "sync_message": "fallback message",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"msg\": \"  \"}, \"message\": \"fallback message\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 guard blank / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"msg\": \"  \"}, \"message\": \"fallback message\"}"
+   },
+   "expected": {
+    "message": "fallback message",
+    "retryable": true,
+    "sync_message": "fallback message",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"msg\": \"  \"}, \"message\": \"fallback message\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 legacy error / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": \"Invalid Guard insights share payload.\"}"
+   },
+   "expected": {
+    "message": "Invalid Guard insights share payload.",
+    "retryable": false,
+    "sync_message": "Invalid Guard insights share payload.",
+    "plan_restricted": false,
+    "plan_message": "Invalid Guard insights share payload.",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 legacy error / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"Invalid Guard insights share payload.\"}"
+   },
+   "expected": {
+    "message": "Invalid Guard insights share payload.",
+    "retryable": true,
+    "sync_message": "Invalid Guard insights share payload.",
+    "plan_restricted": false,
+    "plan_message": "Invalid Guard insights share payload.",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 error dict / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": {\"code\": \"plan_restriction\"}}"
+   },
+   "expected": {
+    "message": "{\"error\": {\"code\": \"plan_restriction\"}}",
+    "retryable": false,
+    "sync_message": "{\"error\": {\"code\": \"plan_restriction\"}}",
+    "plan_restricted": true,
+    "plan_message": "{\"error\": {\"code\": \"plan_restriction\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 error dict / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": {\"code\": \"plan_restriction\"}}"
+   },
+   "expected": {
+    "message": "{\"error\": {\"code\": \"plan_restriction\"}}",
+    "retryable": true,
+    "sync_message": "{\"error\": {\"code\": \"plan_restriction\"}}",
+    "plan_restricted": true,
+    "plan_message": "{\"error\": {\"code\": \"plan_restriction\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 retryable / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"retryable\": true}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"retryable\": true}}",
+    "retryable": true,
+    "sync_message": "{\"guardError\": {\"retryable\": true}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"retryable\": true}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 retryable / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"retryable\": true}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"retryable\": true}}",
+    "retryable": true,
+    "sync_message": "{\"guardError\": {\"retryable\": true}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"retryable\": true}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 retryable false / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"retryable\": false, \"msg\": \"x\"}}"
+   },
+   "expected": {
+    "message": "x",
+    "retryable": false,
+    "sync_message": "x",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"retryable\": false, \"msg\": \"x\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 retryable false / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"retryable\": false, \"msg\": \"x\"}}"
+   },
+   "expected": {
+    "message": "x",
+    "retryable": true,
+    "sync_message": "x",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"retryable\": false, \"msg\": \"x\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 unavailable code / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}",
+    "retryable": true,
+    "sync_message": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 unavailable code / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}",
+    "retryable": true,
+    "sync_message": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": \" Guard_Cloud_Unavailable \"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 guard_unavailable / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"code\": \"guard_unavailable\"}, \"err\": \"down\"}"
+   },
+   "expected": {
+    "message": "down",
+    "retryable": true,
+    "sync_message": "down",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": \"guard_unavailable\"}, \"err\": \"down\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 guard_unavailable / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"code\": \"guard_unavailable\"}, \"err\": \"down\"}"
+   },
+   "expected": {
+    "message": "down",
+    "retryable": true,
+    "sync_message": "down",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": \"guard_unavailable\"}, \"err\": \"down\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 other code / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"code\": \"nope\"}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"code\": \"nope\"}}",
+    "retryable": false,
+    "sync_message": "{\"guardError\": {\"code\": \"nope\"}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": \"nope\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 other code / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"code\": \"nope\"}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"code\": \"nope\"}}",
+    "retryable": true,
+    "sync_message": "{\"guardError\": {\"code\": \"nope\"}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": \"nope\"}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 code number / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"guardError\": {\"code\": 5}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"code\": 5}}",
+    "retryable": false,
+    "sync_message": "{\"guardError\": {\"code\": 5}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": 5}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 code number / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"guardError\": {\"code\": 5}}"
+   },
+   "expected": {
+    "message": "{\"guardError\": {\"code\": 5}}",
+    "retryable": true,
+    "sync_message": "{\"guardError\": {\"code\": 5}}",
+    "plan_restricted": false,
+    "plan_message": "{\"guardError\": {\"code\": 5}}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 sync disabled / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"syncEnabled\": false, \"error\": \"Guard sync requires a Pro plan.\"}"
+   },
+   "expected": {
+    "message": "Guard sync requires a Pro plan.",
+    "retryable": false,
+    "sync_message": "Guard sync requires a Pro plan.",
+    "plan_restricted": true,
+    "plan_message": "Guard sync requires a Pro plan.",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 sync disabled / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"syncEnabled\": false, \"error\": \"Guard sync requires a Pro plan.\"}"
+   },
+   "expected": {
+    "message": "Guard sync requires a Pro plan.",
+    "retryable": true,
+    "sync_message": "Guard sync requires a Pro plan.",
+    "plan_restricted": true,
+    "plan_message": "Guard sync requires a Pro plan.",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 sync disabled no error / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"syncEnabled\": false}"
+   },
+   "expected": {
+    "message": "{\"syncEnabled\": false}",
+    "retryable": false,
+    "sync_message": "{\"syncEnabled\": false}",
+    "plan_restricted": true,
+    "plan_message": "{\"syncEnabled\": false}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 sync disabled no error / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"syncEnabled\": false}"
+   },
+   "expected": {
+    "message": "{\"syncEnabled\": false}",
+    "retryable": true,
+    "sync_message": "{\"syncEnabled\": false}",
+    "plan_restricted": true,
+    "plan_message": "{\"syncEnabled\": false}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 sync enabled / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"syncEnabled\": true, \"error\": \"forbidden\"}"
+   },
+   "expected": {
+    "message": "forbidden",
+    "retryable": false,
+    "sync_message": "forbidden",
+    "plan_restricted": false,
+    "plan_message": "forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 sync enabled / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"syncEnabled\": true, \"error\": \"forbidden\"}"
+   },
+   "expected": {
+    "message": "forbidden",
+    "retryable": true,
+    "sync_message": "forbidden",
+    "plan_restricted": false,
+    "plan_message": "forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 sync zero / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"syncEnabled\": 0, \"error\": \"forbidden\"}"
+   },
+   "expected": {
+    "message": "forbidden",
+    "retryable": false,
+    "sync_message": "forbidden",
+    "plan_restricted": false,
+    "plan_message": "forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 sync zero / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"syncEnabled\": 0, \"error\": \"forbidden\"}"
+   },
+   "expected": {
+    "message": "forbidden",
+    "retryable": true,
+    "sync_message": "forbidden",
+    "plan_restricted": false,
+    "plan_message": "forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan code / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"code\": \"SYNC_NOT_AVAILABLE\"}"
+   },
+   "expected": {
+    "message": "{\"code\": \"SYNC_NOT_AVAILABLE\"}",
+    "retryable": false,
+    "sync_message": "{\"code\": \"SYNC_NOT_AVAILABLE\"}",
+    "plan_restricted": true,
+    "plan_message": "{\"code\": \"SYNC_NOT_AVAILABLE\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 plan code / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"code\": \"SYNC_NOT_AVAILABLE\"}"
+   },
+   "expected": {
+    "message": "{\"code\": \"SYNC_NOT_AVAILABLE\"}",
+    "retryable": true,
+    "sync_message": "{\"code\": \"SYNC_NOT_AVAILABLE\"}",
+    "plan_restricted": true,
+    "plan_message": "{\"code\": \"SYNC_NOT_AVAILABLE\"}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan words / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 plan words / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": true,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 plan words / cloudflare html",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan words / cloudflare html",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 plan words / mitigated",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan words / mitigated",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 plan words / bad ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan words / bad ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 plan words / empty ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan words / empty ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 plan words / server only",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan words / server only",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "{\"error\": \"Please upgrade your plan\"}"
+   },
+   "expected": {
+    "message": "Please upgrade your plan",
+    "retryable": false,
+    "sync_message": "Please upgrade your plan",
+    "plan_restricted": true,
+    "plan_message": "Please upgrade your plan",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan words caps / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": \"This REQUIRES A TEAM workspace\"}"
+   },
+   "expected": {
+    "message": "This REQUIRES A TEAM workspace",
+    "retryable": false,
+    "sync_message": "This REQUIRES A TEAM workspace",
+    "plan_restricted": true,
+    "plan_message": "This REQUIRES A TEAM workspace",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 plan words caps / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"This REQUIRES A TEAM workspace\"}"
+   },
+   "expected": {
+    "message": "This REQUIRES A TEAM workspace",
+    "retryable": true,
+    "sync_message": "This REQUIRES A TEAM workspace",
+    "plan_restricted": true,
+    "plan_message": "This REQUIRES A TEAM workspace",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan code list / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"code\": [\"upgrade to pro\"]}"
+   },
+   "expected": {
+    "message": "{\"code\": [\"upgrade to pro\"]}",
+    "retryable": false,
+    "sync_message": "{\"code\": [\"upgrade to pro\"]}",
+    "plan_restricted": true,
+    "plan_message": "{\"code\": [\"upgrade to pro\"]}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 plan code list / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"code\": [\"upgrade to pro\"]}"
+   },
+   "expected": {
+    "message": "{\"code\": [\"upgrade to pro\"]}",
+    "retryable": true,
+    "sync_message": "{\"code\": [\"upgrade to pro\"]}",
+    "plan_restricted": true,
+    "plan_message": "{\"code\": [\"upgrade to pro\"]}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan falsy / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": 0, \"code\": false}"
+   },
+   "expected": {
+    "message": "{\"error\": 0, \"code\": false}",
+    "retryable": false,
+    "sync_message": "{\"error\": 0, \"code\": false}",
+    "plan_restricted": false,
+    "plan_message": "{\"error\": 0, \"code\": false}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 plan falsy / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": 0, \"code\": false}"
+   },
+   "expected": {
+    "message": "{\"error\": 0, \"code\": false}",
+    "retryable": true,
+    "sync_message": "{\"error\": 0, \"code\": false}",
+    "plan_restricted": false,
+    "plan_message": "{\"error\": 0, \"code\": false}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plan true / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": true, \"code\": null}"
+   },
+   "expected": {
+    "message": "{\"error\": true, \"code\": null}",
+    "retryable": false,
+    "sync_message": "{\"error\": true, \"code\": null}",
+    "plan_restricted": false,
+    "plan_message": "{\"error\": true, \"code\": null}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 plan true / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": true, \"code\": null}"
+   },
+   "expected": {
+    "message": "{\"error\": true, \"code\": null}",
+    "retryable": true,
+    "sync_message": "{\"error\": true, \"code\": null}",
+    "plan_restricted": false,
+    "plan_message": "{\"error\": true, \"code\": null}",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 plain forbidden / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": \"forbidden\", \"code\": \"denied\"}"
+   },
+   "expected": {
+    "message": "forbidden",
+    "retryable": false,
+    "sync_message": "forbidden",
+    "plan_restricted": false,
+    "plan_message": "forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 plain forbidden / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"forbidden\", \"code\": \"denied\"}"
+   },
+   "expected": {
+    "message": "forbidden",
+    "retryable": true,
+    "sync_message": "forbidden",
+    "plan_restricted": false,
+    "plan_message": "forbidden",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 list body / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "[\"a\"]"
+   },
+   "expected": {
+    "message": "[\"a\"]",
+    "retryable": false,
+    "sync_message": "[\"a\"]",
+    "plan_restricted": false,
+    "plan_message": "[\"a\"]",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 list body / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "[\"a\"]"
+   },
+   "expected": {
+    "message": "[\"a\"]",
+    "retryable": true,
+    "sync_message": "[\"a\"]",
+    "plan_restricted": false,
+    "plan_message": "[\"a\"]",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 number body / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "42"
+   },
+   "expected": {
+    "message": "42",
+    "retryable": false,
+    "sync_message": "42",
+    "plan_restricted": false,
+    "plan_message": "42",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 number body / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "42"
+   },
+   "expected": {
+    "message": "42",
+    "retryable": true,
+    "sync_message": "42",
+    "plan_restricted": false,
+    "plan_message": "42",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 string body / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "\"quoted\""
+   },
+   "expected": {
+    "message": "\"quoted\"",
+    "retryable": false,
+    "sync_message": "\"quoted\"",
+    "plan_restricted": false,
+    "plan_message": "\"quoted\"",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 string body / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "\"quoted\""
+   },
+   "expected": {
+    "message": "\"quoted\"",
+    "retryable": true,
+    "sync_message": "\"quoted\"",
+    "plan_restricted": false,
+    "plan_message": "\"quoted\"",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 bad json / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{not json"
+   },
+   "expected": {
+    "message": "{not json",
+    "retryable": false,
+    "sync_message": "{not json",
+    "plan_restricted": false,
+    "plan_message": "{not json",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 bad json / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{not json"
+   },
+   "expected": {
+    "message": "{not json",
+    "retryable": true,
+    "sync_message": "{not json",
+    "plan_restricted": false,
+    "plan_message": "{not json",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 unicode / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": \"\\u00dcberpr\\u00fcfung fehlgeschlagen \\u2713\"}"
+   },
+   "expected": {
+    "message": "Überprüfung fehlgeschlagen ✓",
+    "retryable": false,
+    "sync_message": "Überprüfung fehlgeschlagen ✓",
+    "plan_restricted": false,
+    "plan_message": "Überprüfung fehlgeschlagen ✓",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 unicode / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"\\u00dcberpr\\u00fcfung fehlgeschlagen \\u2713\"}"
+   },
+   "expected": {
+    "message": "Überprüfung fehlgeschlagen ✓",
+    "retryable": true,
+    "sync_message": "Überprüfung fehlgeschlagen ✓",
+    "plan_restricted": false,
+    "plan_message": "Überprüfung fehlgeschlagen ✓",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 block page / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "plan_restricted": false,
+    "plan_message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 block page / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": true,
+    "sync_message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "plan_restricted": false,
+    "plan_message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 block page / cloudflare html",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 block page / cloudflare html",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 block page / mitigated",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 block page / mitigated",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 block page / bad ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 block page / bad ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 block page / empty ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 block page / empty ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 block page / server only",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 block page / server only",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>"
+   },
+   "expected": {
+    "message": "<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud blocked the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 challenge page / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "plan_restricted": false,
+    "plan_message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 challenge page / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": true,
+    "sync_message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "plan_restricted": false,
+    "plan_message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 challenge page / cloudflare html",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 challenge page / cloudflare html",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403, Ray ID 8f1a2b3c4d5e6f70). This is not a sign-in problem, so reconnecting will not help; the Guard Cloud operator can look up that Ray ID."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 challenge page / mitigated",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 challenge page / mitigated",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 challenge page / bad ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 challenge page / bad ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 challenge page / empty ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 challenge page / empty ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 challenge page / server only",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 challenge page / server only",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>"
+   },
+   "expected": {
+    "message": "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script></html>",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 json behind cf / none",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": null,
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "503 json behind cf / plain",
+   "args": {
+    "status": 503,
+    "reason": "Service Unavailable",
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": true,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 json behind cf / cloudflare html",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 json behind cf / cloudflare html",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a2b3c4d5e6f70-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 json behind cf / mitigated",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 401). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 json behind cf / mitigated",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-mitigated": "challenge",
+     "content-type": "application/json"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help.",
+    "edge_block": "Guard Cloud is unreachable from this network: Cloudflare in front of Guard Cloud challenged the request (HTTP 403). This is not a sign-in problem, so reconnecting will not help."
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 json behind cf / bad ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 json behind cf / bad ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "8f1a!2b-IAD",
+     "server": "cloudflare",
+     "content-type": "text/html; charset=UTF-8"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 json behind cf / empty ray",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 json behind cf / empty ray",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "cf-ray": "",
+     "content-type": "text/html"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "401 json behind cf / server only",
+   "args": {
+    "status": 401,
+    "reason": "Unauthorized",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
+  },
+  {
+   "kind": "cloud_http_error",
+   "name": "403 json behind cf / server only",
+   "args": {
+    "status": 403,
+    "reason": "Forbidden",
+    "headers": {
+     "server": "CloudFlare",
+     "content-type": "TEXT/HTML"
+    },
+    "body": "{\"error\": \"Guard Cloud answer\"}"
+   },
+   "expected": {
+    "message": "Guard Cloud answer",
+    "retryable": false,
+    "sync_message": "Guard Cloud answer",
+    "plan_restricted": false,
+    "plan_message": "Guard Cloud answer",
+    "edge_block": null
+   }
   }
  ]
 }
