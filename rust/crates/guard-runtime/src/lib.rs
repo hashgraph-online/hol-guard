@@ -603,6 +603,7 @@ mod local_once_store;
 mod local_store_read;
 mod local_tool_eligibility_op;
 mod local_tool_grant_op;
+mod macos_code_signing;
 mod managed_controls_policy_fields;
 mod managed_policy;
 mod managed_policy_file_trust;
