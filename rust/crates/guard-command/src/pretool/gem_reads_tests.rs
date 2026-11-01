@@ -1,4 +1,4 @@
-use super::{gemrc_inert, inert_gemrc_line, safe_gem_arguments};
+use super::{gemrc_inert, inert_gemrc_line, safe_gem_arguments, user_configuration_inert};
 use std::fs;
 
 fn safe(command: &str) -> bool {
@@ -133,4 +133,27 @@ fn a_missing_gemrc_is_inert_and_a_written_one_is_read() {
     assert!(gemrc_inert(&path));
     fs::write(&path, "gem: --source https://example.invalid\n").expect("write gemrc");
     assert!(!gemrc_inert(&path));
+}
+
+/// RubyGems reads `<config home>/gem/gemrc` when `~/.gemrc` is absent, so a
+/// file there carries the same `--source` the home file would. The proof
+/// used to read only `~/.gemrc`, which left that fallback unopened.
+#[test]
+fn the_fallback_gemrc_under_the_config_home_is_read_too() {
+    let home = tempfile::tempdir().expect("temp home");
+    let directory = home.path().join(".config").join("gem");
+    fs::create_dir_all(&directory).expect("config directory");
+    let path = directory.join("gemrc");
+
+    assert!(user_configuration_inert(home.path()));
+    fs::write(&path, "gem: --no-document\n").expect("write gemrc");
+    assert!(user_configuration_inert(home.path()));
+    fs::write(&path, "gem: --source https://example.invalid\n").expect("write gemrc");
+    assert!(!user_configuration_inert(home.path()));
+
+    // The home file still answers for itself when the fallback is clean.
+    fs::write(&path, "gem: --no-document\n").expect("write gemrc");
+    let home_file = home.path().join(".gemrc");
+    fs::write(&home_file, ":sources:\n").expect("write gemrc");
+    assert!(!user_configuration_inert(home.path()));
 }

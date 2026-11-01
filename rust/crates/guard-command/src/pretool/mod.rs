@@ -28,7 +28,9 @@ pub struct PathContext<'a> {
     pub ripgrep_config_absent: bool,
     /// No inherited `GEMRC`, `RUBYOPT`, `RUBYLIB` or `RUBYGEMS_GEMDEPS` can
     /// hand a RubyGems query a second configuration file, a load path or code
-    /// to require before it starts. Literal contexts leave this false.
+    /// to require before it starts, and no redirected `XDG_CONFIG_HOME`
+    /// moves the user `gemrc` out of the directory the proof reads. Literal
+    /// contexts leave this false.
     pub gem_config_absent: bool,
     /// No inherited `HTTPIE_CONFIG_DIR` or `XH_CONFIG_DIR` can move the
     /// `config.json` whose `default_options` HTTPie and `xh` prepend to

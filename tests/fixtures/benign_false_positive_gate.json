@@ -19405,6 +19405,24 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-gem-moved-config-home",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem list --local"
+      },
+      "cwd": "org_app",
+      "environment": {
+        "XDG_CONFIG_HOME": "/tmp/hol-guard-gate-xdg"
+      },
+      "expect": "not_allow"
+    },
+    {
       "id": "pg-ctl-status-data-dir",
       "fix_area": "package",
       "harnesses": [

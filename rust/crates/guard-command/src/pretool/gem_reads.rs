@@ -35,9 +35,10 @@
 //!   `.gemspec` file and a URL all keep their review.
 //! - every query a session could have pointed elsewhere before it ran.
 //!   `gem` is a Ruby program that loads a configuration first, so an
-//!   inherited `GEMRC`, `RUBYOPT`, `RUBYLIB` or `RUBYGEMS_GEMDEPS`, and a
-//!   `gemrc` carrying anything but the switches [`INERT_DEFAULT_ARGUMENTS`]
-//!   lists, leave the query reviewed: both can put back the `--source`,
+//!   inherited `GEMRC`, `RUBYOPT`, `RUBYLIB` or `RUBYGEMS_GEMDEPS`, an
+//!   `XDG_CONFIG_HOME` naming anywhere but `~/.config`, and a `gemrc`
+//!   carrying anything but the switches [`INERT_DEFAULT_ARGUMENTS`] lists,
+//!   all leave the query reviewed: each can put back the `--source`,
 //!   `--config-file` and `-u` this module refuses on the line, and `RUBYOPT`
 //!   can require a file before the query starts.
 
@@ -176,23 +177,56 @@ pub(super) fn safe_gem_segment(
 /// Whether the `gemrc` files RubyGems loads leave the query as it was
 /// written.
 ///
-/// RubyGems reads `/etc/gemrc` and then the user's `~/.gemrc`, and both
-/// carry the same two kinds of entry: settings such as `:sources:` and
+/// RubyGems reads a system-wide `gemrc` and then the user's, and both carry
+/// the same two kinds of entry: settings such as `:sources:` and
 /// `:update_sources:`, and a list of default arguments under `gem:` or under
 /// a command's own name, which RubyGems adds to the line before its parser
 /// sees it. Those defaults put back exactly what this module refuses --
 /// `--source`, `--config-file`, `-u` -- so a file that carries anything but
-/// the words below leaves the query reviewed. There is no per-directory
-/// `gemrc`, so only these two paths are read, and the home is the one the
-/// shell would expand.
+/// the words below leaves the query reviewed.
+///
+/// The user file is `~/.gemrc` where that exists, and `<config home>/gem/
+/// gemrc` where it does not, so both are read. The config home is
+/// `XDG_CONFIG_HOME` before it is `~/.config`, and a redirected one already
+/// leaves the query reviewed through
+/// [`super::PathContext::gem_config_absent`], so the `~/.config` spelling is
+/// the only one left to open. There is no per-directory `gemrc`, and the
+/// home is the one the shell would expand.
+///
+/// The system file sits in the `sysconfdir` the running Ruby was built with,
+/// which this proof cannot see, so it reads the spellings that sit outside a
+/// Ruby installation tree: `/etc` and the prefixes Homebrew and MacPorts
+/// install under. A `sysconfdir` inside an installation tree is covered by
+/// the tree itself -- whoever can write a `gemrc` there can write the `gem`
+/// program next to it, and no file this proof reads would say so.
 fn configuration_inert(context: super::PathContext<'_>) -> bool {
     let Some(home) = context.home_dir.map(std::path::Path::new) else {
         return false;
     };
     home.is_absolute()
-        && gemrc_inert(&home.join(".gemrc"))
-        && gemrc_inert(std::path::Path::new("/etc/gemrc"))
+        && user_configuration_inert(home)
+        && SYSTEM_GEMRC_PATHS
+            .iter()
+            .all(|path| gemrc_inert(std::path::Path::new(path)))
 }
+
+/// The two user `gemrc` paths, read without the host's system files so a
+/// test can plant one under a temporary home.
+fn user_configuration_inert(home: &std::path::Path) -> bool {
+    gemrc_inert(&home.join(".gemrc"))
+        && gemrc_inert(&home.join(".config").join("gem").join("gemrc"))
+}
+
+/// The system-wide `gemrc` paths this screen reads.
+///
+/// `Etc.sysconfdir` is `/etc` for a distribution Ruby and the package
+/// manager's prefix for the two that install one on macOS.
+const SYSTEM_GEMRC_PATHS: &[&str] = &[
+    "/etc/gemrc",
+    "/usr/local/etc/gemrc",
+    "/opt/homebrew/etc/gemrc",
+    "/opt/local/etc/gemrc",
+];
 
 /// The longest `gemrc` this screen reads.
 const MAX_GEMRC_BYTES: u64 = 64 * 1024;
