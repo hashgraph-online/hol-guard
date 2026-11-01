@@ -13,10 +13,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
+use super::nt_path::nt_normpath;
 use super::probe::{nt_join, windows_context, Runner};
 use super::{
-    nt_normpath, verdict, Request, ABSENT_HRESULTS, HEALTH_ARGUMENTS, RUNNING, START_BOUNDARY,
-    TASK_NAMESPACE, WINDOWS_TASK_NAME,
+    verdict, Request, ABSENT_HRESULTS, HEALTH_ARGUMENTS, RUNNING, START_BOUNDARY, TASK_NAMESPACE,
+    WINDOWS_TASK_NAME,
 };
 
 const SECURITY_DESCRIPTOR: &str = "D:P(A;;FA;;;SY)(A;;FA;;;BA)";
