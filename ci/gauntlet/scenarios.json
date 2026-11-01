@@ -83,10 +83,10 @@
       "expectation": "allow",
       "oracle": "commands",
       "commands": [
-        "sed -n '/export/,/const/p' src/one.ts",
-        "sed -n '/export/p' src/one.ts",
-        "sed -n '0,/export/p' src/one.ts",
-        "sed -n '/export/,/^  }),/p' src/one.ts"
+        "sed -n '/export/,/^};/p' src/settings.ts",
+        "sed -n '/timeoutSeconds/p' src/settings.ts",
+        "sed -n '0,/export/p' src/settings.ts",
+        "sed -n '/export/,/^  timeoutSeconds: 10,/p' src/settings.ts"
       ],
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
     },
