@@ -263,16 +263,6 @@
       "note": "The outage path: a pausing event blocks, an observation does not. The allow is only ever the observation branch."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/cli/product.py",
-      "func": "_resolve_next_action",
-      "root": "direct-cli",
-      "reading": "presentation",
-      "actions": [
-        "review"
-      ],
-      "note": "A product-page next-step string that happens to spell `review`; never reaches enforcement."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/cli/prompt.py",
       "func": "_prompt_for_artifact",
       "root": "direct-cli",
