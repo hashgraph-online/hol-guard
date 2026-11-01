@@ -75,6 +75,7 @@ fn request_digest(request: &RunnerAuthorityRequestV1) -> Result<String, &'static
 pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
     match kind {
         "approval_wait_hint" => crate::blocked_request_mode::wait_hint_projection(args),
+        "approval_link" => crate::approval_link::dispatch(args),
         "developer_inspection_authority" => {
             crate::developer_inspection_authority_op::dispatch(args)
         }

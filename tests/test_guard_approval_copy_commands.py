@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
     attach_primary_approval_link,
     build_approval_browser_url,
-    build_approval_request_url,
     first_approval_url,
     primary_approval_request,
     primary_approval_url,
@@ -519,10 +518,6 @@ def test_attach_primary_approval_link_uses_operation_request_id() -> None:
 
     assert payload["primary_approval_request_id"] == "bound-req"
     assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
-
-
-def test_build_approval_request_url_uses_requests_route() -> None:
-    assert build_approval_request_url("http://127.0.0.1:5474", "abc123") == "http://127.0.0.1:5474/requests/abc123"
 
 
 class TestApprovalsOpenCommand:
