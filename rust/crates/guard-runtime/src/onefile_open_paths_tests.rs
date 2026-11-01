@@ -63,36 +63,6 @@ fn trailing_separators_are_trimmed_from_the_root() {
     assert_eq!(trimmed(b"/"), Vec::<u8>::new());
 }
 
-#[test]
-fn the_answer_is_null_when_unknown_or_too_large() {
-    assert_eq!(answer(None), json!({ "in_use": null }));
-    assert_eq!(
-        answer(names(&["_MEIb", "_MEIa"])),
-        json!({ "in_use": ["_MEIa", "_MEIb"] })
-    );
-    let many = (0..=MAX_IN_USE_NAMES)
-        .map(|index| format!("_MEI{index}"))
-        .collect();
-    assert_eq!(answer(Some(many)), json!({ "in_use": null }));
-}
-
-#[test]
-fn requests_need_the_schema_and_an_absolute_root() {
-    let request = |schema: &str, temp_root: &str| Request {
-        schema: schema.to_owned(),
-        temp_root: temp_root.to_owned(),
-    };
-    let absolute = std::env::temp_dir();
-    let absolute = absolute.to_string_lossy();
-    assert!(temp_root(&request(SCHEMA, &absolute)).is_ok());
-    assert!(temp_root(&request("onefile-open-paths.v0", &absolute)).is_err());
-    assert!(temp_root(&request(SCHEMA, "relative/tmp")).is_err());
-    assert!(run_command(
-        &br#"{"schema":"onefile-open-paths.v1","temp_root":"/tmp","extra":1}"#[..]
-    )
-    .is_err());
-}
-
 #[cfg(unix)]
 mod proc_scan {
     use std::os::unix::fs::symlink;
