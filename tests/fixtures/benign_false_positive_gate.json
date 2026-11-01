@@ -4950,6 +4950,23 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-switch-create-report-window-notes",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -c fix/report-window-notes"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-worktree-add-file",
       "fix_area": "git",
       "harnesses": [
@@ -6488,6 +6505,40 @@
       "expect": "allow"
     },
     {
+      "id": "pytest-isolated-interpreter-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 -I -m pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pytest-attached-module-option",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 -mpytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "inbox-jest-local-bin",
       "fix_area": "shell",
       "harnesses": [
@@ -6669,6 +6720,40 @@
       "tool": "shell",
       "tool_input": {
         "command": "node node_modules/jest/bin/jest.js --ci"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "gauntlet-npx-mocha-reporter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx mocha --reporter dot"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "gauntlet-node-mocha-entry",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node node_modules/mocha/bin/mocha.js test/unit"
       },
       "cwd": "worktree",
       "expect": "allow",
@@ -14446,6 +14531,90 @@
       "expect": "allow"
     },
     {
+      "id": "session-bun-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-bun-test-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test src/parser.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-bun-test-bail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test --bail"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-bun-test-name-pattern",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test -t adds"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-bun-test-preload",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test --preload ${HOME}/.bun/setup.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "session-bun-e-print",
       "fix_area": "shell",
       "harnesses": [
@@ -21811,6 +21980,38 @@
       "tool": "shell",
       "tool_input": {
         "command": "source .venv/bin/activate && pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-venv-activate-interpreter-isolated-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "source .venv/bin/activate && python3 -I -m pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-venv-activate-interpreter-attached-module",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "source .venv/bin/activate && python3 -mpytest -q"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -35021,6 +35222,57 @@
       "expect": "allow"
     },
     {
+      "id": "rg-recursive-glob-markdown",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g '**/*.md'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-recursive-alternation-glob",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"TODO\" -g '**/*.{md,yml}' ."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-recursive-include-markdown",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn 'TODO' --include='**/*.md' src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "control-flow-conditional-read",
       "fix_area": "shell",
       "harnesses": [
@@ -38511,6 +38763,40 @@
         "command": "git checkout feat/other-branch"
       },
       "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "git-switch-previous-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -"
+      },
+      "cwd": "org_wt",
+      "expect": "allow"
+    },
+    {
+      "id": "git-checkout-previous-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git checkout -"
+      },
+      "cwd": "org_wt",
       "expect": "allow"
     },
     {

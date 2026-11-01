@@ -44,16 +44,27 @@ def _edge(harness: str, *, url: str = "https://example.test", action_type: str =
 TRANSPORT_CALL_ID_KEYS = {
     "pi": ("tool_call_id",),
     "omp": ("tool_call_id",),
-    "claude-code": ("tool_use_id",),
+    "claude-code": ("tool_use_id", "prompt_id"),
     "codex": ("tool_use_id",),
+    "cursor": ("generation_id", "tool_use_id"),
+    "zcode": ("tool_use_id", "toolCallId", "turnId"),
 }
+
+
+# The root payload keys that carry a harness's own session identity. Cursor
+# spells its session `conversation_id` and never sends `session_id`.
+SESSION_IDENTITY_KEYS = {
+    "cursor": ("session_id", "conversation_id", "conversationId"),
+}
+DEFAULT_SESSION_IDENTITY_KEYS = ("session_id",)
 
 
 def request_digest_for_fixture(harness: str, payload: object, workspace: object) -> str:
     """Shared receipt fixture implementation, not a pytest test function."""
     semantic = dict(payload) if isinstance(payload, dict) else payload
     if isinstance(semantic, dict):
-        if isinstance(semantic.get("session_id"), str) and semantic["session_id"]:
+        session_keys = SESSION_IDENTITY_KEYS.get(harness, DEFAULT_SESSION_IDENTITY_KEYS)
+        if any(isinstance(semantic.get(key), str) and semantic[key] for key in session_keys):
             for key in TRANSPORT_CALL_ID_KEYS.get(harness, ()):
                 semantic.pop(key, None)
         for key in (

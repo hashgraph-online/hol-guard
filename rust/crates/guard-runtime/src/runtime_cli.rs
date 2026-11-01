@@ -96,12 +96,20 @@ pub(super) fn run() -> Result<(), String> {
             let response = codex_hook_trust::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
+            let response = hook_removal_sweep::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
             let response = macos_code_signing::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
             let response = removal_evidence::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if grok_executable::is_command(command) && flag == "--stdin" => {
+            let response = grok_executable::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if harness_coverage_command::is_command(command) && flag == "--stdin" => {
