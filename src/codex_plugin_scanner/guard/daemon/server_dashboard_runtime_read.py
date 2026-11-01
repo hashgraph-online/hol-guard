@@ -16,6 +16,8 @@ from ..native_daemon_handler import native_events_cursor
 from ..runtime.network_status import build_network_status
 from ..store import GuardStore
 from .command_activity_health_repair import auto_repair_command_activity_health_if_degraded
+from .context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
+from .context_assistance_http import respond as respond_context_assistance
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
 from .harness_version_api import attach_version_compatibility
@@ -31,6 +33,9 @@ m = _ServerProxy()
 class _DashboardRuntimeReadRoutes:
     def _serve_dashboard_runtime_read(self, parsed: ParseResult, path_parts: list[str], store: GuardStore) -> bool:
         """Serve a dashboard read route; return True when the route was handled."""
+        if parsed.path in CONTEXT_ASSISTANCE_READ_PATHS:
+            respond_context_assistance(self, CONTEXT_ASSISTANCE_READ_PATHS[parsed.path])
+            return True
         if parsed.path == "/v1/extension-controls/catalog":
             try:
                 catalog = self._daemon_server().extension_control_api.catalog()

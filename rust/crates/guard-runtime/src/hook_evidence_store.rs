@@ -420,6 +420,10 @@ impl EvidenceStoreApi for NativeEvidenceStore {
             "record_native_decision_receipt",
             args,
         )?;
+        // Independent optional notification, after persistence and after the
+        // storage gate is released. It cannot change this writer's success,
+        // journal ordering, failure signal or acknowledgement behavior.
+        crate::context_assistance_notifications::persisted(&self.guard_home, receipt);
         // `store_native_decision_receipts.record_native_decision_receipt`
         // always answers True: an insert the store ignored as a duplicate is
         // still a receipt the writer has nothing left to do about.

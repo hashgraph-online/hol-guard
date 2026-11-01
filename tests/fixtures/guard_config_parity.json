@@ -45,6 +45,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -98,6 +102,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -176,6 +184,10 @@
     "update_channel": "alpha",
     "watch_auto_revert_hours": 168,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -231,6 +243,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -286,6 +302,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -341,6 +361,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -396,6 +420,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -451,6 +479,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -506,6 +538,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -561,6 +597,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -616,6 +656,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -671,6 +715,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -726,6 +774,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -781,6 +833,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -836,6 +892,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -891,6 +951,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -946,6 +1010,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1001,6 +1069,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1056,6 +1128,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1111,6 +1187,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1166,6 +1246,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1221,6 +1305,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1276,6 +1364,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1331,6 +1423,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1386,6 +1482,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1441,6 +1541,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1496,6 +1600,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1551,6 +1659,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1606,6 +1718,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1661,6 +1777,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1716,6 +1836,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1771,6 +1895,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1826,6 +1954,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1881,6 +2013,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1936,6 +2072,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -1999,6 +2139,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2058,6 +2202,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2117,6 +2265,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02T03:04:05+00:00",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2176,6 +2328,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02T03:04:05Z",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2235,6 +2391,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2294,6 +2454,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02T03:04",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2353,6 +2517,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02T03:04:05.123456",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2410,6 +2578,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2467,6 +2639,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2524,6 +2700,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2581,6 +2761,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2640,6 +2824,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2024-02-29",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2697,6 +2885,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2754,6 +2946,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2811,6 +3007,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2868,6 +3068,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2925,6 +3129,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -2984,6 +3192,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02T23:59:59+23:59",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3041,6 +3253,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3100,6 +3316,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02T03:04:05+05:30:15",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3159,6 +3379,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02x03:04:05",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3216,6 +3440,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3273,6 +3501,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3330,6 +3562,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3387,6 +3623,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3444,6 +3684,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3501,6 +3745,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3558,6 +3806,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3613,6 +3865,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3687,6 +3943,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3744,6 +4004,10 @@
     "update_channel": "alpha",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3801,6 +4065,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": "2026-01-02",
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3858,6 +4126,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3925,6 +4197,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -3985,6 +4261,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4050,6 +4330,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4116,6 +4400,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4182,6 +4470,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4248,6 +4540,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4318,6 +4614,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4395,6 +4695,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4469,6 +4773,10 @@
     "update_channel": "alpha",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4533,6 +4841,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4595,6 +4907,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4657,6 +4973,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4719,6 +5039,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4784,6 +5108,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4849,6 +5177,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4912,6 +5244,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -4982,6 +5318,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -5046,6 +5386,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -5112,6 +5456,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },
@@ -5190,6 +5538,10 @@
     "update_channel": "stable",
     "watch_auto_revert_hours": 24,
     "watch_entered_at": null,
+    "context_assistance": null,
+    "context_assistance_diagnostic": null,
+    "context_assistance_export": null,
+    "context_assistance_requested": null,
     "workspace_assessment_enabled": true
    }
   },

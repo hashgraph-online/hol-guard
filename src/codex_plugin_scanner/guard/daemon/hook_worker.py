@@ -232,22 +232,29 @@ class HookWorker(HookWorkerNativeMixin):
         enable(True)
         self._direct_evidence_drain.start()
 
-    def _stop_direct_evidence_drain(self) -> None:
+    def _stop_direct_evidence_drain(self, *, deadline_monotonic: float | None = None) -> bool:
         drain = self._direct_evidence_drain
         if drain is None:
-            return
-        self._direct_evidence_drain = None
+            return True
         # Close the lane first, then collect what the resident already queued.
         enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
         if callable(enable):
             with suppress(Exception):
                 enable(False)
-        drain.stop()
+        if deadline_monotonic is None:
+            stopped = drain.stop()
+        else:
+            stopped = drain.stop(timeout_seconds=min(1.0, max(0.0, deadline_monotonic - time.monotonic())))
+        if stopped is not True:
+            return False
+        self._direct_evidence_drain = None
+        return True
 
     def close_contained(self, *, deadline_monotonic: float | None = None) -> bool:
         """Confirm this worker's publisher has stopped before releasing ownership."""
 
-        self._stop_direct_evidence_drain()
+        if not self._stop_direct_evidence_drain(deadline_monotonic=deadline_monotonic):
+            return False
         if self._owns_policy_snapshot_publisher:
             close_contained = getattr(self.policy_snapshot_publisher, "close_contained", None)
             if callable(close_contained):

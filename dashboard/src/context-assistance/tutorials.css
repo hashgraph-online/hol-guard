@@ -1,0 +1,60 @@
+.cigar-learning-layout { display: grid; gap: 1.25rem; min-width: 0; }
+.cigar-walkthrough-anchor { min-width: 0; scroll-margin-top: 1rem; }
+.cigar-walkthrough-anchor:focus { outline: none; }
+.cigar-learning-intro { display: flex; align-items: flex-start; gap: 1rem; }
+.cigar-learning-intro > .cigar-icon { flex-shrink: 0; }
+.cigar-learning-intro strong { color: var(--brand-dark); font-weight: 600; }
+.cigar-card .cigar-learning-caption, .cigar-learning-caption { display: block; color: #64748b; font-size: .72rem; line-height: 1.75; }
+.cigar-lesson-outcome { margin-top: 1rem; padding: .85rem 1rem; border-radius: .65rem; background: #f5f8fd; font-size: .78rem; line-height: 1.7; }
+.cigar-lesson-outcome strong, .cigar-example-question strong { font-weight: 600; color: #3f4174; }
+.cigar-card .cigar-lesson-outcome p { font-size: .78rem; margin-top: .25rem; }
+.cigar-effective-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; margin: 1.5rem 0; }
+.cigar-effective-grid p { font-size: .8rem; }
+.cigar-walkthrough { border-color: #bbd0ee; background: #fcfdff; }
+.cigar-walkthrough .cigar-section-heading { gap: .5rem; }
+.cigar-walkthrough h2 { margin-top: .1rem; }
+.cigar-walkthrough-close { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: .5rem; cursor: pointer; color: #64748b; }
+.cigar-walkthrough-close:hover { background: #eef3fc; }
+.cigar-walkthrough-close svg { width: 1rem; height: 1rem; }
+.cigar-lesson-index { margin: 1rem 0; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
+.cigar-lesson-index > summary { min-height: 2.75rem; padding: .75rem 0; font-size: .75rem; font-weight: 600; cursor: pointer; }
+.cigar-lesson-steps { display: grid; gap: .2rem; padding-bottom: .75rem; }
+.cigar-lesson-steps button { display: flex; align-items: center; gap: .6rem; min-height: 2.75rem; width: 100%; padding: .35rem .5rem; border-radius: .5rem; text-align: left; color: #64748b; font-size: .75rem; cursor: pointer; }
+.cigar-lesson-steps button > span:first-child { display: inline-flex; justify-content: center; align-items: center; width: 1.6rem; height: 1.6rem; border: 1px solid #dce2ed; border-radius: 50%; flex-shrink: 0; }
+.cigar-lesson-steps [aria-current="step"] { background: #edf3ff; color: #325b98; font-weight: 600; }
+.cigar-lesson-steps [aria-current="step"] > span:first-child { border-color: #b5cdef; }
+.cigar-lesson-body h3 { margin-top: 1.15rem; }
+.cigar-lesson-body > p, .cigar-lesson-body .cigar-simple-list { font-size: .8rem; }
+.cigar-lesson-body .cigar-simple-list { margin-top: 1rem; gap: .75rem; }
+.cigar-card .cigar-learning-tip { border-left: 2px solid #b8cfee; padding-left: .75rem; margin-top: 1rem; font-size: .75rem; }
+.cigar-example-question { margin-top: 1rem; padding: .9rem; border: 1px solid #d7e3f4; border-radius: .65rem; font-size: .75rem; }
+.cigar-example-question > p { user-select: text; color: #475569; font-size: .8rem; }
+.cigar-example-question .cigar-text-button { margin-top: .25rem; }
+.cigar-lesson-navigation { display: flex; justify-content: space-between; gap: .5rem; margin: 1rem 0; padding-top: 1rem; border-top: 1px solid #e2e8f0; }
+.cigar-lesson-navigation .cigar-button { font-size: .75rem; padding: .5rem .75rem; }
+.cigar-lesson-navigation .cigar-button:last-child { background: #edf3ff; border-color: #b8cfee; }
+.cigar-concept-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-top: 1.4rem; }
+.cigar-concept-flow button { min-height: 7rem; width: 100%; text-align: left; padding: 1rem; border: 1px solid #e2e8f0; border-radius: .75rem; cursor: pointer; }
+.cigar-concept-flow button[aria-expanded="true"] { border-color: #b3cbed; background: #f1f6ff; }
+.cigar-concept-flow .cigar-eyebrow { display: block; margin: .75rem 0 .35rem; }
+.cigar-concept-flow strong { display: block; font-weight: 600; font-size: .8rem; }
+.cigar-concept-detail { margin-top: 1rem; padding: 1.25rem; border: 1px solid #dce6f5; border-radius: .75rem; background: #f8faff; }
+.cigar-concept-detail > p { font-size: .8rem; }
+.cigar-concept-detail .cigar-simple-list { font-size: .8rem; margin-top: .75rem; }
+@media (min-width: 80rem) {
+  .has-walkthrough { grid-template-columns: minmax(0, 1fr) 21rem; align-items: start; }
+  .has-walkthrough > .cigar-panel { grid-column: 1; grid-row: 1; }
+  .has-walkthrough > .cigar-walkthrough-anchor { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100dvh - 2rem); overflow-y: auto; border-radius: .95rem; }
+  .has-walkthrough .cigar-benefits, .has-walkthrough .cigar-effective-grid { grid-template-columns: minmax(0, 1fr); }
+  .has-walkthrough .cigar-concept-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 42rem) {
+  .cigar-learning-intro { flex-direction: column; }
+  .cigar-effective-grid { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .cigar-concept-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cigar-concept-flow button { padding: .8rem; }
+}
+@media (forced-colors: active) {
+  .cigar-walkthrough, .cigar-lesson-outcome, .cigar-example-question, .cigar-concept-detail { background: Canvas; color: CanvasText; border-color: CanvasText; }
+  .cigar-concept-flow button[aria-expanded="true"], .cigar-lesson-steps [aria-current="step"] { background: Canvas; color: Highlight; border-color: Highlight; }
+}

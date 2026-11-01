@@ -47,6 +47,8 @@ fn admit_connection_does_not_block_accept_on_full_auth_queue() {
         primary,
         overflow,
         workers: Vec::new(),
+        context_lane: Arc::new(context::Lane::default()),
+        policy_store: None,
     };
     let started = Instant::now();
     admit_connection(&admission, Box::new(NullStream)).expect("overflow handoff");
@@ -163,6 +165,7 @@ fn regression_auth_worker_hands_a_fully_buffered_request_to_the_evaluation_pool(
         &control_sender,
         &evaluation_sender,
         None,
+        &Arc::new(context::Lane::default()),
     );
     let queued = evaluation_rx
         .try_recv()
@@ -198,6 +201,7 @@ fn regression_auth_worker_evaluates_inline_when_the_evaluation_queue_is_full() {
         &control_sender,
         &evaluation_sender,
         None,
+        &Arc::new(context::Lane::default()),
     );
     let written = written.lock().unwrap();
     assert!(!written.is_empty(), "the request must be answered inline");
@@ -227,7 +231,13 @@ fn auth_worker_answers_overloaded_for_a_fragmented_request_when_the_evaluation_q
     let written = Arc::clone(&stream.0);
     let mut pending = complete_request(Box::new(stream), body);
     pending.payload_prefix.truncate(10);
-    dispatch_authenticated(pending, &control_sender, &evaluation_sender, None);
+    dispatch_authenticated(
+        pending,
+        &control_sender,
+        &evaluation_sender,
+        None,
+        &Arc::new(context::Lane::default()),
+    );
     let written = written.lock().unwrap();
     assert!(
         written
@@ -251,6 +261,7 @@ fn auth_worker_routes_a_complete_control_request_to_the_control_lane() {
         &control_sender,
         &evaluation_sender,
         None,
+        &Arc::new(context::Lane::default()),
     );
     assert!(control_rx.try_recv().is_ok());
     crate::resident_health_counters::leave_queue(QueueLane::Control);

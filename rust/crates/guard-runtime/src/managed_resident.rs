@@ -24,6 +24,8 @@ pub(crate) use handoff::answer_shutdown;
 mod handoff_record;
 #[path = "managed_resident_lease.rs"]
 mod lease;
+#[path = "managed_resident_stop_snapshot.rs"]
+mod stop_snapshot;
 pub(crate) use lease::client_request;
 use lease::client_request_with_lease;
 #[path = "managed_resident_client_request.rs"]
@@ -189,7 +191,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     if retire_clients {
         lease::retire_clients_for_update(state_base, &digest, deadline)?;
     }
-    let process_ids = containment::state_process_identities(std::slice::from_ref(&state));
+    let stopped = stop_snapshot::capture_for_stop(&scope, &digest, &state, retire_clients)?;
     let token = token_from_state(&state)?;
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: state.process_id,
@@ -206,12 +208,13 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     )
     .is_ok()
     {
-        containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
+        stop_snapshot::wait_for_stop(&scope, &digest, deadline, &stopped, &state, retire_clients)?;
         // The children are gone; clear the budget only under the startup
         // lock, since a start that got there first has already charged it.
         let startup =
             exit_record::quiesce_under_startup_lock(state_base, &digest, &scope, deadline)?;
-        if startup.is_some() {
+        if startup.is_some() && crate::resident_state::discover_states(&scope, &digest)?.is_empty()
+        {
             let _ = restart_budget::clear(&scope);
         }
         return Ok(());
@@ -492,7 +495,6 @@ mod tests;
 #[cfg(test)]
 #[path = "managed_resident_client_timeout_tests.rs"]
 mod client_timeout_tests;
-
 #[cfg(test)]
 #[path = "managed_resident_identity_tests.rs"]
 mod identity_tests;
