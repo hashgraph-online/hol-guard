@@ -86,6 +86,42 @@ def test_value_metrics_accepts_a_store_wider_than_the_resident_array_limit() -> 
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_runtime_session_payload_ignores_fields_the_runtime_never_reads() -> None:
+    # A session carrying an unused field the transport cannot carry (a set, or a
+    # list past the resident array limit) used to fail before the Cloud request.
+    session = {
+        "workspace": "/work/repo",
+        "sessionId": "session-1",
+        "operations": set(),
+        "history": list(range(5_000)),
+    }
+    payload = sync.runtime_session_payload(
+        session, device_id="device", device_name="Laptop", cwd="/gone", now="2026-01-01T00:00:00Z", version="1"
+    )
+    assert payload["sessionId"] == "session-1"
+    assert payload["workspace"] == "/work/repo"
+
+
+def test_runtime_session_sync_survives_a_removed_working_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    class CapturedCwdError(Exception):
+        pass
+
+    def removed_directory() -> str:
+        raise FileNotFoundError("cwd removed")
+
+    def capture(_session: object, **kwargs: object) -> dict[str, object]:
+        raise CapturedCwdError(kwargs["cwd"])
+
+    monkeypatch.setattr(runner.os, "getcwd", removed_directory)
+    monkeypatch.setattr(runner, "_guard_device_metadata", lambda _store: ("device", "Laptop"))
+    monkeypatch.setattr(runner._sync, "runtime_session_payload", capture)
+    with pytest.raises(CapturedCwdError, match="/work/repo"):
+        runner._cloud_runtime_session_payload(cast(Any, None), {"workspace": "/work/repo"})
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_rollout_reads_the_environment_value_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(sync.POLICY_CANONICAL_ENFORCEMENT_ENV, "canonical")
     assert sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id=None) is True
@@ -107,6 +143,7 @@ def test_rollout_reads_the_environment_value_it_is_given(monkeypatch: pytest.Mon
         "downgrade_reference",
         "policy_simulation",
         "cloud_exceptions",
+        "runtime_session_payload",
         "cloud_http_error",
         "stale_intel",
     ],

@@ -806,6 +806,7 @@ mod runner_authority_op;
 mod runner_authority_signature;
 mod runner_cloud_exceptions;
 mod runner_cloud_http_error;
+mod runner_runtime_session;
 mod runner_sync_policy;
 mod runner_sync_signals;
 mod runner_sync_url;
@@ -876,6 +877,7 @@ mod verified_read_execute_op;
 mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
+mod windows_process_lifecycle;
 #[cfg(windows)]
 mod windows_pytest;
 #[cfg(windows)]

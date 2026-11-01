@@ -550,3 +550,80 @@ mod feature_directories;
 
 #[path = "search_scope_rg_glob_tests.rs"]
 mod rg_glob_inclusions;
+
+/// The include walk stops on the clock, not only on the entry count. The
+/// whole native evaluation runs inside half a second, and the entries the
+/// count allows cost what the host's filesystem charges for them, which on a
+/// loaded machine is not what they cost on an idle one. An evaluation that
+/// overruns its budget fails, and a failed evaluation blocks, so the clock
+/// has to be read as the walk goes.
+#[test]
+fn an_include_walk_out_of_clock_leaves_the_scope_unproven() {
+    let (home, project) = fixture();
+    let home = home.to_string_lossy().into_owned();
+    let source = project.join("src");
+    let filter =
+        crate::pretool::search_scope_filter::SearchFilter::from_rg_inclusions(&["*.md"]).unwrap();
+    let walk = |budget| {
+        crate::pretool::search_scope_walk::walk_include_scope(
+            &source,
+            &filter,
+            Some(home.as_str()),
+            budget,
+        )
+    };
+    assert!(walk(std::time::Instant::now() + std::time::Duration::from_secs(60)).is_ok());
+    assert!(walk(std::time::Instant::now()).is_err());
+}
+
+/// One evaluation walks a root and glob set once.
+///
+/// A rewrite hands the same submission back under several spellings, each
+/// resolving to the same directory under the same globs. Walking the tree
+/// again for every spelling spends the shared clock on an answer already in
+/// hand, and the later spellings are the ones that then come back unproven.
+/// The tree below is removed between the two calls, so only a remembered
+/// answer can still say it was proven.
+#[test]
+fn one_evaluation_walks_a_root_and_glob_set_once() {
+    let (home, project) = fixture();
+    let home = home.to_string_lossy().into_owned();
+    let source = project.join("src");
+    let globs = ["*.md"];
+    let filter =
+        crate::pretool::search_scope_filter::SearchFilter::from_rg_inclusions(&globs).unwrap();
+    let proven = || {
+        crate::pretool::search_scope_walk::include_scope_proven(
+            &source,
+            &globs,
+            &filter,
+            Some(home.as_str()),
+        )
+    };
+    let budget = crate::pretool::search_scope_walk::begin_include_scope_budget();
+    assert!(proven(), "the walk did not prove the tree it was given");
+    std::fs::remove_dir_all(&source).unwrap();
+    assert!(
+        proven(),
+        "a second spelling of the same root and globs walked the tree again"
+    );
+    {
+        // What an envelope does: it reads a projection of this same
+        // submission by calling the evaluation entry point again.
+        let _projection = crate::pretool::search_scope_walk::begin_include_scope_budget();
+        assert!(
+            proven(),
+            "a projection dropped the answers its own submission had already reached"
+        );
+    }
+    assert!(
+        proven(),
+        "a projection's return ended the submission that was still open"
+    );
+    drop(budget);
+    let _budget = crate::pretool::search_scope_walk::begin_include_scope_budget();
+    assert!(
+        !proven(),
+        "the next submission reused the answer the previous one reached"
+    );
+}

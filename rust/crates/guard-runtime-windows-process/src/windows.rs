@@ -49,6 +49,8 @@ mod file_identity;
 mod job_guard;
 #[path = "private_files.rs"]
 mod private_files;
+#[path = "process_identity.rs"]
+mod process_identity;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
 pub use bound_open::{
@@ -69,6 +71,9 @@ pub use file_identity::{is_single_link_file, is_single_link_handle, remove_file_
 pub use job_guard::{attach_suspended_process, ChildJobGuard, ResourceLimits};
 pub use private_files::{
     create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
+};
+pub use process_identity::{
+    command_line_to_argv, process_creation_time, process_owner_sid, terminate_if_creation_time,
 };
 pub use process_lifecycle::{
     process_liveness, process_parent_ids, process_start_marker, running_process_image_path,

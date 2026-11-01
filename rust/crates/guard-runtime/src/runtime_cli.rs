@@ -148,6 +148,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if windows_process_lifecycle::is_command(command) && flag == "--stdin" => {
+            let response = windows_process_lifecycle::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag]
             if release_manifest_verify_command::is_command(command) && flag == "--stdin" =>
         {
