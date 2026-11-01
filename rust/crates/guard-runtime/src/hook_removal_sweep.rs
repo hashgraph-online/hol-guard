@@ -45,6 +45,26 @@ struct Request {
     path: Option<String>,
     #[serde(default)]
     dry_run: bool,
+    #[serde(default)]
+    harness: Option<String>,
+    #[serde(default)]
+    backup_dir: Option<String>,
+    #[serde(default)]
+    skip: Vec<String>,
+    #[serde(default)]
+    entries: Vec<backup::BackupEntry>,
+    #[serde(default)]
+    stamp: Option<String>,
+}
+
+impl Request {
+    fn has_backup_fields(&self) -> bool {
+        self.harness.is_some()
+            || self.backup_dir.is_some()
+            || !self.skip.is_empty()
+            || !self.entries.is_empty()
+            || self.stamp.is_some()
+    }
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -82,6 +102,15 @@ fn answer(request: &Request) -> Result<Value, String> {
         return Err(invalid());
     }
     match request.op.as_str() {
+        "backup" if request.path.is_none() && request.roots.is_empty() && !request.dry_run => {
+            backup::backup(request)
+        }
+        "finalize-backups"
+            if request.path.is_none() && request.roots.is_empty() && !request.dry_run =>
+        {
+            backup::finalize(request)
+        }
+        _ if request.has_backup_fields() => Err(invalid()),
         "sweep-file" if request.candidates.is_empty() && request.roots.is_empty() => {
             let path = absolute(request.path.as_deref().ok_or_else(invalid)?)?;
             let text = request.path.clone().unwrap_or_default();
@@ -356,6 +385,9 @@ fn write_temporary(
     drop(file);
     fs::set_permissions(temporary, permissions)
 }
+
+#[path = "hook_removal_backup.rs"]
+mod backup;
 
 #[cfg(test)]
 #[path = "hook_removal_sweep_tests.rs"]
