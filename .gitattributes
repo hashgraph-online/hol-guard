@@ -51,3 +51,8 @@
 /docs/guard/cigar-integration/evidence/*.log -whitespace linguist-generated
 # The bundled catalog carries the SHA-256 of these exact receipt bytes (no trailing newline).
 /docs/guard/cigar-integration/evidence/qualification/*.json text eol=lf -whitespace
+
+# The native runtime embeds the safety guide and hashes its earlier versions
+# as checkout bytes.
+/src/codex_plugin_scanner/guard/agent-safety-guidance.md text eol=lf
+/tests/fixtures/agent-safety-guidance-*.md text eol=lf
