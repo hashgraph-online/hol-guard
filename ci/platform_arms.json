@@ -1419,6 +1419,30 @@
    "body": "d82502e748db"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "The Grok registration directory is created without POSIX mode bits, as the Python writer's `mkdir(mode=0o700)` never applied them on Windows either; the directory still lives under the per-user Guard home. `an_explicit_selection_is_registered_and_bound_to_its_hash` in `grok_executable_tests.rs` is not `cfg(unix)`-gated, so the Windows test job writes through this arm.",
+   "file": "rust/crates/guard-runtime/src/grok_executable.rs",
+   "item": "fn private_directory_builder() -> fs::DirBuilder",
+   "cfg": "not(unix)",
+   "body": "bf492cbff997"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no executable or group/other write bits; the Python check returned after the regular-file and `os.access` test there, and `os.access(X_OK)` only reports existence on Windows. The launcher is still refused from the workspace, the Guard home and the cwd, and its content hash is still bound. The non-`cfg(unix)` tests in `grok_executable_tests.rs` resolve launchers through this arm on the Windows test job.",
+   "file": "rust/crates/guard-runtime/src/grok_executable_paths.rs",
+   "item": "fn security_error -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "382540123484"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "The Python directory-chain check only ran off Windows (`os.name != \"nt\"`), so Windows PATH entries and launcher directories were never judged by owner or mode. Location rules (workspace, Guard home, cwd, absolute paths) still apply there; `the_launch_environment_drops_loaders_and_unsafe_path_entries` runs on the Windows test job.",
+   "file": "rust/crates/guard-runtime/src/grok_executable_paths.rs",
+   "item": "pub(crate) fn chain_secure(_directory: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "0d69dbe445f9"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "Home identity capture retains canonical path but skips Unix device and inode checks; replacement at the same path may escape this check, while path comparison still runs.",
    "file": "rust/crates/guard-runtime/src/guard_config_update_assistance_preflight.rs",

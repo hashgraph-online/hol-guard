@@ -320,6 +320,8 @@ mod github_workflow_context_io;
 mod github_workflow_prepare_op;
 #[path = "adapters/detection/grok_detect.rs"]
 mod grok_detect;
+mod grok_executable;
+mod grok_executable_paths;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
@@ -553,6 +555,8 @@ mod hook_direct;
 mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
+mod hook_removal_prune;
+mod hook_removal_sweep;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
 #[path = "adapters/detection/muse_detect.rs"]
