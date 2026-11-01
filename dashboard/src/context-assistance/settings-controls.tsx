@@ -62,14 +62,14 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
           {!stopped ? <button type="button" className={buttonClass} disabled={disabled} onClick={() => props.onControl("stop")}>Turn off now</button> : null}
         </div>
         <p className="text-sm text-slate-600">
-          Requires a verified final CPython 3.14 runtime on this machine. A separate Python 3.14 environment works even when Guard uses an older supported Python.
+          CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR.
         </p>
         {props.locked ? <p className="text-sm text-slate-600">Your organization manages these preferences. You can still turn context assistance off.</p> : null}
         {status?.restriction ? <p className="text-sm text-slate-600">Policy restrictions apply. Your saved choices are retained; effective limits are shown below.</p> : null}
         {value ? (
           <>
             <SettingsToggleRow label="Use CIGAR on this machine" checked={value.enabled}
-              description="Save your preferences, then click Start CIGAR at the top of this page to verify and run the runtime."
+              description="Lets CIGAR run on this computer. The Turn on CIGAR button sets this for you."
               disabled={editingDisabled || (!value.enabled && !selected)}
               onChange={(enabled) => props.onChange({ ...value, enabled })} />
             <CigarRuntimeSelection value={value} status={status} installations={installations} disabled={disabled}

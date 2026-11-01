@@ -132,26 +132,27 @@ try {
   });
   const open = async (versions = true) => {
     await page.goto(origin + "/?guard-token=cigar-browser-fixture");
-    await page.getByRole("tab", { name: "Versions & updates", exact: true }).waitFor();
+    await page.getByRole("tab", { name: "Updates", exact: true }).waitFor();
     if (versions) {
-      await page.getByRole("tab", { name: "Versions & updates", exact: true }).click();
+      await page.getByRole("tab", { name: "Updates", exact: true }).click();
       await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
       await page.getByRole("button", { name: "Refresh versions & jobs", exact: true }).waitFor({ state: "visible" });
     }
   };
   const expect = (await import("@playwright/test")).expect;
   await open(false);
-  assert.ok(calls.every(call => call.method === "GET" && call.path.endsWith("installations")), "opening the workspace must not prepare or select an SDK");
+  // Opening reads metadata for the one-click plan; the only POST allowed is the read-only update-preferences action.
+  assert.ok(calls.every(call => call.method === "GET" || call.action === "preferences"), "opening the workspace must not prepare or select an SDK");
   pass("Workspace opening reads registered metadata without SDK effects");
-  await page.getByRole("tab", { name: "Runtime & preferences", exact: true }).click();
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Local runtime", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Choose or switch runtime", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Versions & updates", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
   pass("Runtime preferences route selection to Versions without drafting or starting a replacement");
-  await page.getByRole("tab", { name: "Runtime & preferences", exact: true }).focus();
+  await page.getByRole("tab", { name: "Settings", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("tab", { name: "Versions & updates", exact: true })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Updates", exact: true })).toBeFocused();
   await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
   await expect(page.getByRole("button", { name: "Switch now", exact: true })).toBeDisabled();
   assert.ok(calls.every(call => !["install","setup_interpreter","prepare_switch","commit"].includes(call.action)));
@@ -262,7 +263,7 @@ try {
   await page.getByRole("tab", { name: "Tutorials", exact: true }).click();
   await page.getByRole("button", { name: /^Start walkthrough.*Update CIGAR with less interruption/ }).click();
   await expect(page.getByRole("heading", { name: "Update CIGAR with less interruption", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Versions & updates", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "Updates", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: "Next step", exact: true }).click();
   await expect(page.getByText("Step 2 of 6", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Exit walkthrough", exact: true }).click();
@@ -272,7 +273,7 @@ try {
   assert.deepEqual(learning, { schema: 1, tutorial: "cigar-updates", step: 1 });
   assert.equal(calls.filter(call => call.action && call.action !== "preferences").length, effectsBeforeLesson);
   await page.getByRole("button", { name: "Exit walkthrough", exact: true }).click();
-  await page.getByRole("tab", { name: "Versions & updates", exact: true }).click();
+  await page.getByRole("tab", { name: "Updates", exact: true }).click();
   await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
   pass("Update walkthrough resumes its step, navigates Versions and never performs a native effect");
   state = { ...structuredClone(initialState), availability: "off", requested_enabled: false, effective_enabled: false,
@@ -280,17 +281,17 @@ try {
     preferences: { ...initialState.preferences, enabled: false }, effective_preferences: { ...initialState.effective_preferences, enabled: false } };
   jobs = []; proof = false; metadataOrder = true;
   await open(false);
-  await page.getByRole("tab", { name: "Runtime & preferences", exact: true }).click();
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
   await page.getByRole("switch", { name: "Use CIGAR on this machine", exact: true }).click();
   await expect.poll(async () => JSON.parse(await page.getByTestId("selection").textContent()).draft.enabled).toBe(true);
-  await page.getByRole("tab", { name: "Versions & updates", exact: true }).click();
+  await page.getByRole("tab", { name: "Updates", exact: true }).click();
   await page.getByRole("heading", { name: "Registered installations", exact: true }).waitFor();
   await expect(page.getByRole("button", { name: "Refresh versions & jobs", exact: true })).toBeEnabled();
   const unchanged = JSON.parse(await page.getByTestId("selection").textContent());
   assert.equal(unchanged.saved.enabled, false); assert.equal(unchanged.draft.enabled, true);
   pass("Metadata key order and optional false defaults cannot overwrite a pending CIGAR opt-in");
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("tab", { name: "Versions & updates", exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole("tab", { name: "Updates", exact: true }).scrollIntoViewIfNeeded();
   summary.utility_styles = await page.getByRole("region", { name: "CIGAR release catalog", exact: true }).evaluate(element => {
     const style = getComputedStyle(element); return { padding: style.paddingTop, radius: style.borderTopLeftRadius };
   });

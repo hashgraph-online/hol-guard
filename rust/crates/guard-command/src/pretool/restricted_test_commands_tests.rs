@@ -443,3 +443,63 @@ fn a_passed_on_word_cannot_turn_a_reporting_tool_into_a_writing_one() {
         assert_eq!(reason(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_quiet_manager_run_takes_the_route_its_loud_spelling_takes() {
+    // An option that only chooses how much the manager prints names no
+    // script. Reading it as one left `npm --silent test` and
+    // `npm run --silent lint` under review while the same runs spelled
+    // without the option were admitted, which is the whole false positive.
+    for command in [
+        "npm --silent test",
+        "npm -s test",
+        "npm run --silent test",
+        "npm --loglevel error test",
+        "npm --loglevel=error run test",
+        "pnpm -s test",
+        "pnpm --reporter silent test",
+        "yarn --silent test",
+        "bun run --silent test",
+        "bun --silent run test",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_package_test_readonly_containment_required"),
+            "{command}"
+        );
+    }
+    for command in [
+        "npm run --silent lint",
+        "npm --silent run lint",
+        "npm run --silent typecheck",
+        "pnpm -s lint",
+        "yarn --silent typecheck",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_node_tool_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn an_option_that_moves_or_fans_out_a_manager_run_is_not_peeled() {
+    // The peeled options are the manager's own reporting options. An option
+    // that changes the directory the run reads, or fans it out across a
+    // workspace, names a different run, so it keeps ordinary review rather
+    // than borrowing the narrow receipt the quiet spelling now takes.
+    for command in [
+        "npm --prefix ../other test",
+        "npm -C ../other test",
+        "npm --workspaces test",
+        "npm --workspace web run lint",
+        "pnpm -r test",
+        "bun --filter web run test",
+        "bun --bun run test",
+        "pnpm --filter web test",
+        "yarn --cwd ../other test",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}

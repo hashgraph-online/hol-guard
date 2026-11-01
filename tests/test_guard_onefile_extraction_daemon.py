@@ -185,3 +185,22 @@ def test_start_reclaim_is_noop_while_thread_alive(monkeypatch: pytest.MonkeyPatc
     assert server._onefile_extraction_reclaim_thread is alive
     blocker.set()
     alive.join(timeout=5)
+
+
+def test_shutdown_kills_the_sweep_and_records_no_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stop join must never wait out a sweep the runtime could run for minutes."""
+
+    server = _bare_daemon_server()
+    seen: list[object] = []
+
+    def stopped(**kwargs: object) -> ExtractionReclaimResult:
+        seen.append(kwargs.get("stop_event"))
+        server._shutdown_started.set()
+        raise onefile_extraction.ExtractionReclaimUnavailableError("onefile_extraction_reclaim_unavailable")
+
+    monkeypatch.setattr(onefile_extraction, "reclaim_orphaned_extraction_dirs", stopped)
+    server._reclaim_onefile_extraction_dirs_once()
+
+    assert seen == [server._shutdown_started]
+    assert server._server.onefile_extraction_status is None
+    assert "onefile_extraction_reclaim_failed" not in server._diagnostics.events
