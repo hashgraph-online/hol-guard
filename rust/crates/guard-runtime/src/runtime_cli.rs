@@ -100,6 +100,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = removal_evidence::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if grok_executable::is_command(command) && flag == "--stdin" => {
+            let response = grok_executable::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if harness_coverage_command::is_command(command) && flag == "--stdin" => {
             let response = harness_coverage_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

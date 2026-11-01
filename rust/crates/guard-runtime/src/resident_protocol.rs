@@ -136,6 +136,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-business-source-anchor-codec-v1".into(),
         "native-integrity-snapshot-v1".into(),
         "native-orphaned-worker-reap-v1".into(),
+        "native-grok-executable-v1".into(),
         "native-macos-code-signing-v1".into(),
         "native-business-source-current-fence-v2".into(),
         "hook-envelope-v2".into(),
