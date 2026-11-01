@@ -218,12 +218,8 @@ class StoreCloudEventsMixin:
         return None
 
     def list_cloud_exceptions(self, harness: str | None = None) -> list[dict[str, object]]:
-        from .cloud_exceptions import (
-            build_cloud_exceptions_from_policy_bundle,
-            cloud_exception_to_dict,
-            dedupe_cloud_exceptions,
-            list_active_cloud_exceptions,
-        )
+        from .native_runner_authority import NativeRunnerAuthorityError
+        from .runtime.runner_native_sync import cloud_exceptions
         from .synced_policy import SyncPayloadReader, validated_synced_policy_bundle
 
         policy_bundle = validated_synced_policy_bundle(cast(SyncPayloadReader, cast(object, self)))
@@ -235,13 +231,18 @@ class StoreCloudEventsMixin:
         except (KeyError, OSError, RuntimeError, TypeError, ValueError):
             return []
         acknowledgement = self.get_sync_payload("policy_bundle_ack")
-        parsed_items = build_cloud_exceptions_from_policy_bundle(
-            policy_bundle,
-            device_id=device_id,
-            policy_bundle_ack=acknowledgement if isinstance(acknowledgement, dict) else None,
-        )
-        active_items = list_active_cloud_exceptions(dedupe_cloud_exceptions(parsed_items), harness=harness)
-        return [cloud_exception_to_dict(item) for item in active_items]
+        try:
+            return cloud_exceptions(
+                policy_bundle,
+                device_id=device_id,
+                policy_bundle_ack=acknowledgement if isinstance(acknowledgement, dict) else None,
+                harness=harness,
+                active_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except NativeRunnerAuthorityError:
+            # An exception only ever widens what runs, so one the runtime could
+            # not read is not listed as in force.
+            return []
 
     def delete_sync_payload(self, state_key: str) -> None:
         if state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY:

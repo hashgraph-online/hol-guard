@@ -4,17 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from codex_plugin_scanner.guard.cloud_exceptions import (
-    cloud_exception_from_mapping,
-    list_active_cloud_exceptions,
-)
 from codex_plugin_scanner.guard.consumer.native_decision_projection import (
     _ConsumerAuthorityInputs,
     _native_runtime_decision,
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.runtime.runner_native_sync import cloud_exceptions
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import (
     build_cloud_exception_bundle_entry,
@@ -32,12 +30,12 @@ PACKAGE_ARTIFACT_ID = "codex:project:package-request:left-pad"
 V2_WORKSPACE_ID = "workspace-alpha"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_exception_without_a_harness_is_listed_for_every_harness() -> None:
     entry = build_cloud_exception_bundle_entry()
     del entry["harness"]
-    parsed = cloud_exception_from_mapping(entry, provenance="policy-bundle")
-    assert parsed is not None
-    assert list_active_cloud_exceptions([parsed], harness="claude-code", now=NOW) == [parsed]
+    active = cloud_exceptions({"cloudExceptions": [entry]}, device_id=None, harness="claude-code", active_at=NOW)
+    assert [(item["id"], item["harness"]) for item in active] == [(entry["exceptionId"], None)]
 
 
 def _store_with_bundle(

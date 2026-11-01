@@ -10,6 +10,7 @@ unchanged; a transport or shape failure raises ``NativeRunnerAuthorityError``.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
@@ -322,3 +323,43 @@ def policy_bundle_downgrade_reference(
     if not isinstance(chosen, dict):
         raise _malformed()
     return chosen
+
+
+_CLOUD_EXCEPTION_BUNDLE_KEYS = ("bundleHash", "bundleVersion", "cloudExceptions", "acknowledgements")
+_CLOUD_EXCEPTION_ACK_KEYS = ("status", "bundleHash", "bundleVersion", "deviceId", "appliedAt")
+
+
+def cloud_exceptions(
+    policy_bundle: Mapping[str, object],
+    *,
+    device_id: str | None,
+    policy_bundle_ack: Mapping[str, object] | None = None,
+    harness: str | None = None,
+    active_at: str | None = None,
+) -> list[dict[str, object]]:
+    """The deduplicated Cloud exception records a policy bundle carries.
+
+    With ``active_at`` only the exceptions still in force at that instant are
+    returned, narrowed to ``harness`` when it is given. Only the bundle and
+    acknowledgement fields the owner reads cross the transport.
+    """
+
+    args: dict[str, object] = {
+        # As JSON text: the transport refuses arrays wider than 4,096 items.
+        "policy_bundle": json.dumps(
+            {key: policy_bundle[key] for key in _CLOUD_EXCEPTION_BUNDLE_KEYS if key in policy_bundle},
+            sort_keys=True,
+        ),
+        "device_id": device_id,
+        "policy_bundle_ack": (
+            {key: policy_bundle_ack[key] for key in _CLOUD_EXCEPTION_ACK_KEYS if key in policy_bundle_ack}
+            if isinstance(policy_bundle_ack, Mapping)
+            else None
+        ),
+        "harness": harness,
+        "active_at": active_at,
+    }
+    items = _field(native_runner_authority("cloud_exceptions", args), "items", list)
+    if not all(isinstance(item, dict) for item in items):
+        raise _malformed()
+    return items
