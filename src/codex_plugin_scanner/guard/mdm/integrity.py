@@ -7,10 +7,8 @@ results: the components, reason codes, assurance level and remediation class.
 from __future__ import annotations
 
 import hashlib
-import json
 import platform
 import shutil
-import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,12 +31,12 @@ from .harness_coverage import verify_harness_coverage
 from .manifest import ManifestVerification, verify_release_manifest
 from .native import NativeInstallVerification, verify_native_install
 from .policy import load_managed_policy
+from .runtime_request import runtime_answer
 from .supervisor import machine_executable, verify_machine_supervisor
 
 INTEGRITY_SNAPSHOT_FEATURE = "native-integrity-snapshot-v1"
 INTEGRITY_SNAPSHOT_COMMAND = "integrity-snapshot"
 INTEGRITY_SNAPSHOT_SCHEMA = "integrity-snapshot.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _OUTPUT_LIMIT_BYTES = 64 * 1024
 
@@ -148,32 +146,14 @@ def _command_shadowing(paths: MachinePaths) -> dict[str, str]:
 
 
 def _native_snapshot(request: dict[str, object]) -> LocalIntegritySnapshot:
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    output = None
-    if (
-        status.available
-        and status.compatible
-        and status.identity is not None
-        and status.capabilities is not None
-        and INTEGRITY_SNAPSHOT_FEATURE in status.capabilities.features
-    ):
-        output = _run_native_process(
-            status.identity.path,
-            (INTEGRITY_SNAPSHOT_COMMAND, "--stdin"),
-            input_text=json.dumps({"schema": INTEGRITY_SNAPSHOT_SCHEMA, **request}, sort_keys=True),
-            timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
-            output_limit=_OUTPUT_LIMIT_BYTES,
-        )
-    try:
-        snapshot = cast(object, json.loads(output)) if output is not None else None
-    except ValueError:
-        snapshot = None
-    if (
-        not isinstance(snapshot, dict)
-        or cast(dict[str, object], snapshot).get("schemaVersion") != LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION
-    ):
+    snapshot = runtime_answer(
+        INTEGRITY_SNAPSHOT_FEATURE,
+        INTEGRITY_SNAPSHOT_COMMAND,
+        {"schema": INTEGRITY_SNAPSHOT_SCHEMA, **request},
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+    )
+    if snapshot is None or snapshot.get("schemaVersion") != LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION:
         # Evidence nothing could compose is never reported as a snapshot.
         raise OSError("integrity_snapshot_native_unavailable")
     return cast(LocalIntegritySnapshot, cast(object, snapshot))

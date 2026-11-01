@@ -9,24 +9,21 @@ and the active installation binding.
 from __future__ import annotations
 
 import base64
-import json
 import os
 import platform
-import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from ..durable_io import fsync_directory as _fsync_directory
 from .acl import verify_protected_ownership_and_acl
 from .continuity import verify_installation_continuity
 from .contracts import MDM_STATUS_SCHEMA_VERSION, MachinePaths, default_machine_paths
+from .runtime_request import runtime_answer
 
 REMOVAL_EVIDENCE_FEATURE = "native-removal-evidence-v1"
 REMOVAL_EVIDENCE_COMMAND = "removal-evidence"
 REMOVAL_EVIDENCE_SCHEMA = "removal-evidence.v1"
 _MAX_AUTHORIZATION_BYTES = 16 * 1024
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _OUTPUT_LIMIT_BYTES = 16 * 1024
 
@@ -69,31 +66,13 @@ def _authorization_root_is_trusted(paths: MachinePaths) -> bool:
 def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
     """The runtime's answer to one removal-evidence request, or ``None`` when it cannot answer."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or REMOVAL_EVIDENCE_FEATURE not in status.capabilities.features
-    ):
-        return None
-    output = _run_native_process(
-        status.identity.path,
-        (REMOVAL_EVIDENCE_COMMAND, "--stdin"),
-        input_text=json.dumps({"schema": REMOVAL_EVIDENCE_SCHEMA, **request}, sort_keys=True),
+    return runtime_answer(
+        REMOVAL_EVIDENCE_FEATURE,
+        REMOVAL_EVIDENCE_COMMAND,
+        {"schema": REMOVAL_EVIDENCE_SCHEMA, **request},
         timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
         output_limit=_OUTPUT_LIMIT_BYTES,
     )
-    if output is None:
-        return None
-    try:
-        response = cast(object, json.loads(output))
-    except ValueError:
-        return None
-    return cast(dict[str, object], response) if isinstance(response, dict) else None
 
 
 def _native_fields(request: dict[str, object], *, unavailable: Exception) -> dict[str, object]:

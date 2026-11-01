@@ -13,12 +13,13 @@ import hashlib
 import importlib
 import json
 import re
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Final, Protocol, cast
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
+
+from .runtime_request import runtime_answer
 
 
 class LeaseClaims(Protocol):
@@ -80,7 +81,6 @@ _CONTRACT_COMMAND = "health-lease-contract"
 _CONTRACT_SCHEMA = "health-lease-contract.v1"
 _CONTRACT_ERRORS = {"health_lease_invalid", "health_lease_challenge_invalid", "health_lease_outbox_invalid"}
 _NATIVE_UNAVAILABLE = "health_lease_contract_native_unavailable"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _OUTPUT_LIMIT_BYTES = 2 * MAX_OUTBOX_BYTES
 
@@ -109,29 +109,13 @@ def canonical_timestamp(value: datetime) -> str:
 def _native_answer(request: dict[str, object]) -> dict[str, Any] | None:
     """The runtime's answer to one contract request, or ``None`` when it cannot answer."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or HEALTH_LEASE_CONTRACT_FEATURE not in status.capabilities.features
-    ):
-        return None
-    output = _run_native_process(
-        status.identity.path,
-        (_CONTRACT_COMMAND, "--stdin"),
-        input_text=json.dumps({"schema": _CONTRACT_SCHEMA, **request}, sort_keys=True),
+    return runtime_answer(
+        HEALTH_LEASE_CONTRACT_FEATURE,
+        _CONTRACT_COMMAND,
+        {"schema": _CONTRACT_SCHEMA, **request},
         timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
         output_limit=_OUTPUT_LIMIT_BYTES,
     )
-    try:
-        answer = cast(object, json.loads(output or ""))
-    except ValueError:
-        return None
-    return cast(dict[str, Any], answer) if isinstance(answer, dict) else None
 
 
 def native_contract(op: str, request: dict[str, object]) -> dict[str, Any]:
