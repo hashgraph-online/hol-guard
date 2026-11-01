@@ -674,7 +674,6 @@ def test_prepared_native_install_preserves_foreign_edit_before_any_publication(t
         ("files", [None]),
         ("managed_installs", ["invalid"]),
         ("deadline_monotonic", True),
-        ("deadline_monotonic", float("inf")),
         ("forward_expires_monotonic", "later"),
         ("candidate", {}),
         ("recovery_causes", "invalid"),
@@ -689,6 +688,19 @@ def test_authenticated_record_shape_failure_preserves_state_and_bindings(transit
     record = runtime.path.read_bytes()
     with pytest.raises(TransitionError):
         runtime.restore_files(plan.operation_id, first_cause="candidate failed")
+    assert runtime.path.read_bytes() == record
+    assert bindings.read_bytes() == b"previous hooks"
+    assert pointer.read_bytes() == b"previous pointer"
+
+
+def test_a_record_that_is_not_json_is_never_authenticated(transition):
+    runtime, plan, bindings, pointer = transition
+    begin(runtime, plan)
+    payload = runtime._read(plan.operation_id)
+    record = runtime.path.read_bytes()
+    payload["deadline_monotonic"] = float("inf")
+    with pytest.raises(ValueError):
+        runtime._write(payload)
     assert runtime.path.read_bytes() == record
     assert bindings.read_bytes() == b"previous hooks"
     assert pointer.read_bytes() == b"previous pointer"
