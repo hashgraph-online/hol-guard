@@ -782,6 +782,18 @@
       ]
     },
     {
+      "id": "omp-native-git-staged-file-listing",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find out what is staged in the index by running the listed command once, then tell me which files it printed.",
+      "commands": [
+        "git diff-index --cached --name-only HEAD"
+      ]
+    },
+    {
       "id": "git-read-after-sibling-climb",
       "expectation": "allow",
       "oracle": "commands",

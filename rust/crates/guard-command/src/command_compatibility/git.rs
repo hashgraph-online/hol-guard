@@ -246,11 +246,11 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "diff-tree" | "log" | "cherry" | "show" | "blame" | "describe"
-            | "reflog" | "branch" | "hash-object" | "rev-parse" | "merge-base" | "ls-files"
-            | "remote" | "worktree" | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref"
-            | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore" | "count-objects"
-            | "check-attr",
+            "status" | "diff" | "diff-index" | "diff-tree" | "log" | "cherry" | "show" | "blame"
+            | "describe" | "reflog" | "branch" | "hash-object" | "rev-parse" | "merge-base"
+            | "ls-files" | "remote" | "worktree" | "config" | "grep" | "ls-tree" | "cat-file"
+            | "show-ref" | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore"
+            | "count-objects" | "check-attr",
         ) => true,
         // A tag listing, a clean preview and a patch check only print, but the
         // same three subcommands also write a tag, remove a file and patch the
@@ -434,14 +434,14 @@ fn routed_with_route<'a>(
 /// The owner a read subcommand answers to when it has no declarative rule of
 /// its own.
 ///
-/// `diff-tree` prints the comparison `diff` owns and `cherry` lists the
-/// commits `log` owns. Without this each would fall to the catch-all below,
-/// which leaves every git rule uncertain and sends an ordinary read to
+/// `diff-tree` and `diff-index` print the comparison `diff` owns and `cherry`
+/// lists the commits `log` owns. Without this each would fall to the catch-all
+/// below, which leaves every git rule uncertain and sends an ordinary read to
 /// review; naming the owner instead keeps the permission a user disables
 /// working on the spelling they disabled it for.
 fn read_owner(command: &str) -> &str {
     match command {
-        "diff-tree" => "diff",
+        "diff-tree" | "diff-index" => "diff",
         "cherry" => "log",
         other => other,
     }
@@ -589,7 +589,9 @@ pub(super) fn observe_with_contexts(
             result.rule("command.git.unverified-fetch", index, !plain);
         }
     }
-    if command == "diff"
+    // `diff-index --cached` prints the same staged content `diff --cached`
+    // does, so it answers to the same index owner.
+    if matches!(command, "diff" | "diff-index")
         && arguments[command_index + 1..]
             .iter()
             .take_while(|argument| argument.as_str() != "--")

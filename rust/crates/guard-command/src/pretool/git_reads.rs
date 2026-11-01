@@ -248,6 +248,7 @@ pub(super) fn safe_git_arguments(
         "status"
             | "cherry"
             | "diff"
+            | "diff-index"
             | "diff-tree"
             | "log"
             | "show"
@@ -314,7 +315,10 @@ pub(super) fn safe_git_arguments(
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
-    let diff_family = matches!(subcommand, "diff" | "diff-tree" | "log" | "show");
+    let diff_family = matches!(
+        subcommand,
+        "diff" | "diff-index" | "diff-tree" | "log" | "show"
+    );
     if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
             || (diff_family && helpers_off)
@@ -350,6 +354,7 @@ pub(super) fn inspection_writes_nothing(
         "status"
             | "cherry"
             | "diff"
+            | "diff-index"
             | "diff-tree"
             | "log"
             | "show"

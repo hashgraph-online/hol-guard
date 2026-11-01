@@ -83,6 +83,7 @@ pub(super) fn execution_free_paging(
         "status"
             | "cherry"
             | "diff"
+            | "diff-index"
             | "diff-tree"
             | "log"
             | "show"
@@ -418,7 +419,7 @@ fn probe(
     // check prints names, and a configured driver leaves all of them alone.
     let renders_diff = matches!(
         rendering,
-        "diff" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+        "diff" | "diff-index" | "diff-tree" | "log" | "show" | "reflog" | "stash"
     );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
@@ -431,11 +432,13 @@ fn probe(
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
         // `clean` prints its preview, and `apply` its check report, without
-        // a pager. `rev-parse` and `ls-files` are plumbing: Git starts no
-        // pager for either, so only their own `pager.*` key can ask for one.
+        // a pager. `rev-parse`, `ls-files` and `diff-index` are plumbing: Git
+        // starts no pager for any of them, so only their own `pager.*` key
+        // can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files" => false,
+        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
+        | "diff-index" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };

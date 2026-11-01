@@ -62,6 +62,7 @@ const READ_ONLY_VERBS: &[&str] = &[
     "count-objects",
     "describe",
     "diff",
+    "diff-index",
     "diff-tree",
     "for-each-ref",
     "grep",
@@ -112,9 +113,8 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
         // `git reflog show` and `git stash list` are `git log` written another
         // way: both hand their words to the log walk, so both define the whole
         // log option set and are read for it here.
-        ("diff" | "diff-tree" | "log" | "show" | "reflog", _) | ("stash", "show" | "list") => {
-            &["--ext-diff", "--output", "--textconv"]
-        }
+        ("diff" | "diff-index" | "diff-tree" | "log" | "show" | "reflog", _)
+        | ("stash", "show" | "list") => &["--ext-diff", "--output", "--textconv"],
         ("blame", _) => &["--textconv"],
         ("grep", _) => &["--open-files-in-pager", "--textconv"],
         // `--filters` runs the repository's smudge filter over the blob it
@@ -130,7 +130,7 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
 /// abbreviation of `--textconv` where it has none.
 fn spelled_in_full(verb: &str) -> &'static [&'static str] {
     match verb {
-        "diff" | "diff-tree" | "log" | "show" | "grep" => &["--text"],
+        "diff" | "diff-index" | "diff-tree" | "log" | "show" | "grep" => &["--text"],
         _ => &[],
     }
 }
@@ -142,7 +142,7 @@ fn spelled_in_full(verb: &str) -> &'static [&'static str] {
 fn short_value_letters(verb: &str) -> &'static str {
     match verb {
         "grep" => "efmABCO",
-        "diff" | "diff-tree" | "log" | "show" | "stash" | "reflog" => "USGlLnOBCM",
+        "diff" | "diff-index" | "diff-tree" | "log" | "show" | "stash" | "reflog" => "USGlLnOBCM",
         "blame" => "LCMS",
         _ => "",
     }
@@ -155,7 +155,7 @@ fn disabled_helpers(verb: &str, subcommand: &str) -> &'static [&'static str] {
         // `stash show` prints a diff, and `stash list` and `reflog show` print
         // one for `-p`, so all three read the same two helpers the diff family
         // does. `reflog exists` answers about a ref and defines neither.
-        ("diff" | "diff-tree" | "log" | "show", _)
+        ("diff" | "diff-index" | "diff-tree" | "log" | "show", _)
         | ("stash", "show" | "list")
         | ("reflog", "" | "show") => &["--no-ext-diff", "--no-textconv"],
         ("blame" | "grep", _) => &["--no-textconv"],
