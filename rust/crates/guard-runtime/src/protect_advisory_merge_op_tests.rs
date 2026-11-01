@@ -2,6 +2,7 @@ use guard_contracts::ProtectCachedVerdictV1;
 use serde_json::json;
 
 use super::*;
+use crate::package_authority_op::request_digest_with_limit;
 
 fn request(payload: Value, action: &str) -> ProtectAdvisoryMergeRequestV1 {
     ProtectAdvisoryMergeRequestV1 {
@@ -99,10 +100,18 @@ fn invalid_requests_fail_with_typed_codes() {
 fn oversized_request_is_refused_before_merging() {
     let mut big = payload();
     big["padding"] = json!("x".repeat(PROTECT_ADVISORY_MERGE_MAX_REQUEST_BYTES));
+    let request = request(big, "block");
+    let result = decode(&request);
     assert_eq!(
-        evaluate_protect_advisory_merge_op(&request(big, "block")).unwrap_err(),
-        TOO_LARGE
+        (result.status.as_str(), result.code.as_str()),
+        ("error", TOO_LARGE)
     );
+    assert_eq!(result.request_id, "merge-1");
+    assert_eq!(
+        result.request_sha256,
+        request_digest_with_limit(&request, guard_contracts::MAX_NATIVE_REQUEST_BYTES).unwrap()
+    );
+    assert_eq!(result.merged, None);
 }
 
 #[test]

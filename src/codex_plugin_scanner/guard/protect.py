@@ -321,6 +321,10 @@ def _merge_cached_advisory_into_package_payload(
     """
 
     payload, exit_code = result
+    if payload.get("executed") is not False:
+        # An install that already ran keeps its result; the native merge
+        # leaves it unchanged, so its output never needs to cross the wire.
+        return result
     merged = native_protect_advisory_merge(
         payload,
         cached={

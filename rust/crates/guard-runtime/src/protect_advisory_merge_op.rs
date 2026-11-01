@@ -4,23 +4,33 @@
 //!
 //! Pure: the caller persists the receipt update and event the op returns.
 
-use crate::package_authority_op::request_digest_with_limit;
 use guard_command::protect_request::{merge_cached_advisory, CachedAdvisoryVerdict};
 use guard_contracts::{
     ProtectAdvisoryMergeRequestV1, ProtectAdvisoryMergeResultV1, ProtectAdvisoryMergeV1,
-    ProtectInstallEventV1, ProtectReceiptPolicyUpdateV1, PROTECT_ADVISORY_MERGE_MAX_REQUEST_BYTES,
-    PROTECT_ADVISORY_MERGE_REQUEST_SCHEMA, PROTECT_ADVISORY_MERGE_RESULT_SCHEMA,
+    ProtectInstallEventV1, ProtectReceiptPolicyUpdateV1, MAX_NATIVE_REQUEST_BYTES,
+    PROTECT_ADVISORY_MERGE_MAX_REQUEST_BYTES, PROTECT_ADVISORY_MERGE_REQUEST_SCHEMA,
+    PROTECT_ADVISORY_MERGE_RESULT_SCHEMA,
 };
 use serde_json::Value;
 
 const TOO_LARGE: &str = "native_protect_advisory_merge_too_large";
+const INVALID: &str = "native_protect_advisory_merge_payload_invalid";
 
 pub(crate) fn evaluate_protect_advisory_merge_op(
     request: &ProtectAdvisoryMergeRequestV1,
 ) -> Result<Vec<u8>, String> {
-    let request_sha256 =
-        request_digest_with_limit(request, PROTECT_ADVISORY_MERGE_MAX_REQUEST_BYTES)
-            .map_err(|_| TOO_LARGE.to_owned())?;
+    // Digest within the frame limit so an over-bound request still gets a
+    // typed refusal bound to it rather than an untyped transport error.
+    let material = serde_json::to_value(request).map_err(|_| INVALID.to_owned())?;
+    let mut canonical = Vec::new();
+    crate::context_digest_json::write_canonical_json_with_limit(
+        &material,
+        &mut canonical,
+        MAX_NATIVE_REQUEST_BYTES,
+    )
+    .map_err(|_| TOO_LARGE.to_owned())?;
+    let oversized = canonical.len() > PROTECT_ADVISORY_MERGE_MAX_REQUEST_BYTES;
+    let request_sha256 = format!("sha256:{}", guard_policy_snapshot::digest_bytes(&canonical));
     let result =
         |code: &str, merged: Option<ProtectAdvisoryMergeV1>| ProtectAdvisoryMergeResultV1 {
             schema: PROTECT_ADVISORY_MERGE_RESULT_SCHEMA.to_owned(),
@@ -30,6 +40,9 @@ pub(crate) fn evaluate_protect_advisory_merge_op(
             code: code.to_owned(),
             merged,
         };
+    if oversized {
+        return crate::encode_response(&result(TOO_LARGE, None));
+    }
     let outcome = match evaluate(request) {
         Ok(merged) => result("ok", merged),
         Err(code) => result(code, None),
