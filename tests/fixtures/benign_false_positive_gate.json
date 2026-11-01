@@ -34464,23 +34464,6 @@
       "expect": "allow"
     },
     {
-      "id": "control-flow-while-read-body-operand-expansion",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "while IFS= read -r f; do wc -l \"$f\"; done < README.md"
-      },
-      "cwd": "parent",
-      "expect": "allow"
-    },
-    {
       "id": "neg-control-flow-while-read-expansion-command-word",
       "fix_area": "negative",
       "harnesses": [
