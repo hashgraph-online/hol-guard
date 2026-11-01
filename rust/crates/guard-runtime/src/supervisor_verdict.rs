@@ -6,7 +6,8 @@
 //! `macos` and `windows` ops decide what evidence a caller sent says. A macOS
 //! verdict can need more evidence than it has, so it answers with the next
 //! probe to run (`disabled`, then `loaded`) until it can decide, and no probe
-//! the registration already ruled out ever runs.
+//! the registration already ruled out ever runs. The `windows-install` and
+//! `windows-remove` ops register and delete the task (`supervisor_install.rs`).
 
 use std::io::Read;
 use std::sync::LazyLock;
@@ -16,7 +17,9 @@ use roxmltree::{Document, Node, NodeType, ParsingOptions};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::daemon_lifecycle_text::{nt_root_end, py_splitlines, py_strip};
+use crate::daemon_lifecycle_text::{py_splitlines, py_strip};
+
+use nt_path::{nt_normcase_normpath, security_descriptor_valid};
 
 const SCHEMA: &str = "supervisor-verdict.v1";
 const MAX_REQUEST_BYTES: u64 = 2 * 1024 * 1024;
@@ -66,6 +69,10 @@ struct Request {
     /// `System32\schtasks.exe`.
     #[serde(default)]
     windows_directory: Option<String>,
+    /// The machine state root `windows-install` writes the task definition
+    /// under before `schtasks` registers it.
+    #[serde(default)]
+    state_root: Option<String>,
     #[serde(default)]
     stdout_log: Option<String>,
     #[serde(default)]
@@ -117,6 +124,12 @@ fn answer(bytes: &[u8]) -> Result<Value, String> {
         }
         "windows-verify" => {
             probe::windows_verify(&request, &mut probe::SystemRunner).ok_or_else(invalid)
+        }
+        "windows-install" => {
+            install::windows_install(&request, &mut probe::SystemRunner).ok_or_else(invalid)
+        }
+        "windows-remove" => {
+            install::windows_remove(&request, &mut probe::SystemRunner).ok_or_else(invalid)
         }
         "windows" => request
             .task
@@ -461,75 +474,11 @@ fn action_status(root: Node, executable: &str) -> Option<Verdict> {
     None
 }
 
-/// `ntpath.normcase(ntpath.normpath(path))`.
-fn nt_normcase_normpath(path: &str) -> String {
-    let characters: Vec<char> = path
-        .chars()
-        .map(|character| if character == '/' { '\\' } else { character })
-        .collect();
-    let end = nt_root_end(&characters);
-    let prefix: String = characters[..end].iter().collect();
-    let rooted = prefix.ends_with('\\');
-    let tail: String = characters[end..].iter().collect();
-    let mut parts: Vec<&str> = Vec::new();
-    for part in tail.split('\\') {
-        match part {
-            "" | "." => {}
-            ".." if parts.last().is_some_and(|last| *last != "..") => {
-                parts.pop();
-            }
-            ".." if parts.is_empty() && rooted => {}
-            part => parts.push(part),
-        }
-    }
-    let joined = if prefix.is_empty() && parts.is_empty() {
-        ".".to_owned()
-    } else {
-        format!("{prefix}{}", parts.join("\\"))
-    };
-    joined.to_lowercase()
-}
+#[path = "supervisor_install.rs"]
+mod install;
 
-/// `D:P` with exactly the SYSTEM and Administrators full-control entries, in
-/// either order and with either SID spelling, and only those owners/groups.
-fn security_descriptor_valid(descriptor: &str) -> bool {
-    static SDDL: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r"(?i)^(?:O:(?:BA|SY|S-1-5-32-544|S-1-5-18))?(?:G:(?:BA|SY|S-1-5-32-544|S-1-5-18))?D:P(?P<aces>(?:\([^()]+\))+)$",
-        )
-        .expect("static pattern")
-    });
-    static ACE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\(([^()]+)\)").expect("static pattern"));
-    let Some(aces) = SDDL
-        .captures(descriptor)
-        .and_then(|captures| captures.name("aces"))
-    else {
-        return false;
-    };
-    let mut normalized = Vec::new();
-    for ace in ACE.captures_iter(aces.as_str()) {
-        let mut fields: Vec<String> = ace[1]
-            .to_uppercase()
-            .split(';')
-            .map(str::to_owned)
-            .collect();
-        if fields.len() != 6 {
-            return false;
-        }
-        fields[5] = match fields[5].as_str() {
-            "SY" => "S-1-5-18".to_owned(),
-            "BA" => "S-1-5-32-544".to_owned(),
-            other => other.to_owned(),
-        };
-        normalized.push(format!("({})", fields.join(";")));
-    }
-    let system = "(A;;FA;;;S-1-5-18)";
-    let administrators = "(A;;FA;;;S-1-5-32-544)";
-    normalized.len() == 2
-        && normalized.iter().any(|ace| ace == system)
-        && normalized.iter().any(|ace| ace == administrators)
-}
+#[path = "supervisor_nt_path.rs"]
+mod nt_path;
 
 #[path = "supervisor_probe.rs"]
 mod probe;

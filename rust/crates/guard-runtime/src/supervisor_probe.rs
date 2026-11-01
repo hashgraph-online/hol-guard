@@ -71,6 +71,7 @@ fn carries_no_evidence(request: &Request) -> bool {
 pub(super) fn macos_verify(mut request: Request, runner: &mut impl Runner) -> Option<Value> {
     if !carries_no_evidence(&request)
         || request.windows_directory.is_some()
+        || request.state_root.is_some()
         || request.plist_path.is_none()
         || request.stdout_log.is_none()
         || request.stderr_log.is_none()
@@ -111,6 +112,7 @@ pub(super) fn macos_verify(mut request: Request, runner: &mut impl Runner) -> Op
 
 pub(super) fn windows_verify(request: &Request, runner: &mut impl Runner) -> Option<Value> {
     if !carries_no_evidence(request)
+        || request.state_root.is_some()
         || request.plist_file.is_some()
         || request.plist_path.is_some()
         || request.stdout_log.is_some()
@@ -159,7 +161,7 @@ pub(super) fn windows_context(
 }
 
 /// `ntpath.join(base, name)` for a drive-rooted `base` and a plain `name`.
-fn nt_join(base: &str, name: &str) -> String {
+pub(super) fn nt_join(base: &str, name: &str) -> String {
     if base.ends_with(['\\', '/']) || base.len() == 2 {
         format!("{base}{name}")
     } else {

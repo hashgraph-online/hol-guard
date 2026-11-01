@@ -233,7 +233,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
             "hol-guard-runtime --lib windows_expanded_home",
             "guard-runtime-windows-process --test process_liveness",
             "hol-guard-runtime --lib health_lease_state",
-            "hol-guard-runtime --lib supervisor_verdict::probe",
+            "hol-guard-runtime --lib supervisor_verdict",
             "hol-guard-runtime --lib managed_owner_lock",
             "hol-guard-runtime --lib owner_release",
             "hol-guard-runtime --lib harness_coverage",
