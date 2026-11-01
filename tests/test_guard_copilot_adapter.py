@@ -166,7 +166,7 @@ def test_copilot_hook_ownership_skips_the_runtime_without_commands(monkeypatch: 
     assert stub.batches == []
 
 
-def test_copilot_merge_and_remove_keep_only_user_entries() -> None:
+def test_copilot_merge_and_remove_keep_every_unmanaged_entry() -> None:
     current: dict[str, object] = {"bash": "guard bash", "powershell": "guard pwsh"}
     entries: list[object] = [
         {"command": "user hook"},
@@ -180,7 +180,7 @@ def test_copilot_merge_and_remove_keep_only_user_entries() -> None:
     merged = copilot_module._merge_hook_entries(entries, current, managed=managed)
     removed = copilot_module._remove_hook_entries(entries, "guard bash", "guard pwsh", managed=managed)
 
-    kept = [{"command": "user hook"}, {"bash": "user bash", "powershell": "user pwsh"}]
+    kept = [{"command": "user hook"}, {"bash": "user bash", "powershell": "user pwsh"}, "not an entry"]
     assert merged == [*kept, current]
     assert removed == kept
     assert copilot_module._remove_hook_entries("not a list", "guard bash", "guard pwsh", managed=managed) == []
