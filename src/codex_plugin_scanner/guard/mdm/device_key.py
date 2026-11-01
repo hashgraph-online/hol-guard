@@ -30,7 +30,7 @@ from .file_lock import (
 from .file_lock import (
     release_file_lock as _release_lock,
 )
-from .state_file import read_state, replace_state
+from .state_file import native_state, replace_state
 
 _METADATA_SCHEMA = "hol-guard-device-key.v1"
 _LOCK_NAME = ".device-key.lock"
@@ -113,74 +113,36 @@ def _machine_key_lock(paths: MachinePaths) -> Iterator[None]:
             _release_lock(handle)
 
 
-def _parse_generation(raw: object) -> KeyGeneration | None:
+def _generation(raw: object) -> KeyGeneration | None:
     if raw is None:
         return None
-    if not isinstance(raw, dict):
-        raise ValueError("device_key_metadata_invalid")
-    generation = raw.get("generation")
-    key_id = raw.get("keyId")
-    public_key_spki = raw.get("publicKeySpki")
-    protection_level = raw.get("protectionLevel")
-    created_at = raw.get("createdAt")
-    if (
-        not isinstance(generation, str)
-        or len(generation) != 32
-        or any(character not in "0123456789abcdef" for character in generation)
-        or not isinstance(key_id, str)
-        or not key_id
-        or not isinstance(public_key_spki, str)
-        or len(public_key_spki) > 1024
-        or protection_level not in {"hardware-backed", "os-protected"}
-        or not isinstance(created_at, str)
-        or not created_at
-    ):
-        raise ValueError("device_key_metadata_invalid")
+    fields = cast(dict[str, str], raw)
     return KeyGeneration(
-        generation,
-        key_id,
-        public_key_spki,
-        cast(KeyProtectionLevel, protection_level),
-        created_at,
+        fields["generation"],
+        fields["keyId"],
+        fields["publicKeySpki"],
+        cast(KeyProtectionLevel, fields["protectionLevel"]),
+        fields["createdAt"],
     )
 
 
 def _read_metadata(paths: MachinePaths) -> DeviceKeyMetadata | None:
-    content = read_state(paths.state_root, "device_key")
-    if content is None:
+    """The metadata the native runtime read and checked, or `None` when there is none."""
+
+    raw = native_state("read-metadata", "device_key", paths.state_root).get("metadata")
+    if raw is None:
         return None
-    raw = json.loads(content)
-    if not isinstance(raw, dict) or raw.get("schemaVersion") != _METADATA_SCHEMA:
-        raise ValueError("device_key_metadata_invalid")
-    state = raw.get("state")
-    pending = raw.get("pendingGeneration")
-    updated_at = raw.get("updatedAt")
-    if (
-        state not in {"pending", "active", "rotation_pending", "revoked"}
-        or (
-            pending is not None
-            and (
-                not isinstance(pending, str)
-                or len(pending) != 32
-                or any(character not in "0123456789abcdef" for character in pending)
-            )
+    try:
+        fields = cast(dict[str, object], raw)
+        return DeviceKeyMetadata(
+            cast(LifecycleState, fields["state"]),
+            _generation(fields["active"]),
+            cast(str | None, fields["pendingGeneration"]),
+            _generation(fields["previous"]),
+            cast(str, fields["updatedAt"]),
         )
-        or not isinstance(updated_at, str)
-        or not updated_at
-    ):
-        raise ValueError("device_key_metadata_invalid")
-    metadata = DeviceKeyMetadata(
-        cast(LifecycleState, state),
-        _parse_generation(raw.get("active")),
-        cast(str | None, pending),
-        _parse_generation(raw.get("previous")),
-        updated_at,
-    )
-    if metadata.state == "active" and (metadata.active is None or metadata.pending_generation is not None):
-        raise ValueError("device_key_metadata_invalid")
-    if metadata.state in {"pending", "rotation_pending"} and metadata.pending_generation is None:
-        raise ValueError("device_key_metadata_invalid")
-    return metadata
+    except (KeyError, TypeError) as exc:
+        raise OSError("device_key_native_unavailable") from exc
 
 
 def _generation_from_evidence(generation: str, evidence: NativeKeyEvidence) -> KeyGeneration:

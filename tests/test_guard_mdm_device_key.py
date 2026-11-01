@@ -6,6 +6,7 @@ import secrets
 import subprocess
 from contextlib import nullcontext
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
@@ -218,12 +219,57 @@ def test_device_key_metadata_round_trips_through_the_native_runtime(
     assert sorted(entry.name for entry in paths.state_root.iterdir()) == ["device-key.json"]
 
 
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        {"state": ["active"]},
+        {"active": {"protectionLevel": ["os-protected"]}},
+        {"active": {"generation": "0123456789ABCDEF0123456789ABCDEF"}},
+        {"pendingGeneration": "fedcba9876543210fedcba9876543210"},
+        {"schemaVersion": "hol-guard-device-key.v2"},
+    ],
+)
+def test_device_key_metadata_the_native_runtime_refuses_reads_as_tampered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replacement: dict[str, object]
+) -> None:
+    paths = _paths(tmp_path)
+    paths.state_root.mkdir()
+    monkeypatch.setattr(state_file, "_state_owner_uid", lambda: getattr(os, "getuid", lambda: 0)())
+    generation = device_key.KeyGeneration(
+        "0123456789abcdef0123456789abcdef", "key-id", "MFkw", "os-protected", "2026-07-17T00:00:00+00:00"
+    )
+    metadata = device_key.DeviceKeyMetadata("active", generation, None, None, "2026-07-17T00:00:00+00:00").to_dict()
+    for name, value in replacement.items():
+        if isinstance(value, dict) and isinstance(metadata[name], dict):
+            metadata[name] = {**cast(dict[str, object], metadata[name]), **value}
+        else:
+            metadata[name] = value
+    state_file.replace_state(paths.state_root, "device_key", json.dumps(metadata).encode("utf-8"))
+
+    with pytest.raises(ValueError, match="device_key_metadata_invalid"):
+        device_key._read_metadata(paths)
+    status = device_key.verify_machine_device_key(paths, system_name="Darwin")
+
+    assert (status.state, status.reason_code) == ("tampered", "device_key_metadata_invalid")
+
+
+@pytest.mark.parametrize("metadata", [["active"], {"state": "active"}, {"state": "revoked", "active": "key"}])
+def test_device_key_metadata_from_a_malformed_native_answer_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, metadata: object
+) -> None:
+    paths = _paths(tmp_path)
+    monkeypatch.setattr(device_key, "native_state", lambda *_args: {"ok": True, "metadata": metadata})
+
+    with pytest.raises(OSError, match="device_key_native_unavailable"):
+        device_key._read_metadata(paths)
+
+
 def test_device_key_metadata_fails_closed_without_the_native_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _paths(tmp_path)
     paths.state_root.mkdir()
-    monkeypatch.setattr(state_file, "MACHINE_STATE_FILES_FEATURE", "native-machine-state-files-absent")
+    monkeypatch.setattr(state_file, "DEVICE_KEY_METADATA_FEATURE", "native-device-key-metadata-absent")
 
     with pytest.raises(OSError, match="device_key_native_unavailable"):
         device_key._read_metadata(paths)
