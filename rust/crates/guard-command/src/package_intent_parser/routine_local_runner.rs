@@ -225,66 +225,201 @@ fn versions_match(
         return false;
     };
 
-    let mut locked_versions: BTreeSet<String> = BTreeSet::new();
-    let npm_key = format!("node_modules/{dependency_name}");
-    let bun_prefix = format!("{dependency_name}@");
+    let mut locked: BTreeSet<String> = BTreeSet::new();
     for evidence in lockfiles {
         let Some(resolved) = evidence.resolved_path.as_deref() else {
             continue;
         };
-        let path = Path::new(resolved);
-        let Some(text) = read_bounded(path, MAX_VERDICT_FILE_BYTES) else {
+        // Every lockfile in the workspace has to bind this runner itself, to
+        // a release the registry served. A file Guard cannot read, cannot
+        // recognise, or that parses but never names the package would
+        // otherwise let the remaining lockfiles answer for it.
+        let Some(versions) = locked_versions(Path::new(resolved), dependency_name) else {
             return false;
         };
-        let parsed = if path.file_name().and_then(|name| name.to_str()) == Some("bun.lock") {
-            loads_jsonc(&text).ok()
-        } else {
-            serde_json::from_str::<Value>(&text).ok()
-        };
-        // A document that does not parse, is not a mapping, or carries no
-        // `packages` mapping is a lockfile Guard cannot read — fail closed
-        // rather than letting the remaining lockfiles decide alone.
-        let Some(packages) = parsed
-            .as_ref()
-            .and_then(|lock| lock.get("packages"))
-            .and_then(Value::as_object)
-        else {
-            return false;
-        };
-        let mut bound_here = false;
-        if let Some(entry) = packages.get(&npm_key).and_then(Value::as_object) {
-            if !registry_entry(entry) {
-                return false;
-            }
-            if let Some(version) = entry.get("version").and_then(Value::as_str) {
-                locked_versions.insert(version.to_owned());
-                bound_here = true;
-            }
+        locked.extend(versions);
+    }
+
+    locked.len() == 1
+        && locked.contains(installed_version)
+        && semver_spec_matches(declared_version, installed_version)
+}
+
+/// The versions one lockfile pins for `dependency_name`, or `None` when it is
+/// a file Guard cannot read, is written in a dialect it does not recognise,
+/// names a source outside the registry, or never names the package at all.
+fn locked_versions(path: &Path, dependency_name: &str) -> Option<BTreeSet<String>> {
+    let text = read_bounded(path, MAX_VERDICT_FILE_BYTES)?;
+    let versions = match path.file_name().and_then(|name| name.to_str())? {
+        "pnpm-lock.yaml" => pnpm_locked_versions(&text, dependency_name)?,
+        "yarn.lock" => yarn_locked_versions(&text, dependency_name)?,
+        "bun.lock" => json_locked_versions(&loads_jsonc(&text).ok()?, dependency_name)?,
+        // `bun.lockb` is Bun's binary lockfile, which carries no text form to
+        // read, so a workspace holding one gets no verdict.
+        "bun.lockb" => return None,
+        // Everything else npm writes is JSON: `package-lock.json` and the
+        // `npm-shrinkwrap.json` it publishes beside it.
+        _ => json_locked_versions(&serde_json::from_str::<Value>(&text).ok()?, dependency_name)?,
+    };
+    (!versions.is_empty()).then_some(versions)
+}
+
+/// `spec` as a released version, or `None` when it names a source instead.
+/// Every lockfile dialect writes the source inside the spec it pins, so a
+/// scheme or a path there means the installed copy is a checkout or a
+/// directory rather than something the registry served.
+fn registry_version(spec: &str) -> Option<&str> {
+    (!spec.is_empty() && !spec.contains([':', '/'])).then_some(spec)
+}
+
+/// The versions a JSON lockfile pins for `dependency_name`. npm keys its
+/// `packages` mapping by install path and Bun by package name, and either
+/// spelling can appear, so both are read from every JSON lockfile.
+fn json_locked_versions(lock: &Value, dependency_name: &str) -> Option<BTreeSet<String>> {
+    let packages = lock.get("packages").and_then(Value::as_object)?;
+    let mut versions = BTreeSet::new();
+    if let Some(entry) = packages
+        .get(&format!("node_modules/{dependency_name}"))
+        .and_then(Value::as_object)
+    {
+        if !registry_entry(entry) {
+            return None;
         }
-        if let Some(version) = packages
-            .get(dependency_name)
-            .and_then(Value::as_array)
-            .and_then(|items| items.first())
-            .and_then(Value::as_str)
-            .and_then(|entry| entry.strip_prefix(&bun_prefix))
+        if let Some(version) = entry.get("version").and_then(Value::as_str) {
+            versions.insert(version.to_owned());
+        }
+    }
+    if let Some(spec) = packages
+        .get(dependency_name)
+        .and_then(Value::as_array)
+        .and_then(|items| items.first())
+        .and_then(Value::as_str)
+        .and_then(|entry| entry.strip_prefix(&format!("{dependency_name}@")))
+    {
+        versions.insert(registry_version(spec)?.to_owned());
+    }
+    Some(versions)
+}
+
+/// The versions `pnpm-lock.yaml` pins for `dependency_name`.
+///
+/// pnpm writes one key per resolved package under a top-level `packages`
+/// mapping, two spaces in. Three spellings have shipped: `name@version` in
+/// lockfile 9, `/name@version` in lockfile 6 and `/name/version` in lockfile
+/// 5. A key may also carry the peers it was resolved against in parentheses,
+/// which still names that release.
+fn pnpm_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<String>> {
+    let mut versions = BTreeSet::new();
+    let mut inside_packages = false;
+    for line in text.lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            continue;
+        }
+        let Some(entry) = line.strip_prefix("  ") else {
+            // Anything else at column zero opens the next top-level block.
+            inside_packages = line == "packages:";
+            continue;
+        };
+        if !inside_packages || entry.starts_with(' ') {
+            continue;
+        }
+        let Some(key) = entry.strip_suffix(':') else {
+            continue;
+        };
+        let key = key.trim_matches(['\'', '"']);
+        let key = key.strip_prefix('/').unwrap_or(key);
+        let Some(rest) = key.strip_prefix(dependency_name) else {
+            continue;
+        };
+        let Some(spec) = rest.strip_prefix('@').or_else(|| rest.strip_prefix('/')) else {
+            continue;
+        };
+        let spec = spec.split('(').next().unwrap_or(spec);
+        versions.insert(registry_version(spec)?.to_owned());
+    }
+    Some(versions)
+}
+
+/// What one `yarn.lock` block has said so far about the release it pins.
+#[derive(Default)]
+struct YarnBlock {
+    version: Option<String>,
+    from_registry: bool,
+}
+
+impl YarnBlock {
+    /// Read one body line of the block.
+    fn read(&mut self, line: &str) {
+        if let Some(value) = line
+            .strip_prefix("version ")
+            .or_else(|| line.strip_prefix("version: "))
         {
-            // A Bun entry names its source inside the spec, so a version
-            // carrying a scheme or a path is a checkout rather than a release.
-            if version.contains([':', '/']) {
-                return false;
-            }
-            locked_versions.insert(version.to_owned());
-            bound_here = true;
-        }
-        // Every lockfile Guard read has to bind this runner itself. A file
-        // that parses but never names the package would otherwise let the
-        // remaining lockfiles answer for it.
-        if !bound_here {
-            return false;
+            self.version = Some(unquote(value).to_owned());
+        } else if let Some(value) = line.strip_prefix("resolved ") {
+            let value = unquote(value);
+            self.from_registry = value.starts_with("https://") || value.starts_with("http://");
+        } else if let Some(value) = line.strip_prefix("resolution: ") {
+            self.from_registry = unquote(value).contains("@npm:");
         }
     }
 
-    locked_versions.len() == 1
-        && locked_versions.contains(installed_version)
-        && semver_spec_matches(declared_version, installed_version)
+    /// The release the block pins, or `None` when it never named one or named
+    /// a source outside the registry.
+    fn finish(self) -> Option<String> {
+        let version = self.version?;
+        (self.from_registry && registry_version(&version).is_some()).then_some(version)
+    }
+}
+
+/// `value` without the quotes a lockfile may wrap it in.
+fn unquote(value: &str) -> &str {
+    value.trim().trim_matches(['"', '\''])
+}
+
+/// Whether a `yarn.lock` block header answers for `dependency_name`. A header
+/// lists the specifiers the block resolves, each a package name followed by
+/// the range it came from, and either dialect may quote them.
+fn yarn_header_binds(header: &str, dependency_name: &str) -> bool {
+    let Some(header) = header.strip_suffix(':') else {
+        return false;
+    };
+    header.split(',').any(|spec| {
+        let spec = unquote(spec);
+        spec.rfind('@')
+            .filter(|index| *index > 0)
+            .is_some_and(|index| &spec[..index] == dependency_name)
+    })
+}
+
+/// The versions `yarn.lock` pins for `dependency_name`.
+///
+/// Both dialects write one block per resolved package: a column-zero header
+/// listing the specifiers it answers for, then an indented body. Yarn 1
+/// writes `version "4.22.4"` and the registry URL on a `resolved` line; Yarn
+/// 2 and later write `version: 4.22.4` and name the source in `resolution`.
+fn yarn_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<String>> {
+    let mut versions = BTreeSet::new();
+    let mut block: Option<YarnBlock> = None;
+    for line in text.lines() {
+        let line = line.trim_end();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if !line.starts_with(' ') {
+            if let Some(block) = block.take() {
+                versions.insert(block.finish()?);
+            }
+            block = yarn_header_binds(line, dependency_name).then(YarnBlock::default);
+            continue;
+        }
+        let Some(block) = block.as_mut() else {
+            continue;
+        };
+        block.read(line.trim_start());
+    }
+    if let Some(block) = block {
+        versions.insert(block.finish()?);
+    }
+    Some(versions)
 }
