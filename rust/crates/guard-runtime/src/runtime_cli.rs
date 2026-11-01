@@ -204,6 +204,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = device_key_helper::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if desktop_foreign_installs::is_command(command) && flag == "--stdin" => {
+            let response = desktop_foreign_installs::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {
             let response = posix_processes::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
