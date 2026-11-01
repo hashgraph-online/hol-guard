@@ -4349,6 +4349,23 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-annotate-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git annotate README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-worktree-diff-index-names",
       "fix_area": "git",
       "harnesses": [

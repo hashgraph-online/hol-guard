@@ -89,6 +89,7 @@ pub(super) fn execution_free_paging(
             | "log"
             | "show"
             | "blame"
+            | "annotate"
             | "describe"
             | "reflog"
             | "grep"
@@ -136,7 +137,7 @@ pub(super) fn execution_free_paging(
     if operation == "rev-list" && !super::git_rev_list::read_form(&remaining[1..]) {
         return None;
     }
-    if matches!(operation, "blame" | "describe" | "reflog")
+    if matches!(operation, "blame" | "annotate" | "describe" | "reflog")
         && !super::git_history_reads::read_form(operation, &remaining[1..])
     {
         return None;

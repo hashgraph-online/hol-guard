@@ -54,6 +54,7 @@
 
 /// Verbs whose every form reads the repository.
 const READ_ONLY_VERBS: &[&str] = &[
+    "annotate",
     "blame",
     "cat-file",
     "check-attr",
@@ -119,7 +120,9 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
         // log option set and are read for it here.
         ("diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog", _)
         | ("stash", "show" | "list") => &["--ext-diff", "--output", "--textconv"],
-        ("blame", _) => &["--textconv"],
+        // `git annotate` is `git blame` in another output format and takes
+        // the same options, this one included.
+        ("blame" | "annotate", _) => &["--textconv"],
         ("grep", _) => &["--open-files-in-pager", "--textconv"],
         // `--filters` runs the repository's smudge filter over the blob it
         // prints, which is the same program `--textconv` would have named.
@@ -148,7 +151,7 @@ fn short_value_letters(verb: &str) -> &'static str {
         "grep" => "efmABCO",
         "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "stash"
         | "reflog" => "USGlLnOBCM",
-        "blame" => "LCMS",
+        "blame" | "annotate" => "LCMS",
         _ => "",
     }
 }
@@ -163,7 +166,7 @@ fn disabled_helpers(verb: &str, subcommand: &str) -> &'static [&'static str] {
         ("diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show", _)
         | ("stash", "show" | "list")
         | ("reflog", "" | "show") => &["--no-ext-diff", "--no-textconv"],
-        ("blame" | "grep", _) => &["--no-textconv"],
+        ("blame" | "annotate" | "grep", _) => &["--no-textconv"],
         _ => &[],
     }
 }

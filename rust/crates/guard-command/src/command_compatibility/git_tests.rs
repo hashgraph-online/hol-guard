@@ -368,6 +368,36 @@ fn read_plumbing_answers_to_the_porcelain_owner_it_belongs_to() {
     }
 }
 
+/// `git annotate` is `git blame` printed in another format: the same walk,
+/// the same options and the same `blame.*` settings. Without an owner it fell
+/// to the blanket attribution every unnamed subcommand reaches, which reports
+/// each git rule as uncertain and leaves an everyday read with a floor no
+/// approval and no contained workspace can settle.
+#[test]
+fn the_other_spelling_of_blame_answers_to_the_blame_owner() {
+    for (annotate, blame) in [
+        ("git annotate src/index.ts", "git blame src/index.ts"),
+        (
+            "git annotate -L 1,20 src/index.ts",
+            "git blame -L 1,20 src/index.ts",
+        ),
+        (
+            "git annotate --textconv src/index.ts",
+            "git blame --textconv src/index.ts",
+        ),
+    ] {
+        let read = |command: &str| -> Vec<(String, bool)> {
+            observations(command)
+                .rule_matches
+                .iter()
+                .map(|entry| (entry.rule_id.to_string(), entry.uncertainty))
+                .collect()
+        };
+        assert_eq!(read(annotate), read(blame), "{annotate}");
+    }
+    assert!(settles("git annotate src/index.ts"));
+}
+
 /// A bisect session moves `HEAD` across the history it is searching, so it
 /// has its own owner. Before it had one it fell to the blanket attribution
 /// every unnamed subcommand reaches, which reports each git rule as

@@ -76,6 +76,7 @@ const INERT_KEYS: &[&str] = &[
 /// scheduler jobs), and `git <name>` resolving to a `git-<name>` on `PATH`.
 const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "add",
+    "annotate",
     "am",
     "apply",
     "archive",

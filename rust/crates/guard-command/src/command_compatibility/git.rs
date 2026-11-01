@@ -263,10 +263,11 @@ pub(super) fn inspection_arguments<'a>(
     let admitted = match subcommand {
         Some(
             "status" | "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "cherry"
-            | "show" | "blame" | "describe" | "reflog" | "branch" | "hash-object" | "rev-parse"
-            | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep" | "ls-tree"
-            | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore"
-            | "count-objects" | "check-attr" | "name-rev" | "show-branch" | "check-ref-format",
+            | "show" | "blame" | "annotate" | "describe" | "reflog" | "branch" | "hash-object"
+            | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep"
+            | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog"
+            | "check-ignore" | "count-objects" | "check-attr" | "name-rev" | "show-branch"
+            | "check-ref-format",
         ) => true,
         // A second operand turns the ref read into a ref write, so the
         // printing form is admitted on its own grammar.
@@ -453,9 +454,10 @@ fn routed_with_route<'a>(
 /// The owner a read subcommand answers to when it has no declarative rule of
 /// its own.
 ///
-/// `diff-tree`, `diff-index` and `diff-files` print the comparison `diff` owns
-/// and `cherry`
-/// lists the commits `log` owns. Without this each would fall to the catch-all
+/// `diff-tree`, `diff-index` and `diff-files` print the comparison `diff` owns,
+/// `cherry`
+/// lists the commits `log` owns and `annotate` is `blame` in another output
+/// format, built from the same walk and reading the same `blame.*` settings. Without this each would fall to the catch-all
 /// below, which leaves every git rule uncertain and sends an ordinary read to
 /// review; naming the owner instead keeps the permission a user disables
 /// working on the spelling they disabled it for.
@@ -463,6 +465,7 @@ fn read_owner(command: &str) -> &str {
     match command {
         "diff-tree" | "diff-index" | "diff-files" => "diff",
         "cherry" => "log",
+        "annotate" => "blame",
         other => other,
     }
 }

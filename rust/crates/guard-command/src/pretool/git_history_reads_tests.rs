@@ -18,6 +18,12 @@ fn history_inspections_are_read_forms() {
             "blame",
             "--ignore-revs-file .git-blame-ignore-revs src/index.ts",
         ),
+        // `git annotate` is `git blame` printed another way and parses the
+        // same options, so the read form answers for both spellings.
+        ("annotate", ""),
+        ("annotate", "src/index.ts"),
+        ("annotate", "-L 1,20 src/index.ts"),
+        ("annotate", "-w -M -C3 --date=short src/index.ts"),
         ("describe", ""),
         ("describe", "--tags"),
         ("describe", "--tags --always"),
@@ -45,6 +51,9 @@ fn other_forms_keep_review() {
         ("blame", "-S../.ssh/id_rsa src/index.ts"),
         ("blame", "-L:secret:.env src/index.ts"),
         ("blame", "--abbrev=x src/index.ts"),
+        ("annotate", "--textconv src/index.ts"),
+        ("annotate", "--output=blame.txt src/index.ts"),
+        ("annotate", "-S.env src/index.ts"),
         ("describe", "--textconv"),
         ("describe", "--abbrev=x"),
         ("describe", "--unknown-option"),
@@ -64,6 +73,7 @@ fn other_forms_keep_review() {
 fn trailing_value_options_need_their_value() {
     for (subcommand, rest) in [
         ("blame", "--contents"),
+        ("annotate", "--contents"),
         ("describe", "--match"),
         ("reflog", "--date"),
     ] {
