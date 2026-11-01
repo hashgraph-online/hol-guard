@@ -34,9 +34,14 @@ pub(crate) const SCRIPT_SUFFIXES: &[&str] = &[
     ".sh", ".bash", ".zsh", ".ksh", ".fish", ".py", ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl",
 ];
 pub(crate) const OTHER_READERS: &[&str] = &[
-    "base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc", "ag",
-    "ack",
+    "base64", "xxd", "od", "hexdump", "strings", "tac", "less", "more", "sort", "uniq", "wc",
 ];
+/// The search tools, whose first non-option word is a pattern rather than a
+/// path. `ag` and `ack` sat in `OTHER_READERS` and had every non-option word
+/// swept in as a path candidate, so `ag private_key src/` read its own
+/// pattern as a wallet key. They belong here, with the operand reader the
+/// rest of the family already uses.
+pub(crate) const SEARCH_READERS: &[&str] = &["grep", "egrep", "fgrep", "rg", "ag", "ack"];
 pub(crate) const MAX_SCRIPTS: usize = 16;
 pub(crate) const MAX_DEPTH: usize = 4;
 pub(crate) const MAX_TOTAL_BYTES: usize = 128 * 1024;
@@ -877,6 +882,33 @@ pub(crate) fn ripgrep_args_expand_hidden_files(args: &[String]) -> bool {
     false
 }
 
+/// Hidden-file expansion across the search readers. `rg` is answered by its
+/// own option tables; `ag` and `ack` spell the same widening as `--hidden`,
+/// `--unrestricted`, or a short cluster carrying `u`.
+pub(crate) fn search_args_expand_hidden_files(command_name: &str, args: &[String]) -> bool {
+    if command_name == "rg" {
+        return ripgrep_args_expand_hidden_files(args);
+    }
+    if !["ag", "ack"].contains(&command_name) {
+        return false;
+    }
+    for arg in args {
+        if arg == "--" {
+            break;
+        }
+        if arg == "--hidden" || arg == "--unrestricted" {
+            return true;
+        }
+        if arg.starts_with("--") || !arg.starts_with('-') || arg == "-" {
+            continue;
+        }
+        if arg[1..].chars().any(|option| option == 'u') {
+            return true;
+        }
+    }
+    false
+}
+
 /// `_shell_segment_file_operand_tokens` (:61-74).
 pub(crate) fn shell_segment_file_operand_tokens(segment: &[String]) -> Vec<String> {
     if segment.is_empty() {
@@ -893,7 +925,7 @@ pub(crate) fn shell_segment_file_operand_tokens(segment: &[String]) -> Vec<Strin
     if command_name == "sed" {
         return sed_file_operand_tokens(args);
     }
-    if ["grep", "egrep", "fgrep", "rg"].contains(&command_name.as_str()) {
+    if SEARCH_READERS.contains(&command_name.as_str()) {
         return search_file_operand_tokens(&command_name, args);
     }
     Vec::new()
@@ -907,25 +939,24 @@ pub(crate) fn local_read_operands_resolve_safely(
     cwd: &Path,
     root: &Path,
 ) -> bool {
-    let allow_dirs = ["grep", "egrep", "fgrep", "rg"].contains(&command_name);
+    let allow_dirs = SEARCH_READERS.contains(&command_name);
     let resolved_root = match root.canonicalize() {
         Ok(r) => r,
         Err(_) => return false,
     };
-    if command_name == "rg" && ripgrep_args_expand_hidden_files(args) {
+    if search_args_expand_hidden_files(command_name, args) {
         return false;
     }
     let mut all_args: Vec<String> = vec![command_name.to_owned()];
     all_args.extend(args.iter().cloned());
-    let operand_roles: Vec<(String, bool)> =
-        if ["grep", "egrep", "fgrep", "rg"].contains(&command_name) {
-            search_file_operand_roles(command_name, args)
-        } else {
-            shell_segment_file_operand_tokens(&all_args)
-                .into_iter()
-                .map(|o| (o, false))
-                .collect()
-        };
+    let operand_roles: Vec<(String, bool)> = if SEARCH_READERS.contains(&command_name) {
+        search_file_operand_roles(command_name, args)
+    } else {
+        shell_segment_file_operand_tokens(&all_args)
+            .into_iter()
+            .map(|o| (o, false))
+            .collect()
+    };
     for (operand, is_search_glob) in operand_roles {
         let stripped = operand.trim().trim_matches('\'').trim_matches('"');
         if stripped.is_empty() || stripped == "-" {
@@ -1461,9 +1492,9 @@ pub(crate) fn command_may_need_read_assessment(
         let mut v: Vec<&str> = Vec::new();
         v.extend(SHELLS);
         v.extend(OTHER_READERS);
+        v.extend(SEARCH_READERS);
         v.extend([
-            "cat", "head", "tail", "sed", "grep", "egrep", "fgrep", "rg", "read", "command",
-            "exec", "node", "bun", "ruby", "perl",
+            "cat", "head", "tail", "sed", "read", "command", "exec", "node", "bun", "ruby", "perl",
         ]);
         v
     };
