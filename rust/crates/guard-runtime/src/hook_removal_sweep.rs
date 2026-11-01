@@ -218,7 +218,17 @@ fn load(path: &Path) -> Result<Config, &'static str> {
             .map(Config::Toml)
             .map_err(|_| "unparseable");
     }
-    match parse(&text) {
+    // CPython also decodes a lone surrogate escape in a key; the mapping
+    // parser reads such a file so the sweep can find the hooks, and
+    // `render` then refuses to write it back.
+    let parsed = parse(&text).or_else(|_| {
+        parse_mapping_lone_surrogates(&text)
+            .ok()
+            .filter(|parsed| parsed.mapped)
+            .map(|parsed| parsed.value)
+            .ok_or("unparseable")
+    });
+    match parsed {
         Ok(payload @ PyVal::Dict(_)) => Ok(Config::Json(payload, text)),
         Ok(_) => Err("unexpected_shape"),
         Err(_) => Err("unparseable"),
