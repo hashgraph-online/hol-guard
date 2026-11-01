@@ -1131,15 +1131,33 @@ def _windows_path_is_direct(path: str) -> bool:
 
 def _set_windows_private_directory(path: Path) -> None:
     from .native_policy_snapshot import NativePolicySnapshotError
+
+    try:
+        _ensure_windows_private_directory_recently(path)
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
+
+
+def _ensure_windows_private_directory_recently(path: Path, *, private_root: Path | None = None) -> None:
+    """Have the runtime make `path` owner-private, at most once per recheck window.
+
+    A directory reached without a junction or link, whose identity is the one
+    the runtime last made private within the window, is not asked again. A
+    failure is raised and forgets the directory.
+    """
+
     from .native_policy_snapshot_windows_atomic import _windows_ensure_private_directory
 
-    key = os.path.normcase(os.path.abspath(path))
+    path_key = os.path.normcase(os.path.abspath(path))
+    key = path_key
+    if private_root is not None:
+        key = f"{path_key}\0{os.path.normcase(os.path.abspath(private_root))}"
     try:
         stat = os.stat(path)
     except OSError:
         stat = None
     now = time.monotonic()
-    if stat is not None and _windows_path_is_direct(key):
+    if stat is not None and _windows_path_is_direct(path_key):
         with _windows_private_directory_lock:
             bound = _windows_private_directory_bound.get(key)
         if (
@@ -1149,12 +1167,14 @@ def _set_windows_private_directory(path: Path) -> None:
         ):
             return
     try:
-        _windows_ensure_private_directory(path)
-    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        if private_root is None:
+            _windows_ensure_private_directory(path)
+        else:
+            _windows_ensure_private_directory(path, private_root=private_root)
+    except BaseException:
         with _windows_private_directory_lock:
             _windows_private_directory_bound.pop(key, None)
-        _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
-        return
+        raise
     if stat is not None:
         with _windows_private_directory_lock:
             _windows_private_directory_bound[key] = (stat.st_dev, stat.st_ino, now)
