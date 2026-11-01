@@ -33,6 +33,8 @@ assert(resolveView("/apps/*") === "fleet", "wildcard app route falls back to fle
 assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls back to fleet");
 assert(resolveView(PROTECT_ROUTE) === "fleet", "/protect resolves to protect workspace view");
 assert(resolveView("/about") === "about", "/about resolves to about view");
+assert(resolveView("/cigar") === "cigar", "CIGAR has a dedicated dashboard route");
+assert(viewTitle("cigar") === "CIGAR", "CIGAR keeps its identity in the page title");
 assert(TODAY_EVIDENCE_ROUTE === "/evidence?time=today", "daily activity opens Evidence filtered to today");
 assert(resolveView("/protection/repair") === "protection-repair", "the repair link opens the one-button repair page");
 assert(viewTitle("protection-repair") === "Repair protection", "the repair page title names the action");

@@ -34,6 +34,8 @@ fn malformed_sync_arguments_are_typed_errors() {
         "canonical_rollout",
         "downgrade_reference",
         "policy_simulation",
+        "runtime_session_payload",
+        "cloud_http_error",
         "stale_intel",
     ] {
         assert!(

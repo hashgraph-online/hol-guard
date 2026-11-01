@@ -242,7 +242,7 @@ fn a_payload_that_does_not_match_its_header_digest_is_never_evaluated() {
     let written = Arc::clone(&stream.written);
     let request = pending(stream, body.len(), body, &Sha256::digest(b"another body"));
 
-    handle_pending_request(request, None, None);
+    handle_pending_request(request, None, None, None);
 
     let written = written.lock().unwrap();
     assert!(contains(&written, b"native_request_digest_mismatch"));
@@ -258,7 +258,7 @@ fn a_payload_the_client_stops_sending_ends_on_the_payload_timeout() {
     // The header promised the whole body; only its first ten bytes arrived.
     let request = pending(stream, body.len(), &body[..10], &Sha256::digest(body));
 
-    handle_pending_request(request, None, None);
+    handle_pending_request(request, None, None, None);
 
     let recorded = timeouts.lock().unwrap();
     assert_eq!(recorded[0], Some(crate::PAYLOAD_TIMEOUT));
@@ -278,7 +278,7 @@ fn a_request_that_waited_past_its_budget_is_answered_without_reading_its_payload
     let mut request = pending(stream, body.len(), b"", &Sha256::digest(body));
     request.accepted_at = Instant::now() - crate::hardening::TOTAL_REQUEST_BUDGET;
 
-    handle_pending_request(request, None, None);
+    handle_pending_request(request, None, None, None);
 
     let written = written.lock().unwrap();
     assert!(contains(&written, b"native_request_deadline_exceeded"));
@@ -302,7 +302,7 @@ fn a_payload_fed_one_byte_at_a_time_ends_on_what_is_left_of_the_budget() {
     request.accepted_at = Instant::now() - (crate::hardening::TOTAL_REQUEST_BUDGET - left);
 
     let started = Instant::now();
-    handle_pending_request(request, None, None);
+    handle_pending_request(request, None, None, None);
 
     assert!(contains(
         &written.lock().unwrap(),
@@ -329,6 +329,8 @@ fn a_flood_of_connections_that_never_authenticate_leaves_accept_running() {
         primary,
         overflow,
         workers: Vec::new(),
+        context_lane: Arc::new(context::Lane::default()),
+        policy_store: None,
     };
 
     let started = Instant::now();

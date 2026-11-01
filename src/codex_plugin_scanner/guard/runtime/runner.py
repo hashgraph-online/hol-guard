@@ -1212,32 +1212,8 @@ def sync_receipts(
 
 
 def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str, bool]:
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    retryable = error.code in {429, 503, 524}
-    payload: object = None
-    if raw_body:
-        try:
-            payload = json.loads(raw_body)
-        except json.JSONDecodeError:
-            payload = None
-    message: str | None = None
-    if isinstance(payload, dict):
-        message = _read_guard_cloud_error_message(payload)
-        guard_error = payload.get("guardError")
-        if isinstance(guard_error, dict):
-            if guard_error.get("retryable") is True:
-                retryable = True
-            guard_code = guard_error.get("code")
-            unavailable_codes = {"guard_unavailable", "guard_cloud_unavailable"}
-            if isinstance(guard_code, str) and guard_code.strip().lower() in unavailable_codes:
-                retryable = True
-    if message is None:
-        normalized_body = raw_body.strip()
-        message = normalized_body or f"HTTP Error {error.code}: {error.reason}"
-    return message, retryable
+    answer = _cloud_http_error(error)
+    return answer.message, answer.retryable
 
 
 def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
@@ -3298,136 +3274,67 @@ def _refresh_guard_sync_request(
     )
 
 
-def _read_guard_cloud_error_message(payload: dict[str, object]) -> str | None:
-    guard_error = payload.get("guardError")
-    if isinstance(guard_error, dict):
-        for key in ("msg", "message"):
-            nested = guard_error.get(key)
-            if isinstance(nested, str) and nested.strip():
-                return nested.strip()
-    for key in ("err", "message", "error"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
+# Bounds the body shipped to the resident well inside its request cap; Guard
+# Cloud and Cloudflare error bodies are far smaller.
+_CLOUD_HTTP_ERROR_BODY_CHARS = 512 * 1024
+_CLOUD_HTTP_ERROR_HEADERS = ("cf-mitigated", "cf-ray", "server", "content-type")
+# The statuses the runtime itself treats as retryable (`RETRYABLE_STATUSES`).
+_CLOUD_HTTP_ERROR_RETRYABLE_STATUSES = frozenset({429, 503, 524})
 
 
-CLOUD_EDGE_BLOCK_REASON_PREFIX = "Guard Cloud is unreachable from this network"
+def _cloud_http_error(error: urllib.error.HTTPError) -> _sync.CloudHttpError:
+    """Read the error once and return how the resident reads it.
 
-
-def _cloud_edge_block_message(error: urllib.error.HTTPError, raw_body: str) -> str | None:
-    """Cloudflare's own block or challenge page instead of a Guard Cloud answer.
-
-    Mirrors ``cloud_edge_block_message`` in guard_sync_transport.rs. The page is HTML
-    a client cannot pass, so its raw text is no use as an error message.
+    The answer carries the sync message, the retryable flag, the 403
+    plan-restriction verdict and Cloudflare's edge-block message, so a caller
+    never drains the stream twice.
     """
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
     headers = error.headers
-    if headers is None:
-        return None
-    challenged = headers.get("cf-mitigated") is not None
-    from_cloudflare = headers.get("cf-ray") is not None or str(headers.get("server") or "").lower() == "cloudflare"
-    html = str(headers.get("content-type") or "").lower().startswith("text/html")
-    page = raw_body[: 64 * 1024]
-    challenge_page = "Just a moment..." in page or "challenge-platform" in page
-    block_page = "Attention Required! | Cloudflare" in page or "Sorry, you have been blocked" in page
-    if not challenged and not (from_cloudflare and html and (challenge_page or block_page)):
-        return None
-    action = "challenged" if challenged or challenge_page else "blocked"
-    ray = str(headers.get("cf-ray") or "").split("-", 1)[0]
-    if ray.isascii() and ray.isalnum():
-        ray_detail, ray_hint = f", Ray ID {ray}", "; the Guard Cloud operator can look up that Ray ID"
-    else:
-        ray_detail, ray_hint = "", ""
-    return (
-        f"{CLOUD_EDGE_BLOCK_REASON_PREFIX}: Cloudflare in front of Guard Cloud {action} the request "
-        f"(HTTP {error.code}{ray_detail}). This is not a sign-in problem, so reconnecting will not help{ray_hint}."
+    projected = (
+        None
+        if headers is None
+        else {name: str(value) for name in _CLOUD_HTTP_ERROR_HEADERS if (value := headers.get(name)) is not None}
     )
+    try:
+        return _sync.cloud_http_error(
+            status=error.code,
+            reason=str(error.reason),
+            headers=projected,
+            body=raw_body[:_CLOUD_HTTP_ERROR_BODY_CHARS],
+        )
+    except NativeRunnerAuthorityError:
+        # The HTTP error still has to reach the user when the runtime cannot
+        # answer, without a verdict the runtime never gave: the status alone
+        # decides a retry, and the status line stands in as the edge block so
+        # an unread 401 is reported as it came rather than as an expired sign-in.
+        status_line = f"HTTP Error {error.code}: {error.reason}"
+        retryable = error.code in _CLOUD_HTTP_ERROR_RETRYABLE_STATUSES
+        return _sync.CloudHttpError(status_line, retryable, status_line, False, status_line, status_line)
 
 
 def _cloud_edge_block_from_http_error(error: urllib.error.HTTPError) -> str | None:
-    """Read the body once and return the edge-block message, if Cloudflare answered."""
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    return _cloud_edge_block_message(error, raw_body)
+    """The edge-block message, if Cloudflare answered instead of Guard Cloud."""
+    return _cloud_http_error(error).edge_block
 
 
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    edge_block = _cloud_edge_block_message(error, raw_body)
-    if edge_block is not None:
-        return edge_block
-    try:
-        payload = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        message = _read_guard_cloud_error_message(payload)
-        if message is not None:
-            return message
-    normalized_body = raw_body.strip()
-    if normalized_body:
-        return normalized_body
-    return f"HTTP Error {error.code}: {error.reason}"
+    return _cloud_http_error(error).sync_message
 
 
 def _redact_sync_text(value: str) -> str:
     return redact_sensitive_text(value)
 
 
-_PLAN_403_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "sync_not_available",
-        "plan_restriction",
-        "requires a pro",
-        "requires a team",
-        "upgrade your plan",
-        "upgrade to",
-        "subscription required",
-        "not included in your plan",
-        "guard sync requires",
-    }
-)
-
-
 def _check_plan_restriction_403(
     error: urllib.error.HTTPError,
 ) -> tuple[bool, str]:
-    """Read a 403 response body exactly once.
-
-    Returns (is_plan_restriction, error_message) so callers never
-    drain the stream more than once regardless of which branch they take.
-    Checks both machine-readable fields (syncEnabled, error, code) and
-    human-readable error messages for plan-restriction signals.
-    """
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    try:
-        payload: object = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    edge_block = _cloud_edge_block_message(error, raw_body)
-    if edge_block is not None:
-        return False, edge_block
-    fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
-    if not isinstance(payload, dict):
-        return False, fallback
-    message = payload.get("error")
-    message_str = message.strip() if isinstance(message, str) and message.strip() else fallback
-    if payload.get("syncEnabled") is False:
-        return True, message_str
-    error_field = str(payload.get("error") or "").lower()
-    code_field = str(payload.get("code") or "").lower()
-    combined = f"{error_field} {code_field}"
-    if any(kw in combined for kw in _PLAN_403_KEYWORDS):
-        return True, message_str
-    return False, message_str
+    """Read a 403 response body exactly once; return (is_plan_restriction, error_message)."""
+    answer = _cloud_http_error(error)
+    return answer.plan_restricted, answer.plan_message
 
 
 def _sync_url_error_message(error: OSError) -> str:
@@ -4233,60 +4140,26 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
 
 def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
     device_id, device_name = _guard_device_metadata(store)
-    workspace = _optional_string(session.get("workspace")) or os.getcwd()
-    session_id = (
-        _optional_string(session.get("session_id") or session.get("sessionId"))
-        or hashlib.sha256(f"{device_id}:{workspace}".encode()).hexdigest()[:24]
+    # The working directory only stands in for a missing workspace; a process
+    # whose directory was removed still syncs a session that names its own.
+    workspace = session.get("workspace")
+    payload = _sync.runtime_session_payload(
+        session,
+        device_id=device_id,
+        device_name=device_name,
+        cwd=workspace if isinstance(workspace, str) and workspace.strip() else os.getcwd(),
+        now=_now(),
+        version=__version__,
     )
-    created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
-    updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
-    capabilities = list(_string_items(session.get("capabilities")))
-    policy_document_versions = list(
-        _string_items(session.get("policy_document_versions") or session.get("policyDocumentVersions"))
-    )
-    policy_bundle_versions = list(
-        _string_items(session.get("policy_bundle_versions") or session.get("policyBundleVersions"))
-    )
-    policy_contracts = list(_string_items(session.get("policy_contracts") or session.get("policyContracts")))
-    yaml_import = session.get("yaml_import") is True or session.get("yamlImport") is True
-    canonical_policy_enforcement = (
-        session.get("canonical_policy_enforcement") is True or session.get("canonicalPolicyEnforcement") is True
-    )
-    package_manager_coverage = _cloud_package_manager_coverage(
+    updated_at = str(payload["updatedAt"])
+    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
+    payload["localIdentity"] = local_identity
+    payload["localIdentitySource"] = _cloud_local_identity_source_payload(local_identity)
+    payload["packageManagerCoverage"] = _cloud_package_manager_coverage(
         store,
-        workspace=workspace,
+        workspace=str(payload["workspace"]),
         generated_at=updated_at,
     )
-    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
-    payload: dict[str, object] = {
-        "sessionId": session_id,
-        "harness": _optional_string(session.get("harness")) or "hol-guard",
-        "surface": _optional_string(session.get("surface")) or "cli",
-        "status": _optional_string(session.get("status")) or "active",
-        "clientName": _optional_string(session.get("client_name") or session.get("clientName")) or "hol-guard",
-        "clientTitle": _optional_string(session.get("client_title") or session.get("clientTitle"))
-        or f"HOL Guard on {device_name}",
-        "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
-        "deviceId": device_id,
-        "deviceName": device_name,
-        "localIdentity": local_identity,
-        "localIdentitySource": _cloud_local_identity_source_payload(local_identity),
-        "packageManagerCoverage": package_manager_coverage,
-        "workspace": workspace,
-        "capabilities": capabilities,
-        "operations": [],
-        "createdAt": created_at,
-        "updatedAt": updated_at,
-    }
-    if policy_document_versions:
-        payload["policyDocumentVersions"] = policy_document_versions
-    if policy_bundle_versions:
-        payload["policyBundleVersions"] = policy_bundle_versions
-    if policy_contracts:
-        payload["policyContracts"] = policy_contracts
-    payload["yamlImport"] = yaml_import
-    if canonical_policy_enforcement:
-        payload["canonicalPolicyEnforcement"] = True
     payload.update(_managed_controls_runtime_sync_posture(store, generated_at=updated_at))
     return payload
 
