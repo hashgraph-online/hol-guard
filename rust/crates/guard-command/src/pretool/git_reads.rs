@@ -15,6 +15,40 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
     })
 }
 
+/// The long options that name a program for Git to run or a file for Git to
+/// write, as this module refuses them.
+const REFUSED_LONG_OPTIONS: &[&str] = &["--ext-diff", "--output", "--textconv"];
+
+/// Whether the word names one of those options, written in full or as any
+/// prefix of one.
+///
+/// Git's own parser resolves an unambiguous prefix to the option that owns
+/// it, so `--textc` starts the program a `diff.<driver>.textconv` setting
+/// names and `--ext-d` the one `diff.external` names, while `--no-textconv`
+/// and `--no-ext-diff` on the same line still satisfy the pair asked for
+/// above. A screen that compares whole words lets both past.
+///
+/// `--text` is left in: the comparison verbs spell it in full for their own
+/// "treat the file as text", and Git resolves an exact spelling to the
+/// option that owns it rather than reading it as a prefix of another.
+///
+/// [`crate::contained_git::names_helper_or_output`] asks the same question
+/// of the containment route. It is kept separate because it answers per verb
+/// from that route's own table, and the verbs admitted here -- `status`,
+/// `ls-files`, `remote`, `rev-parse` -- are not in it.
+fn names_refused_option(word: &str) -> bool {
+    let name = word.split('=').next().unwrap_or(word);
+    if name == "-o" {
+        return true;
+    }
+    if !name.starts_with("--") || name.len() < 3 || name == "--text" {
+        return false;
+    }
+    REFUSED_LONG_OPTIONS
+        .iter()
+        .any(|option| option.starts_with(name))
+}
+
 /// Whether `value`, a `git grep` target, is a tracked document whose name
 /// only reads like a credential, such as a committed
 /// `command.kubernetes-secrets.json`. A leading option other than the pager
@@ -207,7 +241,15 @@ pub(super) fn safe_git_arguments(
     }
     if !matches!(
         subcommand,
-        "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
+        "status"
+            | "cherry"
+            | "diff"
+            | "diff-tree"
+            | "log"
+            | "show"
+            | "rev-parse"
+            | "ls-files"
+            | "remote"
     ) {
         return false;
     }
@@ -253,30 +295,33 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
-    // These three read through the diff machinery, so without the
+    // These read through the diff machinery, so without the
     // configuration probe only the spelling that turns the external driver
     // and the textconv filter off is proven. A `-C` route that discovers no
     // repository needs neither: Git dies in its own setup before it reads a
     // diff, textconv, pager or filter setting, so there is no configured
-    // helper for the options to turn off.
+    // helper for the options to turn off. `git cherry` runs no helper of its
+    // own, but it still prints under `pager.cherry`, so it asks for the same
+    // clearance and has no spelling of its own that answers instead: the two
+    // diff switches are not options it defines.
     let helpers_off = active_options
         .iter()
         .any(|argument| argument == "--no-ext-diff")
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
-    if matches!(subcommand, "diff" | "log" | "show")
+    let diff_family = matches!(subcommand, "diff" | "diff-tree" | "log" | "show");
+    if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
-            || helpers_off
+            || (diff_family && helpers_off)
             || super::git_helper_context::arguments_route_to_no_repository(with_route, context))
     {
         return false;
     }
-    !has_argument(
-        active_options,
-        &["--ext-diff", "--textconv", "--output", "-o"],
-        &["--output=", "--exec-path="],
-    )
+    !active_options
+        .iter()
+        .any(|argument| names_refused_option(argument))
+        && !has_argument(active_options, &[], &["--exec-path="])
 }
 
 /// Whether a Git inspection, once the configuration probe cleared its helpers,
@@ -298,7 +343,15 @@ pub(super) fn inspection_writes_nothing(
     };
     if !matches!(
         subcommand.as_str(),
-        "status" | "diff" | "log" | "show" | "grep" | "merge-base" | "stash"
+        "status"
+            | "cherry"
+            | "diff"
+            | "diff-tree"
+            | "log"
+            | "show"
+            | "grep"
+            | "merge-base"
+            | "stash"
     ) {
         return false;
     }
@@ -307,9 +360,52 @@ pub(super) fn inspection_writes_nothing(
         .position(|argument| argument == "--")
         .unwrap_or(inspected.len());
     !has_argument(leading, &[], &["--exec-path"])
-        && !has_argument(
-            &inspected[1..option_end],
-            &["--ext-diff", "--textconv", "--output", "-o"],
-            &["--output=", "--exec-path="],
-        )
+        && !inspected[1..option_end]
+            .iter()
+            .any(|argument| names_refused_option(argument))
+        && !has_argument(&inspected[1..option_end], &[], &["--exec-path="])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::names_refused_option;
+
+    /// Git takes any unambiguous prefix of a long option, so a read that
+    /// disables both helpers in full can turn one back on in an abbreviation
+    /// the screen never compared against.
+    #[test]
+    fn an_abbreviated_helper_names_the_option_it_resolves_to() {
+        for word in [
+            "--textconv",
+            "--textcon",
+            "--textc",
+            "--ext-diff",
+            "--ext-d",
+            "--output",
+            "--outp",
+            "--output=/tmp/changed.patch",
+            "-o",
+        ] {
+            assert!(names_refused_option(word), "{word}");
+        }
+    }
+
+    /// `--text` is the comparison verbs' own "treat the file as text", and
+    /// Git answers an exact spelling with the option that owns it, so reading
+    /// it as a prefix of `--textconv` would refuse an ordinary read.
+    #[test]
+    fn a_word_a_verb_spells_in_full_is_not_an_abbreviation() {
+        for word in [
+            "--text",
+            "--no-textconv",
+            "--no-ext-diff",
+            "--oneline",
+            "--topo-order",
+            "--",
+            "-O",
+            "HEAD",
+        ] {
+            assert!(!names_refused_option(word), "{word}");
+        }
+    }
 }

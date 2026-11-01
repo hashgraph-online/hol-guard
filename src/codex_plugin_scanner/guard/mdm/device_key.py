@@ -11,7 +11,7 @@ import secrets
 import stat
 import subprocess
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,11 +30,10 @@ from .file_lock import (
 from .file_lock import (
     release_file_lock as _release_lock,
 )
+from .state_file import read_state, replace_state
 
 _METADATA_SCHEMA = "hol-guard-device-key.v1"
-_METADATA_NAME = "device-key.json"
 _LOCK_NAME = ".device-key.lock"
-_MAX_METADATA_BYTES = 64 * 1024
 
 LifecycleState = Literal["pending", "active", "rotation_pending", "revoked"]
 
@@ -80,63 +79,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _metadata_path(paths: MachinePaths) -> Path:
-    return paths.state_root / _METADATA_NAME
-
-
 def _lock_path(paths: MachinePaths) -> Path:
     return paths.state_root / _LOCK_NAME
 
 
-def _bounded_private_file(path: Path) -> bytes:
-    descriptor = os.open(
-        path,
-        os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-    )
-    try:
-        before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_METADATA_BYTES:
-            raise OSError("device_key_metadata_invalid")
-        if os.name != "nt" and (before.st_uid != 0 or stat.S_IMODE(before.st_mode) & 0o077):
-            raise PermissionError("device_key_acl_invalid")
-        payload = os.read(descriptor, _MAX_METADATA_BYTES + 1)
-        after = os.fstat(descriptor)
-        if (
-            len(payload) > _MAX_METADATA_BYTES
-            or len(payload) != before.st_size
-            or (before.st_dev, before.st_ino, before.st_size, before.st_ctime_ns)
-            != (after.st_dev, after.st_ino, after.st_size, after.st_ctime_ns)
-        ):
-            raise OSError("device_key_metadata_changed")
-        return payload
-    finally:
-        os.close(descriptor)
-
-
 def _atomic_metadata_write(paths: MachinePaths, metadata: DeviceKeyMetadata) -> None:
-    parent = paths.state_root
-    if parent.is_symlink() or not parent.is_dir():
-        raise OSError("device_key_state_root_invalid")
-    target = _metadata_path(paths)
-    temporary = parent / f".{target.name}.{secrets.token_hex(16)}.tmp"
     payload = json.dumps(metadata.to_dict(), sort_keys=True, separators=(",", ":")).encode("utf-8")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, target)
-        if os.name != "nt":
-            directory_descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(directory_descriptor)
-            finally:
-                os.close(directory_descriptor)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
+    replace_state(paths.state_root, "device_key", payload)
 
 
 @contextmanager
@@ -197,10 +146,10 @@ def _parse_generation(raw: object) -> KeyGeneration | None:
 
 
 def _read_metadata(paths: MachinePaths) -> DeviceKeyMetadata | None:
-    try:
-        raw = json.loads(_bounded_private_file(_metadata_path(paths)))
-    except FileNotFoundError:
+    content = read_state(paths.state_root, "device_key")
+    if content is None:
         return None
+    raw = json.loads(content)
     if not isinstance(raw, dict) or raw.get("schemaVersion") != _METADATA_SCHEMA:
         raise ValueError("device_key_metadata_invalid")
     state = raw.get("state")

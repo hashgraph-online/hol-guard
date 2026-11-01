@@ -1,14 +1,16 @@
-//! `health-lease-state --stdin`: the machine health lease's two state files.
+//! `health-lease-state --stdin`: the private state files in the machine
+//! state root.
 //!
-//! The pending outbox and the last Cloud acknowledgement live beside the
-//! installation continuity record in the machine state root. A read trusts a
-//! file only when it is a regular file of the state owner that no one else
-//! can read or write and that held still while it was read. The outbox is
-//! created once and never replaced while pending; the acknowledgement is
-//! replaced in place. Both writes go through a private temporary file that is
-//! synced before it takes the file's name, and the directory is synced after.
-//! `mdm/health_lease.py` keeps the lease contract, the signatures and the
-//! continuity lock, and only asks this command to move bytes.
+//! The health lease's pending outbox and last Cloud acknowledgement live
+//! there beside the installation continuity record and the device-key
+//! metadata. A read trusts a file only when it is a regular file of the state
+//! owner that no one else can read or write and that held still while it was
+//! read. The outbox is created once and never replaced while pending; the
+//! other files are replaced in place. Every write goes through a private
+//! temporary file that is synced before it takes the file's name, and the
+//! directory is synced after. `mdm/health_lease.py`, `mdm/continuity.py` and
+//! `mdm/device_key.py` keep their contracts, signatures and locks, and only
+//! ask this command to move bytes.
 
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read, Write};
@@ -21,11 +23,15 @@ use serde_json::{json, Value};
 const SCHEMA: &str = "health-lease-state.v1";
 const OUTBOX_NAME: &str = "health-lease-outbox.json";
 const ACK_NAME: &str = "health-lease-ack.json";
+const CONTINUITY_NAME: &str = "installation-continuity.json";
+const DEVICE_KEY_NAME: &str = "device-key.json";
 /// `mdm/health_lease_contract.py`: a base64 snapshot, a signed lease and
 /// framing.
 const MAX_OUTBOX_BYTES: u64 = 4 * (256 * 1024_u64).div_ceil(3) + 32 * 1024 + 4096;
 /// `mdm/health_lease_ack.py`.
 const MAX_ACK_BYTES: u64 = 4096;
+/// `mdm/continuity.py` and `mdm/device_key.py`.
+const MAX_RECORD_BYTES: u64 = 64 * 1024;
 /// The largest outbox, base64 encoded, and the request around it.
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 const STATE_ROOT_INVALID: &str = "health_lease_state_root_invalid";
@@ -48,6 +54,8 @@ struct Request {
 enum Kind {
     Outbox,
     Ack,
+    Continuity,
+    DeviceKey,
 }
 
 impl Kind {
@@ -55,6 +63,8 @@ impl Kind {
         match kind {
             "outbox" => Some(Self::Outbox),
             "ack" => Some(Self::Ack),
+            "continuity" => Some(Self::Continuity),
+            "device_key" => Some(Self::DeviceKey),
             _ => None,
         }
     }
@@ -63,6 +73,8 @@ impl Kind {
         match self {
             Self::Outbox => OUTBOX_NAME,
             Self::Ack => ACK_NAME,
+            Self::Continuity => CONTINUITY_NAME,
+            Self::DeviceKey => DEVICE_KEY_NAME,
         }
     }
 
@@ -70,6 +82,7 @@ impl Kind {
         match self {
             Self::Outbox => MAX_OUTBOX_BYTES,
             Self::Ack => MAX_ACK_BYTES,
+            Self::Continuity | Self::DeviceKey => MAX_RECORD_BYTES,
         }
     }
 
@@ -77,13 +90,37 @@ impl Kind {
         match self {
             Self::Outbox => "health_lease_outbox_acl_invalid",
             Self::Ack => "health_lease_ack_acl_invalid",
+            Self::Continuity => "installation_identity_acl_invalid",
+            Self::DeviceKey => "device_key_acl_invalid",
         }
     }
 
+    /// The file changed while it was read.
     fn invalid(self) -> &'static str {
         match self {
             Self::Outbox => "health_lease_outbox_invalid",
             Self::Ack => "health_lease_ack_invalid",
+            Self::Continuity => "installation_identity_invalid",
+            Self::DeviceKey => "device_key_metadata_changed",
+        }
+    }
+
+    /// A write larger than the file's read bound, which would leave a file
+    /// no later read accepts.
+    fn too_large(self) -> &'static str {
+        match self {
+            Self::Outbox => "health_lease_outbox_too_large",
+            Self::Ack => "health_lease_ack_too_large",
+            Self::Continuity => "installation_identity_too_large",
+            Self::DeviceKey => "device_key_metadata_too_large",
+        }
+    }
+
+    fn state_root_invalid(self) -> &'static str {
+        match self {
+            Self::Outbox | Self::Ack => STATE_ROOT_INVALID,
+            Self::Continuity => "installation_identity_state_root_invalid",
+            Self::DeviceKey => "device_key_state_root_invalid",
         }
     }
 }
@@ -139,7 +176,7 @@ fn respond(request: Request) -> Result<Value, String> {
             let payload = Base64::decode_vec(&content).map_err(|_| invalid())?;
             create_new(root, kind, &payload).map(|()| json!({"ok": true}))
         }
-        ("replace", Kind::Ack, Some(content)) => {
+        ("replace", Kind::Ack | Kind::Continuity | Kind::DeviceKey, Some(content)) => {
             let payload = Base64::decode_vec(&content).map_err(|_| invalid())?;
             replace(root, kind, &payload).map(|()| json!({"ok": true}))
         }
@@ -182,7 +219,7 @@ fn read_private(root: &Path, kind: Kind, owner_uid: u32) -> Result<Option<Vec<u8
 /// Give `payload` the file's name only when nothing holds it yet: a pending
 /// outbox is durable evidence and is never overwritten.
 fn create_new(root: &Path, kind: Kind, payload: &[u8]) -> Result<(), StateError> {
-    require_state_root(root)?;
+    require_state_root(root, kind)?;
     let target = root.join(kind.name());
     match fs::symlink_metadata(&target) {
         Ok(_) => return Err(refused("exists", PENDING_CONFLICT)),
@@ -201,7 +238,7 @@ fn create_new(root: &Path, kind: Kind, payload: &[u8]) -> Result<(), StateError>
 }
 
 fn replace(root: &Path, kind: Kind, payload: &[u8]) -> Result<(), StateError> {
-    require_state_root(root)?;
+    require_state_root(root, kind)?;
     let target = root.join(kind.name());
     with_private_temporary(root, kind, payload, |temporary| {
         fs::rename(temporary, &target).map_err(io_failed)
@@ -216,22 +253,26 @@ fn remove(root: &Path, kind: Kind) -> Result<(), StateError> {
     }
 }
 
-fn require_state_root(root: &Path) -> Result<(), StateError> {
+fn require_state_root(root: &Path, kind: Kind) -> Result<(), StateError> {
     match fs::symlink_metadata(root) {
         Ok(metadata) if metadata.is_dir() => Ok(()),
-        _ => Err(refused("os", STATE_ROOT_INVALID)),
+        _ => Err(refused("os", kind.state_root_invalid())),
     }
 }
 
 /// Write `payload` to a fresh private file beside the target, sync it, let
 /// `commit` give it the target's name, then sync the directory. The temporary
-/// name is removed whatever happens.
+/// name is removed whatever happens. A payload past the file's read bound is
+/// refused before anything is written.
 fn with_private_temporary(
     root: &Path,
     kind: Kind,
     payload: &[u8],
     commit: impl FnOnce(&Path) -> Result<(), StateError>,
 ) -> Result<(), StateError> {
+    if payload.len() as u64 > kind.maximum() {
+        return Err(refused("os", kind.too_large()));
+    }
     let suffix: String = crate::encrypted_secret_store::random_bytes(16)
         .iter()
         .map(|byte| format!("{byte:02x}"))
