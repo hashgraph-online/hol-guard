@@ -4236,11 +4236,14 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
 
 def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
     device_id, device_name = _guard_device_metadata(store)
+    # The working directory only stands in for a missing workspace; a process
+    # whose directory was removed still syncs a session that names its own.
+    workspace = session.get("workspace")
     payload = _sync.runtime_session_payload(
         session,
         device_id=device_id,
         device_name=device_name,
-        cwd=os.getcwd(),
+        cwd=workspace if isinstance(workspace, str) and workspace.strip() else os.getcwd(),
         now=_now(),
         version=__version__,
     )

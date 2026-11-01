@@ -176,6 +176,38 @@ def completed_guard_event_ids(payload: Mapping[str, object]) -> list[str]:
     return ids
 
 
+# The session fields the runtime reads; nothing else crosses the transport.
+_SESSION_KEYS = (
+    "session_id",
+    "sessionId",
+    "workspace",
+    "harness",
+    "surface",
+    "status",
+    "client_name",
+    "clientName",
+    "client_title",
+    "clientTitle",
+    "client_version",
+    "clientVersion",
+    "capabilities",
+    "created_at",
+    "createdAt",
+    "updated_at",
+    "updatedAt",
+    "policy_document_versions",
+    "policyDocumentVersions",
+    "policy_bundle_versions",
+    "policyBundleVersions",
+    "policy_contracts",
+    "policyContracts",
+    "yaml_import",
+    "yamlImport",
+    "canonical_policy_enforcement",
+    "canonicalPolicyEnforcement",
+)
+
+
 def runtime_session_payload(
     session: Mapping[str, object],
     *,
@@ -190,7 +222,7 @@ def runtime_session_payload(
     payload = native_runner_authority(
         "runtime_session_payload",
         {
-            "session": dict(session),
+            "session": {key: session[key] for key in _SESSION_KEYS if key in session},
             "device_id": device_id,
             "device_name": device_name,
             "cwd": cwd,
