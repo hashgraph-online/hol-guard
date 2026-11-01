@@ -3994,6 +3994,40 @@
       "expect": "allow"
     },
     {
+      "id": "sed-context-address-comma-in-pattern",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '/export/,/^  }),/p' tests/sample.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-context-address-comma-in-pattern-source",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '/export/,/^  }),/p' src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "cat-skill-doc",
       "fix_area": "shell",
       "harnesses": [

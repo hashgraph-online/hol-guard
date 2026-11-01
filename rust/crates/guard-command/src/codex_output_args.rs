@@ -281,8 +281,45 @@ fn sed_print_command_is_bounded(command: &str) -> bool {
     if body.is_empty() {
         return true;
     }
-    let parts: Vec<&str> = body.split(',').collect();
+    let Some(parts) = sed_addresses_split(body) else {
+        return false;
+    };
     parts.len() <= 2 && parts.iter().all(|part| sed_address_is_bounded(part))
+}
+
+/// The addresses a print command carries, split on the comma that separates a
+/// range's two ends.
+///
+/// Only a comma outside a `/regex/` separates addresses. A pattern may hold
+/// one of its own -- `/^  }),/` closes a block in ordinary source -- and
+/// splitting there would leave two halves that spell nothing and refuse a read
+/// this reading can otherwise follow. A delimiter left open at the end is a
+/// script this reading never finished, so it comes back unread.
+fn sed_addresses_split(body: &str) -> Option<Vec<&str>> {
+    let mut parts: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut in_pattern = false;
+    let mut escaped = false;
+    for (index, character) in body.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' if in_pattern => escaped = true,
+            '/' => in_pattern = !in_pattern,
+            ',' if !in_pattern => {
+                parts.push(&body[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    if in_pattern || escaped {
+        return None;
+    }
+    parts.push(&body[start..]);
+    Some(parts)
 }
 
 fn sed_address_is_bounded(value: &str) -> bool {
@@ -372,6 +409,12 @@ mod tests {
         assert!(sed_script_is_bounded_print(r"/guard\/plugins/p"));
         assert!(sed_script_is_bounded_print("/needle/Ip"));
         assert!(sed_script_is_bounded_print("/needle/Mp"));
+        // A comma inside a pattern belongs to that pattern. `/^  }),/` is how
+        // a reader names the end of a block in ordinary source, and the range
+        // it closes still has two ends, not three.
+        assert!(sed_script_is_bounded_print("/path:/,/^  }),/p"));
+        assert!(sed_script_is_bounded_print("/a,b/p"));
+        assert!(sed_script_is_bounded_print("/a,b/,/c,d/p"));
     }
 
     #[test]
@@ -388,6 +431,9 @@ mod tests {
         // A negated address and an alternative delimiter are both unread.
         assert!(!sed_script_is_bounded_print("/a/!p"));
         assert!(!sed_script_is_bounded_print(r"\%a%p"));
+        // A comma outside every pattern still separates addresses, so a third
+        // one is as unread as it ever was.
+        assert!(!sed_script_is_bounded_print("/a,b/,/c/,/d/p"));
         // A substitution still ends in `p` but is not an address at all.
         assert!(!sed_script_is_bounded_print("s/a/b/p"));
         // Three addresses are not a range.
