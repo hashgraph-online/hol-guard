@@ -555,6 +555,40 @@ a busy or missing resident is never taken for an older one. Only a resident
 whose capabilities list lacks the feature, or a compiled program that is not
 a script, takes the help-first path above.
 
+A pasted command is tried as a stdio MCP server before help discovery, and
+that launch passes the script its real arguments. A resident that advertises
+`local-cli-help-mcp-evidence-v1` adds `mcp_server` to the same source read:
+true when a code line, outside a trailing comment, imports the server side of
+an MCP library (`@modelcontextprotocol/sdk/server/*`,
+`@modelcontextprotocol/server`, `fastmcp` or `mcp-framework` from JavaScript,
+`mcp.server`, `fastmcp` or `FastMCP`/`Server` from `mcp` in Python, `mcp` or
+`fast_mcp` from Ruby) or dispatches on `tools/list` (a comparison, `case` or
+`when` label, or handler-table key). A client that imports the SDK or sends
+`tools/list` does not count. The same read adds `entry_point`: the module the
+script imports when every code line belongs to the console-script wrapper pip,
+uv or Poetry writes for an installed package (one `from module import function`,
+`sys.exit` of that function, and the `__main__` guard and `sys.argv[0]` fix-ups
+around them, its module a dotted name of at most 200 characters), else null.
+Python imports report `from .server import` and `from . import server` as
+`./server.py`, beside the script.
+Python (`local_mcp_source_evidence.py`) takes the
+script from the launch identity, so `bash ship.sh` reads `ship.sh`, not the
+shell, and launches it only when the script or one of its followed `./`
+modules (a sibling package's `__init__.py` included) has that fact. A selected
+server, a stored observation recorded for this same launch, a package MCP
+launcher (`npx`, `uvx` and the like), a package bin run through a runner, and
+a compiled program keep the launch without a read. An entry-point wrapper whose
+import is not a `./` module beside it is launched only when the installed
+module it names shows the fact: Python finds that module in the
+`site-packages` of the environment holding the wrapper or its `#!` interpreter,
+reads its own file, then follows the imports of its own package (relative or
+by package name) up to 24 files, each opened under the package folder. Another
+module of the package, such as an optional MCP server beside a CLI's commands,
+does not count. A module it cannot find is not launched. A failed identity lookup, a
+script whose source or answer cannot be read, or a runtime whose status cannot
+be read, is not launched. A resident without the
+feature keeps the launch, as before.
+
 Two consequences are worth naming. Discovery fails closed: a resident that
 cannot answer leaves the CLI with no commands found, and the grant falls back
 to its "other" bucket rather than to a Python parse. And the port keeps a
