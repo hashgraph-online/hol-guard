@@ -18,6 +18,7 @@ _MAX_HEALTH_LEASE_CLAIMS_BYTES = 4096
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _MAX_ANSWER_BYTES = 64 * 1024
 _SYSTEM_SID = "S-1-5-18"
+_CURRENT_USER_SID: list[str] = []
 _PLATFORMS = {"Darwin": "macos", "Windows": "windows"}
 _STATES = frozenset({"active", "absent", "unknown", "tampered"})
 _PROTECTION_LEVELS = frozenset({"hardware-backed", "os-protected", "unknown"})
@@ -243,16 +244,23 @@ def sign_health_key_registration(
 
 
 def windows_current_user_sid() -> str:
-    """The string SID this process's token runs as, read by the native runtime."""
+    """The string SID this process's token runs as, read by the native runtime.
 
-    from ..windows_paths import windows_process_owner_sid
+    A process's token user never changes, so the first answer is kept for the
+    life of the process; a failed read is asked again next time.
+    """
 
-    owner_sid = windows_process_owner_sid(os.getpid())
+    if _CURRENT_USER_SID:
+        return _CURRENT_USER_SID[0]
+    from ..windows_paths import windows_current_owner_sid
+
+    owner_sid = windows_current_owner_sid()
     if owner_sid is None:
         raise OSError("device_key_system_context_required")
     sid = owner_sid.removeprefix("sid:")
     if re.fullmatch(r"S-[0-9]+(?:-[0-9]+)+", sid) is None:
         raise OSError("device_key_system_context_required")
+    _CURRENT_USER_SID.append(sid)
     return sid
 
 
