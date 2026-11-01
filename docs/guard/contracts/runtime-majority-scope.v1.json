@@ -757,10 +757,9 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
-          "src/codex_plugin_scanner/guard/mdm/device_key_windows_api.py"
+          "src/codex_plugin_scanner/guard/mdm/device_key_native.py"
         ],
-        "reason": "Reviewed: windows_current_user_sid and its token-API loader: native_policy_snapshot_windows_support lazily imports it to bind the Windows policy snapshot owner, so it runs when a snapshot is written; the rest of device_key_native is excluded by mdm-device-key-native-signing."
+        "reason": "Reviewed: windows_current_user_sid asks the runtime's windows-process-lifecycle owner_sid for this process: native_policy_snapshot_windows_support lazily imports it to bind the Windows policy snapshot owner, so it runs when a snapshot is written; the rest of device_key_native is excluded by mdm-device-key-native-signing."
       },
       {
         "path": [
@@ -1361,8 +1360,8 @@
           "require_machine_context"
         ],
         "entry_points": [],
-        "reason": "Requests to the runtime's device-key-helper command and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership.",
-        "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which is retained together with the token API module it loads."
+        "reason": "Requests to the runtime's device-key-helper command and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership; the runtime reads the token user.",
+        "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which asks the runtime for this process's token user."
       },
       {
         "id": "adapter-inventory-snapshot",
