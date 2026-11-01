@@ -285,6 +285,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-integrity-snapshot-v1",
     "native-orphaned-worker-reap-v1",
     "native-codex-hook-trust-v1",
+    "native-local-authority-integrity-v1",
     "native-storage-retention-v1",
     "native-desktop-notification-v1",
     "native-grok-executable-v1",

@@ -601,6 +601,7 @@ mod inventory_source_evidence_op;
 mod inventory_url_redaction_op;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
+mod local_authority_integrity_op;
 mod local_cli_grant_op;
 mod local_cli_help;
 mod local_cli_hook_contained;
