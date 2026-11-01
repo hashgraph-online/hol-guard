@@ -44,8 +44,10 @@ def _edge(harness: str, *, url: str = "https://example.test", action_type: str =
 TRANSPORT_CALL_ID_KEYS = {
     "pi": ("tool_call_id",),
     "omp": ("tool_call_id",),
-    "claude-code": ("tool_use_id",),
+    "claude-code": ("tool_use_id", "prompt_id"),
     "codex": ("tool_use_id",),
+    "cursor": ("generation_id", "tool_use_id"),
+    "zcode": ("tool_use_id", "toolCallId", "turnId"),
 }
 
 

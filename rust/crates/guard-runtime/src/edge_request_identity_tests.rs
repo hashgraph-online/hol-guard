@@ -154,8 +154,11 @@ fn execution_intent_same_session_call_id_is_harness_scoped() {
     // Claude Code and Codex stamp `tool_use_id` on every tool-use block, so a
     // retry of the same action carries a new one; Claude Code's `prompt_id`
     // names the user turn, and the approved retry comes in a later turn.
-    // Their `tool_call_id` is not a transport ID and stays in the commitment,
-    // as does every other harness's call ID.
+    // Cursor mints a fresh `generation_id` per attempt beside its
+    // `tool_use_id`, and ZCode replaces `tool_use_id`, `toolCallId` and
+    // `turnId` together. Every other root key, and every key a harness does
+    // not stamp per attempt, stays in the commitment -- as does the call ID
+    // of a harness whose transport Guard does not model.
     for (harness, key, retried) in [
         ("claude-code", "tool_use_id", true),
         ("claude-code", "prompt_id", true),
@@ -163,7 +166,15 @@ fn execution_intent_same_session_call_id_is_harness_scoped() {
         ("codex", "prompt_id", false),
         ("claude-code", "tool_call_id", false),
         ("codex", "tool_call_id", false),
-        ("cursor", "tool_use_id", false),
+        ("cursor", "tool_use_id", true),
+        ("cursor", "generation_id", true),
+        ("cursor", "tool_call_id", false),
+        ("cursor", "prompt_id", false),
+        ("zcode", "tool_use_id", true),
+        ("zcode", "toolCallId", true),
+        ("zcode", "turnId", true),
+        ("zcode", "tool_call_id", false),
+        ("gemini", "tool_use_id", false),
     ] {
         let mut first = envelope(
             "PreToolUse",
