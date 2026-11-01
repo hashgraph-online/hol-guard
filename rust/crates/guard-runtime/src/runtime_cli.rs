@@ -96,8 +96,24 @@ pub(super) fn run() -> Result<(), String> {
             let response = bounded_probe::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if desktop_notification::is_command(command) && flag == "--stdin" => {
+            let response = desktop_notification::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
+            let response = hook_removal_sweep::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
+            let response = macos_code_signing::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
             let response = removal_evidence::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if grok_executable::is_command(command) && flag == "--stdin" => {
+            let response = grok_executable::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if harness_coverage_command::is_command(command) && flag == "--stdin" => {
@@ -142,6 +158,14 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if user_health_state::is_command(command) && flag == "--stdin" => {
             let response = user_health_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {
+            let response = hermes_file_inspect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
+            let response = local_skill_index::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if windows_private_state::is_command(command) && flag == "--stdin" => {
@@ -208,6 +232,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if orphaned_worker_reap::is_command(command) && flag == "--stdin" => {
             let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if storage_retention::is_command(command) && flag == "--stdin" => {
+            let response = storage_retention::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

@@ -31,7 +31,11 @@ from .source_output_fixtures import (
     WORKER_MARKER,
     WORKER_PATH,
 )
-from .workspace_runner_fixtures import HOME_BUN_ENTRY_CASE, RUNNER_MARKER, WORKSPACE_RUNNER_CASES
+from .workspace_runner_fixtures import (
+    HOME_BUN_ENTRY_CASE,
+    WORKSPACE_RUNNER_CASES,
+    runner_marker,
+)
 
 TOKEN_READ_CASE = "omp-native-read-token-handling-sources"
 TOKEN_SHELL_CASE = "omp-native-shell-cat-token-handling-sources"
@@ -260,12 +264,12 @@ def _bun_entry_build_match(calls: list[dict[str, Any]]) -> bool:
     return text is not None and VITE_BUILD_MARKER in text
 
 
-def _workspace_runner_match(calls: list[dict[str, Any]]) -> bool:
+def _workspace_runner_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """The workspace's own runner actually launched, printing the line only it prints."""
     if len(calls) != 1:
         return False
     text = _text(calls[0])
-    return text is not None and RUNNER_MARKER in text
+    return text is not None and runner_marker(scenario.id) in text
 
 
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
@@ -283,7 +287,7 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
     if scenario.id == WORKSPACE_FIND_CASE:
         return _workspace_find_match(calls)
     if scenario.id in WORKSPACE_RUNNER_CASES:
-        return _workspace_runner_match(calls)
+        return _workspace_runner_match(scenario, calls)
     if scenario.id in BUN_ENTRY_CASES:
         return _bun_entry_build_match(calls)
     if scenario.id not in OUTPUT_SCENARIOS:

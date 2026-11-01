@@ -345,6 +345,63 @@ fn a_relative_vitest_entry_names_the_same_runner_as_the_absolute_one() {
 }
 
 #[test]
+fn bun_launching_a_runner_entry_names_the_runner_node_names() {
+    for (argument, tail, arguments) in [
+        (
+            "node_modules/vitest/vitest.mjs",
+            json!(["run", "src"]),
+            json!(["run", "src"]),
+        ),
+        (
+            "./node_modules/vitest/dist/cli.js",
+            json!(["run"]),
+            json!(["run"]),
+        ),
+        (
+            "node_modules/jest/bin/jest.js",
+            json!(["src"]),
+            json!(["src"]),
+        ),
+        (
+            "node_modules/mocha/bin/mocha.js",
+            json!(["test/unit"]),
+            json!(["test/unit"]),
+        ),
+    ] {
+        let mut command = vec![json!("bun"), json!(argument)];
+        command.extend(tail.as_array().unwrap().iter().cloned());
+        let command = json!(command);
+        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
+        assert_eq!(kind["value"]["vitest"], true, "{argument} {kind}");
+        // The node-tool sink reads a manifest script, not an entry launch, so
+        // a runner entry has to leave that route alone.
+        assert_eq!(kind["value"]["node_tool"], false, "{argument} {kind}");
+        let found = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert_eq!(found["value"], arguments, "{argument}");
+    }
+}
+
+#[test]
+fn bun_naming_no_runner_entry_still_names_no_runner() {
+    for command in [
+        // `--cwd` sits where the entry would be, so the call names no file
+        // this route may run.
+        json!([
+            "bun",
+            "--cwd",
+            "app",
+            "node_modules/vitest/vitest.mjs",
+            "run"
+        ]),
+        json!(["bun", "xnode_modules/vitest/vitest.mjs", "run"]),
+        json!(["bun", "node_modules/vite/dist/cli.js", "run"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
+        assert_eq!(kind["value"]["vitest"], false, "{command} {kind}");
+    }
+}
+
+#[test]
 fn a_relative_jest_entry_names_the_same_runner_as_the_absolute_one() {
     for argument in [
         "node_modules/jest/bin/jest.js",
@@ -358,6 +415,24 @@ fn a_relative_jest_entry_names_the_same_runner_as_the_absolute_one() {
 }
 
 #[test]
+fn a_relative_mocha_entry_names_the_same_runner_as_the_absolute_one() {
+    for argument in [
+        "node_modules/mocha/bin/mocha.js",
+        "./node_modules/mocha/bin/mocha.js",
+        "/work/app/node_modules/mocha/bin/mocha.js",
+        // Mocha 8 and 9 publish the shim without the extension.
+        "node_modules/mocha/bin/mocha",
+        "./node_modules/mocha/bin/mocha",
+    ] {
+        let command = json!(["node", argument, "test/unit"]);
+        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
+        assert_eq!(kind["value"]["vitest"], true, "{argument} {kind}");
+        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert_eq!(arguments["value"], json!(["test/unit"]), "{argument}");
+    }
+}
+
+#[test]
 fn a_lookalike_entry_still_names_no_runner() {
     for argument in [
         "xnode_modules/vitest/vitest.mjs",
@@ -365,6 +440,9 @@ fn a_lookalike_entry_still_names_no_runner() {
         "vitest/vitest.mjs",
         "node_modules/vitest/dist/vitest.mjs",
         "node_modules/jest/bin/jest.js.bak",
+        "node_modules/mocha/bin/mocha.sh",
+        "node_modules/mocha/bin/_mocha.js",
+        "node_modules/xmocha/bin/mocha",
         "node_modules/vite/dist/cli.js",
         "node_modules/xvitest/dist/cli.js",
         "node_modules/vitest/dist/cli.mjs",

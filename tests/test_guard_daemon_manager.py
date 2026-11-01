@@ -2354,11 +2354,14 @@ def test_same_install_native_upgrade_rejects_live_previous_generation(tmp_path, 
 
 def test_desktop_ensure_uses_post_update_timeout(monkeypatch):
     # The resident decides the budget: the larger of the base timeout and the
-    # start floor plus its margin (14 s + 5 s), so a slow cold start is not cut off.
+    # start floor plus its margin (14 s + 5 s), so a slow cold start is not cut
+    # off. Windows runs the same arithmetic over its own budgets, because the
+    # packaged runtime there spends half a minute before it publishes a port.
+    windows = os.name == "nt"
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    assert daemon_manager_module._default_guard_daemon_start_timeout() == 30.0
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == (75.0 if windows else 30.0)
     monkeypatch.delenv("HOL_GUARD_DESKTOP")
-    assert daemon_manager_module._default_guard_daemon_start_timeout() == 19.0
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == (60.0 if windows else 19.0)
 
 
 def test_ensure_guard_daemon_refuses_desktop_preflight(tmp_path, monkeypatch):

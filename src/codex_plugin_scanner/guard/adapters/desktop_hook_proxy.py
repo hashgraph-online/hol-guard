@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import stat
-import subprocess
 import sys
 from pathlib import Path
 
@@ -14,27 +13,9 @@ _DESKTOP_PROXY_ENV = "HOL_GUARD_DESKTOP_HOOK_PROXY"
 def _codesign_team(path: Path) -> str | None:
     """Return a verified Apple TeamIdentifier without importing the Desktop runtime."""
 
-    verify = subprocess.run(
-        ["/usr/bin/codesign", "--verify", "--strict", "--verbose=2", str(path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if verify.returncode != 0:
-        return None
-    display = subprocess.run(
-        ["/usr/bin/codesign", "--display", "--verbose=4", str(path)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if display.returncode != 0:
-        return None
-    for line in display.stderr.splitlines():
-        team = line.strip().removeprefix("TeamIdentifier=")
-        if team != line.strip() and team and team != "not set":
-            return team
-    return None
+    from ..macos_code_signing import verified_macos_signing_team
+
+    return verified_macos_signing_team(path)
 
 
 _DESKTOP_PROXY_LAUNCH_SCRIPT = r"""

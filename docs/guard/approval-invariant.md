@@ -14,9 +14,14 @@ approval the user has given.
    Always allow. That includes commands Guard cannot prove, commands that run
    outside the workspace sandbox, package installs and Guard-control commands.
 2. Allow once lets the agent's retry of that command through. The retry is a
-   new tool call, so the binding leaves out the per-attempt call id (`tool_call_id`
-   for Pi and Oh My Pi, `tool_use_id` for Claude Code and Codex) while a session
-   id is present, and keeps the command, working directory, session and policy.
+   new tool call, so the binding leaves out the per-attempt call id
+   (`tool_call_id` for Pi and Oh My Pi, `tool_use_id` for Claude Code, Codex,
+   Cursor and ZCode, the `generation_id` Cursor mints for every attempt, and
+   the `toolCallId` and `turnId` ZCode moves alongside it) while a session id
+   is present, and keeps the command, working directory, session and policy.
+   A harness spells that session id in its own field: Cursor sends no
+   `session_id` and names its session `conversation_id`, so Cursor's binding
+   reads that field instead.
 3. Always allow is saved against the command's hash. Every part of Guard (the
    Rust resident, the Python daemon, the hook paths and the dashboard) honors
    it.

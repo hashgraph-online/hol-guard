@@ -21,6 +21,37 @@ pub(crate) fn local_vitest_entry(argument: &str) -> bool {
         || local_package_entry(argument, "vitest/dist/cli.js")
 }
 
+/// Mocha's installed entry points. `bin/mocha.js` is the package's declared
+/// `bin` shim from Mocha 10 on; Mocha 8 and 9 publish the same shim without
+/// the extension. Both name the installed package's own entry, and the sink
+/// runs whichever of them this workspace holds, so reading only the newer
+/// spelling would send a working `node node_modules/mocha/bin/mocha` to
+/// review while the `npx mocha` beside it runs.
+pub(crate) fn local_mocha_entry(argument: &str) -> bool {
+    local_package_entry(argument, "mocha/bin/mocha.js")
+        || local_package_entry(argument, "mocha/bin/mocha")
+}
+
+/// Whether a word names one of those installed entry points. A runtime handed
+/// this path starts the workspace's own runner, whichever of the three it is.
+pub(crate) fn local_runner_entry(argument: &str) -> bool {
+    let entry = argument.replace('\\', "/");
+    local_vitest_entry(&entry)
+        || local_package_entry(&entry, "jest/bin/jest.js")
+        || local_mocha_entry(&entry)
+}
+
+/// Whether a call hands Bun one of those entry points as the file to run.
+///
+/// Bun executes a JavaScript entry the way Node does, so `bun
+/// node_modules/vitest/vitest.mjs run` is the run `node` spells beside it, and
+/// the sink relaunches the resolved entry under Node for either spelling. The
+/// `bun x` wrapper and a `--cwd` prefix name no entry at this position, so
+/// they are read by the routes that already carry them rather than here.
+pub(crate) fn bun_runner_entry_launch(command: &[String]) -> bool {
+    basename(command) == "bun" && command.get(1).is_some_and(|word| local_runner_entry(word))
+}
+
 /// The program a word names; on Windows without `.exe`, as the pre-tool parser
 /// reads it, so `node.exe` and a resolved `C:\...\python.exe` name `node` and
 /// `python`. Every reading of a program name goes through here, so a
@@ -270,8 +301,21 @@ fn bun_runner_invocation(
 #[path = "contained_argv_runner_calls.rs"]
 mod runner_calls;
 pub(crate) use runner_calls::{
-    contained_runner_call, jest_contained_call, jest_runs_once, vitest_runs_once,
+    bun_test_runs_once, contained_runner_call, jest_contained_call, jest_runs_once,
+    mocha_contained_call, mocha_runs_once, vitest_runs_once,
 };
+
+/// True when a command is Bun's own test runner taking one contained pass.
+///
+/// `bun test` runs Bun's runner, never the package `test` script, so the
+/// package-test alias leaves it alone and it is read here as the direct run
+/// it is. The Node test profile carries it: Bun reads files through the same
+/// syscalls, and the runner needs nothing from outside the workspace.
+pub fn bun_test_invocation(command: &[String]) -> bool {
+    basename(command) == "bun"
+        && command.get(1).is_some_and(|word| word == "test")
+        && bun_test_runs_once(&command[2..])
+}
 
 /// The runner a contained call names, with the arguments the sink hands it.
 fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
@@ -280,7 +324,11 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
     };
     contained_runner_call(arguments).then(|| {
         (
-            if tool == "jest" { "jest" } else { "vitest" },
+            match tool.as_str() {
+                "jest" => "jest",
+                "mocha" => "mocha",
+                _ => "vitest",
+            },
             rest.to_vec(),
         )
     })
@@ -306,6 +354,14 @@ fn runner_tail_or_error(
             Some("jest") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected Jest reads its configuration and modules from this workspace.",
+            )),
+            Some("mocha") if !mocha_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Mocha requires a run that does not watch.",
+            )),
+            Some("mocha") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Mocha reads its configuration and modules from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -485,11 +541,11 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if let Some(args) = manager_exec_tool(&argv) {
             args.to_vec()
-        } else if matches!(name, "vitest" | "jest") {
+        } else if matches!(name, "vitest" | "jest" | "mocha") {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
             call
-        } else if matches!(name, "node" | "nodejs") {
+        } else if matches!(name, "node" | "nodejs") || bun_runner_entry_launch(&argv) {
             let args = &argv[1 + runtime.len()..];
             let entry = args
                 .first()
@@ -499,6 +555,8 @@ pub fn contained_runner_invocation(
                 "vitest"
             } else if local_package_entry(&entry, "jest/bin/jest.js") {
                 "jest"
+            } else if local_mocha_entry(&entry) {
+                "mocha"
             } else {
                 return invalid_vitest();
             };
@@ -729,21 +787,27 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
         vec![]
     };
     let index = 1 + runtime.len();
-    let node_test =
+    let node_test_argv =
         command.get(index).is_some_and(|v| v == "--test") && matches!(name, "node" | "nodejs");
     let bun = bun_vitest_invocation(command);
+    let bun_test = bun_test_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
-        && (matches!(name, "bunx" | "npx" | "vitest" | "jest")
+        && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
             || manager_exec_runner(command).is_some()
             || bun.is_some()
+            || bun_runner_entry_launch(command)
             || tsx_test_invocation(command)?.is_some()
             || (matches!(name, "node" | "nodejs")
                 && entries.clone().any(|v| {
                     let entry = v.replace('\\', "/");
-                    local_vitest_entry(&entry) || local_package_entry(&entry, "jest/bin/jest.js")
+                    local_vitest_entry(&entry)
+                        || local_package_entry(&entry, "jest/bin/jest.js")
+                        || local_mocha_entry(&entry)
                 })));
     let node_tool = bun.is_none()
+        && !bun_test
+        && !bun_runner_entry_launch(command)
         && manager_exec_runner(command).is_none()
         && !command.is_empty()
         && (matches!(
@@ -770,7 +834,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     // run never pays for a second reading to learn it is not an alias.
     Ok(json!({
         "inline_eval": inline,
-        "node_test": node_test,
+        "node_test": node_test_argv || bun_test,
         "vitest": vitest,
         "git": name == "git",
         "node_tool": node_tool,

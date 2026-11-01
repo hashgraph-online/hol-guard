@@ -274,6 +274,7 @@ mod decision_authority_op;
 #[cfg(test)]
 mod decision_authority_vectors_tests;
 mod delivery_object;
+mod desktop_notification;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
 mod device_key_helper;
@@ -320,6 +321,8 @@ mod github_workflow_context_io;
 mod github_workflow_prepare_op;
 #[path = "adapters/detection/grok_detect.rs"]
 mod grok_detect;
+mod grok_executable;
+mod grok_executable_paths;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
@@ -496,6 +499,7 @@ mod health_lease_state;
 mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
+mod hermes_file_inspect;
 mod hermes_inspect;
 mod hermes_printable;
 mod hermes_skills;
@@ -553,6 +557,9 @@ mod hook_direct;
 mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
+mod hook_removal_prune;
+mod hook_removal_sweep;
+mod html_unescape;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
 #[path = "adapters/detection/muse_detect.rs"]
@@ -601,9 +608,11 @@ mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
+mod local_skill_index;
 mod local_store_read;
 mod local_tool_eligibility_op;
 mod local_tool_grant_op;
+mod macos_code_signing;
 mod managed_controls_policy_fields;
 mod managed_policy;
 mod managed_policy_file_trust;
@@ -854,6 +863,7 @@ mod skill_identity_walk;
 mod skill_workflow_preflight_op;
 #[cfg(unix)]
 mod state_directory_lock;
+mod storage_retention;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;
