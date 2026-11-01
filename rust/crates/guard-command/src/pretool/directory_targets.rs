@@ -481,6 +481,44 @@ impl<'a> super::PathContext<'a> {
             }
             None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
         };
+        // RubyGems reads a second configuration file from `GEMRC`, and `gem`
+        // is itself a Ruby program: `RUBYOPT=-r<file>` and `RUBYLIB` load
+        // code before the query starts, and `RUBYGEMS_GEMDEPS` activates the
+        // gems a dependency file names. `GEM_HOME` and `GEM_PATH` are left
+        // out on the ground the Node version managers are left out next
+        // door: every rbenv, rvm and chruby shell exports them, and the gems
+        // they select are ones the user installed. A stamped environment
+        // carries names without values, so any name counts.
+        //
+        // `XDG_CONFIG_HOME` moves the user `gemrc` the same way: RubyGems
+        // falls back to `<config home>/gem/gemrc` when `~/.gemrc` is absent,
+        // and its config home is that variable before it is `~/.config`. Its
+        // value is stamped rather than only named, so the session that spells
+        // out the default path keeps the reading and every other directory
+        // loses it.
+        let gem_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        GEM_CONFIG_NAMES
+                            .iter()
+                            .any(|known| name.eq_ignore_ascii_case(known))
+                    })
+                    && xdg_config_is_default(
+                        environment.xdg_config_home.as_deref(),
+                        environment.home.as_deref(),
+                    )
+            }
+            None => {
+                GEM_CONFIG_NAMES
+                    .iter()
+                    .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty()))
+                    && xdg_config_is_default(
+                        std::env::var("XDG_CONFIG_HOME").ok().as_deref(),
+                        std::env::var("HOME").ok().as_deref(),
+                    )
+            }
+        };
         // HTTPie and xh read a `config.json` whose `default_options` are
         // prepended to every request, and each takes a variable that moves
         // the directory it is read from. A stamped environment carries names
@@ -541,6 +579,7 @@ impl<'a> super::PathContext<'a> {
             pip_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            gem_config_absent,
             http_config_absent,
             // A session knows its environment, not the command, so the
             // proof that no step creates a filesystem entry is set where a
@@ -553,16 +592,19 @@ impl<'a> super::PathContext<'a> {
 
 const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
 
+/// The variables that hand a RubyGems query configuration or code.
+const GEM_CONFIG_NAMES: [&str; 4] = ["GEMRC", "RUBYOPT", "RUBYLIB", "RUBYGEMS_GEMDEPS"];
+
 /// The variables HTTPie and `xh` read their configuration directory from.
 const HTTP_CONFIG_NAMES: [&str; 2] = ["HTTPIE_CONFIG_DIR", "XH_CONFIG_DIR"];
 
 /// Whether an inherited `XDG_CONFIG_HOME` still names the directory
-/// [`super::http_reads`] opens.
+/// [`super::http_reads`] and [`super::gem_reads`] open.
 ///
-/// An absent or empty value leaves both programs on `~/.config`, and a value
-/// that spells that same directory out names it too. Anywhere else is a
-/// configuration this proof never read, and a home it cannot place leaves
-/// nothing to compare the value against.
+/// An absent or empty value leaves each of those programs on `~/.config`,
+/// and a value that spells that same directory out names it too. Anywhere
+/// else is a configuration this proof never read, and a home it cannot place
+/// leaves nothing to compare the value against.
 fn xdg_config_is_default(value: Option<&str>, home: Option<&str>) -> bool {
     let Some(value) = value.filter(|value| !value.is_empty()) else {
         return true;
@@ -703,6 +745,35 @@ mod tests {
         ));
         // A home the stamp does not carry leaves nothing to compare against.
         assert!(!xdg_config_is_default(default.to_str(), None));
+    }
+
+    /// A session that moved `XDG_CONFIG_HOME` moved the `gemrc` RubyGems
+    /// falls back to when `~/.gemrc` is absent, so the RubyGems reading is
+    /// no longer proved. The gem field used to read only the four `GEM_`
+    /// and `RUBY` names, which left that redirect out.
+    #[test]
+    fn a_moved_config_home_takes_the_gem_reading_with_it() {
+        let home = tempfile::tempdir().expect("temp home");
+        let home_text = home.path().to_str().expect("home text").to_owned();
+        let moved = tempfile::tempdir().expect("temp config");
+        let environment = |xdg: Option<&str>| guard_contracts::GuardExecutionEnvironmentV1 {
+            path: "/usr/bin".to_owned(),
+            environment_names: vec!["HOME".to_owned(), "PATH".to_owned()],
+            environment_digest: "0".repeat(64),
+            home: Some(home_text.clone()),
+            xdg_config_home: xdg.map(str::to_owned),
+            ..Default::default()
+        };
+
+        let inherited = environment(None);
+        let context =
+            crate::pretool::PathContext::for_session(Some(&home_text), None, Some(&inherited));
+        assert!(context.gem_config_absent);
+
+        let redirected = environment(moved.path().to_str());
+        let context =
+            crate::pretool::PathContext::for_session(Some(&home_text), None, Some(&redirected));
+        assert!(!context.gem_config_absent);
     }
 
     #[test]

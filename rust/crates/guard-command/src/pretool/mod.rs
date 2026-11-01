@@ -26,6 +26,12 @@ pub struct PathContext<'a> {
     /// `--pre`, `--hidden` or extra search paths to an `rg` command that
     /// omits `--no-config`. Literal contexts leave this false.
     pub ripgrep_config_absent: bool,
+    /// No inherited `GEMRC`, `RUBYOPT`, `RUBYLIB` or `RUBYGEMS_GEMDEPS` can
+    /// hand a RubyGems query a second configuration file, a load path or code
+    /// to require before it starts, and no redirected `XDG_CONFIG_HOME`
+    /// moves the user `gemrc` out of the directory the proof reads. Literal
+    /// contexts leave this false.
+    pub gem_config_absent: bool,
     /// No inherited `HTTPIE_CONFIG_DIR` or `XH_CONFIG_DIR` can move the
     /// `config.json` whose `default_options` HTTPie and `xh` prepend to
     /// every request. Literal contexts leave this false.
@@ -90,6 +96,7 @@ mod fanout_reads;
 mod filter_pattern_text;
 mod find_reads;
 mod for_loop_unroll;
+mod gem_reads;
 pub(crate) mod git_apply_check;
 pub(crate) mod git_branch_listing;
 pub(crate) mod git_clean_preview;

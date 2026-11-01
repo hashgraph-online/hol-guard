@@ -19374,6 +19374,159 @@
       "expect": "allow"
     },
     {
+      "id": "gem-list-local",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem list --local"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "gem-search-remote",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem search -r rails"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "gem-info-name",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem info rake"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "gem-which-name",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem which rake"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "gem-outdated",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem outdated"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-gem-sources-add",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem sources --add https://example.invalid"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-gem-list-update-sources",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem list --update-sources"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-gem-specification-build-extensions",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem specification rake build_extensions"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-gem-install",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem install rails"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-gem-moved-config-home",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem list --local"
+      },
+      "cwd": "org_app",
+      "environment": {
+        "XDG_CONFIG_HOME": "/tmp/hol-guard-gate-xdg"
+      },
+      "expect": "not_allow"
+    },
+    {
       "id": "pg-ctl-status-data-dir",
       "fix_area": "package",
       "harnesses": [
