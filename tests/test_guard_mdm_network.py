@@ -11,6 +11,7 @@ from email.message import Message
 from email.utils import format_datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from requests import Request
@@ -476,7 +477,7 @@ def test_windows_system_proxy_falls_back_to_machine_scope(monkeypatch: pytest.Mo
 
 
 def test_proxy_credentials_come_from_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_runtime
+    from codex_plugin_scanner.guard import codex_hook_launch_runtime, native_runtime
 
     status = SimpleNamespace(
         available=True,
@@ -491,12 +492,21 @@ def test_proxy_credentials_come_from_the_native_runtime(monkeypatch: pytest.Monk
         {"ok": True, "credentials": {"username": "proxy-user", "password": ""}},
     ]
 
-    def spawn(_path: Path, arguments: tuple[str, ...], **kwargs: object) -> str:
-        calls.append((arguments, kwargs["input_text"]))
-        return json.dumps(answers.pop(0))
+    def spawn(argv: tuple[str, ...], **kwargs: object) -> SimpleNamespace:
+        calls.append((argv[1:], kwargs["input_text"]))
+        environment = cast(dict[str, str], kwargs["environment"])
+        assert environment.get("DBUS_SESSION_BUS_ADDRESS") == "unix:path=/run/user/1000/bus"
+        return SimpleNamespace(
+            returncode=0,
+            timed_out=False,
+            output_limit_exceeded=False,
+            containment_failed=False,
+            stdout=json.dumps(answers.pop(0)),
+        )
 
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
     monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
-    monkeypatch.setattr(native_runtime, "_run_native_process", spawn)
+    monkeypatch.setattr(codex_hook_launch_runtime, "run_isolated_hook_process", spawn)
     proxy_url = "https://proxy.example:8443"
 
     credentials = transport_module.load_proxy_credentials(proxy_url)

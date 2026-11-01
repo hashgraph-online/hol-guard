@@ -112,6 +112,14 @@ fn a_credential_manager_blob_reads_as_utf8_or_utf16le_text() {
         windows_credential_text(utf16),
         Some("{\"u\":\"\u{e4}\"}".as_bytes().to_vec())
     );
+    let ascii_utf16: Vec<u8> = "{\"u\":\"x\"}"
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    assert_eq!(
+        windows_credential_text(ascii_utf16),
+        Some(br#"{"u":"x"}"#.to_vec())
+    );
     // Empty, an odd UTF-16 length, and a lone surrogate are no record.
     assert_eq!(windows_credential_text(Vec::new()), None);
     assert_eq!(windows_credential_text(vec![0xff, 0xfe, 0x41]), None);

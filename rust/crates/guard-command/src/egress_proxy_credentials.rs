@@ -144,24 +144,29 @@ fn read_proxy_credential_record(_account: &str) -> Option<Vec<u8>> {
 }
 
 /// A Credential Manager blob as UTF-8 bytes: UTF-8 as stored, or else
-/// UTF-16LE, and `None` when it is empty or neither.
+/// UTF-16LE, and `None` when it is empty or neither. ASCII text written as
+/// UTF-16LE is also valid UTF-8, so UTF-8 that carries a NUL is read as
+/// UTF-16LE.
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn windows_credential_text(raw: Vec<u8>) -> Option<Vec<u8>> {
     let text = match String::from_utf8(raw) {
-        Ok(text) => text,
-        Err(error) => {
-            let raw = error.into_bytes();
-            if raw.len() % 2 != 0 {
-                return None;
-            }
-            let units: Vec<u16> = raw
-                .chunks_exact(2)
-                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
-                .collect();
-            String::from_utf16(&units).ok()?
-        }
+        Ok(text) if !text.contains('\0') => text,
+        Ok(text) => utf16le_text(text.as_bytes())?,
+        Err(error) => utf16le_text(error.as_bytes())?,
     };
     (!text.is_empty()).then(|| text.into_bytes())
+}
+
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn utf16le_text(raw: &[u8]) -> Option<String> {
+    if raw.len() % 2 != 0 {
+        return None;
+    }
+    let units: Vec<u16> = raw
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .collect();
+    String::from_utf16(&units).ok()
 }
 
 /// `/usr/bin/security find-generic-password -s <service> -a <account> -w`.

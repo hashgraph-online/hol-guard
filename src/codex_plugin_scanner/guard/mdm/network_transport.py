@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import platform
 import re
 import ssl
@@ -44,6 +45,7 @@ _PUBLIC_REGISTRIES = frozenset(
 _PROXY_CREDENTIALS_FEATURE = "native-proxy-credentials-v1"
 _NATIVE_TIMEOUT_SECONDS = 30.0
 _MAX_NATIVE_OUTPUT_BYTES = 64 * 1024
+_SESSION_BUS_VARIABLES = ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "DISPLAY")
 
 
 class ManagedNetworkError(RuntimeError):
@@ -220,7 +222,8 @@ def load_proxy_credentials(proxy_url: str) -> ProxyCredentials | None:
 def _native_proxy_credentials(proxy_url: str) -> dict[str, object] | None:
     """The runtime's answer for one proxy's stored credential, or ``None`` when it cannot answer."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
+    from ..codex_hook_launch_runtime import run_isolated_hook_process
+    from ..native_runtime import _isolated_environment, native_runtime_status
 
     deadline = time.monotonic() + _NATIVE_TIMEOUT_SECONDS
     status = native_runtime_status(deadline_monotonic=deadline)
@@ -235,17 +238,23 @@ def _native_proxy_credentials(proxy_url: str) -> dict[str, object] | None:
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         return None
-    output = _run_native_process(
-        status.identity.path,
-        ("proxy-credentials", "--stdin"),
+    # The Linux credential store is reached over the user's session bus, so
+    # the runtime keeps the variables that locate it on top of the usual
+    # isolated environment.
+    environment = _isolated_environment()
+    environment.update({name: os.environ[name] for name in _SESSION_BUS_VARIABLES if name in os.environ})
+    result = run_isolated_hook_process(
+        (str(status.identity.path), "proxy-credentials", "--stdin"),
         input_text=json.dumps({"schema": "proxy-credentials.v1", "proxy_url": proxy_url}),
+        cwd=status.identity.path.parent,
+        environment=environment,
         timeout_seconds=remaining,
         output_limit=_MAX_NATIVE_OUTPUT_BYTES,
     )
-    if output is None:
+    if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
         return None
     try:
-        answer = cast(object, json.loads(output))
+        answer = cast(object, json.loads(result.stdout))
     except ValueError:
         return None
     return cast(dict[str, object], answer) if isinstance(answer, dict) else None
