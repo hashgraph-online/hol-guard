@@ -17,12 +17,14 @@ from codex_plugin_scanner.guard.runtime.network_legacy_config import (
 from codex_plugin_scanner.guard.runtime.network_policy_contract import EnforcementGrade
 from codex_plugin_scanner.guard.runtime.network_status_validation import (
     NetworkStatusSchemaError,
+    NetworkStatusValidatorUnavailableError,
     validate_network_status,
 )
 from codex_plugin_scanner.guard.runtime.network_supervisor import NetworkSupervisorHealth
 
 __all__ = [
     "NetworkStatusSchemaError",
+    "NetworkStatusValidatorUnavailableError",
     "build_network_status",
     "project_network_supervisor_health",
     "validate_network_status",
