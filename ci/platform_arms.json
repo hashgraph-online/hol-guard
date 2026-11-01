@@ -376,7 +376,7 @@
    "verdict": "windows-unsupported",
    "note": "Only the Node build and Node tool reasons are filtered here; every other contained reason is passed through for `generic.rs::windows_contained` to decide. That allowlist is where a Windows containment profile is actually admitted.",
    "cfg": "not(unix)",
-   "body": "2d8559fe0d22"
+   "body": "af913c8cf3ae"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
@@ -2409,6 +2409,30 @@
    "item": "fn pid_alive(pid: i64) -> bool",
    "cfg": "not(unix)",
    "body": "aeb9e90f0af4"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The daemon process queries are POSIX-only, as before the move: Windows reads its process table through `windows-process-command-lines`, and the Python wrapper returns `None` on Windows before it asks. With no trusted `ps` and no procfs root off Unix, every query answers `null`, which callers read as \"cannot be proven\"; `without_ps_or_procfs_nothing_is_proven` pins that answer on every platform.",
+   "file": "rust/crates/guard-runtime/src/posix_processes.rs",
+   "item": "fn trusted_ps_path() -> Option<PathBuf>",
+   "cfg": "not(unix)",
+   "body": "3a781c167585"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn isolate_group(_command: &mut Command)",
+   "cfg": "not(unix)",
+   "body": "ec39219807ef"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn kill_group(_child: &Child)",
+   "cfg": "not(unix)",
+   "body": "42851029dd12"
   },
   {
    "verdict": "windows-equivalent",

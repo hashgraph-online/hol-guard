@@ -559,12 +559,11 @@
           "src/codex_plugin_scanner/guard/runtime_identity_assessment.py",
           "src/codex_plugin_scanner/guard/runtime_identity_candidates.py",
           "src/codex_plugin_scanner/guard/runtime_identity_probe.py",
-          "src/codex_plugin_scanner/guard/runtime_instance_store.py",
           "src/codex_plugin_scanner/guard/runtime_posture.py",
           "src/codex_plugin_scanner/guard/runtime_advisory_bundle.py",
           "src/codex_plugin_scanner/guard/cli/runtime_posture_command.py"
         ],
-        "reason": "Read-only `guard runtime posture` report: discovers configured MCP servers, sends their launches to the native runtime-identity probe and assessment (launch resolution, shebang following, signed-bundle verification and the decision logic live in Rust), passes the locally cached supply-chain bundle and its sync context through unparsed, carries the running instances the native probe bound to their builds in a Guard-home file between probes, and formats the result. Reached only from the CLI dispatcher for that subcommand; no hook, approval, allow or deny path reads it."
+        "reason": "Read-only `guard runtime posture` report: discovers configured MCP servers, sends their launches to the native runtime-identity probe and assessment (launch resolution, shebang following, signed-bundle verification and the decision logic live in Rust), passes the locally cached supply-chain bundle and its sync context through unparsed, has the native probe carry the running instances it bound to their builds in a Guard-home file between probes, and formats the result. Reached only from the CLI dispatcher for that subcommand; no hook, approval, allow or deny path reads it."
       }
     ],
     "reviewed_runtime": [

@@ -180,6 +180,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if local_authority_integrity_op::is_command(command) && flag == "--stdin" => {
+            let response = local_authority_integrity_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if store_quarantine_forensics::is_command(command) && flag == "--stdin" => {
             let response = store_quarantine_forensics::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -202,6 +206,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
             let response = device_key_helper::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {
+            let response = posix_processes::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag]
@@ -272,6 +280,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if sqlite_store_salvage::is_command(command) && flag == "--stdin" => {
             let response = sqlite_store_salvage::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if guard_home_resolve::is_command(command) && flag == "--stdin" => {
+            let response = guard_home_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

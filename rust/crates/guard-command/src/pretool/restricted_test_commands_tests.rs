@@ -503,3 +503,65 @@ fn an_option_that_moves_or_fans_out_a_manager_run_is_not_peeled() {
         assert_eq!(reason(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_managers_own_verb_alias_takes_the_route_the_canonical_spelling_takes() {
+    // npm's command table maps `run-script`, `rum` and `urn` onto `run`, and
+    // `t` and `tst` onto `test`; pnpm carries `run-script`, `t` and `tst`.
+    // Each alias starts exactly what the canonical spelling starts, so
+    // reading only the canonical word left the alias under review while the
+    // same run spelled plainly beside it was admitted.
+    for command in [
+        "npm run-script test",
+        "npm rum test",
+        "npm urn test",
+        "npm run-script test:unit",
+        "pnpm run-script test",
+        "npm t",
+        "npm tst",
+        "pnpm t",
+        "pnpm tst",
+        "npm --silent t",
+        "npm run-script --silent test",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_package_test_readonly_containment_required"),
+            "{command}"
+        );
+    }
+    for command in [
+        "npm run-script lint",
+        "npm urn typecheck",
+        "pnpm run-script lint",
+        "npm run-script --silent lint",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_node_tool_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_word_a_manager_does_not_alias_stays_a_script_name() {
+    // yarn and bun carry none of these aliases and pass a bare word to the
+    // manifest, so reading one as a verb would admit a script the line never
+    // named. `npm run t` is the manifest's own `t` entry for the same reason:
+    // the alias is a top-level command, not a script name.
+    for command in [
+        "yarn run-script test",
+        "bun run-script test",
+        "pnpm rum test",
+        "pnpm urn test",
+        "yarn t",
+        "bun t",
+    ] {
+        assert_ne!(
+            reason(command),
+            Some("native_package_test_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}

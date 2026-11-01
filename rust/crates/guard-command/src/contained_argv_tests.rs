@@ -601,3 +601,64 @@ fn a_hook_command_reads_the_way_the_screen_that_admitted_it_read_it() {
         json!("pytest_restricted_invalid_command")
     );
 }
+
+#[test]
+fn script_run_verb_reads_every_managers_own_aliases() {
+    // npm's command table maps `run-script`, `rum` and `urn` onto `run`, so a
+    // line spelled any of those ways starts the same script.
+    for word in ["run", "run-script", "rum", "urn"] {
+        assert!(names_script_run_verb("npm", word), "npm {word}");
+    }
+    // pnpm lists only `run-script`.
+    assert!(names_script_run_verb("pnpm", "run-script"));
+    for word in ["rum", "urn"] {
+        assert!(!names_script_run_verb("pnpm", word), "pnpm {word}");
+    }
+    // yarn and bun spell it `run` alone. Reading an alias they do not carry
+    // would admit a word they pass to the manifest instead.
+    for manager in ["yarn", "bun"] {
+        assert!(names_script_run_verb(manager, "run"), "{manager} run");
+        for word in ["run-script", "rum", "urn"] {
+            assert!(!names_script_run_verb(manager, word), "{manager} {word}");
+        }
+    }
+    // A path-spelled manager answers for the program it names.
+    assert!(names_script_run_verb("/usr/local/bin/npm", "run-script"));
+    // Nothing else is the verb.
+    assert!(!names_script_run_verb("npm", "runs"));
+    assert!(!names_script_run_verb("npm", "exec"));
+}
+
+#[test]
+fn aliased_test_script_name_resolves_to_the_manifest_key() {
+    // `t` and `tst` are npm's and pnpm's own aliases of `test`, and both run
+    // the manifest's `test` entry, so the name returned is the key the sink
+    // looks up rather than the word the line spells.
+    for manager in ["npm", "pnpm"] {
+        for word in ["t", "tst"] {
+            assert_eq!(
+                aliased_test_script_name(manager, word),
+                Some("test"),
+                "{manager} {word}"
+            );
+        }
+    }
+    // yarn and bun pass a bare word straight to the manifest, so reading `t`
+    // as `test` for them would run an entry the line never named.
+    for manager in ["yarn", "bun"] {
+        for word in ["t", "tst"] {
+            assert_eq!(
+                aliased_test_script_name(manager, word),
+                None,
+                "{manager} {word}"
+            );
+        }
+    }
+    // The canonical spelling needs no mapping, and no other word is an alias.
+    assert_eq!(aliased_test_script_name("npm", "test"), None);
+    assert_eq!(aliased_test_script_name("npm", "ts"), None);
+    assert_eq!(
+        aliased_test_script_name("/opt/homebrew/bin/pnpm", "t"),
+        Some("test")
+    );
+}
