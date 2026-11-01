@@ -424,13 +424,24 @@ def _run_guard_policy_document_command(
         CommandPolicyDecisionUnavailableError,
     ) as error:
         code = getattr(error, "code", error.__class__.__name__)
+        message = str(error)
+        if command in {"export", "show"} and code == "sensitive_local_policy_requires_provenance":
+            message = _workspace_rule_redaction_message(command, getattr(error, "rule_id", ""))
         _write_payload(
             f"policy {command}",
-            {"error": str(code), "message": str(error)},
+            {"error": str(code), "message": message},
             as_json=as_json,
             output_stream=output_stream,
         )
         return 4
+
+
+def _workspace_rule_redaction_message(command: str, rule_id: str) -> str:
+    return (
+        f"Rule {rule_id} applies to a workspace, and Guard keeps workspace paths out of policy {command} "
+        f"by default. Run `hol-guard policy {command} --include-provenance` to include them; "
+        "Guard asks for your approval first."
+    )
 
 
 def _semantic_diff_payload(difference: PolicyDocumentDiff) -> dict[str, object]:
