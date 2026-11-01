@@ -195,6 +195,28 @@ mod proc_scan {
     }
 
     #[test]
+    fn output_past_the_limit_stops_the_child_at_once() {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "while :; do echo xxxxxxxxxxxxxxxx; done"]);
+        let started = Instant::now();
+
+        assert_eq!(bounded_stdout(command, 4096, Duration::from_secs(60)), None);
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    #[test]
+    fn bounded_output_needs_a_clean_exit() {
+        let run = |script: &str| {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", script]);
+            bounded_stdout(command, 4096, Duration::from_secs(30))
+        };
+
+        assert_eq!(run("echo n/tmp/x"), Some(b"n/tmp/x\n".to_vec()));
+        assert_eq!(run("echo n/tmp/x; exit 1"), None);
+    }
+
+    #[test]
     fn the_resolved_root_is_matched_too() {
         let fake = fake_proc();
         let alias = fake.proc_root.parent().expect("parent").join("tmp-alias");

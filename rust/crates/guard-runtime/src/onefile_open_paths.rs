@@ -290,10 +290,19 @@ fn lsof_path() -> Option<PathBuf> {
 /// skipped something it could not inspect, which may be the very process
 /// holding an extraction directory open, so only a clean exit counts.
 fn system_lsof() -> Option<Vec<u8>> {
-    let mut child = Command::new(lsof_path()?)
+    let mut command = Command::new(lsof_path()?);
+    command
         .args(["-n", "-P", "-w", "-F", "n"])
         .env_clear()
-        .env("LC_ALL", "C")
+        .env("LC_ALL", "C");
+    bounded_stdout(command, LSOF_OUTPUT_LIMIT, LSOF_TIMEOUT)
+}
+
+/// Stdout of `command` when it exits cleanly within `timeout` and writes at
+/// most `limit` bytes. Output past the limit kills the child at once rather
+/// than leaving it blocked on a full pipe until the timeout.
+fn bounded_stdout(mut command: Command, limit: u64, timeout: Duration) -> Option<Vec<u8>> {
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -307,11 +316,22 @@ fn system_lsof() -> Option<Vec<u8>> {
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         let mut bytes = Vec::new();
-        let _ = stdout.take(LSOF_OUTPUT_LIMIT + 1).read_to_end(&mut bytes);
+        let _ = stdout.take(limit + 1).read_to_end(&mut bytes);
         let _ = sender.send(bytes);
     });
-    let deadline = Instant::now() + LSOF_TIMEOUT;
+    let deadline = Instant::now() + timeout;
+    let mut output = None;
     let status = loop {
+        if output.is_none() {
+            if let Ok(bytes) = receiver.try_recv() {
+                if bytes.len() as u64 > limit {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+                output = Some(bytes);
+            }
+        }
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => {
@@ -324,10 +344,13 @@ fn system_lsof() -> Option<Vec<u8>> {
             }
         }
     };
-    let bytes = receiver
-        .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-        .ok()?;
-    if !status.success() || bytes.len() as u64 > LSOF_OUTPUT_LIMIT {
+    let bytes = match output {
+        Some(bytes) => bytes,
+        None => receiver
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .ok()?,
+    };
+    if !status.success() || bytes.len() as u64 > limit {
         return None;
     }
     Some(bytes)
