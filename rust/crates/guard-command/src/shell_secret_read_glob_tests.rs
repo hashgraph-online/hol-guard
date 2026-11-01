@@ -2,7 +2,7 @@
 //! search tool accepts. The recorded Python parity vectors in
 //! `sfrs_token_vectors` cover the spellings that predate them.
 
-use crate::shell_secret_read_support::search_glob_pattern_is_safe;
+use crate::shell_secret_read_glob::search_glob_pattern_is_safe;
 
 fn safe(pattern: &str) -> bool {
     search_glob_pattern_is_safe(pattern, None)
