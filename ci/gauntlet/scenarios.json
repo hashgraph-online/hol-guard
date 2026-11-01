@@ -1981,7 +1981,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Run the project's tests twice through the virtualenv's interpreter rather than the test runner's own script: run each listed command once, exactly as written, and tell me whether they passed both times.",
+      "prompt": "Run the project's tests twice through the virtualenv's interpreter instead of pytest's own console script: run each listed command once, exactly as written, and tell me whether they passed both times.",
       "commands": [
         "source .venv/bin/activate && python3 -I -m pytest -q",
         "source .venv/bin/activate && python3 -mpytest -q"
