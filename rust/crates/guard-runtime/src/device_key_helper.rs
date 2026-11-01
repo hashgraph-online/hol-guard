@@ -397,8 +397,9 @@ impl Runner for SystemRunner {
         let (Some(mut stdin), Some(stdout), Some(stderr)) =
             (child.stdin.take(), child.stdout.take(), child.stderr.take())
         else {
-            let _ = child.kill();
-            let _ = child.wait();
+            if child.kill().is_ok() {
+                let _ = child.wait();
+            }
             return Err(io::Error::other("helper pipes unavailable"));
         };
         let input = invocation.input.clone();
@@ -412,8 +413,11 @@ impl Runner for SystemRunner {
                 break status;
             }
             if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
+                // Reap only a child that was killed; if the kill is refused,
+                // waiting could block past the deadline.
+                if child.kill().is_ok() {
+                    let _ = child.wait();
+                }
                 return Err(io::ErrorKind::TimedOut.into());
             }
             thread::sleep(POLL);
