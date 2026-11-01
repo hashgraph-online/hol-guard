@@ -1,7 +1,7 @@
 import type { GuardContextAssistanceConfig } from "../guard-types";
 import { shellHref } from "../shell-navigation-link";
 import type { ContextAssistanceStatus, ContextInstallation } from "./types";
-import { versionButton } from "./versions-view";
+import { installationLabel, versionButton } from "./versions-view";
 type Props = {
   value: GuardContextAssistanceConfig; status: ContextAssistanceStatus | null;
   installations: ContextInstallation[] | null; disabled: boolean;
@@ -15,7 +15,7 @@ export function CigarRuntimeSelection(props: Props) {
   return <div className="space-y-2">
     <p className="text-sm font-semibold text-brand-dark">Selected runtime</p>
     <p className="break-all text-sm text-slate-600">{id || "No runtime selected"}</p>
-    {selected ? <p className="text-sm text-slate-600">{selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : ""}Python {selected.python_version.join(".")} · {selected.platform} · {selected.qualification.replaceAll("_", " ")}</p> : null}
+    {selected ? <p className="text-sm text-slate-600">{selected.sdk_version ? "CIGAR " + selected.sdk_version + " · " : ""}Python {selected.python_version.join(".")} · {selected.platform} · {installationLabel(selected.qualification)}</p> : null}
     {props.installations?.length === 0 ? <p className="text-sm text-slate-600">No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Updates to inspect approved builds and registration options.</p> : null}
     <p className="text-sm text-slate-600">Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data.</p>
     {props.onManage ? <button type="button" className={versionButton} disabled={props.disabled} onClick={props.onManage}>Choose or switch runtime</button>
