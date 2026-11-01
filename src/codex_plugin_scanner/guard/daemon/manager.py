@@ -1138,28 +1138,37 @@ def reap_orphaned_daemon_workers(*, deadline: float | None = None) -> None:
     """Stop hook workers whose daemon parent is already gone.
 
     The native runtime lists the processes, selects the orphaned workers and
-    stops them. A runtime that cannot answer leaves them for the next start.
+    stops them. A runtime that cannot answer leaves them for the next start,
+    as a missing process listing did before. Without a caller deadline the
+    status check and the reap share `_ORPHAN_REAP_TIMEOUT_SECONDS`.
     """
 
     if os.name == "nt":
         return
     from ..mdm.runtime_request import runtime_answer
 
-    request: dict[str, object] = {"schema": "orphaned-worker-reap.v1", "self_pid": os.getpid()}
-    timeout_seconds: float | None = _ORPHAN_REAP_TIMEOUT_SECONDS
-    if deadline is not None:
-        budget = deadline - time.monotonic() - _ORPHAN_REAP_LAUNCH_RESERVE_SECONDS
+    reap_deadline = time.monotonic() + _ORPHAN_REAP_TIMEOUT_SECONDS if deadline is None else deadline
+
+    def request() -> dict[str, object] | None:
+        # Sized after the status check, so a cold lookup never leaves the
+        # runtime a budget longer than the launch has left.
+        budget = reap_deadline - time.monotonic() - _ORPHAN_REAP_LAUNCH_RESERVE_SECONDS
         if budget <= 0:
-            return
-        request["budget_ms"] = min(int(budget * 1000), _ORPHAN_REAP_MAX_BUDGET_MS)
-        timeout_seconds = None
+            return None
+        return {
+            "schema": "orphaned-worker-reap.v1",
+            "self_pid": os.getpid(),
+            "budget_ms": min(int(budget * 1000), _ORPHAN_REAP_MAX_BUDGET_MS),
+        }
+
+    if request() is None:
+        return
     runtime_answer(
         "native-orphaned-worker-reap-v1",
         "orphaned-worker-reap",
         request,
         output_limit=_ORPHAN_REAP_OUTPUT_LIMIT,
-        timeout_seconds=timeout_seconds,
-        deadline=deadline,
+        deadline=reap_deadline,
     )
 
 
