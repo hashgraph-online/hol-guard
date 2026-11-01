@@ -34,6 +34,13 @@ from codex_plugin_scanner.guard.daemon.discovery import (
 from tests.native_runtime_fixtures import patch_popen_past_native_runtime
 
 
+@pytest.fixture(autouse=True)
+def _no_orphaned_worker_reap(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Daemon starts here fake `subprocess.Popen`; the reap's runtime launch is
+    # judged in tests/test_orphaned_daemon_workers.py.
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
+
+
 def _write_subprocess_launch_wrapper(
     path: Path,
     *,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import cast
 
 _STATUS_TIMEOUT_SECONDS = 10.0
@@ -13,7 +13,7 @@ _STATUS_TIMEOUT_SECONDS = 10.0
 def runtime_answer(
     feature: str,
     command: str,
-    request: Mapping[str, object] | str,
+    request: Mapping[str, object] | str | Callable[[], Mapping[str, object] | None],
     *,
     output_limit: int,
     timeout_seconds: float | None = None,
@@ -28,12 +28,13 @@ def runtime_answer(
     passes the encoded text, so runtime faults never read as bad input. A
     `deadline` bounds the status check and the command together; without one
     the command gets `timeout_seconds` of its own. The status check alone
-    never takes longer than `status_timeout_seconds`.
+    never takes longer than `status_timeout_seconds`. A callable request is
+    built after the status check, so it can size itself to what is left of
+    the deadline; it returns `None` to send nothing.
     """
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
-    input_text = request if isinstance(request, str) else json.dumps(request, sort_keys=True)
     status_deadline = time.monotonic() + status_timeout_seconds
     status = native_runtime_status(
         deadline_monotonic=status_deadline if deadline is None else min(deadline, status_deadline)
@@ -46,6 +47,12 @@ def runtime_answer(
         or any(name not in status.capabilities.features for name in (feature, *extra_features))
     ):
         return None
+    if callable(request):
+        built = request()
+        if built is None:
+            return None
+        request = built
+    input_text = request if isinstance(request, str) else json.dumps(request, sort_keys=True)
     if deadline is not None:
         timeout_seconds = deadline - time.monotonic()
     if timeout_seconds is None or timeout_seconds <= 0:

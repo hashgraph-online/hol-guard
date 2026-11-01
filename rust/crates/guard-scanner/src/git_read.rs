@@ -23,6 +23,8 @@ use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use zeroize::Zeroizing;
+
 /// `_GIT_TIMEOUT_SECONDS` from the Python module.
 pub const GIT_TIMEOUT_SECONDS: u64 = 20;
 
@@ -39,9 +41,13 @@ pub struct CompletedOutput {
     /// or `-signal` when the child was killed by a signal (POSIX only).
     pub returncode: i32,
     /// Captured stdout bytes.
-    pub stdout: Vec<u8>,
-    /// Captured stderr bytes.
-    pub stderr: Vec<u8>,
+    ///
+    /// `git cat-file blob` hands back a file's whole contents, so this buffer
+    /// is plaintext. Wrapping it wipes it on every drop, including the ones a
+    /// caller never sees, and keeps the derived `Debug` from printing it.
+    pub stdout: Zeroizing<Vec<u8>>,
+    /// Captured stderr bytes, wrapped for the same reason as `stdout`.
+    pub stderr: Zeroizing<Vec<u8>>,
 }
 
 /// Failure modes of [`run_git`], mirroring the exceptions Python callers
@@ -55,7 +61,10 @@ pub enum GitError {
     Timeout,
     /// Non-zero exit status, mirroring `CalledProcessError` (`check=True` with
     /// `returncode != 0`): carries the code and the captured stderr.
-    NonZero { code: i32, stderr: Vec<u8> },
+    NonZero {
+        code: i32,
+        stderr: Zeroizing<Vec<u8>>,
+    },
     /// Catch-all for `subprocess.SubprocessError`-style failures (e.g. a
     /// drained-pipe reader thread panicking).
     Subprocess(String),
@@ -104,15 +113,73 @@ fn raw_returncode(status: &std::process::ExitStatus) -> i32 {
     status.code().unwrap_or(-1)
 }
 
+/// Read a pipe to its end without leaving partial copies in freed memory.
+///
+/// `read_to_end` grows its buffer by reallocating, and every growth frees an
+/// allocation that still holds the bytes read so far. `git cat-file blob`
+/// hands back a file's plaintext, so those freed allocations are exactly what
+/// a crash dump would carry. Reading into fixed chunks never reallocates a
+/// filled buffer, each chunk is wiped when it drops, and the result is
+/// allocated once at the size the chunks already add up to.
+///
+/// The result is wrapped rather than handed back bare because the caller is
+/// not the only one who drops it: the timeout path, a failed sibling drain and
+/// a non-zero exit all discard an assembled buffer, and each of those is a
+/// full copy of the plaintext that would otherwise be freed intact.
+fn read_whole_pipe(pipe: &mut impl Read) -> io::Result<Zeroizing<Vec<u8>>> {
+    const CHUNK_BYTES: usize = 64 * 1024;
+    let mut chunks: Vec<Zeroizing<Vec<u8>>> = Vec::new();
+    let mut last_used = 0usize;
+    loop {
+        let mut chunk = Zeroizing::new(vec![0u8; CHUNK_BYTES]);
+        let mut used = 0usize;
+        while used < CHUNK_BYTES {
+            // `read_to_end` retried an interrupted read; propagating it here
+            // would fail a whole git call on a signal an embedding Python
+            // interpreter installs without `SA_RESTART`.
+            let read = match pipe.read(&mut chunk[used..]) {
+                Ok(read) => read,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            };
+            if read == 0 {
+                break;
+            }
+            used += read;
+        }
+        let filled = used == CHUNK_BYTES;
+        if used > 0 {
+            chunks.push(chunk);
+            last_used = used;
+        }
+        if !filled {
+            break;
+        }
+    }
+    let total = chunks.len().saturating_sub(1) * CHUNK_BYTES + last_used;
+    let mut whole = Vec::with_capacity(total);
+    for (index, chunk) in chunks.iter().enumerate() {
+        let used = if index + 1 == chunks.len() {
+            last_used
+        } else {
+            CHUNK_BYTES
+        };
+        whole.extend_from_slice(&chunk[..used]);
+    }
+    Ok(Zeroizing::new(whole))
+}
+
 /// Drain one piped stream into the `Ok(stdout)`/`Ok(stderr)` buffers, mapping
 /// reader failures the same way Python maps `OSError`.
-fn drain(reader: Option<JoinHandle<io::Result<Vec<u8>>>>) -> Result<Vec<u8>, GitError> {
+fn drain(
+    reader: Option<JoinHandle<io::Result<Zeroizing<Vec<u8>>>>>,
+) -> Result<Zeroizing<Vec<u8>>, GitError> {
     match reader {
         Some(handle) => handle
             .join()
             .map_err(|_| GitError::Subprocess("pipe reader thread panicked".to_string()))?
             .map_err(GitError::Spawn),
-        None => Ok(Vec::new()),
+        None => Ok(Zeroizing::new(Vec::new())),
     }
 }
 
@@ -136,18 +203,14 @@ fn run_program(
 
     // Drain both pipes concurrently with the poll loop: `try_wait` alone
     // would leave a child blocked on a full pipe buffer past the deadline.
-    let stdout_reader = child.stdout.take().map(|mut pipe| {
-        thread::spawn(move || {
-            let mut buffer = Vec::new();
-            pipe.read_to_end(&mut buffer).map(|_| buffer)
-        })
-    });
-    let stderr_reader = child.stderr.take().map(|mut pipe| {
-        thread::spawn(move || {
-            let mut buffer = Vec::new();
-            pipe.read_to_end(&mut buffer).map(|_| buffer)
-        })
-    });
+    let stdout_reader = child
+        .stdout
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_whole_pipe(&mut pipe)));
+    let stderr_reader = child
+        .stderr
+        .take()
+        .map(|mut pipe| thread::spawn(move || read_whole_pipe(&mut pipe)));
 
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
     let status = loop {
@@ -269,5 +332,48 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(error, GitError::Spawn(_)));
+    }
+
+    #[test]
+    fn a_pipe_longer_than_one_chunk_is_read_whole() {
+        let source: Vec<u8> = (0..200_000usize).map(|index| (index % 251) as u8).collect();
+        let mut cursor = std::io::Cursor::new(source.clone());
+        let read = read_whole_pipe(&mut cursor).unwrap();
+        assert_eq!(*read, source);
+        assert_eq!(read.capacity(), source.len());
+    }
+
+    #[test]
+    fn an_empty_pipe_reads_as_no_bytes() {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        assert!(read_whole_pipe(&mut cursor).unwrap().is_empty());
+    }
+
+    /// A signal handler installed without `SA_RESTART` interrupts a blocked
+    /// read; `read_to_end` retried that, so the chunked reader must too.
+    #[test]
+    fn an_interrupted_read_is_retried_rather_than_failing_the_call() {
+        struct InterruptsOnce {
+            interrupted: bool,
+            left: usize,
+        }
+        impl Read for InterruptsOnce {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if !self.interrupted {
+                    self.interrupted = true;
+                    return Err(io::Error::from(io::ErrorKind::Interrupted));
+                }
+                let wrote = buffer.len().min(self.left);
+                buffer[..wrote].fill(b'x');
+                self.left -= wrote;
+                Ok(wrote)
+            }
+        }
+        let mut pipe = InterruptsOnce {
+            interrupted: false,
+            left: 7,
+        };
+        let read = read_whole_pipe(&mut pipe).unwrap();
+        assert_eq!(*read, vec![b'x'; 7]);
     }
 }
