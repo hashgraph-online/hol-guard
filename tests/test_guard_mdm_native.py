@@ -255,7 +255,6 @@ def _answering(
         return answer
 
     monkeypatch.setattr(native.platform, "system", lambda: system)
-    monkeypatch.setattr(native, "windows_directory", lambda: r"D:\Windows")
     monkeypatch.setattr(native, "_native_answer", native_answer)
     return requests
 
@@ -308,7 +307,6 @@ def test_windows_native_verification_names_the_pins_and_system_root(
             "platform": "windows",
             "runtime_root": str(tmp_path),
             "windows_signer_thumbprints": ["A", "B"],
-            "windows_directory": r"D:\Windows",
         }
     ]
 

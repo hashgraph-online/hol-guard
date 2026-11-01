@@ -24,6 +24,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use crate::daemon_lifecycle_text::nt_root_end;
+use crate::device_key_helper::system_windows_directory;
 
 const SCHEMA: &str = "ownership-acl.v1";
 const MAX_REQUEST_BYTES: u64 = 2 * 1024 * 1024;
@@ -159,7 +160,10 @@ fn respond(request: Request) -> Result<Value, String> {
     match request.op.as_str() {
         "windows-probe" => {
             let paths = request.windows_paths.ok_or_else(invalid)?;
-            let windows_directory = request.windows_directory.ok_or_else(invalid)?;
+            let windows_directory = request
+                .windows_directory
+                .or_else(system_windows_directory)
+                .ok_or_else(invalid)?;
             Ok(verdict_json(&windows_probe::probe(
                 windows_payload(&paths),
                 &windows_directory,
@@ -168,7 +172,10 @@ fn respond(request: Request) -> Result<Value, String> {
         }
         "windows-file-probe" => {
             let file = request.managed_file.ok_or_else(invalid)?;
-            let windows_directory = request.windows_directory.ok_or_else(invalid)?;
+            let windows_directory = request
+                .windows_directory
+                .or_else(system_windows_directory)
+                .ok_or_else(invalid)?;
             Ok(verdict_json(&windows_probe::probe(
                 managed_file_payload(&file),
                 &windows_directory,

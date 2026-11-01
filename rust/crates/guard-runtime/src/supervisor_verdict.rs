@@ -18,6 +18,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::daemon_lifecycle_text::{py_splitlines, py_strip};
+use crate::device_key_helper::system_windows_directory;
 
 use nt_path::{nt_normcase_normpath, security_descriptor_valid};
 
@@ -25,6 +26,8 @@ const SCHEMA: &str = "supervisor-verdict.v1";
 const MAX_REQUEST_BYTES: u64 = 2 * 1024 * 1024;
 const LABEL: &str = "org.hol.guard.machine-health";
 const WINDOWS_TASK_NAME: &str = r"\HOL Guard\Machine Health";
+/// Ops that run Windows system tools, so they need the system directory.
+const WINDOWS_SYSTEM_OPS: [&str; 3] = ["windows-verify", "windows-install", "windows-remove"];
 const TASK_NAMESPACE: &str = "http://schemas.microsoft.com/windows/2004/02/mit/task";
 const HEALTH_ARGUMENTS: [&str; 5] = ["mdm", "health-report", "--scope", "machine", "--json"];
 const START_BOUNDARY: &str = "2000-01-01T00:00:00";
@@ -112,11 +115,14 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 
 fn answer(bytes: &[u8]) -> Result<Value, String> {
     let invalid = || "supervisor_verdict_request_invalid".to_owned();
-    let request: Request = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+    let mut request: Request = serde_json::from_slice(bytes).map_err(|_| invalid())?;
     if request.schema != SCHEMA {
         return Err(invalid());
     }
     let op = request.op.clone();
+    if WINDOWS_SYSTEM_OPS.contains(&op.as_str()) && request.windows_directory.is_none() {
+        request.windows_directory = system_windows_directory();
+    }
     match op.as_str() {
         "macos" => macos(&request).ok_or_else(invalid),
         "macos-verify" => {
