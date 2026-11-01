@@ -101,7 +101,7 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         .unwrap_or(arguments.len());
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
-                        "diff" | "log" | "show" => !(active_options
+                        "diff" | "diff-tree" | "log" | "show" => !(active_options
                             .iter()
                             .any(|argument| argument == "--no-ext-diff")
                             && active_options
@@ -115,8 +115,10 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         "config" => super::git_config_reads::read_form(&arguments[1..]).is_some(),
                         // These do not page by default, but pager.<name> can, and
                         // an object read can fetch from a partial clone's promisor.
-                        "merge-base" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
-                        | "rev-list" => true,
+                        // `cherry` prints commit names through no helper of its
+                        // own, so the pager is the whole of what it can start.
+                        "cherry" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
+                        | "for-each-ref" | "rev-list" => true,
                         // blame and reflog page by default; describe honors
                         // pager.describe when it is set.
                         "blame" | "describe" | "reflog" => true,

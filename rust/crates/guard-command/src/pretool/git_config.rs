@@ -81,7 +81,9 @@ pub(super) fn execution_free_paging(
     if !matches!(
         operation,
         "status"
+            | "cherry"
             | "diff"
+            | "diff-tree"
             | "log"
             | "show"
             | "blame"
@@ -413,7 +415,10 @@ fn probe(
     // An external driver renders a diff, so only a read that renders one can
     // start it. A tag listing, a clean preview, a ref listing or an ignore
     // check prints names, and a configured driver leaves all of them alone.
-    let renders_diff = matches!(rendering, "diff" | "log" | "show" | "reflog" | "stash");
+    let renders_diff = matches!(
+        rendering,
+        "diff" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+    );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;

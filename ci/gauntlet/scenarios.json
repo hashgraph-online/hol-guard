@@ -770,6 +770,18 @@
       ]
     },
     {
+      "id": "omp-native-git-commit-file-listing",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "List the files the most recent commit touched by running the listed command once, then tell me how many there were.",
+      "commands": [
+        "git diff-tree --no-commit-id --name-only -r HEAD"
+      ]
+    },
+    {
       "id": "git-read-after-sibling-climb",
       "expectation": "allow",
       "oracle": "commands",

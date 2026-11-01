@@ -4,7 +4,10 @@ use std::path::Path;
 use base64ct::{Base64, Encoding};
 use serde_json::{json, Value};
 
-use super::{run_command, ACK_NAME, MAX_ACK_BYTES, OUTBOX_NAME};
+use super::{
+    run_command, ACK_NAME, CONTINUITY_NAME, DEVICE_KEY_NAME, MAX_ACK_BYTES, MAX_OUTBOX_BYTES,
+    MAX_RECORD_BYTES, OUTBOX_NAME,
+};
 
 fn state_root() -> (tempfile::TempDir, std::path::PathBuf) {
     let directory = tempfile::tempdir().unwrap();
@@ -85,6 +88,14 @@ fn a_file_that_was_never_written_reads_as_absent() {
 
     assert_eq!(read(&root, "outbox"), json!({"ok": true, "content": null}));
     assert_eq!(read(&root, "ack"), json!({"ok": true, "content": null}));
+    assert_eq!(
+        read(&root, "continuity"),
+        json!({"ok": true, "content": null})
+    );
+    assert_eq!(
+        read(&root, "device_key"),
+        json!({"ok": true, "content": null})
+    );
 }
 
 #[test]
@@ -127,6 +138,24 @@ fn an_acknowledgement_is_replaced_in_place() {
 }
 
 #[test]
+fn continuity_and_device_key_records_are_replaced_in_place() {
+    let (_directory, root) = state_root();
+
+    for kind in ["continuity", "device_key"] {
+        write(&root, "replace", kind, b"first");
+        assert_eq!(
+            write(&root, "replace", kind, b"second"),
+            json!({"ok": true})
+        );
+        assert_eq!(read(&root, kind), content(b"second"), "{kind}");
+    }
+    assert_eq!(
+        names(&root),
+        vec![DEVICE_KEY_NAME.to_owned(), CONTINUITY_NAME.to_owned()]
+    );
+}
+
+#[test]
 fn a_retired_outbox_is_gone_and_retiring_it_again_succeeds() {
     let (_directory, root) = state_root();
     write(&root, "create", "outbox", b"pending");
@@ -157,15 +186,105 @@ fn a_write_needs_a_real_state_root() {
 }
 
 #[test]
+fn a_record_write_names_its_own_missing_state_root() {
+    let (_directory, root) = state_root();
+    let missing = root.join("missing");
+
+    assert_eq!(
+        write(&missing, "replace", "continuity", b"x"),
+        refused("os", "installation_identity_state_root_invalid")
+    );
+    assert_eq!(
+        write(&missing, "replace", "device_key", b"x"),
+        refused("os", "device_key_state_root_invalid")
+    );
+}
+
+/// Fill `kind` to its bound through the runtime, then grow it by one byte
+/// behind the runtime's back.
+fn grow_past_bound(root: &Path, kind: &str, name: &str, bound: u64) {
+    let full = vec![b'a'; usize::try_from(bound).unwrap()];
+    assert_eq!(write(root, "replace", kind, &full), json!({"ok": true}));
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(root.join(name))
+        .unwrap();
+    std::io::Write::write_all(&mut file, b"a").unwrap();
+}
+
+#[test]
+fn a_record_past_its_bound_is_refused() {
+    let (_directory, root) = state_root();
+    grow_past_bound(&root, "continuity", CONTINUITY_NAME, MAX_RECORD_BYTES);
+    grow_past_bound(&root, "device_key", DEVICE_KEY_NAME, MAX_RECORD_BYTES);
+
+    assert_eq!(
+        read(&root, "continuity"),
+        refused("permission", "installation_identity_acl_invalid")
+    );
+    assert_eq!(
+        read(&root, "device_key"),
+        refused("permission", "device_key_acl_invalid")
+    );
+}
+
+#[test]
 fn an_acknowledgement_past_its_bound_is_refused() {
     let (_directory, root) = state_root();
-    let oversized = vec![b'a'; usize::try_from(MAX_ACK_BYTES).unwrap() + 1];
-    write(&root, "replace", "ack", &oversized);
+    grow_past_bound(&root, "ack", ACK_NAME, MAX_ACK_BYTES);
 
     assert_eq!(
         read(&root, "ack"),
         refused("permission", "health_lease_ack_acl_invalid")
     );
+}
+
+#[test]
+fn a_write_past_its_bound_is_refused_and_keeps_the_file() {
+    let (_directory, root) = state_root();
+    for (op, kind, bound, reason_code) in [
+        (
+            "create",
+            "outbox",
+            MAX_OUTBOX_BYTES,
+            "health_lease_outbox_too_large",
+        ),
+        (
+            "replace",
+            "ack",
+            MAX_ACK_BYTES,
+            "health_lease_ack_too_large",
+        ),
+        (
+            "replace",
+            "continuity",
+            MAX_RECORD_BYTES,
+            "installation_identity_too_large",
+        ),
+        (
+            "replace",
+            "device_key",
+            MAX_RECORD_BYTES,
+            "device_key_metadata_too_large",
+        ),
+    ] {
+        if op == "replace" {
+            assert_eq!(write(&root, op, kind, b"{}"), json!({"ok": true}));
+        }
+        let oversized = vec![b'a'; usize::try_from(bound).unwrap() + 1];
+
+        assert_eq!(
+            write(&root, op, kind, &oversized),
+            refused("os", reason_code)
+        );
+        let expected = if op == "replace" {
+            content(b"{}")
+        } else {
+            json!({"ok": true, "content": null})
+        };
+        assert_eq!(read(&root, kind), expected, "{kind}");
+    }
+    assert!(names(&root).iter().all(|name| !name.ends_with(".tmp")));
 }
 
 #[test]
@@ -182,7 +301,9 @@ fn a_request_outside_the_two_files_and_their_writes_is_refused() {
         request(&root, "remove", "ack"),
         carrying(request(&root, "read", "ack"), b"x"),
         request(&root, "create", "outbox"),
-        request(&root, "read", "continuity"),
+        carrying(request(&root, "create", "device_key"), b"x"),
+        request(&root, "remove", "continuity"),
+        request(&root, "read", "lock"),
         wrong_schema,
         extra,
     ] {
@@ -206,8 +327,10 @@ fn written_files_are_private_to_their_owner() {
     let (_directory, root) = state_root();
     write(&root, "create", "outbox", b"pending");
     write(&root, "replace", "ack", b"ack");
+    write(&root, "replace", "continuity", b"record");
+    write(&root, "replace", "device_key", b"metadata");
 
-    for name in [OUTBOX_NAME, ACK_NAME] {
+    for name in [OUTBOX_NAME, ACK_NAME, CONTINUITY_NAME, DEVICE_KEY_NAME] {
         let mode = fs::metadata(root.join(name)).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o600, "{name}");
     }
@@ -269,6 +392,43 @@ fn a_planted_link_is_never_written_through() {
         refused("exists", "health_lease_pending_conflict")
     );
     assert_eq!(fs::read(&elsewhere).unwrap(), b"original");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_linked_or_foreign_record_is_refused() {
+    let (directory, root) = state_root();
+    let elsewhere = directory.path().join("elsewhere.json");
+    fs::write(&elsewhere, b"{}").unwrap();
+    std::os::unix::fs::symlink(&elsewhere, root.join(DEVICE_KEY_NAME)).unwrap();
+    write(&root, "replace", "continuity", b"record");
+    let mut foreign = request(&root, "read", "continuity");
+    foreign["owner_uid"] = json!(owner(&root).wrapping_add(1));
+
+    assert_eq!(
+        read(&root, "device_key"),
+        refused("permission", "device_key_acl_invalid")
+    );
+    assert_eq!(
+        run(&foreign).unwrap(),
+        refused("permission", "installation_identity_acl_invalid")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_replaced_record_takes_the_place_of_a_planted_link() {
+    let (directory, root) = state_root();
+    let elsewhere = directory.path().join("elsewhere.json");
+    fs::write(&elsewhere, b"original").unwrap();
+    std::os::unix::fs::symlink(&elsewhere, root.join(DEVICE_KEY_NAME)).unwrap();
+
+    assert_eq!(
+        write(&root, "replace", "device_key", b"metadata"),
+        json!({"ok": true})
+    );
+    assert_eq!(fs::read(&elsewhere).unwrap(), b"original");
+    assert_eq!(read(&root, "device_key"), content(b"metadata"));
 }
 
 #[cfg(not(unix))]
