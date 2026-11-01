@@ -24907,7 +24907,7 @@
       "expect": "allow"
     },
     {
-      "id": "toolchain-pnpm-lint-passed-option",
+      "id": "toolchain-yarn-lint-passed-option",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -24917,7 +24917,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "pnpm lint -- --max-warnings=0"
+        "command": "yarn lint -- --max-warnings=0"
       },
       "cwd": "worktree",
       "expect": "allow"
