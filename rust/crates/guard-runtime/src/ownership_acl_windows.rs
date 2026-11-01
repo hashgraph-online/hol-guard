@@ -62,7 +62,18 @@ pub(super) trait Runner {
     ) -> io::Result<Vec<u8>>;
 }
 
-pub(super) struct SystemRunner;
+/// The real PowerShell, bounded by a wall clock.
+pub(super) struct SystemRunner {
+    pub(super) timeout: Duration,
+}
+
+impl Default for SystemRunner {
+    fn default() -> Self {
+        Self {
+            timeout: PROBE_TIMEOUT,
+        }
+    }
+}
 
 impl Runner for SystemRunner {
     fn run(
@@ -72,13 +83,14 @@ impl Runner for SystemRunner {
         cwd: &str,
         environment: &[(&str, &str)],
     ) -> io::Result<Vec<u8>> {
-        run_bounded(program, arguments, cwd, environment)
+        run_bounded(program, arguments, cwd, environment, self.timeout)
     }
 }
 
 /// Probe every payload item and classify the rows. The Windows directory
-/// comes from the kernel by way of the caller and must start with a drive
-/// letter.
+/// comes from the kernel by way of the caller and must be drive-rooted
+/// (`C:\` or `C:/`); a drive-relative `C:Windows` names a directory under
+/// that drive's current directory, not a fixed one.
 pub(super) fn probe(
     payload: Result<Vec<PayloadItem>, ()>,
     windows_directory: &str,
@@ -91,7 +103,8 @@ pub(super) fn probe(
     let drive_rooted = chars
         .next()
         .is_some_and(|letter| letter.is_ascii_alphabetic())
-        && chars.next() == Some(':');
+        && chars.next() == Some(':')
+        && matches!(chars.next(), Some('\\' | '/'));
     if !drive_rooted {
         return probe_failed();
     }
@@ -130,13 +143,14 @@ fn nt_join(base: &str, name: &str) -> String {
     }
 }
 
-/// One probe run with no shell, null standard input and error, a 15 s wall
-/// clock and at most 1 MiB of standard output.
+/// One probe run with no shell, null standard input and error, a wall clock
+/// (15 s outside tests) and at most 1 MiB of standard output.
 fn run_bounded(
     program: &str,
     arguments: &[&str],
     cwd: &str,
     environment: &[(&str, &str)],
+    timeout: Duration,
 ) -> io::Result<Vec<u8>> {
     let mut child = Command::new(program)
         .args(arguments)
@@ -161,7 +175,7 @@ fn run_bounded(
             .map(|_| bytes);
         let _ = sender.send(result);
     });
-    let deadline = Instant::now() + PROBE_TIMEOUT;
+    let deadline = Instant::now() + timeout;
     let status = loop {
         if let Some(status) = child.try_wait()? {
             break status;

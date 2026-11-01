@@ -6,13 +6,12 @@
 //!
 //! - `macos-verify` walks each surface's chain with `lstat` and `ls -lde`
 //!   (see `ownership_acl_macos.rs`) and folds the results into one verdict.
-//! - `windows-payload` lists the Windows surfaces to probe: each protected
-//!   file, directory and registry key, and every ancestor up to the drive or
-//!   `HKLM:\` root, once each regardless of case.
-//! - `windows-verify` checks the probe's rows against that list and classifies
-//!   each row by owner SID, attributes, container type and access rules.
-//! - `windows-probe` and `windows-file-probe` run that probe over the
-//!   payload and verify its rows (see `ownership_acl_windows.rs`).
+//! - `windows-probe` and `windows-file-probe` list the Windows surfaces to
+//!   probe (each protected file, directory and registry key, and every
+//!   ancestor up to the drive or `HKLM:\` root, once each regardless of
+//!   case), run the pinned probe over them, and classify each row by owner
+//!   SID, attributes, container type and access rules (see
+//!   `ownership_acl_windows.rs`).
 //! - `aggregate` folds per-surface results into one verdict.
 //!
 //! A malformed or incomplete Windows probe never reports health: the verdict
@@ -67,8 +66,6 @@ struct Request {
     managed_file: Option<String>,
     #[serde(default)]
     windows_directory: Option<String>,
-    #[serde(default)]
-    rows: Option<Value>,
     #[serde(default)]
     surfaces: Option<Vec<Surface>>,
     #[serde(default)]
@@ -160,23 +157,13 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
 fn respond(request: Request) -> Result<Value, String> {
     let invalid = || "ownership_acl_request_invalid".to_owned();
     match request.op.as_str() {
-        "windows-payload" => {
-            let paths = request.windows_paths.ok_or_else(invalid)?;
-            let payload = windows_payload(&paths).map_err(|_| invalid())?;
-            Ok(json!({"ok": true, "payload": payload.iter().map(payload_json).collect::<Vec<_>>()}))
-        }
-        "windows-verify" => {
-            let paths = request.windows_paths.ok_or_else(invalid)?;
-            let rows = request.rows.ok_or_else(invalid)?;
-            Ok(verdict_json(&windows_verify(windows_payload(&paths), rows)))
-        }
         "windows-probe" => {
             let paths = request.windows_paths.ok_or_else(invalid)?;
             let windows_directory = request.windows_directory.ok_or_else(invalid)?;
             Ok(verdict_json(&windows_probe::probe(
                 windows_payload(&paths),
                 &windows_directory,
-                &mut windows_probe::SystemRunner,
+                &mut windows_probe::SystemRunner::default(),
             )))
         }
         "windows-file-probe" => {
@@ -185,20 +172,7 @@ fn respond(request: Request) -> Result<Value, String> {
             Ok(verdict_json(&windows_probe::probe(
                 managed_file_payload(&file),
                 &windows_directory,
-                &mut windows_probe::SystemRunner,
-            )))
-        }
-        "windows-file-payload" => {
-            let file = request.managed_file.ok_or_else(invalid)?;
-            let payload = managed_file_payload(&file).map_err(|_| invalid())?;
-            Ok(json!({"ok": true, "payload": payload.iter().map(payload_json).collect::<Vec<_>>()}))
-        }
-        "windows-file-verify" => {
-            let file = request.managed_file.ok_or_else(invalid)?;
-            let rows = request.rows.ok_or_else(invalid)?;
-            Ok(verdict_json(&windows_verify(
-                managed_file_payload(&file),
-                rows,
+                &mut windows_probe::SystemRunner::default(),
             )))
         }
         "macos-verify" => {

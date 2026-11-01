@@ -9,10 +9,13 @@ use super::{probe, Runner, SCRIPT_HEAD, SCRIPT_TAIL};
 
 const MANAGED_FILE: &str = r"C:\ProgramData\HOL\Guard\policy.json";
 
+/// One recorded run: program, arguments, working directory and environment.
+type Call = (String, Vec<String>, String, Vec<(String, String)>);
+
 /// A stand-in PowerShell that records each run.
 struct FakePowershell {
     answers: VecDeque<io::Result<Vec<u8>>>,
-    calls: Vec<(String, Vec<String>, String, Vec<(String, String)>)>,
+    calls: Vec<Call>,
 }
 
 impl FakePowershell {
@@ -160,7 +163,14 @@ fn a_failed_or_unreadable_probe_never_reports_health() {
 
 #[test]
 fn a_drive_less_windows_directory_or_payload_never_runs_the_probe() {
-    for directory in [r"\Windows", "", "Windows", r"\\server\share\Windows"] {
+    for directory in [
+        r"\Windows",
+        "",
+        "Windows",
+        r"\\server\share\Windows",
+        "C:",
+        "C:Windows",
+    ] {
         let mut powershell = FakePowershell::answering(Vec::new());
         let verdict = probe(
             managed_file_payload(MANAGED_FILE),
@@ -209,14 +219,20 @@ fn the_installed_powershell_probes_a_real_file_chain() {
     std::fs::write(&file, b"{}").expect("file");
     let file = file.to_string_lossy().into_owned();
     let windows_directory = std::env::var("SystemRoot").expect("SystemRoot");
+    // A cold Windows PowerShell on a shared runner can take longer to start
+    // than the production budget; the test checks what the probe reads.
+    let mut runner = super::SystemRunner {
+        timeout: std::time::Duration::from_secs(120),
+    };
+    let started = std::time::Instant::now();
 
-    let verdict = probe(
-        managed_file_payload(&file),
-        &windows_directory,
-        &mut super::SystemRunner,
+    let verdict = probe(managed_file_payload(&file), &windows_directory, &mut runner);
+
+    let elapsed = started.elapsed();
+    assert_ne!(
+        verdict.reason_code, PROBE_FAILED,
+        "{verdict:?} after {elapsed:?}"
     );
-
-    assert_ne!(verdict.reason_code, PROBE_FAILED, "{verdict:?}");
     assert_eq!(
         verdict.surfaces.len(),
         managed_file_payload(&file).expect("payload").len()
