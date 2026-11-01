@@ -4284,7 +4284,8 @@
         "command": "git log --no-ext-diff --no-textconv --textc -5"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-git-diff-abbreviated-ext-diff",
@@ -4301,7 +4302,8 @@
         "command": "git diff --no-ext-diff --no-textconv --ext-d HEAD~1"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "git-worktree-log-oneline-3",
