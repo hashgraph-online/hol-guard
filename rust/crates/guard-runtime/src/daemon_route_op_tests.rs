@@ -6,6 +6,24 @@ use serde_json::{json, Value};
 
 const VECTORS: &str = include_str!("../tests/fixtures/daemon_route_vectors.json");
 
+#[test]
+fn context_assistance_control_routes_require_existing_dashboard_or_header_authorization() {
+    for path in [
+        "/v1/context-assistance",
+        "/v1/context-assistance/installations",
+        "/v1/context-assistance/recheck",
+        "/v1/context-assistance/activate",
+        "/v1/context-assistance/stop",
+        "/v1/context-assistance/workspace",
+        "/v1/context-assistance/workspace-access",
+        "/v1/context-assistance/workspace-grant",
+    ] {
+        assert!(crate::daemon_route_paths::requires_header_token(path));
+        assert!(crate::daemon_route_paths::session_path("GET", path));
+        assert!(!crate::daemon_route_paths::protection_repair_session_allowed("POST", path));
+    }
+}
+
 fn request_with(schema: &str, query: &Value) -> Value {
     json!({
         "operation": "daemon_route",

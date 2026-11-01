@@ -125,6 +125,25 @@ fn command_writes_creates_and_resets_home_config() {
     assert_eq!(fs::read_to_string(&config).unwrap(), "\n");
 }
 
+#[cfg(unix)]
+#[test]
+fn command_saves_ordinary_settings_into_a_group_writable_home() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = scratch("group-writable").join("home");
+    fs::create_dir_all(&home).unwrap();
+    fs::set_permissions(&home, fs::Permissions::from_mode(0o775)).unwrap();
+
+    let response = run(&home, "settings", r#"{"mode": "enforce"}"#);
+
+    assert_eq!(response["ok"], json!(true), "{response}");
+    assert_eq!(
+        fs::read_to_string(home.join(HOME_CONFIG_FILENAME)).unwrap(),
+        "mode = \"enforce\"\n"
+    );
+    let mode = fs::metadata(&home).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o755);
+}
+
 #[test]
 fn command_reports_invalid_payloads_without_writing() {
     let home = scratch("invalid").join("home");

@@ -311,6 +311,7 @@ class _DashboardSupportRoutes:
             "/workspaces",
             "/releases",
             "/settings",
+            "/cigar",
             "/about",
             "/protection/repair",
             "/requests",

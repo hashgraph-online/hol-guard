@@ -35,6 +35,8 @@ fn malformed_sync_arguments_are_typed_errors() {
         "downgrade_reference",
         "policy_simulation",
         "cloud_exceptions",
+        "cloud_http_error",
+        "stale_intel",
     ] {
         assert!(
             dispatch(kind, &Value::from("not-an-object")).is_err(),

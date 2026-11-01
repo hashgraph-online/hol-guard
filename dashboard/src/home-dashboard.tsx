@@ -23,6 +23,7 @@ import { harnessDisplayName, formatRelativeTime, formatNumber } from "./approval
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, OperatorHealthCard, resolveCloudIntelCopy } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
+import { ContextHomeStatus } from "./context-assistance/home-status";
 import { HomeHero, buildHomeHeroModel } from "./home-hero";
 import { HomeHowGuardWorks, useHowGuardWorksReveal } from "./home-how-guard-works";
 import { HomeSetupCard, WhatStaysLocalCard, resolveSetupApps } from "./home-setup-card";
@@ -148,6 +149,7 @@ export function HomeWorkspace(props: {
   onOpenInsights?: () => void;
   onOpenCommands: () => void;
   onOpenSettings: () => void;
+  onOpenCigar?: () => void;
   onRefreshRuntime?: () => Promise<void> | void;
   onReconnectSession?: () => Promise<void> | void;
   onOpenRecovery?: () => RecoveryHandoffResult | void | Promise<RecoveryHandoffResult | void>;
@@ -443,6 +445,7 @@ export function HomeWorkspace(props: {
             onOpenFleet={props.onOpenFleet}
             onOpenSupplyChain={props.onOpenSupplyChain}
           />
+          <ContextHomeStatus onOpenSettings={props.onOpenCigar ?? props.onOpenSettings} />
 
           {dailyStory && (
             <CollapsibleCard

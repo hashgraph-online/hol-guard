@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 use crate::resident_diagnostics::{self, observe, Phase, Status};
 use crate::resident_health_counters::{self as counters, QueueLane};
 use sha2::{Digest, Sha256};
+#[path = "resident_context_dispatch.rs"]
+mod context;
 #[path = "resident_control_dispatch.rs"]
 mod control;
 #[path = "resident_worker_pool.rs"]
@@ -309,6 +311,7 @@ fn handle_pending_request(
     mut pending: PendingRequest,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
     control_dispatch: Option<&SyncSender<PendingRequest>>,
+    context_lane: Option<&Arc<context::Lane>>,
 ) {
     let expired = crate::hardening::request_expired(pending.accepted_at);
     resident_diagnostics::finish_since(
@@ -353,6 +356,9 @@ fn handle_pending_request(
         if !constant_time_eq(&digest, &pending.request_digest) {
             counters::record_digest_mismatch();
             crate::resident_protocol::error_response("native_request_digest_mismatch", false)
+        } else if let Some(lane) = context_lane.filter(|_| context::is_request(&request)) {
+            lane.enqueue(pending, request, policy_store);
+            return;
         } else if let Some(sender) = control_dispatch.filter(|_| control::is_request(&request)) {
             // A fragmented request is routed only after its complete frame is
             // authenticated. Move its buffer rather than retaining a copy.
@@ -387,6 +393,8 @@ pub(crate) struct ResidentAdmission {
     primary: SyncSender<BoxedResidentStream>,
     overflow: SyncSender<BoxedResidentStream>,
     workers: Vec<thread::JoinHandle<()>>,
+    context_lane: Arc<context::Lane>,
+    policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
 }
 
 pub(crate) fn drain_resident_workers(admission: ResidentAdmission) {
@@ -394,10 +402,17 @@ pub(crate) fn drain_resident_workers(admission: ResidentAdmission) {
         primary,
         overflow,
         workers,
+        context_lane,
+        policy_store,
     } = admission;
+    context_lane.close();
+    if let Some(store) = &policy_store {
+        store.context_assistance().shutdown();
+    }
     drop(primary);
     drop(overflow);
     worker_pool::drain(workers, Duration::from_secs(2));
+    context_lane.drain();
     let deadline = Instant::now() + Duration::from_secs(2);
     while CODEX_RESUME_RETRY_IN_FLIGHT.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
         thread::sleep(Duration::from_millis(5));
@@ -473,6 +488,7 @@ fn dispatch_authenticated(
     control_sender: &SyncSender<PendingRequest>,
     evaluation_sender: &SyncSender<PendingRequest>,
     policy_store: Option<&Arc<crate::policy_store::PolicySnapshotStore>>,
+    context_lane: &Arc<context::Lane>,
 ) {
     if pending.payload_prefix.len() == pending.length
         && control::is_request(&pending.payload_prefix)
@@ -489,7 +505,12 @@ fn dispatch_authenticated(
         // retryable overload instead.
         Err(TrySendError::Full(returned)) if returned.payload_prefix.len() == returned.length => {
             drop(charge);
-            handle_pending_request(returned, policy_store.cloned(), Some(control_sender));
+            handle_pending_request(
+                returned,
+                policy_store.cloned(),
+                Some(control_sender),
+                Some(context_lane),
+            );
         }
         Err(TrySendError::Full(mut returned)) => {
             drop(charge);
@@ -527,11 +548,14 @@ pub(crate) fn start_resident_workers(
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
 ) -> ResidentAdmission {
     crate::resident_health_op::mark_serving();
+    let context_lane = Arc::new(context::Lane::default());
+    let admission_store = policy_store.clone();
     let (control_sender, mut workers) = control::start(policy_store.clone());
     let (evaluation_sender, evaluation_receiver) =
         sync_channel::<PendingRequest>(crate::evaluation_queue_capacity() - control::capacity());
     let evaluation_policy_store = policy_store.clone();
     let evaluation_control_sender = control_sender.clone();
+    let evaluation_context_lane = Arc::clone(&context_lane);
     workers.extend(spawn_workers(
         crate::evaluation_workers() - control::WORKERS,
         evaluation_receiver,
@@ -541,12 +565,14 @@ pub(crate) fn start_resident_workers(
                 pending,
                 evaluation_policy_store.clone(),
                 Some(&evaluation_control_sender),
+                Some(&evaluation_context_lane),
             );
         },
     ));
 
     let (authentication_sender, authentication_receiver) =
         sync_channel::<BoxedResidentStream>(crate::auth_queue_capacity());
+    let authentication_context_lane = Arc::clone(&context_lane);
     workers.extend(spawn_workers(
         crate::auth_workers(),
         authentication_receiver,
@@ -585,6 +611,7 @@ pub(crate) fn start_resident_workers(
                 &control_sender,
                 &evaluation_sender,
                 policy_store.as_ref(),
+                &authentication_context_lane,
             );
         },
     ));
@@ -597,6 +624,8 @@ pub(crate) fn start_resident_workers(
         primary: authentication_sender,
         overflow: overflow_sender,
         workers,
+        context_lane,
+        policy_store: admission_store,
     }
 }
 

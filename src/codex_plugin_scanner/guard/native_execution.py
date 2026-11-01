@@ -196,6 +196,8 @@ def _resident_request(
             "approval_bulk_eligibility",
             "codex_request_resume",
             "daemon_route",
+            "context_assistance",
+            "context_agent",
             "daemon_handler",
             "extension_control",
             "extension_allow_hint",

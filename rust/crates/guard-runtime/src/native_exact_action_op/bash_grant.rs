@@ -2,8 +2,8 @@
 //! No caller-supplied subject or digest can substitute for captured inputs.
 
 use std::io;
-use std::sync::atomic::AtomicBool;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use guard_contained_process::{CapturedOutput, SourceLaunchGate};
 use guard_contracts::{
@@ -139,11 +139,68 @@ pub(crate) fn execute_authorized(
     if !context_matches(request, envelope) {
         return Err(io::ErrorKind::PermissionDenied.into());
     }
-    let fence = store.fence_for_launch(envelope).map_err(refuse)?;
-    let captured = super::bash_capture::capture_for_launch(request, fence.snapshot())
+    let mut fence = store.fence_for_launch(envelope).map_err(refuse)?;
+    let mut captured = super::bash_capture::capture_for_launch(request, fence.snapshot())
         .map_err(|_| io::ErrorKind::PermissionDenied)?;
-    let expected = binding(&captured.subject, fence.snapshot())
+    let mut expected = binding(&captured.subject, fence.snapshot())
         .map_err(|_| io::ErrorKind::PermissionDenied)?;
+    let mut deadline = deadline;
+    let mut context = None;
+    if !cancel.load(Ordering::Acquire)
+        && deadline.saturating_duration_since(Instant::now()) > Duration::from_millis(250)
+        && store.context_assistance().execution_requested()
+    {
+        if let Ok(facts) = super::bash_context::facts(
+            request,
+            envelope,
+            &captured.subject,
+            fence.snapshot(),
+            &expected,
+        ) {
+            let previous = (
+                fence.snapshot().generation,
+                fence.snapshot().policy_digest.clone(),
+            );
+            fence.require_current().map_err(refuse)?;
+            // Retain captured bytes, but release native policy/control locks
+            // before any actor, settings or SDK work. Consent is still unspent.
+            drop(fence);
+            let began = Instant::now();
+            context = store
+                .context_assistance()
+                .prepare_execution(facts, began + Duration::from_millis(100));
+            #[cfg(test)]
+            if context.is_some() {
+                store.context_assistance().run_execution_test_hook(store);
+            }
+            // The short optional wait does not consume the native command's
+            // own execution allowance; existing transport headroom covers it.
+            deadline += began.elapsed().min(Duration::from_millis(100));
+            fence = store.fence_for_launch(envelope).map_err(refuse)?;
+            if previous
+                != (
+                    fence.snapshot().generation,
+                    fence.snapshot().policy_digest.clone(),
+                )
+            {
+                super::bash_capture::refresh_launch_policy(
+                    &mut captured,
+                    request,
+                    fence.snapshot(),
+                )
+                .map_err(|_| io::ErrorKind::PermissionDenied)?;
+            }
+            expected = binding(&captured.subject, fence.snapshot())
+                .map_err(|_| io::ErrorKind::PermissionDenied)?;
+        }
+    }
+    if let Some(context) = &mut context {
+        context.require_native_binding(
+            &expected,
+            fence.snapshot().generation,
+            &fence.snapshot().policy_digest,
+        );
+    }
     let allocator =
         BashOperationJournal::open(store, authorization.store_path(), operation.0, &expected)
             .map_err(refuse)?;
@@ -158,10 +215,16 @@ pub(crate) fn execute_authorized(
         BashOperationJournal::open(store, authorization.store_path(), &operation_id, &expected)
             .map_err(refuse)?;
     journal.attach_invocation(invocation);
+    if let Some(context) = &mut context {
+        context.associate_invocation(&operation_id);
+    }
     if let Some(operation) = journal
         .read()
         .map_err(|_| io::ErrorKind::PermissionDenied)?
     {
+        if let Some(context) = &mut context {
+            context.replayed();
+        }
         return Ok(LaunchOutput {
             output: None,
             grant_claimed: operation.authorization == NativeBashAuthorizationKindV1::SavedGrant,
@@ -213,17 +276,26 @@ pub(crate) fn execute_authorized(
         harness: request.harness.clone(),
         project: captured.subject.context.project.clone(),
         saved_authority_refused: false,
+        context,
     };
     match super::bash_launch::execute(captured, deadline, cancel, &mut gate) {
         Ok(output) => {
-            let operation = journal.completed(&output).map_err(|_| LaunchFailure {
-                error: io::ErrorKind::Other.into(),
-                grant_claimed: gate.grant_claimed(),
-                dispatch_acknowledged: gate.dispatched,
-                operation: None,
-                code: Some("native_bash_completion_record_unavailable"),
-                review_lineage: None,
+            let operation = journal.completed(&output).map_err(|_| {
+                if let Some(context) = &mut gate.context {
+                    context.uncertain();
+                }
+                LaunchFailure {
+                    error: io::ErrorKind::Other.into(),
+                    grant_claimed: gate.grant_claimed(),
+                    dispatch_acknowledged: gate.dispatched,
+                    operation: None,
+                    code: Some("native_bash_completion_record_unavailable"),
+                    review_lineage: None,
+                }
             })?;
+            if let Some(context) = &mut gate.context {
+                context.completed();
+            }
             Ok(LaunchOutput {
                 output: Some(output),
                 grant_claimed: gate.grant_claimed(),
@@ -233,6 +305,11 @@ pub(crate) fn execute_authorized(
             })
         }
         Err(error) => {
+            if gate.claimed {
+                if let Some(context) = &mut gate.context {
+                    context.uncertain();
+                }
+            }
             let mut code = gate
                 .saved_authority_refused
                 .then_some("native_bash_saved_authority_changed");
@@ -327,6 +404,7 @@ struct Gate<'store, 'journal> {
     harness: String,
     project: String,
     saved_authority_refused: bool,
+    context: Option<crate::context_assistance_execution::ExecutionContext>,
 }
 
 impl Gate<'_, '_> {
@@ -368,16 +446,27 @@ impl Gate<'_, '_> {
 
 impl SourceLaunchGate for Gate<'_, '_> {
     fn prepare_effects(&mut self) -> io::Result<()> {
-        self.authorize()
+        self.authorize()?;
+        if let Some(context) = &mut self.context {
+            context.poll_at_barrier();
+        }
+        Ok(())
     }
     fn commit(&mut self) -> io::Result<()> {
-        self.authorize()
+        self.authorize()?;
+        if let Some(context) = &mut self.context {
+            context.poll_at_barrier();
+        }
+        Ok(())
     }
     fn released(&mut self) -> io::Result<()> {
         if !self.claimed || self.fence.is_none() {
             return Err(io::ErrorKind::PermissionDenied.into());
         }
         self.dispatched = true;
+        if let Some(context) = &mut self.context {
+            context.dispatched();
+        }
         // S was observed even if the durable update fails; never erase that
         // fact or release a retry. The claimed row already blocks execution.
         self.journal
