@@ -477,16 +477,30 @@ pub(crate) fn manager_local_bin_arguments<'a>(
 /// `npm run lint -- --fix` hands `--fix` to the script's own command, so the
 /// tail belongs to the run the manifest body spells and is gated with it. A
 /// tail that is not introduced by `--` is not a package script run.
+///
+/// An option that only chooses how much the manager prints names no script,
+/// so the reading looks behind it, both before the `run` verb and after it:
+/// `npm --silent run lint` and `npm run --silent lint` are the same run as
+/// `npm run lint`. The peeled options are the manager's own reporting
+/// options; an option that moves the directory or fans the run out is not
+/// among them, so a peeled reading never names a different script.
 pub(crate) fn manager_script_task<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<(&'a str, &'a [String])> {
+    let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
+    if let [run, tail @ ..] = arguments {
+        if run == "run" {
+            let tail = crate::contained_argv::manager_reporting_options_peeled(manager, tail);
+            return match tail {
+                [task] => Some((task.as_str(), &tail[1..])),
+                [task, separator, rest @ ..] if separator == "--" => Some((task.as_str(), rest)),
+                _ => None,
+            };
+        }
+    }
     let bare = matches!(manager, "pnpm" | "yarn");
     match arguments {
-        [run, task] if run == "run" => Some((task.as_str(), &arguments[2..])),
-        [run, task, separator, tail @ ..] if run == "run" && separator == "--" => {
-            Some((task.as_str(), tail))
-        }
         [task] if bare && !MANAGER_SUBCOMMANDS.contains(&task.as_str()) => {
             Some((task.as_str(), &arguments[1..]))
         }
@@ -627,12 +641,20 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
             crate::contained_package_test::test_task(task)
                 && (task.as_str() == "test" || matches!(manager, "pnpm" | "yarn"))
         };
+        // An option that only chooses how much the manager prints names no
+        // script, so the reading looks behind it, before the `run` verb and
+        // after it. The sink reads the same words, so a quiet spelling routes
+        // to the run the loud one names rather than staying under review.
+        let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
         let rest = match arguments {
             [test, rest @ ..] if named(test) && manager != "bun" => Some(rest),
-            [run, test, rest @ ..]
-                if run == "run" && crate::contained_package_test::test_task(test) =>
-            {
-                Some(rest)
+            [run, tail @ ..] if run == "run" => {
+                match crate::contained_argv::manager_reporting_options_peeled(manager, tail) {
+                    [test, rest @ ..] if crate::contained_package_test::test_task(test) => {
+                        Some(rest)
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         };

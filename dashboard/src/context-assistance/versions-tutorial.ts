@@ -5,7 +5,7 @@ export const CIGAR_UPDATE_TUTORIAL: CigarTutorial = {
   outcome: "A verified selection, an understood reconnect boundary, and a path to the last good build.",
   steps: [
     {
-      title: "Read the available builds", description: "Opening Versions & updates reads metadata without starting Python or CIGAR.",
+      title: "Read the available builds", description: "Opening Updates reads metadata without starting Python or CIGAR.",
       instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn, expired or upstream-only artifact is unavailable for preparation. A new Guard release does not qualify an SDK automatically.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
       expect: "You can identify the exact build and whether this Guard host has a qualified artifact.", target: "versions", action: "Inspect versions & updates",
     },
@@ -26,12 +26,12 @@ export const CIGAR_UPDATE_TUTORIAL: CigarTutorial = {
     },
     {
       title: "Reconnect the scopes you need", description: "Saved evidence does not restore source or app permission.",
-      instructions: ["If you selected while off, return to Runtime & preferences, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
-      expect: "Your intended sources and apps have fresh access to the selected runtime.", target: "access", action: "Review sources & AI apps",
+      instructions: ["If you selected while off, return to Settings, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
+      expect: "Your intended sources and apps have fresh access to the selected runtime.", target: "access", action: "Review projects & AI apps",
     },
     {
       title: "Use the last good build deliberately", description: "Rollback prepares current compatible data for the previous verified installation.",
-      instructions: ["In Versions & updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
+      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
       expect: "You know where to inspect a rollback or interrupted job before taking another action.", target: "versions", action: "Inspect rollback & recovery",
     },
   ],

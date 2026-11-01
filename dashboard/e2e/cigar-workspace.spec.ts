@@ -3,10 +3,23 @@ import { readFileSync } from "node:fs";
 import { defaultSettingsPayload, emptyInventoryPayload, emptyPoliciesPayload, emptyReceiptsPayload, freeStateSnapshot } from "./fixture-states";
 
 const ready = JSON.parse(readFileSync(new URL("../src/context-assistance/fixtures/intent-state.json", import.meta.url), "utf8")).native_test.ready_observation;
+const catalog = JSON.parse(readFileSync(new URL("../../integrations/cigar/release-catalog.v1.json", import.meta.url), "utf8"));
+const updatePreferences = { mode: "manual", allow_preview: false, retain_last_good: true };
+const updateSettings = { schema: "guard-cigar-update-preferences.v1", requested: updatePreferences, effective: updatePreferences,
+  revision: "sha256:" + "a".repeat(64), diagnostic: null, locked_settings: [],
+  capabilities: { modes: ["manual", "notify"], automatic_preparation: false, automatic_selection: false, retention_reduction: false } };
+const releases = { schema: "guard-cigar-releases.v1", host_platform: "darwin-arm64", builds: catalog.builds, interpreter_builds: catalog.interpreters,
+  catalog: { source: "bundled", fresh_for_preparation: true, diagnostic: null, trust_configured: false, trust_diagnostic: null,
+    remote_feed_configured: false, feed_diagnostic: null, activation_granted: false } };
 const installation = { runtime_id: ready.preferences.runtime_id, qualification: "local_candidate", python_version: [3, 14, 7], platform: "darwin-arm64", worker_fingerprint: ready.runtime.worker_fingerprint };
 
+type Call = { path: string; method: string; body: any };
+const readOnlyActions = new Set(["preferences", "list"]);
+const writes = (calls: Call[]) => calls.filter((call) => call.method === "POST"
+  && (call.path.startsWith("/v1/context-assistance") || call.path === "/v1/settings") && !readOnlyActions.has(call.body?.input?.action));
+
 async function fixture(page: Page, registered = true, savedEnabled = false) {
-  const calls: Array<{ path: string; method: string; body: any }> = [];
+  const calls: Call[] = [];
   let status = { ...ready, availability: savedEnabled ? "unavailable" : "off", requested_enabled: savedEnabled, effective_enabled: false,
     runtime: null, last_check: null, diagnostic: savedEnabled ? "runtime_not_verified" : null, job: null, qualification: null,
     preferences: { ...ready.preferences, enabled: savedEnabled, runtime_id: savedEnabled ? installation.runtime_id : "" },
@@ -23,6 +36,7 @@ async function fixture(page: Page, registered = true, savedEnabled = false) {
     const body = request.postDataJSON();
     calls.push({ path, method: request.method(), body });
     let result: unknown = {};
+    const versions = (value: unknown) => ({ schema: "guard-cigar-versions-result.v1", result: value, state: status });
     if (path.endsWith("/initialize")) result = { auth_token: "e2e-cigar-session" };
     else if (path === "/v1/runtime") result = freeStateSnapshot;
     else if (path === "/v1/requests") result = { items: [], next_cursor: null, total_pending_count: 0, total_count: 0, status: "pending" };
@@ -40,7 +54,11 @@ async function fixture(page: Page, registered = true, savedEnabled = false) {
           diagnostic: settings.settings.context_assistance.enabled ? "runtime_not_verified" : null };
       }
       result = settings;
-    } else if (path === "/v1/context-assistance/installations") result = { ...status, installation_options: registered ? [installation] : [] };
+    } else if (path === "/v1/context-assistance/versions" && request.method() === "GET") result = versions(releases);
+    else if (path === "/v1/context-assistance/interpreters") result = versions({ interpreters: [] });
+    else if (path === "/v1/context-assistance/jobs") result = versions({ jobs: [] });
+    else if (body?.input?.action === "preferences") result = versions(updateSettings);
+    else if (path === "/v1/context-assistance/installations") result = { ...status, installation_options: registered ? [installation] : [] };
     else if (path === "/v1/context-assistance") result = status;
     else if (path === "/v1/context-assistance/activate") {
       status = { ...status, availability: "ready", effective_enabled: true, runtime: ready.runtime,
@@ -68,44 +86,46 @@ for (const width of [1440, 790, 390, 320]) {
     const calls = await fixture(page);
     await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175");
     await expect(page.getByRole("heading", { name: "CIGAR", exact: true })).toBeVisible();
-    await expect(page.getByText("Python 3.14.7", { exact: true })).toBeVisible();
-    await expect(page.getByText("1 of 3 complete", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Give your AI the right pages, not the whole book." })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true })).toBeEnabled();
+    await expect(page.getByRole("heading", { name: "Three steps, and only the first is needed", exact: true })).toBeVisible();
+    await expect(page.locator(".cigar-hero, .cigar-panel").getByText(/save[sd]? tokens|faster|smarter/i).filter({ visible: true })).toHaveCount(0);
     await expect(page.locator('[data-navigation-item="cigar"][aria-current="page"]:visible').first()).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath("cigar-overview-" + width + ".png"), fullPage: true });
     const guideTab = page.getByRole("tab", { name: "How it works", exact: true });
     await guideTab.click();
-    await expect(page.getByText("An empty list means no bundle is registered.", { exact: true })).toBeVisible();
-    await page.getByText("What is the difference between saving and starting?", { exact: true }).click();
-    await expect(page.getByText(/Saving records your preferences/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Do I need to install anything?", exact: true })).toBeVisible();
+    await page.getByText("Does CIGAR save me tokens or make my AI faster?", { exact: true }).click();
+    await expect(page.getByText(/CIGAR does not promise either/)).toBeVisible();
     await guideTab.focus();
     await page.keyboard.press("Home");
     await expect(page.getByRole("tab", { name: "Overview", exact: true })).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tab", { name: "Runtime & preferences", exact: true })).toBeFocused();
+    await expect(page.getByRole("tab", { name: "Settings", exact: true })).toBeFocused();
     await expect(page.getByText("Selected runtime", { exact: true })).toBeVisible();
-    await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
-    await expect(page.getByText("Start CIGAR before granting context access.", { exact: true })).toBeVisible();
-    expect(calls.filter((call) => call.method === "POST" && (call.path.startsWith("/v1/context-assistance") || call.path === "/v1/settings"))).toEqual([]);
+    await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
+    await expect(page.getByText("Turn on CIGAR first", { exact: true })).toBeVisible();
+    expect(writes(calls)).toEqual([]);
     expect(errors).toEqual([]);
   });
 }
 
-test("missing registration explains Python accurately and offers setup help", async ({ page }) => {
-  await fixture(page, false);
+test("an unapproved CIGAR build explains the wait plainly and changes nothing", async ({ page }) => {
+  const calls = await fixture(page, false);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=runtime");
-  await expect(page.getByText("No CIGAR bundle is registered in this Guard profile.", { exact: true })).toBeVisible();
-  await expect(page.getByText(/an empty list does not mean your Python is incompatible/)).toBeVisible();
-  await expect(page.getByRole("switch", { name: "Use CIGAR on this machine" })).toBeDisabled();
-  await page.getByRole("button", { name: "Read the runtime setup guide" }).click();
-  await expect(page.getByRole("tab", { name: "How it works" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Waiting for Guard's safety check", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Guard has not finished checking it/).first()).toBeVisible();
+  for (const button of await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).all()) await expect(button).toBeDisabled();
+  expect(writes(calls)).toEqual([]);
 });
 
 test("CIGAR saves with the existing approval proof, starts explicitly, and keeps a global off switch", async ({ page }) => {
   const calls = await fixture(page, true, true);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=runtime");
   await page.getByRole("combobox", { name: "Context size" }).selectOption("low_memory");
-  await expect(page.getByRole("button", { name: "Save preferences first", exact: true })).toBeVisible();
+  await expect(page.getByText("Save your changes first", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true }).first()).toBeDisabled();
   const save = page.getByRole("region", { name: "Save CIGAR preferences" });
   await save.getByRole("button", { name: "Save CIGAR preferences", exact: true }).click();
   const proof = page.getByRole("dialog");
@@ -114,9 +134,12 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   await proof.getByRole("button", { name: "Save settings", exact: true }).click();
   await expect(proof).toHaveCount(0);
   await expect(page.locator(".cigar-status")).toHaveText("Not started");
-  await expect(page.getByRole("button", { name: "Start CIGAR", exact: true })).toBeEnabled();
+  const start = page.getByRole("button", { name: "Turn on CIGAR", exact: true }).first();
+  await expect(start).toBeEnabled();
   expect(calls.some((call) => call.path === "/v1/context-assistance/activate")).toBe(false);
-  await page.getByRole("button", { name: "Start CIGAR", exact: true }).click();
+  // Preferences are saved and the runtime is selected, so turning on needs no second approval.
+  await start.click();
+  await expect(proof).toHaveCount(0);
   await expect(page.locator(".cigar-status")).toHaveText("Ready");
   await page.getByRole("tab", { name: "How it works", exact: true }).click();
   await page.getByRole("button", { name: "Turn off CIGAR", exact: true }).click();
@@ -124,10 +147,10 @@ test("CIGAR saves with the existing approval proof, starts explicitly, and keeps
   await expect(page.getByRole("tab", { name: "How it works", exact: true })).toHaveAttribute("aria-selected", "true");
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
   expect(calls.filter((call) => call.path === "/v1/context-assistance/stop")).toHaveLength(1);
-  const writes = calls.filter((call) => call.path === "/v1/settings" && call.method === "POST");
-  expect(writes).toHaveLength(1);
-  expect(writes[0].body.settings.approval_gate.current_password).toBe("cigar-ui-test-proof");
-  expect(writes[0].body.settings.context_assistance.enabled).toBe(true);
+  const saves = calls.filter((call) => call.path === "/v1/settings" && call.method === "POST");
+  expect(saves).toHaveLength(1);
+  expect(saves[0].body.settings.approval_gate.current_password).toBe("cigar-ui-test-proof");
+  expect(saves[0].body.settings.context_assistance.enabled).toBe(true);
 });
 
 test("a saved runtime starts from the top of the guide and leads to actual context access", async ({ page }) => {
@@ -135,14 +158,14 @@ test("a saved runtime starts from the top of the guide and leads to actual conte
   const calls = await fixture(page, true, true);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=guide");
   await expect(page.locator(".cigar-status")).toHaveText("Not started");
-  const start = page.getByRole("button", { name: "Start CIGAR", exact: true });
+  const start = page.getByRole("button", { name: "Turn on CIGAR", exact: true });
   await expect(start).toBeInViewport();
   expect(calls.some((call) => call.path === "/v1/context-assistance/activate")).toBe(false);
   await start.click();
   await expect(page.locator(".cigar-status")).toHaveText("Ready");
   await expect(page.getByRole("tab", { name: "How it works", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("button", { name: "Use CIGAR", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Sources & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Pick a project folder", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("No workspace has context access.", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Workspace folder", { exact: true })).toBeEnabled();
   expect(calls.filter((call) => call.path === "/v1/context-assistance/activate")).toHaveLength(1);
@@ -162,17 +185,17 @@ for (const width of [1440, 390]) {
     page.on("pageerror", (error) => errors.push(error.message));
     const calls = await fixture(page);
     await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=tutorials");
-    await expect(page.locator(".cigar-heading p")).toHaveText("Context Intelligence Graph Agentic Runtime");
+    await expect(page.locator(".cigar-heading p")).toHaveText("A context helper for your AI that runs on your computer.");
     await expect(page.getByRole("heading", { name: "Make CIGAR useful for your next task", exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("cigar-tutorials-" + width + ".png"), fullPage: true });
     await page.getByRole("button", { name: /Start walkthrough.*Prepare your first cited brief/ }).click();
     const walkthrough = page.getByRole("complementary", { name: "Prepare your first cited brief", exact: true });
     await expect(walkthrough).toBeVisible();
     await expect(walkthrough.getByText("Step 1 of 6 · learning progress", { exact: true })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Runtime & preferences", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Settings", exact: true })).toHaveAttribute("aria-selected", "true");
     for (let index = 0; index < 3; index++) await walkthrough.getByRole("button", { name: "Next step", exact: true }).click();
     await expect(walkthrough.getByText("Step 4 of 6 · learning progress", { exact: true })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Sources & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tab", { name: "Projects & AI apps", exact: true })).toHaveAttribute("aria-selected", "true");
     await walkthrough.getByRole("button", { name: "Copy question", exact: true }).click();
     await expect(walkthrough.getByRole("status")).toContainText("Question copied");
     expect(await page.evaluate(() => (window as any).__cigarCopiedQuestion)).toContain("native Guard policy");
@@ -187,7 +210,7 @@ for (const width of [1440, 390]) {
     await page.screenshot({ path: testInfo.outputPath("cigar-walkthrough-" + width + ".png"), fullPage: true });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(page.locator(".cigar-status")).toHaveText("Off");
-    expect(calls.filter((call) => call.method === "POST" && (call.path.startsWith("/v1/context-assistance") || call.path === "/v1/settings"))).toEqual([]);
+    expect(writes(calls)).toEqual([]);
     expect(errors).toEqual([]);
   });
 }
@@ -204,5 +227,5 @@ test("how CIGAR works explains scoped graphs, budgets and evidence interactively
   await expect(page.getByRole("region", { name: /Use it with Guard and apps/ })).toContainText("Guard makes and enforces command decisions");
   await page.getByRole("button", { name: "Try a guided walkthrough", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Tutorials", exact: true })).toHaveAttribute("aria-selected", "true");
-  expect(calls.filter((call) => call.method === "POST" && (call.path.startsWith("/v1/context-assistance") || call.path === "/v1/settings"))).toEqual([]);
+  expect(writes(calls)).toEqual([]);
 });

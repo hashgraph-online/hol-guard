@@ -58,7 +58,7 @@ test("execution opt-in and browser approvals reach the installed native executor
     const panel = page.getByRole("region", { name: "Native execution context observations", exact: true });
     await expect(panel.getByText(/Preparation is ready for Pi and Oh My Pi/)).toBeVisible();
     await expect(panel.getByText("No recent execution-context observations.", { exact: true })).toBeVisible();
-    await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
+    await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
     const consumer = page.getByRole("combobox", { name: "Context consumer", exact: true });
     expect(await consumer.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)))
       .toEqual(["dashboard", "pi", "omp"]);

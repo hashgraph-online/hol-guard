@@ -46,6 +46,7 @@ toml_edit = "0.22.27"
 saphyr-parser.workspace = true
 unicode-normalization = "0.1.25"
 zeroize = "1.9.0"
+zip = { version = "=9.1.2", default-features = false, features = ["deflate-flate2"] }
 aes.workspace = true
 base64.workspace = true
 base64ct.workspace = true

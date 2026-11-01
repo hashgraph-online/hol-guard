@@ -7,21 +7,17 @@ import hashlib
 import json
 import os
 import platform
-import posixpath
 import re
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
-import unicodedata
 import urllib.error
 import urllib.request
-import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TypedDict
 
 from packaging.version import InvalidVersion, Version
@@ -43,6 +39,7 @@ _ONEDIR_FORMAT = "onedir-zip"
 _ONEDIR_TREE_ROOT = "hol-guard"
 _RELEASE_DOWNLOAD_PREFIX = "https://github.com/hashgraph-online/hol-guard/releases/download/"
 _DESKTOP_APP_ID = "org.hol.guard.desktop"
+_ONEDIR_FEATURE = "native-desktop-core-onedir-v1"
 _MAX_MANIFEST_BYTES = 128 * 1024
 _MAX_BINARY_BYTES = 300 * 1024 * 1024
 _USER_AGENT = "HOL-Guard-Core-Updater"
@@ -491,6 +488,9 @@ def _try_apply_onedir(
 ) -> Path | None:
     if not _desktop_version():
         return None
+    # A runtime that cannot unpack the tree leaves the single-file artifact.
+    if not _onedir_unpack_available():
+        return None
     try:
         raw = downloader(_release_url(tag, f"{artifact}.onedir.json"), _MAX_MANIFEST_BYTES)
     except DesktopCoreUpdateError as error:
@@ -524,14 +524,11 @@ def _try_apply_onedir(
             scratch_root = Path(scratch)
             archive_path = scratch_root / manifest["artifact"]
             _ = archive_path.write_bytes(archive)
-            _validate_onedir_zip_members(archive_path)
             extracted = scratch_root / "tree"
             extracted.mkdir()
-            _extract_onedir_zip(archive_path, extracted)
+            _unpack_onedir(archive_path, extracted, file_count=manifest["file_count"])
             tree = extracted / _ONEDIR_TREE_ROOT
             launcher = tree / _executable_name()
-            if not launcher.is_file() or _onedir_file_count(extracted) != manifest["file_count"]:
-                raise DesktopCoreUpdateError("desktop_core_install_failed")
             _verify_candidate(launcher, expected_team=trusted_team, expected_sha256=manifest["launcher_sha256"])
             _require_sealed_onedir(launcher)
             _verify_onedir_tree_signatures(tree, expected_team=trusted_team)
@@ -541,152 +538,31 @@ def _try_apply_onedir(
     return installed
 
 
-def _onedir_file_count(extracted: Path) -> int:
-    """R5/R6: count non-directory entries (files plus links, never followed) and
-    require every link to be a relative in-tree path."""
-    tree_real = os.path.realpath(extracted / _ONEDIR_TREE_ROOT)
-    count = 0
-    for entry in extracted.rglob("*"):
-        if entry.parts[len(extracted.parts)] != _ONEDIR_TREE_ROOT:
-            raise DesktopCoreUpdateError("desktop_core_install_failed")
-        if entry.is_symlink():
-            _check_onedir_tree_link(entry, extracted, tree_real)
-            count += 1
-        elif entry.is_dir():
-            continue
-        elif not entry.is_file():
-            raise DesktopCoreUpdateError("desktop_core_install_failed")
-        else:
-            count += 1
-    return count
+def _onedir_unpack_available() -> bool:
+    from ..mdm.runtime_request import runtime_offers
+
+    return runtime_offers(_ONEDIR_FEATURE)
 
 
-def _check_onedir_tree_link(link: Path, extracted: Path, tree_real: str) -> None:
-    """R6: an extracted link must readlink to a short relative in-tree target."""
-    try:
-        target = os.readlink(link)
-        encoded = os.fsencode(target)
-        relative = link.relative_to(extracted).as_posix()
-    except (OSError, UnicodeEncodeError, ValueError) as error:
-        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
-    if (
-        not encoded
-        or len(encoded) > _ONEDIR_SYMLINK_TARGET_MAX
-        or b"\x00" in encoded
-        or PurePosixPath(target).is_absolute()
-    ):
+def _unpack_onedir(archive: Path, destination: Path, *, file_count: int) -> None:
+    """Check the archive's members, extract it with `ditto` and count the tree, in the native runtime."""
+    from ..mdm.runtime_request import runtime_answer
+
+    request = {
+        "schema": "desktop-core-onedir.v1",
+        "archive": str(archive),
+        "destination": str(destination),
+        "file_count": file_count,
+    }
+    answer = runtime_answer(
+        _ONEDIR_FEATURE,
+        "desktop-core-onedir",
+        request,
+        output_limit=4096,
+        timeout_seconds=660.0,
+    )
+    if answer is None or answer.get("unpacked") is not True:
         raise DesktopCoreUpdateError("desktop_core_install_failed")
-    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(relative), target))
-    if not resolved.startswith(f"{_ONEDIR_TREE_ROOT}/"):
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-    if not link.exists():
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-    if not os.path.realpath(link).startswith(tree_real + os.sep):
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-
-
-_ONEDIR_REQUIRED_MEMBERS = (
-    f"{_ONEDIR_TREE_ROOT}/Info.plist",
-    f"{_ONEDIR_TREE_ROOT}/_CodeSignature/CodeResources",
-)
-_ONEDIR_INTERNAL_PREFIX = f"{_ONEDIR_TREE_ROOT}/_internal/"
-_ONEDIR_SYMLINK_TARGET_MAX = 1024
-_ZIP_SYMLINK_MODE = 0o120000
-_ZIP_MODE_MASK = 0o170000
-
-
-def _fold(name: str) -> list[str]:
-    return unicodedata.normalize("NFC", name.rstrip("/")).casefold().split("/")
-
-
-def _check_onedir_zip_symlink(zipped: zipfile.ZipFile, info: zipfile.ZipInfo) -> None:
-    """R2: a symlink member's target must be a short relative path that stays in-tree."""
-    name = info.filename
-    try:
-        raw = zipped.read(info)
-    except (OSError, RuntimeError, zipfile.BadZipFile) as error:
-        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
-    if not raw or len(raw) > _ONEDIR_SYMLINK_TARGET_MAX or b"\x00" in raw:
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-    try:
-        target = raw.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
-    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(name), target))
-    if PurePosixPath(target).is_absolute() or not resolved.startswith(f"{_ONEDIR_TREE_ROOT}/"):
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-
-
-def _validate_onedir_zip_members(archive: Path) -> None:
-    try:
-        with zipfile.ZipFile(archive) as zipped:
-            names: set[str] = set()
-            link_names: list[str] = []
-            for info in zipped.infolist():
-                name = info.filename
-                member = PurePosixPath(name)
-                if member.is_absolute() or ".." in member.parts:
-                    raise DesktopCoreUpdateError("desktop_core_install_failed")
-                # PurePosixPath folds "." and empty components away; check the raw
-                # split so a "./" detour cannot dodge the nested-under-link rule.
-                raw_parts = name.split("/")
-                if "." in raw_parts or "" in raw_parts[:-1]:
-                    raise DesktopCoreUpdateError("desktop_core_install_failed")
-                if name != _ONEDIR_TREE_ROOT and not name.startswith(f"{_ONEDIR_TREE_ROOT}/"):
-                    raise DesktopCoreUpdateError("desktop_core_install_failed")
-                if member.name.startswith("._") or "__MACOSX" in member.parts:
-                    raise DesktopCoreUpdateError("desktop_core_install_failed")
-                if (info.external_attr >> 16) & _ZIP_MODE_MASK == _ZIP_SYMLINK_MODE:
-                    _check_onedir_zip_symlink(zipped, info)
-                    link_names.append(name)
-                names.add(name)
-    except (OSError, zipfile.BadZipFile) as error:
-        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
-    folded = [tuple(_fold(name)) for name in names]
-    if len(set(folded)) != len(folded):
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-    # R3: nothing may sit beneath a symlink member, so extraction can never
-    # write through a link.
-    link_parts = [_fold(name) for name in link_names]
-    for name in names:
-        parts = _fold(name)
-        if any(len(link) < len(parts) and parts[: len(link)] == link for link in link_parts):
-            raise DesktopCoreUpdateError("desktop_core_install_failed")
-    # R4: the launcher and sealed-bundle anchors must be regular files, never links.
-    launcher_member = f"{_ONEDIR_TREE_ROOT}/{_executable_name()}"
-    required = (launcher_member, *_ONEDIR_REQUIRED_MEMBERS)
-    if any(name not in names or name in link_names for name in required):
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-    if not any(name.startswith(_ONEDIR_INTERNAL_PREFIX) for name in names):
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-
-
-def _extract_onedir_zip(archive: Path, destination: Path) -> None:
-    if sys.platform == "darwin":
-        result = subprocess.run(
-            ["/usr/bin/ditto", "-x", "-k", str(archive), str(destination)],
-            check=False,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            raise DesktopCoreUpdateError("desktop_core_install_failed")
-        return
-    _extract_onedir_zip_portable(archive, destination)
-
-
-def _extract_onedir_zip_portable(archive: Path, destination: Path) -> None:
-    try:
-        with zipfile.ZipFile(archive) as zipped:
-            for info in zipped.infolist():
-                name = info.filename
-                if name.startswith("/") or ".." in Path(name).parts:
-                    raise DesktopCoreUpdateError("desktop_core_install_failed")
-                zipped.extract(info, destination)
-                extracted = destination / name
-                if info.external_attr >> 16 & stat.S_IXUSR and extracted.is_file():
-                    extracted.chmod(extracted.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    except zipfile.BadZipFile as error:
-        raise DesktopCoreUpdateError("desktop_core_install_failed") from error
 
 
 def _require_sealed_onedir(launcher: Path) -> None:
