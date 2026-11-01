@@ -351,6 +351,8 @@ pub mod source_cli;
 pub mod supply_chain_package_eval;
 #[path = "../../guard-command/src/target_identities.rs"]
 pub mod target_identities;
+#[path = "../../guard-command/src/tsc_project.rs"]
+mod tsc_project;
 #[path = "../../guard-command/src/typescript_launch_evidence.rs"]
 pub mod typescript_launch_evidence;
 #[path = "../../guard-command/src/vite_output.rs"]
