@@ -299,3 +299,53 @@ fn bun_eval_package_permission_keeps_the_node_eval_receipt() {
         );
     }
 }
+
+#[test]
+fn bun_test_package_permission_keeps_the_node_test_receipt() {
+    // `bun test` runs Bun's own runner, so the package firewall records the
+    // image the way it does for `bun -e`. The receipt has to survive that
+    // permission, or every harness falls back to a bare deny and the
+    // contained route is never offered.
+    let response = |permissions: Value| {
+        obj(&json!({
+            "schema": "guard-pre-tool-result.v1",
+            "authority": "rust",
+            "decision": "deny",
+            "minimum_action": "sandbox-required",
+            "policy_action": "sandbox-required",
+            "reason_code": "native_node_test_readonly_containment_required",
+            "reason": "protected",
+            "command_extensions": {
+                "binding": {"uncertainty_count": 0},
+                "evaluation_error": null,
+                "observations": [],
+                "permission_observations": permissions,
+            },
+        }))
+    };
+    let permission = json!([{
+        "extension_id": "command.package.node",
+        "permission_id": "command.package.node.permission.package-protection",
+        "uncertainty_reasons": [],
+    }]);
+    for harness in ["zcode", "claude-code", "omp"] {
+        let rendered = pre_tool(harness, &response(permission.clone()));
+        assert_eq!(
+            rendered.get("required_execution_profile"),
+            Some(&json!("node-test-readonly-v1")),
+            "{harness}"
+        );
+        assert_eq!(
+            rendered.get("policy_action"),
+            Some(&json!("sandbox-required")),
+            "{harness}"
+        );
+    }
+    // `node --test` reaches the same profile with no permission list, which
+    // the empty-list path already carried.
+    let rendered = pre_tool("zcode", &response(json!([])));
+    assert_eq!(
+        rendered.get("required_execution_profile"),
+        Some(&json!("node-test-readonly-v1"))
+    );
+}

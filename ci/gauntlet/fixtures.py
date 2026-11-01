@@ -488,6 +488,15 @@ CALC_TEST = (
     "def test_add():\n    assert add(2, 3) == 5\n\n\n"
     "assert add(2, 3) == 5\nprint('calc ok')\n"
 )
+# Bun's runner discovers its own naming, so the Python suite beside it is
+# invisible to it. The case that runs `bun test` needs a file Bun will pick up,
+# or the run reports no tests and says nothing about the boundary it took.
+BUN_TEST_CASE = "omp-native-bun-test-runner"
+BUN_TEST = (
+    'import { expect, test } from "bun:test";\n\n'
+    "const add = (a: number, b: number) => a + b;\n\n"
+    'test("adds", () => {\n  expect(add(2, 3)).toBe(5);\n});\n'
+)
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 
 HOME_SKILL_SCRIPT = "#!/bin/sh\necho fixture\n"
@@ -670,6 +679,9 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (main / "app/registry/[slug]").mkdir(parents=True)
     (main / "app/registry/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
     tracked = add_main_shapes(main)
+    if scenario_id == BUN_TEST_CASE:
+        (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")
+        tracked = (*tracked, "calc.test.ts")
     _git(("add", ".agents", "src", "app", "test_calc.py", *tracked), main, environment)
     _git(("commit", "--quiet", "-m", "Synthetic shapes"), main, environment)
     # Agents routinely run inside a linked worktree whose main checkout is a sibling.
