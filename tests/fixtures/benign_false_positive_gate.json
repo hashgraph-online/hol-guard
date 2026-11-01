@@ -45451,6 +45451,38 @@
       },
       "cwd": "org_app",
       "expect": "not_allow"
+    },
+    {
+      "id": "gh-api-search-sorted-page-projection",
+      "fix_area": "gh",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api \"search/issues?q=repo:example-org/example-repo+is:pr+created:>=2026-10-29&sort=created&order=desc&per_page=30\" --jq '.items[] | [.number, .state, .title] | @tsv'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-gh-api-search-sorted-page-projection-to-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api \"search/issues?q=repo:example-org/example-repo+is:pr+created:>=2026-10-29&sort=created&order=desc&per_page=30\" --jq '.items[] | [.number, .state, .title] | @tsv' > ${HOME}/prs.tsv"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

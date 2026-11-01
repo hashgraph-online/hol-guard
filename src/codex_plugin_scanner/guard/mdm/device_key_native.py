@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 from .contracts import KeyProtectionLevel, MachinePaths
-from .device_key_windows_api import load_windows_token_api
 from .runtime_request import runtime_answer
 
 DEVICE_KEY_HELPER_FEATURE = "native-device-key-helper-v1"
@@ -19,6 +18,7 @@ _MAX_HEALTH_LEASE_CLAIMS_BYTES = 4096
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _MAX_ANSWER_BYTES = 64 * 1024
 _SYSTEM_SID = "S-1-5-18"
+_CURRENT_USER_SID: list[str] = []
 _PLATFORMS = {"Darwin": "macos", "Windows": "windows"}
 _STATES = frozenset({"active", "absent", "unknown", "tampered"})
 _PROTECTION_LEVELS = frozenset({"hardware-backed", "os-protected", "unknown"})
@@ -244,38 +244,24 @@ def sign_health_key_registration(
 
 
 def windows_current_user_sid() -> str:
-    import ctypes
-    from ctypes import wintypes
+    """The string SID this process's token runs as, read by the native runtime.
 
-    windows_token_api = load_windows_token_api()
+    A process's token user never changes, so the first answer is kept for the
+    life of the process; a failed read is asked again next time.
+    """
 
-    token = wintypes.HANDLE()
-    if not windows_token_api.open_process_token(windows_token_api.get_current_process(), 0x0008, ctypes.byref(token)):
+    if _CURRENT_USER_SID:
+        return _CURRENT_USER_SID[0]
+    from ..windows_paths import windows_current_owner_sid
+
+    owner_sid = windows_current_owner_sid()
+    if owner_sid is None:
         raise OSError("device_key_system_context_required")
-    try:
-        needed = wintypes.DWORD()
-        if windows_token_api.get_token_information(token, 1, None, 0, ctypes.byref(needed)):
-            raise OSError("device_key_system_context_required")
-        if ctypes.get_last_error() != 122 or not 0 < needed.value <= 64 * 1024:
-            raise OSError("device_key_system_context_required")
-        buffer = ctypes.create_string_buffer(needed.value)
-        if not windows_token_api.get_token_information(token, 1, buffer, needed, ctypes.byref(needed)):
-            raise OSError("device_key_system_context_required")
-        sid_pointer = ctypes.cast(buffer, ctypes.POINTER(wintypes.LPVOID)).contents
-        if not sid_pointer.value:
-            raise OSError("device_key_system_context_required")
-        sid_string = wintypes.LPWSTR()
-        if not windows_token_api.convert_sid(sid_pointer, ctypes.byref(sid_string)):
-            raise OSError("device_key_system_context_required")
-        try:
-            value = sid_string.value
-            if not value:
-                raise OSError("device_key_system_context_required")
-            return str(value)
-        finally:
-            _ = windows_token_api.local_free(ctypes.cast(sid_string, wintypes.HLOCAL))
-    finally:
-        _ = windows_token_api.close_handle(token)
+    sid = owner_sid.removeprefix("sid:")
+    if re.fullmatch(r"S-[0-9]+(?:-[0-9]+)+", sid) is None:
+        raise OSError("device_key_system_context_required")
+    _CURRENT_USER_SID.append(sid)
+    return sid
 
 
 def require_machine_context(system_name: str) -> None:
