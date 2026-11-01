@@ -239,7 +239,7 @@ fn nt_join(base: &str, name: &str) -> String {
 }
 
 #[cfg(windows)]
-fn system_windows_directory() -> Option<String> {
+pub(crate) fn system_windows_directory() -> Option<String> {
     guard_runtime_windows_process::windows_directory()?
         .into_os_string()
         .into_string()
@@ -247,7 +247,7 @@ fn system_windows_directory() -> Option<String> {
 }
 
 #[cfg(not(windows))]
-fn system_windows_directory() -> Option<String> {
+pub(crate) fn system_windows_directory() -> Option<String> {
     None
 }
 

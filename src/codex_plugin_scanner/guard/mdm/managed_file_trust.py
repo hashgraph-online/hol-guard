@@ -13,7 +13,6 @@ from .acl import (
     _native_deadline,
     _PathSurface,
 )
-from .windows_support import windows_directory
 
 
 def posix_path_is_root_owned_and_restricted(path: Path) -> bool:
@@ -50,15 +49,7 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
         answer = _native_answer(_macos_request((surface,), 0), deadline=_native_deadline())
         return answer is not None and answer.get("status") == "healthy"
     if resolved_system == "Windows":
-        try:
-            directory = windows_directory()
-        except OSError:
-            return False
-        request: dict[str, object] = {
-            "op": "windows-file-probe",
-            "managed_file": str(path),
-            "windows_directory": directory,
-        }
+        request: dict[str, object] = {"op": "windows-file-probe", "managed_file": str(path)}
         verdict = _native_answer(request, deadline=_native_deadline())
         return verdict is not None and verdict.get("status") == "healthy"
     if os.name != "posix":

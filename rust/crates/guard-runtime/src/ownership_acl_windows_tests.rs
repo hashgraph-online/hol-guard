@@ -191,7 +191,7 @@ fn a_drive_less_windows_directory_or_payload_never_runs_the_probe() {
 }
 
 #[test]
-fn probe_ops_require_the_windows_directory() {
+fn probe_ops_read_the_windows_directory_themselves() {
     for request in [
         json!({"schema": "ownership-acl.v1", "op": "windows-file-probe", "managed_file": MANAGED_FILE}),
         json!({"schema": "ownership-acl.v1", "op": "windows-probe", "windows_paths": {
@@ -202,10 +202,13 @@ fn probe_ops_require_the_windows_directory() {
         }}),
     ] {
         let bytes = serde_json::to_vec(&request).expect("request");
-        assert_eq!(
-            super::super::run_command(bytes.as_slice()),
-            Err("ownership_acl_request_invalid".to_owned())
-        );
+        let answer = super::super::run_command(bytes.as_slice());
+        if cfg!(windows) {
+            assert!(answer.is_ok(), "{request}: {answer:?}");
+        } else {
+            // Off Windows there is no system directory, so nothing is probed.
+            assert_eq!(answer, Err("ownership_acl_request_invalid".to_owned()));
+        }
     }
 }
 

@@ -16,7 +16,6 @@ from typing import Literal, cast
 
 from .contracts import MachinePaths
 from .runtime_request import runtime_answer
-from .windows_support import windows_directory
 
 AclState = Literal["healthy", "absent", "tampered", "unsupported", "unknown"]
 
@@ -152,9 +151,6 @@ def _macos_request(surfaces: tuple[_PathSurface, ...], expected_uid: int) -> dic
     }
 
 
-_windows_directory = windows_directory
-
-
 def _windows_paths(paths: MachinePaths) -> dict[str, str]:
     return {
         "runtime_root": str(paths.runtime_root),
@@ -181,12 +177,8 @@ def verify_protected_ownership_and_acl(
         )
         return verdict or _probe_failed()
     if resolved_system == "Windows":
-        try:
-            directory = _windows_directory()
-        except OSError:
-            return _probe_failed()
         verdict = _native_verdict(
-            {"op": "windows-probe", "windows_paths": _windows_paths(paths), "windows_directory": directory},
+            {"op": "windows-probe", "windows_paths": _windows_paths(paths)},
             deadline=_native_deadline(),
         )
         return verdict or _probe_failed()

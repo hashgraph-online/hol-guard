@@ -24,6 +24,8 @@ use pep440_rs::Version;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::device_key_helper::system_windows_directory;
+
 const SCHEMA: &str = "native-install-verdict.v1";
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 const MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
@@ -133,9 +135,12 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     if bytes.len() as u64 > MAX_REQUEST_BYTES {
         return Err("native_install_request_too_large".to_owned());
     }
-    let request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    let mut request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
     if request.schema != SCHEMA {
         return Err(invalid());
+    }
+    if request.platform == "windows" && request.windows_directory.is_none() {
+        request.windows_directory = system_windows_directory();
     }
     let answer = verify(&request, &mut SystemRunner).ok_or_else(invalid)?;
     serde_json::to_vec(&answer.to_json())
