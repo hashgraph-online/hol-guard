@@ -168,8 +168,15 @@ def containment_health_signals(
 
     The resident decides them exactly as it does inside the full report, so a
     repair confirmation can never disagree with the health the operator sees.
-    A resident that cannot answer raises ``NativeProtectionHealthError``.
+    A resident that cannot answer raises ``NativeProtectionHealthError``,
+    except for valid evidence from a platform with no backend: that fails all
+    four checks as ``unsupported_platform`` before any other check, so it is
+    answered here and stays a platform limit rather than an unreachable runtime.
     """
+
+    if _unsupported_backend(value):
+        unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
+        return dict.fromkeys(sorted(_CONTAINMENT_CHECK_IDS), unsupported)
 
     from ..native_protection_health import protection_health_report
 
@@ -191,6 +198,14 @@ def containment_health_signals(
         for row in checks
         if row["check_id"] in _CONTAINMENT_CHECK_IDS
     }
+
+
+def _unsupported_backend(value: object) -> bool:
+    try:
+        evidence = ContainmentHealthEvidence.from_mapping(value)
+    except (TypeError, ValueError):
+        return False
+    return evidence.backend is ContainmentBackend.UNSUPPORTED
 
 
 def _parse_time(value: str) -> datetime:

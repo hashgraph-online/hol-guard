@@ -151,18 +151,34 @@ def test_installs_send_only_their_identity_and_activity(collect: Callable[..., d
     ]
     installs.append({"harness": "../../private", "active": "yes"})
 
-    facts = collect(installs=installs)
+    facts = collect(installs=list(reversed(installs)))
 
     serialized = repr(facts["managed_installs"])
     assert "/private/workspace" not in serialized
     assert "secret-command" not in serialized
     assert "/secret" not in serialized
-    # What a malformed identity or activity proves is the resident's call.
+    # An install the resident would not count is not sent.
     assert facts["managed_installs"] == [
         {"harness": "app-0", "active": True},
         {"harness": "app-1", "active": True},
         {"harness": "app-2", "active": True},
-        {"harness": "../../private", "active": "yes"},
+    ]
+
+
+def test_stale_and_repeated_installs_stay_within_the_request_limit(
+    collect: Callable[..., dict[str, object]],
+) -> None:
+    installs: list[dict[str, object]] = []
+    installs.extend({"harness": "codex", "active": True} for _ in range(20_000))
+    installs.extend({"harness": f"old-{index}", "active": False} for index in range(20_000))
+    installs.extend(({"harness": "x" * 65, "active": True}, {"harness": "x" * 64, "active": True}))
+    installs.append({"harness": 7, "active": True})
+
+    facts = collect(installs=installs)
+
+    assert facts["managed_installs"] == [
+        {"harness": "codex", "active": True},
+        {"harness": "x" * 64, "active": True},
     ]
 
 

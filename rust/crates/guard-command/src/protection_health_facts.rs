@@ -25,10 +25,9 @@ use guard_contracts::{
     DaemonFactsV1, DecisionStreamFactsV1, HarnessInstallFactV1, ProtectionHealthFactsRequestV1,
 };
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 use crate::attestation_timestamp::{parse_attestation_timestamp, python_strip};
-use crate::effect_decision::{EFFECT_CONTRACT_SCHEMA_VERSION, EFFECT_DECISION_SCHEMA_VERSION};
+use crate::containment_compatibility::{CompatibilityEvidence, CONTAINMENT_HEALTH_SCHEMA_VERSION};
 use crate::protection_health::{
     ProtectionCheckStatus, ProtectionHealthError, ProtectionSignal, STABLE_ID,
 };
@@ -38,15 +37,8 @@ use crate::protection_health::ProtectionCheckStatus::{Fail, Pass, Unknown};
 const MICROS_PER_SECOND: i64 = 1_000_000;
 const HEARTBEAT_MAX_AGE_MICROS: i64 = 30 * MICROS_PER_SECOND;
 const HEARTBEAT_FUTURE_TOLERANCE_MICROS: i64 = 5 * MICROS_PER_SECOND;
-const PROBE_MAX_AGE_MICROS: i64 = 5 * 60 * MICROS_PER_SECOND;
-const PROBE_FUTURE_TOLERANCE_MICROS: i64 = 5 * MICROS_PER_SECOND;
 const MAX_HARNESS_CHARS: usize = 64;
 
-const CONTAINMENT_HEALTH_SCHEMA_VERSION: &str = "guard.containment-health.v1";
-const CONTAINMENT_SCHEMA_VERSION: &str = "guard.containment.v1";
-const CONTAINMENT_POLICY_VERSION: &str = "guard.containment-policy.v1";
-const POLICY_CONTRACT_INPUT: &[u8] =
-    b"guard.containment-policy.v1\x00deny-network\x00deny-external-writes\x00deny-live-workspace-reads";
 const UNSUPPORTED_BACKEND: &str = "unsupported";
 const BACKENDS: [&str; 3] = [UNSUPPORTED_BACKEND, "macos-sandbox", "linux-bwrap"];
 /// `ContainmentHealthEvidence.from_mapping`'s exact field set.
@@ -100,9 +92,10 @@ fn signal(status: ProtectionCheckStatus, reason_code: &'static str) -> Protectio
 }
 
 /// An instant in microseconds since the Unix epoch, for a timezone-aware
-/// timestamp. Python's `fromisoformat` strips nothing, so neither does this.
+/// timestamp. Python's `fromisoformat` strips nothing and reads only an
+/// uppercase `Z`, so neither does this.
 fn instant(value: &str) -> Option<i64> {
-    if python_strip(value).len() != value.len() {
+    if python_strip(value).len() != value.len() || value.ends_with('z') {
         return None;
     }
     parse_attestation_timestamp(value)
@@ -212,21 +205,7 @@ fn decision_stream_signal(counters: Option<&DecisionStreamFactsV1>) -> Protectio
 
 /// `ContainmentHealthEvidence`, read strictly: the exact field set, a known
 /// backend, lowercase digests, a boolean probe result and an aware probe time.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ContainmentEvidence<'a> {
-    backend: &'a str,
-    policy_contract_digest: &'a str,
-    daemon_fingerprint: &'a str,
-    runtime_fingerprint: &'a str,
-    probe_micros: i64,
-    probe_enforced: bool,
-    containment_schema_version: &'a str,
-    policy_version: &'a str,
-    effect_contract_schema_version: &'a str,
-    effect_decision_schema_version: &'a str,
-}
-
-fn containment_evidence(value: &Value) -> Option<ContainmentEvidence<'_>> {
+fn containment_evidence(value: &Value) -> Option<CompatibilityEvidence<'_>> {
     let object = value.as_object()?;
     if object.len() != EVIDENCE_KEYS.len()
         || !EVIDENCE_KEYS.iter().all(|key| object.contains_key(*key))
@@ -253,8 +232,8 @@ fn containment_evidence(value: &Value) -> Option<ContainmentEvidence<'_>> {
         return None;
     }
     let probe_enforced = object.get("probe_enforced").and_then(Value::as_bool)?;
-    Some(ContainmentEvidence {
-        backend,
+    Some(CompatibilityEvidence {
+        unsupported_backend: backend == UNSUPPORTED_BACKEND,
         policy_contract_digest: text("policy_contract_digest")?,
         daemon_fingerprint: text("daemon_fingerprint")?,
         runtime_fingerprint: text("runtime_fingerprint")?,
@@ -265,47 +244,6 @@ fn containment_evidence(value: &Value) -> Option<ContainmentEvidence<'_>> {
         effect_contract_schema_version: text("effect_contract_schema_version")?,
         effect_decision_schema_version: text("effect_decision_schema_version")?,
     })
-}
-
-fn policy_contract_digest() -> String {
-    hex::encode(Sha256::digest(POLICY_CONTRACT_INPUT))
-}
-
-/// `ContainmentHealthEvidence.compatibility_errors`, sorted.
-fn compatibility_errors(evidence: &ContainmentEvidence<'_>, now: i64) -> Vec<&'static str> {
-    let mut errors = Vec::new();
-    if evidence.backend == UNSUPPORTED_BACKEND {
-        errors.push("unsupported_platform");
-    }
-    if evidence.containment_schema_version != CONTAINMENT_SCHEMA_VERSION {
-        errors.push("containment_schema_mismatch");
-    }
-    if evidence.policy_version != CONTAINMENT_POLICY_VERSION {
-        errors.push("policy_version_mismatch");
-    }
-    if evidence.effect_contract_schema_version != EFFECT_CONTRACT_SCHEMA_VERSION {
-        errors.push("effect_contract_mismatch");
-    }
-    if evidence.effect_decision_schema_version != EFFECT_DECISION_SCHEMA_VERSION {
-        errors.push("decision_plane_mismatch");
-    }
-    if evidence.policy_contract_digest != policy_contract_digest() {
-        errors.push("policy_digest_mismatch");
-    }
-    if evidence.daemon_fingerprint != evidence.runtime_fingerprint {
-        errors.push("daemon_runtime_drift");
-    }
-    if !evidence.probe_enforced {
-        errors.push("containment_probe_failed");
-    }
-    let age = now - evidence.probe_micros;
-    if age < -PROBE_FUTURE_TOLERANCE_MICROS {
-        errors.push("containment_probe_future");
-    } else if age > PROBE_MAX_AGE_MICROS {
-        errors.push("containment_probe_stale");
-    }
-    errors.sort_unstable();
-    errors
 }
 
 fn containment_failed(reason: &'static str) -> [ProtectionSignal; 4] {
@@ -319,10 +257,10 @@ fn containment_signals(value: Option<&Value>, now: i64) -> [ProtectionSignal; 4]
     let Some(evidence) = value.and_then(containment_evidence) else {
         return containment_failed("containment_health_invalid");
     };
-    if evidence.backend == UNSUPPORTED_BACKEND {
+    if evidence.unsupported_backend {
         return containment_failed("unsupported_platform");
     }
-    let errors = compatibility_errors(&evidence, now);
+    let errors = evidence.errors(now, None);
     let Some(reason) = errors.first().copied() else {
         return [
             signal(Pass, "policy_engine_compatible"),

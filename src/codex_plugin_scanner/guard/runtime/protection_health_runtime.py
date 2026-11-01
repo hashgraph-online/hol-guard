@@ -9,6 +9,9 @@ from typing import Protocol
 
 from ..native_protection_health import protection_health_report
 
+# The resident reads no longer harness name; see `protection_health_facts`.
+_MAX_HARNESS_CHARS = 64
+
 
 class CommandActivityHealth(Protocol):
     @property
@@ -40,6 +43,23 @@ def _decision_stream(store: ProtectionHealthStore) -> dict[str, int] | None:
         return None
 
 
+def _install_facts(managed_installs: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
+    """Each active harness once, in a stable order.
+
+    The resident counts only an active install with a short harness name, and
+    every active row of one harness proves the same thing, so the rest are
+    dropped rather than sent: a store full of stale or repeated rows cannot
+    push the request past the resident's size limit and lose the whole report.
+    """
+
+    harnesses: set[str] = set()
+    for install in managed_installs:
+        harness = install.get("harness")
+        if install.get("active") is True and isinstance(harness, str) and len(harness) <= _MAX_HARNESS_CHARS:
+            harnesses.add(harness)
+    return [{"harness": harness, "active": True} for harness in sorted(harnesses)]
+
+
 def build_runtime_protection_health(
     *,
     store: ProtectionHealthStore,
@@ -54,16 +74,14 @@ def build_runtime_protection_health(
 
     What each fact proves, and whether that adds up to a protected machine, is
     the native runtime's answer. Only the fields a check reads leave this
-    process: a managed install's harness and whether it is active, never its
-    workspace or manifest. ``NativeProtectionHealthError`` reaches the caller
-    rather than a verdict assembled here from an unreachable runtime.
+    process: each active managed harness, never its workspace or manifest.
+    ``NativeProtectionHealthError`` reaches the caller rather than a verdict
+    assembled here from an unreachable runtime.
     """
 
     facts: dict[str, object] = {
         "now": now.isoformat(),
-        "managed_installs": [
-            {"harness": install.get("harness"), "active": install.get("active")} for install in managed_installs
-        ],
+        "managed_installs": _install_facts(managed_installs),
         "hook_verification": dict(hook_verification) if hook_verification is not None else None,
         "daemon": (
             {

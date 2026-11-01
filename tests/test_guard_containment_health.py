@@ -104,6 +104,30 @@ def test_containment_signals_are_the_resident_report_rows(
     ]
 
 
+def test_unsupported_platform_signals_do_not_need_the_resident(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unreachable(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        raise native_protection_health.NativeProtectionHealthError("native_protection_health_unavailable")
+
+    monkeypatch.setattr(native_protection_health, "protection_health_report", unreachable)
+    evidence = _evidence(
+        backend=ContainmentBackend.UNSUPPORTED,
+        backend_digest=hashlib.sha256(b"unavailable:unsupported").hexdigest(),
+        probe_enforced=False,
+    ).to_dict()
+
+    signals = containment_health_signals(evidence, now=_NOW, guard_home=tmp_path)
+
+    unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
+    assert signals == dict.fromkeys(
+        ("containment_compatibility", "decision_plane_compatibility", "policy_engine", "sandbox"), unsupported
+    )
+    with pytest.raises(native_protection_health.NativeProtectionHealthError):
+        _ = containment_health_signals({**evidence, "backend": "macos-sandbox"}, now=_NOW, guard_home=tmp_path)
+
+
 def test_health_mapping_is_strict_and_privacy_safe(tmp_path: Path) -> None:
     evidence = _evidence()
     serialized = repr(evidence.to_dict())
