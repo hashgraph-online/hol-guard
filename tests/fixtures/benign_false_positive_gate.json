@@ -45029,6 +45029,125 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "grep-include-markdown-glob-over-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN --include=\"*.md\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-include-markdown-glob-relative-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln TOKEN --include=\"*.md\" service-api"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-include-two-globs-over-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln TOKEN --include=\"*.md\" --include=\"*.rs\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-include-separate-value-over-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN --include \"*.md\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-include-every-file-glob-over-checkout",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN --include=\"*\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-dereference-include-over-checkout",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -Rn TOKEN --include=\"*.md\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-recursive-checkout-with-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [
