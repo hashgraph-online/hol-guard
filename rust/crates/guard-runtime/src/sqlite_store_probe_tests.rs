@@ -158,6 +158,7 @@ fn io_and_unknown_first_probes_stop_before_the_write_check() {
         let detail = detail(&path, |_path| state, || panic!("write probe ran"));
         assert!(!detail.proven_unusable && detail.identity_stable);
         assert_eq!(detail.first_state, state);
+        assert_eq!(detail.second_state, None);
     }
 }
 

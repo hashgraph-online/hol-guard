@@ -28,16 +28,6 @@ def _quarantined_databases(guard_home: Path) -> list[Path]:
     return sorted(path for path in guard_home.glob("guard.db.corrupt-*") if not path.name.endswith(".forensics.json"))
 
 
-def _connects_store(database: str | Path, path: Path) -> bool:
-    raw = str(database)
-    if raw.startswith("file:"):
-        from urllib.parse import unquote, urlparse
-
-        parsed = urlparse(raw)
-        raw = unquote(parsed.path)
-    return Path(raw) == path or Path(raw) == path.resolve()
-
-
 def _main_quarantined_databases(guard_home: Path) -> list[Path]:
     return [
         path
@@ -226,58 +216,38 @@ def test_transient_io_error_does_not_quarantine_healthy_store(
     assert store.get_runtime_state() is None
 
 
-def test_io_error_that_clears_after_directory_probe_does_not_quarantine(
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"first_state": "io", "identity_stable": True},
+        {"first_state": "fatal", "second_state": "io", "guard_home_accepts_write": True, "identity_stable": True},
+    ],
+)
+def test_io_probe_answers_never_quarantine_the_store(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    answer: dict[str, object],
 ) -> None:
+    # sqlite_store_probe.rs runs the probes; these answers stand for an I/O
+    # failure that clears or persists across them.
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    real_connect = store_connection_schema.sqlite3.connect
-    active_attempts = 0
+    requests: list[dict[str, object]] = []
 
-    def fail_first_active_probe(database: str | Path, timeout: float = 5.0, **kwargs: object) -> sqlite3.Connection:
-        nonlocal active_attempts
-        if _connects_store(database, store.path):
-            active_attempts += 1
-            if active_attempts == 1:
-                raise sqlite3.OperationalError("disk I/O error")
-        return real_connect(database, timeout=timeout, **kwargs)
+    def probe_answer(request: dict[str, object]) -> dict[str, object]:
+        requests.append(request)
+        return {"proven_unusable": False, **answer}
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery.sqlite3.connect", fail_first_active_probe)
+    monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery._probe_answer", probe_answer)
 
     assert (
-        store._store_is_proven_unusable(  # pyright: ignore[reportPrivateUsage]
-            sqlite3.OperationalError("disk I/O error")
-        )
-        is False
-    )
-    assert active_attempts == 1
-    assert _quarantined_databases(store.guard_home) == []
-
-
-def test_fatal_error_does_not_recover_when_rechecks_report_persistent_io(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    real_connect = store_connection_schema.sqlite3.connect
-    active_attempts = 0
-
-    def fail_active_probes(database: str | Path, timeout: float = 5.0, **kwargs: object) -> sqlite3.Connection:
-        nonlocal active_attempts
-        if _connects_store(database, store.path):
-            active_attempts += 1
-            raise sqlite3.OperationalError("disk I/O error")
-        return real_connect(database, timeout=timeout, **kwargs)
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.sqlite_recovery.sqlite3.connect", fail_active_probes)
-
-    assert (
-        store._store_is_proven_unusable(  # pyright: ignore[reportPrivateUsage]
+        store._recover_fatal_sqlite_store(  # pyright: ignore[reportPrivateUsage]
             sqlite3.DatabaseError("database disk image is malformed")
         )
         is False
     )
-    assert active_attempts == 1
+    assert [request["op"] for request in requests] == ["detail"]
+    assert _quarantined_databases(store.guard_home) == []
+    assert store.path.is_file()
 
 
 def test_recovery_restores_readable_quarantined_store(

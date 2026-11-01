@@ -59,6 +59,10 @@ def sqlite_store_probe_detail(
         return _UNPROVEN
     answer = _probe_answer({"op": "detail", "path": str(path.absolute()), "guard_home": str(guard_home.absolute())})
     if answer is None:
+        # A helper stopped at its deadline never removed its write probe.
+        for leftover in guard_home.glob("storage-probe-*.db*"):
+            with suppress(OSError):
+                leftover.unlink()
         return _UNPROVEN
     accepts_write = answer.get("guard_home_accepts_write")
     return SQLiteStoreProbeDetail(
@@ -73,8 +77,9 @@ def sqlite_store_probe_detail(
 def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bool:
     """Move a quarantined store back when it still opens and passes integrity.
 
-    A lost answer counts as a restore only when the store and both sidecars
-    already left quarantine.
+    The native helper moves the store last. When its answer is lost, a store
+    already back in place is restored, and sidecars it moved ahead of a store
+    still in quarantine go back beside it.
     """
 
     answer = _probe_answer(
@@ -82,11 +87,14 @@ def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bo
     )
     if answer is not None:
         return answer.get("restored") is True
-    return (
-        destination.is_file()
-        and not destination.is_symlink()
-        and not any(os.path.lexists(f"{quarantined}{suffix}") for suffix in ("", "-wal", "-shm"))
-    )
+    if destination.is_file() and not destination.is_symlink() and not os.path.lexists(quarantined):
+        return True
+    for suffix in ("-wal", "-shm"):
+        moved, source = Path(f"{destination}{suffix}"), Path(f"{quarantined}{suffix}")
+        if moved.is_file() and not moved.is_symlink() and not os.path.lexists(source):
+            with suppress(OSError):
+                moved.rename(source)
+    return False
 
 
 def _probe_answer(request: dict[str, object]) -> dict[str, object] | None:

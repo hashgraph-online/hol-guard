@@ -213,7 +213,9 @@ fn write_probe(path: &Path, wait: Duration) -> rusqlite::Result<()> {
 }
 
 /// Moves a quarantined store and its sidecars back when the store still
-/// passes `quick_check`, undoing every move when one fails.
+/// passes `quick_check`, undoing every move when one fails. The store moves
+/// last, so a helper stopped part way never leaves it beside a missing WAL;
+/// the caller finds the split sidecars still quarantined beside it.
 fn restore(destination: &Path, quarantined: &Path, wait: Duration) -> bool {
     if fs::symlink_metadata(destination).is_ok() || probe(quarantined, wait) != State::Healthy {
         return false;
@@ -223,19 +225,18 @@ fn restore(destination: &Path, quarantined: &Path, wait: Duration) -> bool {
         .map(|suffix| (suffixed(quarantined, suffix), suffixed(destination, suffix)))
         .filter(|(source, _)| source.exists() && !source.is_symlink())
         .collect();
-    if fs::rename(quarantined, destination).is_err() {
-        return false;
-    }
-    for (index, (source, target)) in sidecars.iter().enumerate() {
-        if fs::rename(source, target).is_err() {
-            for (source, target) in sidecars[..index].iter().rev() {
-                let _ = fs::rename(target, source);
-            }
-            let _ = fs::rename(destination, quarantined);
-            return false;
+    let mut moved = 0;
+    let complete = sidecars.iter().all(|(source, target)| {
+        let renamed = fs::rename(source, target).is_ok();
+        moved += usize::from(renamed);
+        renamed
+    }) && fs::rename(quarantined, destination).is_ok();
+    if !complete {
+        for (source, target) in sidecars[..moved].iter().rev() {
+            let _ = fs::rename(target, source);
         }
     }
-    true
+    complete
 }
 
 fn identity(path: &Path) -> [Option<Stamp>; 3] {
