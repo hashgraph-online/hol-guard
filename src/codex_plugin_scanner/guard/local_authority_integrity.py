@@ -9,6 +9,7 @@ and nothing verifies.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping
 from typing import cast
 
@@ -20,6 +21,8 @@ _FEATURE = "native-local-authority-integrity-v1"
 _SCHEMA = "local-authority-integrity.v1"
 _STATUSES = frozenset({"valid", "missing_integrity", "tampered", "unknown_key"})
 _TIMEOUT_SECONDS = 10.0
+# The verification message when no runtime answered: nothing was compared.
+LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE = "local_authority_integrity_runtime_unavailable"
 
 
 def sign_local_authority_payload(
@@ -29,8 +32,13 @@ def sign_local_authority_payload(
     key_id: str,
     purpose: str,
     signed_at: str,
+    deadline: float | None = None,
 ) -> dict[str, object]:
-    """Sign a local authority payload with a purpose-specific derived key."""
+    """Sign a local authority payload with a purpose-specific derived key.
+
+    `deadline` (monotonic) bounds the runtime call along with any active hook
+    validation deadline.
+    """
 
     answer = _ask(
         {
@@ -40,7 +48,8 @@ def sign_local_authority_payload(
             "key_hex": key.hex(),
             "key_id": key_id,
             "signed_at": signed_at,
-        }
+        },
+        deadline,
     )
     if answer is None or answer.get("integrity_key_id") != key_id:
         raise RuntimeError("local authority signing requires the native runtime")
@@ -76,7 +85,7 @@ def verify_local_authority_payload(
     if answer is None or status not in _STATUSES:
         return PolicyIntegrityVerificationResult(
             status="unknown_key",
-            message="local_authority_integrity_runtime_unavailable",
+            message=LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE,
         )
     return PolicyIntegrityVerificationResult(
         status=cast(PolicyIntegrityStatus, status),
@@ -94,13 +103,17 @@ def _text(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _ask(request: dict[str, object]) -> dict[str, object] | None:
+def _ask(request: dict[str, object], deadline: float | None = None) -> dict[str, object] | None:
+    """One runtime answer, bounded by `deadline` and any active hook validation deadline."""
+
+    from .codex_hook_file_integrity import active_hook_validation_deadline
     from .mdm.runtime_request import runtime_answer
 
+    bounds = [time.monotonic() + _TIMEOUT_SECONDS, deadline, active_hook_validation_deadline()]
     return runtime_answer(
         _FEATURE,
         "local-authority-integrity",
         {"schema": _SCHEMA, **request},
         output_limit=4096,
-        timeout_seconds=_TIMEOUT_SECONDS,
+        deadline=min(bound for bound in bounds if bound is not None),
     )

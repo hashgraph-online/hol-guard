@@ -809,7 +809,7 @@ class RuntimeTransition:
             raise TransitionError("refusal_context_invalid")
         return TransitionStatus(operation_id, "NotStarted", reason, (), generation)
 
-    def _write(self, payload: dict[str, object]) -> None:
+    def _write(self, payload: dict[str, object], *, deadline: float | None = None) -> None:
         require_codex_install_owner(self.home)
         key, key_id = self._key()
         signed = dict(payload)
@@ -819,7 +819,10 @@ class RuntimeTransition:
             key_id=key_id,
             purpose=_PURPOSE,
             signed_at=str(payload["operation_id"]),
+            deadline=deadline,
         )
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TransitionError("deadline_exceeded")
         encoded = canonical_manifest_bytes(signed) + b"\n"
         if len(encoded) > _MAX_RECORD:
             raise TransitionError("record_too_large")
@@ -967,7 +970,7 @@ class RuntimeTransition:
                 "recovery_causes": [],
             }
         )
-        self._write(payload)
+        self._write(payload, deadline=deadline)
         self._forward_grant = grant
 
     def status(self, operation_id: str) -> TransitionStatus:

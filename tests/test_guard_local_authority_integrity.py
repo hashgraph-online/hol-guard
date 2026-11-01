@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import json
 import sqlite3
+import time
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline
+from codex_plugin_scanner.guard.codex_hook_integrity import (
+    HOOK_MANIFEST_MAC_ALGORITHM,
+    HookSecretMaterial,
+    authenticate_hook_manifest_text,
+)
 from codex_plugin_scanner.guard.local_authority_integrity import (
+    LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE,
     sign_local_authority_payload,
     verify_local_authority_payload,
 )
@@ -163,6 +172,49 @@ def test_no_runtime_signs_nothing_and_verifies_nothing(monkeypatch: pytest.Monke
         purpose="guard-local-once-approval",
     )
     assert result.status != "valid"
+    assert result.message == LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE
+
+
+def test_runtime_calls_share_the_active_and_explicit_deadlines(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    deadlines: list[object] = []
+
+    def answer(*_args: object, **kwargs: object) -> None:
+        deadlines.append(kwargs.get("deadline"))
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", answer)
+    hook_deadline = time.monotonic() + 1.0
+    with hook_validation_deadline(hook_deadline):
+        _ = verify_local_authority_payload(
+            {"action": "allow"}, {"integrity_version": 1}, key=b"k" * 32, key_id="key-1", purpose="p"
+        )
+    signing_deadline = time.monotonic() + 0.5
+    with pytest.raises(RuntimeError):
+        _ = sign_local_authority_payload(
+            {"action": "allow"},
+            key=b"k" * 32,
+            key_id="key-1",
+            purpose="p",
+            signed_at=_CREATED_AT,
+            deadline=signing_deadline,
+        )
+    assert deadlines == [hook_deadline, signing_deadline]
+
+
+def test_an_unverifiable_hook_manifest_is_not_reported_as_foreign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    manifest = json.dumps({"authentication": {"algorithm": HOOK_MANIFEST_MAC_ALGORITHM}})
+    secret = HookSecretMaterial(installation_id="install-1", key_id="key-1", key=b"k" * 32)
+
+    with pytest.raises(CodexHookIntegrityError) as error:
+        _ = authenticate_hook_manifest_text(tmp_path, manifest, _secret=secret)
+
+    assert error.value.reason == "codex_hook_manifest_verification_unavailable"
 
 
 def test_authentic_local_once_row_resolves_and_claims(tmp_path: Path) -> None:
