@@ -44,6 +44,15 @@ regexes = [
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "CIGAR verification manifests record SHA-256 source digests, not credentials"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)docs/guard/cigar\-integration/evidence/[^/]+\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"(?:agent-access\.md|rust/crates/guard\-runtime/src/context_assistance_installation_key\.rs|rust/crates/guard\-scanner/src/secret_detection\.rs|dashboard/src/guard\-api\.ts|dashboard/src/context\-assistance/(?:versions\-api(?:\.test)?|workspaces\-api(?:\.test)?|history\-api|api\.test|action\-api|proposals\-api)\.ts)": "[0-9a-f]{64}",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "Historical synthetic packaged-binary scanner fixture, not a credential"
 condition = "AND"
 regexTarget = "line"

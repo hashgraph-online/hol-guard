@@ -22,7 +22,6 @@ from .contracts import (
     default_machine_paths,
 )
 from .runtime_request import runtime_answer
-from .windows_support import windows_directory
 
 _MACOS_LABEL = "org.hol.guard.machine-health"
 _MACOS_PLIST = Path(f"/Library/LaunchDaemons/{_MACOS_LABEL}.plist")
@@ -111,16 +110,12 @@ def _verify_macos_supervisor(paths: MachinePaths, plist_path: Path) -> Superviso
         return SupervisorStatus("unknown", "supervisor_probe_failed")
 
 
-_windows_directory = windows_directory
-
-
 def _verify_windows_supervisor(paths: MachinePaths) -> SupervisorStatus:
     try:
         return _native_verdict(
             {
                 "op": "windows-verify",
                 "executable": str(machine_executable(paths, "Windows")),
-                "windows_directory": _windows_directory(),
             }
         )
     except (OSError, ValueError, subprocess.SubprocessError):
@@ -165,7 +160,6 @@ def install_machine_supervisor() -> dict[str, object]:
         {
             "op": "windows-install",
             "executable": str(machine_executable(paths, "Windows")),
-            "windows_directory": _windows_directory(),
             "state_root": str(paths.state_root),
         },
         "running",
@@ -188,7 +182,6 @@ def remove_machine_supervisor() -> dict[str, object]:
         {
             "op": "windows-remove",
             "executable": str(machine_executable(paths, "Windows")),
-            "windows_directory": _windows_directory(),
         },
         "absent",
     )

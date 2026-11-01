@@ -210,6 +210,7 @@
   "serializers": [
    "rust/crates/guard-command/src/hook_evidence_writer.rs",
    "rust/crates/guard-command/src/hook_evidence_journal_fs.rs",
+   "rust/crates/guard-command/src/hook_evidence_journal_batch.rs",
    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
    "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
    "src/codex_plugin_scanner/guard/native_route_receipt.py",
@@ -386,6 +387,10 @@
     "src/codex_plugin_scanner/guard/native_hook_containment_route.py",
     "src/codex_plugin_scanner/guard/native_daemon_route.py",
     "src/codex_plugin_scanner/guard/native_daemon_handler.py",
+    "src/codex_plugin_scanner/guard/native_context_assistance.py",
+    "src/codex_plugin_scanner/guard/native_context_agent.py",
+    "src/codex_plugin_scanner/guard/daemon/context_assistance_http.py",
+    "src/codex_plugin_scanner/guard/cli/context_assistance_commands.py",
     "src/codex_plugin_scanner/guard/native_resident_decision.py",
     "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
     "src/codex_plugin_scanner/guard/native_consumer_artifact_compose.py",
@@ -572,9 +577,12 @@
     "src/codex_plugin_scanner/guard/daemon/hook_direct_counters.py",
     "rust/crates/guard-command/src/hook_evidence_writer.rs",
     "rust/crates/guard-command/src/hook_evidence_journal_fs.rs",
+    "rust/crates/guard-command/src/hook_evidence_batch.rs",
+    "rust/crates/guard-command/src/hook_evidence_journal_batch.rs",
     "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
     "src/codex_plugin_scanner/guard/daemon/hook_direct_evidence_drain.py",
     "src/codex_plugin_scanner/guard/daemon/hook_evidence_dispatch.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_evidence_shutdown.py",
     "src/codex_plugin_scanner/guard/daemon/mcp_relay_evidence_drain.py",
     "src/codex_plugin_scanner/guard/daemon/mcp_relay_package_evidence_drain.py",
     "src/codex_plugin_scanner/guard/store.py",
@@ -627,6 +635,16 @@
    "target": "same"
   },
   {
+   "id": "optional_cigar_sdk_transport",
+   "class": "python_transport",
+   "paths": [
+    "integrations/cigar/bridge.py",
+    "integrations/cigar/broker_client.py"
+   ],
+   "current": "isolated optional public-SDK dispatch and serialization; native Rust owns opt-in, runtime verification, scopes, source admission and supervision; unreachable from synchronous hooks",
+   "target": "same"
+  },
+  {
    "id": "native_workspace",
    "class": "rust_semantic",
    "paths": [
@@ -655,6 +673,8 @@
     "rust/crates/guard-rule-contract/**",
     "rust/crates/guard-rules/**",
     "rust/crates/guard-runtime/**",
+    "rust/crates/guard-context-assistance/**",
+    "rust/crates/guard-cigar-release/**",
     "rust/crates/guard-scanner/**",
     "rust/crates/guard-command-build/**",
     "rust/crates/guard-command-catalog-data/**",
@@ -674,6 +694,8 @@
    "paths": [
     "rust/crates/guard-hook-core/**",
     "rust/crates/guard-secure-fs/**",
+    "rust/crates/guard-cigar-artifacts/**",
+    "rust/crates/guard-cigar-install/**",
     "rust/crates/guard-seatbelt/**",
     "rust/crates/guard-contained-process/**",
     "rust/crates/guard-runtime-windows-process/**",
@@ -684,6 +706,7 @@
   }
  ],
  "protected_change_globs": [
+  "integrations/cigar/bridge.py",
   "rust/**",
   "rust/crates/*/src/approval*.rs",
   "rust/crates/guard-runtime/src/resident_protocol.rs",

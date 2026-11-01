@@ -3,7 +3,9 @@
 use guard_command::local_supply_chain::VALID_RISK_ACTION_KEYS;
 
 use crate::guard_config_harness::canonical_harness_id;
-use crate::guard_config_update_value::{py_json_eq_int, py_json_repr, py_strip, set, Table, Tv};
+use crate::guard_config_update_value::{
+    from_toml_table, py_json_eq_int, py_json_repr, py_strip, set, Table, Tv,
+};
 use crate::package_authority_config::VALID_SECURITY_LEVELS;
 use crate::pyjson::PyVal;
 
@@ -98,6 +100,21 @@ fn int(value: &PyVal, maximum: i64, message: &str) -> Result<Tv, String> {
 /// `_coerce_editable_setting`.
 pub(crate) fn coerce_editable(key: &str, value: &PyVal) -> Result<Tv, String> {
     match key {
+        "context_assistance" => {
+            let value = value
+                .to_json()
+                .ok_or_else(|| invalid("context_assistance_schema_invalid"))?;
+            let config = if value.is_null() {
+                guard_context_assistance::ContextAssistanceConfig::default()
+            } else {
+                guard_context_assistance::ContextAssistanceConfig::parse(value)
+                    .map_err(|error| error.to_string())?
+            };
+            match toml::Value::try_from(config) {
+                Ok(toml::Value::Table(table)) => Ok(Tv::Table(from_toml_table(table))),
+                _ => Err(invalid("context_assistance_schema_invalid")),
+            }
+        }
         "presentation_mode" => one_of(
             value,
             &["everyday", "technical"],

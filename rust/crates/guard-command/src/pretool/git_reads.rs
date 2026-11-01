@@ -243,6 +243,20 @@ pub(super) fn safe_git_arguments(
                 })
             });
     }
+    if matches!(subcommand, "name-rev" | "show-branch" | "check-ref-format") {
+        // None of the three starts a pager of its own, runs a configured
+        // driver or opens a working-tree file, but an explicit `pager.<verb>`
+        // key can still name a program, so the configuration probe clears
+        // that first.
+        return allow_helper_context;
+    }
+    if subcommand == "symbolic-ref" {
+        // Printing where a symbolic ref points reads one loose file. A second
+        // operand writes that ref instead and keeps its own review; the
+        // explicit `pager.symbolic-ref` key is the probe's to clear.
+        return allow_helper_context
+            && crate::command_compatibility::git_symbolic_ref_read(&arguments[1..]);
+    }
     if !matches!(
         subcommand,
         "status"
@@ -363,6 +377,10 @@ pub(super) fn inspection_writes_nothing(
             | "grep"
             | "merge-base"
             | "stash"
+            | "name-rev"
+            | "show-branch"
+            | "check-ref-format"
+            | "symbolic-ref"
     ) {
         return false;
     }

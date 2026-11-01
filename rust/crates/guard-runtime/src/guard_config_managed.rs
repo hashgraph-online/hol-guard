@@ -142,6 +142,14 @@ pub(crate) fn apply_managed_policy(
 ) -> Map<String, Value> {
     let mut composed = local.clone();
     for (key, managed_value) in &policy.settings {
+        if key == "context_assistance" {
+            let restricted = guard_context_assistance::restrict_value(
+                composed.get("context_assistance"),
+                managed_value,
+            );
+            composed.insert(key.clone(), restricted);
+            continue;
+        }
         let next = if is_action_setting_path(key) {
             strongest_actions(composed.get(key), managed_value)
         } else if composed.contains_key(key) {
@@ -152,6 +160,11 @@ pub(crate) fn apply_managed_policy(
         composed.insert(key.clone(), next);
     }
     for path in &policy.locked_settings {
+        // Assistance policy is a consent intersection even when locked.
+        // The generic overwrite rule would otherwise force a managed true on.
+        if path == "context_assistance" || path.starts_with("context_assistance.") {
+            continue;
+        }
         let Some(managed_value) = get_path(&policy.settings, path) else {
             continue;
         };

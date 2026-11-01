@@ -1,0 +1,1772 @@
+{
+  "schema": "guard-cigar-evidence-receipts.v1",
+  "receipts": [
+    {
+      "name": "allocation-and-response-loss-installed-verification.json",
+      "schema": "guard-cigar-allocation-and-response-loss-installed-verification.v1",
+      "captured_record_sha256": "27df9ae892002ca9c5e1d046e2bb9136fa8c361f353714abb8090b22552c1b67",
+      "captured_record_bytes": 175411,
+      "omitted_bytes": 97395,
+      "digests": {
+        "omitted_fields_sha256": "f1ffd915200b5ce373f422fb00a7ec7f22427e073132acb24f0066b32fdcfce7"
+      }
+    },
+    {
+      "name": "broker-native-verification.json",
+      "schema": "guard-cigar-native-broker-evidence.v1",
+      "captured_record_sha256": "d9ff98a5692820747681ce36b72f7f6b6c4b3bda6384c6b2aafd1733a16070ec",
+      "captured_record_bytes": 11713,
+      "omitted_bytes": 9974,
+      "digests": {
+        "omitted_fields_sha256": "b705ac51b0d0233a6b6520fa01fc2be755e6445862a02333f38f9d5529181dc6"
+      }
+    },
+    {
+      "name": "browser-acknowledged-stop-verification.json",
+      "schema": "guard-cigar-browser-acknowledged-stop-verification.v1",
+      "captured_record_sha256": "bb5e00a284a68111a52ca7865b5f3ff424b5a3d81abf6885b4ec25e4f0256961",
+      "captured_record_bytes": 40541,
+      "qualified": true,
+      "identity": {
+        "product_source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f"
+      }
+    },
+    {
+      "name": "browser-stop-ordering-diagnostics.json",
+      "schema": "guard-cigar-browser-stop-ordering-diagnostics.v1",
+      "captured_record_sha256": "0bce4c7f9ce4312e92c0a02e251098e64002f606e0cf312622840302d5555c07",
+      "captured_record_bytes": 67603,
+      "diagnostic_only": true,
+      "omitted_bytes": 62003,
+      "identity": {
+        "product_source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f"
+      },
+      "digests": {
+        "omitted_fields_sha256": "ff408587956a5231eaa1ac1df6bb8e425034c391f3fad556a97cccb42f3992b6"
+      }
+    },
+    {
+      "name": "cigar-activation-ux-verification.json",
+      "schema": "guard-cigar-activation-ux-verification.v1",
+      "captured_record_sha256": "051808aa825acf9c137c12ef275bfc31cc567132298c2e62ccbb4a0a632c3faf",
+      "captured_record_bytes": 3052,
+      "recorded_at": "2026-10-25T21:41:38.373808+00:00"
+    },
+    {
+      "name": "cigar-tutorial-ui-verification.json",
+      "schema": "guard-cigar-tutorial-ui-verification.v1",
+      "captured_record_sha256": "c260149182e91d2660e5059872f652de8ab24bc9ca01e0ca327565bb4ad2924b",
+      "captured_record_bytes": 4155,
+      "recorded_at": "2026-10-26T00:00:31.087729+00:00"
+    },
+    {
+      "name": "cigar-workspace-ui-verification.json",
+      "schema": "guard-cigar-workspace-ui-verification.v1",
+      "captured_record_sha256": "bc67ca37520aeb269d63678e14b8b47e7749897b5f2c53d322e59f83dbe93adb",
+      "captured_record_bytes": 3276,
+      "recorded_at": "2026-10-25T21:16:33.681702+00:00"
+    },
+    {
+      "name": "cli-development-verification.json",
+      "schema": "guard-cigar-cli-development-evidence.v1",
+      "captured_record_sha256": "4edbfae6fdf2d9d24d79cf5069bca602ae08043ad60898579862b8956ef36304",
+      "captured_record_bytes": 3751,
+      "status": "partial_with_failed_process_qualification",
+      "observed_date": "2026-10-23",
+      "identity": {
+        "native_control_commit": "4a350799",
+        "ui_commit": "81e714ec"
+      }
+    },
+    {
+      "name": "configuration-verification.json",
+      "schema": "hol-guard.cigar-configuration-verification.v1",
+      "captured_record_sha256": "bc2f64c1f7bfeb8434780e0e881f62762ab03d6a84a3d9694b8ccb35617d5593",
+      "captured_record_bytes": 1111,
+      "identity": {
+        "implementation_commit": "01ed8521"
+      }
+    },
+    {
+      "name": "contention-installed-slo-restart-verification.json",
+      "schema": "guard-cigar-contention-installed-slo-restart-verification.v1",
+      "captured_record_sha256": "e6aa0ab0d19402236969c0a47a722b7480f6911e477fb92b087dc73bdf3015d4",
+      "captured_record_bytes": 222928,
+      "omitted_bytes": 126336,
+      "digests": {
+        "omitted_fields_sha256": "2baedb9d34f782836c3999deca604d4648692c24caeb333edad63fbd48ee5688"
+      }
+    },
+    {
+      "name": "context-isolation-verification.json",
+      "schema": "guard-cigar-context-isolation-verification.v1",
+      "captured_record_sha256": "8b1aa0b1dbe01800f4ddcaae32f5bc5c122c5d1bb3bffaf725a4d275dfe31005",
+      "captured_record_bytes": 5419,
+      "status": "passed",
+      "observed_at": "2026-10-23T22:21:48Z",
+      "identity": {
+        "implementation_commit": "0ee90934c438ef596f48973b75109488aa544791",
+        "source_parent_commit": "904e3818dc365efe563f8977de5c3c840ac3ea8d"
+      }
+    },
+    {
+      "name": "context-thread-profile-verification.json",
+      "schema": "guard-cigar-context-thread-profile-verification.v1",
+      "captured_record_sha256": "dc95ba9e55637b0fe42194241b47f7859265e628aadee3ec723328fa64af26af",
+      "captured_record_bytes": 100228,
+      "diagnostic_only": true,
+      "identity": {
+        "native_source_commit": "4c4db2d99f8e500c477704e33f79f8bc56fc4871"
+      }
+    },
+    {
+      "name": "context-worker-reuse-installed-functional-verification.json",
+      "schema": "guard-cigar-worker-reuse-installed-functional-verification.v1",
+      "captured_record_sha256": "3452d61da45e5ea2012d932d7b6bb9e78fad91dd4dffae43ece44ce784b506ef",
+      "captured_record_bytes": 19904,
+      "omitted_bytes": 16552,
+      "digests": {
+        "omitted_fields_sha256": "489485d1ee206d37fce55ccbcb27b1c4d368f7d190c52a25c00be913ec5cee43"
+      }
+    },
+    {
+      "name": "context-worker-reuse-onefile-failed-verification.json",
+      "schema": "guard-cigar-context-worker-reuse-onefile-failed-verification.v1",
+      "captured_record_sha256": "802d3203376c5d86807829050371f18ae4361153bad80c085105835f48c43118",
+      "captured_record_bytes": 66224,
+      "omitted_bytes": 55510,
+      "identity": {
+        "product_source_commit": "d780af20d775564298c72e0e78616f7afd76e69a"
+      },
+      "digests": {
+        "omitted_fields_sha256": "6607e7973a4e4ab54cc7662903c697141bd304788f4045a06c0319f04def65a6"
+      }
+    },
+    {
+      "name": "context-worker-reuse-source-verification.json",
+      "schema": "guard-cigar-context-worker-reuse-source-verification.v1",
+      "captured_record_sha256": "b8f68231fe90007daba426b5d9601ad105ffeb5264b3d8fa56cb996e7afd22f9",
+      "captured_record_bytes": 313456,
+      "omitted_bytes": 239763,
+      "digests": {
+        "omitted_fields_sha256": "462a3fcb004ac31590440c684da794dc08e3469d3b87697b6d8c79bbdbf6ef7b"
+      }
+    },
+    {
+      "name": "control-preflight-diagnostics.json",
+      "schema": "guard-cigar-control-preflight-diagnostics.v1",
+      "captured_record_sha256": "806f48ad0941a09092db1442c4df22a2e92f7f5701b34b6639fab32701c920d9",
+      "captured_record_bytes": 69629,
+      "diagnostic_only": true,
+      "omitted_bytes": 57109,
+      "identity": {
+        "product_source_commit": "d780af20d775564298c72e0e78616f7afd76e69a"
+      },
+      "digests": {
+        "omitted_fields_sha256": "8059ba8b59f3d2e42acd3f89b087e604b2476ec6a0b783f3e809368dd5cb6dcb"
+      }
+    },
+    {
+      "name": "control-preflight-gc-site-diagnostics.json",
+      "schema": "guard-cigar-control-preflight-gc-site-diagnostics.v1",
+      "captured_record_sha256": "12daee96621927b31586c4b5c14f7e01aaf9b59abf5df46c172b76cccbb31148",
+      "captured_record_bytes": 326165,
+      "diagnostic_only": true,
+      "identity": {
+        "product_source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f"
+      }
+    },
+    {
+      "name": "control-preflight-http-phase-diagnostics.json",
+      "schema": "guard-cigar-control-preflight-http-phase-diagnostics.v1",
+      "captured_record_sha256": "155638aa2a1742f7b91bfad9728e88f19c5044c457240c1a30a60c6e175b5e7a",
+      "captured_record_bytes": 5294427,
+      "diagnostic_only": true,
+      "identity": {
+        "product_source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f"
+      }
+    },
+    {
+      "name": "control-preflight-installed-functional-verification.json",
+      "schema": "guard-cigar-control-preflight-installed-functional-verification.v1",
+      "captured_record_sha256": "d02edf4d3113078b550a693745df5c21bbce3f434fbc5cb8d52bbb59f200d017",
+      "captured_record_bytes": 98449,
+      "omitted_bytes": 91866,
+      "digests": {
+        "omitted_fields_sha256": "6f823743edf86061a8cc890159ba64cb13ea9dd4e2fa4b79661b0c1057faaaee"
+      }
+    },
+    {
+      "name": "control-preflight-installed-performance-verification.json",
+      "schema": "guard-cigar-control-preflight-installed-performance.v1",
+      "captured_record_sha256": "5b15524e88e5861fa693a0f3f5481a38e766c0c3d9b37f0d2f110ced7cef1ac7",
+      "captured_record_bytes": 199220,
+      "omitted_bytes": 111605,
+      "identity": {
+        "product_source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f"
+      },
+      "digests": {
+        "omitted_fields_sha256": "f571a3f0f6d3181cfa9e2c66ae9238043468682d645efae9718127d9ae33857f"
+      }
+    },
+    {
+      "name": "control-preflight-onefile-context-verification.json",
+      "schema": "guard-cigar-control-preflight-onefile-context-verification.v1",
+      "captured_record_sha256": "7795370668db6a162dafa0deac2987c4d95a99a9d64522b7e7de2c980eea255b",
+      "captured_record_bytes": 224520,
+      "omitted_bytes": 180789,
+      "identity": {
+        "product_source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f"
+      },
+      "digests": {
+        "omitted_fields_sha256": "ef615b5c4ed263533fa108d21fe0ba4cf56aab771bb31ce0a8544bf3a48df736"
+      }
+    },
+    {
+      "name": "control-preflight-source-verification.json",
+      "schema": "guard-cigar-control-preflight-source-verification.v1",
+      "captured_record_sha256": "73b96277dfa34e7b0815164ce196240b057d86a49846c2479e0ca9af03f33778",
+      "captured_record_bytes": 277089,
+      "omitted_bytes": 204959,
+      "digests": {
+        "omitted_fields_sha256": "e049b57fb91c00bf1de21db2734dc45086edaf89bdfa3ed87adfaf8fdd023ab1"
+      }
+    },
+    {
+      "name": "distribution-http-diagnostics.json",
+      "schema": "guard-cigar-distribution-http-diagnostics.v1",
+      "captured_record_sha256": "99f25284ef0bad408465e0e33ad50113d342fde9e78d3b296b99bae8904946f6",
+      "captured_record_bytes": 130664,
+      "diagnostic_only": true,
+      "omitted_bytes": 75470,
+      "identity": {
+        "product_source_commit": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f"
+      },
+      "digests": {
+        "omitted_fields_sha256": "741818fe6a4f38cc8c09c3800ceeb337e2ea01030047f309b3ed25e50dc7fe6f"
+      }
+    },
+    {
+      "name": "distribution-installed-performance-verification.json",
+      "schema": "guard-cigar-distribution-profile-installed-performance.v1",
+      "captured_record_sha256": "7b544eb0e8bc951ed7935faf93bf1fa257df010f5de1346715fea8bd1a021f75",
+      "captured_record_bytes": 198451,
+      "omitted_bytes": 110825,
+      "identity": {
+        "product_source_commit": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f"
+      },
+      "digests": {
+        "omitted_fields_sha256": "0259b9adca90e8637ff7048f66565fd2978167ba4c7a58d26278964b84cffb36"
+      }
+    },
+    {
+      "name": "distribution-onefile-context-verification.json",
+      "schema": "guard-cigar-distribution-onefile-context-verification.v1",
+      "captured_record_sha256": "06d0198b554dedf43d31d9433b42177c823449244a549cad70fac2beb9f20119",
+      "captured_record_bytes": 225472,
+      "omitted_bytes": 181043,
+      "identity": {
+        "product_source_commit": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f"
+      },
+      "digests": {
+        "omitted_fields_sha256": "68198e59b337f495c89378a0d4bebbda9df74fead099704899504dafbc1faa4b"
+      }
+    },
+    {
+      "name": "environment-projection-installed-verification.json",
+      "schema": "guard-cigar-environment-projection-installed-verification.v1",
+      "captured_record_sha256": "cc6df2ed958864c688638e4ee1df9323d8c9fe30c7820f2c0bb4cb9559d475b1",
+      "captured_record_bytes": 229232,
+      "omitted_bytes": 134691,
+      "digests": {
+        "omitted_fields_sha256": "fed67ee78528a8811926cf6b5fb8f913898ac0f70cb37e41654bbe1c344ac08e"
+      }
+    },
+    {
+      "name": "environment-projection-source-verification.json",
+      "schema": "guard-cigar-environment-projection-source-verification.v1",
+      "captured_record_sha256": "0debb92717f842b164ca3d526a5f4f398f8e308229de49c9365b75e227716bc6",
+      "captured_record_bytes": 286762,
+      "status": "source-qualified; matching installed artifact and unchanged cohort still required",
+      "omitted_bytes": 199941,
+      "digests": {
+        "omitted_fields_sha256": "32a3c33a6050eb9e888b081835cd0e69b6dfcfade189949272601fe9ba7f82ec"
+      }
+    },
+    {
+      "name": "evidence-batch-installed-verification.json",
+      "schema": "guard-cigar-evidence-batch-installed-verification.v1",
+      "captured_record_sha256": "6c132e4a7ceb9def5ad55d9c2c4a157aab39a90ac0e1189779743ff4d011ac33",
+      "captured_record_bytes": 229442,
+      "omitted_bytes": 134414,
+      "digests": {
+        "omitted_fields_sha256": "1a324cff3ee3ffc95e2a8ad7531bb5ce2dc1a65de627ac1e3222c64a2d2cab18"
+      }
+    },
+    {
+      "name": "evidence-batch-verification.json",
+      "schema": "guard-cigar-evidence-batch-source-verification.v1",
+      "captured_record_sha256": "e6333f51ad5175ce52c1c1c8e768cc3f22927293bdbb2d43c477b4010656d7be",
+      "captured_record_bytes": 42559,
+      "status": "source-qualified; matching installed candidate required",
+      "identity": {
+        "source_base_commit": "bb36b0d69f3304643b697c6cc51b6498a6b75824"
+      }
+    },
+    {
+      "name": "evidence-shutdown-verification.json",
+      "schema": "guard-cigar-evidence-shutdown-verification.v1",
+      "captured_record_sha256": "fd7039dc432d45f0ffcc9e451c4b5d3a6539fecd835d8dce8db5d9a6a9a6b4ac",
+      "captured_record_bytes": 268673,
+      "status": "Ordered shared evidence shutdown and direct-drain ownership verified in source. A fresh matching installed artifact, complete SLO and matched cohort remain required. Full goal active.",
+      "omitted_bytes": 265791,
+      "identity": {
+        "source_baseline_commit": "e3d5e4038c0f406a35de1d6c8c373d1a5918ea5e"
+      },
+      "digests": {
+        "omitted_fields_sha256": "0ba919d8767bac27086a9376edbdeb6955f567e22af7515750b29c423c4f017b"
+      }
+    },
+    {
+      "name": "final-installed-product-verification.json",
+      "schema": "guard-cigar-final-installed-product-verification.v1",
+      "captured_record_sha256": "2878421b9773c56fb63743e32bdf97e8a977cdd538eca8d05249b14389c64de0",
+      "captured_record_bytes": 95410,
+      "omitted_bytes": 65311,
+      "digests": {
+        "omitted_fields_sha256": "2d0703c6dd5123c6bceef53d87f80548d73a475254af77c7406f6f5eb508188a"
+      }
+    },
+    {
+      "name": "foreground-interrupt-source-verification.json",
+      "schema": "guard-cigar-foreground-interrupt-source-verification.v1",
+      "captured_record_sha256": "280a003a32eec85ce99558ef7875a1389262b83ada5a80d854da2152c540aee8",
+      "captured_record_bytes": 214265,
+      "omitted_bytes": 155302,
+      "digests": {
+        "omitted_fields_sha256": "c051f6f1674274f155ce953add98e2919098dea6ddb113edb777c7a88476eddc"
+      }
+    },
+    {
+      "name": "foreground-onefile-failed-verification.json",
+      "schema": "guard-cigar-foreground-onefile-failed-verification.v1",
+      "captured_record_sha256": "90b5f936699b4d4d61e2cec0e98e8ded1b7abc075b3a45f0f82d9a215434b671",
+      "captured_record_bytes": 46099,
+      "omitted_bytes": 42733,
+      "identity": {
+        "product_source_commit": "baf311e468ee1df575ef5eee90e564e16eeaf6f1"
+      },
+      "digests": {
+        "omitted_fields_sha256": "151b1d46fc574988ed7cf0b782b3eaa6a11f24425acd4f579bcd2849ec776ba5"
+      }
+    },
+    {
+      "name": "frozen-context-installed-verification.json",
+      "schema": "guard-cigar-frozen-context-installed-verification.v1",
+      "captured_record_sha256": "0c91ce44288cbc3f5da3cddc0dfbb3e3997945a4f0b3a52e6364b9d23c3a0efe",
+      "captured_record_bytes": 233058,
+      "omitted_bytes": 202276,
+      "identity": {
+        "product_source_commit": "0e33844cbc353a23ff06d935ac8efd85db9cc0dc"
+      },
+      "digests": {
+        "omitted_fields_sha256": "88d87a6e9926872c28f88578d19aa433866ab8b4e735ce2917c75c19b7a02953"
+      }
+    },
+    {
+      "name": "full-installed-slo-activity-verification.json",
+      "schema": "guard-cigar-full-installed-slo-activity-verification.v1",
+      "captured_record_sha256": "e245ab145b2772dbe49dcf74e19c18819db20eb582987c64bd152870888c18f0",
+      "captured_record_bytes": 327391,
+      "status": "qualification_failed_full_goal_active",
+      "omitted_bytes": 177269,
+      "identity": {
+        "product_source_commit": "95657b30f277604bcd12582e9bbf5d6602c4c433"
+      },
+      "digests": {
+        "omitted_fields_sha256": "ffb51a767da6b1e06b75bef9fadb30b333174a118c8e4f8379df6983df4d1c21"
+      }
+    },
+    {
+      "name": "header-readiness-installed-verification.json",
+      "schema": "guard-cigar-header-readiness-installed-verification.v1",
+      "captured_record_sha256": "e10b4de47fab5ac0966245a69a8bfa118ba6543be7868aa9a080c2166534a771",
+      "captured_record_bytes": 179428,
+      "status": "Fresh readiness correction passes complete installed off/on absolute SLO and installed transport cases. Repeated relative cohort fails observed native cleanup in its third run and is incomplete/unqualified. Full goal remains active.",
+      "omitted_bytes": 108875,
+      "digests": {
+        "omitted_fields_sha256": "cac27fe2fc4a9de0ac6ff96d03e9be49c305903a86ea495674fdab2504b5158d"
+      }
+    },
+    {
+      "name": "header-readiness-verification.json",
+      "schema": "guard-cigar-header-readiness-verification.v1",
+      "captured_record_sha256": "234a2c7ec6e476c7954c21dbe5f52d4ea65556c6eb509de55bc1ac2998714bb7",
+      "captured_record_bytes": 499030,
+      "status": "HTTP polling delay diagnosed; readiness correction verified in source only. New installed artifact qualification remains required. Full integration goal active.",
+      "omitted_bytes": 233960,
+      "identity": {
+        "source_baseline_commit": "3b3a5fc8"
+      },
+      "digests": {
+        "omitted_fields_sha256": "101178398dc895272dd4548693c83bc9e0811d766de5a12e725ac0dd810512b7"
+      }
+    },
+    {
+      "name": "headless-retention-installed-verification.json",
+      "schema": "guard-cigar-headless-retention-installed-evidence.v1",
+      "captured_record_sha256": "f38aa50fcba91f0f6be53665e40cbb4c7c2c3ad414d9dc8b0843d951e4196992",
+      "captured_record_bytes": 17251,
+      "status": "passed",
+      "omitted_bytes": 14459,
+      "digests": {
+        "omitted_fields_sha256": "fabd2c5d78827ce7782e5222a39439ecf62d9b349692280b8fce173abcc31f6c",
+        "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "history-development-verification.json",
+      "schema": "guard-cigar-history-development-evidence.v1",
+      "captured_record_sha256": "8009fd8d1bb3517a36a672476bfab145dfc881251efce58f9ec0a6bac83b8c1c",
+      "captured_record_bytes": 10840,
+      "identity": {
+        "implementation_base": "8d6da893"
+      }
+    },
+    {
+      "name": "history-installed-browser-verification.json",
+      "schema": "guard-cigar-history-installed-browser-evidence.v1",
+      "captured_record_sha256": "fa304fd50c841a5ba3b7ef1ef0aaebff1545163bc72f0145c502dcc8b3c07239",
+      "captured_record_bytes": 10527,
+      "omitted_bytes": 8920,
+      "digests": {
+        "omitted_fields_sha256": "1272292ec51f02d16a49dbef7e998185ed22dbd748c4d22af1a0faace38f52e3"
+      }
+    },
+    {
+      "name": "home-installed-browser-verification.json",
+      "schema": "guard-cigar-home-installed-browser-verification.v1",
+      "captured_record_sha256": "5379549ef79d22c8a588390fb9cebc8d8f2009180036cc547243a5a5ce36d920",
+      "captured_record_bytes": 4848,
+      "status": "passed",
+      "identity": {
+        "implementation_commit": "74b169ca93a82472a8772b00684dec5875ac5a58"
+      }
+    },
+    {
+      "name": "installed-browser-verification.json",
+      "schema": "guard-cigar-installed-browser-verification.v1",
+      "captured_record_sha256": "f96849df09a3f79d05e94599934bcf4e6339cb9104dcc6f205b1a3639ecdb70d",
+      "captured_record_bytes": 2061,
+      "status": "passed",
+      "observed_date": "2026-10-23",
+      "identity": {
+        "source_commit": "7714410b98e8f3bd5c7b8fcb92f20b7d430337d5"
+      },
+      "digests": {
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "intent-state-verification.json",
+      "schema": "guard-cigar-intent-state-evidence.v1",
+      "captured_record_sha256": "cedfc2366b8eff8f5af0ec9b28bf3e794dcb186c000a4f56e2c40bc49e2a8eca",
+      "captured_record_bytes": 7182,
+      "observed_date": "2026-10-23"
+    },
+    {
+      "name": "isolated-installed-browser-verification.json",
+      "schema": "guard-cigar-isolated-installed-browser-verification.v1",
+      "captured_record_sha256": "572bded3a7068bb6c220a6bb1b1fd9a46bfc82ee313a5c0d446fb468ecaa15cd",
+      "captured_record_bytes": 7496,
+      "status": "passed",
+      "identity": {
+        "source_commit": "bcbc5a32328217ccd083d6467acd697c9b4b0cad"
+      }
+    },
+    {
+      "name": "late-execution-lease-verification.json",
+      "schema": "guard-cigar-late-execution-lease-verification.v1",
+      "captured_record_sha256": "d4bfe7470dda0a1f51eade3c8ae98eaa80c103cc278bb6e0894e0a79a52f09a3",
+      "captured_record_bytes": 2462,
+      "status": "passed",
+      "identity": {
+        "sdk_revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+        "source_commit": "f55e119e0f79adba17bb7bf5fb59de9de402f99a"
+      },
+      "digests": {
+        "sdk_worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "local-integration-acceptance.json",
+      "schema": "guard-cigar-local-integration-acceptance.v1",
+      "captured_record_sha256": "fbcd9444cb9d8e77d9a05bfec9a9244d854acefc2f9a840fed7eff8b8906f5bb",
+      "captured_record_bytes": 13460,
+      "omitted_bytes": 11124,
+      "identity": {
+        "product_source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616"
+      },
+      "digests": {
+        "omitted_fields_sha256": "ba30a769c437cb40807c390d5875e04706fb5142f883f0d1f64337f1897145a7"
+      }
+    },
+    {
+      "name": "mapping-and-inflight-delivery-installed-verification.json",
+      "schema": "guard-cigar-mapping-and-inflight-delivery-installed-verification.v1",
+      "captured_record_sha256": "4f9c647f3239575c88b86f406a286aec7e1ecd29c12dcc051afcf272b94457d2",
+      "captured_record_bytes": 214241,
+      "goal_status": "active",
+      "omitted_bytes": 173021,
+      "digests": {
+        "omitted_fields_sha256": "5d13f61837b78dab1f944f69467efd3db76e249807ea84d22419e1b5e9009c8b"
+      }
+    },
+    {
+      "name": "matched-contention-6c4c8468-verification.json",
+      "schema": "guard-cigar-matched-contention-verification.v1",
+      "captured_record_sha256": "75f63365d56760089410e53e5adb23d6d17f90f2532f66d5118643f59c710157",
+      "captured_record_bytes": 124712,
+      "status": "Complete five-pair cohort; relative HTTP criterion failed. No speedup or full performance qualification.",
+      "omitted_bytes": 72358,
+      "digests": {
+        "omitted_fields_sha256": "91c6e080dfb0ff263cd36f4ca6d9f145e63a222769a68e41e8065311648c47d7"
+      }
+    },
+    {
+      "name": "native-cleanup-order-verification.json",
+      "schema": "guard-cigar-native-cleanup-order-verification.v1",
+      "captured_record_sha256": "3759a78b284c0c5a25ead49929fcfd67e507be128263e7062772b950c6352def",
+      "captured_record_bytes": 316895,
+      "status": "Evidence-producer shutdown ordering corrected in benchmark fixtures with stricter confirmation. Installed diagnostics reveal separate concurrent product cleanup owners and unfinished evidence shutdown; relative and complete shutdown qualification remain open. Full goal active.",
+      "omitted_bytes": 198859,
+      "identity": {
+        "source_baseline_commit": "4b7f567e"
+      },
+      "digests": {
+        "omitted_fields_sha256": "72520e2e24d3794b576eb5e8e398efd5ac4fa6091a373cfdd231647137032855"
+      }
+    },
+    {
+      "name": "native-context-freshness-investigation.json",
+      "schema": "guard-cigar-native-context-freshness-investigation.v1",
+      "captured_record_sha256": "7d5d044dfee595703f1b555cdce4c192726624bccccfd833a126b01740641442",
+      "captured_record_bytes": 6233,
+      "identity": {
+        "source_sha": "e537c82ae11566f492e46dd9e7206dce43150ea6"
+      }
+    },
+    {
+      "name": "native-control-verification.json",
+      "schema": "guard-cigar-native-control-evidence.v1",
+      "captured_record_sha256": "0a4cf8255e1dd174deadbdd2ad54152afc7feeef396a4304c4b9328799c53982",
+      "captured_record_bytes": 6301,
+      "observed_date": "2026-10-23",
+      "identity": {
+        "source_revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f"
+      }
+    },
+    {
+      "name": "native-decision-installed-browser-verification.json",
+      "schema": "guard-cigar-native-decision-installed-browser-evidence.v1",
+      "captured_record_sha256": "7cabae1725bca5cccc512b2638b4d0e529352114bffd4b6a900770fbcf9693e2",
+      "captured_record_bytes": 5681,
+      "status": "passed",
+      "identity": {
+        "native_implementation_commit": "b37100c11baf12303d19693ebb272768e06b5ab3",
+        "sdk_source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+        "source_commit": "3517c20dc20e99b5fc03d3912551cc56098c4e88"
+      },
+      "digests": {
+        "lock_sha256": "1eaa8ab681a9e52dd16aa4573ca7d1d0eb8a35a2e352553863eeff261ca7c1ef",
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "native-decision-verification.json",
+      "schema": "guard-cigar-native-decision-evidence.v1",
+      "captured_record_sha256": "e8a743a56b8a4d799557dc1fe96712901ef39087f494250c60f5dd022898fa8b",
+      "captured_record_bytes": 7115,
+      "identity": {
+        "implementation_base": "29a15ebe"
+      }
+    },
+    {
+      "name": "native-execution-precondition-verification.json",
+      "schema": "guard-cigar-native-execution-precondition-evidence.v1",
+      "captured_record_sha256": "782a477d4e74378fb8b7eec9badc9815371c4173a3f025492e36fa33e679fe81",
+      "captured_record_bytes": 9503,
+      "status": "passed",
+      "omitted_bytes": 8319,
+      "digests": {
+        "omitted_fields_sha256": "47d6f948fc3395b0447c50e30c8ba5f6d89a6833cd5ff0261200c26185422ef2",
+        "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "native-executor-installed-verification.json",
+      "schema": "guard-cigar-native-executor-installed-verification.v1",
+      "captured_record_sha256": "66821e0e4bf0e962a8e2317e89b7321019945a83ba5875e7c68edeb9d46dcedc",
+      "captured_record_bytes": 15632,
+      "status": "passed",
+      "omitted_bytes": 13266,
+      "digests": {
+        "omitted_fields_sha256": "77c42f86fa1d9c27aa78144579c877ebc49cd3551db35cd1999afa597b86b899"
+      }
+    },
+    {
+      "name": "native-executor-verification.json",
+      "schema": "guard-cigar-native-executor-verification.v1",
+      "captured_record_sha256": "64d5e3ccb5eebb5327c72b5972495a6c46f1ccaebb63ba24406e1ce9a26d3675",
+      "captured_record_bytes": 17963,
+      "status": "passed",
+      "omitted_bytes": 16076,
+      "digests": {
+        "omitted_fields_sha256": "c2771a02cb8b42f831b2423dffd773feddf9bb39533749b7588e9e0175830e3e"
+      }
+    },
+    {
+      "name": "native-owner-loss-installed-verification.json",
+      "schema": "guard-cigar-native-owner-loss-installed-verification.v1",
+      "captured_record_sha256": "dcb2ad03b7a199e7287c629ec4aca194e4c38640b0ff1c924da1113f705e8294",
+      "captured_record_bytes": 23174,
+      "omitted_bytes": 18388,
+      "digests": {
+        "omitted_fields_sha256": "432b87599ebc4c167b01cb31136ab89770a0c114dc7c3468216e9e06d962cd8b"
+      }
+    },
+    {
+      "name": "native-receipt-regressions.json",
+      "schema": "guard-cigar-native-receipt-regressions.v1",
+      "captured_record_sha256": "4d18203576ca1cc737bd5313eab646bca4faf683f1282f410d4444b092804e8d",
+      "captured_record_bytes": 10188,
+      "status": "partial",
+      "digests": {
+        "final_context_log_sha256": "030db2d00db357580938208d4623e69406811f1646c1eae7d7e1915922b9439f"
+      }
+    },
+    {
+      "name": "native-receipt-verification.json",
+      "schema": "guard-cigar-native-receipt-test-run.v1",
+      "captured_record_sha256": "29d4a1be314f540c8f780f74c2c1638cc84913add5aaee56e09d4ed0bf61476f",
+      "captured_record_bytes": 4402,
+      "status": "passed",
+      "digests": {
+        "log_sha256": "d9a93441cc3cc7569ad6cfffd57807b5ab89a2c08dbb6f6afda082921b7de429"
+      }
+    },
+    {
+      "name": "onefile-context-failed-verification.json",
+      "schema": "guard-cigar-onefile-context-failed-verification.v1",
+      "captured_record_sha256": "636bcf7122cdd1e1922be05c06f50351d4439816698e157b92bd26228c8b5be5",
+      "captured_record_bytes": 152598,
+      "qualified": false,
+      "identity": {
+        "product_source_commit": "0e33844cbc353a23ff06d935ac8efd85db9cc0dc"
+      }
+    },
+    {
+      "name": "paired-installed-browser-verification.json",
+      "schema": "guard-cigar-paired-installed-browser-verification.v1",
+      "captured_record_sha256": "b9644d0708df6285bca924631bc587c3d44fbd679ac17238421064116fadb38f",
+      "captured_record_bytes": 4614,
+      "status": "passed",
+      "observed_at": "2026-10-23T22:01:38Z",
+      "identity": {
+        "sdk_source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+        "source_commit": "904e3818dc365efe563f8977de5c3c840ac3ea8d"
+      }
+    },
+    {
+      "name": "paired-mcp-verification.json",
+      "schema": "guard-cigar-paired-mcp-verification.v1",
+      "captured_record_sha256": "f0b3e620503bf73c601fca823dc2ef2329e6c18a09163f0fde5244bc4ed3f776",
+      "captured_record_bytes": 5126,
+      "status": "passed"
+    },
+    {
+      "name": "pairing-preparation-installed-verification.json",
+      "schema": "guard-cigar-pairing-preparation-installed-verification.v1",
+      "captured_record_sha256": "16b191bf43c3e1daaee08810e036e4739933065eb92ceea3115e81bc54ff4091",
+      "captured_record_bytes": 43885,
+      "status": "checkpoint_passed_full_goal_incomplete",
+      "omitted_bytes": 31020,
+      "digests": {
+        "omitted_fields_sha256": "70b47c24cc03472c1d957b83b2c761fafcc6ce2742851097568ca8d0a18917c4"
+      }
+    },
+    {
+      "name": "pi-sdk-execution-context-verification.json",
+      "schema": "guard-cigar-pi-sdk-execution-context-verification.v1",
+      "captured_record_sha256": "49e239ca8633bdad5fe99c51c06c1a2020829f47c8d9757825d37f60eeca63a5",
+      "captured_record_bytes": 8997,
+      "identity": {
+        "SDK_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+        "product_build_sha": "75c78563ed4e3c949c01285133fff9e15aa24193",
+        "test_source_sha": "b5b9f0e2d94c06dbcb39fd5790560c8aceaa32ec"
+      },
+      "digests": {
+        "product_native_sha256": "0348ad3a05c61c365ea14a84190b2e958966e4e40cf57489e28b10b090b6087f",
+        "product_wheel_sha256": "038c80a19bd248317a06ef7a1e91d63b6796361da56ad29355e386ba9f2e1074"
+      }
+    },
+    {
+      "name": "preferred-runtime-final-source-verification.json",
+      "schema": "guard-cigar-preferred-runtime-final-source-verification.v1",
+      "captured_record_sha256": "9f9a3332ba3dc4d679b5bc27b756e8474f433f13f46e29eeea959cef8e0bc0a9",
+      "captured_record_bytes": 257557,
+      "omitted_bytes": 198283,
+      "digests": {
+        "omitted_fields_sha256": "bb10e84477d31a62b9e9c3587331c62a773df39522f461ecd31bdb2bef727700"
+      }
+    },
+    {
+      "name": "preferred-runtime-installed-performance-verification.json",
+      "schema": "guard-cigar-preferred-runtime-installed-performance.v1",
+      "captured_record_sha256": "e59c233454c6822d17d7fec4f2d24d2459a3e647796ea7b120c4fc19b1b94bfb",
+      "captured_record_bytes": 199032,
+      "omitted_bytes": 111159,
+      "identity": {
+        "product_source_commit": "486d6d9fbae6fb12d9ae954f19fdde08b7b963ca"
+      },
+      "digests": {
+        "omitted_fields_sha256": "db0cf8e4ce6c243c2ed1c6951f6d4074c7009d8cf9c69cbda295a7d475276912"
+      }
+    },
+    {
+      "name": "preferred-runtime-onefile-context-verification.json",
+      "schema": "guard-cigar-preferred-runtime-onefile-context-verification.v1",
+      "captured_record_sha256": "082eb2f037f5759ea2ba1e126fee047149dee8dab862b39b91a510368add5045",
+      "captured_record_bytes": 284383,
+      "omitted_bytes": 213507,
+      "identity": {
+        "product_source_commit": "486d6d9fbae6fb12d9ae954f19fdde08b7b963ca"
+      },
+      "digests": {
+        "omitted_fields_sha256": "32c3926b868c66dae9fcd6e731b0645cee82217ec4d45b2b7a4cefc2f2dd2ac0"
+      }
+    },
+    {
+      "name": "preferred-runtime-source-verification.json",
+      "schema": "guard-cigar-preferred-runtime-source-verification.v1",
+      "captured_record_sha256": "7b5e8b7d774e0fdb0f41ef379eedf77bfcad7937565bd42921f05d6177707c13",
+      "captured_record_bytes": 217437,
+      "omitted_bytes": 157588,
+      "digests": {
+        "identical_red_green_test_sha256": "21b74ca5e0aadf5480e879278cb6723dee7c44f9ffb17d19fe2f3ef85ae15027",
+        "omitted_fields_sha256": "1abf14ce7aafe8b11606002a8bc5b8e5c12c4b6d3f6bea9afa5aee39450cff0f"
+      }
+    },
+    {
+      "name": "preferred-runtime-transport-diagnostics.json",
+      "schema": "guard-cigar-preferred-runtime-transport-diagnostics.v1",
+      "captured_record_sha256": "0b7b6b31cf61806e23100b93e23a76834883f3e60144bbd198188c332a57959f",
+      "captured_record_bytes": 2442842,
+      "diagnostic_only": true,
+      "omitted_bytes": 590804,
+      "identity": {
+        "product_source_commit": "486d6d9fbae6fb12d9ae954f19fdde08b7b963ca"
+      },
+      "digests": {
+        "omitted_fields_sha256": "ca3f91ca7f6867d655c9cdcce42a4c2edeab74729a3adf874c1c164841a925d4"
+      }
+    },
+    {
+      "name": "private-cache-native-engine-verification.json",
+      "schema": "guard-cigar-private-cache-native-engine-evidence.v1",
+      "captured_record_sha256": "342b9ffe4f1389fc0ebe2b1de3a0eb3c7fef9b4817b1724e8f49e6b64244fd2f",
+      "captured_record_bytes": 10927,
+      "status": "passed",
+      "omitted_bytes": 9715,
+      "digests": {
+        "omitted_fields_sha256": "b7bd3328aabc5da8ac407c8183f34a51370081c4f861645b66282b124aa09da4",
+        "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "private-persistence-native-verification.json",
+      "schema": "guard-cigar-private-persistence-native-evidence.v1",
+      "captured_record_sha256": "f12b514bef49b289737767e7813f1b23c6572e5eaaf3a7e2915f564fa1d8ade8",
+      "captured_record_bytes": 5455,
+      "status": "passed",
+      "identity": {
+        "sdk_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+        "source_sha": "501f08f114e677612393802aa1c2594d99c33796"
+      },
+      "digests": {
+        "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "private-persistence-product-verification.json",
+      "schema": "guard-cigar-private-persistence-product-evidence.v1",
+      "captured_record_sha256": "1f8a920137e3e0542d2283a610a77462a6c55469862b1526d820d0f7fd5a0c4e",
+      "captured_record_bytes": 24887,
+      "status": "passed",
+      "omitted_bytes": 21893,
+      "digests": {
+        "omitted_fields_sha256": "2c53064d5cecdb1780c286db014c31eaf0847e6cb09b2041011cc20a7a4d997a",
+        "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "process-failure-eviction-installed-verification.json",
+      "schema": "guard-cigar-process-failure-eviction-installed-verification.v1",
+      "captured_record_sha256": "456795ff72b02a5728b238095ba41e3c5c4b06b6951aef594993220d96b6c275",
+      "captured_record_bytes": 24005,
+      "status": "Local installed fault containment, native approval fallback and bounded selection/source/graph/idle lifecycle qualified; full integration goal remains active.",
+      "omitted_bytes": 17690,
+      "digests": {
+        "omitted_fields_sha256": "ad05b790831d7ce9730a664d1a66caa709681c857f8edae1a9dbd1933e5b4baf"
+      }
+    },
+    {
+      "name": "runtime-development-verification.json",
+      "schema": "hol-guard.cigar-runtime-development-evidence.v1",
+      "captured_record_sha256": "ff6261d310b6c8249d18eb0c1d4111547c064c5a3a88a007296ccb5d5f158bda",
+      "captured_record_bytes": 4416,
+      "date": "2026-10-23",
+      "identity": {
+        "cigar_source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f"
+      }
+    },
+    {
+      "name": "shared-persistence-restart-verification.json",
+      "schema": "guard-cigar-shared-persistence-restart-evidence.v1",
+      "captured_record_sha256": "57de4a24555d9310f3a714ba8424e811c20c18f6ee8db4e17d7d1439d6c22699",
+      "captured_record_bytes": 4431,
+      "status": "passed",
+      "identity": {
+        "product_source_sha": "5fe31cc14f82c7179173507bdc8d5c0246d4c9f2",
+        "sdk_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+        "test_source_sha": "d3d53e8561fc96db3ae347c97d6cadf2595d3fa9"
+      },
+      "digests": {
+        "binary_sha256": "f9238062be39fc252ff274d8b8e95edbcc77031b3bb994790063d3f773ba6744",
+        "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "wheel_sha256": "abd4c7d4b6a50b61844350e55fcbcc83860c1d0bc8a0ae63bfdd64930d0fcac6",
+        "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      }
+    },
+    {
+      "name": "shared-preferred-installed-functional-verification.json",
+      "schema": "guard-cigar-shared-preferred-installed-functional-verification.v1",
+      "captured_record_sha256": "ff9b9ac231c43162eb06f912684be0c110a7034bf6f4b7be8bacb48b1936dafe",
+      "captured_record_bytes": 67395,
+      "qualified": true,
+      "identity": {
+        "source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616"
+      }
+    },
+    {
+      "name": "shared-preferred-installed-performance-verification.json",
+      "schema": "guard-cigar-shared-preferred-installed-performance.v1",
+      "captured_record_sha256": "6596bea5cb32592528e08459346ad408628691a4f6764dc26f09bc07e7d30fa2",
+      "captured_record_bytes": 201663,
+      "omitted_bytes": 113438,
+      "identity": {
+        "product_source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616"
+      },
+      "digests": {
+        "omitted_fields_sha256": "98d432c3d74f0452b6d0bc1254bdd161d3881a19fe2c1830a1d3cee2394d394d"
+      }
+    },
+    {
+      "name": "shared-preferred-onefile-context-verification.json",
+      "schema": "guard-cigar-shared-preferred-onefile-context-verification.v1",
+      "captured_record_sha256": "5a701736d5459a269c5797390090994083fb2f880c3050a47c8ef7e6b731a97f",
+      "captured_record_bytes": 245626,
+      "omitted_bytes": 188360,
+      "identity": {
+        "product_source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616"
+      },
+      "digests": {
+        "omitted_fields_sha256": "6e03d4e290ce7822e6e4a27c8e67ea57da2b261cd7bff124f8b2dad1d861c6a8"
+      }
+    },
+    {
+      "name": "shared-preferred-source-verification.json",
+      "schema": "guard-cigar-shared-preferred-source-verification.v1",
+      "captured_record_sha256": "c878b5eeb15e733f9d1812f4e2a2a0a30edb2ef38ec1882f868551d2b709cc45",
+      "captured_record_bytes": 430337,
+      "omitted_bytes": 356762,
+      "digests": {
+        "frozen_targeted_test_sha256": "1f9d891fee1284a3ae7285a1456f252c07a5e5db6be26738b586704f0886f178",
+        "omitted_fields_sha256": "bdc4bd88efc9426b6ea08a418f3d3f6346d24a4c98cf0f90ee96cc6e12bbd040"
+      }
+    },
+    {
+      "name": "shared-product-installed-browser-verification.json",
+      "schema": "guard-cigar-sharing-installed-browser-evidence.v1",
+      "captured_record_sha256": "2fb0b7048420d4d8c543cff67abf465ce1285b5962e4f3624633732fd9323526",
+      "captured_record_bytes": 18965,
+      "status": "passed",
+      "omitted_bytes": 16902,
+      "digests": {
+        "omitted_fields_sha256": "65142e8720683956061a21673b8a55acd94c42b5e435ebf0970ce59efe3395a3"
+      }
+    },
+    {
+      "name": "source-actor-verification.json",
+      "schema": "guard-cigar-source-actor-evidence.v1",
+      "captured_record_sha256": "8f8536674d3f204dbe8048334fa59ca660886a469844577b6e2d77e2ee1f1297",
+      "captured_record_bytes": 3971,
+      "observed_date": "2026-10-23"
+    },
+    {
+      "name": "source-churn-installed-verification.json",
+      "schema": "guard-cigar-source-churn-installed-verification.v1",
+      "captured_record_sha256": "60bd65b9474e66785adda071ac2bbcac2ef3dff8630c9ab4c84cbb2aa70e9ebb",
+      "captured_record_bytes": 90221,
+      "status": "source_churn_checkpoint_passed_full_goal_incomplete",
+      "omitted_bytes": 49689,
+      "identity": {
+        "product_source_commit": "95657b30f277604bcd12582e9bbf5d6602c4c433"
+      },
+      "digests": {
+        "omitted_fields_sha256": "01a89f82ffee30b120d1ab9d57e668b11ab15f7c7e63fb05b20385ebf2202fbb"
+      }
+    },
+    {
+      "name": "sparse-http-boundary-verification.json",
+      "schema": "guard-cigar-sparse-http-boundary-verification.v1",
+      "captured_record_sha256": "5715228ce79ef5ffb584cfb0fa273a6538689bfd9b1026abe26f7a3d878fadef",
+      "captured_record_bytes": 17469,
+      "diagnostic_only": true,
+      "omitted_bytes": 13185,
+      "identity": {
+        "product_source_commit": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f"
+      },
+      "digests": {
+        "omitted_fields_sha256": "cb12247c4024c5bbb353013136e1899f4287dc4b4d29b446f228e4bc5eb2278d"
+      }
+    },
+    {
+      "name": "startup-interrupt-source-verification.json",
+      "schema": "guard-cigar-startup-interrupt-source-verification.v1",
+      "captured_record_sha256": "6aaee708947e87ae0e076f16661c40bec1cccd433cd99907ad04bc86fee04207",
+      "captured_record_bytes": 217038,
+      "omitted_bytes": 157739,
+      "digests": {
+        "omitted_fields_sha256": "30ee254d8d6e9a9963bd38ac05dc1a634dc6faec971bbb861c41f8b257bdb773"
+      }
+    },
+    {
+      "name": "stop-generation-installed-verification.json",
+      "schema": "guard-cigar-stop-generation-installed-verification.v1",
+      "captured_record_sha256": "a1e349926595cface27d5982042203c771a8c4dc1cdf9a3bbdef27e217f3e4ab",
+      "captured_record_bytes": 114233,
+      "status": "Local installed native Stop correction qualified by unchanged complete off/on SLO and approval/execution regression suite. Full integration goal remains active.",
+      "omitted_bytes": 70397,
+      "digests": {
+        "omitted_fields_sha256": "3538f2179655fa482dc060c74e309e32d191ff0f6067f4d9d2e087ab931f89b9"
+      }
+    },
+    {
+      "name": "stop-generation-verification.json",
+      "schema": "guard-cigar-stop-generation-verification.v1",
+      "captured_record_sha256": "e024d35962456fd1e6abc95a1f9f6def35366cc122954f726d69498a2a40f10d",
+      "captured_record_bytes": 164478,
+      "identity": {
+        "source_parent": "f21dd1c5"
+      }
+    },
+    {
+      "name": "upgrades-baseline-20261026.json",
+      "schema": "guard-cigar-upgrade-baseline.v1",
+      "captured_record_sha256": "43fe36f5738ad575ff2bdfd603a52eb4ac2b6acd83eeb0c086cc2d4079e3e352",
+      "captured_record_bytes": 16279,
+      "recorded_date": "2026-10-26",
+      "identity": {
+        "branch": "feature/integrate-cigar-0.14.1",
+        "head": "fedfc7a418145ed2f82cb21f9dd38a2dda85e46d"
+      }
+    },
+    {
+      "name": "upgrades-catalog-atomic-20261028.json",
+      "schema": "guard-cigar-catalog-atomic-evidence.v1",
+      "captured_record_sha256": "62315813f34959b0323a3db599ab22a4a95e17d82bf42463aeddda8242aba5fe",
+      "captured_record_bytes": 240818,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T04:19:24.444998+00:00",
+      "omitted_bytes": 178571,
+      "digests": {
+        "actual_sdk_image_sha256": "5f4c5a214546995ffce3b7d6cb7087ae7adeacd945898fd4809a21b9afe3d2b2",
+        "combined_log_sha256": "6547e1876a00dd16c176197d6e5d1e009dd8f8514a7754ecefc4d7c8940a4be0",
+        "execution_log_sha256": "0c52c26fe86165078a71fefb350457e63535f66078237226c22ce5725dbe5d8f",
+        "final_native_image_sha256": "5f4c5a214546995ffce3b7d6cb7087ae7adeacd945898fd4809a21b9afe3d2b2",
+        "omitted_fields_sha256": "18b9c211c416107e6dac5220b8fdd7ceabdb1065a2b3ba4cd816b559e38431b2",
+        "prior_catalog_refresh_receipt_sha256": "195df0bf71e373a09032c59b50d4561e91f6944ef159979a8242561313273fd7"
+      }
+    },
+    {
+      "name": "upgrades-catalog-distribution-20261028.json",
+      "schema": "guard-cigar-catalog-distribution-evidence.v1",
+      "captured_record_sha256": "8d16af4307a7b2c9ab8542ab93abbeff0e62b2eb8269a322d958e0f48f5c8151",
+      "captured_record_bytes": 245368,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T03:19:53.954869+00:00",
+      "omitted_bytes": 181478,
+      "digests": {
+        "actual_sdk_image_sha256": "088ee818c7c51b4083c24d0324d688c4f8f58f0057b1d82f92d7ea714c1dfe08",
+        "combined_log_sha256": "bf513992d74d124d5baa1e59e6b835a969a933a348fc05df9c54d5c60b8f23e0",
+        "execution_log_sha256": "295884407a029387c68fcdf4c47744b14d27c030c23bcf78fb847cb86070f780",
+        "final_native_image_sha256": "088ee818c7c51b4083c24d0324d688c4f8f58f0057b1d82f92d7ea714c1dfe08",
+        "omitted_fields_sha256": "a5776b9cce5916732c1de2f6a19e6211654f18cd391f53c16ef7f3aaa56b717c",
+        "prior_operator_controls_receipt_sha256": "aac0854cef0165c4dd9ca99c8d5dae058190edc5c034c5ff979a76f8f3ce8a41"
+      }
+    },
+    {
+      "name": "upgrades-catalog-refresh-20261028.json",
+      "schema": "guard-cigar-catalog-refresh-evidence.v1",
+      "captured_record_sha256": "195df0bf71e373a09032c59b50d4561e91f6944ef159979a8242561313273fd7",
+      "captured_record_bytes": 240802,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T03:47:46.843149+00:00",
+      "omitted_bytes": 178173,
+      "digests": {
+        "actual_sdk_image_sha256": "9034d973c6a3128c1bf635ee2c15a1ea0878e37111e1d264292474c9651a376e",
+        "combined_log_sha256": "6c519c22b72a38a7d5395129fd8f6697e88743086b1f6d2424db186133023042",
+        "execution_log_sha256": "7bc25513292aac83b3a834ba68e42f00e679d1c45dd5f4d2e1d6e66594f6d96e",
+        "final_native_image_sha256": "9034d973c6a3128c1bf635ee2c15a1ea0878e37111e1d264292474c9651a376e",
+        "omitted_fields_sha256": "1a1d6741b0848432abf5c7a081188b5fa065e8e14e79f341d3331a1b5be7df50",
+        "prior_catalog_distribution_receipt_sha256": "8d16af4307a7b2c9ab8542ab93abbeff0e62b2eb8269a322d958e0f48f5c8151"
+      }
+    },
+    {
+      "name": "upgrades-cleanup-ownership-20261027.json",
+      "schema": "guard-cigar-cleanup-ownership-evidence.v1",
+      "captured_record_sha256": "303f2e2b698ed00d162b0f6c141b9998f520cf0b654a9c5299ad01b1b5261e85",
+      "captured_record_bytes": 98274,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T21:52:10.691580+00:00",
+      "digests": {
+        "combined_log_sha256": "af2a21067a5daac9c4b2c969dad7692a21bd38c36fc650f5069c99fa78f12925",
+        "execution_log_sha256": "5e54c8b9c127858ae17281ef4c18ba0709c42fcfd4786eaa15622b7c9b9cc196",
+        "prior_restoration_receipt_sha256": "f03b8da5e043ed36b391b7262b53425e7be010922170b3f5905f60510f34015d"
+      }
+    },
+    {
+      "name": "upgrades-cold-data-20261028.json",
+      "schema": "guard-cigar-cold-data-evidence.v1",
+      "captured_record_sha256": "447d3535c7434ba5493266210cbe60a906575c3f2cefdac86d9450b0e61ad8f8",
+      "captured_record_bytes": 268525,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T06:54:21.754325+00:00",
+      "omitted_bytes": 201549,
+      "digests": {
+        "actual_sdk_context_image_sha256": "3de115eae0e3bf0238ec0d26d4f14599ca709805c090a16d645ce2fa43190c2b",
+        "actual_sdk_native_image_sha256": "2a1db6579fb12f0a91ac7ad4bca22e8a15924338e39dbad25eb68dbec7f1653a",
+        "cargo_lock_unchanged_sha256": "9bb8d064f4cf43b12ffb8d8732be6752fdd6a9d71cf3e481ebfb9c44e78615be",
+        "combined_log_sha256": "3ba81a63c6e181f17534a33bf913e5965994a53d8caa00ce6b7a38af168d230d",
+        "execution_log_sha256": "0f441f2b844e051ace0fd246b608cfd370b5e43bba832d20c35f4c99d9051968",
+        "final_context_image_sha256": "3de115eae0e3bf0238ec0d26d4f14599ca709805c090a16d645ce2fa43190c2b",
+        "final_native_image_sha256": "2a1db6579fb12f0a91ac7ad4bca22e8a15924338e39dbad25eb68dbec7f1653a",
+        "omitted_fields_sha256": "2b7d5a2921ae7819bd46b78c4df26eb819854eb474735d2b118d6df0d5ecfa6b",
+        "prior_update_preferences_receipt_sha256": "aa65535bb8c4556ee5b3073bb98fcb038f37fa005a6b00af2bb977877303902d"
+      }
+    },
+    {
+      "name": "upgrades-disabled-recovery-20261028.json",
+      "schema": "guard-cigar-disabled-recovery-evidence.v1",
+      "captured_record_sha256": "46b751e74e5e97bc5a6ac8ca21c3d11d11b9bba28022966191f6c50a8ac5ea4d",
+      "captured_record_bytes": 161144,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T20:40:40.911336+00:00",
+      "omitted_bytes": 135775,
+      "digests": {
+        "actual_sdk_image_sha256": "6c98cbd610e6b1b76bc04a1e8559d8b23874297e078e7db9c51b71602b9e82ff",
+        "browser_receipt_sha256": "4f82d96e01e8cd906888b55abc7d11470ba4e9f2bf903d382780f258484e1bda",
+        "combined_log_sha256": "9cfec645efd59e6493eb6ac63362bf893ff2cf2415db9e9eb2d5b51c1744e3ac",
+        "execution_log_sha256": "e9c0a040e8372ab9a0bbf97f237dff7f516fddc6e7b9b6639e0a9532a5a15986",
+        "omitted_fields_sha256": "34a44d9090b0da2fd93a2be3330689a8f05e6bb911b8f572f8ece5c011e9de63",
+        "prior_versions_routing_receipt_sha256": "7be757790156fc1e4880361bd5e5edf35068b60dff76adae4591822804bdb21d"
+      }
+    },
+    {
+      "name": "upgrades-dynamic-scope-20261028.json",
+      "schema": "guard-cigar-dynamic-scope-evidence.v1",
+      "captured_record_sha256": "3a0c1ae0110b080d8da2b23c1a919b37e86978469366f7a6069de911c7ffc81c",
+      "captured_record_bytes": 71422,
+      "recorded_at_utc": "2026-10-28T21:49:32.121021+00:00",
+      "omitted_bytes": 66257,
+      "digests": {
+        "actual_sdk_image_sha256": "b6486445abe6e50955556388accf6c6de51752106cde9b698bbc5563f0f12322",
+        "audit_artifact_sha256": "477686c133ad798a2678a1d2f3e47b613cc3d9d63ef808fc5045650fd6bd1391",
+        "combined_log_sha256": "02cd0ca7b7d4cf6f15c98a7d82cd88894f3f552a0ff7f1e814a80ba4b7721bc6",
+        "execution_log_sha256": "c3983cdc9767e9314d9d5ce82d9e153523cf871ee1d84c3d1b14f71610963b99",
+        "omitted_fields_sha256": "b111894a9bb7e0b9d9bfc054ba3e3373a5b161ccee8544f0edcf992555387d86",
+        "prior_stop_recovery_receipt_sha256": "770e299f186dad24f2dd965f7f925a03090f961e6d9068e97d20bffd296a5e50"
+      }
+    },
+    {
+      "name": "upgrades-engine-preparation-20261027.json",
+      "schema": "guard-cigar-engine-preparation-evidence.v1",
+      "captured_record_sha256": "4b62114c82e561187de1ee0b8153170b22fc5babb793e9e80746c191c89873d5",
+      "captured_record_bytes": 59041,
+      "recorded_at_utc": "2026-10-27T16:55:34.194155+00:00",
+      "omitted_bytes": 50564,
+      "digests": {
+        "combined_log_sha256": "430df594ff4c29d7faaac5e21882fa85bc125aa501de60752216f61366b63218",
+        "omitted_fields_sha256": "97e121cb2556f9407dd5e2c44eaf254bb2cd9fbb080c3909a3775b67f51d5869"
+      }
+    },
+    {
+      "name": "upgrades-evidence-preparation-20261027.json",
+      "schema": "guard-cigar-evidence-preparation-evidence.v1",
+      "captured_record_sha256": "f08dd2c0d6670465f2870d8f9b7d06cf4da41868d95e3003f5dfae1a8ac55ac4",
+      "captured_record_bytes": 41573,
+      "recorded_at_utc": "2026-10-27T14:45:02.536317+00:00",
+      "omitted_bytes": 36360,
+      "digests": {
+        "combined_log_sha256": "0271ed33ee2bedbe578fa74f1a6510a81c86208d63ad9bd0a2a8fb6c4da9b1c4",
+        "omitted_fields_sha256": "0c302ca9862d5ff04f9c50d721dd435bded08b91f91a653fd10bac9e4e536103"
+      }
+    },
+    {
+      "name": "upgrades-final-0.14.1-native-20261026.json",
+      "schema": "guard-cigar-upgrade-native-evidence.v1",
+      "captured_record_sha256": "f0d08d15720ec754ef0d5bbfbaa330658265b32cac77ea435a5a97d4f03efb06",
+      "captured_record_bytes": 17761,
+      "captured_at_utc": "2026-10-27T00:05:52.496292+00:00",
+      "identity": {
+        "branch": "feature/integrate-cigar-0.14.1"
+      },
+      "digests": {
+        "qualification_receipt_sha256": "9e91117562ca22ec39320f5e3d702432454ec57d08d22f79e381420003cbe425",
+        "qualifier_binary_sha256": "5a919d3cc659e145ed9e7d23da90abd691342065dc2bc11074a0efc455c3a4c4"
+      }
+    },
+    {
+      "name": "upgrades-full-erasure-20261027.json",
+      "schema": "guard-cigar-durable-full-erasure-evidence.v1",
+      "captured_record_sha256": "03fda03ba2afdc3f7b2600109497b928479b09e0576de0ebdafae0adad55bb07",
+      "captured_record_bytes": 101631,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T23:23:15.518071+00:00",
+      "digests": {
+        "combined_log_sha256": "ddec90e9950d65e3bf9a53c597008605f6381460ab8c3291f7ebd55572e8cd49",
+        "execution_log_sha256": "b12dd093444e3e24c893a144f3ab3075fec3d0e33b7f67e16f3a518ff15e7f3a",
+        "prior_prepared_recovery_receipt_sha256": "9e1ee797f97c5316050e9e6991a27c91ef27e51c84d2db83e28f99e756324c24"
+      }
+    },
+    {
+      "name": "upgrades-initial-recovery-20261028.json",
+      "schema": "guard-cigar-initial-recovery-evidence.v1",
+      "captured_record_sha256": "b40400115dc55a608b10e58f2dc38d3143c276383d4b31e86b1b49d10d7e4a83",
+      "captured_record_bytes": 302163,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T16:55:21.245295+00:00",
+      "omitted_bytes": 226758,
+      "digests": {
+        "actual_sdk_image_sha256": "e5969592efb0e7785ff896c1e252b84d5e50cddf18551857f1d5a03b41d14541",
+        "cargo_lock_unchanged_sha256": "9bb8d064f4cf43b12ffb8d8732be6752fdd6a9d71cf3e481ebfb9c44e78615be",
+        "combined_log_sha256": "174d9e045cc80f7e2e436bd47c6e59e65b0db9144ecdf950b973eade7e9328f0",
+        "execution_log_sha256": "67859319f9d6c02665caef1bb0d6df2bb00b95088d43f605be0987993934b811",
+        "final_native_image_sha256": "e5969592efb0e7785ff896c1e252b84d5e50cddf18551857f1d5a03b41d14541",
+        "omitted_fields_sha256": "9094e8520fe8161fc6b830bd6b872a83fc21614375696a96741e74d93882f2b3",
+        "prior_initial_selection_receipt_sha256": "b7cdf1d98563857b43cf7c37befd3a9a8feece66f3662e1d43041dffa43fa557"
+      }
+    },
+    {
+      "name": "upgrades-initial-selection-20261028.json",
+      "schema": "guard-cigar-initial-selection-evidence.v1",
+      "captured_record_sha256": "b7cdf1d98563857b43cf7c37befd3a9a8feece66f3662e1d43041dffa43fa557",
+      "captured_record_bytes": 264418,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T16:21:55.799233+00:00",
+      "omitted_bytes": 199160,
+      "digests": {
+        "actual_sdk_image_sha256": "214063eed329049480dfdf34a2d978452dae8a187000f5b4361bdf8e5fa98512",
+        "cargo_lock_unchanged_sha256": "9bb8d064f4cf43b12ffb8d8732be6752fdd6a9d71cf3e481ebfb9c44e78615be",
+        "combined_log_sha256": "bbaa550efec0781d53447c4f73187f6ec41b73cb073004a3fd0dd330759213ab",
+        "execution_log_sha256": "7d354ea6bcac8eb508933427c91844cb72d5be932d496ca799dc0499fe8c23b6",
+        "final_native_image_sha256": "214063eed329049480dfdf34a2d978452dae8a187000f5b4361bdf8e5fa98512",
+        "omitted_fields_sha256": "61a5aa97540ff5be64a5e176a2dcf99c4ac9d6610228757a183571449112afe3",
+        "prior_settings_selection_receipt_sha256": "3c73e4ad4d4c30de9d9d4067733f774bcdb546b124fc56d2019136a480f00ba5"
+      }
+    },
+    {
+      "name": "upgrades-legacy-producer-config-20261027.json",
+      "schema": "guard-cigar-legacy-producer-config-evidence.v1",
+      "captured_record_sha256": "df18a2e6a23daad434c9a21ce3c90c8210520fcd2561cd8d2d992c37a10a438b",
+      "captured_record_bytes": 60329,
+      "recorded_at_utc": "2026-10-27T15:23:59.402974+00:00",
+      "omitted_bytes": 51215,
+      "digests": {
+        "combined_log_sha256": "f815429278bcc7ab75b2be69dbc09cc66099ce9a246f66516fbfbb37696e30c8",
+        "omitted_fields_sha256": "05abf95aa53dd7307cd21c1cfb1efabc117d6e97f50dc98cea9d8f15174081ab"
+      }
+    },
+    {
+      "name": "upgrades-live-rollback-20261027.json",
+      "schema": "guard-cigar-live-rollback-evidence.v1",
+      "captured_record_sha256": "336a08901cdd0352718ac1be88a17a6cb03de311616c17af33ee61e1e04e6a90",
+      "captured_record_bytes": 98851,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T20:53:24.408251+00:00",
+      "digests": {
+        "combined_log_sha256": "b61fce9e1a807dd117f5771031d97902594a5ac777439bddf2554010ce06b71b"
+      }
+    },
+    {
+      "name": "upgrades-live-service-switch-20261027.json",
+      "schema": "guard-cigar-live-service-switch-evidence.v1",
+      "captured_record_sha256": "5b793678813d8a9f4b897b6addf4b22707a854be277906dc8f7be562bf31c386",
+      "captured_record_bytes": 98468,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T19:24:28.807703+00:00",
+      "digests": {
+        "combined_log_sha256": "540050e5c0c8d6e39b2b4274a422ca6cdc14e9ebdbd83dd923433d45794dbe21"
+      }
+    },
+    {
+      "name": "upgrades-managed-python-20261026.json",
+      "schema": "guard-cigar-managed-python-evidence.v1",
+      "captured_record_sha256": "32b681cbd65e58d6b700c45b7a0388601328371934fe70ae5f1a2487f62994ec",
+      "captured_record_bytes": 30799,
+      "recorded_at_utc": "2026-10-27T05:04:36.496856+00:00",
+      "omitted_bytes": 26744,
+      "digests": {
+        "omitted_fields_sha256": "ed2bde71f0ccbf0bdcac229b6569b2e2ae72f4a786a9e7954ace60c169e4e060"
+      }
+    },
+    {
+      "name": "upgrades-memory-service-switch-20261027.json",
+      "schema": "guard-cigar-memory-service-switch-evidence.v1",
+      "captured_record_sha256": "44cc312910a43a0a6e360bb0c22fecc09fadc950219530d80165098d417931ee",
+      "captured_record_bytes": 95051,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T20:09:54.263450+00:00",
+      "digests": {
+        "combined_log_sha256": "4ad9f47bc1f713cd20e8f62d11faa333d92be74a43d6dbd11b03421f33053d7b"
+      }
+    },
+    {
+      "name": "upgrades-native-acquisition-20261026.json",
+      "schema": "guard-cigar-native-acquisition-evidence.v1",
+      "captured_record_sha256": "cc72001fe1917c63c49ad535babf8d88c1b5aab5f4775b6e09d5f2777c91dca8",
+      "captured_record_bytes": 15698,
+      "recorded_at_utc": "2026-10-27T02:08:34.330264+00:00",
+      "identity": {
+        "branch": "feature/integrate-cigar-0.14.1"
+      }
+    },
+    {
+      "name": "upgrades-native-install-jobs-20261026.json",
+      "schema": "guard-cigar-install-job-evidence.v1",
+      "captured_record_sha256": "5bfd0cc542d9cecbe7b44fb26efd4c85af073f793d7be731d5c33bca46988f88",
+      "captured_record_bytes": 11783,
+      "identity": {
+        "branch": "feature/integrate-cigar-0.14.1"
+      }
+    },
+    {
+      "name": "upgrades-native-selection-20261027.json",
+      "schema": "guard-cigar-native-selection-evidence.v1",
+      "captured_record_sha256": "1e776372c5378f9fb42b893747fe48c4a37eacd2ab769052208ab9fdda4e624e",
+      "captured_record_bytes": 75235,
+      "recorded_at_utc": "2026-10-27T18:03:14.278889+00:00",
+      "omitted_bytes": 64463,
+      "digests": {
+        "combined_log_sha256": "ba5f2712be85d2dcb78cb065ad047ca92cf0560fda7e667fce88e0d63dc5873b",
+        "omitted_fields_sha256": "0821b215f296d063a20ffe4ff41bd88b10240d288059d41633c0d993b27943da"
+      }
+    },
+    {
+      "name": "upgrades-off-state-selection-20261028.json",
+      "schema": "guard-cigar-off-state-selection-evidence.v1",
+      "captured_record_sha256": "c6d22a562419cc8bb22ec6495d919cb91e686ebe1f6e6f8a0420e8ea79b0e147",
+      "captured_record_bytes": 267957,
+      "goal_status": "unfinished; continuing after user resume",
+      "recorded_at_utc": "2026-10-28T14:13:39.123116+00:00",
+      "omitted_bytes": 201419,
+      "digests": {
+        "actual_sdk_cold_image_sha256": "a532acc60ebf961cb09fc08358c64c06c58e3517c02d7055811a775e2c950931",
+        "actual_sdk_live_companion_image_sha256": "18fe699feddf225510e4f926a3cbb6643c18ef2a5a55b6dba992a9a2b96a2aac",
+        "cargo_lock_unchanged_sha256": "9bb8d064f4cf43b12ffb8d8732be6752fdd6a9d71cf3e481ebfb9c44e78615be",
+        "combined_log_sha256": "51a2aa1ba6b74ba6b9b82191b41247afb06de03b065c900f732d5c6ae2133e5c",
+        "execution_log_sha256": "9c36bf1f8f88576c6e87508d8deae36c899bf17dc35e9505da1d22e4464fc261",
+        "final_context_image_sha256": "595212a318f21e84a3d86e6250ec3d5d2b099a73683b5c2d5225fba306481b01",
+        "final_native_image_sha256": "a532acc60ebf961cb09fc08358c64c06c58e3517c02d7055811a775e2c950931",
+        "omitted_fields_sha256": "1b38b578e203b758752087cc29266b26d091d8ee8cb840dab9fa714f21b37285",
+        "prior_cold_data_receipt_sha256": "447d3535c7434ba5493266210cbe60a906575c3f2cefdac86d9450b0e61ad8f8"
+      }
+    },
+    {
+      "name": "upgrades-operator-controls-20261028.json",
+      "schema": "guard-cigar-operator-controls-evidence.v1",
+      "captured_record_sha256": "aac0854cef0165c4dd9ca99c8d5dae058190edc5c034c5ff979a76f8f3ce8a41",
+      "captured_record_bytes": 231978,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T01:31:06.547912+00:00",
+      "omitted_bytes": 169980,
+      "digests": {
+        "actual_sdk_image_sha256": "152a91a12c099b92f73790c8a3e20db42e1339c9962c737cab75c591d6261e2f",
+        "combined_log_sha256": "cb227000cb13af8d658c209c9e2e06035afb047e46499e7a35144593a228376d",
+        "execution_log_sha256": "c7b282ad2a7b0229985461ff7e568a893296f84a2e9fc37e4b34a2ea02892059",
+        "final_native_image_sha256": "d64d5617fdffd25963bf4d9456bd10ba90485a1794abb195e204b66bd087bb77",
+        "omitted_fields_sha256": "aa2196213c071934e7908164fdf3ad4327e71f6e75e6ad048c33c7371d46fe59",
+        "prior_scoped_deletion_receipt_sha256": "12c705db80efcf700b7d80a3dae067aea0c1846f36799f369fe25b237d5769fb"
+      }
+    },
+    {
+      "name": "upgrades-prepared-recovery-20261027.json",
+      "schema": "guard-cigar-prepared-recovery-evidence.v1",
+      "captured_record_sha256": "9e1ee797f97c5316050e9e6991a27c91ef27e51c84d2db83e28f99e756324c24",
+      "captured_record_bytes": 108543,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T22:50:08.967935+00:00",
+      "digests": {
+        "combined_log_sha256": "c87e5c9cb2e68a0d2592f6f549ecee5f6a1c5e4793a8ac62bba810a48a510c50",
+        "execution_log_sha256": "2220fe6d2a5be6f9f8a0dea12d4c2342db19b30cdf83ca0b9b4a30845d35d64c",
+        "prior_cleanup_receipt_sha256": "303f2e2b698ed00d162b0f6c141b9998f520cf0b654a9c5299ad01b1b5261e85"
+      }
+    },
+    {
+      "name": "upgrades-private-python-20261026.json",
+      "schema": "guard-cigar-private-python-evidence.v1",
+      "captured_record_sha256": "e6b416326b45dbf45f5590a35162d02739eac29792f616d4038444bba3ee0c4a",
+      "captured_record_bytes": 27095,
+      "recorded_at_utc": "2026-10-27T03:47:56.685508+00:00",
+      "omitted_bytes": 23581,
+      "digests": {
+        "omitted_fields_sha256": "15bb9aa326e82ebe10d0d6ceedf5d5457d4e634e569444a4bc91a30e24b24342"
+      }
+    },
+    {
+      "name": "upgrades-python-compatibility-20261026.json",
+      "schema": "guard-cigar-native-python-compatibility-evidence.v1",
+      "captured_record_sha256": "30c8f0af93ff6c3a8ad40081a67604b9025fdf700d453a4a9ba4a4184014f1fd",
+      "captured_record_bytes": 18100,
+      "recorded_at_utc": "2026-10-27T02:29:37.372612+00:00",
+      "omitted_bytes": 16100,
+      "digests": {
+        "omitted_fields_sha256": "696d7897d4c204804050c276471c7da28d7755f58b06e0088faab4d0eb0c0299",
+        "previous_acquisition_evidence_sha256": "cc72001fe1917c63c49ad535babf8d88c1b5aab5f4775b6e09d5f2777c91dca8"
+      }
+    },
+    {
+      "name": "upgrades-requalification-20261026.json",
+      "schema": "guard-cigar-requalification-evidence.v1",
+      "captured_record_sha256": "b04320900ed5dbcbed966d002ec2e0d81676d62ec7a3cab5d88f43f330d2b2ba",
+      "captured_record_bytes": 35002,
+      "recorded_at_utc": "2026-10-27T06:12:40.558679+00:00",
+      "omitted_bytes": 30703,
+      "digests": {
+        "omitted_fields_sha256": "8df6498a61874d4e677c05d5200785c40d0d07e8b806d055e91c46ad96140c68"
+      }
+    },
+    {
+      "name": "upgrades-scope-erasure-primitives-20261027.json",
+      "schema": "guard-cigar-scope-erasure-primitives-evidence.v1",
+      "captured_record_sha256": "b558e7cc407387fc9c0956f5cacbd25c1477bdc8322070ec0492f9a8d0273819",
+      "captured_record_bytes": 106068,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T23:55:07.537259+00:00",
+      "digests": {
+        "combined_log_sha256": "86feff7c8b5ab2cd66b32042b69ab5433acc088227f4a418e803eec44b0acc91",
+        "execution_log_sha256": "0093f9a1f84fb3cc56391b827840e36fc2916445ac341518e004b456a5822dc9",
+        "prior_full_erasure_receipt_sha256": "03fda03ba2afdc3f7b2600109497b928479b09e0576de0ebdafae0adad55bb07"
+      }
+    },
+    {
+      "name": "upgrades-scoped-deletion-20261028.json",
+      "schema": "guard-cigar-integrated-scoped-deletion-evidence.v1",
+      "captured_record_sha256": "12c705db80efcf700b7d80a3dae067aea0c1846f36799f369fe25b237d5769fb",
+      "captured_record_bytes": 146676,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T01:07:43.775515+00:00",
+      "digests": {
+        "combined_log_sha256": "ef8fbf26df025e5266aeda7e32ea896d5991ee609f9ccf8abcfcf78ed14c3a12",
+        "execution_log_sha256": "c7b25fd71504b7f768cb8f0179f5ab872a22ce923b77733b1f8ee7b6981c9fcf",
+        "prior_scope_primitive_receipt_sha256": "b558e7cc407387fc9c0956f5cacbd25c1477bdc8322070ec0492f9a8d0273819"
+      }
+    },
+    {
+      "name": "upgrades-settings-opt-in-20261028.json",
+      "schema": "guard-cigar-settings-opt-in-evidence.v1",
+      "captured_record_sha256": "9b5363729d69522cc58718a8dcc8c9801af65dd670ca4a95f1056523a9025f05",
+      "captured_record_bytes": 264953,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T05:00:53.354492+00:00",
+      "omitted_bytes": 196333,
+      "digests": {
+        "actual_sdk_image_sha256": "a8674bba151541305127e2bfc345d4a1d7aaf57e21b1d11a99fd675bac504cc6",
+        "cargo_lock_unchanged_sha256": "9bb8d064f4cf43b12ffb8d8732be6752fdd6a9d71cf3e481ebfb9c44e78615be",
+        "combined_log_sha256": "35b964b3b59d4f61b73b6153ba4e1a128bf1b0bafcc64ea7f15599223d96693f",
+        "execution_log_sha256": "6d5e77bedf1267b74af8c43c9ab48777b9654829d336ed2c1a69730971243061",
+        "final_native_image_sha256": "a8674bba151541305127e2bfc345d4a1d7aaf57e21b1d11a99fd675bac504cc6",
+        "omitted_fields_sha256": "43d8df2410099e532435ff4fb32e5edc800253eb44f7d99554388c4b7d75e2fc",
+        "prior_atomic_catalog_receipt_sha256": "62315813f34959b0323a3db599ab22a4a95e17d82bf42463aeddda8242aba5fe"
+      }
+    },
+    {
+      "name": "upgrades-settings-selection-20261028.json",
+      "schema": "guard-cigar-settings-selection-evidence.v1",
+      "captured_record_sha256": "3c73e4ad4d4c30de9d9d4067733f774bcdb546b124fc56d2019136a480f00ba5",
+      "captured_record_bytes": 268158,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T14:28:33.262665+00:00",
+      "omitted_bytes": 200033,
+      "digests": {
+        "actual_sdk_image_sha256": "6ee66484e4e69c3d16a119253a58d6f4007bb814ce5d81126ef12b276dbe0830",
+        "cargo_lock_unchanged_sha256": "9bb8d064f4cf43b12ffb8d8732be6752fdd6a9d71cf3e481ebfb9c44e78615be",
+        "combined_log_sha256": "a2bc5980a7e396faba48e6c79578fed9cf389643a7fd9b98d92df1865db46a6d",
+        "execution_log_sha256": "5f361337b1d5055d2bc47cfd255bda5b46baddad0336d9e5153b3206f94ba53a",
+        "final_native_image_sha256": "6ee66484e4e69c3d16a119253a58d6f4007bb814ce5d81126ef12b276dbe0830",
+        "omitted_fields_sha256": "a02459d58a6511d33089563a296a8c2b1dd82f0c922f91001e737c6c9c5fa516",
+        "prior_off_state_receipt_sha256": "c6d22a562419cc8bb22ec6495d919cb91e686ebe1f6e6f8a0420e8ea79b0e147"
+      }
+    },
+    {
+      "name": "upgrades-source-restoration-20261027.json",
+      "schema": "guard-cigar-source-restoration-evidence.v1",
+      "captured_record_sha256": "f03b8da5e043ed36b391b7262b53425e7be010922170b3f5905f60510f34015d",
+      "captured_record_bytes": 108909,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-27T21:27:35.214232+00:00",
+      "digests": {
+        "combined_log_sha256": "2a8cc371281c7e7a8f9b4c4c7df7e9e06b46592f297ce7cd433569367ee66715",
+        "execution_log_sha256": "d4a591d63c93037e21d8e2ab1ed40a218c64bb21e9518fba698b1be0f48c7c7e"
+      }
+    },
+    {
+      "name": "upgrades-stop-recovery-20261028.json",
+      "schema": "guard-cigar-stop-recovery-evidence.v1",
+      "captured_record_sha256": "770e299f186dad24f2dd965f7f925a03090f961e6d9068e97d20bffd296a5e50",
+      "captured_record_bytes": 182388,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T21:41:43.889631+00:00",
+      "omitted_bytes": 152536,
+      "digests": {
+        "actual_sdk_companion_receipt_sha256": "197a4d97a0aa5bb49ba5f2d6ace326e77ce7cfb5ce7fbede29037da37102f2a5",
+        "actual_sdk_image_sha256": "b6486445abe6e50955556388accf6c6de51752106cde9b698bbc5563f0f12322",
+        "browser_receipt_sha256": "5791b245fdd3553eb6a28221e72659f4c2e70ab756c65165b3f409222a9071cd",
+        "combined_log_sha256": "3746ca69925d9486c14601cc812ae04734c698d4e16b9d8c04618626b277dbe6",
+        "execution_log_sha256": "60a2c23172eec3422230e1ecf740f8a268165d753d35117c22b252f8022f8a6e",
+        "omitted_fields_sha256": "42bc8287886bb33efeabf3b38b7bfb1a71bad903920ea6e18eb0e128d6278aee",
+        "prior_disabled_recovery_receipt_sha256": "46b751e74e5e97bc5a6ac8ca21c3d11d11b9bba28022966191f6c50a8ac5ea4d",
+        "retained_prior_image_companion_batch_sha256": "c9fe36d98790a5ee1b966888e6f66a08dab9994c1bbdfc0ba7644aa25b2186ee"
+      }
+    },
+    {
+      "name": "upgrades-update-preferences-20261028.json",
+      "schema": "guard-cigar-update-preferences-evidence.v1",
+      "captured_record_sha256": "aa65535bb8c4556ee5b3073bb98fcb038f37fa005a6b00af2bb977877303902d",
+      "captured_record_bytes": 257882,
+      "goal_status": "active",
+      "recorded_at_utc": "2026-10-28T05:28:19.474600+00:00",
+      "omitted_bytes": 192830,
+      "digests": {
+        "actual_sdk_image_sha256": "ec1abe365970f48ecca66001d2d549109b164a009c07e4b7f8815947beebcd58",
+        "cargo_lock_unchanged_sha256": "9bb8d064f4cf43b12ffb8d8732be6752fdd6a9d71cf3e481ebfb9c44e78615be",
+        "combined_log_sha256": "6a3b2d0e9c2263f6a4a3554517240677f4736cb95512af1c5bc9101d6ac54f1f",
+        "execution_log_sha256": "42231305aedd55ae7cb769115d5f17c5fc162725797cec0de95cbb90cc1a2da3",
+        "final_native_image_sha256": "ec1abe365970f48ecca66001d2d549109b164a009c07e4b7f8815947beebcd58",
+        "omitted_fields_sha256": "b22b09f88a02f482f9b8d8e6325926fa6bd6295f7f72768637616c0bfd07a6d3",
+        "prior_settings_opt_in_receipt_sha256": "9b5363729d69522cc58718a8dcc8c9801af65dd670ca4a95f1056523a9025f05"
+      }
+    },
+    {
+      "name": "upgrades-versions-client-20261028.json",
+      "schema": "guard-cigar-versions-client-evidence.v1",
+      "captured_record_sha256": "d8c240e3bb3b96f469e4beab99e1d4a7d36a9c239678a222d1d8c3fa18f0f10a",
+      "captured_record_bytes": 84473,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T17:13:26.772858+00:00",
+      "omitted_bytes": 77265,
+      "digests": {
+        "combined_log_sha256": "15602d357897828c023d91c85aa14f9c30ba3f69b3b624dad7bcd022ab1bdbf2",
+        "execution_log_sha256": "57c34ebd83e3050f21418f59a91a396ac4da234ada9fb832dc9bd5705161a141",
+        "omitted_fields_sha256": "c9ee1b3890ee9ceb4b17850e2bb10302cd646a1628628f2048ceee3450ed7a52",
+        "prior_actual_sdk_image_sha256": "e5969592efb0e7785ff896c1e252b84d5e50cddf18551857f1d5a03b41d14541",
+        "prior_initial_recovery_receipt_sha256": "b40400115dc55a608b10e58f2dc38d3143c276383d4b31e86b1b49d10d7e4a83"
+      }
+    },
+    {
+      "name": "upgrades-versions-routing-20261028.json",
+      "schema": "guard-cigar-versions-routing-evidence.v1",
+      "captured_record_sha256": "7be757790156fc1e4880361bd5e5edf35068b60dff76adae4591822804bdb21d",
+      "captured_record_bytes": 131027,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T18:36:46.880365+00:00",
+      "omitted_bytes": 111631,
+      "digests": {
+        "actual_sdk_image_sha256": "e5969592efb0e7785ff896c1e252b84d5e50cddf18551857f1d5a03b41d14541",
+        "combined_log_sha256": "451cdf2474ca511675fcdbae93e91d3eb454be9fcb76aca2b0e97f33bc0a32ff",
+        "execution_log_sha256": "86809f155b0f90a1bc6168f29cbab70204c6b3e0be41dbca3c65062d8c0919fe",
+        "native_metadata_test_image_sha256": "29eb21592c01f8202b250c6d4870a84c6df4bc4fd4cbeca73245bef9a1c8982a",
+        "omitted_fields_sha256": "7a96c7707aaae022388036c9305e1dea6f521320b004252893c64fc3b93a5116",
+        "prior_versions_ui_receipt_sha256": "3d9f594e4103cbf9e95d35b3ccd677d39a524c46dfea5d2ffb84351a5e05160d"
+      }
+    },
+    {
+      "name": "upgrades-versions-ui-20261028.json",
+      "schema": "guard-cigar-versions-ui-evidence.v1",
+      "captured_record_sha256": "3d9f594e4103cbf9e95d35b3ccd677d39a524c46dfea5d2ffb84351a5e05160d",
+      "captured_record_bytes": 163517,
+      "goal_status": "unfinished; continuing user-authorized objective",
+      "recorded_at_utc": "2026-10-28T18:15:41.348600+00:00",
+      "omitted_bytes": 135843,
+      "digests": {
+        "actual_sdk_image_sha256": "e5969592efb0e7785ff896c1e252b84d5e50cddf18551857f1d5a03b41d14541",
+        "combined_log_sha256": "06ce81ca19cc001d374c2b7062153600af699d667a3619aa3830fc0877aa1b1a",
+        "execution_log_sha256": "ccd8da1091eae547b5f3f3a4a0f29407e73f23137cfaa37ba05b056a89743251",
+        "native_metadata_test_image_sha256": "29eb21592c01f8202b250c6d4870a84c6df4bc4fd4cbeca73245bef9a1c8982a",
+        "omitted_fields_sha256": "09a009b8bdd588609ac04776be5181c94318dfab5089b2cb5448eb1f83364654",
+        "previous_initial_recovery_receipt_sha256": "b40400115dc55a608b10e58f2dc38d3143c276383d4b31e86b1b49d10d7e4a83",
+        "previous_ui_client_receipt_sha256": "d8c240e3bb3b96f469e4beab99e1d4a7d36a9c239678a222d1d8c3fa18f0f10a"
+      }
+    },
+    {
+      "name": "useful-project-docs-installed-verification.json",
+      "schema": "guard-cigar-useful-project-docs-verification.v1",
+      "captured_record_sha256": "8c5cd7b9bfee5072e0c565bddcba2647c9dcb070b5ccd3d776d5ed6e92de98ce",
+      "captured_record_bytes": 41069,
+      "identity": {
+        "source_commit": "0e33844cbc353a23ff06d935ac8efd85db9cc0dc"
+      }
+    },
+    {
+      "name": "worker-development-build.json",
+      "schema": "hol-guard.cigar-worker-development-build.v1",
+      "captured_record_sha256": "66c83e5fec5dd014ba41716cb58d47e4c14814dcdd19ceedd39106e5176c1b2d",
+      "captured_record_bytes": 1084,
+      "created_at_utc": "2026-10-23T14:44:43+00:00",
+      "identity": {
+        "source_revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f"
+      },
+      "digests": {
+        "source_lock_sha256": "3440e5619a21e4af687ebb4ed763f3f3488c84db85a024e58d55b1fe4be6eb2e"
+      }
+    },
+    {
+      "name": "worker-priority-diagnostic-verification.json",
+      "schema": "guard-cigar-worker-priority-diagnostic-verification.v1",
+      "captured_record_sha256": "24bb19751db99036237e80c42f257c2aec2ef172085e0920ba7b233a65ec3bca",
+      "captured_record_bytes": 113955,
+      "diagnostic_only": true,
+      "identity": {
+        "native_source_commit": "4c4db2d99f8e500c477704e33f79f8bc56fc4871"
+      }
+    }
+  ],
+  "logs": [
+    {
+      "name": "upgrades-catalog-atomic-20261028.log",
+      "sha256": "6547e1876a00dd16c176197d6e5d1e009dd8f8514a7754ecefc4d7c8940a4be0",
+      "bytes": 667641
+    },
+    {
+      "name": "upgrades-catalog-distribution-20261028.log",
+      "sha256": "bf513992d74d124d5baa1e59e6b835a969a933a348fc05df9c54d5c60b8f23e0",
+      "bytes": 700102
+    },
+    {
+      "name": "upgrades-catalog-refresh-20261028.log",
+      "sha256": "6c519c22b72a38a7d5395129fd8f6697e88743086b1f6d2424db186133023042",
+      "bytes": 691071
+    },
+    {
+      "name": "upgrades-cleanup-ownership-20261027.log",
+      "sha256": "af2a21067a5daac9c4b2c969dad7692a21bd38c36fc650f5069c99fa78f12925",
+      "bytes": 757811
+    },
+    {
+      "name": "upgrades-cold-data-20261028.log",
+      "sha256": "3ba81a63c6e181f17534a33bf913e5965994a53d8caa00ce6b7a38af168d230d",
+      "bytes": 854008
+    },
+    {
+      "name": "upgrades-disabled-recovery-20261028.log",
+      "sha256": "9cfec645efd59e6493eb6ac63362bf893ff2cf2415db9e9eb2d5b51c1744e3ac",
+      "bytes": 759832
+    },
+    {
+      "name": "upgrades-dynamic-scope-20261028.log",
+      "sha256": "02cd0ca7b7d4cf6f15c98a7d82cd88894f3f552a0ff7f1e814a80ba4b7721bc6",
+      "bytes": 9972
+    },
+    {
+      "name": "upgrades-engine-preparation-20261027.log",
+      "sha256": "430df594ff4c29d7faaac5e21882fa85bc125aa501de60752216f61366b63218",
+      "bytes": 667217
+    },
+    {
+      "name": "upgrades-evidence-preparation-20261027.log",
+      "sha256": "0271ed33ee2bedbe578fa74f1a6510a81c86208d63ad9bd0a2a8fb6c4da9b1c4",
+      "bytes": 182925
+    },
+    {
+      "name": "upgrades-full-erasure-20261027.log",
+      "sha256": "ddec90e9950d65e3bf9a53c597008605f6381460ab8c3291f7ebd55572e8cd49",
+      "bytes": 781840
+    },
+    {
+      "name": "upgrades-initial-recovery-20261028.log",
+      "sha256": "174d9e045cc80f7e2e436bd47c6e59e65b0db9144ecdf950b973eade7e9328f0",
+      "bytes": 1680855
+    },
+    {
+      "name": "upgrades-initial-selection-20261028.log",
+      "sha256": "bbaa550efec0781d53447c4f73187f6ec41b73cb073004a3fd0dd330759213ab",
+      "bytes": 778640
+    },
+    {
+      "name": "upgrades-interpreter-catalog-native-20261026.log",
+      "sha256": "cb95723541c71c4e25d952aa97d79eb20b9bec1c7afcbb5c952b00145a125a9d",
+      "bytes": 11474
+    },
+    {
+      "name": "upgrades-legacy-producer-config-20261027.log",
+      "sha256": "f815429278bcc7ab75b2be69dbc09cc66099ce9a246f66516fbfbb37696e30c8",
+      "bytes": 654827
+    },
+    {
+      "name": "upgrades-live-rollback-20261027.log",
+      "sha256": "b61fce9e1a807dd117f5771031d97902594a5ac777439bddf2554010ce06b71b",
+      "bytes": 205575
+    },
+    {
+      "name": "upgrades-live-service-switch-20261027.log",
+      "sha256": "540050e5c0c8d6e39b2b4274a422ca6cdc14e9ebdbd83dd923433d45794dbe21",
+      "bytes": 250074
+    },
+    {
+      "name": "upgrades-managed-python-20261026.log",
+      "sha256": "bc3203b11a8152f358bf9e9c10497245e37600ddc0d851b5282f4da6c00a6d53",
+      "bytes": 14228
+    },
+    {
+      "name": "upgrades-managed-python-timing-20261026.log",
+      "sha256": "61995a4059a04631d963a13ac59a3613012834ec03c46baec4a352407b2c7c26",
+      "bytes": 2359
+    },
+    {
+      "name": "upgrades-memory-service-switch-20261027.log",
+      "sha256": "4ad9f47bc1f713cd20e8f62d11faa333d92be74a43d6dbd11b03421f33053d7b",
+      "bytes": 235719
+    },
+    {
+      "name": "upgrades-native-acquisition-20261026.log",
+      "sha256": "5f963b40dd243849b52a3b9e3539a5663434e3aee70b3752ed2e94e0d4d551e3",
+      "bytes": 9897
+    },
+    {
+      "name": "upgrades-native-install-jobs-20261026.log",
+      "sha256": "355305986adf8fd43e3b007118b7ce1f8fdb80264c9a6738324c4248929e0663",
+      "bytes": 8630
+    },
+    {
+      "name": "upgrades-native-selection-20261027.log",
+      "sha256": "ba5f2712be85d2dcb78cb065ad047ca92cf0560fda7e667fce88e0d63dc5873b",
+      "bytes": 723139
+    },
+    {
+      "name": "upgrades-off-state-selection-20261028.log",
+      "sha256": "51a2aa1ba6b74ba6b9b82191b41247afb06de03b065c900f732d5c6ae2133e5c",
+      "bytes": 840933
+    },
+    {
+      "name": "upgrades-operator-controls-20261028.log",
+      "sha256": "cb227000cb13af8d658c209c9e2e06035afb047e46499e7a35144593a228376d",
+      "bytes": 639721
+    },
+    {
+      "name": "upgrades-prepared-recovery-20261027.log",
+      "sha256": "c87e5c9cb2e68a0d2592f6f549ecee5f6a1c5e4793a8ac62bba810a48a510c50",
+      "bytes": 800852
+    },
+    {
+      "name": "upgrades-private-python-20261026.log",
+      "sha256": "b7f284a6ffcd3eac52c150ad7245020034de2ce804b7bd0823a352b44ad6ef0c",
+      "bytes": 4143
+    },
+    {
+      "name": "upgrades-python-compatibility-20261026.log",
+      "sha256": "a16b5a7bd401f5889fc60aaf441f7f2f7ac61de0f6e49554a655de0f5fbfeeba",
+      "bytes": 10677
+    },
+    {
+      "name": "upgrades-python-compatibility-development-failure-20261026.log",
+      "sha256": "5c9b651387069b236ce53efd2382356b91597b9ed643808a7ab90c12c7cc8412",
+      "bytes": 12468
+    },
+    {
+      "name": "upgrades-requalification-20261026.log",
+      "sha256": "ad4f9eee24391849c4b4aec77e3faa850a63a326d2b543b40a509874bcdabef7",
+      "bytes": 16201
+    },
+    {
+      "name": "upgrades-requalification-checks-20261026.log",
+      "sha256": "57753f6f94f587b6607e2371a5bcf9021a08c30a5016e926b4bc77ea6c436e04",
+      "bytes": 52215
+    },
+    {
+      "name": "upgrades-requalification-development-native-requalification-all-v2-test-output.log",
+      "sha256": "134dfd0fc92b130b5281d72153ecfead4f2a11f0ede96976d701192fdedbf48c",
+      "bytes": 17085
+    },
+    {
+      "name": "upgrades-requalification-development-requalification-final-context-clippy.log",
+      "sha256": "71527a1fa7f78c85a0618eef5bd7505a90f4029de986d45a4ba7165bb1c5a4a2",
+      "bytes": 3037
+    },
+    {
+      "name": "upgrades-scope-erasure-primitives-20261027.log",
+      "sha256": "86feff7c8b5ab2cd66b32042b69ab5433acc088227f4a418e803eec44b0acc91",
+      "bytes": 811303
+    },
+    {
+      "name": "upgrades-scoped-deletion-20261028.log",
+      "sha256": "ef8fbf26df025e5266aeda7e32ea896d5991ee609f9ccf8abcfcf78ed14c3a12",
+      "bytes": 1437209
+    },
+    {
+      "name": "upgrades-settings-opt-in-20261028.log",
+      "sha256": "35b964b3b59d4f61b73b6153ba4e1a128bf1b0bafcc64ea7f15599223d96693f",
+      "bytes": 1160393
+    },
+    {
+      "name": "upgrades-settings-selection-20261028.log",
+      "sha256": "a2bc5980a7e396faba48e6c79578fed9cf389643a7fd9b98d92df1865db46a6d",
+      "bytes": 1139277
+    },
+    {
+      "name": "upgrades-source-restoration-20261027.log",
+      "sha256": "2a8cc371281c7e7a8f9b4c4c7df7e9e06b46592f297ce7cd433569367ee66715",
+      "bytes": 784195
+    },
+    {
+      "name": "upgrades-stop-recovery-20261028.log",
+      "sha256": "3746ca69925d9486c14601cc812ae04734c698d4e16b9d8c04618626b277dbe6",
+      "bytes": 799138
+    },
+    {
+      "name": "upgrades-update-preferences-20261028.log",
+      "sha256": "6a3b2d0e9c2263f6a4a3554517240677f4736cb95512af1c5bc9101d6ac54f1f",
+      "bytes": 720500
+    },
+    {
+      "name": "upgrades-versions-client-20261028.log",
+      "sha256": "15602d357897828c023d91c85aa14f9c30ba3f69b3b624dad7bcd022ab1bdbf2",
+      "bytes": 73857
+    },
+    {
+      "name": "upgrades-versions-routing-20261028.log",
+      "sha256": "451cdf2474ca511675fcdbae93e91d3eb454be9fcb76aca2b0e97f33bc0a32ff",
+      "bytes": 28614
+    },
+    {
+      "name": "upgrades-versions-ui-20261028.log",
+      "sha256": "06ce81ca19cc001d374c2b7062153600af699d667a3619aa3830fc0877aa1b1a",
+      "bytes": 178703
+    }
+  ]
+}

@@ -22,6 +22,13 @@ use crate::guard_config_update_value::{from_toml_table, render, set, Tv};
 use crate::package_authority_config::{merge_config_payload, HOME_CONFIG_FILENAME};
 use crate::pyjson::{self, PyVal};
 
+#[path = "guard_config_update_assistance_preflight.rs"]
+mod assistance_preflight;
+#[path = "guard_config_update_io.rs"]
+pub(crate) mod io;
+#[cfg(test)]
+pub(crate) use assistance_preflight::with_publication_hook;
+
 const SCHEMA: &str = "guard-config-update.v1";
 const MAX_REQUEST_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_CONFIG_BYTES: usize = 1024 * 1024;
@@ -80,6 +87,10 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     let response = match write(&request, &value) {
         Ok(previous) => json!({"ok": true, "previous": previous}),
         Err(Failure::Invalid(message)) => json!({"ok": false, "invalid": message}),
+        Err(Failure::Error(reason)) if reason == "native_context_assistance_switch_required" => {
+            json!({"ok":false,"error":reason,
+                "invalid":"Prepare and commit a CIGAR switch before selecting a different installation."})
+        }
         Err(Failure::Error(reason)) => json!({"ok": false, "error": reason}),
     };
     serde_json::to_vec(&response).map_err(|_| "guard_config_response_encode_failed".to_owned())
@@ -89,10 +100,44 @@ fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Failure> {
     if request.kind == "channel" {
         channel(value)?;
     }
+    prepare_home(&request.guard_home).map_err(|reason| Failure::Error(reason.to_owned()))?;
+    assistance_preflight::write(request, value)
+}
+
+/// Creates the Guard home and removes group and world write from a home this
+/// user owns, as the daemon does on start. The config write lock refuses a
+/// group-writable home, and a save can run before the daemon ever has, under
+/// a umask such as 0002 that leaves a new directory group-writable.
+fn prepare_home(home: &Path) -> Result<(), &'static str> {
+    fs::create_dir_all(home).map_err(|_| "config_file_unavailable")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let canonical = fs::canonicalize(home).map_err(|_| "config_directory_unavailable")?;
+        let metadata = fs::metadata(&canonical).map_err(|_| "config_directory_unavailable")?;
+        if metadata.is_dir()
+            && metadata.uid() == nix::unistd::geteuid().as_raw()
+            && metadata.mode() & 0o022 != 0
+        {
+            let mode = metadata.mode() & 0o7777 & !0o022;
+            fs::set_permissions(&canonical, fs::Permissions::from_mode(mode))
+                .map_err(|_| "config_directory_unsafe")?;
+        }
+    }
+    Ok(())
+}
+
+fn write_locked(
+    request: &UpdateRequest,
+    value: &PyVal,
+    lock: &io::WriteLock,
+) -> Result<Value, Failure> {
+    if request.kind == "channel" {
+        channel(value)?;
+    }
     let home = &request.guard_home;
-    fs::create_dir_all(home).map_err(|_| Failure::Error("config_file_unavailable".to_owned()))?;
     let stored = read_home_config(home)?;
-    let computed = compute(
+    let mut computed = compute(
         &request.kind,
         stored.as_deref(),
         value,
@@ -100,13 +145,74 @@ fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Failure> {
         request.cloud_sync_entitled,
         &now_iso(),
     )?;
-    fs::write(home.join(HOME_CONFIG_FILENAME), computed.text)
-        .map_err(|_| Failure::Error("config_write_failed".to_owned()))?;
+    // This locked path is reserved for explicit Stop, which must persist an
+    // ordering change even if the on-disk enabled preference was already off.
+    assistance_preflight::fence(stored.as_deref(), &mut computed.text, true)?;
+    if request.kind == "settings" {
+        verify_assistance_opt_in(home, stored.as_deref(), &computed.text)?;
+    }
+    lock.publish(stored.as_deref(), &computed.text)?;
     Ok(computed.previous.unwrap_or(Value::Null))
 }
 
+/// Opting out is always allowed, including when an administrator locked other
+/// preferences. This only narrows local consent and preserves base settings.
+pub(crate) fn disable_context_assistance(home: &Path) -> Result<(), String> {
+    prepare_home(home).map_err(|_| "native_context_assistance_settings_unavailable")?;
+    let lock = io::WriteLock::acquire(home)
+        .map_err(|_| "native_context_assistance_settings_write_busy")?;
+    let stored =
+        read_home_config(home).map_err(|_| "native_context_assistance_settings_unavailable")?;
+    let mut config = assistance_preferences(stored.as_deref().unwrap_or_default())
+        .map_err(|_| "native_context_assistance_settings_unavailable")?;
+    config.enabled = false;
+    let value_text = serde_json::to_string(&json!({"context_assistance": config}))
+        .map_err(|_| "native_context_assistance_settings_invalid".to_owned())?;
+    let value = pyjson::parse(&value_text)
+        .map_err(|_| "native_context_assistance_settings_invalid".to_owned())?;
+    let request = UpdateRequest {
+        schema: SCHEMA.into(),
+        guard_home: home.into(),
+        kind: "settings".into(),
+        value_text,
+        managed: None,
+        cloud_sync_entitled: false,
+    };
+    write_locked(&request, &value, &lock)
+        .map(|_| ())
+        .map_err(|_| "native_context_assistance_settings_write_failed".to_owned())
+}
+
+pub(crate) fn assistance_preferences(
+    text: &str,
+) -> Result<guard_context_assistance::ContextAssistanceConfig, Failure> {
+    let table: toml::Table = text
+        .parse()
+        .map_err(|_| Failure::Error("config_malformed".into()))?;
+    let value =
+        serde_json::to_value(table).map_err(|_| Failure::Error("config_malformed".into()))?;
+    Ok(guard_context_assistance::ContextAssistanceConfig::load(value.get("context_assistance")).0)
+}
+
+fn verify_assistance_opt_in(
+    home: &Path,
+    previous: Option<&str>,
+    next: &str,
+) -> Result<(), Failure> {
+    let next = assistance_preferences(next)?;
+    if !next.enabled {
+        return Ok(());
+    }
+    let previous = assistance_preferences(previous.unwrap_or_default())?;
+    if previous.enabled && previous.runtime_id == next.runtime_id {
+        return Ok(());
+    }
+    crate::policy_store::context_assistance_registry::validate_selection(home, &next.runtime_id)
+        .map_err(assistance_preflight::selection_error)
+}
+
 /// `read_config_file_bytes` for the home config; `None` when it is absent.
-fn read_home_config(home: &Path) -> Result<Option<String>, Failure> {
+pub(crate) fn read_home_config(home: &Path) -> Result<Option<String>, Failure> {
     let path = home.join(HOME_CONFIG_FILENAME);
     let unavailable = |reason: &str| Failure::Error(reason.to_owned());
     match fs::symlink_metadata(&path) {
@@ -227,3 +333,11 @@ fn current_config(stored: &Map<String, Value>, managed: Option<&ManagedInput>) -
 #[cfg(test)]
 #[path = "guard_config_update_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "guard_config_assistance_preflight_tests.rs"]
+mod assistance_preflight_tests;
+
+#[cfg(test)]
+#[path = "guard_config_context_assistance_update_tests.rs"]
+mod context_assistance_tests;

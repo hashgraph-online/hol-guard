@@ -39,6 +39,18 @@ const HEADLESS_APP_ACTIONS: &[&str] = &["connect", "repair", "disconnect", "stat
 const HARNESS_ACTIONS: &[&str] = &["install", "verify", "repair", "uninstall"];
 
 const TOKEN_REQUIRED_PATHS: &[&str] = &[
+    "/v1/context-assistance/workspace",
+    "/v1/context-assistance/workspace-access",
+    "/v1/context-assistance/workspace-grant",
+    "/v1/context-assistance",
+    "/v1/context-assistance/installations",
+    "/v1/context-assistance/versions",
+    "/v1/context-assistance/jobs",
+    "/v1/context-assistance/interpreters",
+    "/v1/context-assistance/catalog",
+    "/v1/context-assistance/recheck",
+    "/v1/context-assistance/activate",
+    "/v1/context-assistance/stop",
     "/v1/harness-versions/refresh",
     "/v1/harness-versions/acknowledge",
     "/v1/harness-versions/clear-acknowledgement",
@@ -82,6 +94,18 @@ const TOKEN_REQUIRED_PATHS: &[&str] = &[
 ];
 
 const HOSTED_API_PATHS: &[&str] = &[
+    "/v1/context-assistance/workspace",
+    "/v1/context-assistance/workspace-access",
+    "/v1/context-assistance/workspace-grant",
+    "/v1/context-assistance",
+    "/v1/context-assistance/installations",
+    "/v1/context-assistance/versions",
+    "/v1/context-assistance/jobs",
+    "/v1/context-assistance/interpreters",
+    "/v1/context-assistance/catalog",
+    "/v1/context-assistance/recheck",
+    "/v1/context-assistance/activate",
+    "/v1/context-assistance/stop",
     "/v1/harness-versions/refresh",
     "/v1/harness-versions/acknowledge",
     "/v1/harness-versions/clear-acknowledgement",
@@ -131,6 +155,18 @@ const HOSTED_API_PATHS: &[&str] = &[
 ];
 
 const LOCAL_SURFACE_PATHS: &[&str] = &[
+    "/v1/context-assistance/workspace",
+    "/v1/context-assistance/workspace-access",
+    "/v1/context-assistance/workspace-grant",
+    "/v1/context-assistance",
+    "/v1/context-assistance/installations",
+    "/v1/context-assistance/versions",
+    "/v1/context-assistance/jobs",
+    "/v1/context-assistance/interpreters",
+    "/v1/context-assistance/catalog",
+    "/v1/context-assistance/recheck",
+    "/v1/context-assistance/activate",
+    "/v1/context-assistance/stop",
     "/v1/harness-versions/refresh",
     "/v1/harness-versions/acknowledge",
     "/v1/harness-versions/clear-acknowledgement",

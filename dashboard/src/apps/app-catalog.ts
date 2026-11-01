@@ -209,6 +209,7 @@ const SETTINGS_SEARCH_INDEX: SettingSearchMatch[] = [
   { key: "approval_surface_policy", label: "Where to ask", description: "Where Guard shows approval prompts.", section: "defaults" },
   { key: "protection_posture", label: "Protection", description: "Protected, Extra careful, or Watch.", section: "protection" },
   { key: "harness_postures", label: "Protection by app", description: "Choose Watch or Protected for each app on this machine.", section: "protection" },
+  { key: "context_assistance", label: "Context assistance", description: "Optional CIGAR review briefs and AI app context. Requires verified Python 3.14.", section: "protection" },
   { key: "security_level", label: "Advanced rules", description: "Custom per-risk rules on top of the selected protection posture.", section: "protection" },
   { key: "mode", label: "Legacy protection mode", description: "Compatibility alias for observe, prompt, and enforce.", section: "protection" },
   { key: "approval_wait_timeout", label: "Approval wait timeout", description: "How long Guard waits for you to respond before resuming.", section: "protection" },

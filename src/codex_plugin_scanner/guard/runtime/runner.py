@@ -219,7 +219,6 @@ _PAIN_SIGNAL_EVENTS = frozenset(
         "approval_gate/remote_policy_sync_blocked",
     }
 )
-_EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 _LOGGER = logging.getLogger(__name__)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
@@ -752,7 +751,6 @@ def sync_receipts(
     # response, but they are not covered by the pinned policy-bundle signature
     # and therefore cannot be persisted or materialized as local authority.
     # Only decisions and exceptions inside a validated signed bundle are used.
-    deduped_exceptions: list[dict[str, object]] = []
     advisories_stored = 0
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
@@ -1148,7 +1146,6 @@ def sync_receipts(
         store=store,
         advisories=deduped_advisories,
         alert_preferences=alert_preferences_payload,
-        exceptions=deduped_exceptions,
         now=now,
     )
     try:
@@ -1163,7 +1160,7 @@ def sync_receipts(
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
-        "exceptions_stored": len(deduped_exceptions),
+        "exceptions_stored": 0,
         "cloud_exceptions_stored": len(cloud_exception_items),
         "remote_policies_stored": remote_policies_stored,
         "pain_signals_uploaded": pain_signals_uploaded,
@@ -1215,32 +1212,8 @@ def sync_receipts(
 
 
 def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str, bool]:
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    retryable = error.code in {429, 503, 524}
-    payload: object = None
-    if raw_body:
-        try:
-            payload = json.loads(raw_body)
-        except json.JSONDecodeError:
-            payload = None
-    message: str | None = None
-    if isinstance(payload, dict):
-        message = _read_guard_cloud_error_message(payload)
-        guard_error = payload.get("guardError")
-        if isinstance(guard_error, dict):
-            if guard_error.get("retryable") is True:
-                retryable = True
-            guard_code = guard_error.get("code")
-            unavailable_codes = {"guard_unavailable", "guard_cloud_unavailable"}
-            if isinstance(guard_code, str) and guard_code.strip().lower() in unavailable_codes:
-                retryable = True
-    if message is None:
-        normalized_body = raw_body.strip()
-        message = normalized_body or f"HTTP Error {error.code}: {error.reason}"
-    return message, retryable
+    answer = _cloud_http_error(error)
+    return answer.message, answer.retryable
 
 
 def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
@@ -3301,136 +3274,67 @@ def _refresh_guard_sync_request(
     )
 
 
-def _read_guard_cloud_error_message(payload: dict[str, object]) -> str | None:
-    guard_error = payload.get("guardError")
-    if isinstance(guard_error, dict):
-        for key in ("msg", "message"):
-            nested = guard_error.get(key)
-            if isinstance(nested, str) and nested.strip():
-                return nested.strip()
-    for key in ("err", "message", "error"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
+# Bounds the body shipped to the resident well inside its request cap; Guard
+# Cloud and Cloudflare error bodies are far smaller.
+_CLOUD_HTTP_ERROR_BODY_CHARS = 512 * 1024
+_CLOUD_HTTP_ERROR_HEADERS = ("cf-mitigated", "cf-ray", "server", "content-type")
+# The statuses the runtime itself treats as retryable (`RETRYABLE_STATUSES`).
+_CLOUD_HTTP_ERROR_RETRYABLE_STATUSES = frozenset({429, 503, 524})
 
 
-CLOUD_EDGE_BLOCK_REASON_PREFIX = "Guard Cloud is unreachable from this network"
+def _cloud_http_error(error: urllib.error.HTTPError) -> _sync.CloudHttpError:
+    """Read the error once and return how the resident reads it.
 
-
-def _cloud_edge_block_message(error: urllib.error.HTTPError, raw_body: str) -> str | None:
-    """Cloudflare's own block or challenge page instead of a Guard Cloud answer.
-
-    Mirrors ``cloud_edge_block_message`` in guard_sync_transport.rs. The page is HTML
-    a client cannot pass, so its raw text is no use as an error message.
+    The answer carries the sync message, the retryable flag, the 403
+    plan-restriction verdict and Cloudflare's edge-block message, so a caller
+    never drains the stream twice.
     """
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
     headers = error.headers
-    if headers is None:
-        return None
-    challenged = headers.get("cf-mitigated") is not None
-    from_cloudflare = headers.get("cf-ray") is not None or str(headers.get("server") or "").lower() == "cloudflare"
-    html = str(headers.get("content-type") or "").lower().startswith("text/html")
-    page = raw_body[: 64 * 1024]
-    challenge_page = "Just a moment..." in page or "challenge-platform" in page
-    block_page = "Attention Required! | Cloudflare" in page or "Sorry, you have been blocked" in page
-    if not challenged and not (from_cloudflare and html and (challenge_page or block_page)):
-        return None
-    action = "challenged" if challenged or challenge_page else "blocked"
-    ray = str(headers.get("cf-ray") or "").split("-", 1)[0]
-    if ray.isascii() and ray.isalnum():
-        ray_detail, ray_hint = f", Ray ID {ray}", "; the Guard Cloud operator can look up that Ray ID"
-    else:
-        ray_detail, ray_hint = "", ""
-    return (
-        f"{CLOUD_EDGE_BLOCK_REASON_PREFIX}: Cloudflare in front of Guard Cloud {action} the request "
-        f"(HTTP {error.code}{ray_detail}). This is not a sign-in problem, so reconnecting will not help{ray_hint}."
+    projected = (
+        None
+        if headers is None
+        else {name: str(value) for name in _CLOUD_HTTP_ERROR_HEADERS if (value := headers.get(name)) is not None}
     )
+    try:
+        return _sync.cloud_http_error(
+            status=error.code,
+            reason=str(error.reason),
+            headers=projected,
+            body=raw_body[:_CLOUD_HTTP_ERROR_BODY_CHARS],
+        )
+    except NativeRunnerAuthorityError:
+        # The HTTP error still has to reach the user when the runtime cannot
+        # answer, without a verdict the runtime never gave: the status alone
+        # decides a retry, and the status line stands in as the edge block so
+        # an unread 401 is reported as it came rather than as an expired sign-in.
+        status_line = f"HTTP Error {error.code}: {error.reason}"
+        retryable = error.code in _CLOUD_HTTP_ERROR_RETRYABLE_STATUSES
+        return _sync.CloudHttpError(status_line, retryable, status_line, False, status_line, status_line)
 
 
 def _cloud_edge_block_from_http_error(error: urllib.error.HTTPError) -> str | None:
-    """Read the body once and return the edge-block message, if Cloudflare answered."""
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    return _cloud_edge_block_message(error, raw_body)
+    """The edge-block message, if Cloudflare answered instead of Guard Cloud."""
+    return _cloud_http_error(error).edge_block
 
 
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    edge_block = _cloud_edge_block_message(error, raw_body)
-    if edge_block is not None:
-        return edge_block
-    try:
-        payload = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        message = _read_guard_cloud_error_message(payload)
-        if message is not None:
-            return message
-    normalized_body = raw_body.strip()
-    if normalized_body:
-        return normalized_body
-    return f"HTTP Error {error.code}: {error.reason}"
+    return _cloud_http_error(error).sync_message
 
 
 def _redact_sync_text(value: str) -> str:
     return redact_sensitive_text(value)
 
 
-_PLAN_403_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "sync_not_available",
-        "plan_restriction",
-        "requires a pro",
-        "requires a team",
-        "upgrade your plan",
-        "upgrade to",
-        "subscription required",
-        "not included in your plan",
-        "guard sync requires",
-    }
-)
-
-
 def _check_plan_restriction_403(
     error: urllib.error.HTTPError,
 ) -> tuple[bool, str]:
-    """Read a 403 response body exactly once.
-
-    Returns (is_plan_restriction, error_message) so callers never
-    drain the stream more than once regardless of which branch they take.
-    Checks both machine-readable fields (syncEnabled, error, code) and
-    human-readable error messages for plan-restriction signals.
-    """
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    try:
-        payload: object = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    edge_block = _cloud_edge_block_message(error, raw_body)
-    if edge_block is not None:
-        return False, edge_block
-    fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
-    if not isinstance(payload, dict):
-        return False, fallback
-    message = payload.get("error")
-    message_str = message.strip() if isinstance(message, str) and message.strip() else fallback
-    if payload.get("syncEnabled") is False:
-        return True, message_str
-    error_field = str(payload.get("error") or "").lower()
-    code_field = str(payload.get("code") or "").lower()
-    combined = f"{error_field} {code_field}"
-    if any(kw in combined for kw in _PLAN_403_KEYWORDS):
-        return True, message_str
-    return False, message_str
+    """Read a 403 response body exactly once; return (is_plan_restriction, error_message)."""
+    answer = _cloud_http_error(error)
+    return answer.plan_restricted, answer.plan_message
 
 
 def _sync_url_error_message(error: OSError) -> str:
@@ -4459,52 +4363,15 @@ def _cloud_package_manager_coverage(
         ),
         generated_at=generated_at,
     )
-    synced_at = None
-    next_refresh_at = None
-    synced_timestamp = None
-    for source_name, summary in (
-        ("sync", store.get_sync_payload("sync_summary")),
-        ("runtime", store.get_sync_payload("runtime_session_summary")),
-        ("bundle", store.get_sync_payload("supply_chain_bundle_summary")),
-    ):
-        if not isinstance(summary, dict):
-            continue
-        candidate_synced_at = _optional_string(
-            summary.get("synced_at")
-            or summary.get("syncedAt")
-            or summary.get("runtime_session_synced_at")
-            or summary.get("runtimeSessionSyncedAt")
-            or summary.get("local_guard_online_at"),
-        )
-        candidate_timestamp = _parse_iso_timestamp(candidate_synced_at) if candidate_synced_at is not None else None
-        if candidate_timestamp is None:
-            continue
-        if synced_timestamp is not None and candidate_timestamp <= synced_timestamp:
-            continue
-        synced_at = candidate_synced_at
-        synced_timestamp = candidate_timestamp
-        next_refresh_at = (
-            _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
-            if source_name == "bundle"
-            else None
-        )
-    reference_timestamp = _parse_iso_timestamp(generated_at) or datetime.now(timezone.utc)
-    stale_status = "unknown"
-    if synced_at is not None:
-        stale_status = "fresh"
-    next_refresh_timestamp = _parse_iso_timestamp(next_refresh_at) if next_refresh_at is not None else None
-    if next_refresh_timestamp is None and synced_at is not None:
-        next_refresh_timestamp = _parse_iso_timestamp(synced_at)
-        if next_refresh_timestamp is not None:
-            next_refresh_timestamp += timedelta(minutes=15)
-            next_refresh_at = next_refresh_timestamp.isoformat()
-    if next_refresh_timestamp is not None and next_refresh_timestamp <= reference_timestamp:
-        stale_status = "stale"
-    coverage["staleIntel"] = {
-        "status": stale_status,
-        "lastSyncedAt": synced_at,
-        "nextRefreshAt": next_refresh_at,
-    }
+    coverage["staleIntel"] = _sync.stale_intel(
+        (
+            store.get_sync_payload("sync_summary"),
+            store.get_sync_payload("runtime_session_summary"),
+            store.get_sync_payload("supply_chain_bundle_summary"),
+        ),
+        generated_at=generated_at,
+        now=_now(),
+    )
     return coverage
 
 
@@ -4518,7 +4385,6 @@ def _record_synced_alert_events(
     store: GuardStore,
     advisories: Sequence[dict[str, object]],
     alert_preferences: dict[str, object] | None,
-    exceptions: Sequence[dict[str, object]],
     now: str,
 ) -> None:
     advisories_enabled = not (
@@ -4539,31 +4405,6 @@ def _record_synced_alert_events(
                 },
                 now,
             )
-    current_time = _parse_iso_timestamp(now)
-    for item in exceptions:
-        artifact_id = _optional_string(item.get("artifactId"))
-        expires_at = _optional_string(item.get("expiresAt"))
-        if artifact_id is None or expires_at is None:
-            continue
-        expiry_time = _parse_iso_timestamp(expires_at)
-        if expiry_time is None or current_time is None:
-            continue
-        if (
-            expiry_time <= current_time
-            or (expiry_time - current_time).total_seconds() > _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS * 60 * 60
-        ):
-            continue
-        store.add_event(
-            "exception_expiring",
-            {
-                "artifact_id": artifact_id,
-                "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
-                "expires_at": expires_at,
-                "reason": _optional_string(item.get("reason")),
-                "owner": _optional_string(item.get("owner")),
-            },
-            now,
-        )
 
 
 def _sync_timestamp(payload: dict[str, object]) -> str:

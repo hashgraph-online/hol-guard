@@ -1,0 +1,55 @@
+{
+  "source_test": {
+    "brief_observation": {
+      "citations": [
+        {
+          "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+          "end_line": 1,
+          "node_id": "guard-policy-facts",
+          "source": "guard:policy",
+          "start_line": 1
+        },
+        {
+          "document_digest": "80515738585dde265e296eb98b9d209b01eb7ecd567ea954a9e743258745ae49",
+          "end_line": 1,
+          "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+          "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+          "start_line": 1
+        }
+      ],
+      "data_role": true,
+      "excerpts": [
+        {
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            }
+          ],
+          "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+        },
+        {
+          "citations": [
+            {
+              "document_digest": "80515738585dde265e296eb98b9d209b01eb7ecd567ea954a9e743258745ae49",
+              "end_line": 1,
+              "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+              "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+              "start_line": 1
+            }
+          ],
+          "text": "Project alpha uses a reviewed deployment procedure.\n"
+        }
+      ],
+      "graph_revision": 2,
+      "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+      "rendered": "{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0\",\"source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5\",1,1]],\"text\":\"Project alpha uses a reviewed deployment procedure.\\n\"}",
+      "rendered_tokens": 138,
+      "schema": "guard-cigar-context-brief.v1",
+      "snapshot_id": "1d99b410fb1d0b5fdeaa1bac57f930f9f8fa08a8a922fa66feb43ac06fa360c0"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-ux5jr7Um.js","assets/chunks/home-protection-module-5eEYbzcV.js","assets/chunks/supply-chain-protection-stats-CjJITDuI.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-M_B-xLuc.js","assets/chunks/fleet-workspace-BJ5BiR3O.js","assets/chunks/harness-version-label-DuEFoL5G.js","assets/chunks/connect-guard-cloud-button-BYQK6drV.js","assets/chunks/settings-save-proof-modal-xUkxMRhR.js","assets/chunks/settings-workspace-BgFOFK3E.js","assets/chunks/confirm-dialog-Bemp436a.js","assets/chunks/extensions-workspace-DJ_iKvqd.js","assets/chunks/app-detail-workspace-KKvyTpgD.js","assets/chunks/policy-workspace-page-DGfOJV4m.js","assets/chunks/about-workspace-BeAn9V9d.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BDZwrTBd.js","assets/chunks/home-protection-module-D5_hG3QH.js","assets/chunks/supply-chain-protection-stats-fPS2dg9t.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-Au8qkrQu.js","assets/chunks/harness-version-label-BNKf9mmo.js","assets/chunks/connect-guard-cloud-button-CjnpnUTg.js","assets/chunks/settings-save-proof-modal-CJfd7bMi.js","assets/chunks/settings-workspace-EATcOtZR.js","assets/chunks/confirm-dialog-NIjTMm3y.js","assets/chunks/extensions-workspace-DuWvCy2e.js","assets/chunks/app-detail-workspace-SQy3r0dU.js","assets/chunks/policy-workspace-page-B8GrOyNn.js","assets/chunks/about-workspace-BO9K8980.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -38,21 +38,21 @@ function requireReactJsxRuntime_production() {
   if (hasRequiredReactJsxRuntime_production) return reactJsxRuntime_production;
   hasRequiredReactJsxRuntime_production = 1;
   var REACT_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.transitional.element"), REACT_FRAGMENT_TYPE = /* @__PURE__ */ Symbol.for("react.fragment");
-  function jsxProd(type, config, maybeKey) {
+  function jsxProd(type, config2, maybeKey) {
     var key = null;
     void 0 !== maybeKey && (key = "" + maybeKey);
-    void 0 !== config.key && (key = "" + config.key);
-    if ("key" in config) {
+    void 0 !== config2.key && (key = "" + config2.key);
+    if ("key" in config2) {
       maybeKey = {};
-      for (var propName in config)
-        "key" !== propName && (maybeKey[propName] = config[propName]);
-    } else maybeKey = config;
-    config = maybeKey.ref;
+      for (var propName in config2)
+        "key" !== propName && (maybeKey[propName] = config2[propName]);
+    } else maybeKey = config2;
+    config2 = maybeKey.ref;
     return {
       $$typeof: REACT_ELEMENT_TYPE,
       type,
       key,
-      ref: void 0 !== config ? config : null,
+      ref: void 0 !== config2 ? config2 : null,
       props: maybeKey
     };
   }
@@ -141,8 +141,8 @@ function requireReact_production() {
   function cloneAndReplaceKey(oldElement, newKey) {
     return ReactElement(oldElement.type, newKey, oldElement.props);
   }
-  function isValidElement(object) {
-    return "object" === typeof object && null !== object && object.$$typeof === REACT_ELEMENT_TYPE;
+  function isValidElement(object2) {
+    return "object" === typeof object2 && null !== object2 && object2.$$typeof === REACT_ELEMENT_TYPE;
   }
   function escape(key) {
     var escaperLookup = { "=": "=0", ":": "=2" };
@@ -253,9 +253,9 @@ function requireReact_production() {
   }
   function mapChildren(children, func, context) {
     if (null == children) return children;
-    var result = [], count = 0;
+    var result = [], count2 = 0;
     mapIntoArray(children, result, "", "", function(child) {
-      return func.call(context, child, count++);
+      return func.call(context, child, count2++);
     });
     return result;
   }
@@ -346,15 +346,15 @@ function requireReact_production() {
   react_production.cacheSignal = function() {
     return null;
   };
-  react_production.cloneElement = function(element, config, children) {
+  react_production.cloneElement = function(element, config2, children) {
     if (null === element || void 0 === element)
       throw Error(
         "The argument must be a React element, but you passed " + element + "."
       );
     var props = assign({}, element.props), key = element.key;
-    if (null != config)
-      for (propName in void 0 !== config.key && (key = "" + config.key), config)
-        !hasOwnProperty.call(config, propName) || "key" === propName || "__self" === propName || "__source" === propName || "ref" === propName && void 0 === config.ref || (props[propName] = config[propName]);
+    if (null != config2)
+      for (propName in void 0 !== config2.key && (key = "" + config2.key), config2)
+        !hasOwnProperty.call(config2, propName) || "key" === propName || "__self" === propName || "__source" === propName || "ref" === propName && void 0 === config2.ref || (props[propName] = config2[propName]);
     var propName = arguments.length - 2;
     if (1 === propName) props.children = children;
     else if (1 < propName) {
@@ -380,11 +380,11 @@ function requireReact_production() {
     };
     return defaultValue;
   };
-  react_production.createElement = function(type, config, children) {
+  react_production.createElement = function(type, config2, children) {
     var propName, props = {}, key = null;
-    if (null != config)
-      for (propName in void 0 !== config.key && (key = "" + config.key), config)
-        hasOwnProperty.call(config, propName) && "key" !== propName && "__self" !== propName && "__source" !== propName && (props[propName] = config[propName]);
+    if (null != config2)
+      for (propName in void 0 !== config2.key && (key = "" + config2.key), config2)
+        hasOwnProperty.call(config2, propName) && "key" !== propName && "__self" !== propName && "__source" !== propName && (props[propName] = config2[propName]);
     var childrenLength = arguments.length - 2;
     if (1 === childrenLength) props.children = children;
     else if (1 < childrenLength) {
@@ -10954,7 +10954,7 @@ function requireReactDomClient_production() {
   }
   function estimateBandwidth() {
     if ("function" === typeof performance.getEntriesByType) {
-      for (var count = 0, bits = 0, resourceEntries = performance.getEntriesByType("resource"), i = 0; i < resourceEntries.length; i++) {
+      for (var count2 = 0, bits = 0, resourceEntries = performance.getEntriesByType("resource"), i = 0; i < resourceEntries.length; i++) {
         var entry = resourceEntries[i], transferSize = entry.transferSize, initiatorType = entry.initiatorType, duration = entry.duration;
         if (transferSize && duration && isLikelyStaticResource(initiatorType)) {
           initiatorType = 0;
@@ -10967,13 +10967,13 @@ function requireReactDomClient_production() {
           }
           --i;
           bits += 8 * (transferSize + initiatorType) / (entry.duration / 1e3);
-          count++;
-          if (10 < count) break;
+          count2++;
+          if (10 < count2) break;
         }
       }
-      if (0 < count) return bits / count / 1e6;
+      if (0 < count2) return bits / count2 / 1e6;
     }
-    return navigator.connection && (count = navigator.connection.downlink, "number" === typeof count) ? count : 5;
+    return navigator.connection && (count2 = navigator.connection.downlink, "number" === typeof count2) ? count2 : 5;
   }
   var eventsEnabled = null, selectionInformation = null;
   function getOwnerDocumentFromRootContainer(rootContainerElement) {
@@ -12572,6 +12572,22 @@ function BusinessQueueReadNotice() {
     )
   ] });
 }
+const object$4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const digest$8 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+function parseNativeDecisionSelector(value, harness, event = "PreToolUse") {
+  if (!object$4(value) || event !== "PreToolUse" || value.schema !== "guard-native-hook-decision-receipt.v1" || value.authority !== "rust" || value.event_name !== event || value.harness !== harness || !digest$8(value.decision_id) || !digest$8(value.origin_authentication)) return void 0;
+  return {
+    schema: "guard-native-hook-decision-receipt.v1",
+    authority: "rust",
+    event_name: "PreToolUse",
+    harness,
+    decision_id: value.decision_id,
+    origin_authentication: value.origin_authentication
+  };
+}
+function attachedNativeDecision(envelope, harness) {
+  return object$4(envelope) ? parseNativeDecisionSelector(envelope.native_origin_receipt, harness)?.decision_id ?? null : null;
+}
 const GUARD_ACTIONS$1 = [
   "allow",
   "warn",
@@ -12818,6 +12834,9 @@ function HiMiniMagnifyingGlass(props) {
 function HiMiniLockClosed(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniLink(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" }, "child": [] }] })(props);
+}
 function HiMiniKey(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12985,6 +13004,9 @@ function HiMiniArchiveBox(props) {
 }
 function HiMiniAdjustmentsHorizontal(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 3.75a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM17.25 4.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM5 3.75a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5a.75.75 0 0 1 .75.75ZM4.25 17a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM17.25 17a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM9 10a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1 0-1.5h5.5A.75.75 0 0 1 9 10ZM17.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM14 10a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM10 16.25a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" }, "child": [] }] })(props);
+}
+function HiMiniAcademicCap(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.664 1.319a.75.75 0 0 1 .672 0 41.059 41.059 0 0 1 8.198 5.424.75.75 0 0 1-.254 1.285 31.372 31.372 0 0 0-7.86 3.83.75.75 0 0 1-.84 0 31.508 31.508 0 0 0-2.08-1.287V9.394c0-.244.116-.463.302-.592a35.504 35.504 0 0 1 3.305-2.033.75.75 0 0 0-.714-1.319 37 37 0 0 0-3.446 2.12A2.216 2.216 0 0 0 6 9.393v.38a31.293 31.293 0 0 0-4.28-1.746.75.75 0 0 1-.254-1.285 41.059 41.059 0 0 1 8.198-5.424ZM6 11.459a29.848 29.848 0 0 0-2.455-1.158 41.029 41.029 0 0 0-.39 3.114.75.75 0 0 0 .419.74c.528.256 1.046.53 1.554.82-.21.324-.455.63-.739.914a.75.75 0 1 0 1.06 1.06c.37-.369.69-.77.96-1.193a26.61 26.61 0 0 1 3.095 2.348.75.75 0 0 0 .992 0 26.547 26.547 0 0 1 5.93-3.95.75.75 0 0 0 .42-.739 41.053 41.053 0 0 0-.39-3.114 29.925 29.925 0 0 0-5.199 2.801 2.25 2.25 0 0 1-2.514 0c-.41-.275-.826-.541-1.25-.797a6.985 6.985 0 0 1-1.084 3.45 26.503 26.503 0 0 0-1.281-.78A5.487 5.487 0 0 0 6 12v-.54Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 const CATEGORIES = [
   {
@@ -13735,18 +13757,18 @@ function countDuplicateActionsInGroups(groups) {
 }
 function summarizeSensitiveFileReadGroups(groups) {
   const paths = [];
-  let count = 0;
+  let count2 = 0;
   for (const group of groups) {
     if (group.primary.policy_action === "block") continue;
     const isFileRead = group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request";
     if (!isFileRead || !isSensitiveFileReadItem(group.primary)) continue;
-    count += 1;
+    count2 += 1;
     if (paths.length < 3) {
       const path = group.primary.action_envelope_json?.target_paths?.[0] ?? group.primary.launch_target ?? group.primary.artifact_name;
       if (path) paths.push(path);
     }
   }
-  return { count, samplePaths: paths };
+  return { count: count2, samplePaths: paths };
 }
 function bulkApproveActionCount(groups) {
   return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
@@ -13815,8 +13837,8 @@ function groupDuplicates(items) {
   return groups;
 }
 function queueTimestamp(item) {
-  const timestamp = new Date(item.last_seen_at ?? item.created_at).getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  const timestamp2 = new Date(item.last_seen_at ?? item.created_at).getTime();
+  return Number.isFinite(timestamp2) ? timestamp2 : 0;
 }
 function dateInputToBoundary(value, boundary) {
   if (value.trim().length === 0) {
@@ -13832,8 +13854,8 @@ function dateInputToBoundary(value, boundary) {
   } else {
     date.setHours(23, 59, 59, 999);
   }
-  const timestamp = date.getTime();
-  return Number.isFinite(timestamp) ? timestamp : null;
+  const timestamp2 = date.getTime();
+  return Number.isFinite(timestamp2) ? timestamp2 : null;
 }
 function filterQueueByDateRange(items, range) {
   const from = dateInputToBoundary(range.from, "start");
@@ -13842,11 +13864,11 @@ function filterQueueByDateRange(items, range) {
     return items;
   }
   return items.filter((item) => {
-    const timestamp = queueTimestamp(item);
-    if (from !== null && timestamp < from) {
+    const timestamp2 = queueTimestamp(item);
+    if (from !== null && timestamp2 < from) {
       return false;
     }
-    if (to !== null && timestamp > to) {
+    if (to !== null && timestamp2 > to) {
       return false;
     }
     return true;
@@ -13860,11 +13882,11 @@ const queueDateFormatter = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit"
 });
 function formatQueueRequestDate(item) {
-  const timestamp = queueTimestamp(item);
-  if (timestamp === 0) {
+  const timestamp2 = queueTimestamp(item);
+  if (timestamp2 === 0) {
     return "Date unknown";
   }
-  return queueDateFormatter.format(new Date(timestamp));
+  return queueDateFormatter.format(new Date(timestamp2));
 }
 function queueCategoryById(id2) {
   return QUEUE_CATEGORY_BY_ID.get(id2) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];
@@ -14472,20 +14494,20 @@ function guardDecisionV2Action(value) {
       return "ask";
   }
 }
-function guardActionActivityCopy(value, subject, object) {
+function guardActionActivityCopy(value, subject, object2) {
   switch (normalizeGuardAction(value)) {
     case "allow":
-      return `${subject} allowed ${object}`;
+      return `${subject} allowed ${object2}`;
     case "warn":
-      return `${subject} allowed ${object} with a warning`;
+      return `${subject} allowed ${object2} with a warning`;
     case "review":
-      return `${subject} paused ${object} for review`;
+      return `${subject} paused ${object2} for review`;
     case "require-reapproval":
-      return `${subject} paused ${object} for fresh approval`;
+      return `${subject} paused ${object2} for fresh approval`;
     case "sandbox-required":
-      return `${subject} paused ${object} until sandbox requirements are met`;
+      return `${subject} paused ${object2} until sandbox requirements are met`;
     case "block":
-      return `${subject} blocked ${object}`;
+      return `${subject} blocked ${object2}`;
   }
 }
 function isBlockedGuardAction(value) {
@@ -15358,9 +15380,9 @@ function formatNumber(n) {
   if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
   return String(n);
 }
-function formatRelativeTime(timestamp) {
+function formatRelativeTime(timestamp2) {
   try {
-    const date = new Date(timestamp);
+    const date = new Date(timestamp2);
     const now2 = /* @__PURE__ */ new Date();
     const diffMs = now2.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 6e4);
@@ -15377,7 +15399,7 @@ function formatRelativeTime(timestamp) {
     }
     return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
   } catch {
-    return timestamp;
+    return timestamp2;
   }
 }
 function resolveFileReadPath(item) {
@@ -17636,6 +17658,7 @@ function parseActionEnvelope(raw) {
   if (!isRecord$4(rawPayloadRedacted)) {
     return null;
   }
+  const nativeOrigin = parseNativeDecisionSelector(raw["native_origin_receipt"], harness, eventName);
   return {
     schema_version: schemaVersion,
     action_id: actionId,
@@ -17660,7 +17683,8 @@ function parseActionEnvelope(raw) {
     pre_execution_result: isGuardAction(preExecutionResult) ? preExecutionResult : null,
     ...policyAction === void 0 ? {} : { policy_action: isGuardAction(policyAction) ? policyAction : null },
     script_name: scriptName,
-    raw_payload_redacted: rawPayloadRedacted
+    raw_payload_redacted: rawPayloadRedacted,
+    ...nativeOrigin ? { native_origin_receipt: nativeOrigin } : {}
   };
 }
 function isDecisionV2Action(value) {
@@ -18029,16 +18053,16 @@ function parseAwareTimestamp(value) {
   if (!/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) {
     return null;
   }
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : null;
+  const timestamp2 = Date.parse(value);
+  return Number.isFinite(timestamp2) ? timestamp2 : null;
 }
 function isFreshAwareTimestamp(value) {
-  const timestamp = parseAwareTimestamp(value);
-  if (timestamp === null) {
+  const timestamp2 = parseAwareTimestamp(value);
+  if (timestamp2 === null) {
     return false;
   }
   const now2 = Date.now();
-  return timestamp >= now2 - RUNTIME_HEARTBEAT_MAX_AGE_MS && timestamp <= now2 + RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS;
+  return timestamp2 >= now2 - RUNTIME_HEARTBEAT_MAX_AGE_MS && timestamp2 <= now2 + RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS;
 }
 function isLoopbackRuntimeHost(value) {
   return value === "127.0.0.1" || value === "localhost" || value === "::1";
@@ -19371,11 +19395,11 @@ function normalizePackageFirewallReceipt(value) {
   const id2 = stringValue$1(value.id);
   const operation = stringValue$1(value.operation);
   const status = stringValue$1(value.status);
-  const timestamp = stringValue$1(value.timestamp);
-  if (id2 === null || operation === null || status === null || timestamp === null) {
+  const timestamp2 = stringValue$1(value.timestamp);
+  if (id2 === null || operation === null || status === null || timestamp2 === null) {
     return null;
   }
-  return { id: id2, operation, status, timestamp };
+  return { id: id2, operation, status, timestamp: timestamp2 };
 }
 function normalizePackageFirewallActions(value) {
   if (!isRecord$4(value)) {
@@ -19478,8 +19502,8 @@ function readLastInterceptProofAtByManager(status) {
     if (!isRecord$4(source)) {
       continue;
     }
-    for (const [manager, timestamp] of Object.entries(source)) {
-      const normalized = stringValue$1(timestamp);
+    for (const [manager, timestamp2] of Object.entries(source)) {
+      const normalized = stringValue$1(timestamp2);
       if (normalized !== null) {
         merged[manager] = normalized;
       }
@@ -19573,9 +19597,9 @@ function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
 function actionResultSummary(operation, detail) {
   const countKeys = ["installed_now_count", "repaired_count"];
   for (const key of countKeys) {
-    const count = numberValue(detail[key]);
-    if (count !== null) {
-      return `${operation} completed for ${count} manager${count === 1 ? "" : "s"}.`;
+    const count2 = numberValue(detail[key]);
+    if (count2 !== null) {
+      return `${operation} completed for ${count2} manager${count2 === 1 ? "" : "s"}.`;
     }
   }
   const tested = normalizeStringArray(detail.tested_managers);
@@ -21839,6 +21863,15 @@ const SHELL_NAV_ITEMS = [
     icon: HiMiniShieldCheck
   },
   {
+    href: "/cigar",
+    label: "CIGAR",
+    shortLabel: "CIGAR",
+    description: "Local context, setup, sources, and AI app access",
+    view: "cigar",
+    group: "primary",
+    icon: HiMiniCircleStack
+  },
+  {
     href: "/extensions",
     label: "Extensions",
     shortLabel: "Extensions",
@@ -21902,7 +21935,7 @@ const SHELL_NAV_ITEMS = [
     icon: HiMiniInformationCircle
   }
 ];
-const MOBILE_PRIMARY_VIEWS = /* @__PURE__ */ new Set(["home", "inbox", "fleet", "extensions"]);
+const MOBILE_PRIMARY_VIEWS = /* @__PURE__ */ new Set(["home", "inbox", "fleet", "cigar"]);
 const NAVIGATION_GROUPS = [
   { id: "primary", label: "Guard" },
   { id: "manage", label: "Manage" },
@@ -21927,12 +21960,12 @@ function mobilePrimaryNavigationItems() {
 function isMobilePrimaryView(view) {
   return MOBILE_PRIMARY_VIEWS.has(canonicalNavigationView(view));
 }
-function queueCountDisplay(count) {
-  return count > 99 ? "99+" : String(count);
+function queueCountDisplay(count2) {
+  return count2 > 99 ? "99+" : String(count2);
 }
-function queueAriaLabel(count) {
-  if (count === 0) return "Inbox, no Guard actions waiting";
-  return `Inbox, ${count} Guard ${count === 1 ? "action" : "actions"} waiting`;
+function queueAriaLabel(count2) {
+  if (count2 === 0) return "Inbox, no Guard actions waiting";
+  return `Inbox, ${count2} Guard ${count2 === 1 ? "action" : "actions"} waiting`;
 }
 function shellHref(pathname) {
   return typeof window === "undefined" ? pathname : guardAwareHref(pathname);
@@ -23559,6 +23592,544 @@ function LoggedActionPanel(props) {
     ] })
   ] });
 }
+const record$6 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const digest$7 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+const timestamp = (value) => value === null || typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const keys = /* @__PURE__ */ new Set([
+  "schema",
+  "data_role",
+  "effect_id",
+  "snapshot_id",
+  "scope_id",
+  "execution_reference",
+  "phase",
+  "source_qualification",
+  "SDK_checked_at_ms",
+  "native_barrier_checked_at_ms",
+  "context_eligible_at_last_check",
+  "association_applied",
+  "native_dispatch_acknowledged",
+  "reason",
+  "approval_grant",
+  "send_boundary_atomicity"
+]);
+function isContextExecutionObservation(value) {
+  if (!record$6(value) || Object.keys(value).length !== keys.size || Object.keys(value).some((key) => !keys.has(key))) return false;
+  return value.schema === "guard-cigar-native-execution-observation.v1" && value.data_role === true && typeof value.effect_id === "string" && /^execution:[a-f0-9]{64}$/.test(value.effect_id) && digest$7(value.snapshot_id) && typeof value.scope_id === "string" && /^scope:[a-f0-9]{64}$/.test(value.scope_id) && (value.execution_reference === null || digest$7(value.execution_reference)) && ["prepared", "not_dispatched", "dispatch_acknowledged", "completed", "outcome_unknown"].includes(String(value.phase)) && value.source_qualification === "captured_native_facts_only" && timestamp(value.SDK_checked_at_ms) && timestamp(value.native_barrier_checked_at_ms) && typeof value.context_eligible_at_last_check === "boolean" && typeof value.association_applied === "boolean" && typeof value.native_dispatch_acknowledged === "boolean" && (value.reason === null || ["captured_native_binding_changed", "context_revoked_expired_or_unavailable", "native_operation_already_recorded"].includes(String(value.reason))) && value.approval_grant === false && value.send_boundary_atomicity === false && (!value.association_applied || value.native_dispatch_acknowledged && value.context_eligible_at_last_check && value.native_barrier_checked_at_ms !== null) && (value.phase !== "not_dispatched" || !value.native_dispatch_acknowledged) && (value.phase !== "dispatch_acknowledged" || value.native_dispatch_acknowledged);
+}
+const isCigarProducerVersion = (value) => typeof value === "string" && value.length > 0 && value.length <= 128 && value === value.trim() && /^(?:[0-9]+!)?[0-9]+(?:\.[0-9]+)*(?:(?:a|b|rc)[0-9]+)?(?:\.post[0-9]+)?(?:\.dev[0-9]+)?(?:\+[a-z0-9]+(?:[._-][a-z0-9]+)*)?$/i.test(value);
+const isCigarCoreLabel = (value) => typeof value === "string" && value === value.trim() && value.length <= 128 && /^[a-z0-9][a-z0-9._+!-]{0,127}$/i.test(value) && !value.includes("..");
+const object$3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const identifier = (value) => typeof value === "string" && value === value.trim() && /^[a-z0-9_:-]{1,128}$/i.test(value);
+const digest$6 = (value) => typeof value === "string" && value.length === 64 && /^[a-f0-9]{64}$/.test(value);
+function isCigarBuildIdentity(value) {
+  return object$3(value) && identifier(value.build_id) && isCigarProducerVersion(value.sdk_version) && isCigarCoreLabel(value.core_version) && typeof value.source_revision === "string" && value.source_revision.length === 40 && /^[a-f0-9]{40}$/.test(value.source_revision) && digest$6(value.manifest_sha256);
+}
+function isCigarReleaseBinding(value) {
+  if (!object$3(value) || !isCigarBuildIdentity(value.identity)) return false;
+  return identifier(value.profile_id) && identifier(value.adapter_id) && Number.isSafeInteger(value.adapter_revision) && Number(value.adapter_revision) >= 1 && Number(value.adapter_revision) <= 65535 && digest$6(value.profile_sha256) && typeof value.platform === "string" && ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "linux-arm64-gnu", "linux-x64-musl", "linux-arm64-musl", "win32-x64"].includes(value.platform);
+}
+const record$5 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const text$3 = (value, max = 256) => typeof value === "string" && value.length <= max;
+const digest$5 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+const revision = (value) => typeof value === "string" && /^[1-9][0-9]{0,19}$/.test(value);
+const version$1 = (value) => Array.isArray(value) && value.length === 3 && value.every((part) => Number.isSafeInteger(part) && part >= 0 && part <= 65535);
+function config(value) {
+  if (!record$5(value) || value.schema_version !== 1 || typeof value.enabled !== "boolean" || !text$3(value.runtime_id, 128) || !["low_memory", "balanced", "custom"].includes(String(value.resource_profile)) || !record$5(value.features) || !record$5(value.sources) || !record$5(value.storage) || !record$5(value.limits)) return false;
+  const { features, sources, storage, limits } = value;
+  return ["review_briefs", "agent_context", "shared_agents"].every((key) => typeof features[key] === "boolean") && (features.execution_context === void 0 || typeof features.execution_context === "boolean") && ["native_policy_facts", "sanitized_receipt_facts", "workspace_documents"].every((key) => typeof sources[key] === "boolean") && text$3(sources.source_set_id, 128) && (storage.mode === "memory" || storage.mode === "sqlite") && Number.isSafeInteger(storage.retention_hours) && ["context_tokens", "reserve_tokens", "max_active_workspaces", "idle_shutdown_seconds"].every((key) => Number.isSafeInteger(limits[key]));
+}
+function runtime(value) {
+  if (!record$5(value) || value.schema !== "guard-cigar-runtime-status.v1" || !record$5(value.interpreter)) return false;
+  const facts = value.interpreter;
+  return facts.schema === "guard-cigar-interpreter.v1" && version$1(facts.version) && ["implementation", "release_level", "abi", "platform"].every((key) => text$3(facts[key])) && typeof facts.free_threaded === "boolean" && typeof facts.debug_build === "boolean" && isCigarProducerVersion(value.package_version) && text$3(value.protocol) && (value.core_version === void 0 || isCigarCoreLabel(value.core_version)) && (value.release === void 0 || isCigarReleaseBinding(value.release) && value.package_version === value.release.identity.sdk_version && value.core_version === value.release.identity.core_version && value.adapter_id === value.release.adapter_id && value.adapter_revision === value.release.adapter_revision) && digest$5(value.package_fingerprint) && digest$5(value.worker_fingerprint) && Array.isArray(value.features) && value.features.length <= 64 && value.features.every((item) => text$3(item, 64)) && typeof value.compile_verified === "boolean" && typeof value.active === "boolean" && (value.shared_compile_verified === void 0 || typeof value.shared_compile_verified === "boolean") && (value.persistence_compile_verified === void 0 || typeof value.persistence_compile_verified === "boolean") && (value.execution_handoff_verified === void 0 || typeof value.execution_handoff_verified === "boolean");
+}
+function installation(value) {
+  if (!record$5(value) || !text$3(value.runtime_id, 128) || !["local_candidate", "guard_qualified"].includes(String(value.qualification)) || !version$1(value.python_version) || !text$3(value.platform) || !digest$5(value.worker_fingerprint)) return false;
+  const metadata = ["sdk_version", "core_version", "build_id", "adapter_id", "adapter_revision", "managed"];
+  if (!metadata.some((key) => value[key] !== void 0)) return value.qualification === "local_candidate";
+  if (!isCigarProducerVersion(value.sdk_version) || !isCigarCoreLabel(value.core_version) || !text$3(value.adapter_id, 128) || !Number.isSafeInteger(value.adapter_revision) || Number(value.adapter_revision) < 1 || Number(value.adapter_revision) > 65535 || typeof value.managed !== "boolean") return false;
+  return value.qualification === "guard_qualified" ? value.managed && typeof value.build_id === "string" && value.build_id === value.build_id.trim() && /^[a-z0-9_:-]{1,128}$/i.test(value.build_id) : !value.managed && value.build_id === null;
+}
+function parseContextAssistanceStatus(value) {
+  if (!record$5(value) || value.schema !== "guard-context-assistance-status.v2" || !["off", "unavailable", "checking", "ready"].includes(String(value.availability)) || typeof value.requested_enabled !== "boolean" || typeof value.effective_enabled !== "boolean" || !config(value.preferences) || !config(value.effective_preferences) || !revision(value.generation) || !(value.restriction === null || text$3(value.restriction)) || typeof value.verification_permitted !== "boolean" || !(value.diagnostic === null || text$3(value.diagnostic)) || !(value.runtime === null || runtime(value.runtime)) || !(value.last_check === null || runtime(value.last_check)) || !(value.qualification === null || ["local_candidate", "guard_qualified"].includes(String(value.qualification))) || !(value.capabilities === void 0 || record$5(value.capabilities) && typeof value.capabilities.shared_agents === "boolean" && typeof value.capabilities.private_persistence === "boolean" && (value.capabilities.execution_context === void 0 || typeof value.capabilities.execution_context === "boolean")) || !(value.execution_ready === void 0 || typeof value.execution_ready === "boolean") || !(value.execution_observations === void 0 || value.execution_observations === null || Array.isArray(value.execution_observations) && value.execution_observations.length <= 32 && value.execution_observations.every(isContextExecutionObservation)) || !(value.installation_options === null || Array.isArray(value.installation_options) && value.installation_options.length <= 8 && value.installation_options.every(installation)) || !(value.job === null || record$5(value.job) && revision(value.job.id) && (value.job.operation === "activate" || value.job.operation === "recheck") && (value.job.phase === "verifying" || value.job.phase === "cancelling"))) {
+    throw new Error("Context assistance returned an incompatible status. Update Guard and check again.");
+  }
+  if (value.qualification === "guard_qualified") {
+    const checked = value.runtime ?? value.last_check;
+    if (!record$5(checked) || !isCigarReleaseBinding(checked.release)) {
+      throw new Error("Context assistance did not provide a qualified release identity. Check again.");
+    }
+  }
+  if (value.requested_enabled !== value.preferences.enabled || value.effective_enabled && (value.availability !== "ready" || !value.requested_enabled || !value.effective_preferences.enabled || !value.verification_permitted || !record$5(value.runtime) || value.runtime.active !== true || value.runtime.compile_verified !== true || value.effective_preferences.features.shared_agents && value.runtime.shared_compile_verified !== true || value.effective_preferences.storage.mode === "sqlite" && (value.runtime.persistence_compile_verified !== true || !record$5(value.capabilities) || value.capabilities.private_persistence !== true)) || value.availability === "ready" && !value.effective_enabled || value.execution_ready === true && (!value.effective_enabled || value.effective_preferences.features.execution_context !== true || !value.effective_preferences.sources.native_policy_facts || !record$5(value.capabilities) || value.capabilities.execution_context !== true || !record$5(value.runtime) || value.runtime.execution_handoff_verified !== true)) {
+    throw new Error("Context assistance did not provide a current readiness proof. Check again.");
+  }
+  return value;
+}
+function contextStatusCopy(status) {
+  if (status.job) return status.job.phase === "cancelling" ? { label: "Stopping", detail: "Cancelling the pending runtime check." } : { label: "Checking runtime", detail: "Guard is verifying Python, CIGAR and its worker in the background." };
+  if (status.effective_enabled) return {
+    label: "Ready",
+    detail: "The local CIGAR runtime is ready. Context uses only the sources and app access you authorize."
+  };
+  if (!status.requested_enabled && !status.diagnostic) return {
+    label: "Off",
+    detail: "Optional context assistance is off. Guard continues protecting your commands."
+  };
+  if (status.requested_enabled && status.verification_permitted && status.effective_preferences.enabled && (status.diagnostic === "runtime_not_verified" || status.diagnostic === null)) return {
+    label: "Not started",
+    detail: "Your preferences are saved. Click Start CIGAR to verify and run the selected runtime."
+  };
+  if (status.diagnostic === "runtime_idle") return {
+    label: "Paused",
+    detail: "CIGAR stopped after being idle. Click Start CIGAR when you need context again."
+  };
+  const code = status.diagnostic ?? "runtime_not_verified";
+  const detail = code === "policy_restricted" ? "Your preference is saved. Organization or workspace policy currently prevents context assistance. You can still turn it off." : code.startsWith("python_") ? "Choose a verified final CPython 3.14 runtime. Other Python versions cannot run this feature." : code.includes("managed") || code.includes("configuration") ? "Local or managed settings currently restrict context assistance. Review this machine's settings." : code === "runtime_not_verified" ? "Your preference is saved. Review the selected runtime and any policy restrictions before starting CIGAR." : "Context assistance needs attention. Check the selected runtime; Guard protection remains available.";
+  return { label: "Unavailable", detail };
+}
+class ContextAssistanceApiError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+    this.name = "ContextAssistanceApiError";
+  }
+  code;
+}
+async function request$1(path, action, signal) {
+  if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context assistance setup requires a local Guard installation.");
+  const timeout = AbortSignal.timeout(1e4);
+  const response = await fetchWithGuardAuth(path, {
+    cache: "no-store",
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    ...action ? {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    } : {}
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const code = body !== null && typeof body === "object" && "code" in body && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
+    throw new ContextAssistanceApiError(
+      code,
+      response.status === 404 ? "This Guard installation needs a native core with context assistance support. Update Guard to continue." : "Context assistance is unavailable. Refresh its status before trying again."
+    );
+  }
+  return parseContextAssistanceStatus(await response.json());
+}
+const fetchContextAssistance = (signal) => request$1("/v1/context-assistance", void 0, signal);
+const fetchContextInstallations = (signal) => request$1("/v1/context-assistance/installations", void 0, signal);
+function controlContextAssistance(action, signal) {
+  if (!["recheck", "activate", "stop"].includes(action)) {
+    return Promise.reject(new ContextAssistanceApiError("action_invalid", "Invalid context assistance action."));
+  }
+  return request$1(`/v1/context-assistance/${action}`, action, signal);
+}
+function ContextBriefView({ brief, scope }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-96 space-y-3 overflow-auto text-sm text-slate-700", children: brief.excerpts.map((excerpt, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "whitespace-pre-wrap break-words", children: excerpt.text }, index)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer text-sm font-semibold", children: "Sources and revisions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-2 text-sm", children: brief.citations.map((citation, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        scope.sources.find((source) => source.source_id === citation.source)?.path ?? (citation.source === "guard:notes" ? "Reviewed shared notes" : citation.source === "guard:action" ? "Authenticated native decision facts" : citation.source === "guard:receipts" ? "Native Guard receipt facts" : "Native Guard policy facts"),
+        ", lines ",
+        citation.start_line,
+        "–",
+        citation.end_line,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block break-all text-xs text-slate-500", children: citation.document_digest })
+      ] }, `${citation.node_id}-${index}`)) })
+    ] })
+  ] });
+}
+const count$2 = (value, max) => Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= max;
+function parseSavedEvidence(value) {
+  const v = value;
+  if (!v || typeof v !== "object" || Array.isArray(v) || v.schema !== "guard-cigar-saved-evidence.v1" || !["empty", "saved", "busy", "repair_required", "unavailable", "unsupported"].includes(String(v.status)) || v.max_slots !== 8 || v.max_bytes !== 553648128 || v.authority_restored !== false || v.storage !== "private_posix_files" || !(v.diagnostic === null || typeof v.diagnostic === "string" && /^[a-z0-9_]{1,160}$/.test(v.diagnostic)) || !["slots", "active_slots", "unresolved_writes", "invalid_records", "expired_slots"].every((k) => v[k] === null || count$2(v[k], 8)) || !(v.bytes === null || count$2(v.bytes, 553648128)) || v.slots !== null && ["active_slots", "unresolved_writes", "invalid_records", "expired_slots"].some((k) => v[k] !== null && Number(v[k]) > Number(v.slots)) || ["empty", "saved"].includes(String(v.status)) && (v.diagnostic !== null || v.slots === null || v.bytes === null || Number(v.invalid_records) !== 0 || Number(v.unresolved_writes) !== 0 || ["active_slots", "unresolved_writes", "invalid_records", "expired_slots"].some((k) => v[k] === null) || (v.status === "empty" ? v.slots !== 0 || v.bytes !== 0 : Number(v.slots) === 0)) || !["empty", "saved"].includes(String(v.status)) && v.diagnostic === null) {
+    throw new ContextAssistanceApiError("saved_evidence_payload_invalid", "Guard returned incompatible saved-data status. Refresh or update Guard.");
+  }
+  return value;
+}
+function savedEvidenceCopy(value) {
+  if (value.status === "empty") return "No saved evidence remains on this machine.";
+  if (value.status === "saved") return "Saved evidence remains until its retention period expires or you remove it. Saved data does not restore source or app permissions.";
+  if (value.status === "busy") return "Saved storage is in use or cleanup is still running. Refresh after it finishes.";
+  if (value.status === "repair_required") return "Saved evidence needs reconciliation or repair. It has been preserved. Remove saved evidence to start again with fresh source grants.";
+  if (value.status === "unsupported") return "Private saved storage is unavailable on this platform.";
+  return "Saved storage could not be inspected. Refresh its status before trying removal again.";
+}
+const object$2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const text$2 = (value) => typeof value === "string";
+const digest$4 = (value) => text$2(value) && /^[a-f0-9]{64}$/.test(value);
+const count$1 = (value) => Number.isSafeInteger(value) && value >= 0;
+function invalid$3() {
+  throw new ContextAssistanceApiError("workspace_payload_invalid", "Guard returned incompatible context data. Refresh its status.");
+}
+function validContextBrokerRevision(value) {
+  return object$2(value) && digest$4(value.epoch) && text$2(value.version) && /^(0|[1-9][0-9]{0,19})$/.test(value.version) && (value.version.length < 20 || value.version <= "18446744073709551615");
+}
+function parseContextScope(value) {
+  if (!object$2(value) || !text$2(value.scope_id) || !text$2(value.workspace) || !text$2(value.app) || !digest$4(value.policy_revision) || !count$1(value.retained_contexts) || typeof value.revoked !== "boolean" || !Array.isArray(value.sources) || value.sources.length > 32 || !value.sources.every((source) => object$2(source) && text$2(source.source_id) && text$2(source.path) && digest$4(source.sha256) && count$1(source.documents))) invalid$3();
+  if (value.native_policy_facts !== void 0 && typeof value.native_policy_facts !== "boolean") invalid$3();
+  if (value.sharing !== void 0) {
+    const sharing = value.sharing;
+    if (!object$2(sharing) || !["private_graph", "private_broker", "shared_broker"].includes(String(sharing.mode)) || !object$2(sharing.notes) || typeof sharing.notes.read !== "boolean" || typeof sharing.notes.propose !== "boolean" || sharing.notes.propose && !sharing.notes.read || !count$1(sharing.notes.documents) || sharing.notes.documents > 32 || !(sharing.notes.revision === null || validContextBrokerRevision(sharing.notes.revision)) || (sharing.mode === "shared_broker" ? sharing.client_lease_seconds !== 300 : sharing.client_lease_seconds !== null || sharing.notes.read || sharing.notes.propose)) invalid$3();
+  }
+  if (value.receipt_window !== void 0 && (!object$2(value.receipt_window) || typeof value.receipt_window.enabled !== "boolean" || !count$1(value.receipt_window.retained) || value.receipt_window.retained > 16 || !text$2(value.receipt_window.dropped) || !/^(0|[1-9][0-9]{0,19})$/.test(value.receipt_window.dropped) || value.receipt_window.coverage !== "bounded_recent_native_receipts")) invalid$3();
+  return value;
+}
+function parseContextBrief(value) {
+  if (!object$2(value) || value.schema !== "guard-cigar-context-brief.v1" || value.data_role !== true || !digest$4(value.snapshot_id) || !text$2(value.policy_revision) || !count$1(value.graph_revision) || !text$2(value.rendered) || value.rendered.length > 262144 || !count$1(value.rendered_tokens) || !Array.isArray(value.excerpts) || value.excerpts.length > 16 || !value.excerpts.every((excerpt) => object$2(excerpt) && text$2(excerpt.text) && Array.isArray(excerpt.citations)) || !Array.isArray(value.citations) || value.citations.length > 1024 || !value.citations.every((citation) => object$2(citation) && text$2(citation.source) && text$2(citation.node_id) && count$1(citation.start_line) && citation.start_line > 0 && count$1(citation.end_line) && citation.end_line >= citation.start_line && digest$4(citation.document_digest))) invalid$3();
+  return value;
+}
+async function ask(route, input, proof, signal) {
+  if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
+  const timeout = AbortSignal.timeout(12e3);
+  const response = await fetchWithGuardAuth(`/v1/context-assistance/${route}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    body: JSON.stringify({
+      input,
+      ...proof?.currentPassword ? { approval_password: proof.currentPassword } : {},
+      ...proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}
+    })
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const code = object$2(body) && text$2(body.code) && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_request_refused";
+    const message = code.endsWith("context_storage_repair_required") ? "Saved evidence needs repair. Use Data & repair to remove saved evidence, then check the runtime and grant sources again." : code.endsWith("context_storage_outcome_unknown") ? "Saved data may have changed before the operation ended. Inspect Data & repair before retrying." : code.endsWith("context_resource_limit") && input.action === "authorize_agent" ? "Context client capacity is full. Revoke an unused connection or workspace, then restart this app's Guard MCP connection and pair its new code." : code.endsWith("context_busy") || code.endsWith("_busy") ? "Context work or cleanup is still running. Refresh status after it finishes." : code.endsWith("context_stale") || code.endsWith("context_scope_denied") ? "Sources or access changed. Refresh sources or grant access again before using this context." : response.status === 403 || response.status === 401 ? "Guard needs your approval proof before granting source access." : "Context did not return a verified result. Refresh its status before trying again.";
+    throw new ContextAssistanceApiError(code, message);
+  }
+  if (!object$2(body) || body.schema !== "guard-cigar-workspace-result.v1" || body.data_role !== true || !object$2(body.result)) invalid$3();
+  return body.result;
+}
+async function listContextWorkspaces(signal) {
+  const result = await ask("workspace", { action: "list" }, void 0, signal);
+  if (!Array.isArray(result.scopes) || result.scopes.length > 8) invalid$3();
+  return result.scopes.map(parseContextScope);
+}
+async function grantContextWorkspace(workspace, sources, proof, signal, app = "dashboard", notes) {
+  return parseContextScope(await ask("workspace-grant", { action: "grant", workspace, app, sources, ...notes ? { shared_notes: notes } : {} }, proof, signal));
+}
+async function listContextAgentSessions(signal) {
+  const result = await ask("workspace", { action: "list_agents" }, void 0, signal);
+  if (!Array.isArray(result.agent_sessions) || result.agent_sessions.length > 8 || !result.agent_sessions.every((item) => object$2(item) && text$2(item.session_id) && (item.scope_id === null || text$2(item.scope_id)) && ["pending", "authorized"].includes(String(item.phase)) && count$1(item.expires_in_seconds) && item.expires_in_seconds <= 3600)) invalid$3();
+  return result.agent_sessions;
+}
+async function authorizeContextAgentSession(sessionId, scopeId, proof, signal) {
+  return ask("workspace-grant", { action: "authorize_agent", session_id: sessionId, scope_id: scopeId }, proof, signal);
+}
+async function revokeContextAgentSession(sessionId, signal) {
+  return ask("workspace-access", { action: "revoke_agent", session_id: sessionId }, void 0, signal);
+}
+async function manageContextWorkspace(action, scopeId, sourceId, signal) {
+  return ask("workspace-access", { action, ...scopeId ? { scope_id: scopeId } : {}, ...sourceId ? { source_id: sourceId } : {} }, void 0, signal);
+}
+async function compileWorkspaceContext(scopeId, query, signal) {
+  const result = await ask("workspace", { action: "compile", scope_id: scopeId, query }, void 0, signal);
+  if (result.current !== true) invalid$3();
+  const scope = result.scope === void 0 ? null : parseContextScope(result.scope);
+  if (scope && scope.scope_id !== scopeId) invalid$3();
+  return { brief: parseContextBrief(result.brief), scope };
+}
+const object$1 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const digest$3 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+function invalid$2() {
+  throw new ContextAssistanceApiError("native_decision_payload_invalid", "Guard returned incompatible native decision context. Refresh its status.");
+}
+function parseNativeDecisionAssociation(association) {
+  if (!object$1(association)) invalid$2();
+  if (association.schema !== "guard-context-native-decision.v1" || association.data_role !== true || association.binding !== "authenticated_native_decision" || !digest$3(association.decision_id) || typeof association.harness !== "string" || !/^[a-z0-9-]{1,64}$/.test(association.harness) || association.event !== "PreToolUse" || typeof association.policy_generation !== "string" || !/^[1-9][0-9]{0,19}$/.test(association.policy_generation) || association.execution_binding !== "unqualified" || association.approval_grant !== false || !["command", "file_read", "file_write", "package", "mcp_tool", "network", "process_service", "browser", "config", "prompt", "harness", "unknown"].includes(String(association.action_type)) || !["execute", "read", "write", "install", "call", "request", "start", "stop", "navigate", "set", "submit", "unknown"].includes(String(association.operation))) invalid$2();
+  return association;
+}
+function parseNativeDecisionContext(value, expected) {
+  if (!object$1(value) || value.current !== true) invalid$2();
+  const association = parseNativeDecisionAssociation(value.association);
+  if (association.decision_id !== expected.decisionId || association.harness !== expected.harness) invalid$2();
+  const scope = parseContextScope(value.scope);
+  const brief = parseContextBrief(value.brief);
+  if (scope.scope_id !== expected.scope.scope_id || scope.workspace !== expected.scope.workspace || scope.app !== expected.scope.app || scope.revoked || !scope.native_policy_facts || brief.policy_revision !== scope.policy_revision || !brief.citations.some((citation) => citation.source === "guard:action") || brief.citations.some((citation) => !["guard:action", "guard:policy", "guard:receipts", ...scope.sharing?.notes.read ? ["guard:notes"] : [], ...scope.sources.map((source) => source.source_id)].includes(citation.source))) invalid$2();
+  return { scope, brief, association, explanation: value.explanation };
+}
+async function prepareNativeDecisionContext(scope, decisionId, harness, signal, snapshotId) {
+  if (!digest$3(decisionId) || snapshotId !== void 0 && !digest$3(snapshotId)) invalid$2();
+  const value = await ask("workspace", {
+    action: "action",
+    scope_id: scope.scope_id,
+    decision_id: decisionId,
+    ...snapshotId ? { snapshot_id: snapshotId } : {}
+  }, void 0, signal);
+  return parseNativeDecisionContext(value, { scope, decisionId, harness });
+}
+const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const text$1 = (value) => typeof value === "string";
+const digest$2 = (value) => text$1(value) && /^[a-f0-9]{64}$/.test(value);
+const count = (value, max) => Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= max;
+function invalid$1() {
+  throw new ContextAssistanceApiError("history_payload_invalid", "Guard returned incompatible context history. Refresh its status.");
+}
+function parseContextDataSummary(value) {
+  if (!object(value) || !["guard-cigar-data-summary.v1", "guard-cigar-data-summary.v2"].includes(String(value.schema)) || value.storage !== "memory" || value.data_role !== true || !count(value.active_scopes, 8) || !count(value.selected_files, 256) || !count(value.current_contexts, 64) || !count(value.history_entries, 64) || !count(value.history_encoded_bytes, 4194304) || !count(value.agent_sessions, 8) || value.max_history_entries_per_scope !== 8 || value.max_history_encoded_bytes_per_scope !== 524288 || value.saved_context !== "unavailable" || typeof value.cleared_history !== "boolean") invalid$1();
+  if (value.schema === "guard-cigar-data-summary.v2") {
+    if (value.history_storage !== "memory" || typeof value.cleared_saved !== "boolean") invalid$1();
+    parseSavedEvidence(value.saved_evidence);
+  } else if (value.saved_evidence !== void 0) parseSavedEvidence(value.saved_evidence);
+  return value;
+}
+function parseContextHistoryEntry(value) {
+  if (!object(value) || !text$1(value.history_id) || !/^history:[1-9][0-9]{0,19}$/.test(value.history_id) || !text$1(value.prepared_at_ms) || !/^(0|[1-9][0-9]{0,19})$/.test(value.prepared_at_ms) || !digest$2(value.snapshot_id) || !digest$2(value.policy_revision) || !count(value.graph_revision, Number.MAX_SAFE_INTEGER) || !count(value.rendered_tokens, 32768) || !isCigarProducerVersion(value.sdk_version) || !digest$2(value.worker_fingerprint) || value.historical !== true || value.text_retained !== true || value.observation !== "prepared_not_delivery_or_execution" || !Array.isArray(value.sources) || value.sources.length > 32 || !value.sources.every((source) => object(source) && text$1(source.source_id) && text$1(source.path) && source.path.length <= 1024 && digest$2(source.sha256))) invalid$1();
+  parseContextBrief({ ...value, schema: "guard-cigar-context-brief.v1", data_role: true, rendered: "", excerpts: [] });
+  const association = value.association === null ? null : parseNativeDecisionAssociation(value.association);
+  return { ...value, association };
+}
+function scopeFor(value, expected) {
+  const scope = parseContextScope(value);
+  if (scope.revoked || scope.scope_id !== expected.scope_id || scope.workspace !== expected.workspace || scope.app !== expected.app) invalid$1();
+  return scope;
+}
+function historical(value) {
+  if (!object(value) || value.history_schema !== "guard-cigar-history.v1" || value.historical !== true || value.current !== false) invalid$1();
+}
+function parseContextHistory(value, expected, decisionId) {
+  historical(value);
+  const scope = scopeFor(value.scope, expected);
+  if (!Array.isArray(value.entries) || value.entries.length > 8) invalid$1();
+  const entries = value.entries.map(parseContextHistoryEntry);
+  const summary = value.summary;
+  if (!object(summary) || !count(summary.entries, 8) || !count(summary.encoded_bytes, 524288) || !text$1(summary.dropped) || !/^(0|[1-9][0-9]{0,19})$/.test(summary.dropped) || summary.max_entries !== 8 || summary.max_encoded_bytes !== 524288 || summary.storage !== "memory") invalid$1();
+  if (new Set(entries.map((entry) => entry.history_id)).size !== entries.length || entries.some((entry) => decisionId && entry.association?.decision_id !== decisionId)) invalid$1();
+  return { scope, entries, summary };
+}
+function parseContextHistoryDetail(value, expected, historyId) {
+  historical(value);
+  const scope = scopeFor(value.scope, expected);
+  const entry = parseContextHistoryEntry(value.entry);
+  if (entry.history_id !== historyId || !["available", "unavailable"].includes(String(value.source_access)) || !Array.isArray(value.source_states) || value.source_states.length !== entry.sources.length) invalid$1();
+  const states = value.source_states;
+  if (!states.every((state) => object(state) && text$1(state.source_id) && digest$2(state.recorded_sha256) && (state.current_sha256 === null || digest$2(state.current_sha256)) && ["unchanged", "changed", "unavailable"].includes(String(state.state)) && entry.sources.some((source) => source.source_id === state.source_id && source.sha256 === state.recorded_sha256)) || new Set(states.map((state) => state.source_id)).size !== states.length || entry.sources.some((source) => !scope.sources.some((grant) => grant.source_id === source.source_id && grant.path === source.path))) invalid$1();
+  const brief = value.brief === null ? null : parseContextBrief(value.brief);
+  if (value.source_access === "available" !== Boolean(brief) || brief && (brief.snapshot_id !== entry.snapshot_id || brief.policy_revision !== entry.policy_revision || !brief.citations.every((citation) => ["guard:policy", "guard:action", "guard:receipts", ...scope.sharing?.notes.read ? ["guard:notes"] : [], ...entry.sources.map((source) => source.source_id)].includes(citation.source)))) invalid$1();
+  return { scope, entry, brief, source_access: value.source_access, source_states: states };
+}
+const fetchContextData = async (signal) => parseContextDataSummary(await ask("workspace", { action: "data" }, void 0, signal));
+const forgetContextHistory = async (signal) => parseContextDataSummary(await ask("workspace-access", { action: "forget_history" }, void 0, signal));
+const forgetSavedEvidence = async (signal) => parseContextDataSummary(await ask("workspace-access", { action: "forget_saved" }, void 0, signal));
+async function listContextHistory(scope, decisionId, signal) {
+  const value = await ask("workspace", { action: "history", scope_id: scope.scope_id, ...decisionId ? { decision_id: decisionId } : {} }, void 0, signal);
+  return parseContextHistory(value, scope, decisionId);
+}
+async function readContextHistory(scope, historyId, signal) {
+  return parseContextHistoryDetail(await ask("workspace", { action: "history_detail", scope_id: scope.scope_id, history_id: historyId }, void 0, signal), scope, historyId);
+}
+const button$1 = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+const preparedAt = (value) => {
+  const date = new Date(Number(value));
+  return Number.isNaN(date.getTime()) ? "Unknown preparation time" : date.toLocaleString();
+};
+function ContextHistoryPanel({ decisionId, harness }) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [scopes, setScopes] = reactExports.useState([]);
+  const [scope, setScope] = reactExports.useState(null);
+  const [entries, setEntries] = reactExports.useState([]);
+  const [summary, setSummary] = reactExports.useState(null);
+  const [detail, setDetail] = reactExports.useState(null);
+  const [previous, setPrevious] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const revision2 = reactExports.useRef(0);
+  const generation = reactExports.useRef(null);
+  const request2 = reactExports.useRef(null);
+  const id2 = reactExports.useId();
+  reactExports.useEffect(() => {
+    revision2.current += 1;
+    request2.current?.abort();
+    generation.current = null;
+    setOpen(false);
+    setScopes([]);
+    setScope(null);
+    setEntries([]);
+    setDetail(null);
+    setPrevious(null);
+    setError(null);
+    setBusy(false);
+    return () => {
+      revision2.current += 1;
+      request2.current?.abort();
+    };
+  }, [decisionId, harness]);
+  reactExports.useEffect(() => {
+    if (!open || !scope) return;
+    const controller = new AbortController();
+    let pending = false;
+    const timer = window.setInterval(() => {
+      if (pending) return;
+      pending = true;
+      void fetchContextAssistance(controller.signal).then(async (status) => {
+        if (!status.effective_enabled || status.generation !== generation.current) throw new Error("Context access changed. Reload history to continue.");
+        const result = await listContextHistory(scope, decisionId, controller.signal);
+        if (controller.signal.aborted) return;
+        setEntries(result.entries);
+        setSummary(result.summary);
+        setDetail((value) => value && result.entries.some((entry) => entry.history_id === value.entry.history_id) ? value : null);
+        setPrevious((value) => value && result.entries.some((entry) => entry.history_id === value.entry.history_id) ? value : null);
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          revision2.current += 1;
+          request2.current?.abort();
+          setBusy(false);
+          setEntries([]);
+          setDetail(null);
+          setPrevious(null);
+          setScope(null);
+          setError("Context access changed or its runtime stopped. Reload history to check availability.");
+        }
+      }).finally(() => {
+        pending = false;
+      });
+    }, 3e3);
+    return () => {
+      window.clearInterval(timer);
+      controller.abort();
+    };
+  }, [open, scope, decisionId]);
+  async function perform(operation) {
+    if (busy) return;
+    const current = ++revision2.current;
+    request2.current?.abort();
+    const controller = new AbortController();
+    request2.current = controller;
+    setBusy(true);
+    setError(null);
+    setOpen(true);
+    try {
+      await operation(controller.signal);
+    } catch (cause) {
+      if (revision2.current === current && !controller.signal.aborted) {
+        setDetail(null);
+        setPrevious(null);
+        setEntries([]);
+        setError(cause instanceof Error ? cause.message : "Prepared history is unavailable.");
+      }
+    } finally {
+      if (revision2.current === current) setBusy(false);
+    }
+  }
+  async function choose(selected, signal) {
+    setDetail(null);
+    setPrevious(null);
+    setEntries([]);
+    const value = await listContextHistory(selected, decisionId, signal);
+    if (!signal.aborted) {
+      setScope(value.scope);
+      setEntries(value.entries);
+      setSummary(value.summary);
+    }
+  }
+  function load() {
+    void perform(async (signal) => {
+      const status = await fetchContextAssistance(signal);
+      if (!status.effective_enabled) throw new Error("No active context history is available. Check Context assistance in Protection.");
+      generation.current = status.generation;
+      const granted = (await listContextWorkspaces(signal)).filter((scope2) => !scope2.revoked && (!harness || scope2.app === "dashboard" || scope2.app === harness));
+      if (signal.aborted) return;
+      setScopes(granted);
+      setDetail(null);
+      setPrevious(null);
+      setEntries([]);
+      setScope(null);
+      const selected = granted.find((scope2) => scope2.app === "dashboard") ?? granted[0];
+      if (selected) await choose(selected, signal);
+    });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Prepared context history", className: "space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Prepared context history" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Historical supporting data from authorized sources. Preparation does not confirm delivery, approval, or execution. History stays in local memory while access remains available." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: button$1, type: "button", disabled: busy, onClick: load, children: busy ? "Loading context history…" : "Load prepared context history" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: `${button$1} inline-flex items-center`, href: guardAwareHref("/cigar?section=data"), children: "Manage context data" })
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: error }) : null,
+    open && !busy && !error && scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No authorized workspace has available context history." }) : null,
+    open && scopes.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", htmlFor: id2, children: [
+      "Context workspace and app",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          id: id2,
+          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 px-2 text-sm",
+          disabled: busy,
+          value: scope?.scope_id ?? "",
+          onChange: (event) => {
+            const selected = scopes.find((scope2) => scope2.scope_id === event.target.value);
+            if (selected) void perform((signal) => choose(selected, signal));
+          },
+          children: [
+            !scope ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Choose authorized context access" }) : null,
+            scopes.map((scope2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: scope2.scope_id, children: [
+              scope2.workspace,
+              " · ",
+              scope2.app === "dashboard" ? "Guard dashboard" : harnessDisplayName(scope2.app)
+            ] }, scope2.scope_id))
+          ]
+        }
+      )
+    ] }) : null,
+    scope && !busy && entries.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No prepared context is retained for this selection." }) : null,
+    scope && summary && summary.dropped !== "0" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "Some prepared observations were omitted by history limits. This is a bounded window; Guard's evidence log is separate." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: entries.map((entry, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        className: `${button$1} w-full text-left`,
+        type: "button",
+        disabled: busy,
+        "aria-pressed": detail?.entry.history_id === entry.history_id,
+        onClick: () => {
+          if (scope) void perform(async (signal) => {
+            const value = await readContextHistory(scope, entry.history_id, signal);
+            if (!signal.aborted) {
+              if (!value.brief) setPrevious(null);
+              else if (detail && detail.entry.history_id !== value.entry.history_id) setPrevious(detail);
+              setDetail(value);
+            }
+          });
+        },
+        children: [
+          "View prepared context ",
+          index + 1,
+          " · ",
+          preparedAt(entry.prepared_at_ms),
+          " · ",
+          entry.rendered_tokens,
+          " tokens",
+          entry.association ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "block break-all text-xs", children: [
+            "Native decision ",
+            entry.association.decision_id
+          ] }) : null
+        ]
+      }
+    ) }, entry.history_id)) }),
+    detail ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Historical prepared context", className: "space-y-3 border-t border-slate-200 pt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+        "Historical · prepared ",
+        preparedAt(detail.entry.prepared_at_ms)
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Source state was checked when opened. Native facts describe the recorded evaluation. This view makes no current execution or approval claim." }),
+      detail.brief ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextBriefView, { brief: detail.brief, scope: detail.scope }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "Retained text is withheld because current source access is unavailable. Check or withdraw source access in Protection." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-1 text-sm text-slate-600", children: detail.source_states.map((source) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        detail.entry.sources.find((item) => item.source_id === source.source_id)?.path,
+        ": ",
+        source.state === "changed" ? "Changed since preparation" : source.state === "unchanged" ? "Same source version when checked" : "Source unavailable"
+      ] }, source.source_id)) }),
+      previous?.brief ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer text-sm font-semibold", children: "Compare with previously opened context" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-sm text-slate-600", children: "Both snapshots are historical. Source and policy digests identify their recorded revisions." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ContextBriefView, { brief: previous.brief, scope: previous.scope })
+      ] }) : null
+    ] }) : null
+  ] });
+}
 function SeverityIcon({ severity }) {
   if (severity === "critical" || severity === "high") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-amber-500", "aria-hidden": "true" });
@@ -23890,6 +24461,14 @@ function EvidenceActionDetail({
           /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection$1, { signals }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTimeline, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalSection, { receipt }),
+          attachedNativeDecision(receipt.action_envelope_json, receipt.harness) ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ContextHistoryPanel,
+            {
+              decisionId: attachedNativeDecision(receipt.action_envelope_json, receipt.harness),
+              harness: receipt.harness
+            },
+            receipt.receipt_id
+          ) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
             {
@@ -23985,8 +24564,8 @@ function monthLabels(weeks) {
 }
 function isGuardModalOpen$1() {
   if (typeof document === "undefined") return false;
-  const count = Number(document.documentElement.dataset.guardModalOpen ?? 0);
-  return Number.isFinite(count) && count > 0;
+  const count2 = Number(document.documentElement.dataset.guardModalOpen ?? 0);
+  return Number.isFinite(count2) && count2 > 0;
 }
 function flatCellsFromWeeks(weeks) {
   const result = [];
@@ -24230,11 +24809,11 @@ function EvidenceActivityHeatmap({
 function EvidenceDataProvenanceStrip({
   analytics,
   sampleCount,
-  runtime,
+  runtime: runtime2,
   onViewActions
 }) {
   const beyondSample = analytics.total > sampleCount;
-  const cloudNote = runtime?.cloud_state === "local_only" ? "Cloud sync optional and off." : runtime?.cloud_state === "paired_active" && runtime?.cloud_sync_health?.label !== "Synced" ? runtime?.cloud_sync_health?.label : null;
+  const cloudNote = runtime2?.cloud_state === "local_only" ? "Cloud sync optional and off." : runtime2?.cloud_state === "paired_active" && runtime2?.cloud_sync_health?.label !== "Synced" ? runtime2?.cloud_sync_health?.label : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 border-t border-slate-100 px-5 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
       formatEvidenceCount(analytics.total),
@@ -24601,7 +25180,7 @@ function parseInterceptProofSnapshot(body) {
   }
   const receipt = isRecord$2(body) && isRecord$2(body.receipt) ? body.receipt : null;
   const receiptId = receipt !== null ? readString(receipt.id) : null;
-  const timestamp = receipt !== null ? readString(receipt.timestamp) : null;
+  const timestamp2 = receipt !== null ? readString(receipt.timestamp) : null;
   const summary = interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.";
   return {
     interceptProved,
@@ -24609,7 +25188,7 @@ function parseInterceptProofSnapshot(body) {
     pathRepairRequired,
     managerResults,
     receiptId,
-    timestamp,
+    timestamp: timestamp2,
     summary,
     tone: interceptProved ? "success" : "warning"
   };
@@ -25445,21 +26024,21 @@ function isInsightsShareScopeError(raw) {
   const lower = raw.toLowerCase();
   return lower.includes("guard:insights.share") || lower.includes("insufficient_scope") || lower.includes("insufficient scope") || lower.includes("missing_scope") || lower.includes("missing scope") || lower.includes("unauthorized");
 }
-function insightsShareCloudReady(runtime) {
-  if (runtime === null) {
+function insightsShareCloudReady(runtime2) {
+  if (runtime2 === null) {
     return false;
   }
-  if (runtime.cloud_state === "paired_active") {
+  if (runtime2.cloud_state === "paired_active") {
     return true;
   }
-  return runtime.sync_configured;
+  return runtime2.sync_configured;
 }
 function EvidenceInsightsShareModal({
   analytics,
   runtime: initialRuntime,
   onClose
 }) {
-  const [runtime, setRuntime] = reactExports.useState(initialRuntime);
+  const [runtime2, setRuntime] = reactExports.useState(initialRuntime);
   const [includeTopArtifacts, setIncludeTopArtifacts] = reactExports.useState(false);
   const [showDisplayName, setShowDisplayName] = reactExports.useState(true);
   const [displayName, setDisplayName] = reactExports.useState("");
@@ -25470,8 +26049,8 @@ function EvidenceInsightsShareModal({
   const [connectFlow, setConnectFlow] = reactExports.useState(null);
   const [connectStarting, setConnectStarting] = reactExports.useState(false);
   const [connectError, setConnectError] = reactExports.useState(null);
-  const cloudConnected = insightsShareCloudReady(runtime);
-  const connectMode = runtime?.cloud_state === "local_only" || runtime?.cloud_state === "paired_waiting" ? "connect" : "repair";
+  const cloudConnected = insightsShareCloudReady(runtime2);
+  const connectMode = runtime2?.cloud_state === "local_only" || runtime2?.cloud_state === "paired_waiting" ? "connect" : "repair";
   const refreshConnectState = reactExports.useCallback(async () => {
     const [connectStatus, runtimeSnapshot] = await Promise.all([
       fetchGuardCloudConnectStatus(),
@@ -25552,13 +26131,13 @@ function EvidenceInsightsShareModal({
       title: "Connect Guard Cloud to publish insights",
       detail: "Local Guard remains available. Connect Guard Cloud here so the daemon can publish a public share link with preview image support.",
       action_label: "Connect Guard Cloud",
-      connect_url: runtime?.connect_url ?? "https://hol.org/guard/connect",
+      connect_url: runtime2?.connect_url ?? "https://hol.org/guard/connect",
       authorize_url: null,
       browser_opened: null,
       request_id: null,
       poll_after_ms: null
     };
-  }, [connectFlow, runtime?.connect_url]);
+  }, [connectFlow, runtime2?.connect_url]);
   const isScopeError = Boolean(rawError) && isInsightsShareScopeError(rawError ?? "");
   const errorIsReauth = isScopeError || (rawError?.toLowerCase().includes("unauthorized") ?? false);
   if (shareResult) {
@@ -25600,7 +26179,7 @@ function EvidenceInsightsShareModal({
               GuardStatMetric,
               {
                 label: "Pending",
-                value: formatEvidenceCount(runtime?.pending_count ?? 0),
+                value: formatEvidenceCount(runtime2?.pending_count ?? 0),
                 compact: true
               }
             ),
@@ -25608,7 +26187,7 @@ function EvidenceInsightsShareModal({
               GuardStatMetric,
               {
                 label: "Apps",
-                value: formatEvidenceCount(runtime?.managed_installs?.length ?? 0),
+                value: formatEvidenceCount(runtime2?.managed_installs?.length ?? 0),
                 compact: true
               }
             ),
@@ -25616,7 +26195,7 @@ function EvidenceInsightsShareModal({
               GuardStatMetric,
               {
                 label: "Recorded",
-                value: formatEvidenceCount(runtime?.receipt_count ?? 0),
+                value: formatEvidenceCount(runtime2?.receipt_count ?? 0),
                 compact: true
               }
             )
@@ -25699,7 +26278,7 @@ function EvidenceInsightsShareButton({ onClick, className }) {
     "Share publicly"
   ] }) });
 }
-function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate = true }) {
+function EvidenceShareBar({ label, count: count2, shareOfTotal, onClick, animate = true }) {
   const widthPct = Math.max(Math.min(Math.round(shareOfTotal), 100), shareOfTotal > 0 ? 4 : 0);
   const displayPct = Math.round(shareOfTotal);
   const Wrapper = onClick ? "button" : "div";
@@ -25714,7 +26293,7 @@ function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate = true 
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm font-medium text-brand-dark", children: label }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0 text-xs tabular-nums text-slate-500", children: [
-        formatEvidenceCount(count),
+        formatEvidenceCount(count2),
         shareOfTotal > 0 ? ` · ${displayPct}%` : ""
       ] })
     ] }),
@@ -25741,8 +26320,8 @@ function computeTrendBarHeight(total, maxTotal, chartHeight = CHART_HEIGHT_PX) {
 }
 function isGuardModalOpen() {
   if (typeof document === "undefined") return false;
-  const count = Number(document.documentElement.dataset.guardModalOpen ?? 0);
-  return Number.isFinite(count) && count > 0;
+  const count2 = Number(document.documentElement.dataset.guardModalOpen ?? 0);
+  return Number.isFinite(count2) && count2 > 0;
 }
 function EvidenceTrendChart({ buckets }) {
   const cellRefs = reactExports.useRef(/* @__PURE__ */ new Map());
@@ -25999,7 +26578,7 @@ function ArtifactShareList(props) {
 }
 function EvidenceInsightsSurface({
   analytics,
-  runtime,
+  runtime: runtime2,
   sampleCount,
   onFilterHarness,
   onFilterDay,
@@ -26031,7 +26610,7 @@ function EvidenceInsightsSurface({
       EvidenceInsightsShareModal,
       {
         analytics,
-        runtime,
+        runtime: runtime2,
         onClose: handleShareClose
       }
     ) : null,
@@ -26074,7 +26653,7 @@ function EvidenceInsightsSurface({
         {
           analytics,
           sampleCount,
-          runtime,
+          runtime: runtime2,
           onViewActions
         }
       )
@@ -26328,7 +26907,7 @@ function EvidenceExportDrawer({
   );
 }
 function EvidenceClearModal({
-  count,
+  count: count2,
   isOpen,
   onClose,
   onCleared
@@ -26377,9 +26956,9 @@ function EvidenceClearModal({
                 "This will permanently delete",
                 " ",
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { className: "text-brand-dark", children: [
-                  count,
+                  count2,
                   " record",
-                  count !== 1 ? "s" : ""
+                  count2 !== 1 ? "s" : ""
                 ] }),
                 " ",
                 "from this device. This action cannot be undone."
@@ -26413,11 +26992,11 @@ function EvidenceClearModal({
                 type: "button",
                 onClick: handleConfirm,
                 disabled: loading,
-                "aria-label": `Delete ${count} evidence records`,
+                "aria-label": `Delete ${count2} evidence records`,
                 className: "flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-attention px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-attention/90 disabled:opacity-40 transition-colors",
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" }),
-                  loading ? "Deleting…" : `Delete ${count}`
+                  loading ? "Deleting…" : `Delete ${count2}`
                 ]
               }
             )
@@ -26521,18 +27100,18 @@ function Sparkline({ items, days = 7 }) {
         className: "flex h-14 w-full items-end gap-1",
         role: "img",
         "aria-label": `Guard activity over the last ${days} days`,
-        children: buckets.map((count, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        children: buckets.map((count2, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
             className: "flex min-w-0 flex-1 flex-col items-center justify-end gap-1",
-            title: `${count} action${count !== 1 ? "s" : ""}`,
+            title: `${count2} action${count2 !== 1 ? "s" : ""}`,
             children: [
-              count > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold leading-none text-slate-500", children: count }) : null,
+              count2 > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold leading-none text-slate-500", children: count2 }) : null,
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "div",
                 {
                   className: "w-full rounded-sm bg-brand-blue/20 transition-all hover:bg-brand-blue/30",
-                  style: { height: `${Math.max(count / max * 32, count > 0 ? 4 : 2)}px` },
+                  style: { height: `${Math.max(count2 / max * 32, count2 > 0 ? 4 : 2)}px` },
                   "aria-hidden": "true"
                 }
               )
@@ -26911,7 +27490,7 @@ function AppTabRaw({ receipts }) {
   ] });
 }
 const AppTab = reactExports.memo(AppTabRaw);
-function CategoryCard({ cat, count, blocked, onSelect }) {
+function CategoryCard({ cat, count: count2, blocked, onSelect }) {
   const handleClick = reactExports.useCallback(() => {
     onSelect(cat.key);
   }, [cat.key, onSelect]);
@@ -26925,9 +27504,9 @@ function CategoryCard({ cat, count, blocked, onSelect }) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: cat.label }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-            count,
+            count2,
             " action",
-            count !== 1 ? "s" : ""
+            count2 !== 1 ? "s" : ""
           ] })
         ] }),
         blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "attention", children: [
@@ -28265,9 +28844,9 @@ function normalizeCommandFeedbackResult(value) {
     changed: booleanValue(payload.changed, "command feedback")
   };
 }
-function normalizedCounts(value, keys, kind) {
+function normalizedCounts(value, keys2, kind) {
   const payload = record$4(value, kind);
-  return Object.fromEntries(keys.map((key) => [key, integer$3(payload[key], kind)]));
+  return Object.fromEntries(keys2.map((key) => [key, integer$3(payload[key], kind)]));
 }
 function normalizeCommandActivityDiagnostics(value) {
   rejectForbidden(value, "command activity diagnostics");
@@ -28830,7 +29409,7 @@ const PAGE_SIZE = 50;
 function evidenceTitleForView(view) {
   return VIEW_TABS.find((tab) => tab.key === view)?.label ?? "Evidence";
 }
-function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate }) {
+function EvidenceWorkbench({ receiptItems, runtime: runtime2, onClearEvidence, onNavigate }) {
   const initial = reactExports.useMemo(() => readEvidenceUrlState(), []);
   const [filters, setFilters] = reactExports.useState(() => {
     const linkedReceipt = initial.selectedId ? receiptItems.find((receipt) => receipt.receipt_id === initial.selectedId) : void 0;
@@ -28974,16 +29553,6 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-  if (receiptItems.length === 0 && filters.view !== "commands") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EmptyState,
-      {
-        title: "No evidence yet",
-        body: "Saved choices appear here after HOL Guard reviews or blocks an action.",
-        tone: "teach"
-      }
-    );
-  }
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
   const totalReceiptCount = analytics.kind === "ready" ? analytics.data.total : receiptItems.length;
   const insightsHeaderDescription = reactExports.useMemo(() => {
@@ -29017,6 +29586,19 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     ] }),
     [handleOpenExport, handleOpenClear, onClearEvidence, receiptItems.length]
   );
+  if (receiptItems.length === 0 && filters.view !== "commands") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EmptyState,
+        {
+          title: "No evidence yet",
+          body: "Saved choices appear here after HOL Guard reviews or blocks an action.",
+          tone: "teach"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ContextHistoryPanel, {})
+    ] });
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 max-w-full space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
@@ -29067,7 +29649,8 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
                   pageSize: PAGE_SIZE,
                   onLoadMore: handleLoadMore
                 }
-              )
+              ),
+              !selectedReceipt ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextHistoryPanel, {}) : null
             ] }),
             selectedReceipt && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
               EvidenceActionDetail,
@@ -29090,7 +29673,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
             EvidenceAnalyticsPanel,
             {
               analytics: analytics.data,
-              runtime,
+              runtime: runtime2,
               sampleCount: receiptItems.length,
               onFilterHarness: handleFilterHarnessFromInsights,
               onFilterDay: handleFilterDay,
@@ -29181,12 +29764,12 @@ function ReceiptsWorkspace(props) {
   if (props.receipts.kind === "error") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceErrorState, { message: props.receipts.message });
   }
-  const runtime = props.runtime?.kind === "ready" ? props.runtime.snapshot : null;
+  const runtime2 = props.runtime?.kind === "ready" ? props.runtime.snapshot : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     EvidenceWorkbench,
     {
       receiptItems: props.receipts.items,
-      runtime,
+      runtime: runtime2,
       onClearEvidence: props.onClearEvidence,
       onNavigate: props.onNavigate
     }
@@ -29827,14 +30410,14 @@ function bulkConfirmMatches(typed, phrase) {
   const normalize = (value) => value.trim().toLowerCase().replace(/\s+/g, " ");
   return normalize(typed) === normalize(phrase) && normalize(typed).length > 0;
 }
-function pluralReads(count) {
-  return count === 1 ? "read" : "reads";
+function pluralReads(count2) {
+  return count2 === 1 ? "read" : "reads";
 }
-function pluralActions(count) {
-  return count === 1 ? "action" : "actions";
+function pluralActions(count2) {
+  return count2 === 1 ? "action" : "actions";
 }
-function pluralItems(count) {
-  return count === 1 ? "item" : "items";
+function pluralItems(count2) {
+  return count2 === 1 ? "item" : "items";
 }
 function describeActionMix(stats) {
   const parts = [];
@@ -30006,10 +30589,10 @@ function useQueueBulkApprove(props) {
     const retryBlockedActionCount = countRetryBlockedActions(selectedBulkGroups, props.items);
     for (const group of selectedBulkGroups) {
       const tier = bulkApprovalRiskTier(group);
-      const count = 1 + group.duplicateCount;
-      if (tier === "high") highActionCount += count;
-      else if (tier === "elevated") elevatedActionCount += count;
-      else if (tier === "low") lowActionCount += count;
+      const count2 = 1 + group.duplicateCount;
+      if (tier === "high") highActionCount += count2;
+      else if (tier === "elevated") elevatedActionCount += count2;
+      else if (tier === "low") lowActionCount += count2;
     }
     return {
       actionCount: selectedActionCount,
@@ -30990,10 +31573,10 @@ function ReviewCodexResumePanel({ resume, onRetry }) {
     ] })
   ] });
 }
-function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume, queueReadIncomplete = false }) {
-  const protectionHealth = runtime === null ? unavailableProtectionHealth() : protectionHealthFor(runtime);
+function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, onRetryResume, queueReadIncomplete = false }) {
+  const protectionHealth = runtime2 === null ? unavailableProtectionHealth() : protectionHealthFor(runtime2);
   const presentation = useProtectionPresentationState(protectionHealth);
-  if (runtime === null) {
+  if (runtime2 === null) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-36 w-full" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-16 w-full" }),
@@ -31160,7 +31743,7 @@ function parseBusinessReviewSummary(value, requestId) {
   if (!item.operation.startsWith(servicePrefix)) return null;
   if (typeof item.audience_kind !== "string" || !["private", "named", "public", "unknown"].includes(item.audience_kind)) return null;
   if (![item.audience_expansion_state, item.inspection_state, item.snapshot_fact_completeness].every((state) => typeof state === "string" && ["known", "unknown", "unsupported"].includes(state))) return null;
-  if (![item.recipient_count, item.record_count, item.byte_count, item.attachment_count].every((count) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0)) return null;
+  if (![item.recipient_count, item.record_count, item.byte_count, item.attachment_count].every((count2) => typeof count2 === "number" && Number.isSafeInteger(count2) && count2 >= 0)) return null;
   const labels = item.sensitivity_labels;
   if (!Array.isArray(labels) || labels.length > 5 || !labels.every((label) => typeof label === "string" && ["public", "personal", "confidential", "secret", "unknown"].includes(label)) || new Set(labels).size !== labels.length) return null;
   return item;
@@ -31172,7 +31755,7 @@ const businessReviewSummary = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Obje
   parseBusinessReviewSummary
 }, Symbol.toStringTag, { value: "Module" }));
 function BusinessReviewSummaryDetails({ summary }) {
-  const count = new Intl.NumberFormat();
+  const count2 = new Intl.NumberFormat();
   const audience = { private: "Private", named: "Named recipients", public: "Public", unknown: "Unknown" }[summary.audience_kind];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-5 border-t border-slate-200 pt-4", "aria-label": "Saved business action details", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold text-brand-dark", children: [
@@ -31182,10 +31765,10 @@ function BusinessReviewSummaryDetails({ summary }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3", children: [
       ["Audience", audience],
-      ["Recipients", count.format(summary.recipient_count)],
-      ["Records", count.format(summary.record_count)],
-      ["Attachments", count.format(summary.attachment_count)],
-      ["Content size", `${count.format(summary.byte_count)} bytes`],
+      ["Recipients", count2.format(summary.recipient_count)],
+      ["Records", count2.format(summary.record_count)],
+      ["Attachments", count2.format(summary.attachment_count)],
+      ["Content size", `${count2.format(summary.byte_count)} bytes`],
       ["Sensitivity", summary.sensitivity_labels.length ? summary.sensitivity_labels.join(", ") : "Not labeled"]
     ].map(([label, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: label }),
@@ -31198,7 +31781,7 @@ function BusinessReviewSummaryDetails({ summary }) {
 }
 function BusinessReviewSummaryPanel({ requestId }) {
   const [state, setState] = reactExports.useState(null);
-  const [revision, setRevision] = reactExports.useState(0);
+  const [revision2, setRevision] = reactExports.useState(0);
   reactExports.useEffect(() => {
     const controller = new AbortController();
     setState({ requestId, status: "loading", summary: null });
@@ -31208,7 +31791,7 @@ function BusinessReviewSummaryPanel({ requestId }) {
       if (!controller.signal.aborted) setState({ requestId, status: "error", summary: null });
     });
     return () => controller.abort();
-  }, [requestId, revision]);
+  }, [requestId, revision2]);
   if (!state || state.requestId !== requestId || state.status === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-muted-foreground", role: "status", children: "Checking saved business details…" });
   if (state.status === "error") return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 text-sm text-brand-dark", role: "status", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Saved business details could not be loaded." }),
@@ -31655,8 +32238,8 @@ function normalizeExtensionControlLayer(value, label = "layer") {
       state: enumValue(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
     };
   });
-  const keys = controls.map((control) => `${control.target_kind}:${control.target_id}`);
-  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError(`${label}.controls contains duplicate targets`);
+  const keys2 = controls.map((control) => `${control.target_kind}:${control.target_id}`);
+  if (new Set(keys2).size !== keys2.length) throw new ExtensionControlProtocolError(`${label}.controls contains duplicate targets`);
   return {
     schema_version: string$1(item.schema_version, `${label}.schema_version`),
     kind: enumValue(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
@@ -31697,8 +32280,8 @@ function normalizeEffectiveExtensionControls(value) {
       state: enumValue(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
     };
   });
-  const keys = controls.map((control) => `${control.target.kind}:${control.target.target_id}`);
-  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
+  const keys2 = controls.map((control) => `${control.target.kind}:${control.target.target_id}`);
+  if (new Set(keys2).size !== keys2.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
   const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => normalizeExtensionControlLayer(entry, `effective.layers[${index}]`));
   const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
     const raw = record$2(entry, `effective.failures[${index}]`);
@@ -32524,12 +33107,12 @@ async function enablePermissions(deps, permissionIds, credentials) {
 }
 async function approveWithExtensionAllow(deps, permissionIds, credentials) {
   if (permissionIds.length === 0) throw new Error("There is no extension setting to change.");
-  let revision;
+  let revision2;
   try {
-    revision = await enablePermissions(deps, permissionIds, credentials);
+    revision2 = await enablePermissions(deps, permissionIds, credentials);
   } catch (caught) {
     if (!isConflict(caught)) throw caught;
-    revision = await enablePermissions(deps, permissionIds, credentials);
+    revision2 = await enablePermissions(deps, permissionIds, credentials);
   }
   try {
     await deps.resolve(credentials);
@@ -32537,11 +33120,11 @@ async function approveWithExtensionAllow(deps, permissionIds, credentials) {
     const reason = caught instanceof Error && caught.message ? ` ${caught.message}` : "";
     return {
       status: "saved_only",
-      revision,
+      revision: revision2,
       message: `The extension setting was saved, so future matching commands run automatically. This request still needs a decision.${reason}`
     };
   }
-  return { status: "approved", revision };
+  return { status: "approved", revision: revision2 };
 }
 function ApprovalExtensionRecommendationCard(props) {
   const [liveRecommendation, setLiveRecommendation] = reactExports.useState(null);
@@ -33110,6 +33693,182 @@ function useReviewDecisionResolve(params) {
     useCooldown
   };
 }
+const button = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark disabled:cursor-not-allowed disabled:opacity-50";
+function ContextReviewPanel({ item }) {
+  const decisionId = attachedNativeDecision(item.action_envelope_json, item.harness);
+  const [context, setContext] = reactExports.useState(null);
+  const [previous, setPrevious] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const request2 = reactExports.useRef(null);
+  const revision2 = reactExports.useRef(0);
+  const generation = reactExports.useRef(null);
+  const [watching, setWatching] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    revision2.current += 1;
+    request2.current?.abort();
+    generation.current = null;
+    setContext(null);
+    setPrevious(null);
+    setError(null);
+    setBusy(false);
+    setWatching(false);
+    return () => {
+      revision2.current += 1;
+      request2.current?.abort();
+    };
+  }, [item.request_id, item.status, item.workspace, item.harness, decisionId]);
+  reactExports.useEffect(() => {
+    if (!watching || !context) return;
+    const controller = new AbortController();
+    let pending = false;
+    const timer = window.setInterval(() => {
+      if (pending) return;
+      pending = true;
+      void fetchContextAssistance(controller.signal).then(async (status) => {
+        if (controller.signal.aborted) return;
+        let authorized = status.effective_enabled && status.generation === generation.current;
+        if (authorized) {
+          const scopes = await listContextWorkspaces(controller.signal);
+          const scope = scopes.find((scope2) => scope2.scope_id === context.scope.scope_id);
+          authorized = Boolean(scope && !scope.revoked && scope.native_policy_facts && scope.policy_revision === context.scope.policy_revision && scope.sources.length === context.scope.sources.length && context.scope.sources.every((source) => scope.sources.some((current) => current.source_id === source.source_id && current.sha256 === source.sha256)));
+        }
+        if (controller.signal.aborted) return;
+        if (!authorized) {
+          revision2.current += 1;
+          request2.current?.abort();
+          setContext(null);
+          setPrevious(null);
+          setBusy(false);
+          setWatching(false);
+          setError("Context access changed. Check Sources & AI apps in CIGAR before preparing more context.");
+        }
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          revision2.current += 1;
+          request2.current?.abort();
+          setContext(null);
+          setPrevious(null);
+          setBusy(false);
+          setWatching(false);
+          setError("Context status is unavailable. Refresh it before using prepared context.");
+        }
+      }).finally(() => {
+        pending = false;
+      });
+    }, 2500);
+    return () => {
+      window.clearInterval(timer);
+      controller.abort();
+    };
+  }, [watching, context]);
+  async function prepare(explain = false) {
+    if (busy || !decisionId) return;
+    const current = ++revision2.current;
+    request2.current?.abort();
+    const controller = new AbortController();
+    request2.current = controller;
+    setBusy(true);
+    setError(null);
+    try {
+      const status = await fetchContextAssistance(controller.signal);
+      if (controller.signal.aborted) return;
+      if (!status.effective_enabled || !status.effective_preferences.features.review_briefs) {
+        throw new Error("Enable review context and start a verified Python 3.14 runtime in CIGAR → Runtime & preferences.");
+      }
+      generation.current = status.generation;
+      const scopes = await listContextWorkspaces(controller.signal);
+      const scope = scopes.find((scope2) => scope2.app === "dashboard" && scope2.workspace === item.workspace && !scope2.revoked && scope2.native_policy_facts);
+      if (!scope) throw new Error("Grant this workspace dashboard access with native Guard policy facts in CIGAR → Sources & AI apps.");
+      const value = await prepareNativeDecisionContext(
+        scope,
+        decisionId,
+        item.harness,
+        controller.signal,
+        explain ? context?.brief.snapshot_id : void 0
+      );
+      if (revision2.current !== current || controller.signal.aborted) return;
+      if (!explain && context) setPrevious(context);
+      setContext(value);
+      setWatching(true);
+    } catch (cause) {
+      if (revision2.current === current && !controller.signal.aborted) {
+        setContext(null);
+        setPrevious(null);
+        setWatching(false);
+        setError(cause instanceof Error ? cause.message : "Decision context is unavailable. Guard approvals remain available.");
+      }
+    } finally {
+      if (revision2.current === current) setBusy(false);
+    }
+  }
+  if (!decisionId) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Optional decision context", className: "space-y-3 rounded-xl border border-slate-200 p-4 sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Optional decision context" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Prepare local supporting context for the attached native decision using the sources you authorize." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", "aria-busy": busy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button, disabled: busy, onClick: () => void prepare(), children: busy ? "Preparing context…" : context ? "Refresh decision context" : "Prepare decision context" }),
+      context ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: button, disabled: busy, onClick: () => void prepare(true), children: "Verify context sources" }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: `${button} inline-flex items-center`, href: guardAwareHref("/cigar?section=access"), children: "Manage context access" })
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "text-sm text-slate-600", children: [
+      error,
+      " You can still use the approval controls."
+    ] }) : null,
+    context ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Native decision context", className: "space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
+        "Verified when prepared · ",
+        context.brief.rendered_tokens,
+        " tokens. Refresh after sources or access change."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ContextBriefView, { brief: context.brief, scope: context.scope }),
+      context.explanation ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: "The retained selection and its sources were verified again." }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer text-sm font-semibold", children: "Native decision association" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-600", children: [
+          context.association.action_type,
+          " · ",
+          context.association.operation,
+          " · policy generation ",
+          context.association.policy_generation
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all text-xs text-slate-500", children: context.association.decision_id }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "This links context to the native evaluation. Current executable bytes and execution are not verified by this context." })
+      ] }),
+      previous ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer text-sm font-semibold", children: "Compare with earlier decision context" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-sm text-slate-600", children: "Earlier context is historical and may no longer apply." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ContextBriefView, { brief: previous.brief, scope: previous.scope })
+      ] }) : null
+    ] }) : null
+  ] });
+}
+function ReviewLastTimeCard({ detail }) {
+  const { item, receipt, diff } = detail;
+  if (!receipt || !receiptDescribesRequest(item, receipt)) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: approvalLeftActionStopped(receipt) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      "You approved a similar action once ",
+      formatRelativeTime(receipt.timestamp),
+      ", but it stayed stopped."
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      "You previously ",
+      pastDecisionVerb(receipt.policy_decision),
+      " a similar action",
+      " ",
+      formatRelativeTime(receipt.timestamp),
+      "."
+    ] }) }),
+    diff && diff.changed_fields.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "What changed since then:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: diff.changed_fields.map((field) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        field
+      ] }, field)) })
+    ] })
+  ] });
+}
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 function resolvedActionCopy(item, action, persistedExactAction) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
@@ -33458,28 +34217,8 @@ function ReviewDecisionCard(props) {
       ),
       showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
     ] }),
-    detail.receipt && receiptDescribesRequest(item, detail.receipt) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: approvalLeftActionStopped(detail.receipt) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        "You approved a similar action once ",
-        formatRelativeTime(detail.receipt.timestamp),
-        ", but it stayed stopped."
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        "You previously ",
-        pastDecisionVerb(detail.receipt.policy_decision),
-        " a similar action",
-        " ",
-        formatRelativeTime(detail.receipt.timestamp),
-        "."
-      ] }) }),
-      detail.diff && detail.diff.changed_fields.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "What changed since then:" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: detail.diff.changed_fields.map((field) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-          field
-        ] }, field)) })
-      ] })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewLastTimeCard, { detail }),
     pendingAction !== null && approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalPasswordModal,
       {
@@ -34200,12 +34939,12 @@ function queueItemPreview(item) {
 }
 const QUEUE_PAGE_SIZE$1 = 10;
 function ReviewHeader({
-  count,
+  count: count2,
   filteredCount,
   progress,
   activeHarness
 }) {
-  const isFiltered = filteredCount !== count;
+  const isFiltered = filteredCount !== count2;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl", children: "Review" }),
@@ -34213,7 +34952,7 @@ function ReviewHeader({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
       progress,
-      isFiltered ? ` · ${filteredCount} of ${count} shown` : "",
+      isFiltered ? ` · ${filteredCount} of ${count2} shown` : "",
       " · from ",
       harnessDisplayName(activeHarness)
     ] })
@@ -34907,8 +35646,8 @@ function normalizeLocalCliItem(value) {
 }
 function normalizeMcpCatalog(value) {
   if (!isRecord$1(value) || typeof value.complete !== "boolean" || typeof value.stale !== "boolean") return null;
-  const count = (candidate) => typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= 1e4;
-  if (!count(value.pages) || !count(value.listed_count) || !count(value.known_count)) return null;
+  const count2 = (candidate) => typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= 1e4;
+  if (!count2(value.pages) || !count2(value.listed_count) || !count2(value.known_count)) return null;
   if (value.listed_count > value.known_count) return null;
   if (typeof value.revision !== "number" || !Number.isSafeInteger(value.revision) || value.revision < 1) return null;
   if (typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return null;
@@ -34916,7 +35655,7 @@ function normalizeMcpCatalog(value) {
   if (value.complete && reason !== null) return null;
   const changes = normalizeMcpCatalogChanges(value.changes);
   const skills = value.skills_catalog;
-  const skillsCatalog = isRecord$1(skills) && typeof skills.declared === "boolean" && typeof skills.complete === "boolean" && typeof skills.stale === "boolean" && count(skills.known_count) && skills.known_count <= 1e3 && skills.activation_supported === false ? {
+  const skillsCatalog = isRecord$1(skills) && typeof skills.declared === "boolean" && typeof skills.complete === "boolean" && typeof skills.stale === "boolean" && count2(skills.known_count) && skills.known_count <= 1e3 && skills.activation_supported === false ? {
     declared: skills.declared,
     complete: skills.complete,
     stale: skills.stale,
@@ -35038,19 +35777,19 @@ function normalizeLocalCliList(value) {
       return [];
     }
   }).filter((item) => item.seeded === true) : [];
-  const revision = requiredInt(value.revision, "revision");
+  const revision2 = requiredInt(value.revision, "revision");
   const publication = value.native_publication;
   const discoveryIssue = value.discovery_issue;
   const hostInventory = normalizeCodexHostInventory(value.host_inventory);
   let nativePublication;
-  if (isRecord$1(publication) && publication.revision === revision && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
-    nativePublication = { state: publication.state, revision };
-  } else if (isRecord$1(publication) && publication.state === "acknowledged" && publication.revision === revision && typeof publication.generation === "number" && Number.isSafeInteger(publication.generation) && publication.generation > 0 && typeof publication.policy_digest === "string" && /^[a-f0-9]{64}$/.test(publication.policy_digest)) {
-    nativePublication = { state: "acknowledged", revision, generation: publication.generation };
+  if (isRecord$1(publication) && publication.revision === revision2 && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
+    nativePublication = { state: publication.state, revision: revision2 };
+  } else if (isRecord$1(publication) && publication.state === "acknowledged" && publication.revision === revision2 && typeof publication.generation === "number" && Number.isSafeInteger(publication.generation) && publication.generation > 0 && typeof publication.policy_digest === "string" && /^[a-f0-9]{64}$/.test(publication.policy_digest)) {
+    nativePublication = { state: "acknowledged", revision: revision2, generation: publication.generation };
   }
   return {
     schema_version: requiredString(value.schema_version, "schema"),
-    revision,
+    revision: revision2,
     ...discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed" || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "configured_host_persist_failed" || discoveryIssue === "package_catalog_refresh_failed" ? { discovery_issue: discoveryIssue } : {},
     ...nativePublication ? { native_publication: nativePublication } : {},
     ...hostInventory ? { host_inventory: hostInventory } : {},
@@ -35827,8 +36566,8 @@ function connectorName(group) {
   const name = group.cli?.display_name ?? group.cli?.name;
   return name && name.trim().length > 0 ? name : "a local tool";
 }
-function callCountCopy(count) {
-  return `${count} ${count === 1 ? "call" : "calls"} waiting on this`;
+function callCountCopy(count2) {
+  return `${count2} ${count2 === 1 ? "call" : "calls"} waiting on this`;
 }
 function Block(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
@@ -36865,7 +37604,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-DZ6EAC_p.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BjSV4UAw.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -36970,7 +37709,7 @@ function renderViewContent(props) {
   if (props.view === "protection-repair") {
     return props.protectionRepairContent ?? null;
   }
-  if (props.view === "settings") {
+  if (props.view === "settings" || props.view === "cigar") {
     return props.settingsContent;
   }
   if (props.view === "about") {
@@ -37525,34 +38264,34 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-ux5jr7Um.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BJ5BiR3O.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-BgFOFK3E.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BDZwrTBd.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-Au8qkrQu.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-EATcOtZR.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DJ_iKvqd.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-DuWvCy2e.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-KKvyTpgD.js"), true ? __vite__mapDeps([13,7]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-DMGSvQ9y.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-SQy3r0dU.js"), true ? __vite__mapDeps([13,7]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-a48S1S1l.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-xPdW3GuT.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BlbTNCTo.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-DGfOJV4m.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-B8GrOyNn.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-BeAn9V9d.js"), true ? __vite__mapDeps([15,3,4,16]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-BO9K8980.js"), true ? __vite__mapDeps([15,3,4,16]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-CxCjRHIN.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-D9-6feom.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-p5WxxJCH.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-BKNYPKvI.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -37588,6 +38327,7 @@ function viewTitle(view) {
   if (view === "fleet") return "Protect";
   if (view === "evidence") return "Evidence";
   if (view === "settings") return "Settings";
+  if (view === "cigar") return "CIGAR";
   if (view === "supply-chain") return "Supply Chain";
   if (view === "audit") return "Audit";
   if (view === "policy") return "Rules & exceptions";
@@ -37611,6 +38351,7 @@ function parseAppDetail(pathname) {
   }
 }
 function resolveView(pathname) {
+  if (pathname === "/cigar") return "cigar";
   if (parseAppDetail(pathname) !== null) {
     return "app-detail";
   }
@@ -37708,7 +38449,7 @@ function App() {
   const [detail, setDetail] = reactExports.useState({ kind: "idle" });
   const [detailRefreshKey, setDetailRefreshKey] = reactExports.useState(0);
   const [receipts, setReceipts] = reactExports.useState({ kind: "loading" });
-  const [runtime, setRuntime] = reactExports.useState({ kind: "loading" });
+  const [runtime2, setRuntime] = reactExports.useState({ kind: "loading" });
   const [policies, setPolicies] = reactExports.useState({ kind: "loading" });
   const [inventory, setInventory] = reactExports.useState({ kind: "idle" });
   const [resolutionMessage, setResolutionMessage] = reactExports.useState(null);
@@ -38283,14 +39024,14 @@ function App() {
     });
   }, [refreshStateAfterAction]);
   const appDetailContent = reactExports.useMemo(() => {
-    if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
+    if (view !== "app-detail" || !appDetailHarness || runtime2.kind !== "ready") {
       return null;
     }
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       AppDetailWorkspace,
       {
         harness: appDetailHarness,
-        runtime: runtime.snapshot,
+        runtime: runtime2.snapshot,
         receipts: receipts.kind === "ready" ? receipts.items : [],
         policies: policies.kind === "ready" ? policies.items : [],
         inventory: inventory.kind === "ready" ? inventory.items : [],
@@ -38303,16 +39044,16 @@ function App() {
         onManagedInstallChanged: refreshStateWithoutResult
       }
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenFleet, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
+  }, [view, appDetailHarness, runtime2, receipts, policies, inventory, requests, handleGoHome, handleOpenFleet, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateWithoutResult]);
   const policyContent = reactExports.useMemo(() => {
-    if (runtime.kind !== "ready") {
+    if (runtime2.kind !== "ready") {
       return null;
     }
     if (policies.kind === "ready") {
       return /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         PolicyWorkspacePage,
         {
-          snapshot: runtime.snapshot,
+          snapshot: runtime2.snapshot,
           policies: policies.items,
           onClearPolicy: handleClearPolicy,
           onOpenSettings: handleOpenSettings,
@@ -38327,7 +39068,7 @@ function App() {
     }
     return /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {});
   }, [
-    runtime,
+    runtime2,
     policies,
     handleClearPolicy,
     handleOpenSettings,
@@ -38352,7 +39093,7 @@ function App() {
         requests,
         detail,
         receipts,
-        runtime,
+        runtime: runtime2,
         inventory: inventory.kind === "ready" ? inventory.items : [],
         activeRequestId,
         resolutionMessage,
@@ -38362,8 +39103,9 @@ function App() {
         homeContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           HomeWorkspace,
           {
+            onOpenCigar: () => navigate("/cigar"),
             requests,
-            runtime,
+            runtime: runtime2,
             receipts: receipts.kind === "ready" ? receipts.items : void 0,
             policies,
             onOpenInbox: handleOpenInbox,
@@ -38401,10 +39143,10 @@ function App() {
         onRepair: handleRepair,
         onGuardReconnected: handleRetry,
         onClearEvidence: handleClearEvidence,
-        fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        fleetContent: runtime2.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           FleetWorkspace,
           {
-            runtime: runtime.snapshot,
+            runtime: runtime2.snapshot,
             policies: policies.kind === "ready" ? policies.items : [],
             inventory,
             onConnectHarness: handleConnectHarness,
@@ -38416,13 +39158,21 @@ function App() {
           }
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
-        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime.kind === "ready" ? runtime.snapshot : null, onRefreshRuntime: refreshStateAfterAction, onNavigate: navigate }) }) }),
+        extensionsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsWorkspace, { runtime: runtime2.kind === "ready" ? runtime2.snapshot : null, onRefreshRuntime: refreshStateAfterAction, onNavigate: navigate }) }) }),
         protectionRepairContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionRepairPage, { onNavigate: navigate }) }) }),
-        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
+        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SettingsWorkspace,
+          {
+            contextOnly: view === "cigar",
+            onNavigate: navigate,
+            onApprovalGateChange: setApprovalGate
+          },
+          view === "cigar" ? "cigar" : "settings"
+        ) }),
         supplyChainHubContent: /* @__PURE__ */ jsxRuntimeExports.jsx(
           RuntimeGate,
           {
-            runtime,
+            runtime: runtime2,
             loading: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}),
             onReconnectSession: handleReconnectSession,
             onRefreshRuntime: refreshHubRuntime,
@@ -38447,16 +39197,16 @@ function App() {
         ),
         policyContent,
         releasesContent: view === "releases" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ReleasesWorkspace, { installedVersion: guardVersion }) }) : null,
-        aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime.kind === "ready" ? {
+        aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime2.kind === "ready" ? {
           // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
           // When those fields are added, populate them here instead of null/0.
           guardVersion,
-          cloudState: runtime.snapshot.cloud_state ?? "unknown",
-          cloudStateLabel: runtime.snapshot.cloud_state_label ?? "Unknown",
-          syncConfigured: runtime.snapshot.sync_configured ?? false,
-          syncHealth: runtime.snapshot.cloud_sync_health?.state ?? null,
-          pendingCount: runtime.snapshot.pending_count ?? 0,
-          receiptCount: runtime.snapshot.receipt_count ?? 0,
+          cloudState: runtime2.snapshot.cloud_state ?? "unknown",
+          cloudStateLabel: runtime2.snapshot.cloud_state_label ?? "Unknown",
+          syncConfigured: runtime2.snapshot.sync_configured ?? false,
+          syncHealth: runtime2.snapshot.cloud_sync_health?.state ?? null,
+          pendingCount: runtime2.snapshot.pending_count ?? 0,
+          receiptCount: runtime2.snapshot.receipt_count ?? 0,
           protectedAppCount: 0
         } : null }) })
       }
@@ -38473,357 +39223,385 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  guardActionDisposition as $,
+  OperatorHealthCard as $,
   ActionButton as A,
-  createCommandActivityClient as B,
-  fetchCommandActivityApi as C,
-  getRecoveryCapabilities as D,
+  HomeInsightsMetrics as B,
+  EvidenceActivityHeatmapMini as C,
+  homeCommandActivityModel as D,
   EvidenceInsightsShareButton as E,
-  resolveRecoveryInstructions as F,
+  createCommandActivityClient as F,
   GuardStatMetric as G,
   HiMiniChevronRight as H,
-  HiMiniShieldExclamation as I,
-  HiMiniClipboardDocument as J,
-  openRecoveryView as K,
-  useReceiptAnalytics as L,
-  updateSettings as M,
-  turnProtectionOnUpdate as N,
-  useProtectionPresentationState as O,
-  protectionHealthFor as P,
-  unavailableProtectionHealth as Q,
-  buildHomeRuntimeErrorCopy as R,
+  fetchCommandActivityApi as I,
+  getRecoveryCapabilities as J,
+  resolveRecoveryInstructions as K,
+  HiMiniShieldExclamation as L,
+  HiMiniClipboardDocument as M,
+  openRecoveryView as N,
+  useReceiptAnalytics as O,
+  updateSettings as P,
+  turnProtectionOnUpdate as Q,
+  useProtectionPresentationState as R,
   SectionLabel as S,
   Tag as T,
-  RuntimeErrorState as U,
-  watchBannerModel as V,
-  WatchProtectionBanner as W,
-  EvidenceInsightsShareModal as X,
-  OperatorHealthCard as Y,
-  HiMiniShieldCheck as Z,
-  DeviceProofCard as _,
-  formatNumber as a,
-  resolveProtectionLevelCopy as a$,
-  approvalLeftActionStopped as a0,
-  guardActionActivityCopy as a1,
-  HiMiniSparkles as a2,
-  HiMiniXMark as a3,
-  EmptyState as a4,
-  resolveCloudIntelCopy as a5,
-  HiMiniCloud as a6,
-  HiMiniQuestionMarkCircle as a7,
-  useFocusTrap as a8,
-  approvalProofRequiresPassword as a9,
-  harnessPosturePatch as aA,
-  harnessRowTone as aB,
-  PROTECTION_POSTURE_COPY as aC,
-  harnessPostureOptions as aD,
-  globalPosture as aE,
-  harnessRowStatus as aF,
-  HiMiniEye as aG,
-  HiMiniXCircle as aH,
-  GuardHero as aI,
-  ProofStrip as aJ,
-  HiMiniClipboardDocumentCheck as aK,
-  HiMiniClipboard as aL,
-  fetchResolvedApprovalGate as aM,
-  ApprovalProofModal as aN,
-  POSTURE_OUTCOME_COLUMNS as aO,
-  getDefaultExportFromCjs as aP,
-  React as aQ,
-  HiMiniSquares2X2 as aR,
-  HiMiniBellAlert as aS,
-  HiMiniAdjustmentsHorizontal as aT,
-  HiMiniCircleStack as aU,
-  TabBar as aV,
-  fetchCloudReviewSettings as aW,
-  ApprovalProofFieldInputs as aX,
-  isApprovalProofSubmitDisabled as aY,
-  buildApprovalProofCredentials as aZ,
-  changeCloudReviewSettings as a_,
-  HiMiniExclamationTriangle as aa,
-  HiMiniBolt as ab,
-  Badge as ac,
-  HiMiniMinusCircle as ad,
-  buildDaemonErrorCopy as ae,
-  isUnsupportedPlatformCheck as af,
-  RECHECK_UNAVAILABLE_SIGNATURE as ag,
-  protectionReasonText as ah,
-  HiMiniExclamationCircle as ai,
-  hasRepairableProtectionGap as aj,
-  remainingProtectionRepairParts as ak,
-  protectionGapSignature as al,
-  repairOutcomeIsStalled as am,
-  ProtectionRepairFlowError as an,
-  nextProtectionRepairOutcome as ao,
-  waitForAuthorizeUrl as ap,
-  startOrRecoverCloudConnect as aq,
-  safeCloudConnectUrl as ar,
-  openPackageFirewallAuthorizeFallback as as,
-  waitForCloudConnection as at,
-  activeFailedHarnesses as au,
-  resetRepairOutcomeTracker as av,
-  HiMiniWrenchScrewdriver as aw,
-  fetchSettings as ax,
-  harnessPostureRows as ay,
-  selectHarnessPosture as az,
-  HiMiniChevronUp as b,
-  hasSuggestedRules as b$,
-  fetchRuntimeSnapshot as b0,
-  clearHarnessWatchOverrides as b1,
-  withHarnessPosturePatch as b2,
-  clearPolicy as b3,
-  clearReviewQueue as b4,
-  revokeApprovalGateCooldown as b5,
-  disableApprovalGateTotp as b6,
-  importSettings as b7,
-  resetSettings as b8,
-  enrollApprovalGateTotp as b9,
-  fetchExtensionCatalog as bA,
-  ExtensionControlApiError as bB,
-  normalizeExtensionCatalogSummary as bC,
-  normalizeExtensionPermission as bD,
-  ExtensionControlProtocolError as bE,
-  normalizeExtensionCatalogItem as bF,
-  guardApiCacheScope as bG,
-  fetchExtensionCatalogV2Api as bH,
-  localPermissionDraftState as bI,
-  setLocalPermissionDraftState as bJ,
-  extensionPolicyAuthorityUnchanged as bK,
-  newExtensionPolicyDraftIdentity as bL,
-  extensionPolicyDraftIsDirty as bM,
-  setLocalPermissionDraftStates as bN,
-  buildExtensionPolicyDraftMutation as bO,
-  fetchEffectiveExtensionControls as bP,
-  previewExtensionMutation as bQ,
-  isCurrentExtensionPolicyDraft as bR,
-  applyExtensionMutation as bS,
-  fetchExtensionControlHistory as bT,
-  managedPermissionState as bU,
-  controlProvenance as bV,
-  treatmentLabel as bW,
-  useResolvedApprovalGate as bX,
-  groupPermissionsByFamily as bY,
-  HiMiniInformationCircle as bZ,
-  LocalCliApiError as b_,
-  verifyApprovalGateTotp as ba,
-  clearEvidence as bb,
-  exportDiagnostics as bc,
-  repairApprovalCenter as bd,
-  exportSettings as be,
-  setupDesktopNotifications as bf,
-  settingsWatchBannerModel as bg,
-  WorkspacePageHeader as bh,
-  commitDashboardLocation as bi,
-  guardAwareHref as bj,
-  humanizeList as bk,
-  isProtectionPosture as bl,
-  deriveProtectionPosture as bm,
-  normalizeHarnessPostures as bn,
-  approvalGateCooldownLabel as bo,
-  isGuardDemoMode as bp,
-  isRecord$5 as bq,
-  fetchWithGuardAuth as br,
-  overrideRows as bs,
-  harnessPostureSummary as bt,
-  joinNames as bu,
-  sortHarnessRows as bv,
-  restartHarnessWatch as bw,
-  harnessWatchPrompt as bx,
-  canRestartHarnessWatch as by,
-  HiMiniKey as bz,
-  HiMiniChevronDown as c,
-  HiMiniFunnel as c$,
-  approvalProofRecentlySatisfied as c0,
-  StyledSelect as c1,
-  bulkCommandState as c2,
-  fetchLocalCliApi as c3,
-  ExtensionBrandMark as c4,
-  fetchMcpProviderActions as c5,
-  connectorSetupReady as c6,
-  shortIdentity as c7,
-  customExtensionDisplayName as c8,
-  previewLocalCliMutation as c9,
-  connectorSetupMatch as cA,
-  refreshMcpInventory as cB,
-  connectorGroupOutcome as cC,
-  allowedEarlierVersion as cD,
-  startGuardCloudConnect as cE,
-  extensionEffectiveState as cF,
-  permissionEffectiveState as cG,
-  HiMiniArrowTopRightOnSquare as cH,
-  fetchExtensionControlApi as cI,
-  permissionForRule as cJ,
-  refreshEffectiveExtensionControls as cK,
-  fetchExtensionDiscoveryApi as cL,
-  HiMiniClock as cM,
-  startCancelableDiscoveryJob as cN,
-  waitForMcpDiscoveryJob as cO,
-  isLocalCliId as cP,
-  localCliHref as cQ,
-  fetchPluginUpdatesApi as cR,
-  filterCodexHostApps as cS,
-  connectorWorkspaceItems as cT,
-  customExtensionNeedsReview as cU,
-  profileSetupCommand as cV,
-  customExtensionBadge as cW,
-  extensionDisplayName as cX,
-  catalogRowSecondLine as cY,
-  extensionStateLabel as cZ,
-  HiMiniGlobeAlt as c_,
-  applyLocalCliMutation as ca,
-  LOCAL_CLI_CAPABILITIES as cb,
-  loadLocalCliCommands as cc,
-  DiscoveryFailure as cd,
-  readJson as ce,
-  enrollablePackageScriptCommands as cf,
-  seenSuggestionMeta as cg,
-  HiMiniPlus as ch,
-  looksLikeProjectRelocatePaste as ci,
-  packageScriptFilterNeedle as cj,
-  initialAddCommand as ck,
-  suggestedPackageScriptExtensions as cl,
-  filterExtensionSuggestions as cm,
-  suggestedHarnessExtensions as cn,
-  suggestedSeenExtensions as co,
-  keepsPackageScriptCatalog as cp,
-  prefillSuggestedStates as cq,
-  recognizeLocalCli as cr,
-  preferredPackageScriptExtension as cs,
-  looksLikePackageScriptPaste as ct,
-  enrollmentCommandStates as cu,
-  isBulkApproveGateReady as cv,
-  HiMiniArrowLeft as cw,
-  fetchLocalCliList as cx,
-  normalizeLocalCliList as cy,
-  unreviewedToolChangeCount as cz,
-  HiMiniArrowPath as d,
-  runPackageFirewallAction as d$,
-  discoveryFailureMessage as d0,
-  refreshCodexHostInventory as d1,
-  CODEX_HOST_FALLBACK as d2,
-  CONFIGURED_CONNECTIONS_FALLBACK as d3,
-  loadCurrentDashboardBuild as d4,
-  canonicalExtensionId as d5,
-  extensionDetailHref as d6,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as d7,
-  addCustomExtensionPrefillHref as d8,
-  acknowledgeDegradedExtensionControlAuthority as d9,
-  EvidenceActionDetail as dA,
-  policyIdentityKey as dB,
-  clearLabelForScope as dC,
-  HiMiniChartBar as dD,
-  HiMiniCheckBadge as dE,
-  isSupplyChainAuditIncomplete as dF,
-  isSupplyChainAuditEvidence as dG,
-  readString$1 as dH,
-  IconActionButton as dI,
-  HiMiniBeaker as dJ,
-  HiMiniBugAnt as dK,
-  ActivationSummary as dL,
-  ActionResultPanel as dM,
-  fetchSupplyChainBundle as dN,
-  closeOnEscape as dO,
-  ConnectFlowCard as dP,
-  ApprovalProofInline as dQ,
-  HiMiniCloudArrowDown as dR,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as dS,
-  fetchPackageFirewallStatus as dT,
-  runPackageAudit as dU,
-  resolveSupplyChainAuditFailure as dV,
-  runPackageSync as dW,
-  GuardOperationTimeoutError as dX,
-  startPackageFirewallConnect as dY,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dZ,
-  repairSupplyChainProtection as d_,
-  recoverExtensionControlAuthority as da,
-  connectorSetupLinkFromSearch as db,
-  readExtensionDetailUrlState as dc,
-  parseProtectionRoute as dd,
-  addCustomExtensionHref as de,
-  GuardModalLayer as df,
-  runHarnessAction as dg,
-  GuardHarnessActionError as dh,
-  HiMiniRocketLaunch as di,
-  HiMiniTrash as dj,
-  fetchGuardApi as dk,
-  formatHarnessCommand as dl,
-  fetchApprovalPage as dm,
-  fetchPolicy as dn,
-  HiMiniHome as dp,
-  appSetupTarget as dq,
-  guardActionPresentation as dr,
-  DEFAULT_FILTER_STATE as ds,
-  filterEvidence as dt,
-  sortEvidence as du,
-  computeMetrics as dv,
-  CommandActivityWorkspace as dw,
-  EvidenceFilterBar as dx,
-  EvidenceInsightStrip as dy,
-  EvidenceActionList as dz,
-  HiMiniCheck as e,
-  parseInterceptProofSnapshot as e0,
-  activatePackageFirewallRuntime as e1,
-  EntitlementNotice as e2,
-  chooseSupplyChainAuditFolder as e3,
-  fetchReceipts as e4,
-  lazyWorkspace as e5,
-  __vitePreload as e6,
-  scopeLabel as e7,
-  HiMiniCloudArrowUp as e8,
-  HiMiniCodeBracket as e9,
-  HiMiniChevronLeft as eA,
-  HiMiniArrowDown as eB,
-  HiMiniArrowUp as eC,
-  runAuditRemediation as eD,
-  isBlockedGuardAction as eE,
-  isSupplyChainScannerEvidence as eF,
-  HiMiniFolderOpen as eG,
-  HiMiniSignal as eH,
-  HiMiniUsers as ea,
-  HiMiniFolder as eb,
-  HiMiniIdentification as ec,
-  policyActionLabel as ed,
-  createCloudExceptionRequest as ee,
-  HiMiniPuzzlePiece as ef,
-  fetchCloudExceptions as eg,
-  fetchCloudExceptionRequests as eh,
-  downloadBlob as ei,
-  PaginationControls as ej,
-  PolicyStatField as ek,
-  HiMiniArrowDownTray as el,
-  HiMiniInbox as em,
-  HiMiniQueueList as en,
-  subscribeDashboardLocation as eo,
-  Surface as ep,
-  HiMiniEllipsisHorizontal as eq,
-  HiMiniMinus as er,
-  HiMiniWrench as es,
-  HiMiniArrowLongRight as et,
-  HiMiniArrowUpCircle as eu,
-  fetchReleaseFeedApi as ev,
-  fetchMcpPolicyRequest as ew,
-  resolveMcpPolicyRequest as ex,
-  HiMiniDocumentPlus as ey,
-  HiMiniDocumentMagnifyingGlass as ez,
-  formatRelativeTime as f,
-  HiMiniNoSymbol as g,
+  protectionHealthFor as U,
+  unavailableProtectionHealth as V,
+  buildHomeRuntimeErrorCopy as W,
+  RuntimeErrorState as X,
+  watchBannerModel as Y,
+  WatchProtectionBanner as Z,
+  EvidenceInsightsShareModal as _,
+  controlContextAssistance as a,
+  isApprovalProofSubmitDisabled as a$,
+  HiMiniShieldCheck as a0,
+  DeviceProofCard as a1,
+  guardActionDisposition as a2,
+  approvalLeftActionStopped as a3,
+  guardActionActivityCopy as a4,
+  HiMiniSparkles as a5,
+  HiMiniXMark as a6,
+  EmptyState as a7,
+  resolveCloudIntelCopy as a8,
+  HiMiniCloud as a9,
+  fetchSettings as aA,
+  harnessPostureRows as aB,
+  selectHarnessPosture as aC,
+  harnessPosturePatch as aD,
+  harnessRowTone as aE,
+  PROTECTION_POSTURE_COPY as aF,
+  harnessPostureOptions as aG,
+  globalPosture as aH,
+  harnessRowStatus as aI,
+  HiMiniEye as aJ,
+  HiMiniXCircle as aK,
+  GuardHero as aL,
+  ProofStrip as aM,
+  HiMiniClipboardDocumentCheck as aN,
+  HiMiniClipboard as aO,
+  fetchResolvedApprovalGate as aP,
+  ApprovalProofModal as aQ,
+  POSTURE_OUTCOME_COLUMNS as aR,
+  getDefaultExportFromCjs as aS,
+  React as aT,
+  HiMiniSquares2X2 as aU,
+  HiMiniBellAlert as aV,
+  HiMiniAdjustmentsHorizontal as aW,
+  HiMiniCircleStack as aX,
+  TabBar as aY,
+  fetchCloudReviewSettings as aZ,
+  ApprovalProofFieldInputs as a_,
+  HiMiniQuestionMarkCircle as aa,
+  useFocusTrap as ab,
+  approvalProofRequiresPassword as ac,
+  HiMiniExclamationTriangle as ad,
+  HiMiniBolt as ae,
+  Badge as af,
+  HiMiniMinusCircle as ag,
+  buildDaemonErrorCopy as ah,
+  isUnsupportedPlatformCheck as ai,
+  RECHECK_UNAVAILABLE_SIGNATURE as aj,
+  protectionReasonText as ak,
+  HiMiniExclamationCircle as al,
+  hasRepairableProtectionGap as am,
+  remainingProtectionRepairParts as an,
+  protectionGapSignature as ao,
+  repairOutcomeIsStalled as ap,
+  ProtectionRepairFlowError as aq,
+  nextProtectionRepairOutcome as ar,
+  waitForAuthorizeUrl as as,
+  startOrRecoverCloudConnect as at,
+  safeCloudConnectUrl as au,
+  openPackageFirewallAuthorizeFallback as av,
+  waitForCloudConnection as aw,
+  activeFailedHarnesses as ax,
+  resetRepairOutcomeTracker as ay,
+  HiMiniWrenchScrewdriver as az,
+  formatRelativeTime as b,
+  sortHarnessRows as b$,
+  buildApprovalProofCredentials as b0,
+  changeCloudReviewSettings as b1,
+  shellHref as b2,
+  listContextAgentSessions as b3,
+  revokeContextAgentSession as b4,
+  authorizeContextAgentSession as b5,
+  ContextAssistanceApiError as b6,
+  ask as b7,
+  parseContextScope as b8,
+  validContextBrokerRevision as b9,
+  clearHarnessWatchOverrides as bA,
+  withHarnessPosturePatch as bB,
+  clearPolicy as bC,
+  clearReviewQueue as bD,
+  revokeApprovalGateCooldown as bE,
+  disableApprovalGateTotp as bF,
+  importSettings as bG,
+  resetSettings as bH,
+  enrollApprovalGateTotp as bI,
+  verifyApprovalGateTotp as bJ,
+  clearEvidence as bK,
+  exportDiagnostics as bL,
+  repairApprovalCenter as bM,
+  exportSettings as bN,
+  setupDesktopNotifications as bO,
+  settingsWatchBannerModel as bP,
+  WorkspacePageHeader as bQ,
+  navigateFromAnchor as bR,
+  humanizeList as bS,
+  isProtectionPosture as bT,
+  deriveProtectionPosture as bU,
+  normalizeHarnessPostures as bV,
+  approvalGateCooldownLabel as bW,
+  isRecord$5 as bX,
+  overrideRows as bY,
+  harnessPostureSummary as bZ,
+  joinNames as b_,
+  listContextWorkspaces as ba,
+  manageContextWorkspace as bb,
+  grantContextWorkspace as bc,
+  compileWorkspaceContext as bd,
+  HiMiniDocumentMagnifyingGlass as be,
+  HiMiniLink as bf,
+  HiMiniArrowLeft as bg,
+  HiMiniAcademicCap as bh,
+  subscribeDashboardLocation as bi,
+  HiMiniCpuChip as bj,
+  isGuardDemoMode as bk,
+  fetchWithGuardAuth as bl,
+  parseContextAssistanceStatus as bm,
+  isCigarBuildIdentity as bn,
+  isCigarProducerVersion as bo,
+  isCigarCoreLabel as bp,
+  fetchContextInstallations as bq,
+  commitDashboardLocation as br,
+  savedEvidenceCopy as bs,
+  downloadBlob as bt,
+  guardAwareHref as bu,
+  fetchContextData as bv,
+  forgetContextHistory as bw,
+  forgetSavedEvidence as bx,
+  resolveProtectionLevelCopy as by,
+  fetchRuntimeSnapshot as bz,
+  contextStatusCopy as c,
+  isBulkApproveGateReady as c$,
+  restartHarnessWatch as c0,
+  harnessWatchPrompt as c1,
+  canRestartHarnessWatch as c2,
+  HiMiniKey as c3,
+  fetchExtensionCatalog as c4,
+  ExtensionControlApiError as c5,
+  normalizeExtensionCatalogSummary as c6,
+  normalizeExtensionPermission as c7,
+  ExtensionControlProtocolError as c8,
+  normalizeExtensionCatalogItem as c9,
+  ExtensionBrandMark as cA,
+  fetchMcpProviderActions as cB,
+  connectorSetupReady as cC,
+  shortIdentity as cD,
+  customExtensionDisplayName as cE,
+  previewLocalCliMutation as cF,
+  applyLocalCliMutation as cG,
+  LOCAL_CLI_CAPABILITIES as cH,
+  loadLocalCliCommands as cI,
+  DiscoveryFailure as cJ,
+  readJson as cK,
+  enrollablePackageScriptCommands as cL,
+  seenSuggestionMeta as cM,
+  HiMiniPlus as cN,
+  looksLikeProjectRelocatePaste as cO,
+  packageScriptFilterNeedle as cP,
+  initialAddCommand as cQ,
+  suggestedPackageScriptExtensions as cR,
+  filterExtensionSuggestions as cS,
+  suggestedHarnessExtensions as cT,
+  suggestedSeenExtensions as cU,
+  keepsPackageScriptCatalog as cV,
+  prefillSuggestedStates as cW,
+  recognizeLocalCli as cX,
+  preferredPackageScriptExtension as cY,
+  looksLikePackageScriptPaste as cZ,
+  enrollmentCommandStates as c_,
+  guardApiCacheScope as ca,
+  fetchExtensionCatalogV2Api as cb,
+  localPermissionDraftState as cc,
+  setLocalPermissionDraftState as cd,
+  extensionPolicyAuthorityUnchanged as ce,
+  newExtensionPolicyDraftIdentity as cf,
+  extensionPolicyDraftIsDirty as cg,
+  setLocalPermissionDraftStates as ch,
+  buildExtensionPolicyDraftMutation as ci,
+  fetchEffectiveExtensionControls as cj,
+  previewExtensionMutation as ck,
+  isCurrentExtensionPolicyDraft as cl,
+  applyExtensionMutation as cm,
+  fetchExtensionControlHistory as cn,
+  managedPermissionState as co,
+  controlProvenance as cp,
+  treatmentLabel as cq,
+  useResolvedApprovalGate as cr,
+  groupPermissionsByFamily as cs,
+  HiMiniInformationCircle as ct,
+  LocalCliApiError as cu,
+  hasSuggestedRules as cv,
+  approvalProofRecentlySatisfied as cw,
+  StyledSelect as cx,
+  bulkCommandState as cy,
+  fetchLocalCliApi as cz,
+  formatNumber as d,
+  CommandActivityWorkspace as d$,
+  fetchLocalCliList as d0,
+  normalizeLocalCliList as d1,
+  unreviewedToolChangeCount as d2,
+  connectorSetupMatch as d3,
+  refreshMcpInventory as d4,
+  connectorGroupOutcome as d5,
+  allowedEarlierVersion as d6,
+  startGuardCloudConnect as d7,
+  extensionEffectiveState as d8,
+  permissionEffectiveState as d9,
+  loadCurrentDashboardBuild as dA,
+  canonicalExtensionId as dB,
+  extensionDetailHref as dC,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as dD,
+  addCustomExtensionPrefillHref as dE,
+  acknowledgeDegradedExtensionControlAuthority as dF,
+  recoverExtensionControlAuthority as dG,
+  connectorSetupLinkFromSearch as dH,
+  readExtensionDetailUrlState as dI,
+  parseProtectionRoute as dJ,
+  addCustomExtensionHref as dK,
+  GuardModalLayer as dL,
+  runHarnessAction as dM,
+  GuardHarnessActionError as dN,
+  HiMiniRocketLaunch as dO,
+  HiMiniTrash as dP,
+  fetchGuardApi as dQ,
+  formatHarnessCommand as dR,
+  fetchApprovalPage as dS,
+  fetchPolicy as dT,
+  HiMiniHome as dU,
+  appSetupTarget as dV,
+  guardActionPresentation as dW,
+  DEFAULT_FILTER_STATE as dX,
+  filterEvidence as dY,
+  sortEvidence as dZ,
+  computeMetrics as d_,
+  HiMiniArrowTopRightOnSquare as da,
+  fetchExtensionControlApi as db,
+  permissionForRule as dc,
+  refreshEffectiveExtensionControls as dd,
+  fetchExtensionDiscoveryApi as de,
+  HiMiniClock as df,
+  startCancelableDiscoveryJob as dg,
+  waitForMcpDiscoveryJob as dh,
+  isLocalCliId as di,
+  localCliHref as dj,
+  fetchPluginUpdatesApi as dk,
+  filterCodexHostApps as dl,
+  connectorWorkspaceItems as dm,
+  customExtensionNeedsReview as dn,
+  profileSetupCommand as dp,
+  customExtensionBadge as dq,
+  extensionDisplayName as dr,
+  catalogRowSecondLine as ds,
+  extensionStateLabel as dt,
+  HiMiniGlobeAlt as du,
+  HiMiniFunnel as dv,
+  discoveryFailureMessage as dw,
+  refreshCodexHostInventory as dx,
+  CODEX_HOST_FALLBACK as dy,
+  CONFIGURED_CONNECTIONS_FALLBACK as dz,
+  HiMiniChevronUp as e,
+  HiMiniDocumentPlus as e$,
+  EvidenceFilterBar as e0,
+  EvidenceInsightStrip as e1,
+  EvidenceActionList as e2,
+  EvidenceActionDetail as e3,
+  policyIdentityKey as e4,
+  clearLabelForScope as e5,
+  HiMiniChartBar as e6,
+  HiMiniCheckBadge as e7,
+  isSupplyChainAuditIncomplete as e8,
+  isSupplyChainAuditEvidence as e9,
+  lazyWorkspace as eA,
+  __vitePreload as eB,
+  scopeLabel as eC,
+  HiMiniCloudArrowUp as eD,
+  HiMiniCodeBracket as eE,
+  HiMiniUsers as eF,
+  HiMiniFolder as eG,
+  HiMiniIdentification as eH,
+  policyActionLabel as eI,
+  createCloudExceptionRequest as eJ,
+  HiMiniPuzzlePiece as eK,
+  fetchCloudExceptions as eL,
+  fetchCloudExceptionRequests as eM,
+  PaginationControls as eN,
+  PolicyStatField as eO,
+  HiMiniArrowDownTray as eP,
+  HiMiniInbox as eQ,
+  HiMiniQueueList as eR,
+  Surface as eS,
+  HiMiniEllipsisHorizontal as eT,
+  HiMiniMinus as eU,
+  HiMiniWrench as eV,
+  HiMiniArrowLongRight as eW,
+  HiMiniArrowUpCircle as eX,
+  fetchReleaseFeedApi as eY,
+  fetchMcpPolicyRequest as eZ,
+  resolveMcpPolicyRequest as e_,
+  readString$1 as ea,
+  IconActionButton as eb,
+  HiMiniBeaker as ec,
+  HiMiniBugAnt as ed,
+  ActivationSummary as ee,
+  ActionResultPanel as ef,
+  fetchSupplyChainBundle as eg,
+  closeOnEscape as eh,
+  ConnectFlowCard as ei,
+  ApprovalProofInline as ej,
+  HiMiniCloudArrowDown as ek,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as el,
+  fetchPackageFirewallStatus as em,
+  runPackageAudit as en,
+  resolveSupplyChainAuditFailure as eo,
+  runPackageSync as ep,
+  GuardOperationTimeoutError as eq,
+  startPackageFirewallConnect as er,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as es,
+  repairSupplyChainProtection as et,
+  runPackageFirewallAction as eu,
+  parseInterceptProofSnapshot as ev,
+  activatePackageFirewallRuntime as ew,
+  EntitlementNotice as ex,
+  chooseSupplyChainAuditFolder as ey,
+  fetchReceipts as ez,
+  fetchContextAssistance as f,
+  HiMiniChevronLeft as f0,
+  HiMiniArrowDown as f1,
+  HiMiniArrowUp as f2,
+  runAuditRemediation as f3,
+  isBlockedGuardAction as f4,
+  isSupplyChainScannerEvidence as f5,
+  HiMiniFolderOpen as f6,
+  HiMiniSignal as f7,
+  HiMiniChevronDown as g,
   harnessDisplayName as h,
-  HiMiniHandRaised as i,
+  HiMiniArrowPath as i,
   jsxRuntimeExports as j,
-  HiMiniArrowUpTray as k,
-  HiMiniCube as l,
-  HiMiniPencilSquare as m,
+  HiMiniCheck as k,
+  HiMiniNoSymbol as l,
+  HiMiniHandRaised as m,
   normalizeHarnessSlug as n,
-  HiMiniCommandLine as o,
-  HiMiniMagnifyingGlass as p,
-  HiMiniDocumentText as q,
+  HiMiniArrowUpTray as o,
+  HiMiniCube as p,
+  HiMiniPencilSquare as q,
   reactExports as r,
-  HiMiniCheckCircle as s,
-  HiMiniArrowRight as t,
-  isConnectableAppHarness as u,
-  HiMiniLockClosed as v,
-  getHeatmapLevel as w,
-  HomeInsightsMetrics as x,
-  EvidenceActivityHeatmapMini as y,
-  homeCommandActivityModel as z
+  HiMiniCommandLine as s,
+  HiMiniMagnifyingGlass as t,
+  HiMiniDocumentText as u,
+  HiMiniCheckCircle as v,
+  HiMiniArrowRight as w,
+  isConnectableAppHarness as x,
+  HiMiniLockClosed as y,
+  getHeatmapLevel as z
 };

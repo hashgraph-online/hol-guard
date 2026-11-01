@@ -157,6 +157,7 @@ export function viewTitle(view: AppView): string {
   if (view === "fleet") return "Protect";
   if (view === "evidence") return "Evidence";
   if (view === "settings") return "Settings";
+  if (view === "cigar") return "CIGAR";
   if (view === "supply-chain") return "Supply Chain";
   if (view === "audit") return "Audit";
   if (view === "policy") return "Rules & exceptions";
@@ -182,6 +183,7 @@ export function parseAppDetail(pathname: string): string | null {
 }
 
 export function resolveView(pathname: string): AppView {
+  if (pathname === "/cigar") return "cigar";
   if (parseAppDetail(pathname) !== null) {
     return "app-detail";
   }
@@ -1058,6 +1060,7 @@ export function App() {
       homeContent={
         <Suspense fallback={<LazyFallback />}>
           <HomeWorkspace
+            onOpenCigar={() => navigate("/cigar")}
             requests={requests}
             runtime={runtime}
             receipts={receipts.kind === "ready" ? receipts.items : undefined}
@@ -1136,7 +1139,8 @@ export function App() {
       }
       settingsContent={
         <Suspense fallback={<LazyFallback />}>
-          <SettingsWorkspace onApprovalGateChange={setApprovalGate} />
+          <SettingsWorkspace key={view === "cigar" ? "cigar" : "settings"}
+            contextOnly={view === "cigar"} onNavigate={navigate} onApprovalGateChange={setApprovalGate} />
         </Suspense>
       }
       supplyChainHubContent={
