@@ -335,3 +335,27 @@ def test_policy_show_explains_how_to_include_workspace_rules(
     assert "/workspace/repository" not in text
     assert payload["error"] == "sensitive_local_policy_requires_provenance"
     assert "--include-provenance" in payload["message"]
+
+
+def test_policy_commands_provision_the_resident_prerequisite_from_their_own_store(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import commands_dispatch_policy_document as dispatch
+
+    stores: list[object] = []
+    monkeypatch.setattr(
+        dispatch,
+        "ensure_resident_prerequisite",
+        lambda home, *, store: stores.append((home, store)) or True,
+    )
+    monkeypatch.setattr(GuardStore, "list_policy_decisions", lambda self: [])
+
+    main(["guard", "policy", "show", "--home", str(tmp_path / "home"), "--json"])
+    capsys.readouterr()
+
+    assert len(stores) == 1
+    home, store = stores[0]
+    assert isinstance(store, GuardStore)
+    assert home == store.guard_home

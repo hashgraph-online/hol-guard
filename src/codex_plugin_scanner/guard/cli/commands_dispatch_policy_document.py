@@ -17,6 +17,7 @@ from ..business_policy_document_import import (
     read_business_document_for_store,
 )
 from ..native_command_policy_decision import CommandPolicyDecisionUnavailableError
+from ..native_context import ensure_resident_prerequisite
 from ..native_policy_document import NativePolicyDocumentError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..policy_authority import PolicyAuthorityError
@@ -99,6 +100,10 @@ def _run_guard_policy_document_command(
 ) -> int:
     command = str(args.policy_command)
     as_json = wants_json(args)
+    if store is not None:
+        # The verifier key comes from the store's policy-integrity master, so
+        # provision it from the store this command reads, not a fresh one.
+        ensure_resident_prerequisite(store.guard_home, store=store)
     try:
         if command == "capabilities":
             _write_payload(
