@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if contained_output_match::is_command(command) && flag == "--stdin" => {
+            let response = contained_output_match::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if desktop_core_onedir::is_command(command) && flag == "--stdin" => {
             let response = desktop_core_onedir::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -110,6 +114,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
             let response = macos_code_signing::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if policy_file_io::is_command(command) && flag == "--stdin" => {
+            let response = policy_file_io::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
@@ -248,6 +256,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if orphaned_worker_reap::is_command(command) && flag == "--stdin" => {
             let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if runtime_fingerprint::is_command(command) && flag == "--stdin" => {
+            let response = runtime_fingerprint::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if process_identity::is_command(command) && flag == "--stdin" => {

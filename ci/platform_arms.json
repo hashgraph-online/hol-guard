@@ -376,7 +376,7 @@
    "verdict": "windows-unsupported",
    "note": "Only the Node build and Node tool reasons are filtered here; every other contained reason is passed through for `generic.rs::windows_contained` to decide. That allowlist is where a Windows containment profile is actually admitted.",
    "cfg": "not(unix)",
-   "body": "2d8559fe0d22"
+   "body": "af913c8cf3ae"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
@@ -979,6 +979,14 @@
    "body": "40044ed07203"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Output-filter matchers run only on Unix, as before the move: the Python sink found no root-owned `/usr/bin/grep` or `/bin/grep` and no owner-only `rg` in the Unix install directories on Windows, so every matcher stage answered as a missing program. The Windows arm keeps that answer, `hol-guard: <program>: not found` with status 127, pinned by `a_missing_matcher_exits_as_a_missing_program`, which is not `cfg(unix)`-gated and so runs in the Windows test job.",
+   "file": "rust/crates/guard-runtime/src/contained_output_match.rs",
+   "item": "fn matched(_input: &[u8], program: &str, _arguments: &[String]) -> Option<(Vec<u8>, Vec<u8>, i32)>",
+   "cfg": "not(unix)",
+   "body": "2c5228df1c67"
+  },
+  {
    "verdict": "other-platform",
    "note": "Neither Unix nor Windows: no hook on such a platform writes a request snapshot, so the sink reads none. `None` refuses the run with `contained_run_authorization_failed` and no sandbox starts. Windows reads through `codex_hook_bridge_contain_windows::read_snapshot`, proven by its Windows unit tests.",
    "file": "rust/crates/guard-runtime/src/contained_test_request.rs",
@@ -1521,6 +1529,14 @@
    "item": "fn answer(_request: &Request) -> Value",
    "cfg": "not(unix)",
    "body": "4fbf180853ce"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The Python reader and writer needed `os.geteuid` and directory descriptors (`dir_fd`), neither of which exists on Windows, so local policy files were never readable there. This arm refuses with `policy_parent_unavailable`, the code Python's folder walk raised for an unopenable folder, rather than reading a file whose owner and link count it cannot check.",
+   "file": "rust/crates/guard-runtime/src/policy_file_io.rs",
+   "item": "mod platform",
+   "cfg": "not(unix)",
+   "body": "0e244582f000"
   },
   {
    "verdict": "posix-primitive",
@@ -2393,6 +2409,14 @@
    "item": "fn pid_alive(pid: i64) -> bool",
    "cfg": "not(unix)",
    "body": "aeb9e90f0af4"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no `st_mtime_nsec`; the arm reads the modification time `Metadata::modified` reports, in nanoseconds from the epoch, as `os.stat().st_mtime_ns` gives it on Windows. The value only feeds the cache key, so a coarser clock can at worst recompute the content fingerprint. `the_fingerprint_ignores_mtime_and_tracks_content` is not Unix-only, so any Windows run of the crate's tests exercises this arm.",
+   "file": "rust/crates/guard-runtime/src/runtime_fingerprint.rs",
+   "item": "fn modified_ns(metadata: &fs::Metadata) -> i128",
+   "cfg": "not(unix)",
+   "body": "341845dc6c3c"
   }
  ]
 }

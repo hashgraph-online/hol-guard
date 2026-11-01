@@ -532,7 +532,11 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
     {
         return None;
     }
-    let index = usize::from(words.first() == Some(&"run"));
+    let index = usize::from(
+        words
+            .first()
+            .is_some_and(|word| crate::contained_argv::names_script_run_verb(manager, word)),
+    );
     let flag = words.get(index).copied().unwrap_or_default();
     let root = root_flags.contains(&flag);
     let (value, consumed) = if root {

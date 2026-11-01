@@ -47,6 +47,9 @@ WORKSPACE_SCRIPT_PASSED_OPTION_CASE = "omp-native-workspace-script-passed-option
 # only chooses how much the manager prints, so the run has to reach the script
 # the plain spelling reaches.
 WORKSPACE_QUIET_SCRIPT_RUN_CASE = "omp-native-workspace-quiet-script-run"
+# npm's own longer spelling of the same verb. The run it names is the script,
+# so it has to reach the same place the short spelling reaches.
+WORKSPACE_SCRIPT_RUN_ALIAS_CASE = "omp-native-workspace-script-run-alias"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -57,6 +60,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
+        WORKSPACE_SCRIPT_RUN_ALIAS_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -176,6 +180,14 @@ _QUIET_LINT_FILES = {
     **_ESLINT_FILES,
     "node_modules/eslint/bin/eslint.js": (f"#!/usr/bin/env node\nconsole.log('{QUIET_LINT_MARKER}');\n"),
 }
+# The one line the alias case's ESLint prints. The alias forwards no option
+# either, so its executable answers to the launch itself; its own line keeps it
+# from passing for the quiet case's reason.
+ALIAS_LINT_MARKER = f"eslint {_ESLINT_VERSION} ran through the alias"
+_ALIAS_LINT_FILES = {
+    **_ESLINT_FILES,
+    "node_modules/eslint/bin/eslint.js": (f"#!/usr/bin/env node\nconsole.log('{ALIAS_LINT_MARKER}');\n"),
+}
 
 
 class _Install(NamedTuple):
@@ -191,6 +203,7 @@ _INSTALLS = {
     WORKSPACE_MOCHA_CASE: _Install("mocha", _MOCHA_FILES, MOCHA_MARKER),
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
     WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
+    WORKSPACE_SCRIPT_RUN_ALIAS_CASE: _Install("eslint", _ALIAS_LINT_FILES, ALIAS_LINT_MARKER),
 }
 
 

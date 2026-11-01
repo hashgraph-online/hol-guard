@@ -439,6 +439,21 @@ def test_trusted_read_rejects_oversized_file(tmp_path: Path) -> None:
         read_trusted_policy_text(source)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows names are never raw bytes")
+def test_trusted_round_trip_through_a_name_that_is_not_utf8(tmp_path: Path) -> None:
+    directory = _private_directory(tmp_path / "private")
+    source = Path(os.fsdecode(os.fsencode(directory) + b"/policy-\xff.yaml"))
+    try:
+        source.write_text("rules: []\n", encoding="utf-8")
+    except (OSError, UnicodeEncodeError):
+        pytest.skip("this filesystem only allows UTF-8 names")
+    source.chmod(0o600)
+
+    assert read_trusted_policy_text(source) == "rules: []\n"
+    write_private_policy_text(source, "rules: [1]\n")
+    assert source.read_bytes() == b"rules: [1]\n"
+
+
 def test_private_output_rejects_oversized_content(tmp_path: Path) -> None:
     directory = _private_directory(tmp_path / "private")
     destination = directory / "policy.yaml"
@@ -475,41 +490,6 @@ def test_private_output_rejects_existing_hardlink(tmp_path: Path) -> None:
         write_private_policy_text(destination, "replacement")
 
     assert target.read_text(encoding="utf-8") == "target"
-
-
-def test_private_output_retries_short_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    directory = _private_directory(tmp_path / "private")
-    destination = directory / "policy.yaml"
-    original_write = os.write
-
-    def short_write(descriptor: int, payload: bytes | memoryview) -> int:
-        return original_write(descriptor, payload[:1])
-
-    monkeypatch.setattr(os, "write", short_write)
-
-    write_private_policy_text(destination, "complete")
-
-    assert destination.read_text(encoding="utf-8") == "complete"
-
-
-def test_atomic_output_preserves_existing_file_when_replace_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    directory = _private_directory(tmp_path / "private")
-    destination = directory / "policy.yaml"
-    destination.write_text("before", encoding="utf-8")
-    destination.chmod(0o600)
-
-    def fail_replace(_source: str, _destination: str, **_kwargs: int) -> None:
-        raise OSError("replace failed")
-
-    monkeypatch.setattr(os, "replace", fail_replace)
-
-    with pytest.raises(PolicyFileTrustError, match="policy_output_write_failed"):
-        write_private_policy_text(destination, "after")
-
-    assert destination.read_text(encoding="utf-8") == "before"
-    assert not list(directory.glob(".*.tmp"))
 
 
 def test_document_diff_is_deterministic() -> None:

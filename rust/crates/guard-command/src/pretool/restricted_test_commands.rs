@@ -490,7 +490,7 @@ pub(crate) fn manager_script_task<'a>(
 ) -> Option<(&'a str, &'a [String])> {
     let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
     if let [run, tail @ ..] = arguments {
-        if run == "run" {
+        if crate::contained_argv::names_script_run_verb(manager, run) {
             let tail = crate::contained_argv::manager_reporting_options_peeled(manager, tail);
             return match tail {
                 [task] => Some((task.as_str(), &tail[1..])),
@@ -638,8 +638,9 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         // name is a script only for the managers that run one.
         let manager = super::executable_basename(executable);
         let named = |task: &String| {
-            crate::contained_package_test::test_task(task)
-                && (task.as_str() == "test" || matches!(manager, "pnpm" | "yarn"))
+            (crate::contained_package_test::test_task(task)
+                && (task.as_str() == "test" || matches!(manager, "pnpm" | "yarn")))
+                || crate::contained_argv::aliased_test_script_name(manager, task).is_some()
         };
         // An option that only chooses how much the manager prints names no
         // script, so the reading looks behind it, before the `run` verb and
@@ -648,7 +649,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
         let rest = match arguments {
             [test, rest @ ..] if named(test) && manager != "bun" => Some(rest),
-            [run, tail @ ..] if run == "run" => {
+            [run, tail @ ..] if crate::contained_argv::names_script_run_verb(manager, run) => {
                 match crate::contained_argv::manager_reporting_options_peeled(manager, tail) {
                     [test, rest @ ..] if crate::contained_package_test::test_task(test) => {
                         Some(rest)

@@ -59,8 +59,15 @@ pub(crate) fn is_package_test(command: &[String]) -> bool {
     }
     let arguments = reporting_options_peeled(manager, &command[1..]);
     match arguments {
-        [task, ..] if manager != "bun" && test_task(task) => true,
-        [run, tail @ ..] if run == "run" => {
+        [task, ..]
+            if manager != "bun"
+                && (test_task(task)
+                    || crate::contained_argv::aliased_test_script_name(manager, task)
+                        .is_some()) =>
+        {
+            true
+        }
+        [run, tail @ ..] if crate::contained_argv::names_script_run_verb(manager, run) => {
             matches!(reporting_options_peeled(manager, tail), [task, ..] if test_task(task))
         }
         _ => false,
@@ -91,13 +98,20 @@ pub(crate) fn script_tokens(
 ) -> Result<Vec<String>, RestrictedPytestError> {
     let arguments = reporting_options_peeled(manager, arguments);
     let run_tail = match arguments {
-        [run, tail @ ..] if run == "run" => Some(reporting_options_peeled(manager, tail)),
+        [run, tail @ ..] if crate::contained_argv::names_script_run_verb(manager, run) => {
+            Some(reporting_options_peeled(manager, tail))
+        }
         _ => None,
     };
     let (task, trailing) = match (run_tail, arguments) {
         (Some([task, rest @ ..]), _) if test_task(task) => (task.as_str(), rest),
         (Some(_), _) => return Err(invalid("Only local package test scripts are supported.")),
         (None, [task, rest @ ..]) if test_task(task) => (task.as_str(), rest),
+        (None, [task, rest @ ..])
+            if crate::contained_argv::aliased_test_script_name(manager, task).is_some() =>
+        {
+            ("test", rest)
+        }
         _ => return Err(invalid("Only local package test scripts are supported.")),
     };
     if trailing.first().is_some_and(|word| word != "--") {
