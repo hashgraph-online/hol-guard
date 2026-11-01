@@ -820,6 +820,7 @@
       "src/supply_chain_risk.rs",
       "src/supply_chain_support.rs",
       "src/target_identities.rs",
+      "src/tsc_project.rs",
       "src/typescript_launch_evidence.rs",
       "src/vite_output.rs",
         "src/workspace_inventory.rs",

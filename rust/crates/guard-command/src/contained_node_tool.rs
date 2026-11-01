@@ -20,6 +20,7 @@ mod tests;
 use crate::pretool::{manager_local_bin_arguments, manager_script_task};
 use crate::restricted_command::RestrictedPytestError;
 use serde_json::{json, Value};
+use std::path::Path;
 
 /// A refused command, and the sandbox reason a refusal that is not about the
 /// command itself carries instead.
@@ -146,6 +147,23 @@ pub(crate) fn tool_entries(name: &str) -> Option<(&'static str, &'static [&'stat
     TOOL_ENTRIES.iter().copied().find(|(tool, _)| *tool == name)
 }
 
+/// Whether a `tsc` run emits nothing because the project it reads says so
+/// rather than because the command line does.
+///
+/// The answer is the config's, so it is read only when the command line is
+/// silent, and only when the run directory is known. A caller that has no
+/// directory reads the command line alone, which is the answer this route
+/// has always given.
+pub(crate) fn config_declares_no_emit(
+    name: &str,
+    arguments: &[String],
+    directory: Option<&Path>,
+) -> bool {
+    name == "tsc"
+        && !arguments.iter().any(|word| word == "--noEmit")
+        && crate::tsc_project::declares_no_emit(arguments, directory)
+}
+
 /// The supported tool a name stands for, the entrypoints it publishes and
 /// the mode it runs in, or `None` when the tool or its mode is not one of the
 /// supported runs.
@@ -153,9 +171,24 @@ pub(crate) fn supported_tool(
     name: &str,
     arguments: &[String],
 ) -> Option<(&'static str, &'static [&'static str], ToolMode)> {
+    supported_tool_in(name, arguments, None)
+}
+
+/// [`supported_tool`] for a run whose directory is known, so a `tsc` run can
+/// be read against the project it names as well as the options it carries.
+pub(crate) fn supported_tool_in(
+    name: &str,
+    arguments: &[String],
+    directory: Option<&Path>,
+) -> Option<(&'static str, &'static [&'static str], ToolMode)> {
     let mode = match name {
         "eslint" => ToolMode::Report,
-        "tsc" if arguments.iter().any(|word| word == "--noEmit") => ToolMode::Report,
+        "tsc"
+            if arguments.iter().any(|word| word == "--noEmit")
+                || config_declares_no_emit(name, arguments, directory) =>
+        {
+            ToolMode::Report
+        }
         // Only a checking mode reports instead of rewriting the files it visits.
         "prettier" if prettier_checks(arguments) => ToolMode::Report,
         "vite" if arguments.first().is_some_and(|word| word == "build") => ToolMode::Build,
@@ -313,17 +346,25 @@ pub(crate) fn entry_tool(entry: &str) -> &'static str {
 /// Where the gate lands once a tool name and its arguments are known.
 fn gate(
     name: &str,
-    arguments: Vec<String>,
+    mut arguments: Vec<String>,
     runtime_arguments: Vec<String>,
     expected_entry: Option<String>,
+    directory: Option<&Path>,
 ) -> NodeToolRoute {
-    let Some((name, entries, mode)) = supported_tool(name, &arguments) else {
+    let from_config = config_declares_no_emit(name, &arguments, directory);
+    let Some((name, entries, mode)) = supported_tool_in(name, &arguments, directory) else {
         return invalid(
             "Only local ESLint, no-emit TypeScript and Prettier in a checking mode are supported.",
         );
     };
     if writes_or_chains(&arguments) {
         return invalid("The lint/typecheck input has write or shell effects.");
+    }
+    // The project declared the no-emit mode this route admitted, so the run
+    // carries it on its own command line. Whatever the file says by the time
+    // the run starts, the process that starts cannot emit.
+    if from_config {
+        arguments.push("--noEmit".to_owned());
     }
     NodeToolRoute::Tool {
         name,
@@ -345,6 +386,7 @@ pub(crate) fn node_tool_route(
     command: &[String],
     script_body: Option<&[String]>,
     windows: bool,
+    directory: Option<&Path>,
 ) -> NodeToolRoute {
     if let Some(tokens) = script_body {
         let Some((name, arguments)) = tokens.split_first() else {
@@ -366,10 +408,10 @@ pub(crate) fn node_tool_route(
             );
         }
         arguments.extend_from_slice(tail);
-        return gate(name, arguments, Vec::new(), None);
+        return gate(name, arguments, Vec::new(), None, directory);
     }
     let Some((program, rest)) = command.split_first() else {
-        return gate("", Vec::new(), Vec::new(), None);
+        return gate("", Vec::new(), Vec::new(), None, directory);
     };
     let mut name = program_name(program, windows);
     let mut arguments = rest.to_vec();
@@ -433,7 +475,13 @@ pub(crate) fn node_tool_route(
         name = entry_tool(&entry).to_owned();
         expected_entry = Some(entry);
     }
-    gate(&name, arguments, runtime_arguments, expected_entry)
+    gate(
+        &name,
+        arguments,
+        runtime_arguments,
+        expected_entry,
+        directory,
+    )
 }
 
 /// The routing request as the caller spells it: the platform the command was
@@ -448,6 +496,13 @@ pub(crate) fn route_request(
         .get("windows")
         .and_then(Value::as_bool)
         .unwrap_or(cfg!(windows));
+    // The directory the run starts in, when the caller knows it. Without one
+    // a `tsc` run is read from its command line alone.
+    let directory = input
+        .get("cwd")
+        .and_then(Value::as_str)
+        .filter(|cwd| !cwd.is_empty())
+        .map(Path::new);
     let body = input.get("script_body").cloned().unwrap_or(Value::Null);
     let script_body = if body.is_null() {
         None
@@ -459,7 +514,7 @@ pub(crate) fn route_request(
             )
         })?)
     };
-    route_reply(command, script_body.as_deref(), windows)
+    route_reply(command, script_body.as_deref(), windows, directory)
 }
 
 /// The route as the sink reads it: one reading of the spelling, the tool it
@@ -468,8 +523,9 @@ pub(crate) fn route_reply(
     command: &[String],
     script_body: Option<&[String]>,
     windows: bool,
+    directory: Option<&Path>,
 ) -> Result<Value, RestrictedPytestError> {
-    match node_tool_route(command, script_body, windows) {
+    match node_tool_route(command, script_body, windows, directory) {
         NodeToolRoute::Script { task } => Ok(json!({ "kind": "script", "task": task })),
         NodeToolRoute::Tool {
             name,
