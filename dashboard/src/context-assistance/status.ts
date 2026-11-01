@@ -128,10 +128,10 @@ export function contextStatusCopy(status: ContextAssistanceStatus): { label: str
   };
   if (status.requested_enabled && status.verification_permitted && status.effective_preferences.enabled
       && (status.diagnostic === "runtime_not_verified" || status.diagnostic === null)) return {
-    label: "Not started", detail: "Your preferences are saved. Click Start CIGAR to verify and run the selected runtime.",
+    label: "Not started", detail: "Your preferences are saved. Click Turn on CIGAR to verify and run the selected runtime.",
   };
   if (status.diagnostic === "runtime_idle") return {
-    label: "Paused", detail: "CIGAR stopped after being idle. Click Start CIGAR when you need context again.",
+    label: "Paused", detail: "CIGAR stopped after being idle. Click Turn on CIGAR when you need context again.",
   };
   const code = status.diagnostic ?? "runtime_not_verified";
   const detail = code === "policy_restricted"

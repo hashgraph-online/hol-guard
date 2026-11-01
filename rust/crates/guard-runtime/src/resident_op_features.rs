@@ -289,4 +289,5 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-macos-code-signing-v1",
     "native-business-source-current-fence-v2",
     "native-contained-output-match-v1",
+    "native-agent-safety-guidance-v1",
 ];

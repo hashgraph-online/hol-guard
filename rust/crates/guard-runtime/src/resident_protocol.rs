@@ -138,6 +138,10 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         #[cfg(unix)]
         features.push(crate::binding_capture_op::BINDING_CAPTURE_FEATURE.into());
     }
+    // Unpacking extracts with the pinned macOS `ditto`, so only a macOS
+    // runtime offers it.
+    #[cfg(target_os = "macos")]
+    features.push("native-desktop-core-onedir-v1".into());
     features.push(crate::mcp_relay::RELAY_FEATURE.into());
     features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_WRITER_FEATURE.into());
     features.push(crate::claude_session_start::SESSION_START_FEATURE.into());

@@ -779,6 +779,14 @@
    "body": "d73c3f0622bf"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no directory descriptors, so the support files are named by path: before every read, replacement and removal the support directory is checked to still be the opened directory (same file ID, not a link or junction), each file is opened with `FILE_FLAG_OPEN_REPARSE_POINT` and refused when it is a reparse point, and a file whose ID, size, time or digest changed since it was read is left alone. Only the POSIX mode is approximated by the read-only attribute and the directory fsync is left out, as the Python path backend did. The tests in `agent_safety_guidance_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "file": "rust/crates/guard-runtime/src/agent_safety_guidance.rs",
+   "item": "mod platform",
+   "cfg": "not(unix)",
+   "body": "0e244582f000"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/aibom_paths.rs",
    "item": "fn entry_name -- non-Unix block",
    "verdict": "windows-unsupported",
