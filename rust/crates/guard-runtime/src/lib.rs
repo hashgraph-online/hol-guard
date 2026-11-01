@@ -284,6 +284,7 @@ mod direct_tool_managed_bun;
 mod directory_trust;
 mod discovery_placement_op;
 mod edge;
+mod edge_exact_command_review;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
