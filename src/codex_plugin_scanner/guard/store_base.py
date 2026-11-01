@@ -1135,7 +1135,7 @@ def _set_windows_private_directory(path: Path) -> None:
     try:
         _ensure_windows_private_directory_recently(path)
     except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
-        _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
+        _store_logger.debug("Could not set a Windows private directory: %s", type(exc).__name__)
 
 
 def _ensure_windows_private_directory_recently(path: Path, *, private_root: Path | None = None) -> None:
