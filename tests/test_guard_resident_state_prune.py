@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import socket
-import tempfile
 import time
 from pathlib import Path
 
@@ -13,9 +11,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.repair_engine import build_report, repair_onefile_leaks, run_repair
 from codex_plugin_scanner.guard.resident_state_prune import (
     OWNER_LOCK_NAME,
-    default_socket_roots,
     probe_owner_lock,
-    probe_socket,
     prune_native_runtime,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -40,117 +36,6 @@ def _resident(root: Path, name: str, *, pids: tuple[int, int] = (111, 222), mtim
     return directory
 
 
-def _prune(home: Path, **overrides: object):
-    options: dict[str, object] = {
-        "now": NOW,
-        "pid_alive": lambda _pid: False,
-        "lock_probe": lambda _path: True,
-        "socket_probe": lambda _path: "dead",
-        "socket_roots": (),
-    }
-    options.update(overrides)
-    return prune_native_runtime(home, **options)  # type: ignore[arg-type]
-
-
-def test_stale_dir_with_dead_owners_is_removed(tmp_path: Path) -> None:
-    stale = _resident(tmp_path, "a" * 16)
-    report = _prune(tmp_path)
-    assert not stale.exists()
-    assert report.removed_dirs == [str(stale)]
-    assert not list((tmp_path / "native-runtime").glob(".pruned-*"))
-
-
-def test_dry_run_reports_without_deleting(tmp_path: Path) -> None:
-    stale = _resident(tmp_path, "a" * 16)
-    report = _prune(tmp_path, dry_run=True)
-    assert stale.exists()
-    assert report.removed_dirs == [str(stale)]
-
-
-@pytest.mark.parametrize(
-    ("label", "overrides", "mutate"),
-    [
-        ("live pid", {"pid_alive": lambda pid: pid == 222}, None),
-        ("held lock", {"lock_probe": lambda _path: False}, None),
-        ("unknowable lock", {"lock_probe": lambda _path: None}, None),
-        ("recent", {}, lambda directory: _age(directory, NOW - 60)),
-        ("unparseable state", {}, lambda directory: (directory / "generation-0000000000000001.json").write_text("{")),
-    ],
-)
-def test_dirs_without_full_proof_are_kept(tmp_path: Path, label: str, overrides: dict, mutate) -> None:
-    directory = _resident(tmp_path, "b" * 16)
-    if mutate is not None:
-        mutate(directory)
-        if label == "unparseable state":
-            _age(directory, OLD)
-    report = _prune(tmp_path, **overrides)
-    assert directory.exists(), label
-    assert report.removed_dirs == []
-
-
-def test_symlinked_resident_dir_is_never_followed(tmp_path: Path) -> None:
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (outside / "keep.txt").write_text("x")
-    link = tmp_path / "native-runtime" / ("resident-v3-" + "c" * 16)
-    link.parent.mkdir(parents=True)
-    link.symlink_to(outside, target_is_directory=True)
-    _prune(tmp_path)
-    assert (outside / "keep.txt").exists()
-    assert link.is_symlink()
-
-
-def _bound_socket(path: Path, *, listening: bool) -> socket.socket:
-    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    server.bind(str(path))
-    if listening:
-        server.listen(1)
-    return server
-
-
-def test_probe_socket_distinguishes_dead_from_live() -> None:
-    root = Path(tempfile.mkdtemp(prefix="hgrp", dir="/tmp"))
-    try:
-        dead_path, live_path = root / "d.sock", root / "l.sock"
-        dead = _bound_socket(dead_path, listening=False)
-        dead.close()  # file stays, nothing listens
-        live = _bound_socket(live_path, listening=True)
-        try:
-            assert probe_socket(dead_path) == "dead"
-            assert probe_socket(live_path) == "live"
-            assert probe_socket(root / "missing.sock") == "gone"
-        finally:
-            live.close()
-    finally:
-        for item in root.iterdir():
-            item.unlink()
-        root.rmdir()
-
-
-def test_only_dead_old_resident_sockets_are_removed(tmp_path: Path) -> None:
-    root = Path(tempfile.mkdtemp(prefix="hgrp", dir="/tmp"))
-    try:
-        names = ("hook-v2-1.sock", "h3-aaaa-0000000000000001.sock", "other.sock")
-        for name in names:
-            _bound_socket(root / name, listening=False).close()
-        (root / "hook-v2-notasocket.sock").write_text("x")
-        _age(root, OLD)
-        report = _prune(tmp_path, socket_roots=(root,), socket_probe=lambda _p: "dead")
-        assert not (root / names[0]).exists() and not (root / names[1]).exists()
-        assert (root / "other.sock").exists()
-        assert (root / "hook-v2-notasocket.sock").exists()
-        assert len(report.removed_sockets) == 2
-        # a socket that still answers is never removed
-        _bound_socket(root / "hook-v2-live.sock", listening=False).close()
-        _age(root, OLD)
-        kept = _prune(tmp_path, socket_roots=(root,), socket_probe=lambda _p: "live")
-        assert (root / "hook-v2-live.sock").exists() and kept.removed_sockets == []
-    finally:
-        for item in root.iterdir():
-            item.unlink()
-        root.rmdir()
-
-
 def test_probe_owner_lock_sees_a_held_flock(tmp_path: Path) -> None:
     import fcntl
 
@@ -168,17 +53,32 @@ def test_probe_owner_lock_sees_a_held_flock(tmp_path: Path) -> None:
     assert probe_owner_lock(directory) is True
 
 
-def test_entry_budget_bounds_work(tmp_path: Path) -> None:
-    for index in range(5):
-        _resident(tmp_path, f"{index:016x}")
-    report = _prune(tmp_path, max_entries=2)
-    assert report.budget_exhausted
-    assert len(report.removed_dirs) == 2
+def test_prune_reports_none_for_a_malformed_runtime_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
 
+    answers: list[dict[str, object] | None] = [
+        {"outcome": "ok", "stale_dirs": -1, "dead_sockets": 0, "removed_dirs": [], "removed_sockets": []},
+        None,
+    ]
+    requests: list[object] = []
 
-def test_missing_state_dir_is_a_clean_no_op(tmp_path: Path) -> None:
-    report = _prune(tmp_path)
-    assert report.status == "ok" and report.removed_dirs == [] and report.removed_sockets == []
+    def fake_answer(_feature: str, _command: str, request: object, **_options: object) -> dict[str, object] | None:
+        requests.append(request)
+        return answers.pop(0)
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)
+    assert prune_native_runtime(tmp_path, include_system_sockets=False) is None
+    assert requests[0] == {
+        "schema": "resident-state-prune.v1",
+        "guard_home": str(tmp_path),
+        "dry_run": False,
+        "include_system_sockets": False,
+    }
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    report = run_repair(guard_home=context.guard_home, context=context, store=store, include_daemon=False)
+    native = next(item for item in report["steps"] if item["step"] == "native_runtime")  # type: ignore[union-attr]
+    assert native["status"] == "skipped"
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -276,17 +176,3 @@ def test_report_status_rollup() -> None:
     assert build_report([step("ok"), step("changed")], dry_run=False)["status"] == "repaired"
     assert build_report([step("planned")], dry_run=True)["status"] == "needs_repair"
     assert build_report([step("changed"), step("error")], dry_run=False)["status"] == "partial"
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and modes")
-def test_default_socket_roots_only_returns_private_directories_of_this_user(tmp_path: Path) -> None:
-    private = tmp_path / "hgr-private"
-    private.mkdir(mode=0o700)
-    shared = tmp_path / "hgr-shared"
-    shared.mkdir()
-    shared.chmod(0o777)
-    (tmp_path / "hgr-file").write_text("x")
-    (tmp_path / "hgr-link").symlink_to(private)
-    (tmp_path / "other").mkdir(mode=0o700)
-
-    assert default_socket_roots((tmp_path / "missing", tmp_path)) == (private,)

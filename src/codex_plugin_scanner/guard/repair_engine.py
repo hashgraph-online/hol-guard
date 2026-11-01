@@ -99,17 +99,18 @@ def repair_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, objec
     try:
         from .resident_state_prune import prune_native_runtime
 
-        report = prune_native_runtime(
+        detail = prune_native_runtime(
             guard_home,
             dry_run=dry_run,
-            socket_roots=None if owns_system_scope(guard_home) else (),
+            include_system_sockets=owns_system_scope(guard_home),
         )
     except Exception as error:
         return _error_step("native_runtime", error)
-    detail = report.to_dict()
-    dirs, sockets = len(report.removed_dirs), len(report.removed_sockets)
-    if report.status in {"unsupported", "unavailable"}:
-        return _step("native_runtime", "skipped", f"Not checked ({report.status}).", **detail)
+    if detail is None:
+        return _step("native_runtime", "skipped", "Not checked (runtime unavailable).", outcome="unavailable")
+    dirs, sockets = detail["stale_dirs"], detail["dead_sockets"]
+    if detail["outcome"] in {"unsupported", "unavailable"}:
+        return _step("native_runtime", "skipped", f"Not checked ({detail['outcome']}).", **detail)
     if not dirs and not sockets:
         return _step("native_runtime", "ok", "No stale native runtime state.", **detail)
     verb = "Would remove" if dry_run else "Removed"
