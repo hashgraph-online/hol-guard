@@ -600,7 +600,7 @@ fn one_evaluation_walks_a_root_and_glob_set_once() {
             Some(home.as_str()),
         )
     };
-    let budget = crate::pretool::search_scope_walk::begin_include_scope_budget();
+    let budget = crate::pretool::search_scope_budget::begin_include_scope_budget();
     assert!(proven(), "the walk did not prove the tree it was given");
     std::fs::remove_dir_all(&source).unwrap();
     assert!(
@@ -610,7 +610,7 @@ fn one_evaluation_walks_a_root_and_glob_set_once() {
     {
         // What an envelope does: it reads a projection of this same
         // submission by calling the evaluation entry point again.
-        let _projection = crate::pretool::search_scope_walk::begin_include_scope_budget();
+        let _projection = crate::pretool::search_scope_budget::begin_include_scope_budget();
         assert!(
             proven(),
             "a projection dropped the answers its own submission had already reached"
@@ -621,7 +621,7 @@ fn one_evaluation_walks_a_root_and_glob_set_once() {
         "a projection's return ended the submission that was still open"
     );
     drop(budget);
-    let _budget = crate::pretool::search_scope_walk::begin_include_scope_budget();
+    let _budget = crate::pretool::search_scope_budget::begin_include_scope_budget();
     assert!(
         !proven(),
         "the next submission reused the answer the previous one reached"
