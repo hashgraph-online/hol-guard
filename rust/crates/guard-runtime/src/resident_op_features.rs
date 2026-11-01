@@ -288,4 +288,5 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-process-identity-v1",
     "native-macos-code-signing-v1",
     "native-business-source-current-fence-v2",
+    "native-bounded-probe-v1",
 ];
