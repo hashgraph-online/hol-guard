@@ -2,9 +2,12 @@
 //!
 //! Both sat in `OTHER_READERS`, where every non-option word becomes a path
 //! candidate, so `ag private_key src/` classified its own pattern as a wallet
-//! key file and sent an ordinary code search to review. The trigger needs the
-//! tool on `PATH` in the session that runs it, which no fixture lane plants,
-//! so the operand reader is pinned here instead.
+//! key file and escalated an ordinary code search to a sensitive-access
+//! review. Neither tool is modelled as a command, so the segment stays
+//! unmodelled and the search is reviewed either way; what the fix changes is
+//! the reason, from `native_sensitive_access_review` back to the ordinary
+//! review floor. The benign gate records only allow or not-allow, so it cannot
+//! see that shift, and the operand reader is pinned here instead.
 use crate::shell_secret_read_support::{
     direct_secret_read_paths_from_tokens, search_args_expand_hidden_files,
     shell_segment_file_operand_tokens, OTHER_READERS, SEARCH_READERS,
@@ -31,6 +34,26 @@ fn search_pattern_is_not_a_path_candidate() {
 fn search_operand_is_still_read() {
     assert!(!secret_paths(&["ag", "token", "/home/dev/.ssh/id_rsa"]).is_empty());
     assert!(!secret_paths(&["ack", "token", "/home/dev/.aws/credentials"]).is_empty());
+}
+
+#[test]
+fn boolean_short_options_do_not_swallow_an_operand() {
+    // `-t` is `--all-text` and `-f` is `--follow` in `ag`, so neither takes a
+    // value; the shared rg-shaped table used to eat the next word and read the
+    // key path as the pattern.
+    assert!(!secret_paths(&["ag", "-t", ".", "/home/dev/.ssh/id_rsa"]).is_empty());
+    assert!(!secret_paths(&["ag", "-f", "token", "/home/dev/.ssh/id_rsa"]).is_empty());
+    // `ack -f` lists files and takes no pattern at all.
+    assert!(!secret_paths(&["ack", "-f", "/home/dev/.aws/credentials"]).is_empty());
+    // `rg -t` still takes its type name.
+    assert!(secret_paths(&["rg", "-t", "rust", "private_key", "src/"]).is_empty());
+}
+
+#[test]
+fn file_name_search_carries_its_own_pattern() {
+    // `-g` searches file names, so the word after its value is already a path.
+    assert!(!secret_paths(&["ag", "-g", "id_", "/home/dev/.ssh/id_rsa"]).is_empty());
+    assert!(secret_paths(&["ag", "-g", "private_key", "src/"]).is_empty());
 }
 
 #[test]

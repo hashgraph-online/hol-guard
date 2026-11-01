@@ -1282,7 +1282,7 @@ pub(crate) fn search_file_operand_roles(
             after_options = true;
             continue;
         }
-        if SEARCH_VALUE_OPTIONS.contains(&arg.as_str()) {
+        if search_option_takes_value(command_name, arg) {
             skip_next = true;
             skip_next_is_operand = (["grep", "egrep", "fgrep"].contains(&command_name)
                 && arg == "--include")
@@ -1336,9 +1336,37 @@ pub(crate) fn search_file_operand_roles(
     operands
 }
 
-/// `_search_command_has_no_pattern` (:415-417).
+/// Whether `arg` consumes the next word as its value for this command.
+///
+/// The shared table is spelled for `rg` and the grep family. `ag` reads `-t`
+/// as `--all-text` and `-f` as `--follow`, and `ack` reads `-f` as "list the
+/// files", so none of those takes a value there. Letting the shared table
+/// swallow the next word drops a real operand: `ag -t . ~/.ssh/id_rsa` fed
+/// `.` to `-t` and then read the key path as the pattern, so the key never
+/// reached the secret-read scan.
+fn search_option_takes_value(command_name: &str, arg: &str) -> bool {
+    if matches!(command_name, "ag" | "ack") && matches!(arg, "-t" | "-f") {
+        return false;
+    }
+    SEARCH_VALUE_OPTIONS.contains(&arg)
+}
+
+/// `_search_command_has_no_pattern` (:415-417), plus the `ag`/`ack` spellings
+/// that carry their pattern inside an option: `-g`/`--file-search-regex`
+/// search file names, and `ack -f` lists files with no pattern at all. Without
+/// this the first path after them is eaten as the pattern.
 fn search_command_has_no_pattern(command_name: &str, args: &[String]) -> bool {
-    command_name == "rg" && args.iter().any(|a| a == "--files")
+    match command_name {
+        "rg" => args.iter().any(|a| a == "--files"),
+        "ag" | "ack" => args.iter().any(|a| {
+            a == "-g"
+                || (a.starts_with("-g") && a.len() > 2)
+                || a == "--file-search-regex"
+                || a.starts_with("--file-search-regex=")
+                || (command_name == "ack" && (a == "-f" || a == "--files"))
+        }),
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
