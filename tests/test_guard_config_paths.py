@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import config as guard_config_module
 from codex_plugin_scanner.guard.config import (
-    GuardHomeMigrationError,
-    _copy_guard_database,
-    _migrate_guard_home_state,
     load_guard_config,
     resolve_guard_home,
     resolve_risk_action,
     update_guard_settings,
 )
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.mdm import runtime_request as runtime_request_module
 
 try:
     import tomllib
@@ -25,47 +20,9 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
 
-def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
-    """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
-
-    Also installs a test-only resolver override so sync-path exercises stay hermetic
-    (no OAuth token refresh against the network). Tests that need real sync against a
-    local server pass sync_url=<url>.
-    """
-    from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
-    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
-
-    dpop_key_material = generate_dpop_key_pair()
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token=token,
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id=workspace_id,
-        now=now,
-    )
-    effective_sync_url = sync_url if sync_url is not None else "https://hol.org/api/guard/receipts/sync"
-    guard_runner_module._test_sync_auth_context_override = {
-        "sync_url": effective_sync_url,
-        "access_token": token,
-        "dpop_key_material": None,
-    }
-
-
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-
-
-def _create_sqlite_guard_db(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as connection:
-        connection.execute("create table migration_probe (value text)")
-        connection.execute("insert into migration_probe(value) values ('legacy')")
 
 
 def test_resolve_guard_home_defaults_to_hol_guard_directory(tmp_path, monkeypatch):
@@ -394,246 +351,61 @@ def test_dashboard_settings_update_preserves_existing_inline_table_array_config_
     assert config_payload["rules"] == [{"name": "canary", "action": "review", "weight": 0.5}]
 
 
-def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_path, monkeypatch):
+def _answer_guard_home(monkeypatch, answer):
+    requests: list[dict[str, object]] = []
+
+    def _runtime_answer(feature, command, request, **_kwargs):
+        assert (feature, command) == ("native-guard-home-resolve-v1", "guard-home-resolve")
+        requests.append(request)
+        return answer
+
+    monkeypatch.setattr(runtime_request_module, "runtime_answer", _runtime_answer)
+    return requests
+
+
+def test_resolve_guard_home_skips_the_runtime_without_a_legacy_home(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
-    legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"
-    legacy_home.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(Path, "home", lambda: home_dir)
+    requests = _answer_guard_home(monkeypatch, {"guard_home": "/elsewhere"})
 
     assert resolve_guard_home() == home_dir / ".hol-guard"
+    assert requests == []
 
 
-def test_migrate_guard_home_state_copies_guard_db_with_sqlite_backup(tmp_path):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
-    _create_sqlite_guard_db(legacy_home / "guard.db")
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    with sqlite3.connect(canonical_home / "guard.db") as connection:
-        row = connection.execute("select value from migration_probe").fetchone()
-    assert row == ("legacy",)
-
-
-def test_migrate_guard_home_state_preserves_oauth_local_credentials(tmp_path):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
-    legacy_store = GuardStore(legacy_home)
-    _seed_guard_cloud(legacy_store, workspace_id="workspace-123")
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    canonical_store = GuardStore(canonical_home)
-    oauth_payload = canonical_store.get_sync_payload("oauth_local_credentials")
-
-    assert isinstance(oauth_payload, dict)
-    assert canonical_store.get_cloud_workspace_id() == "workspace-123"
-
-
-def test_migrate_guard_home_state_replaces_retired_credentials_only_destination(tmp_path):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
-    canonical_store = GuardStore(canonical_home)
-    canonical_store.set_sync_payload(
-        "credentials",
-        {
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "access_token": "demo-token",
-        },
-        "2026-05-19T00:00:00Z",
-    )
-    legacy_store = GuardStore(legacy_home)
-    _seed_guard_cloud(legacy_store, workspace_id="workspace-123")
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    migrated_store = GuardStore(canonical_home)
-    oauth_payload = migrated_store.get_sync_payload("oauth_local_credentials")
-
-    assert isinstance(oauth_payload, dict)
-    assert migrated_store.get_cloud_workspace_id() == "workspace-123"
-    assert migrated_store.get_sync_payload("credentials") is None
-
-
-def test_resolve_guard_home_does_not_migrate_retired_legacy_credentials(tmp_path, monkeypatch):
+def test_resolve_guard_home_uses_the_home_the_runtime_answers(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
-    canonical_home = home_dir / ".hol-guard"
     legacy_home = home_dir / ".ai-plugin-scanner-guard"
-    GuardStore(canonical_home)
-    legacy_store = GuardStore(legacy_home)
-    legacy_store.set_sync_payload(
-        "credentials",
-        {
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "access_token": "demo-token",
-        },
-        "2026-05-19T00:00:00Z",
-    )
+    legacy_home.mkdir(parents=True)
     monkeypatch.setattr(Path, "home", lambda: home_dir)
-
-    resolved_home = resolve_guard_home()
-
-    assert resolved_home == canonical_home
-    canonical_store = GuardStore(canonical_home)
-    assert canonical_store.get_cloud_sync_profile() is None
-
-
-def test_migrate_guard_home_state_merges_nested_legacy_directories(tmp_path):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".ai-plugin-scanner-guard"
-    _write_text(canonical_home / "bin" / "keep.txt", "canonical")
-    _write_text(legacy_home / "bin" / "legacy.txt", "legacy")
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    assert (canonical_home / "bin" / "keep.txt").read_text(encoding="utf-8") == "canonical"
-    assert (canonical_home / "bin" / "legacy.txt").read_text(encoding="utf-8") == "legacy"
-
-
-def test_migrate_guard_home_state_skips_legacy_daemon_runtime_state(tmp_path):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".ai-plugin-scanner-guard"
-    _write_text(legacy_home / "daemon-state.json", '{"port": 1, "auth_token": "legacy"}')
-    _write_text(legacy_home / "config.toml", 'default_action = "warn"\n')
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    assert not (canonical_home / "daemon-state.json").exists()
-    assert (canonical_home / "config.toml").read_text(encoding="utf-8") == 'default_action = "warn"\n'
-
-
-def test_migrate_guard_home_state_skips_legacy_sqlite_sidecars(tmp_path, monkeypatch):
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".ai-plugin-scanner-guard"
-    _write_text(legacy_home / "guard.db", "legacy-db")
-    _write_text(legacy_home / "guard.db-wal", "wal")
-    _write_text(legacy_home / "guard.db-shm", "shm")
-    _write_text(legacy_home / "guard.db-journal", "journal")
-    copied: list[tuple[Path, Path]] = []
-
-    def _record_copy(*, source: Path, destination: Path) -> None:
-        copied.append((source, destination))
-        _write_text(destination, "copied-db")
-
-    monkeypatch.setattr(guard_config_module, "_copy_guard_database", _record_copy)
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    assert copied == [(legacy_home / "guard.db", canonical_home / "guard.db")]
-    assert (canonical_home / "guard.db").is_file()
-    assert not (canonical_home / "guard.db-wal").exists()
-    assert not (canonical_home / "guard.db-shm").exists()
-    assert not (canonical_home / "guard.db-journal").exists()
-
-
-def test_copy_guard_database_does_not_fallback_to_raw_copy_on_sqlite_error(tmp_path, monkeypatch):
-    source = tmp_path / "legacy" / "guard.db"
-    destination = tmp_path / "canonical" / "guard.db"
-    _write_text(source, "legacy")
-
-    class _FailingConnection:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def backup(self, *_args, **_kwargs):
-            raise sqlite3.OperationalError("database is locked")
-
-    monkeypatch.setattr(guard_config_module.sqlite3, "connect", lambda *_args, **_kwargs: _FailingConnection())
-    monkeypatch.setattr(
-        guard_config_module.shutil,
-        "copy2",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("raw copy fallback should not run")),
-    )
-
-    try:
-        _copy_guard_database(source=source, destination=destination)
-        raise AssertionError("expected GuardHomeMigrationError")
-    except GuardHomeMigrationError:
-        pass
-
-    assert not destination.exists()
-
-
-def test_copy_guard_database_aborts_when_backup_deadline_elapses(tmp_path, monkeypatch):
-    source = tmp_path / "legacy" / "guard.db"
-    destination = tmp_path / "canonical" / "guard.db"
-    _write_text(source, "legacy")
-
-    class _ProgressConnection:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def backup(self, _target, *, progress=None, **_kwargs):
-            if progress is not None:
-                progress(0, 1, 1)
-
-    monkeypatch.setattr(guard_config_module, "GUARD_DB_BACKUP_TIMEOUT_SECONDS", 0.0)
-    monkeypatch.setattr(guard_config_module.time, "monotonic", lambda: 0.0)
-    monkeypatch.setattr(guard_config_module.sqlite3, "connect", lambda *_args, **_kwargs: _ProgressConnection())
-    monkeypatch.setattr(
-        guard_config_module.shutil,
-        "copy2",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("raw copy fallback should not run")),
-    )
-
-    try:
-        _copy_guard_database(source=source, destination=destination)
-        raise AssertionError("expected GuardHomeMigrationError")
-    except GuardHomeMigrationError:
-        pass
-
-    assert not destination.exists()
-
-
-def test_resolve_guard_home_falls_back_to_legacy_home_when_database_migration_fails(tmp_path, monkeypatch):
-    home_dir = tmp_path / "home"
-    canonical_home = home_dir / ".hol-guard"
-    legacy_home = home_dir / ".ai-plugin-scanner-guard"
-    _write_text(legacy_home / "guard.db", "legacy-db")
-    _write_text(legacy_home / "config.toml", 'default_action = "warn"\n')
-    monkeypatch.setattr(Path, "home", lambda: home_dir)
-
-    def _fail_copy(*, source: Path, destination: Path) -> None:
-        raise GuardHomeMigrationError("guard.db migration failed")
-
-    monkeypatch.setattr(guard_config_module, "_copy_guard_database", _fail_copy)
+    requests = _answer_guard_home(monkeypatch, {"guard_home": str(legacy_home)})
 
     assert resolve_guard_home() == legacy_home
-    assert not canonical_home.exists()
+    assert requests == [{"schema": "guard-home-resolve.v1", "user_home": str(home_dir.absolute())}]
 
 
-def test_resolve_guard_home_falls_back_to_legacy_home_when_file_copy_fails(tmp_path, monkeypatch):
+def test_resolve_guard_home_asks_the_runtime_once_after_it_picks_the_canonical_home(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"
-    legacy_home = home_dir / ".ai-plugin-scanner-guard"
-    _write_text(legacy_home / "config.toml", 'default_action = "warn"\n')
+    (home_dir / ".ai-plugin-scanner-guard").mkdir(parents=True)
+    canonical_home.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home_dir)
-    monkeypatch.setattr(
-        guard_config_module,
-        "_migrate_guard_home_state",
-        lambda **_kwargs: (_ for _ in ()).throw(PermissionError("unreadable legacy file")),
-    )
-
-    assert resolve_guard_home() == legacy_home
-    assert not canonical_home.exists()
-
-
-def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):
-    home_dir = tmp_path / "home"
-    canonical_home = home_dir / ".hol-guard"
-    legacy_home = home_dir / ".ai-plugin-scanner-guard"
-    _write_text(canonical_home / "guard.db", "sqlite placeholder")
-    legacy_store = GuardStore(legacy_home)
-    _seed_guard_cloud(legacy_store)
-    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    requests = _answer_guard_home(monkeypatch, {"guard_home": str(canonical_home)})
 
     assert resolve_guard_home() == canonical_home
+    assert resolve_guard_home() == canonical_home
+    assert len(requests) == 1
+
+
+def test_resolve_guard_home_without_the_runtime_keeps_the_legacy_home_until_canonical_exists(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    legacy_home = home_dir / ".ai-plugin-scanner-guard"
+    legacy_home.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    _answer_guard_home(monkeypatch, None)
+
+    assert resolve_guard_home() == legacy_home
+    (home_dir / ".hol-guard").mkdir()
+    assert resolve_guard_home() == home_dir / ".hol-guard"
 
 
 def test_load_guard_config_ignores_workspace_default_action_overrides(tmp_path):
