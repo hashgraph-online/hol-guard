@@ -1467,6 +1467,14 @@
    "body": "d8031d1df298"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The macOS ownership walk reads Unix owner and mode bits, which Windows does not have. Without them every surface reports `ownership_acl_probe_failed`, so a Windows host never reads as healthy through this op; Windows surfaces go through `windows-payload` and `windows-verify` instead. ownership_acl_macos_tests.rs::without_unix_metadata_every_surface_fails_the_probe pins the refusal off Unix on the native-op gate in .github/actions/ci-job-windows-shim-admin/action.yml.",
+   "file": "rust/crates/guard-runtime/src/ownership_acl_macos.rs",
+   "item": "pub(super) fn lstat(_path: &Path) -> io::Result<Fingerprint>",
+   "cfg": "not(unix)",
+   "body": "9c80ab6ea759"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/pack_lifecycle/offline/fresh.rs",
    "item": "fn batch -- non-Unix block",
    "verdict": "posix-primitive",

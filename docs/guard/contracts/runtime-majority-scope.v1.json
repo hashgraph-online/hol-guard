@@ -957,7 +957,6 @@
         "path": "src/codex_plugin_scanner/guard/mdm/acl.py",
         "symbols": [
           "OwnershipAclVerification",
-          "_aggregate",
           "_native_verdict",
           "_probe_failed",
           "_macos_surfaces",
@@ -967,7 +966,7 @@
         ],
         "entry_points": [],
         "reason": "Whole-machine ownership and ACL verification for the managed-device integrity snapshot. It runs when the health lease reports, when removal is authorized and for the guard mdm command, on their own cadence rather than during hook handling.",
-        "evidence": "verify_protected_ownership_and_acl and OwnershipAclVerification are called only from mdm/integrity.py (whose machine_integrity_snapshot is imported only by mdm/user_health.py, mdm/health_lease.py and cli/commands_dispatch_mdm.py) and mdm/removal.py (mdm-health). The per-path helpers that in-scope mdm/managed_file_trust.py imports (_PathSurface, _native_answer, _run_windows_acl_payload, _verify_macos_surface) stay in scope. The report validates this reference closure on every run."
+        "evidence": "verify_protected_ownership_and_acl and OwnershipAclVerification are called only from mdm/integrity.py (whose machine_integrity_snapshot is imported only by mdm/user_health.py, mdm/health_lease.py and cli/commands_dispatch_mdm.py) and mdm/removal.py (mdm-health). The per-path helpers that in-scope mdm/managed_file_trust.py imports (_PathSurface, _macos_request, _native_answer, _native_deadline, _run_windows_acl_payload) stay in scope. The report validates this reference closure on every run."
       },
       {
         "id": "local-trust-backend-checks",
