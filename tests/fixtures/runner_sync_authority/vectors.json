@@ -14818,6 +14818,2237 @@
      "stale": false
     }
    }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "no summaries",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "non-dict summaries",
+   "args": {
+    "summaries": [
+     [
+      "2026-10-31T11:55:00Z"
+     ],
+     "2026-10-31T11:55:00Z",
+     5
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "empty dicts",
+   "args": {
+    "summaries": [
+     {},
+     {},
+     {}
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z fresh in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:50:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:50:00Z",
+    "nextRefreshAt": "2026-10-31T12:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z fresh in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:50:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:50:00Z",
+    "nextRefreshAt": "2026-10-31T12:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z fresh in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:50:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:50:00Z",
+    "nextRefreshAt": "2026-10-31T12:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z stale in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:40:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:40:00Z",
+    "nextRefreshAt": "2026-10-31T11:55:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z stale in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:40:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:40:00Z",
+    "nextRefreshAt": "2026-10-31T11:55:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z stale in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:40:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:40:00Z",
+    "nextRefreshAt": "2026-10-31T11:55:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z exact edge in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:45:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:45:00Z",
+    "nextRefreshAt": "2026-10-31T12:00:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z exact edge in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:45:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:45:00Z",
+    "nextRefreshAt": "2026-10-31T12:00:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "z exact edge in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:45:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:45:00Z",
+    "nextRefreshAt": "2026-10-31T12:00:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "naive in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "naive in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "naive in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "naive stale in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T10:00:00"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T10:00:00",
+    "nextRefreshAt": "2026-10-31T10:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "naive stale in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T10:00:00"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T10:00:00",
+    "nextRefreshAt": "2026-10-31T10:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "naive stale in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T10:00:00"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T10:00:00",
+    "nextRefreshAt": "2026-10-31T10:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "plus offset in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T17:25:00+05:30"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T17:25:00+05:30",
+    "nextRefreshAt": "2026-10-31T17:40:00+05:30"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "plus offset in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T17:25:00+05:30"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T17:25:00+05:30",
+    "nextRefreshAt": "2026-10-31T17:40:00+05:30"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "plus offset in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T17:25:00+05:30"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T17:25:00+05:30",
+    "nextRefreshAt": "2026-10-31T17:40:00+05:30"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "minus offset in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T03:50:00-08:00"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T03:50:00-08:00",
+    "nextRefreshAt": "2026-10-31T04:05:00-08:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "minus offset in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T03:50:00-08:00"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T03:50:00-08:00",
+    "nextRefreshAt": "2026-10-31T04:05:00-08:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "minus offset in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T03:50:00-08:00"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T03:50:00-08:00",
+    "nextRefreshAt": "2026-10-31T04:05:00-08:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "second offset in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00+00:00:30"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00+00:00:30",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00:30"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "second offset in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00+00:00:30"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00+00:00:30",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00:30"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "second offset in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00+00:00:30"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00+00:00:30",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00:30"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "fraction in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00.123456Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.123456Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.123456+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "fraction in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00.123456Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.123456Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.123456+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "fraction in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00.123456Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.123456Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.123456+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "short fraction in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00.5Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.5Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.500000+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "short fraction in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00.5Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.5Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.500000+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "short fraction in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00.5Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.5Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.500000+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "long fraction in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00.123456789Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.123456789Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.123456+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "long fraction in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00.123456789Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.123456789Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.123456+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "long fraction in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00.123456789Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00.123456789Z",
+    "nextRefreshAt": "2026-10-31T12:10:00.123456+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "comma fraction in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00,25+00:00"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00,25+00:00",
+    "nextRefreshAt": "2026-10-31T12:10:00.250000+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "comma fraction in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00,25+00:00"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00,25+00:00",
+    "nextRefreshAt": "2026-10-31T12:10:00.250000+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "comma fraction in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:55:00,25+00:00"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00,25+00:00",
+    "nextRefreshAt": "2026-10-31T12:10:00.250000+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "space separator in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31 11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31 11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "space separator in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31 11:55:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31 11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "space separator in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31 11:55:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31 11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "minutes only in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "minutes only in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11:55Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "minutes only in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:55Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "hour only in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11",
+    "nextRefreshAt": "2026-10-31T11:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "hour only in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T11"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11",
+    "nextRefreshAt": "2026-10-31T11:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "hour only in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11",
+    "nextRefreshAt": "2026-10-31T11:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "date only in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31",
+    "nextRefreshAt": "2026-10-31T00:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "date only in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31",
+    "nextRefreshAt": "2026-10-31T00:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "date only in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31",
+    "nextRefreshAt": "2026-10-31T00:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "leap day in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2028-02-29T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2028-02-29T11:55:00Z",
+    "nextRefreshAt": "2028-02-29T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "leap day in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2028-02-29T11:55:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2028-02-29T11:55:00Z",
+    "nextRefreshAt": "2028-02-29T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "leap day in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2028-02-29T11:55:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2028-02-29T11:55:00Z",
+    "nextRefreshAt": "2028-02-29T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bad day in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-02-30T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bad day in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-02-30T11:55:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bad day in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-02-30T11:55:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bad hour in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T24:00:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bad hour in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T24:00:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bad hour in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T24:00:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "garbage in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "yesterday"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "garbage in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "yesterday"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "garbage in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "yesterday"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "padded in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": " 2026-10-31T11:55:00Z "
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "padded in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": " 2026-10-31T11:55:00Z "
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "padded in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": " 2026-10-31T11:55:00Z "
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "blank in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "   "
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "blank in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "   "
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "blank in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "   "
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "empty in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": ""
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "empty in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": ""
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "empty in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": ""
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "day rollover in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T23:50:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T23:50:00Z",
+    "nextRefreshAt": "2026-11-01T00:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "day rollover in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-10-31T23:50:00Z"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T23:50:00Z",
+    "nextRefreshAt": "2026-11-01T00:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "day rollover in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T23:50:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T23:50:00Z",
+    "nextRefreshAt": "2026-11-01T00:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "year rollover in slot 0",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-12-31T23:50:00+00:00"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-12-31T23:50:00+00:00",
+    "nextRefreshAt": "2027-01-01T00:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "year rollover in slot 1",
+   "args": {
+    "summaries": [
+     null,
+     {
+      "synced_at": "2026-12-31T23:50:00+00:00"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-12-31T23:50:00+00:00",
+    "nextRefreshAt": "2027-01-01T00:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "year rollover in slot 2",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-12-31T23:50:00+00:00"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-12-31T23:50:00+00:00",
+    "nextRefreshAt": "2027-01-01T00:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "key synced_at",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "key syncedAt",
+   "args": {
+    "summaries": [
+     {
+      "syncedAt": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "key runtime_session_synced_at",
+   "args": {
+    "summaries": [
+     {
+      "runtime_session_synced_at": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "key runtimeSessionSyncedAt",
+   "args": {
+    "summaries": [
+     {
+      "runtimeSessionSyncedAt": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "key local_guard_online_at",
+   "args": {
+    "summaries": [
+     {
+      "local_guard_online_at": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "falsy falls through",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "",
+      "syncedAt": null,
+      "runtime_session_synced_at": 0,
+      "runtimeSessionSyncedAt": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "truthy number stops",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": 5,
+      "syncedAt": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "truthy list stops",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": [
+       "x"
+      ],
+      "syncedAt": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "blank stops",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "  ",
+      "syncedAt": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "false falls through",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": false,
+      "local_guard_online_at": "2026-10-31T11:55:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "latest wins",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:00:00Z"
+     },
+     {
+      "synced_at": "2026-10-31T11:55:00Z"
+     },
+     {
+      "synced_at": "2026-10-31T11:30:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "tie keeps first",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00Z"
+     },
+     {
+      "synced_at": "2026-10-31T17:25:00+05:30"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "unparseable skipped",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:55:00Z"
+     },
+     {
+      "synced_at": "not a time"
+     },
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:55:00Z",
+    "nextRefreshAt": "2026-10-31T12:10:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh future",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "2026-10-31T13:00:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T13:00:00Z"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh past",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "2026-10-31T11:59:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T11:59:00Z"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh exact",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "2026-10-31T12:00:00+00:00"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T12:00:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh naive",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "2026-10-31T13:00:00"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T13:00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh offset",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "2026-10-31T18:00:00+05:30"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T18:00:00+05:30"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh unparseable",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "soon"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T11:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh blank",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": " "
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T11:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh number",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": 30
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T11:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle camel refresh",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "syncedAt": "2026-10-31T11:00:00Z",
+      "nextRefreshAt": "2026-10-31T13:00:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T13:00:00Z"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle falsy refresh falls through",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "",
+      "nextRefreshAt": "2026-10-31T13:00:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T13:00:00Z"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "refresh only on bundle",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "2026-10-31T13:00:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:00:00Z",
+    "nextRefreshAt": "2026-10-31T11:15:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle older than sync",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:58:00Z"
+     },
+     null,
+     {
+      "synced_at": "2026-10-31T11:00:00Z",
+      "next_refresh_at": "2026-10-31T11:10:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:58:00Z",
+    "nextRefreshAt": "2026-10-31T12:13:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle newer than sync",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:00:00Z"
+     },
+     null,
+     {
+      "synced_at": "2026-10-31T11:30:00Z",
+      "next_refresh_at": "2026-10-31T11:40:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T11:30:00Z",
+    "nextRefreshAt": "2026-10-31T11:40:00Z"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "bundle refresh without sync",
+   "args": {
+    "summaries": [
+     null,
+     null,
+     {
+      "next_refresh_at": "2026-10-31T13:00:00Z"
+     }
+    ],
+    "generated_at": "2026-10-31T12:00:00+00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "unknown",
+    "lastSyncedAt": null,
+    "nextRefreshAt": null
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "generated unparseable uses now",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T12:10:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "later",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "stale",
+    "lastSyncedAt": "2026-10-31T12:10:00Z",
+    "nextRefreshAt": "2026-10-31T12:25:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "generated unparseable fresh now",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T12:20:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T12:20:00Z",
+    "nextRefreshAt": "2026-10-31T12:35:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "generated naive",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:50:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T12:00:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:50:00Z",
+    "nextRefreshAt": "2026-10-31T12:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "generated offset",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:50:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T07:00:00-05:00",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:50:00Z",
+    "nextRefreshAt": "2026-10-31T12:05:00+00:00"
+   }
+  },
+  {
+   "kind": "stale_intel",
+   "name": "generated z",
+   "args": {
+    "summaries": [
+     {
+      "synced_at": "2026-10-31T11:40:00Z"
+     },
+     null,
+     null
+    ],
+    "generated_at": "2026-10-31T11:50:00Z",
+    "now": "2026-10-31T12:30:00+00:00"
+   },
+   "expected": {
+    "status": "fresh",
+    "lastSyncedAt": "2026-10-31T11:40:00Z",
+    "nextRefreshAt": "2026-10-31T11:55:00+00:00"
+   }
   }
  ]
 }
