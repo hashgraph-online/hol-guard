@@ -1,6 +1,6 @@
 {
   "schema": "guard-cigar-release-catalog.v1",
-  "revision": 6,
+  "revision": 7,
   "issued_at": 1793053757,
   "expires_at": 1824589757,
   "profiles": [
@@ -64,7 +64,246 @@
           ],
           "qualification": "upstream_only",
           "qualification_receipt_sha256": null,
-          "features": ["graph", "sharing", "persistence", "execution_context"]
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
+        },
+        {
+          "platform": "darwin-x64",
+          "worker_sha256": "e976a7f04db4a67fc84cbf4bd516b355a4c651cc48bd0454f48e7f6262249866",
+          "package_tree_sha256": "f2e35033831a326501ec54857a8a70bd96615e74fda567a36c7b9d5c3fd62eae",
+          "wheel": {
+            "distribution": "hol-cigar",
+            "version": "0.14.1",
+            "filename": "hol_cigar-0.14.1-py3-none-macosx_11_0_x86_64.whl",
+            "sha256": "dafe766ee08cf20a28a577ca89898fac2676ceaede093a4f70ffecbc90dbee0c",
+            "bytes": 4425696,
+            "source": {
+              "kind": "github_cigar_release",
+              "tag": "v0.14.1"
+            },
+            "requires_python": "<3.15,>=3.14"
+          },
+          "dependencies": [
+            {
+              "distribution": "protobuf",
+              "version": "7.36.2",
+              "filename": "protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl",
+              "sha256": "cbc70b17ee27e28894c7fee8bb04be1abead49e936bc70eb60052531eee2079e",
+              "bytes": 456039,
+              "source": {
+                "kind": "pypi_file",
+                "path": "/packages/32/72/98342feb672507c8f3a69e34b4fa8961f608edba5c1a48a6f47156d92cb5/protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl"
+              },
+              "requires_python": ">=3.10"
+            }
+          ],
+          "qualification": "upstream_only",
+          "qualification_receipt_sha256": null,
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
+        },
+        {
+          "platform": "linux-x64-gnu",
+          "worker_sha256": "0b16cbbb806b108fab783b89b0ff654357fbfebf2e7c3812638eeb4b6072842b",
+          "package_tree_sha256": "4dff00b5bc317be4aabfd9700a900b859b2cc5fcf31b35d73ddc6be4c3bbc782",
+          "wheel": {
+            "distribution": "hol-cigar",
+            "version": "0.14.1",
+            "filename": "hol_cigar-0.14.1-py3-none-manylinux_2_28_x86_64.whl",
+            "sha256": "577bbf6aafb459f0364e2ab71cb528385c4e3ad3310d7ad750eaa9ba86715b59",
+            "bytes": 4580375,
+            "source": {
+              "kind": "github_cigar_release",
+              "tag": "v0.14.1"
+            },
+            "requires_python": "<3.15,>=3.14"
+          },
+          "dependencies": [
+            {
+              "distribution": "protobuf",
+              "version": "7.36.2",
+              "filename": "protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl",
+              "sha256": "89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2",
+              "bytes": 343223,
+              "source": {
+                "kind": "pypi_file",
+                "path": "/packages/db/f3/3996583dd2906297a637af12114deddf7658af6e683fedb83be061983fb5/protobuf-7.36.2-cp310-abi3-manylinux2014_x86_64.whl"
+              },
+              "requires_python": ">=3.10"
+            }
+          ],
+          "qualification": "upstream_only",
+          "qualification_receipt_sha256": null,
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
+        },
+        {
+          "platform": "linux-arm64-gnu",
+          "worker_sha256": "34eeebd5c1a16d380fd84099d8091dc2816b1aa6217a940a0ebdc639b6e45463",
+          "package_tree_sha256": "2ad1f4b17e14314fffaf82567b18d766f2da0b17a11be729ad89bf95e7ecd5d0",
+          "wheel": {
+            "distribution": "hol-cigar",
+            "version": "0.14.1",
+            "filename": "hol_cigar-0.14.1-py3-none-manylinux_2_28_aarch64.whl",
+            "sha256": "6c5973bb88fef25f88bee7c5887dab4e0e3ad102800a6d564f2729050d2932b8",
+            "bytes": 4358857,
+            "source": {
+              "kind": "github_cigar_release",
+              "tag": "v0.14.1"
+            },
+            "requires_python": "<3.15,>=3.14"
+          },
+          "dependencies": [
+            {
+              "distribution": "protobuf",
+              "version": "7.36.2",
+              "filename": "protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl",
+              "sha256": "e11e1f0180583a2af89db6a2ecd9e8dc40aa6d2988ca175bfd0e6d12ea72d74e",
+              "bytes": 344219,
+              "source": {
+                "kind": "pypi_file",
+                "path": "/packages/b6/ea/91fdf7c2b8bbd49cde056f00a9df6773532987e1c00fe2830b895af95c7e/protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl"
+              },
+              "requires_python": ">=3.10"
+            }
+          ],
+          "qualification": "upstream_only",
+          "qualification_receipt_sha256": null,
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
+        },
+        {
+          "platform": "linux-x64-musl",
+          "worker_sha256": "36adaeb898e95469b40a1ec739138556b9a0bca806dde95f89c96b23f393bde9",
+          "package_tree_sha256": "a77c602d159add7f2ef06de118d2ad4c87f4f4980c98a0ee8947f0ec6929137f",
+          "wheel": {
+            "distribution": "hol-cigar",
+            "version": "0.14.1",
+            "filename": "hol_cigar-0.14.1-py3-none-musllinux_1_2_x86_64.whl",
+            "sha256": "dd38496c3b57ee2bcfd641f688ee47597ed5aae248709158d0edb6e187f2fd31",
+            "bytes": 4662401,
+            "source": {
+              "kind": "github_cigar_release",
+              "tag": "v0.14.1"
+            },
+            "requires_python": "<3.15,>=3.14"
+          },
+          "dependencies": [
+            {
+              "distribution": "protobuf",
+              "version": "7.36.2",
+              "filename": "protobuf-7.36.2-py3-none-any.whl",
+              "sha256": "bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e",
+              "bytes": 179806,
+              "source": {
+                "kind": "pypi_file",
+                "path": "/packages/e4/04/d52c7016b04b6c5108f26691f9d33ec82a9b65d041f1a9c771137693d618/protobuf-7.36.2-py3-none-any.whl"
+              },
+              "requires_python": ">=3.10"
+            }
+          ],
+          "qualification": "upstream_only",
+          "qualification_receipt_sha256": null,
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
+        },
+        {
+          "platform": "linux-arm64-musl",
+          "worker_sha256": "9099fe4f532f77032c4d8a0a825a4dadd8cb2f8956cefd0f4bd62f4626bc7e07",
+          "package_tree_sha256": "ca4fffb45c73f4c508d27c3c8503e4b4d6abef668654e1c85760d8c63bcd67d6",
+          "wheel": {
+            "distribution": "hol-cigar",
+            "version": "0.14.1",
+            "filename": "hol_cigar-0.14.1-py3-none-musllinux_1_2_aarch64.whl",
+            "sha256": "631445167bf00658ad0e7c02e542eb10564889a96fd31c03198a0bd46f0025df",
+            "bytes": 4394322,
+            "source": {
+              "kind": "github_cigar_release",
+              "tag": "v0.14.1"
+            },
+            "requires_python": "<3.15,>=3.14"
+          },
+          "dependencies": [
+            {
+              "distribution": "protobuf",
+              "version": "7.36.2",
+              "filename": "protobuf-7.36.2-py3-none-any.whl",
+              "sha256": "bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e",
+              "bytes": 179806,
+              "source": {
+                "kind": "pypi_file",
+                "path": "/packages/e4/04/d52c7016b04b6c5108f26691f9d33ec82a9b65d041f1a9c771137693d618/protobuf-7.36.2-py3-none-any.whl"
+              },
+              "requires_python": ">=3.10"
+            }
+          ],
+          "qualification": "upstream_only",
+          "qualification_receipt_sha256": null,
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
+        },
+        {
+          "platform": "win32-x64",
+          "worker_sha256": "b56a8e6ff2fbb76025c8bc366a0bb0bfaf772a74abd5f32ba63a1c96ee37a9d6",
+          "package_tree_sha256": "0c10a60db1c42ad7556eff52ad5463b515152afbff03a724753c785a8a242891",
+          "wheel": {
+            "distribution": "hol-cigar",
+            "version": "0.14.1",
+            "filename": "hol_cigar-0.14.1-py3-none-win_amd64.whl",
+            "sha256": "579d8188bb57f6cafafa0cdf23b14a6bd115a49c868a50c32964679c24fb2f80",
+            "bytes": 4303924,
+            "source": {
+              "kind": "github_cigar_release",
+              "tag": "v0.14.1"
+            },
+            "requires_python": "<3.15,>=3.14"
+          },
+          "dependencies": [
+            {
+              "distribution": "protobuf",
+              "version": "7.36.2",
+              "filename": "protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+              "sha256": "a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353",
+              "bytes": 456514,
+              "source": {
+                "kind": "pypi_file",
+                "path": "/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl"
+              },
+              "requires_python": ">=3.10"
+            }
+          ],
+          "qualification": "upstream_only",
+          "qualification_receipt_sha256": null,
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
         }
       ]
     }
@@ -92,6 +331,126 @@
       "files": 1701,
       "expanded_bytes": 106491517,
       "executable_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
+      "qualification": "upstream_only",
+      "qualification_receipt_sha256": null,
+      "withdrawn": false
+    },
+    {
+      "build_id": "cpython-3_14_10-20261026-darwin-x64",
+      "python_version": [
+        3,
+        14,
+        10
+      ],
+      "platform": "darwin-x64",
+      "source_release": "20261026",
+      "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "archive_sha256": "2fd8becd48cf0ff5f0a15df3c0db7cae7aa708dcaacf901bd30d6cdd6229370b",
+      "archive_bytes": 26943401,
+      "tree_sha256": "2fbebae7f9a6008a8c3990c5bbd26ebdb72179f06deed0bed96070de4f97603e",
+      "files": 1698,
+      "expanded_bytes": 109427934,
+      "executable_sha256": "fe5e649ca1b665f71c5d97187a499c62807f793183f6dc6c263ebae044a759e5",
+      "qualification": "upstream_only",
+      "qualification_receipt_sha256": null,
+      "withdrawn": false
+    },
+    {
+      "build_id": "cpython-3_14_10-20261026-linux-x64-gnu",
+      "python_version": [
+        3,
+        14,
+        10
+      ],
+      "platform": "linux-x64-gnu",
+      "source_release": "20261026",
+      "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "archive_sha256": "4d3c16c59ed0802a3d1d34d8bce504b15ceeaff39d62dadecc6a9fa803412aed",
+      "archive_bytes": 36776589,
+      "tree_sha256": "fc8b2c2beaa9fbbe25d9bb3f24f61214756598bbf6f319df53037e82ea158252",
+      "files": 4572,
+      "expanded_bytes": 202344253,
+      "executable_sha256": "340a561270dc31d791a4922adf3a112da5c425379a3e080c1946047d3eb89638",
+      "qualification": "upstream_only",
+      "qualification_receipt_sha256": null,
+      "withdrawn": false
+    },
+    {
+      "build_id": "cpython-3_14_10-20261026-linux-arm64-gnu",
+      "python_version": [
+        3,
+        14,
+        10
+      ],
+      "platform": "linux-arm64-gnu",
+      "source_release": "20261026",
+      "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "archive_sha256": "90f48337bc3dd4ae6eda81e001e4c981236d403b6b5a07778bbdf94ee423dc00",
+      "archive_bytes": 30635900,
+      "tree_sha256": "5aa980e83247db5aae6e875d2b1d11233f72a3100b33d006bf8ab5dbb2271be0",
+      "files": 4572,
+      "expanded_bytes": 151979989,
+      "executable_sha256": "e49b51f58b82f4d90aa1c6d4d95008f24b749e471fbe8462a01cd026ec1eae36",
+      "qualification": "upstream_only",
+      "qualification_receipt_sha256": null,
+      "withdrawn": false
+    },
+    {
+      "build_id": "cpython-3_14_10-20261026-linux-x64-musl",
+      "python_version": [
+        3,
+        14,
+        10
+      ],
+      "platform": "linux-x64-musl",
+      "source_release": "20261026",
+      "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "archive_sha256": "f6dc25dc87ec05c1600ff49ad169adcec449b9ca563d274ba143f5e13b41fe42",
+      "archive_bytes": 29033369,
+      "tree_sha256": "8c77322a159677116a2eae556ba2e2ffe3e6553e4f7074cacbd217368ac54eeb",
+      "files": 4569,
+      "expanded_bytes": 147039235,
+      "executable_sha256": "591b03a70e9ccb7e8612ada5a7ae720d072891228895a48ca1da89ab0c590523",
+      "qualification": "upstream_only",
+      "qualification_receipt_sha256": null,
+      "withdrawn": false
+    },
+    {
+      "build_id": "cpython-3_14_10-20261026-linux-arm64-musl",
+      "python_version": [
+        3,
+        14,
+        10
+      ],
+      "platform": "linux-arm64-musl",
+      "source_release": "20261026",
+      "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "archive_sha256": "d96d9e66e1e4f6465114ed239681bf6e45bca63724453675fd9bdf30a6475873",
+      "archive_bytes": 29227326,
+      "tree_sha256": "444762d393081f363a967ed5a6a21fcd275a9eb9713cf3f73411385aa8b0ac28",
+      "files": 4569,
+      "expanded_bytes": 147748309,
+      "executable_sha256": "8bb50f95aa1488fee1fe6ac5a4c4d6da6357357bef088828797f8a6663957770",
+      "qualification": "upstream_only",
+      "qualification_receipt_sha256": null,
+      "withdrawn": false
+    },
+    {
+      "build_id": "cpython-3_14_10-20261026-win32-x64",
+      "python_version": [
+        3,
+        14,
+        10
+      ],
+      "platform": "win32-x64",
+      "source_release": "20261026",
+      "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "archive_sha256": "c1876a9795d3a94ee49a1499a69cd91e26ca3e2829593f93fa6e4db90d05402b",
+      "archive_bytes": 23294761,
+      "tree_sha256": "b41f7771a105c8221591a3f4e099608765937f50b3db440a3a70877308762b00",
+      "files": 2195,
+      "expanded_bytes": 61776457,
+      "executable_sha256": "bcd8e6a0d88b5e9681e94bb4ce569ca1f76039e8ed9944ac7fcd13528d363cae",
       "qualification": "upstream_only",
       "qualification_receipt_sha256": null,
       "withdrawn": false

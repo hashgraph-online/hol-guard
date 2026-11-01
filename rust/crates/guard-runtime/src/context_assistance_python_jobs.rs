@@ -3,18 +3,32 @@ use super::*;
 
 /// Metadata only, shared by catalog presentation and native Python setup.
 /// No interpreter probe, platform qualification or process launch occurs here.
+/// Linux picks gnu or musl from the host's C library, not Guard's own target.
 pub(super) fn setup_platform() -> Option<&'static str> {
-    let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
-    match platform.as_str() {
-        "macos-aarch64" => Some("darwin-arm64"),
-        "macos-x86_64" => Some("darwin-x64"),
-        "linux-x86_64" if cfg!(target_env = "gnu") => Some("linux-x64-gnu"),
-        "linux-aarch64" if cfg!(target_env = "gnu") => Some("linux-arm64-gnu"),
-        "linux-x86_64" if cfg!(target_env = "musl") => Some("linux-x64-musl"),
-        "linux-aarch64" if cfg!(target_env = "musl") => Some("linux-arm64-musl"),
+    use host_libc::Libc;
+    let libc = || {
+        if cfg!(target_os = "linux") {
+            host_libc::host_libc()
+        } else {
+            None
+        }
+    };
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => Some("darwin-arm64"),
+        ("macos", "x86_64") => Some("darwin-x64"),
+        ("linux", "x86_64") => match libc()? {
+            Libc::Gnu => Some("linux-x64-gnu"),
+            Libc::Musl => Some("linux-x64-musl"),
+        },
+        ("linux", "aarch64") => match libc()? {
+            Libc::Gnu => Some("linux-arm64-gnu"),
+            Libc::Musl => Some("linux-arm64-musl"),
+        },
         _ => None,
     }
 }
+#[path = "context_assistance_host_libc.rs"]
+mod host_libc;
 impl Jobs {
     pub(crate) fn setup_interpreter(
         &self,

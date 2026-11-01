@@ -10,6 +10,7 @@ fn installed(
     let catalog = TrustedCatalog::bundled().unwrap();
     let mut build = catalog.document().builds[0].clone();
     build.identity.build_id = "synthetic-reuse-record".into();
+    build.platforms.truncate(1);
     build.platforms[0].qualification = Qualification::GuardQualified;
     build.platforms[0].qualification_receipt_sha256 = Some("8".repeat(64));
     build.platforms[0].features = features.clone();
