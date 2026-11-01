@@ -10,6 +10,13 @@
 //! and every `databases` read (connection URIs and user passwords). These are
 //! simply absent from the table.
 //!
+//! `auth list` is the one `auth` path that is present. It names the contexts
+//! the stored configuration holds and prints no part of their tokens, so it
+//! says less about the account than `account get` -- already in the table --
+//! which prints the account's email and UUID. Every other `auth` verb either
+//! writes the credential store or reads a token out of it, and none is
+//! listed.
+//!
 //! One `databases` shape is admitted beside the table, by
 //! [`databases_list_arguments`]: a cluster listing whose columns the command
 //! text itself names, and which are all inventory. See that function for why
@@ -41,6 +48,7 @@ apps|app|a tier list|ls
 apps|app|a tier get
 apps|app|a tier instance-size list|ls
 apps|app|a tier instance-size get
+auth list|ls
 balance get|g
 billing-history|bh list|ls
 invoice get|g
@@ -469,6 +477,9 @@ mod tests {
             "-h",
             "compute droplet delete --help",
             "account get",
+            "auth list",
+            "auth ls",
+            "auth list --format Name",
             "apps list",
             "apps get 0f1e --output json",
             "kubernetes cluster list",
@@ -536,6 +547,9 @@ mod tests {
             "registry garbage-collection start",
             "auth token",
             "auth init",
+            "auth switch --context prod",
+            "auth remove --context prod",
+            "auth list --access-token dop_v1_x",
             "databases get db1",
             "databases connection db1",
             "apps list --access-token dop_v1_x",
@@ -577,7 +591,6 @@ mod tests {
             for denied in [
                 "databases",
                 "kubeconfig",
-                "auth",
                 "docker-config",
                 "login",
                 "key",
@@ -587,6 +600,13 @@ mod tests {
                     "{row}"
                 );
             }
+            // The `auth` group is the credential store itself. Listing the
+            // contexts it holds prints no token; every other verb there
+            // writes the store or reads a token out of it.
+            assert!(
+                !row.starts_with("auth ") || row == "auth list|ls",
+                "{row}"
+            );
         }
     }
 }

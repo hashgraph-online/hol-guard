@@ -21123,6 +21123,22 @@
       "expect": "allow"
     },
     {
+      "id": "doctl-auth-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl auth list"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "doctl-apps-list",
       "fix_area": "shell",
       "harnesses": [
