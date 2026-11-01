@@ -231,6 +231,7 @@
       "src/native_command_unmodeled_find_exec.rs",
       "src/native_command_unmodeled_functions.rs",
       "src/native_command_unmodeled_heredoc.rs",
+      "src/native_command_unmodeled_operands.rs",
       "src/native_command_unmodeled_prefix.rs",
       "src/native_command_unmodeled_redirections.rs",
       "src/native_command_unmodeled_shapes.rs",

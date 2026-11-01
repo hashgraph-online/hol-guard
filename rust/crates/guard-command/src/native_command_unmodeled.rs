@@ -55,6 +55,8 @@ mod functions;
 mod heredoc;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
+#[path = "native_command_unmodeled_operands.rs"]
+mod operands;
 #[path = "native_command_unmodeled_redirections.rs"]
 mod redirections;
 #[path = "native_command_unmodeled_shapes.rs"]
@@ -66,6 +68,7 @@ mod xargs;
 use case_labels::without_case_labels;
 use find_exec::{find_exec_programs, text_outside_exec_arguments, EXEC_ACTIONS};
 use link_makers::creates_links;
+use operands::text_in_command_positions;
 pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file, Handover};
 use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
@@ -229,6 +232,11 @@ impl CompiledNativeCommandControls {
         let shell = without_plain_awk(&shell);
         let shell = shell.as_str();
         let interpreted = named_words(&joined_quotes(&bare));
+        // The words that can name a program this text runs. An interpreter's
+        // name in an operand position runs nothing: `rg env src` searches for
+        // the word, the way `rg bar src` always has, and reading the operand
+        // as a program refused it outright with no approval left to give it.
+        let commanded = named_words(&joined_quotes(&text_in_command_positions(&bare)));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
@@ -300,6 +308,7 @@ impl CompiledNativeCommandControls {
         };
         if INTERPRETERS.iter().any(|name| {
             interpreted.contains(*name)
+                && commanded.contains(*name)
                 && !(sourced_bounded && matches!(*name, "source" | "."))
                 && !(xargs_bounded && *name == "xargs")
                 && !(exec_names_program && EXEC_ACTIONS.contains(name))
@@ -308,7 +317,7 @@ impl CompiledNativeCommandControls {
             // An `xargs` whose operands are not in the text is not bounded by
             // reading a script file. `2>/dev/null xargs gh` still takes its
             // arguments from the caller.
-            if interpreted.contains("xargs") && !xargs_bounded {
+            if commanded.contains("xargs") && !xargs_bounded {
                 return None;
             }
             // A program read from a file names the tools it may launch
@@ -1457,6 +1466,10 @@ mod funsub_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_prefix_tests.rs"]
 mod prefix_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_operands_tests.rs"]
+mod operands_tests;
 
 #[cfg(test)]
 #[path = "native_command_unmodeled_expansion_tests.rs"]
