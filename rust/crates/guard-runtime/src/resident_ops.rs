@@ -349,6 +349,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ProtectRequest(request) => {
                 crate::protect_request_op::evaluate_protect_request_op(&request)
             }
+            ResidentOperationV1::ProtectAdvisoryMerge(request) => {
+                crate::protect_advisory_merge_op::evaluate_protect_advisory_merge_op(&request)
+            }
             ResidentOperationV1::ApprovalReuseDiagnostic(request) => {
                 crate::approval_reuse_diagnostic_op::evaluate_approval_reuse_diagnostic_request(
                     &request,
