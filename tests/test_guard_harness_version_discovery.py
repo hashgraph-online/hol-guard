@@ -179,13 +179,15 @@ def _fixture_manifest(context: HarnessContext) -> Path:
 class TestService:
     def _compat(self, context: HarnessContext, **kwargs: object) -> dict[str, object]:
         options: dict[str, object] = {
-            "manifest_path": _fixture_manifest(context),
             "guard_version": GUARD,
             "platform": PLATFORM,
             "observe": lambda harness, ctx, clock: _observe(ctx, clock=clock),
             "clock": lambda: 1000.0,
         }
         options.update(kwargs)
+        if "manifest_path" not in options:
+            # Writing the fixture again would change its stamp and miss the decision cache.
+            options["manifest_path"] = _fixture_manifest(context)
         return service.compatibility_for("omp", context, **options)  # type: ignore[arg-type]
 
     def test_acknowledge_flow_and_version_change(self, tmp_path: Path) -> None:

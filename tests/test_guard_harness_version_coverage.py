@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.harness_versions.compatibility import (
 from codex_plugin_scanner.guard.harness_versions.discovery import VersionObservation
 from codex_plugin_scanner.guard.harness_versions.service import _manifest_path
 from codex_plugin_scanner.guard.harness_versions.versions import parse_version, parse_version_banner
+from codex_plugin_scanner.guard.mdm import runtime_request
 from scripts.ci.harness_version_manifest import ManifestError, bundled_manifest_path, parse_manifest
 
 GUARD = "9.9.9"
@@ -289,8 +290,18 @@ class TestDecision:
         self, decide: Callable[..., dict[str, object]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(compatibility, "runtime_request", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: False)
         payload = decide(_observed("18.8.3"))
         assert (payload["state"], payload["reason"]) == (STATE_VERSION_UNKNOWN, "runtime_unavailable")
+        assert payload["enforcement_effect"] == "none"
+
+    def test_a_runtime_that_offers_the_decision_but_fails_reports_an_error(
+        self, decide: Callable[..., dict[str, object]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(compatibility, "runtime_request", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
+        payload = decide(_observed("18.8.3"))
+        assert (payload["state"], payload["reason"]) == (STATE_VERSION_UNKNOWN, "runtime_error")
         assert payload["enforcement_effect"] == "none"
 
 
