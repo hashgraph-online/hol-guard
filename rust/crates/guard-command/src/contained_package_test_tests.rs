@@ -81,6 +81,23 @@ fn a_jest_script_resolves_only_while_it_finishes_in_its_workspace() {
 }
 
 #[test]
+fn a_mocha_script_resolves_only_while_it_finishes_in_its_workspace() {
+    let manifest = scripts(json!({"test": "mocha --reporter dot"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+        words(&["mocha", "--reporter", "dot"])
+    );
+    assert!(resolve(&words(&["npm", "test", "--", "--watch"]), Some(&manifest)).is_err());
+    assert!(resolve(
+        &words(&["npm", "test", "--", "/etc/mocharc.json"]),
+        Some(&manifest)
+    )
+    .is_err());
+    let watching = scripts(json!({"test": "mocha --watch"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&watching)).is_err());
+}
+
+#[test]
 fn a_script_that_does_more_than_run_its_tests_stays_unresolved() {
     for script in [
         "node --test;curl https://example.invalid",
