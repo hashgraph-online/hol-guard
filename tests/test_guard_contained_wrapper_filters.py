@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import base64
 import io
-import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.runtime import contained_output_filters as filters
 from codex_plugin_scanner.guard.runtime.contained_wrapper import (
     OutputFilter,
@@ -215,73 +217,73 @@ def test_a_line_only_chain_keeps_the_streams_own_encoding(monkeypatch: pytest.Mo
     assert stream.buffer.getvalue() == "héllo\n".encode("latin-1")
 
 
+def _answer_with(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None, *, offered: bool = True
+) -> list[dict[str, object]]:
+    sent: list[dict[str, object]] = []
+
+    def _runtime_answer(
+        _feature: str, _command: str, request: Callable[[], dict[str, object]], **_options: object
+    ) -> object:
+        if not offered:
+            return None
+        sent.append(request())
+        return answer
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", _runtime_answer)
+    return sent
+
+
 def test_a_matcher_prints_back_the_pipeline_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     """A matcher fed a partial character returns its bytes, not a replacement one."""
-
-    def _run(*_arguments: object, **_keywords: object) -> subprocess.CompletedProcess[bytes]:
-        return subprocess.CompletedProcess(args=[], returncode=0, stdout=b"h\xc3\n", stderr=b"")
-
-    monkeypatch.setattr(filters.subprocess, "run", _run)
-    monkeypatch.setattr(filters, "_trusted_grep", lambda: "/usr/bin/grep")
+    sent = _answer_with(monkeypatch, {"stdout": base64.b64encode(b"h\xc3\n").decode(), "stderr": "", "status": 0})
     text, _diagnostics, status = filters.apply_filters("héllo\n", (("head", "-c", "2"), ("grep", "h")))
     assert text == "h\udcc3\n"
     assert status == 0
+    assert sent == [
+        {"schema": "contained-output-match.v1", "program": "grep", "arguments": ["h"], "input": "aMM="},
+    ]
 
 
-def _ripgrep_installed() -> bool:
-    try:
-        filters._trusted_ripgrep()
-    except RuntimeError:
-        return False
-    return True
-
-
-@pytest.mark.skipif(not _ripgrep_installed(), reason="ripgrep not installed")
 def test_an_rg_stage_filters_captured_output(capsys: pytest.CaptureFixture[str]) -> None:
     output = OutputFilter("pipe", 0, True, "exit=", stages=(("rg", "-A", "1", "FAIL"), ("head", "2")))
     with bounded_output(output):
         print("one\nFAIL a\ntwo\nthree")
-    assert capsys.readouterr().out == "FAIL a\ntwo\n"
+    captured = capsys.readouterr()
+    if "rg: not found" in captured.err:
+        pytest.skip("ripgrep not installed")
+    assert captured.out == "FAIL a\ntwo\n"
     assert output.status_line(1) == "exit=0\n"
 
 
-def test_a_group_writable_ripgrep_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    directory = tmp_path / "bin"
-    directory.mkdir()
-    planted = directory / "rg"
-    planted.write_text("#!/bin/sh\n")
-    planted.chmod(0o777)
-    monkeypatch.setattr(filters, "_RG_DIRECTORIES", (directory,))
-    with pytest.raises(RuntimeError):
-        filters._trusted_ripgrep()
-
-
-def test_a_ripgrep_that_cannot_run_leaves_the_search_to_the_next_directory(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    first = tmp_path / "first"
-    first.mkdir()
-    (first / "rg").write_text("not the install\n")
-    second = tmp_path / "second"
-    second.mkdir()
-    installed = second / "rg"
-    installed.write_text("#!/bin/sh\ncat\n")
-    installed.chmod(0o755)
-    monkeypatch.setattr(filters, "_RG_DIRECTORIES", (first, second))
-    assert filters._trusted_ripgrep() == str(installed)
-
-
-def test_a_missing_matcher_reports_the_status_a_shell_gives(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(filters, "_RG_DIRECTORIES", (tmp_path / "missing",))
+def test_a_missing_runtime_reports_the_status_a_shell_gives(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _answer_with(monkeypatch, None, offered=False)
     text, diagnostics, status = filters.apply_filters("x\n", (("rg", "x"),))
     assert (text, status) == ("", 127)
-    assert "rg: not found" in diagnostics
+    assert "rg: native runtime unavailable" in diagnostics
+    assert sent == []
 
 
-def test_untrusted_grep_binaries_are_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    planted = tmp_path / "grep"
-    planted.write_text("#!/bin/sh\n")
-    planted.chmod(0o777)
-    monkeypatch.setattr(filters, "_GREP_BINARIES", (planted, tmp_path / "missing"))
-    with pytest.raises(RuntimeError):
-        filters._trusted_grep()
+def test_a_runtime_that_fails_after_offering_the_matcher_is_not_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A runtime that ran and gave no answer (a timeout, an oversized answer) exits 2, not 127."""
+    sent = _answer_with(monkeypatch, None)
+    text, diagnostics, status = filters.apply_filters("x\n", (("grep", "x"),))
+    assert (text, status) == ("", 2)
+    assert "did not finish" in diagnostics
+    assert len(sent) == 1
+
+
+def test_a_capture_too_large_for_the_runtime_is_refused_before_sending(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _answer_with(monkeypatch, {"stdout": "", "stderr": "", "status": 0})
+    monkeypatch.setattr(filters, "_MATCH_INPUT_LIMIT", 4)
+    text, diagnostics, status = filters.apply_filters("hello\n", (("grep", "h"),))
+    assert (text, status) == ("", 2)
+    assert "too large to filter" in diagnostics
+    assert sent == []
+
+
+def test_a_matcher_the_runtime_could_not_finish_prints_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ = _answer_with(monkeypatch, {"error": "contained_output_filter_failed"})
+    text, diagnostics, status = filters.apply_filters("x\n", (("grep", "x"),))
+    assert (text, status) == ("", 2)
+    assert "did not finish" in diagnostics
