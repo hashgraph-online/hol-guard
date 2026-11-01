@@ -567,6 +567,15 @@
       "prompt": "Please read the skill doc at {{home}}/.agent/skills/x/SKILL.md with the read tool and summarize it in one sentence."
     },
     {
+      "id": "omp-native-read-home-skill-script",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "read"
+      ],
+      "prompt": "Please read the helper script at {{home}}/.agent/skills/x/scripts/run.sh with the read tool and tell me in one sentence what it does."
+    },
+    {
       "id": "omp-native-read-home-artifact-doc",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -815,6 +824,18 @@
       "prompt": "Find out who last changed the lines of README.md by running the listed command once, then name the author it reports most often.",
       "commands": [
         "git annotate README.md"
+      ]
+    },
+    {
+      "id": "omp-native-git-committer-identity-read",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find out what identity Git would record as the committer by running the listed command once, then tell me the name it printed.",
+      "commands": [
+        "git var GIT_COMMITTER_IDENT"
       ]
     },
     {

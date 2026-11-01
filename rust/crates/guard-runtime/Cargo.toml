@@ -62,7 +62,7 @@ sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
-rustix.workspace = true
+rustix = { workspace = true, features = ["time"] }
 nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount", "hostname"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
