@@ -55,7 +55,7 @@ impl Runner for SystemRunner {
         cwd: &str,
         environment: &[(&str, &str)],
     ) -> io::Result<Probe> {
-        run_bounded(program, arguments, cwd, environment)
+        run_bounded(program, arguments, cwd, environment, PROBE_TIMEOUT)
     }
 }
 
@@ -297,13 +297,14 @@ fn plist_text(node: Node) -> Option<String> {
     )
 }
 
-/// One probe run with no shell, null standard input and error, a 10 s wall
-/// clock and at most the registration bound of standard output.
+/// One probe run with no shell, null standard input and error, a wall clock
+/// (10 s outside tests) and at most the registration bound of standard output.
 fn run_bounded(
     program: &str,
     arguments: &[&str],
     cwd: &str,
     environment: &[(&str, &str)],
+    timeout: Duration,
 ) -> io::Result<Probe> {
     let mut child = Command::new(program)
         .args(arguments)
@@ -328,7 +329,7 @@ fn run_bounded(
             .map(|_| bytes);
         let _ = sender.send(result);
     });
-    let deadline = Instant::now() + PROBE_TIMEOUT;
+    let deadline = Instant::now() + timeout;
     let status = loop {
         if let Some(status) = child.try_wait()? {
             break status;

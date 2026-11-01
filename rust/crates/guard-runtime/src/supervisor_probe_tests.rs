@@ -5,6 +5,8 @@ use std::path::Path;
 use serde_json::{json, Value};
 
 use super::{macos_verify, parse_plist, windows_context, windows_verify, Runner};
+#[cfg(unix)]
+use super::{run_bounded, MAX_REGISTRATION_BYTES};
 use crate::supervisor_verdict::tests::task_xml;
 use crate::supervisor_verdict::{Probe, Request};
 
@@ -271,6 +273,64 @@ fn an_unreadable_registration_is_a_failed_probe() {
             &text[..text.len().min(40)]
         );
         assert!(runner.calls.is_empty());
+    }
+}
+
+#[cfg(unix)]
+const SHELL_PATH: [(&str, &str); 1] = [("PATH", "/usr/bin:/bin")];
+
+#[cfg(unix)]
+fn shell(script: &str, timeout: std::time::Duration) -> io::Result<Probe> {
+    run_bounded("/bin/sh", &["-c", script], "/", &SHELL_PATH, timeout)
+}
+
+#[cfg(unix)]
+#[test]
+fn the_real_runner_clears_the_environment_and_keeps_the_exit_code() {
+    let ran = run_bounded(
+        "/bin/sh",
+        &[
+            "-c",
+            r#"printf '%s|%s|%s' "$PROBE" "${HOME-unset}" "$(pwd)"; exit 3"#,
+        ],
+        "/",
+        &[("PROBE", "yes")],
+        std::time::Duration::from_secs(10),
+    )
+    .expect("the probe runs");
+
+    assert_eq!(ran.returncode, 3);
+    assert_eq!(ran.stdout, "yes|unset|/");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_real_runner_refuses_oversized_output_and_signals() {
+    let budget = std::time::Duration::from_secs(10);
+    let at_bound = format!("head -c {MAX_REGISTRATION_BYTES} /dev/zero");
+    let over_bound = format!("head -c {} /dev/zero", MAX_REGISTRATION_BYTES + 1);
+
+    let ran = shell(&at_bound, budget).expect("output at the bound");
+    assert_eq!(ran.stdout.len(), MAX_REGISTRATION_BYTES);
+    assert!(shell(&over_bound, budget).is_err());
+    assert!(shell("kill -9 $$", budget).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn the_real_runner_stops_at_the_deadline() {
+    let budget = std::time::Duration::from_millis(300);
+    for script in ["sleep 5", "(sleep 5 &); exit 0"] {
+        let started = std::time::Instant::now();
+
+        let error = shell(script, budget).expect_err("a timeout");
+
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut, "{script}");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < std::time::Duration::from_secs(4),
+            "{script}: {elapsed:?}"
+        );
     }
 }
 
