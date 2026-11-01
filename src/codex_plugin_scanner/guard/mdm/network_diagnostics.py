@@ -68,9 +68,14 @@ class NetworkDiagnostic:
         }
 
 
-def _proxy_diagnostic(policy: ManagedNetworkPolicy, endpoint_scheme: str) -> tuple[ProxyDiagnostic, str | None]:
+def _proxy_diagnostic(
+    policy: ManagedNetworkPolicy, endpoint_scheme: str, *, managed: bool
+) -> tuple[ProxyDiagnostic, str | None]:
     try:
-        selected = transport.selected_proxy_url(policy, endpoint_scheme)
+        if managed or policy.proxy_mode != "system":
+            selected = transport.selected_proxy_url(policy, endpoint_scheme)
+        else:
+            selected = transport.available_system_proxies(managed=False).get(endpoint_scheme)
     except transport.ManagedNetworkError as exc:
         return ProxyDiagnostic(policy.proxy_mode, False, None, "not-tested", False), str(exc)
     if selected is None:
@@ -187,7 +192,7 @@ def _diagnostic_endpoint(endpoint: str) -> urllib.parse.SplitResult | None:
 
 
 def diagnose_endpoint(endpoint: str, policy: ManagedNetworkPolicy | None = None) -> NetworkDiagnostic:
-    resolved = policy or transport.active_network_policy()
+    resolved, managed = transport.resolved_network_policy(policy)
     parsed = _diagnostic_endpoint(endpoint)
     direct_proxy = ProxyDiagnostic(resolved.proxy_mode, False, None, "not-tested", False)
     if parsed is None or parsed.hostname is None:
@@ -221,7 +226,7 @@ def diagnose_endpoint(endpoint: str, policy: ManagedNetworkPolicy | None = None)
     except socket.gaierror:
         dns = "failed"
 
-    proxy, proxy_error = _proxy_diagnostic(resolved, parsed.scheme)
+    proxy, proxy_error = _proxy_diagnostic(resolved, parsed.scheme, managed=managed)
     if proxy_error is not None:
         return _result(
             endpoint=endpoint_label,
@@ -245,7 +250,7 @@ def diagnose_endpoint(endpoint: str, policy: ManagedNetworkPolicy | None = None)
 
     request = urllib.request.Request(endpoint, method="HEAD")
     try:
-        with transport.managed_urlopen(request, timeout=10, policy=resolved) as response:
+        with transport.managed_urlopen(request, timeout=10, policy=resolved if managed else None) as response:
             clock, skew = _clock_diagnostic(response)
             return _reachable_result(endpoint_label, dns, proxy, clock, skew)
     except urllib.error.HTTPError as exc:

@@ -499,6 +499,21 @@ def test_a_failed_native_proxy_lookup_refuses_instead_of_going_direct(
     assert transport_module.available_system_proxies(managed=False) == {}
 
 
+def test_diagnostics_without_a_managed_policy_keep_the_direct_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import network_diagnostics
+
+    def unavailable() -> dict[str, str]:
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
+
+    monkeypatch.setattr(transport_module, "platform_system_proxies", unavailable)
+    policy = ManagedNetworkPolicy(proxy_mode="system")
+
+    proxy, error = network_diagnostics._proxy_diagnostic(policy, "https", managed=False)  # pyright: ignore[reportPrivateUsage]
+    assert (proxy.selected, error) == (False, None)
+    _proxy, error = network_diagnostics._proxy_diagnostic(policy, "https", managed=True)  # pyright: ignore[reportPrivateUsage]
+    assert error == "managed_system_proxy_unavailable"
+
+
 def test_proxy_credentials_come_from_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import codex_hook_launch_runtime, native_runtime
 
