@@ -8,6 +8,7 @@ mod adapter_state_integrity_op;
 #[cfg(all(test, unix))]
 #[path = "adapters/adapter_vectors_tests.rs"]
 mod adapter_vectors_tests;
+mod agent_safety_guidance;
 mod aibom_artifact;
 mod aibom_discovery;
 mod aibom_extend;

@@ -49,3 +49,8 @@
 # CIGAR receipts and test logs are recorded evidence, not hand-edited product source.
 /docs/guard/cigar-integration/evidence/** linguist-generated
 /docs/guard/cigar-integration/evidence/*.log -whitespace linguist-generated
+
+# The native runtime embeds the safety guide and hashes its earlier versions
+# as checkout bytes.
+/src/codex_plugin_scanner/guard/agent-safety-guidance.md text eol=lf
+/tests/fixtures/agent-safety-guidance-*.md text eol=lf
