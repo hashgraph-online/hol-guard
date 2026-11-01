@@ -114,6 +114,13 @@ runs:
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib managed_owner_lock
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib owner_release
+    - name: Keep the harness coverage registry and request on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib harness_coverage
     - name: Refuse the macOS ownership walk off Unix
       if: inputs.shim-gate == 'native-op'
       shell: pwsh

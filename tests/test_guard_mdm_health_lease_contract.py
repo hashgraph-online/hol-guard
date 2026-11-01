@@ -9,7 +9,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from codex_plugin_scanner.guard.mdm import health_snapshot_validation
+from codex_plugin_scanner.guard.mdm import health_lease_contract
 from codex_plugin_scanner.guard.mdm.contracts import IntegrityReasonCode
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     HEALTH_LEASE_SCHEMA,
@@ -311,10 +311,12 @@ def test_snapshot_binding_fails_closed_without_the_native_runtime(monkeypatch: p
     snapshot = _snapshot()
     snapshot["generatedAt"] = "2026-07-18T14:00:00Z"
     outbox = _outbox(snapshot)
-    monkeypatch.setattr(health_snapshot_validation, "_native_answer", lambda *_: None)
+    monkeypatch.setattr(health_lease_contract, "_native_answer", lambda *_: None)
 
-    with pytest.raises(ValueError, match="health_lease_snapshot_native_unavailable"):
+    with pytest.raises(ValueError, match="health_lease_contract_native_unavailable"):
         outbox.canonical_bytes()
+    with pytest.raises(ValueError, match="health_lease_contract_native_unavailable"):
+        HealthLeaseClaims.parse(_claims("k" * 43))
 
 
 def test_sequence_requires_complete_prior_lease_chain() -> None:

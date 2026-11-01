@@ -396,7 +396,6 @@
           "src/codex_plugin_scanner/guard/mdm/health_lease_ack.py",
           "src/codex_plugin_scanner/guard/mdm/health_lease_contract.py",
           "src/codex_plugin_scanner/guard/mdm/health_reporter.py",
-          "src/codex_plugin_scanner/guard/mdm/health_snapshot_validation.py",
           "src/codex_plugin_scanner/guard/mdm/health_transport.py",
           "src/codex_plugin_scanner/guard/mdm/lifecycle.py",
           "src/codex_plugin_scanner/guard/mdm/protection_lease_contract.py",
@@ -1809,7 +1808,7 @@
         ],
         "entry_points": [],
         "reason": "The local integrity snapshot models and reason codes describe managed-device health reports. They are built by mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py and mdm/harness_coverage.py and consumed by the health lease and the mdm CLI, all of which run on the health-reporting cadence rather than a hook request. Managed-policy contracts in this module stay counted.",
-        "evidence": "rg -ln 'IntegrityReasonCode|LocalIntegritySnapshot|SnapshotComponents|KeyProtectionStatus|SupervisorStatus|IntegrityComponent' src -g '*.py' lists only mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py, mdm/harness_coverage.py, mdm/health_lease.py, mdm/health_snapshot_validation.py and cli/commands_dispatch_mdm.py besides mdm/contracts.py; the adapters' HarnessCoverageSummary comes from adapters/contracts.py. None of those mdm modules is in the runtime import closure."
+        "evidence": "rg -ln 'IntegrityReasonCode|LocalIntegritySnapshot|SnapshotComponents|KeyProtectionStatus|SupervisorStatus|IntegrityComponent' src -g '*.py' lists only mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py, mdm/harness_coverage.py, mdm/health_lease.py and cli/commands_dispatch_mdm.py besides mdm/contracts.py; the adapters' HarnessCoverageSummary comes from adapters/contracts.py. None of those mdm modules is in the runtime import closure."
       },
       {
         "id": "store2-oauth-connect-lifecycle",

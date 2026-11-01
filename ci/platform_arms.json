@@ -1147,6 +1147,14 @@
    "body": "e88822ef3716"
   },
   {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_request.rs",
+   "item": "fn request_acl_is_private(_home: &Metadata, _guard_home: &Metadata, _request: &Metadata) -> bool",
+   "verdict": "windows-unsupported",
+   "note": "A Windows coverage request is never trusted, matching the Python reader, whose owner and mode checks always failed there because `st_mode` carries no permission bits and `st_uid` is zero. Reading the request's DACL is not ported, so device registration from a user's request stays refused on Windows. `harness_coverage_request_tests.rs` runs this arm on Windows in `a_request_is_never_trusted_without_owner_and_mode_bits`.",
+   "cfg": "not(unix)",
+   "body": "279bd89f2f4f"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/hook_approval_context/support.rs",
    "item": "pub(super) fn named_user_home(_text: &str) -> Option<String>",
    "verdict": "posix-primitive",
