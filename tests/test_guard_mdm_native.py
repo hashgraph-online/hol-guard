@@ -3,11 +3,14 @@ from __future__ import annotations
 import plistlib
 import subprocess
 import sys
+import time
 from pathlib import Path
+from types import SimpleNamespace
 from xml.etree import ElementTree
 
 import pytest
 
+from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.mdm import native
 from codex_plugin_scanner.guard.mdm.contracts import default_machine_paths
 
@@ -347,3 +350,18 @@ def test_windows_mdm_docs_exclude_desktop_artifact_signing_leaves() -> None:
     assert "Do not pin a rotating Azure Public Trust leaf" in verify_doc
     assert "not a valid pin for this HOLGuardMachine identity" in windows_doc
     assert "Do not store Azure Artifact Signing leaves" in policy_source
+
+
+def test_native_install_gives_a_cold_runtime_status_probe_the_whole_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    deadlines: list[float] = []
+
+    def status(*, deadline_monotonic: float) -> SimpleNamespace:
+        deadlines.append(deadline_monotonic)
+        return SimpleNamespace(available=False, compatible=False, identity=None, capabilities=None)
+
+    monkeypatch.setattr(native_runtime, "native_runtime_status", status)
+    started = time.monotonic()
+
+    assert native._native_answer({"platform": "macos"}) is None
+    assert len(deadlines) == 1
+    assert deadlines[0] - started > 30

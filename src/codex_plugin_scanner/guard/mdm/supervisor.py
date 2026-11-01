@@ -8,7 +8,6 @@ supervisor's health is unknown.
 
 from __future__ import annotations
 
-import json
 import platform
 import subprocess
 import time
@@ -22,6 +21,7 @@ from .contracts import (
     SupervisorStatus,
     default_machine_paths,
 )
+from .runtime_request import runtime_answer
 
 _MACOS_LABEL = "org.hol.guard.machine-health"
 _MACOS_PLIST = Path(f"/Library/LaunchDaemons/{_MACOS_LABEL}.plist")
@@ -30,7 +30,6 @@ SUPERVISOR_PROBE_FEATURE = "native-supervisor-probe-v1"
 SUPERVISOR_INSTALL_FEATURE = "native-supervisor-install-v1"
 SUPERVISOR_VERDICT_COMMAND = "supervisor-verdict"
 SUPERVISOR_VERDICT_SCHEMA = "supervisor-verdict.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _OUTPUT_LIMIT_BYTES = 16 * 1024
 _TASK_ERRORS = frozenset(
@@ -52,33 +51,15 @@ def machine_executable(paths: MachinePaths, system_name: str) -> Path:
 def _native_answer(request: dict[str, object], feature: str) -> dict[str, Any]:
     """The runtime's answer to one supervisor op that needs ``feature``."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
-    status = native_runtime_status(deadline_monotonic=min(deadline, time.monotonic() + _STATUS_TIMEOUT_SECONDS))
-    remaining = deadline - time.monotonic()
-    output = None
-    if (
-        remaining > 0
-        and status.available
-        and status.compatible
-        and status.identity is not None
-        and status.capabilities is not None
-        and SUPERVISOR_VERDICT_FEATURE in status.capabilities.features
-        and feature in status.capabilities.features
-    ):
-        output = _run_native_process(
-            status.identity.path,
-            (SUPERVISOR_VERDICT_COMMAND, "--stdin"),
-            input_text=json.dumps({"schema": SUPERVISOR_VERDICT_SCHEMA, **request}, sort_keys=True),
-            timeout_seconds=remaining,
-            output_limit=_OUTPUT_LIMIT_BYTES,
-        )
-    try:
-        answer = cast(object, json.loads(output or ""))
-    except ValueError:
-        answer = None
-    if not isinstance(answer, dict):
+    answer = runtime_answer(
+        SUPERVISOR_VERDICT_FEATURE,
+        SUPERVISOR_VERDICT_COMMAND,
+        {"schema": SUPERVISOR_VERDICT_SCHEMA, **request},
+        deadline=time.monotonic() + _COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+        extra_features=(feature,),
+    )
+    if answer is None:
         raise OSError("supervisor_verdict_native_unavailable")
     return cast(dict[str, Any], answer)
 
