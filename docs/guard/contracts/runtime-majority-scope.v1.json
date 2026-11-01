@@ -572,6 +572,10 @@
     ],
     "reviewed_runtime": [
       {
+        "path": "src/codex_plugin_scanner/guard/runtime/runner_native_sync.py",
+        "reason": "Reviewed native runner-authority projections: store_cloud_events lazily imports cloud_exceptions from this module, alongside the sync URL, pain-signal, value-metric and policy-bundle projections the cloud sync transport uses. Every function ships a minimal projection to the resident and returns its answer unchanged; count the complete module in runtime scope. No runtime behavior is excluded."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/runtime/extension_control_proof.py",
         "reason": "Retained conservatively in runtime scope: installed-upgrade recovery imports the existing authority phase and error contracts from this proof module. Count the complete module, including its proof helpers, rather than exclude code reached by startup recovery. Installed-upgrade authorization remains native."
       },
