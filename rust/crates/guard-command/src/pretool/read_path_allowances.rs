@@ -121,9 +121,16 @@ pub(in crate::pretool) fn agent_skill_script(
     canonical: &std::path::Path,
     home_dir: Option<&str>,
 ) -> bool {
-    skill_tree_file(canonical, home_dir, |extension| {
-        SKILL_SCRIPT_EXTENSIONS.contains(&extension)
-    })
+    // The filename screen stands aside as soon as a name carries a source
+    // extension, so it never reaches its own directory half for a script.
+    // A skill tree may still hold a credential store, and a script written
+    // into one is named for the language it is in, not for what it reads.
+    // Ask the directory question here, where the extension list is what
+    // admits the file in the first place.
+    !guard_secure_fs::credential_directory_path(canonical)
+        && skill_tree_file(canonical, home_dir, |extension| {
+            SKILL_SCRIPT_EXTENSIONS.contains(&extension)
+        })
 }
 
 /// Extensions that name the language a file is written in.

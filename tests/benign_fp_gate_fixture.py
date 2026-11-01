@@ -216,6 +216,9 @@ def build_fixture(root: Path) -> BenignFixture:
     # helper before running it is the careful step, so the tree carries one.
     _write(home / ".agents" / "skills" / "x" / "scripts" / "run.sh", "#!/bin/sh\necho fixture\n")
     _write(home / ".agents" / "skills" / "x" / "scripts" / "backup.db", "inert fixture bytes\n")
+    # A credential store keeps its review wherever it sits, a skill tree
+    # included, whatever language the file inside it is written in.
+    _write(home / ".agents" / "skills" / "x" / "secrets" / "export.sh", "#!/bin/sh\necho fixture\n")
     _write(home / ".config" / "app-portal" / "settings.json", '{"theme": "dark"}\n')
     # A tool Guard knows no name for, with the two trees every one of them
     # keeps: a skills folder and a lane of dated reports. Agents look both up

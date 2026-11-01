@@ -66,6 +66,10 @@ fn home(name: &str) -> PathBuf {
             "rows\n",
         ),
         (
+            ".agents/skills/release-check/secrets/export.sh",
+            "export TOKEN=redacted\n",
+        ),
+        (
             ".cargo/registry/src/index.crates.io/serde-1.0.0/src/lib.rs",
             "pub fn parse() {}\n",
         ),
@@ -389,6 +393,8 @@ fn narrower_document_rules_keep_their_paths() {
     for command in [
         "cat ~/.agents/skills/release-check/config.json",
         "cat ~/.agents/skills/release-check/scripts/inventory.db",
+        // A credential store inside a skill tree is still a credential store.
+        "cat ~/.agents/skills/release-check/secrets/export.sh",
     ] {
         assert_ne!(action(&home, "codex", command), "allow", "{command}");
     }
@@ -438,6 +444,7 @@ fn the_native_read_tool_answers_as_the_shell_does() {
             );
         }
         for target in [
+            ".agents/skills/release-check/secrets/export.sh",
             ".ssh/config",
             ".config/gh/hosts.yml",
             ".config/gcloud/credentials.db",
