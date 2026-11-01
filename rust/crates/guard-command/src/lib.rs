@@ -42,6 +42,13 @@ mod catalog_read_model_tests;
 mod catalog_read_projection;
 mod catalog_read_query;
 pub mod ci_workflow_risk;
+pub mod cloud_action;
+pub mod cloud_action_activation;
+pub mod cloud_action_binding;
+pub mod cloud_action_canonical;
+pub mod cloud_action_policy;
+#[cfg(test)]
+mod cloud_action_tests;
 pub mod cloud_catalog;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
