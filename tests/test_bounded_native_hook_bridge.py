@@ -160,15 +160,14 @@ def test_cline_worker_runs_the_native_bridge_once_per_payload(tmp_path: Path, mo
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
     argv = cline_hooks._bounded_hook_argv(context, sys.executable)
-    source = cline_hooks._hook_source(context, event_name="PreToolUse", guard_cli=list(argv))
+    worker = json.loads(cline_hooks._worker_config(context, event_name="PreToolUse", guard_cli=list(argv)))
 
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)
     config = json.loads(argv[-1])
     assert config["harness"] == "cline"
     assert config["cli_args"][:2] == ["guard", "hook"]
     assert config["timeout_seconds"] < cline_hooks._TIMEOUT
-    assert f"GUARD={list(argv)!r}" in source
-    assert "[*GUARD" not in source
+    assert worker["guard"] == list(argv)
 
 
 def _config(tmp_path: Path) -> dict[str, object]:

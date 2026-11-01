@@ -71,6 +71,9 @@ pub(super) fn run() -> Result<(), String> {
         {
             std::process::exit(cursor_hook_bridge::run(python_argv))
         }
+        [command, config] if command == cline_hook_worker::WORKER_COMMAND => {
+            std::process::exit(cline_hook_worker::run(config))
+        }
         [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
             std::process::exit(pi_hook_bridge::run(config))
         }

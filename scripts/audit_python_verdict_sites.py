@@ -271,8 +271,7 @@ def discover(package: Path = PACKAGE) -> list[dict[str, object]]:
     """Every verdict-producing function in the package, in a stable order.
 
     Covers the package's own modules and the Python it carries as embedded
-    script templates. A template that is a format string rather than source --
-    Cline's, which interpolates ``{event_name!r}`` and escapes its braces --
+    script templates. A template that is a format string rather than source
     cannot be parsed in place; :func:`unparsed_templates` reports those
     separately so the gate stays honest about what it could not read.
     """

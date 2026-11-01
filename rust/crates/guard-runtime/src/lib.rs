@@ -126,6 +126,7 @@ mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
+mod cline_hook_worker;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
 mod cloud_exception_lift;

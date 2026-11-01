@@ -19,12 +19,12 @@ from .cline_state_paths import canonical_cline_state_path as _canonical_state_pa
 from .cline_state_paths import cline_hook_command as _hook_command
 from .cline_state_paths import uninstall_persisted_cline_hooks as uninstall_cline_hooks
 from .guard_cli_attestation import resolve_attested_guard_cli
+from .native_hook_bridge import native_hook_bridge_executable
 
 _MARKER = "HOL_GUARD_MANAGED_CLINE_HOOK_V1"
 _SCHEMA = 1
-_MAX_BYTES = 256 * 1024
-_MAX_PRETOOL_BYTES = 64 * 1024
-_MAX_DEPTH = 48
+_WORKER_SCHEMA = "cline-hook-worker.v1"
+NATIVE_CLINE_HOOK_WORKER_FEATURE = "cline-hook-worker-v1"
 _TIMEOUT = 9
 # The bounded bridge answers inside the worker's own subprocess timeout.
 _BRIDGE_TIMEOUT_SECONDS = 8
@@ -51,7 +51,7 @@ def _proof_path(context: HarnessContext, event: str) -> Path:
 
 
 def _worker_path(context: HarnessContext, event: str) -> Path:
-    return context.guard_home / "managed" / "cline" / "hook-workers" / f"{event}.py"
+    return context.guard_home / "managed" / "cline" / "hook-workers" / f"{event}.json"
 
 
 def _managed(path: Path) -> bool:
@@ -83,346 +83,29 @@ def _write(path: Path, text: str, *, executable: bool = False) -> None:
     os.replace(temporary, path)
 
 
-def _hook_source(context: HarnessContext, *, event_name: str, guard_cli: list[str]) -> str:
-    """Generate the bounded Python worker invoked by platform launchers.
+def _worker_config(context: HarnessContext, *, event_name: str, guard_cli: list[str]) -> str:
+    """The configuration the native Cline hook worker reads for one event.
 
     ``guard_cli`` is the complete argv the worker runs once per hook payload.
     """
 
-    proof = str(_proof_path(context, event_name))
-    adapter_state = str(_adapter_state_path(context))
-    blocking = event_name == "PreToolUse"
-    return f"""# {_MARKER}
-from __future__ import annotations
-import json
-import os
-import subprocess
-import sys
-import time
-from pathlib import Path
-
-EVENT={event_name!r}
-BLOCKING={blocking!r}
-MAX_BYTES={_MAX_BYTES}
-MAX_PRETOOL_BYTES={_MAX_PRETOOL_BYTES}
-MAX_DEPTH={_MAX_DEPTH}
-TIMEOUT={_TIMEOUT}
-GUARD={guard_cli!r}
-PROOF=Path({proof!r})
-ADAPTER_STATE=Path({adapter_state!r})
+    config = {
+        "marker": _MARKER,
+        "schema": _WORKER_SCHEMA,
+        "event": event_name,
+        "guard": guard_cli,
+        "proof": str(_proof_path(context, event_name)),
+        "adapter_state": str(_adapter_state_path(context)),
+    }
+    return json.dumps(config, indent=2, sort_keys=True) + "\n"
 
 
-def emit(value):
-    sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\\n")
-    sys.stdout.flush()
-
-
-def fail(message):
-    emit({{
-        "cancel": bool(BLOCKING),
-        "errorMessage": message if BLOCKING else "",
-        "contextModification": message,
-    }})
-
-
-def active_transport():
-    if os.environ.get("HOL_GUARD_CLINE_CANARY") == "1":
-        return "hooks"
-    try:
-        value = json.loads(ADAPTER_STATE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    transport = value.get("active_transport") if isinstance(value, dict) else None
-    return transport if isinstance(transport, str) else None
-
-
-def depth_ok(value):
-    stack = [(value, 1)]
-    while stack:
-        item, depth = stack.pop()
-        if depth > MAX_DEPTH:
-            return False
-        if isinstance(item, dict):
-            stack.extend((nested, depth + 1) for nested in item.values())
-        elif isinstance(item, list):
-            stack.extend((nested, depth + 1) for nested in item)
-    return True
-
-
-def pretool_size_ok(value):
-    if EVENT != "PreToolUse":
-        return True
-    current = value.get("tool_call")
-    legacy = value.get("preToolUse")
-    if isinstance(current, dict):
-        action = current
-    elif isinstance(legacy, dict):
-        action = legacy
-    else:
-        action = value
-    try:
-        encoded = json.dumps(action, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-    except (TypeError, ValueError):
-        return False
-    return len(encoded) <= MAX_PRETOOL_BYTES
-
-
-def parse_output(text):
-    text = text.strip()
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for candidate in [text, *reversed(lines)]:
-        if not candidate.startswith("{{"):
-            continue
-        try:
-            value = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            return value
-    return None
-
-
-def reason(value):
-    for key in ("reason", "stopReason", "review_hint", "systemMessage", "message", "error"):
-        item = value.get(key)
-        if isinstance(item, str) and item.strip():
-            return item.strip()
-    specific = value.get("hookSpecificOutput")
-    if isinstance(specific, dict):
-        for key in ("permissionDecisionReason", "additionalContext"):
-            item = specific.get(key)
-            if isinstance(item, str) and item.strip():
-                return item.strip()
-        nested = specific.get("decision")
-        if isinstance(nested, dict) and isinstance(nested.get("message"), str):
-            return nested["message"].strip()
-    return "HOL Guard blocked this action."
-
-
-def blocked(value):
-    if value.get("blocked") is True or value.get("continue") is False:
-        return True
-    decision = value.get("decision")
-    if isinstance(decision, str) and decision.lower() in {{"deny", "block", "ask"}}:
-        return True
-    for action in (value.get("policy_action"), value.get("policyAction")):
-        # Either spelling is read, not just the first one present: a response
-        # carrying a restrictive action under the alias still says so.
-        if isinstance(action, str):
-            if action.lower() in {{"review", "require-reapproval", "sandbox-required", "block"}}:
-                return True
-    specific = value.get("hookSpecificOutput")
-    if isinstance(specific, dict):
-        permission = specific.get("permissionDecision")
-        if isinstance(permission, str) and permission.lower() in {{"deny", "block", "ask"}}:
-            return True
-        nested = specific.get("decision")
-        if isinstance(nested, dict):
-            behavior = nested.get("behavior")
-            if isinstance(behavior, str) and behavior.lower() in {{"deny", "block", "ask"}}:
-                return True
-    return False
-
-
-def explicitly_allows(value):
-    # The deny-list above names the tiers this client already knows how to
-    # place. An action outside it -- one a newer resident introduced, or a
-    # truncated or corrupted field -- is not evidence of permission, so the
-    # decision has to say "allow" in one of the shapes this client reads, and
-    # no present field may say anything else. The plugin transport of this same
-    # adapter applies the same rule.
-    if blocked(value):
-        return False
-    if "decision" in value and not isinstance(value.get("decision"), str):
-        return False
-    raw_decision = value.get("decision")
-    decision = raw_decision.lower() if isinstance(raw_decision, str) else None
-    actions = []
-    for key in ("policy_action", "policyAction"):
-        if key not in value:
-            continue
-        # A present action field that is not a word this client can read -- a
-        # null, a number, a truncated object -- is unplaceable, so it is not
-        # evidence of permission and the other spelling does not stand in for
-        # it. Every present spelling is read, not just the first one: an
-        # allowing action beside an alias naming a tier this client cannot
-        # place still names no permission.
-        if not isinstance(value.get(key), str):
-            return False
-        actions.append(value[key].lower())
-    if any(item not in {{"allow", "warn"}} for item in actions):
-        return False
-    action = actions[0] if actions else None
-    permission = None
-    nested_behavior = None
-    specific = value.get("hookSpecificOutput")
-    if isinstance(specific, dict):
-        raw_permission = specific.get("permissionDecision")
-        if isinstance(raw_permission, str):
-            permission = raw_permission.lower()
-        nested = specific.get("decision")
-        if isinstance(nested, dict) and isinstance(nested.get("behavior"), str):
-            nested_behavior = nested["behavior"].lower()
-    if decision is not None and decision != "allow":
-        return False
-    if permission is not None and permission != "allow":
-        return False
-    if nested_behavior is not None and nested_behavior != "allow":
-        return False
-    return (
-        decision == "allow"
-        or action in {{"allow", "warn"}}
-        or permission == "allow"
-        or nested_behavior == "allow"
-    )
-
-
-def command_payloads(value):
-    if EVENT != "PreToolUse":
-        return [value]
-    current = value.get("tool_call")
-    legacy = value.get("preToolUse")
-    name = current.get("name") if isinstance(current, dict) else None
-    if name is None and isinstance(legacy, dict):
-        name = legacy.get("toolName")
-    if name != "run_commands":
-        return [value]
-    raw = current.get("input") if isinstance(current, dict) else None
-    if raw is None and isinstance(legacy, dict):
-        raw = legacy.get("parameters")
-    commands = raw
-    if isinstance(raw, dict):
-        commands = raw.get("commands", raw.get("command", raw.get("cmd")))
-    if isinstance(commands, str):
-        try:
-            commands = json.loads(commands)
-        except json.JSONDecodeError:
-            commands = [commands]
-    if isinstance(commands, str):
-        commands = [commands]
-    if not isinstance(commands, list):
-        return [value]
-    command_id = ""
-    if isinstance(current, dict):
-        command_id = current.get("id", "")
-    out = []
-    for item in commands:
-        if isinstance(item, dict):
-            item = item.get("command", item.get("cmd"))
-        if not isinstance(item, str) or not item.strip():
-            continue
-        entry = {{
-            "hookName": "PreToolUse",
-            "hook_event_name": "PreToolUse",
-            "tool_call": {{
-                "id": command_id,
-                "name": "run_command",
-                "input": {{"command": item}},
-            }},
-        }}
-        cwd = value.get("cwd")
-        if isinstance(cwd, str) and cwd.strip():
-            entry["cwd"] = cwd.strip()
-        out.append(entry)
-    return out or [value]
-
-
-def proof(outcome):
-    if os.environ.get("HOL_GUARD_CLINE_CANARY") == "1":
-        return
-    try:
-        PROOF.parent.mkdir(parents=True, exist_ok=True)
-        temp = PROOF.with_name(PROOF.name + ".tmp")
-        payload = {{
-            "schema_version": 1,
-            "event": EVENT,
-            "source": "cline",
-            "outcome": outcome,
-            "timestamp": time.time(),
-        }}
-        temp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-        os.replace(temp, PROOF)
-    except OSError:
-        pass
-
-
-def main():
-    raw = sys.stdin.buffer.read(MAX_BYTES + 1)
-    if len(raw) > MAX_BYTES:
-        fail("HOL Guard rejected an oversized Cline hook request.")
-        return 0
-    try:
-        value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        fail("HOL Guard could not parse the Cline hook request safely.")
-        return 0
-    if not isinstance(value, dict) or not depth_ok(value):
-        fail("HOL Guard rejected an invalid Cline hook request.")
-        return 0
-    if not pretool_size_ok(value):
-        fail("HOL Guard rejected an oversized Cline pre-tool request.")
-        return 0
-    transport = active_transport()
-    if transport != "hooks":
-        if transport is None:
-            fail("HOL Guard Cline transport state is unavailable; this action was not allowed to proceed safely.")
-        else:
-            emit({{"cancel": False, "errorMessage": "", "contextModification": ""}})
-        return 0
-    denied = False
-    why = ""
-    for item in command_payloads(value):
-        try:
-            result = subprocess.run(
-                GUARD,
-                input=json.dumps(item),
-                capture_output=True,
-                text=True,
-                timeout=TIMEOUT,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError):
-            fail("HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.")
-            return 0
-        decision = parse_output(result.stdout)
-        if decision is None:
-            fail("HOL Guard returned an invalid decision; this Cline action was not allowed to proceed.")
-            return 0
-        if blocked(decision):
-            denied = True
-            why = reason(decision)
-            break
-        if not explicitly_allows(decision):
-            denied = True
-            why = "HOL Guard returned an ambiguous decision; this action was withheld."
-            break
-    if BLOCKING:
-        outcome = "blocked" if denied else "allowed"
-    else:
-        outcome = "observed"
-    proof(outcome)
-    if BLOCKING:
-        emit({{
-            "cancel": denied,
-            "errorMessage": why if denied else "",
-            "contextModification": why if denied else "",
-        }})
-    else:
-        emit({{"cancel": False, "contextModification": why if denied else ""}})
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-"""
-
-
-def _posix_wrapper(*, worker: Path, python: str) -> str:
+def _posix_wrapper(*, worker: Path, runtime: str) -> str:
     return "\n".join(
         (
             "#!/bin/sh",
             f"# {_MARKER}",
-            f"exec {shlex.quote(python)} -I -s {shlex.quote(worker.as_posix())}",
+            f"exec {shlex.quote(runtime)} cline-hook-worker {shlex.quote(worker.as_posix())}",
             "",
         )
     )
@@ -432,7 +115,7 @@ def _ps_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _powershell_wrapper(*, worker: Path, python: str, blocking: bool) -> str:
+def _powershell_wrapper(*, worker: Path, runtime: str, blocking: bool) -> str:
     message = (
         "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed."
         if blocking
@@ -447,12 +130,12 @@ def _powershell_wrapper(*, worker: Path, python: str, blocking: bool) -> str:
     return "\n".join(
         (
             f"# {_MARKER}",
-            f"$Python = {_ps_quote(python)}",
+            f"$Runtime = {_ps_quote(runtime)}",
             f"$Worker = {_ps_quote(str(worker))}",
-            '$Args = @("-I", "-s", $Worker)',
+            '$Args = @("cline-hook-worker", $Worker)',
             "$Raw = [Console]::In.ReadToEnd()",
             "try {",
-            "  $Lines = $Raw | & $Python @Args 2>$null",
+            "  $Lines = $Raw | & $Runtime @Args 2>$null",
             "  $Code = $LASTEXITCODE",
             "  $Text = ($Lines -join [Environment]::NewLine)",
             "  if ($Code -ne 0 -or [string]::IsNullOrWhiteSpace($Text)) {",
@@ -499,6 +182,9 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
     attested = resolve_attested_guard_cli(context)
     if attested.python is None:
         raise RuntimeError("Cline native hooks require a standalone Python Guard runtime.")
+    runtime = native_hook_bridge_executable(NATIVE_CLINE_HOOK_WORKER_FEATURE, guard_home=context.guard_home)
+    if runtime is None:
+        raise RuntimeError("Cline native hooks require the HOL Guard native runtime.")
     interpreter = str(attested.python.executable)
     guard = list(_bounded_hook_argv(context, interpreter))
     root = cline_hook_roots(context)[0]
@@ -511,13 +197,16 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
         worker = _worker_path(context, event)
         ensure_safe_cline_destination(context, slot)
         ensure_safe_cline_destination(context, worker)
-        worker_source = _hook_source(context, event_name=event, guard_cli=guard)
+        worker_source = _worker_config(context, event_name=event, guard_cli=guard)
         _write(worker, worker_source)
+        legacy_worker = worker.with_suffix(".py")
+        if _managed(legacy_worker):
+            legacy_worker.unlink()
         if os.name == "nt":
-            launcher = _powershell_wrapper(worker=worker, python=interpreter, blocking=event == "PreToolUse")
+            launcher = _powershell_wrapper(worker=worker, runtime=str(runtime), blocking=event == "PreToolUse")
             _write(slot, launcher)
         else:
-            launcher = _posix_wrapper(worker=worker, python=interpreter)
+            launcher = _posix_wrapper(worker=worker, runtime=str(runtime))
             _write(slot, launcher, executable=True)
         paths[event] = str(slot)
         digests[event] = sha256(launcher.encode()).hexdigest()
@@ -542,6 +231,7 @@ def install_cline_hooks(context: HarnessContext) -> dict[str, object]:
         "transport": "hooks",
         "managed_hooks_root": str(root),
         "managed_hook_paths": paths,
+        "managed_hook_workers": workers,
         "managed_hook_sha256": digests,
         "guard_cli_identity": attested.manifest_payload(),
         "synthetic_canary": canary,
