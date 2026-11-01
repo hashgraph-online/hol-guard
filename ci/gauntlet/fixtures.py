@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from .branch_return_fixtures import branch_return_checks
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .edge_clone_fixtures import write_edge_clone
@@ -417,6 +418,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     checks.update(script_case_checks(fixture.home, fixture.workspace, fixture.canary, scenario_id))
     checks.update(runtime_case_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
+    checks.update(branch_return_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))
     checks.update(git_allow_checks(fixture.workspace, scenario_id))
     checks.update(session_folder_checks(fixture.home, scenario_id))
