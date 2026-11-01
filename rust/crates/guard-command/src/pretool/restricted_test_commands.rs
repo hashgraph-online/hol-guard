@@ -8,7 +8,9 @@
 #[path = "restricted_test_commands_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{contained_runner_call, jest_contained_call, npm_exec_inert_option};
+use crate::contained_argv::{
+    contained_runner_call, jest_contained_call, mocha_contained_call, npm_exec_inert_option,
+};
 use crate::contained_node_tool::{
     entry_tool, local_package_entry, supported_tool, writes_or_chains, ToolMode,
 };
@@ -689,9 +691,11 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         }
         "vitest" => crate::contained_argv::vitest_runs_once(arguments),
         "jest" => jest_contained_call(arguments),
+        "mocha" => mocha_contained_call(arguments),
         "node" | "nodejs" => {
             matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
                 || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
+                || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
         }
         _ => false,
     };
