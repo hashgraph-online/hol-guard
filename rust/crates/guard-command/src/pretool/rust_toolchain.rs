@@ -129,7 +129,7 @@ pub(super) fn proxy_selects_official_toolchain(context: super::PathContext<'_>) 
     let Some(home) = context.home_dir.map(Path::new) else {
         return false;
     };
-    if !home.is_absolute() || rustup_settings(home) == RustupSettings::Unproven {
+    if !home.is_absolute() || matches!(rustup_settings(home), RustupSettings::Unproven) {
         return false;
     }
     let Some(cwd) = context.cwd.map(Path::new) else {
@@ -158,15 +158,18 @@ pub(super) fn rustfmt_proxy_is_official(context: super::PathContext<'_>) -> bool
 }
 
 /// What rustup's persistent settings select, as far as reading them can tell.
-#[derive(PartialEq)]
 enum RustupSettings {
     /// There is no rustup home, or the home carries no settings file. Nothing
     /// stored selects a toolchain, so the proxy runs whichever toolchain the
     /// rest of this proof accounts for.
     Absent,
-    /// A settings file whose default is an official channel and which carries
-    /// no directory override.
-    Official,
+    /// A settings file that carries no directory override and whose default,
+    /// where it names one, is an official channel. `default_named` says
+    /// whether a default was there at all, because a file that names none
+    /// selects no toolchain: rustup stops with its own error instead of
+    /// running one, which answers a query but is not the positive proof a
+    /// command that writes files asks for.
+    Official { default_named: bool },
     /// Anything else: a custom default, a directory override, or a file this
     /// proof could not read or parse.
     Unproven,
@@ -199,7 +202,8 @@ fn rustup_settings(home: &Path) -> RustupSettings {
     };
     // A settings file with no default names no toolchain either: rustup stops
     // with its own error rather than running one.
-    let default_is_official = match settings.get("default_toolchain") {
+    let default = settings.get("default_toolchain");
+    let default_is_official = match default {
         None => true,
         Some(value) => value.as_str().is_some_and(official_channel),
     };
@@ -211,7 +215,9 @@ fn rustup_settings(home: &Path) -> RustupSettings {
         _ => false,
     };
     if default_is_official && no_directory_overrides {
-        RustupSettings::Official
+        RustupSettings::Official {
+            default_named: default.is_some(),
+        }
     } else {
         RustupSettings::Unproven
     }
@@ -226,7 +232,12 @@ fn rustup_settings_only_official(home: &Path) -> bool {
     home.is_absolute()
         && fs::symlink_metadata(home.join(".rustup").join("settings.toml"))
             .is_ok_and(|metadata| metadata.is_file())
-        && rustup_settings(home) == RustupSettings::Official
+        && matches!(
+            rustup_settings(home),
+            RustupSettings::Official {
+                default_named: true
+            }
+        )
 }
 
 /// Whether the registry a query contacts is still crates.io, and whether
@@ -633,8 +644,22 @@ mod tests {
         assert!(!rustup_settings_only_official(Path::new(&root)));
         std::fs::write(&settings, "default_toolchain = \"stable\"\n").unwrap();
         assert!(rustup_settings_only_official(Path::new(&root)));
+
+        // A settings file that names no default selects no toolchain at all.
+        // A query reads that as nothing stored, because rustup stops with its
+        // own error rather than running something unproven. The formatter
+        // writes files, so it asks for the positive answer instead.
+        std::fs::write(&settings, "version = \"12\"\n").unwrap();
+        assert!(matches!(
+            rustup_settings(Path::new(&root)),
+            RustupSettings::Official {
+                default_named: false
+            }
+        ));
+        assert!(!rustup_settings_only_official(Path::new(&root)));
         std::fs::remove_dir_all(root).unwrap();
     }
+
     #[test]
     fn a_stored_rustup_default_decides_whether_the_search_is_read() {
         let root = std::env::temp_dir().join(format!(
