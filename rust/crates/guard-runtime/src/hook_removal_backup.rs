@@ -45,13 +45,19 @@ pub(super) fn backup(request: &Request) -> Result<Value, String> {
     {
         return Err(invalid());
     }
+    // Every path is checked before the first copy, so a refused request
+    // leaves nothing behind.
+    let candidates = request
+        .candidates
+        .iter()
+        .map(|text| Ok((text.as_str(), absolute(text)?)))
+        .collect::<Result<Vec<_>, String>>()?;
     let mut seen: BTreeSet<&str> = request.skip.iter().map(String::as_str).collect();
     let mut entries: Vec<BackupEntry> = Vec::new();
-    for text in &request.candidates {
-        let path = absolute(text)?;
+    for (text, path) in candidates {
         // A file named twice, or already copied for an earlier harness,
         // keeps its first (pre-edit) copy.
-        if !seen.insert(text.as_str()) {
+        if !seen.insert(text) {
             continue;
         }
         match copy_one(&directory, harness, text, &path) {
@@ -80,7 +86,9 @@ pub(super) fn finalize(request: &Request) -> Result<Value, String> {
     {
         return Err(invalid());
     }
-    let mut kept: Vec<BackupEntry> = Vec::new();
+    // Every entry is checked before the first removal, so a refused request
+    // never costs a copy.
+    let mut checked: Vec<(&BackupEntry, PathBuf, PathBuf)> = Vec::new();
     for entry in &request.entries {
         let original = absolute(&entry.original_path)?;
         let copy = absolute(&entry.backup_path)?;
@@ -89,6 +97,10 @@ pub(super) fn finalize(request: &Request) -> Result<Value, String> {
         if copy.parent() != Some(directory.as_path()) || entry.sha256.is_none() {
             return Err(invalid());
         }
+        checked.push((entry, original, copy));
+    }
+    let mut kept: Vec<BackupEntry> = Vec::new();
+    for (entry, original, copy) in checked {
         if current_digest(&original).as_deref() == entry.sha256.as_deref() {
             let _ = fs::remove_file(&copy);
             continue;

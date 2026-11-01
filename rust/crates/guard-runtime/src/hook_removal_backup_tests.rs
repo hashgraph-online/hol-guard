@@ -250,6 +250,47 @@ fn finalize_never_removes_a_file_outside_the_backup_directory() {
 }
 
 #[test]
+fn a_refused_backup_request_copies_nothing() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let settings = root.path().join("settings.json");
+    fs::write(&settings, b"{}").expect("write settings");
+    let directory = root.path().join("backups");
+    let mut request = backup_request(&directory, "codex", &[&settings], &[]);
+    request["candidates"]
+        .as_array_mut()
+        .expect("candidates")
+        .push(json!("relative.json"));
+
+    assert_eq!(
+        run(request),
+        Err("hook_removal_sweep_request_invalid".to_owned())
+    );
+    assert!(!directory.exists());
+}
+
+#[test]
+fn a_refused_finalize_request_removes_no_copy() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let original = root.path().join("settings.json");
+    fs::write(&original, b"same").expect("original");
+    let directory = root.path().join("backups");
+    fs::create_dir(&directory).expect("backups");
+    let copy = directory.join("codex-1-settings.json");
+    fs::write(&copy, b"same").expect("copy");
+    let digest = hex::encode(Sha256::digest(b"same"));
+    let entries = json!([
+        { "harness": "codex", "original_path": original, "backup_path": copy, "sha256": digest },
+        { "harness": "codex", "original_path": original, "backup_path": original, "sha256": digest },
+    ]);
+
+    assert_eq!(
+        run(finalize_request(&directory, &entries)),
+        Err("hook_removal_sweep_request_invalid".to_owned())
+    );
+    assert!(copy.exists());
+}
+
+#[test]
 fn malformed_backup_requests_are_refused() {
     let root = tempfile::tempdir().expect("tempdir");
     let directory = root.path().join("backups");

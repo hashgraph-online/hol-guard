@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import hook_removal_sweep
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import lifecycle_gate_requirement
@@ -13,7 +14,7 @@ from codex_plugin_scanner.guard.codex_config import dump_toml, tomllib
 from codex_plugin_scanner.guard.harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from codex_plugin_scanner.guard.hook_removal import remove_all_guard_hooks
 from codex_plugin_scanner.guard.hook_removal_presence import CONFIRMATION_PHRASE, require_typed_presence
-from codex_plugin_scanner.guard.hook_removal_sweep import sweep_config_file
+from codex_plugin_scanner.guard.hook_removal_sweep import finalize_backups, sweep_config_file
 from codex_plugin_scanner.guard.store import GuardStore
 
 GUARD_COMMAND = "hol-guard hook --harness claude-code --event PreToolUse"
@@ -280,3 +281,32 @@ def test_cli_hooks_remove_with_typed_phrase_on_tty(
     assert payload["status"] == "removed"
     assert GUARD_COMMAND not in settings.read_text()
     assert USER_COMMAND in settings.read_text()
+
+
+def test_finalize_without_an_answer_reports_only_copies_still_on_disk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The runtime can remove unchanged copies and then lose its answer; the
+    # report must not name a copy that is gone.
+    monkeypatch.setattr(hook_removal_sweep, "runtime_answer", lambda *args, **kwargs: None)
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    kept = backup_dir / "codex-1-config.toml"
+    kept.write_text("x")
+    entries = [
+        {"harness": "codex", "original_path": str(tmp_path / "config.toml"), "backup_path": str(kept), "sha256": "a"},
+        {
+            "harness": "claude-code",
+            "original_path": str(tmp_path / "settings.json"),
+            "backup_path": str(backup_dir / "claude-code-2-settings.json"),
+            "sha256": "b",
+        },
+    ]
+
+    directory, files = finalize_backups(backup_dir, entries, stamp="20261101T000000Z")
+
+    assert directory == backup_dir
+    assert [item["backup_path"] for item in files] == [str(kept)]
+    assert "sha256" not in files[0]
+    kept.unlink()
+    assert finalize_backups(backup_dir, entries, stamp="20261101T000000Z") == (None, [])

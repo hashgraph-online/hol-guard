@@ -14,6 +14,7 @@ re-parsed file equals the pruned payload.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -210,8 +211,10 @@ def finalize_backups(
 ) -> tuple[Path | None, list[dict[str, str]]]:
     """Keep copies of files that changed, drop the rest, and write the manifest.
 
-    Without a runtime answer every copy is kept, since nothing proved a file
-    unchanged.
+    Without a runtime answer every copy that still exists is kept, since
+    nothing proved its file unchanged. The runtime may have removed some
+    copies before the answer was lost, so the report lists only the copies
+    still on disk.
     """
 
     request = {"op": "finalize-backups", "backup_dir": str(backup_dir), "stamp": stamp, "entries": entries}
@@ -219,7 +222,7 @@ def finalize_backups(
         answer = _runtime(request, feature=_BACKUP_FEATURE)
         kept = _entries(answer.get("files"), _BACKUP_KEYS)
     except SweepUnavailableError:
-        kept = [{key: entry[key] for key in _BACKUP_KEYS} for entry in entries]
+        kept = [{key: entry[key] for key in _BACKUP_KEYS} for entry in entries if os.path.lexists(entry["backup_path"])]
         return (backup_dir if kept else None), kept
     directory = answer.get("backup_dir")
     return (Path(directory) if isinstance(directory, str) else None), kept
