@@ -12,6 +12,9 @@
 //!   private temporary beside the file and replaces the file with it, so a
 //!   reader sees the old content or the new, never a partial one.
 //! - `delete` removes one owner-private file through its verified handle.
+//! - `ensure` creates `directory` and any missing ancestors, and creates or
+//!   repairs the private ACL on each directory from `private_root` down. A
+//!   missing ancestor above `private_root` is created private too.
 //!
 //! An operational failure answers `{"error": "<code>"}`; a malformed request
 //! is an error exit. Off Windows every operation answers
@@ -36,7 +39,8 @@ struct Request {
     schema: String,
     op: String,
     directory: String,
-    name: String,
+    #[serde(default)]
+    name: Option<String>,
     #[serde(default)]
     private_root: Option<String>,
     #[serde(default)]
@@ -62,6 +66,7 @@ trait PrivateStore {
         private_root: &str,
     ) -> Result<(), String>;
     fn delete(&self, directory: &str, name: &str, private_root: &str) -> Result<bool, String>;
+    fn ensure(&self, directory: &str, private_root: &str) -> Result<(), String>;
 }
 
 struct SystemStore;
@@ -77,6 +82,10 @@ impl PrivateStore for SystemStore {
     }
 
     fn delete(&self, _: &str, _: &str, _: &str) -> Result<bool, String> {
+        Err(unsupported())
+    }
+
+    fn ensure(&self, _: &str, _: &str) -> Result<(), String> {
         Err(unsupported())
     }
 }
@@ -111,6 +120,10 @@ impl PrivateStore for SystemStore {
     fn delete(&self, directory: &str, name: &str, private_root: &str) -> Result<bool, String> {
         system::delete(directory, name, private_root)
     }
+
+    fn ensure(&self, directory: &str, private_root: &str) -> Result<(), String> {
+        system::ensure(directory, private_root)
+    }
 }
 
 pub(crate) fn is_command(command: &str) -> bool {
@@ -139,7 +152,6 @@ fn invalid() -> String {
 fn answer<S: PrivateStore>(request: &Request, store: &S) -> Result<Value, String> {
     if request.schema != SCHEMA
         || !is_absolute(&request.directory)
-        || !is_child_name(&request.name)
         || request
             .private_root
             .as_deref()
@@ -148,8 +160,23 @@ fn answer<S: PrivateStore>(request: &Request, store: &S) -> Result<Value, String
         return Err(invalid());
     }
     let directory = request.directory.as_str();
-    let name = request.name.as_str();
     let private_root = request.private_root.as_deref().unwrap_or(directory);
+    if request.op == "ensure" {
+        if request.name.is_some()
+            || request.maximum_bytes.is_some()
+            || request.content_b64.is_some()
+        {
+            return Err(invalid());
+        }
+        let outcome = store
+            .ensure(directory, private_root)
+            .map(|()| json!({ "ensured": true }));
+        return Ok(outcome.unwrap_or_else(|code| json!({ "error": code })));
+    }
+    let name = match request.name.as_deref() {
+        Some(name) if is_child_name(name) => name,
+        _ => return Err(invalid()),
+    };
     let maximum_bytes = || {
         request
             .maximum_bytes
@@ -347,6 +374,21 @@ mod system {
             return Ok(false);
         }
         remove_windows_private_file(&directory.join(name), Path::new(private_root))
+    }
+
+    /// Bind the directory privately from `private_root` down, after moving
+    /// that root up over any ancestors that do not exist yet so they are
+    /// created private rather than refused as missing ancestry.
+    pub(super) fn ensure(directory: &str, private_root: &str) -> Result<(), String> {
+        let directory = Path::new(directory);
+        let mut root = Path::new(private_root);
+        while let Some(parent) = root.parent() {
+            match std::fs::symlink_metadata(parent) {
+                Err(error) if error.kind() == io::ErrorKind::NotFound => root = parent,
+                _ => break,
+            }
+        }
+        ensure_private_directory_under(directory, root, true).map(|_| ())
     }
 }
 

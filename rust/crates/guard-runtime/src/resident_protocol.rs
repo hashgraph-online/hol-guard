@@ -113,6 +113,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-installation-continuity-v1".into(),
         "native-machine-state-files-v1".into(),
         "native-windows-private-state-v1".into(),
+        "native-windows-private-directory-v1".into(),
         "native-device-key-metadata-v1".into(),
         "native-windows-process-lifecycle-v1".into(),
         "native-windows-trusted-directories-v1".into(),

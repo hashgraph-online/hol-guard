@@ -2546,7 +2546,7 @@ def _set_private_mode(path: Path, mode: int) -> None:
 
 def _set_windows_private_directory(path: Path) -> None:
     from ..native_policy_snapshot import NativePolicySnapshotError
-    from ..native_policy_snapshot_windows_state import _windows_ensure_private_directory
+    from ..native_policy_snapshot_windows_atomic import _windows_ensure_private_directory
 
     try:
         _windows_ensure_private_directory(path)

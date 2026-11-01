@@ -46,8 +46,9 @@ def _windows_path_has_reparse_component(path: Path) -> bool:
 def _runtime_state_directory(guard_home: Path) -> Path:
     api = _snapshot_api()
     if os.name == "nt":
-        with api._windows_private_state_binding(guard_home) as binding:
-            return binding.path
+        state_dir = Path(os.path.abspath(guard_home)) / NATIVE_RUNTIME_STATE_DIRECTORY
+        api._windows_ensure_private_directory(state_dir, private_root=state_dir.parent)
+        return state_dir
     api._private_guard_home(guard_home)
     state_dir = guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
     try:

@@ -1131,7 +1131,7 @@ def _windows_path_is_direct(path: str) -> bool:
 
 def _set_windows_private_directory(path: Path) -> None:
     from .native_policy_snapshot import NativePolicySnapshotError
-    from .native_policy_snapshot_windows_state import _windows_ensure_private_directory
+    from .native_policy_snapshot_windows_atomic import _windows_ensure_private_directory
 
     key = os.path.normcase(os.path.abspath(path))
     try:
