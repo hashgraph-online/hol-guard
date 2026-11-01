@@ -68,6 +68,15 @@ thread_local! {
     /// spelling and runs the shared clock out on work it has already done.
     static INCLUDE_SCOPE_ANSWERS: std::cell::RefCell<HashMap<IncludeScopeKey, bool>> =
         std::cell::RefCell::new(HashMap::new());
+    /// How many evaluations are open on this thread.
+    ///
+    /// One submission reaches the evaluation entry point many times over: the
+    /// command itself, then the envelope it is read inside once per
+    /// projection -- a git-config isolation, a virtualenv activation, an
+    /// environment prefix, each inner command of a process substitution, a
+    /// redirect rewrite. Those are not separate submissions and must not get
+    /// budgets of their own, so only the outermost starts the clock.
+    static INCLUDE_SCOPE_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// What an include walk is decided by: the directory it starts at, the globs
@@ -76,18 +85,52 @@ thread_local! {
 /// entries and reach the same answer.
 type IncludeScopeKey = (PathBuf, String, Option<String>);
 
-/// Start the shared include-walk clock for the evaluation beginning now, and
-/// drop the answers the previous one reached: a tree is read again because
-/// what is in it may have changed since.
-pub(crate) fn begin_include_scope_budget() {
-    INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(Some(Instant::now() + INCLUDE_SCOPE_BUDGET)));
-    INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
+/// Start the shared include-walk clock for the submission beginning now.
+///
+/// The returned guard ends the submission where it is dropped. A nested
+/// evaluation of the same submission takes a guard too, and that guard
+/// neither restarts the clock nor ends the submission: the outermost one
+/// does both, which is what makes the clock the submission's own.
+///
+/// The answers of the previous submission are dropped with it, because a
+/// tree is read again when the next one asks: what is in it may have changed
+/// since.
+#[must_use]
+pub(crate) fn begin_include_scope_budget() -> IncludeScopeBudget {
+    let depth = INCLUDE_SCOPE_DEPTH.with(|depth| {
+        let entered = depth.get() + 1;
+        depth.set(entered);
+        entered
+    });
+    if depth == 1 {
+        INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(Some(Instant::now() + INCLUDE_SCOPE_BUDGET)));
+        INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
+    }
+    IncludeScopeBudget
+}
+
+/// The open submission, which ends where this is dropped.
+pub(crate) struct IncludeScopeBudget;
+
+impl Drop for IncludeScopeBudget {
+    fn drop(&mut self) {
+        let left = INCLUDE_SCOPE_DEPTH.with(|depth| {
+            let left = depth.get().saturating_sub(1);
+            depth.set(left);
+            left
+        });
+        if left == 0 {
+            INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(None));
+            INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
+        }
+    }
 }
 
 /// Put the thread back where it is outside an evaluation, for a test that
 /// reads the unstarted clock on a thread an earlier test may have used.
 #[cfg(test)]
 fn clear_include_scope_budget() {
+    INCLUDE_SCOPE_DEPTH.with(|depth| depth.set(0));
     INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(None));
     INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
 }

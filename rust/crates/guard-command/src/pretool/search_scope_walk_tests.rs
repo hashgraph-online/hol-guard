@@ -15,7 +15,7 @@ use std::time::Instant;
 #[test]
 fn walks_in_one_evaluation_share_a_deadline() {
     clear_include_scope_budget();
-    begin_include_scope_budget();
+    let _budget = begin_include_scope_budget();
     let first = include_scope_deadline();
     let second = include_scope_deadline();
     assert_eq!(
@@ -45,5 +45,37 @@ fn a_walk_outside_an_evaluation_is_bounded_on_its_own() {
     assert!(
         deadline <= Instant::now() + INCLUDE_SCOPE_BUDGET,
         "a walk with no evaluation clock outlasts the budget"
+    );
+}
+
+/// A projection reads the clock the submission started, not one of its own.
+///
+/// An envelope evaluates each projection of a submission -- a git-config
+/// isolation, an environment prefix, an inner command of a process
+/// substitution -- by calling the evaluation entry point again. Restarting
+/// the clock there would hand every projection the whole budget, which is
+/// the same unbounded total that starting it per walk used to give.
+#[test]
+fn a_projection_joins_the_clock_its_submission_started() {
+    clear_include_scope_budget();
+    let submission = begin_include_scope_budget();
+    let started = include_scope_deadline();
+    {
+        let _projection = begin_include_scope_budget();
+        assert_eq!(
+            include_scope_deadline(),
+            started,
+            "a projection was handed a clock of its own"
+        );
+    }
+    assert_eq!(
+        include_scope_deadline(),
+        started,
+        "a projection's return ended the submission that was still open"
+    );
+    drop(submission);
+    assert!(
+        include_scope_deadline() > started,
+        "the next submission inherited the clock of the one before it"
     );
 }
