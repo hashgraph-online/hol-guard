@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
-use super::migration::{copy_database, migrate_state, migrate_transactionally, Failed};
+use super::migration::{
+    copy_database, migrate_before, migrate_state, migrate_transactionally, Failed,
+};
 use super::{resolve, run_command};
 
 const LEGACY: &str = ".ai-plugin-scanner-guard";
@@ -260,7 +262,7 @@ fn merging_keeps_canonical_files_and_skips_live_process_files() {
         write_text(&legacy.join(log), "log");
     }
     assert_eq!(
-        migrate_state(&legacy, &canonical, Duration::from_secs(5)),
+        migrate_state(&legacy, &canonical, Instant::now() + Duration::from_secs(5)),
         Ok(())
     );
     assert_eq!(
@@ -296,7 +298,7 @@ fn saved_extension_authority_keeps_the_canonical_database() {
          insert into extension_control_authority_snapshot values (1, '[{\"kind\":\"local\"}]');",
     );
     assert_eq!(
-        migrate_state(&legacy, &canonical, Duration::from_secs(5)),
+        migrate_state(&legacy, &canonical, Instant::now() + Duration::from_secs(5)),
         Ok(())
     );
     let database = canonical.join("guard.db");
@@ -324,7 +326,11 @@ fn a_database_that_sqlite_cannot_read_is_never_raw_copied() {
     let destination = root.path().join("canonical/guard.db");
     write_text(&source, "legacy");
     assert_eq!(
-        copy_database(&source, &destination, Duration::from_secs(5)),
+        copy_database(
+            &source,
+            &destination,
+            Instant::now() + Duration::from_secs(5)
+        ),
         Err(Failed)
     );
     assert!(!destination.exists());
@@ -341,9 +347,103 @@ fn a_backup_past_its_deadline_is_abandoned() {
         "create table payload (data blob); insert into payload values (zeroblob(1048576));",
     );
     assert_eq!(
-        copy_database(&source, &destination, Duration::ZERO),
+        copy_database(&source, &destination, Instant::now()),
         Err(Failed)
     );
     assert!(!destination.exists());
     assert!(!root.path().join("canonical/guard.db.migrating").exists());
+}
+
+#[test]
+fn a_small_backup_that_finishes_past_its_deadline_is_abandoned() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let source = root.path().join("legacy/guard.db");
+    let destination = root.path().join("canonical/guard.db");
+    probe_database(&source, "legacy");
+    assert_eq!(
+        copy_database(&source, &destination, Instant::now()),
+        Err(Failed)
+    );
+    assert!(!destination.exists());
+    assert!(!root.path().join("canonical/guard.db.migrating").exists());
+}
+
+#[test]
+fn a_move_past_its_deadline_leaves_no_staging_and_no_destination() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let source = root.path().join("source-home");
+    let destination = root.path().join(".hol-guard");
+    probe_database(&source.join("guard.db"), "source");
+    write_text(&source.join("secrets/key.bin"), "key");
+    assert_eq!(
+        migrate_before(&source, &destination, Instant::now()),
+        Err(Failed)
+    );
+    assert!(!destination.exists());
+    let left: Vec<_> = fs::read_dir(root.path())
+        .expect("list")
+        .flatten()
+        .map(|entry| entry.file_name())
+        .collect();
+    assert_eq!(left, vec![std::ffi::OsString::from("source-home")]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_linked_folder_moves_as_its_contents() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let legacy = root.path().join(LEGACY);
+    let canonical = root.path().join(".hol-guard");
+    write_text(&root.path().join("elsewhere/key.bin"), "key");
+    write_text(&legacy.join("bin/tool"), "tool");
+    std::os::unix::fs::symlink(root.path().join("elsewhere"), legacy.join("secrets"))
+        .expect("link");
+    std::os::unix::fs::symlink(root.path().join("elsewhere"), legacy.join("bin/linked"))
+        .expect("link");
+    assert_eq!(migrate_transactionally(&legacy, &canonical), Ok(()));
+    for path in ["secrets/key.bin", "bin/linked/key.bin"] {
+        assert_eq!(
+            fs::read_to_string(canonical.join(path)).expect("read"),
+            "key"
+        );
+        assert!(
+            !fs::symlink_metadata(canonical.join(path).parent().expect("parent"))
+                .expect("stat")
+                .file_type()
+                .is_symlink()
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_linked_folder_cycle_fails_the_move() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let legacy = root.path().join(LEGACY);
+    let canonical = root.path().join(".hol-guard");
+    write_text(&legacy.join("bin/tool"), "tool");
+    std::os::unix::fs::symlink(legacy.join("bin"), legacy.join("bin/loop")).expect("link");
+    assert_eq!(migrate_transactionally(&legacy, &canonical), Err(Failed));
+    assert!(!canonical.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_move_removes_only_staging_a_killed_move_abandoned() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let source = root.path().join("source-home");
+    let destination = root.path().join(".hol-guard");
+    probe_database(&source.join("guard.db"), "source");
+    let abandoned = root.path().join(".hol-guard-migration-old");
+    let recent = root.path().join(".hol-guard-migration-new");
+    write_text(&abandoned.join(".hol-guard/secrets/key.bin"), "key");
+    write_text(&recent.join(".hol-guard/secrets/key.bin"), "key");
+    let long_ago = SystemTime::now() - Duration::from_secs(60 * 60);
+    fs::File::open(&abandoned)
+        .expect("open")
+        .set_modified(long_ago)
+        .expect("age");
+    assert_eq!(migrate_transactionally(&source, &destination), Ok(()));
+    assert!(!abandoned.exists());
+    assert!(recent.exists());
 }

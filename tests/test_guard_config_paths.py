@@ -383,6 +383,19 @@ def test_resolve_guard_home_uses_the_home_the_runtime_answers(tmp_path, monkeypa
     assert requests == [{"schema": "guard-home-resolve.v1", "user_home": str(home_dir.absolute())}]
 
 
+def test_resolve_guard_home_asks_the_runtime_once_after_it_picks_the_canonical_home(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    canonical_home = home_dir / ".hol-guard"
+    (home_dir / ".ai-plugin-scanner-guard").mkdir(parents=True)
+    canonical_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    requests = _answer_guard_home(monkeypatch, {"guard_home": str(canonical_home)})
+
+    assert resolve_guard_home() == canonical_home
+    assert resolve_guard_home() == canonical_home
+    assert len(requests) == 1
+
+
 def test_resolve_guard_home_without_the_runtime_keeps_the_legacy_home_until_canonical_exists(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     legacy_home = home_dir / ".ai-plugin-scanner-guard"

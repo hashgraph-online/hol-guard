@@ -81,6 +81,10 @@ LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner
 # One legacy home's move can back up a large guard.db; the runtime caps
 # each database copy at five seconds.
 _GUARD_HOME_RESOLVE_TIMEOUT_SECONDS = 30.0
+# The canonical home keeps winning once the runtime picks it, and a moved
+# legacy folder stays behind, so each process asks the runtime once.
+_RESOLVED_CANONICAL_HOMES: set[Path] = set()
+_RESOLVED_CANONICAL_HOMES_LOCK = threading.Lock()
 
 DEFAULT_SECURITY_LEVEL = "balanced"
 VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
@@ -213,6 +217,9 @@ def resolve_guard_home_for_user_home(user_home: Path) -> Path:
     legacy_home = _existing_legacy_guard_home(user_home)
     if legacy_home is None:
         return canonical_home
+    with _RESOLVED_CANONICAL_HOMES_LOCK:
+        if canonical_home in _RESOLVED_CANONICAL_HOMES and canonical_home.is_dir():
+            return canonical_home
     # `guard_home_resolve.rs` picks between the homes and moves a legacy home
     # with state into the canonical one.
     from .mdm.runtime_request import runtime_answer
@@ -226,7 +233,11 @@ def resolve_guard_home_for_user_home(user_home: Path) -> Path:
     )
     guard_home = None if answer is None else answer.get("guard_home")
     if isinstance(guard_home, str) and guard_home:
-        return Path(guard_home)
+        resolved = Path(guard_home)
+        if resolved == canonical_home:
+            with _RESOLVED_CANONICAL_HOMES_LOCK:
+                _RESOLVED_CANONICAL_HOMES.add(canonical_home)
+        return resolved
     # An older runtime: use the canonical home once it exists, the legacy one until then.
     return canonical_home if canonical_home.exists() else legacy_home
 
