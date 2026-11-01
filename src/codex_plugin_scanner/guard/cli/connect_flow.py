@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import http.server
 import json
 import secrets
@@ -15,17 +14,15 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import NoReturn, TypedDict
-from uuid import uuid4
 
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from typing_extensions import Unpack
 
 from ...version import __version__
 from ..browser_opener import open_browser_url
+from ..dpop_key_binding import signed_dpop_proof
 from ..mdm.network import managed_urlopen
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
+from ..native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
 from ..oauth_token_claims import oauth_device_id
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
@@ -34,7 +31,7 @@ from ..package_firewall_entitlement import (
     reconcile_connect_state_with_oauth_entitlement,
 )
 from ..portable_command import portable_command_payload
-from ..runtime.runner import _dpop_access_token_confirmation_claim, prepare_guard_cloud_connect_authorization
+from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
 from .commands_parser_constants import DEFAULT_GUARD_CONNECT_URL
@@ -172,10 +169,6 @@ class GuardOAuthBrowserSession:
         self._thread.join(timeout=2)
 
 
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
-
-
 def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
     current: object = payload
     for segment in path:
@@ -200,10 +193,6 @@ def _guard_access_token_expires_at(
     return (now + timedelta(seconds=expires_in)).isoformat()
 
 
-def _encode_jwt_segment(payload: dict[str, object]) -> str:
-    return _base64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
-
-
 def _int_payload_value(payload: dict[str, object], key: str, default: int) -> int:
     value = payload.get(key)
     if isinstance(value, bool):
@@ -226,36 +215,23 @@ def _sign_dpop_proof(
     nonce: str | None = None,
     access_token: str | None = None,
 ) -> str:
-    issued_at = int(now.timestamp())
-    header: dict[str, object] = {
-        "alg": dpop_key_material.algorithm,
-        "jwk": dpop_key_material.public_jwk,
-        "typ": "dpop+jwt",
-    }
-    claims: dict[str, object] = {
-        "htu": token_endpoint,
-        "htm": "POST",
-        "iat": issued_at,
-        "jti": str(uuid4()),
-    }
-    if access_token is not None:
-        # A proof sent alongside an access token binds to it through `ath` (RFC 9449 section 4.2).
-        claims["ath"] = _dpop_access_token_confirmation_claim(access_token)
-    if isinstance(nonce, str):
-        normalized_nonce = nonce.strip()
-        if normalized_nonce:
-            claims["nonce"] = normalized_nonce
-    signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
-    private_key = serialization.load_pem_private_key(
-        dpop_key_material.private_key_pem.encode("ascii"),
-        password=None,
-    )
-    if not isinstance(private_key, ec.EllipticCurvePrivateKey):
-        raise RuntimeError("Guard DPoP key must be an EC private key.")
-    der_signature = private_key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
-    r_value, s_value = decode_dss_signature(der_signature)
-    jose_signature = _base64url_encode(r_value.to_bytes(32, byteorder="big") + s_value.to_bytes(32, byteorder="big"))
-    return f"{signing_input.decode('ascii')}.{jose_signature}"
+    # The native errors subclass ValueError, which connect reports as bad input;
+    # a signing failure is operational, so it leaves here as a RuntimeError.
+    try:
+        return signed_dpop_proof(
+            private_key_pem=dpop_key_material.private_key_pem,
+            algorithm=dpop_key_material.algorithm,
+            public_jwk=dpop_key_material.public_jwk,
+            request_url=token_endpoint,
+            method="POST",
+            issued_at=int(now.timestamp()),
+            access_token=access_token,
+            nonce=nonce,
+        )
+    except PolicyBundleNativeUnavailableError as exc:
+        raise RuntimeError("Guard could not sign the Guard Cloud request. Try again shortly.") from exc
+    except PolicyBundleNativeError as exc:
+        raise RuntimeError("Guard Cloud authorization key is invalid. Reconnect Guard Cloud.") from exc
 
 
 def _oauth_response_header_value(response: object, header_name: str) -> str | None:

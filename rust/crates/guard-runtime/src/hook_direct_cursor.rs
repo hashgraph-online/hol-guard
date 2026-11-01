@@ -25,7 +25,7 @@
 //! the call as usual.
 
 use super::{reviewed_edge, HookDirectDefer, CURSOR, PRE_TOOL_USE};
-use crate::hook_decision_containment_rewrite::{containment_rewrite_with, Native};
+use crate::hook_decision_containment_rewrite::containment_rewrite_with;
 use crate::hook_decision_containment_route::{edge_route, host_platform};
 use admission::admitted;
 use guard_command::hook_responses::pre_tool;
@@ -374,13 +374,9 @@ fn routed(parsed: &Value, payload: &Map<String, Value>, scope: &Scope) -> Option
         home: scope.home_dir.clone(),
         sink_command: scope.sink_command.clone(),
     };
-    let native = receipt
-        .get("reason")
-        .filter(|_| scope.native)
-        .map(|reason| Native {
-            reason,
-            sink: native_sink,
-        });
+    let native = scope
+        .native
+        .then_some(native_sink as super::contained::NativeSink);
     let response = containment_rewrite_with(&inputs, native).ok()?.response?;
     let text = |name: &str| response.get(name).and_then(Value::as_str);
     (text("policy_action") == Some("allow") && text("reason_code") == Some(ROUTED_REASON))

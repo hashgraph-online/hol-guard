@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands, update_desktop_core
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
@@ -20,6 +21,11 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_installed_desktop_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: None)
 
 
 def _alpha_manifest(*, sha256: str, size: int, minimum: str = "0.1.0") -> dict[str, object]:
@@ -764,3 +770,212 @@ def test_dashboard_runner_and_daemon_env_preserve_desktop_version(
     assert runner_env["HOL_GUARD_DESKTOP_VERSION"] == "0.2.0"
     assert "HOL_GUARD_DESKTOP_VERSION" in dashboard_update_module._DASHBOARD_UPDATE_RUNNER_ENV_KEYS
     assert "HOL_GUARD_DESKTOP_VERSION" in daemon_manager._GUARD_DAEMON_ENV_KEYS
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleeps = 0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps += 1
+        self.now += seconds
+
+
+def _patch_daemon_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    retirement_completes_after: int | None,
+    desktop_respawn_after: int | None,
+) -> tuple[_FakeClock, list[Path]]:
+    from codex_plugin_scanner.guard.cli import update_desktop_apply
+
+    clock = _FakeClock()
+    launched: list[Path] = []
+    monkeypatch.setattr(update_desktop_apply, "time", clock)
+    monkeypatch.setattr(daemon_manager, "retire_all_guard_daemons_for_home", lambda _home: [])
+    monkeypatch.setattr(
+        daemon_manager,
+        "guard_daemon_retirement_is_complete",
+        lambda _home: retirement_completes_after is not None and clock.sleeps >= retirement_completes_after,
+    )
+
+    def ensure_after_update(guard_home: Path, *, home_dir: Path, executable: Path) -> str:
+        launched.append(executable)
+        return "http://127.0.0.1:4781"
+
+    monkeypatch.setattr(daemon_manager, "ensure_guard_daemon_after_update", ensure_after_update)
+
+    def retained(_home: Path, *, minimum_version: str | None = None) -> dict[str, object] | None:
+        if desktop_respawn_after is None or clock.sleeps < desktop_respawn_after:
+            return None
+        return {
+            "status": "retained_desktop_owner",
+            "daemon_url": "http://127.0.0.1:4781",
+            "daemon_version": minimum_version,
+            "runtime_verified": True,
+        }
+
+    monkeypatch.setattr(update_desktop_apply, "retained_desktop_owner_payload", retained)
+    return clock, launched
+
+
+def _refresh_context(tmp_path: Path) -> HarnessContext:
+    return HarnessContext(home_dir=tmp_path / "home", workspace_dir=tmp_path / "work", guard_home=tmp_path / "guard")
+
+
+def test_daemon_refresh_keeps_a_desktop_respawn_that_answers_after_retirement(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    _clock, launched = _patch_daemon_refresh(monkeypatch, retirement_completes_after=None, desktop_respawn_after=20)
+
+    refreshed, note = refresh_desktop_core_daemon(
+        _refresh_context(tmp_path), executable=tmp_path / "core", minimum_version="3.59.0a22"
+    )
+
+    assert refreshed is not None
+    assert refreshed["status"] == "retained_desktop_owner"
+    assert refreshed["daemon_version"] == "3.59.0a22"
+    assert note is not None and "Kept the Guard Desktop daemon" in note
+    assert launched == []
+
+
+def test_daemon_refresh_launches_the_core_when_retirement_completes_while_waiting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    _clock, launched = _patch_daemon_refresh(monkeypatch, retirement_completes_after=4, desktop_respawn_after=None)
+
+    refreshed, note = refresh_desktop_core_daemon(
+        _refresh_context(tmp_path), executable=tmp_path / "core", minimum_version="3.59.0a22"
+    )
+
+    assert refreshed == {"status": "restarted", "url": "http://127.0.0.1:4781", "runtime_verified": True}
+    assert note is None
+    assert launched == [tmp_path / "core"]
+
+
+def test_daemon_refresh_fails_only_after_waiting_for_a_respawn_that_never_comes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    clock, launched = _patch_daemon_refresh(monkeypatch, retirement_completes_after=None, desktop_respawn_after=None)
+
+    refreshed, note = refresh_desktop_core_daemon(
+        _refresh_context(tmp_path), executable=tmp_path / "core", minimum_version="3.59.0a22"
+    )
+
+    assert refreshed is None
+    assert note == "Could not stop the running Guard daemon before launching the updated Core."
+    assert clock.now >= 60.0
+    assert launched == []
+
+
+def _patch_slow_core_start(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    answers_after: int | None,
+    package_version: str = "3.59.0a24",
+) -> _FakeClock:
+    from codex_plugin_scanner.guard.cli import update_desktop_core_start
+    from codex_plugin_scanner.guard.daemon.start_classification import GuardDaemonStillStartingError
+
+    clock, _launched = _patch_daemon_refresh(monkeypatch, retirement_completes_after=0, desktop_respawn_after=None)
+
+    def still_starting(guard_home: Path, *, home_dir: Path, executable: Path) -> str:
+        raise GuardDaemonStillStartingError("Guard daemon is still starting; retry shortly.")
+
+    monkeypatch.setattr(daemon_manager, "ensure_guard_daemon_after_update", still_starting)
+    monkeypatch.setattr(update_desktop_core_start, "time", clock)
+
+    def live_identity(_home: Path) -> dict[str, object] | None:
+        if answers_after is None or clock.sleeps < answers_after:
+            return None
+        return {"daemon_url": "http://127.0.0.1:5474", "package_version": package_version}
+
+    monkeypatch.setattr(update_desktop_core_start, "verified_live_guard_daemon_identity", live_identity)
+    return clock
+
+
+def test_daemon_refresh_waits_for_a_core_that_is_still_starting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    _patch_slow_core_start(monkeypatch, answers_after=10)
+
+    refreshed, note = refresh_desktop_core_daemon(
+        _refresh_context(tmp_path), executable=tmp_path / "core", minimum_version="3.59.0a24"
+    )
+
+    assert refreshed == {"status": "restarted", "url": "http://127.0.0.1:5474", "runtime_verified": True}
+    assert note is None
+
+
+def test_daemon_refresh_ignores_an_older_daemon_while_the_core_is_still_starting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    clock = _patch_slow_core_start(monkeypatch, answers_after=0, package_version="3.59.0a22")
+
+    refreshed, note = refresh_desktop_core_daemon(
+        _refresh_context(tmp_path), executable=tmp_path / "core", minimum_version="3.59.0a24"
+    )
+
+    assert refreshed is None
+    assert note is not None and "still starting" in note
+    assert clock.now >= 60.0
+
+
+def test_daemon_refresh_reports_a_core_that_never_finishes_starting(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    clock = _patch_slow_core_start(monkeypatch, answers_after=None)
+
+    refreshed, note = refresh_desktop_core_daemon(
+        _refresh_context(tmp_path), executable=tmp_path / "core", minimum_version="3.59.0a24"
+    )
+
+    assert refreshed is None
+    assert note == (
+        "The updated Guard daemon is still starting. Run `hol-guard daemon status` shortly to confirm it is up."
+    )
+    assert clock.now >= 60.0
+
+
+def test_daemon_refresh_without_an_applied_version_never_accepts_an_older_daemon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+
+    clock = _patch_slow_core_start(monkeypatch, answers_after=0, package_version="0.0.1")
+
+    refreshed, note = refresh_desktop_core_daemon(_refresh_context(tmp_path), executable=tmp_path / "core")
+
+    assert refreshed is None
+    assert note is not None and "still starting" in note
+    assert clock.now >= 60.0
+
+
+def test_daemon_refresh_without_an_applied_version_accepts_this_core_once_it_answers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refresh_desktop_core_daemon
+    from codex_plugin_scanner.version import __version__
+
+    _patch_slow_core_start(monkeypatch, answers_after=3, package_version=__version__)
+
+    refreshed, note = refresh_desktop_core_daemon(_refresh_context(tmp_path), executable=tmp_path / "core")
+
+    assert refreshed == {"status": "restarted", "url": "http://127.0.0.1:5474", "runtime_verified": True}
+    assert note is None

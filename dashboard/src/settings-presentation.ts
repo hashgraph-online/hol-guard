@@ -61,6 +61,14 @@ export function buildSettingsUpdatePayload(
   const payload: Partial<GuardSettings> = { ...draft };
   delete payload.presentation;
   delete payload.presentation_diagnostic;
+  delete payload.context_assistance_diagnostic;
+  delete payload.context_assistance_requested;
+  // Older cores expose only the restricted value. Never round-trip that value
+  // into local consent while saving another preference.
+  if (draft.context_assistance_requested === undefined
+      || settingsValueEquals(draft.context_assistance, previous.context_assistance)) {
+    delete payload.context_assistance;
+  }
   delete payload.presentation_mode;
   delete payload.presentation_mode_explicit;
   delete payload.presentation_schema_version;

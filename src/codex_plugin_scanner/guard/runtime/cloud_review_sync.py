@@ -20,7 +20,11 @@ from .cloud_review_batching import (
 )
 from .cloud_review_event_delivery import post_review_events
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
-from .cloud_review_retry_recovery import recover_rejected_review_events, retry_result_message
+from .cloud_review_retry_recovery import (
+    forget_rejection_counts,
+    retry_result_message,
+    settle_rejected_review_events,
+)
 from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
 from .native_workspace_review_context import NativeWorkspaceReviewContextProbeState
 from .native_workspace_review_replay import (
@@ -152,6 +156,8 @@ def _sync_result(
     errors: list[str],
     batches: int,
     outbox: dict[str, object],
+    stalled: bool = False,
+    retry_after_ms: int = 0,
 ) -> dict[str, object]:
     return {
         "synced": accepted,
@@ -161,6 +167,8 @@ def _sync_result(
         "batches": batches,
         "outbox": outbox,
         "next_attempt_at": outbox.get("next_attempt_at"),
+        "stalled": stalled,
+        "retry_after_ms": retry_after_ms,
     }
 
 
@@ -260,6 +268,11 @@ def sync_cloud_review_events_once(
 
     total_accepted = total_rejected = total_delivered = batches = 0
     all_errors: list[str] = []
+    # A batch that Cloud answered without accepting, acknowledging, or
+    # dead-lettering anything ends the run so the worker can back off the whole
+    # queue instead of sending the next due batch straight away.
+    stalled_batch = False
+    retry_after_ms = 0
     native_context_probe_state = getattr(store, _PROBE_STATE_ATTRIBUTE, None)
     setattr(store, _PROBE_STATE_ATTRIBUTE, None)
     if not isinstance(native_context_probe_state, NativeWorkspaceReviewContextProbeState):
@@ -328,6 +341,9 @@ def sync_cloud_review_events_once(
             if isinstance(delivered, int) and not isinstance(delivered, bool) and 0 <= delivered <= accepted:
                 total_delivered += delivered
             batches += 1
+            retry_after_hint = response.get("retryAfterMs")
+            if type(retry_after_hint) is int and retry_after_hint > 0:
+                retry_after_ms = max(retry_after_ms, retry_after_hint)
             batch_limits = next_review_batch_limits(batch_limits, response)
             _persist_sync_batch_limits(store, state, batch_binding_key, batch_limits)
 
@@ -373,14 +389,16 @@ def sync_cloud_review_events_once(
                         _retry_review_events(store, sequences, error=message, binding=delivery_binding)
                         continue
                     store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
-                    retry_sequences, retry_results = recover_rejected_review_events(
+                    retry_sequences, retry_results, progressed = settle_rejected_review_events(
                         store,
                         sequences=retry_sequences,
                         results=retry_results,
                         events=dict(zip(sequences, events, strict=True)),
-                        binding=delivery_binding,
+                        acknowledged=acknowledged_sequences,
                         acknowledged_through=response.get("acknowledgedThrough"),
+                        binding=delivery_binding,
                     )
+                    stalled_batch = not progressed
                     if retry_sequences:
                         message = retry_result_message(retry_results)
                         all_errors.append(message)
@@ -390,10 +408,12 @@ def sync_cloud_review_events_once(
                             error=message,
                             **delivery_binding,
                         )
-                    if snapshot_repairs:
-                        store.requeue_pending_review_events(
-                            changed_at=_now(), require_binding=True, snapshot_repair_sequences=snapshot_repairs
-                        )
+                    if snapshot_repairs and store.requeue_pending_review_events(
+                        changed_at=_now(), require_binding=True, snapshot_repair_sequences=snapshot_repairs
+                    ):
+                        stalled_batch = False
+                    if stalled_batch:
+                        break
                     continue
 
             accounted = accepted + rejected
@@ -401,13 +421,16 @@ def sync_cloud_review_events_once(
                 message = "Cloud Review sync acknowledgement count did not match the batch."
                 all_errors.append(message)
                 _retry_review_events(store, sequences, error=message, binding=delivery_binding)
+                stalled_batch = True
                 break
             if rejected:
                 message = f"{rejected} Cloud Review events were rejected."
                 all_errors.append(message)
                 _retry_review_events(store, sequences, error=message, binding=delivery_binding)
+                stalled_batch = True
                 break
             store.acknowledge_review_events(sequences, **delivery_binding)
+            forget_rejection_counts(store, sequences)
 
         _, outbox_status = _complete_sync_state(
             store,
@@ -435,6 +458,8 @@ def sync_cloud_review_events_once(
             errors=all_errors,
             batches=batches,
             outbox=outbox_status,
+            stalled=stalled_batch,
+            retry_after_ms=retry_after_ms if stalled_batch else 0,
         )
     except urllib.error.HTTPError as error:
         error_message = f"HTTP {error.code}: {error.reason}"

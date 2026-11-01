@@ -40,16 +40,6 @@ class StoreLocalCliRetentionMixin:
         except ValueError as error:
             raise LocalCliForgetError(str(error)) from None
 
-    def local_cli_replay_allowed(self, identity_hash: str, seen_at: str, *, now: str | None = None) -> bool:
-        """Return whether a history entry may restore or refresh this identity."""
-
-        return bool(
-            self._native_store_call(
-                "local_cli_replay_allowed",
-                {"identity_hash": identity_hash, "seen_at": seen_at, "now": now, "clock": utc_now_iso()},
-            )
-        )
-
     def prune_inactive_local_cli_observations(
         self,
         *,

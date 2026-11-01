@@ -118,3 +118,85 @@ fn a_directory_above_the_run_projects_and_leaves_the_bound_to_containment() {
         Some(&*expected)
     );
 }
+
+/// A workspace fixture: a root holding `pnpm-workspace.yaml` and a package
+/// below it, which is where `pnpm -w` is typed from.
+fn workspace(name: &str) -> PathBuf {
+    let root = fixture(name);
+    std::fs::write(root.join("pnpm-workspace.yaml"), "packages:\n  - web\n").unwrap();
+    root
+}
+
+/// `pnpm -w <rest>` runs the rest in the workspace root, so it is the same
+/// call as `cd <root> && pnpm <rest>` and reaches containment the way the
+/// spelled directory and the typed `cd` already do. Without this the root
+/// script of every pnpm monorepo was a review prompt while the same script
+/// run without the flag was contained silently.
+#[test]
+fn the_workspace_root_flag_projects_like_a_spelled_directory() {
+    let root = workspace("workspace-root");
+    let cwd = root.to_str().unwrap();
+    for (raw, expected) in [
+        ("pnpm -w run build", format!("cd {cwd} && pnpm run build")),
+        (
+            "pnpm --workspace-root run build",
+            format!("cd {cwd} && pnpm run build"),
+        ),
+        ("pnpm -w build", format!("cd {cwd} && pnpm build")),
+        ("pnpm run -w build", format!("cd {cwd} && pnpm run build")),
+        ("pnpm -w test", format!("cd {cwd} && pnpm test")),
+        (
+            "pnpm -w add left-pad",
+            format!("cd {cwd} && pnpm add left-pad"),
+        ),
+        (
+            "pnpm -w run build 2>&1 | tail -20",
+            format!("cd {cwd} && pnpm run build 2>&1 | tail -20"),
+        ),
+    ] {
+        assert_eq!(projection(raw, cwd).as_deref(), Some(&*expected), "{raw}");
+    }
+}
+
+/// The root is found the way pnpm finds it, by climbing from the directory
+/// the command was typed in. As with a spelled directory, the peel says
+/// nothing about whether that root may be entered: the projected text carries
+/// that to the containment check, which is what keeps a package's own
+/// sandbox from being widened to its monorepo by a flag.
+#[test]
+fn the_workspace_root_is_found_by_climbing_out_of_the_run_directory() {
+    let root = workspace("workspace-climb");
+    let cwd = root.join("web");
+    let expected = format!("cd {} && pnpm run build", root.to_str().unwrap());
+    assert_eq!(
+        projection("pnpm -w run build", cwd.to_str().unwrap()).as_deref(),
+        Some(&*expected)
+    );
+}
+
+/// The flag is read in its two exact spellings only, for pnpm alone, and
+/// needs a workspace to name. npm's `-w` takes a workspace *name* rather than
+/// naming the root, so reading it as this flag would drop a word the run
+/// depends on.
+#[test]
+fn other_workspace_root_spellings_keep_the_unprojected_text() {
+    let root = workspace("workspace-other");
+    let cwd = root.to_str().unwrap();
+    for raw in [
+        "pnpm -w",
+        "pnpm -wx run build",
+        "pnpm --workspace-root=web run build",
+        "pnpm -w -C web run build",
+        "pnpm -w --workspace-root run build",
+        "npm -w web run build",
+        "yarn -w run build",
+        "bun -w run build",
+    ] {
+        assert_eq!(projection(raw, cwd), None, "{raw}");
+    }
+    let bare = fixture("workspace-none");
+    assert_eq!(
+        projection("pnpm -w run build", bare.to_str().unwrap()),
+        None
+    );
+}

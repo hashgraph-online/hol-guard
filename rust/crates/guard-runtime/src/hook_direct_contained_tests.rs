@@ -261,6 +261,7 @@ fn only_plain_workspace_runs_take_the_native_sink() {
     let root = scratch("shape");
     let workspace = root.join("work space");
     fs::create_dir_all(workspace.join("sub")).unwrap();
+    fs::create_dir_all(workspace.join("my dir")).unwrap();
     fs::write(workspace.join("file"), "").unwrap();
     let workspace = workspace.to_str().unwrap();
     let denial = workspace_denial();
@@ -275,7 +276,17 @@ fn only_plain_workspace_runs_take_the_native_sink() {
     assert!(shape("npm test && cargo fmt --check"));
     // A `cd` into the workspace runs whole from its root on either sink.
     assert!(shape("cd sub && pytest"));
+    // At the root itself both sinks peel the `cd` and ask about the rest
+    // again there.
+    assert!(shape("cd . && pytest"));
+    assert!(shape("cd sub/.. && pytest -q 2>&1 | tail -20"));
     assert!(shape("\tcd  sub/.  &&  pytest -q"));
+    // Quotes around plain text leave it literal, and both sinks peel the
+    // target from the command model without them.
+    assert!(shape("cd 'sub' && pytest"));
+    assert!(shape("cd \"sub\" && pytest -q 2>&1 | tail -5"));
+    assert!(shape("cd 'my dir' && pytest"));
+    assert!(shape("cd \"my dir/..\" && pytest"));
     // Output filters, stderr folding and status reads run whole in the
     // sandbox, with the shell's own meaning.
     assert!(shape("pytest | tee log"));
@@ -291,6 +302,10 @@ fn only_plain_workspace_runs_take_the_native_sink() {
     assert!(shape("pnpm --dir=sub/. run lint"));
     assert!(shape("pnpm -C sub run build"));
     assert!(shape("npm -C sub test 2>&1 | tail -20"));
+    // At the root both sinks peel the flag, as they peel `cd .`.
+    assert!(shape("npm --prefix . test"));
+    assert!(shape("bun --cwd sub/.. run build"));
+    assert!(shape("pnpm -C . run build"));
     let inner = format!(
         "cd {}/sub && pytest",
         root.join("tmp/../work space").display()
@@ -299,14 +314,15 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         !shape(&inner),
         "a space in the target is not one plain word"
     );
+    // A home path is the sandbox shell's to expand, as in Guard's own sink.
+    assert!(shape("ls ~/work"));
+    assert!(shape("pytest ~/work/tests 2>&1 | tail -5"));
     for command in [
-        "ls ~/work",
         "npm --prefix web test",
-        // Like `cd`, a package directory at the root, out of it, after a
-        // `cd`, or spelled any other way keeps the daemon's sink.
-        "npm --prefix . test",
+        // Like `cd`, a package directory out of the workspace into no
+        // repository, after a `cd`, or spelled any other way keeps the
+        // daemon's sink.
         "bun --cwd .. run build",
-        "bun --cwd sub/.. run build",
         "bun --cwd file run build",
         "bun --cwd run build",
         "npm --prefix -w sub test",
@@ -319,20 +335,26 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         // own word.
         "make -C sub test",
         "pnpm -Csub run build",
-        "pnpm -C . run build",
         "pnpm -C sub run build && git -C sub status",
         "pytest -C sub",
-        // The daemon plans a `cd` to the root, or out of it, again there.
-        "cd . && pytest",
-        "cd sub/.. && pytest",
+        // A `cd` out of the workspace into no repository.
         "cd .. && pytest",
         "cd /tmp && pytest",
+        "cd ~ && pytest",
+        "npm --prefix ~/web test",
         // Only `&&` after one plain, existing directory.
         "cd sub; pytest",
         "cd sub&& pytest",
         "cd sub &&",
         "cd sub",
-        "cd 'sub' && pytest",
+        // Quoted text must be plain, closed, and followed by a blank.
+        "cd 'sub'&& pytest",
+        "cd 'sub && pytest",
+        "cd 'su'b && pytest",
+        "cd 'my dir'x && pytest",
+        "cd '' && pytest",
+        "cd \"$HOME\" && pytest",
+        "cd '~' && pytest",
         "cd $HOME && pytest",
         "cd missing && pytest",
         "cd file && pytest",
@@ -353,9 +375,10 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         workspace,
         HOME
     ));
+    // It also creates a linked worktree before the checks chained to it.
     let mut worktree = denial.clone();
     worktree["reason"] = json!(guard_command::pretool::CONTAINED_WORKTREE_ADD_REASON);
-    assert!(!native_shape(
+    assert!(native_shape(
         &worktree,
         &input("git worktree add ../app-fix HEAD && cd ../app-fix && pytest"),
         workspace,

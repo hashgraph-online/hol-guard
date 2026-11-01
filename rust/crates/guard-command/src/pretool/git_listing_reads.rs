@@ -335,6 +335,15 @@ fn shortlog_read_form(rest: &[String]) -> bool {
         if short_bundle(argument, "nsec") {
             continue;
         }
+        // `-20` is `--max-count=20` written the way git's revision parser
+        // reads it, and git itself refuses the spelling unless every
+        // character after the dash is a digit. `-n` is this verb's
+        // `--numbered`, so only the bare count is read here.
+        if let Some(count) = argument.strip_prefix('-') {
+            if shortlog_value("--max-count", count) {
+                continue;
+            }
+        }
         if let Some((name, value)) = argument.split_once('=') {
             if SHORTLOG_VALUES.contains(&name) && shortlog_value(name, value) {
                 continue;

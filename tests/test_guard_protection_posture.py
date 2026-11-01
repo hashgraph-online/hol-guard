@@ -312,10 +312,10 @@ def test_watch_forces_observe_even_when_mode_is_in_payload(tmp_path: Path) -> No
 def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(
     tmp_path: Path, native_approval_reuse_runtime: Path
 ) -> None:
-    from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
+    from codex_plugin_scanner.guard.models import GuardArtifact
+    from tests.runtime_artifact_policy_support import (
         _runtime_artifact_policy_action,
     )
-    from codex_plugin_scanner.guard.models import GuardArtifact
 
     guard_home = tmp_path / ".hol-guard"
     config = update_guard_settings(guard_home, {"protection_posture": "protected"})

@@ -45,6 +45,51 @@ def token(value: object, *, pattern: str = TOKEN_PATTERN, maximum: int = 64) -> 
     return result
 
 
+# SPDX license-expression grammar (SPDX 2.3 Annex D) without DocumentRef
+# prefixes. The bound matches the native command-source compiler, which
+# rejects `extension.license` values longer than 64 bytes.
+LICENSE_MAX_LENGTH = 64
+_LICENSE_CHARACTERS = r"[A-Za-z0-9.+\-() ]+"
+_LICENSE_ID = r"[A-Za-z0-9][A-Za-z0-9.-]*\+?"
+_EXCEPTION_ID = r"[A-Za-z0-9][A-Za-z0-9.-]*"
+_LICENSE_OPERATORS = frozenset({"AND", "OR", "WITH"})
+
+
+def license_expression(value: object) -> str:
+    """Accept an SPDX expression such as ``MIT`` or ``MIT AND (Apache-2.0 OR BSD-3-Clause)``."""
+
+    result = text(value, maximum=LICENSE_MAX_LENGTH)
+    if re.fullmatch(_LICENSE_CHARACTERS, result) is None:
+        raise BuilderError("invalid_license", "License must be an SPDX license expression.")
+    tokens: list[str] = re.findall(r"[()]|[^\s()]+", result)
+
+    def identifier(index: int, pattern: str) -> int:
+        if index >= len(tokens) or tokens[index] in _LICENSE_OPERATORS or re.fullmatch(pattern, tokens[index]) is None:
+            raise BuilderError("invalid_license", "License must be an SPDX license expression.")
+        return index + 1
+
+    def term(index: int) -> int:
+        if index < len(tokens) and tokens[index] == "(":
+            index = expression(index + 1)
+            if index >= len(tokens) or tokens[index] != ")":
+                raise BuilderError("invalid_license", "License must be an SPDX license expression.")
+            return index + 1
+        index = identifier(index, _LICENSE_ID)
+        if index < len(tokens) and tokens[index] == "WITH":
+            index = identifier(index + 1, _EXCEPTION_ID)
+        return index
+
+    def expression(index: int) -> int:
+        index = term(index)
+        while index < len(tokens) and tokens[index] in {"AND", "OR"}:
+            index = term(index + 1)
+        return index
+
+    if expression(0) != len(tokens):
+        raise BuilderError("invalid_license", "License must be an SPDX license expression.")
+    return result
+
+
 def slug(value: object) -> str:
     result = token(value, pattern=SLUG_PATTERN, maximum=40)
     if result in _RESERVED:

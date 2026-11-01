@@ -3,6 +3,14 @@ use super::*;
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, flag] if command == "context-assistance-install-operator" && flag == "--stdin" => {
+            let response = policy_store::context_assistance_registry::run_operator_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if command == "context-assistance-enroll-local" && flag == "--stdin" => {
+            let response = policy_store::context_assistance_registry::run_enroll_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&pack_lifecycle::run(&bytes)?)
@@ -84,6 +92,46 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if codex_hook_trust::is_command(command) && flag == "--stdin" => {
+            let response = codex_hook_trust::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if desktop_notification::is_command(command) && flag == "--stdin" => {
+            let response = desktop_notification::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
+            let response = hook_removal_sweep::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
+            let response = macos_code_signing::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
+            let response = removal_evidence::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if grok_executable::is_command(command) && flag == "--stdin" => {
+            let response = grok_executable::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if harness_coverage_command::is_command(command) && flag == "--stdin" => {
+            let response = harness_coverage_command::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if health_lease_contract::is_command(command) && flag == "--stdin" => {
+            let response = health_lease_contract::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if health_snapshot_binding::is_command(command) && flag == "--stdin" => {
+            let response = health_snapshot_binding::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if supervisor_verdict::is_command(command) && flag == "--stdin" => {
+            let response = supervisor_verdict::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if guard_config_load::is_command(command) && flag == "--stdin" => {
             let response = guard_config_load::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -96,12 +144,106 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if installation_continuity::is_command(command) && flag == "--stdin" => {
+            let response = installation_continuity::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if managed_policy_load_command::is_command(command) && flag == "--stdin" => {
+            let response = managed_policy_load_command::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if health_lease_state::is_command(command) && flag == "--stdin" => {
+            let response = health_lease_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if user_health_state::is_command(command) && flag == "--stdin" => {
+            let response = user_health_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {
+            let response = hermes_file_inspect::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if store_quarantine_forensics::is_command(command) && flag == "--stdin" => {
+            let response = store_quarantine_forensics::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if network_status_validation::is_command(command) && flag == "--stdin" => {
+            let response = network_status_validation::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
+            let response = local_skill_index::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if windows_private_state::is_command(command) && flag == "--stdin" => {
+            let response = windows_private_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if onefile_open_paths::is_command(command) && flag == "--stdin" => {
+            let response = onefile_open_paths::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
+            let response = device_key_helper::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if windows_process_command_lines::is_command(command) && flag == "--stdin" =>
+        {
+            let response = windows_process_command_lines::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if windows_process_lifecycle::is_command(command) && flag == "--stdin" => {
+            let response = windows_process_lifecycle::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if windows_trusted_directories::is_command(command) && flag == "--stdin" =>
+        {
+            let response = windows_trusted_directories::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if release_manifest_verify_command::is_command(command) && flag == "--stdin" =>
+        {
+            let response = release_manifest_verify_command::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if system_proxies::is_command(command) && flag == "--stdin" => {
+            let response = system_proxies::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if proxy_credentials::is_command(command) && flag == "--stdin" => {
+            let response = proxy_credentials::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if native_install_verdict::is_command(command) && flag == "--stdin" => {
+            let response = native_install_verdict::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if ownership_acl_verdict::is_command(command) && flag == "--stdin" => {
+            let response = ownership_acl_verdict::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if business_source_codec::is_command(command) && flag == "--stdin" => {
             let response = business_source_codec::run_command(command, io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if mdm_integrity_snapshot::is_command(command) && flag == "--stdin" => {
+            let response = mdm_integrity_snapshot::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if orphaned_worker_reap::is_command(command) && flag == "--stdin" => {
+            let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if storage_retention::is_command(command) && flag == "--stdin" => {
+            let response = storage_retention::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

@@ -7,13 +7,11 @@ Unavailable, malformed, late or unbound replies fail closed.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import tempfile
 import time
 import uuid
 from contextlib import suppress
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,10 +26,6 @@ from .runtime.restricted_archive_contract import (
 from .strict_json_pairs import unique_json_object
 
 _FEATURE = "archive-acquisition-v1"
-_CONTENT_FEATURE = "managed-content-fetch-v1"
-# The contained decoder's raw input ceiling; a larger body is never fetched.
-MANAGED_CONTENT_MAX_RAW_BYTES = 3 * 1024 * 1024
-_MAX_CONTENT_ENCODING_VALUES = 8
 _REQUEST_SCHEMA = "hol-guard.archive-acquisition-request.v1"
 _RESULT_SCHEMA = "hol-guard.archive-acquisition-result.v1"
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
@@ -43,7 +37,6 @@ def _request(
     *,
     deadline: float,
     guard_home: Path | None = None,
-    feature: str = _FEATURE,
 ) -> dict[str, Any] | None:
     try:
         deadline = min(deadline, time.monotonic() + _MAX_TIMEOUT_MS / 1000)
@@ -55,7 +48,6 @@ def _request(
             or status.identity is None
             or status.capabilities is None
             or _FEATURE not in status.capabilities.features
-            or feature not in status.capabilities.features
             or "resident-protocol-v2" not in status.capabilities.features
         ):
             return None
@@ -65,7 +57,7 @@ def _request(
         if remaining <= 0:
             return None
         timeout_ms = max(1, int(remaining * 1000))
-        if query["action"] in {"download", "content"}:
+        if query["action"] == "download":
             timeout_ms = min(timeout_ms, cast(int, query["timeout_ms"]))
         query = {
             **query,
@@ -159,7 +151,6 @@ def _spooled_fetch(
     max_redirects: int,
     timeout_seconds: float,
     temp_dir: Path | None,
-    feature: str,
 ) -> tuple[dict[str, Any] | None, tempfile.TemporaryDirectory[str]]:
     from .mdm.network_transport import managed_ssl_context, resolved_network_policy
     from .mdm.network_trust import export_managed_trust_roots
@@ -183,7 +174,7 @@ def _spooled_fetch(
             "trust_roots_der_hex": [root.hex() for root in roots],
             "allow_public_registries": policy.allow_public_registries,
         }
-        return _request(query, deadline=deadline, feature=feature), spool
+        return _request(query, deadline=deadline), spool
     except BaseException:
         with suppress(OSError):
             spool.cleanup()
@@ -198,11 +189,9 @@ def _native_failure(payload: dict[str, Any]) -> RestrictedArchiveFailure | None:
     return RestrictedArchiveFailure(payload["code"], payload["message"])
 
 
-def _valid_blob(
-    payload: dict[str, Any], *, kind: str, extra: frozenset[str], source_url: str, max_bytes: int, spool: str
-) -> bool:
+def _valid_blob(payload: dict[str, Any], *, kind: str, source_url: str, max_bytes: int, spool: str) -> bool:
     return (
-        set(payload) == {"kind", "path", "sha256", "size", "source_url", "final_url"} | extra
+        set(payload) == {"kind", "path", "sha256", "size", "source_url", "final_url"}
         and payload["kind"] == kind
         and all(isinstance(payload[key], str) for key in ("path", "sha256", "source_url", "final_url"))
         and not isinstance(payload["size"], bool)
@@ -236,15 +225,12 @@ def download_restricted_archive(
             max_redirects=max_redirects,
             timeout_seconds=timeout_seconds,
             temp_dir=temp_dir,
-            feature=_FEATURE,
         )
         if payload is None:
             return unavailable
         if payload.get("kind") == "failure":
             return _native_failure(payload) or unavailable
-        if not _valid_blob(
-            payload, kind="download", extra=frozenset(), source_url=source_url, max_bytes=max_bytes, spool=spool.name
-        ):
+        if not _valid_blob(payload, kind="download", source_url=source_url, max_bytes=max_bytes, spool=spool.name):
             return unavailable
         download = RestrictedArchiveDownload(
             path=Path(payload["path"]),
@@ -256,87 +242,6 @@ def download_restricted_archive(
         )
         spool = None
         return download
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return unavailable
-    finally:
-        if spool is not None:
-            with suppress(OSError):
-                spool.cleanup()
-
-
-@dataclass(frozen=True, slots=True)
-class ManagedRawContent:
-    """A raw response body exactly as the server sent it, still encoded.
-
-    Every ``Content-Encoding`` value was vetted on every hop before the body
-    was read; the body itself has not been decoded and is untrusted.
-    """
-
-    body: bytes
-    content_encoding: tuple[str, ...]
-    sha256: str
-    source_url: str
-    final_url: str
-
-
-def fetch_managed_content_raw(
-    source_url: str,
-    *,
-    max_bytes: int = MANAGED_CONTENT_MAX_RAW_BYTES,
-    max_redirects: int = 4,
-    timeout_seconds: float = 3.0,
-) -> ManagedRawContent | RestrictedArchiveFailure:
-    """Fetch one public HTTPS body without letting any HTTP stack decode it.
-
-    The resident carries no credentials: only the managed trust roots and the
-    URL. A coding the decoder would refuse stops the fetch on the hop that
-    declared it, before that body is read.
-    """
-
-    unavailable = RestrictedArchiveFailure(
-        "native_content_fetch_unavailable", "Native managed content fetch is unavailable."
-    )
-    spool: tempfile.TemporaryDirectory[str] | None = None
-    try:
-        payload, spool = _spooled_fetch(
-            source_url,
-            action="content",
-            max_bytes=max_bytes,
-            max_redirects=max_redirects,
-            timeout_seconds=timeout_seconds,
-            temp_dir=None,
-            feature=_CONTENT_FEATURE,
-        )
-        if payload is None:
-            return unavailable
-        if payload.get("kind") == "failure":
-            return _native_failure(payload) or unavailable
-        codings = payload.get("content_encoding")
-        if (
-            not _valid_blob(
-                payload,
-                kind="content",
-                extra=frozenset({"content_encoding"}),
-                source_url=source_url,
-                max_bytes=max_bytes,
-                spool=spool.name,
-            )
-            or not isinstance(codings, list)
-            or len(codings) > _MAX_CONTENT_ENCODING_VALUES
-            or not all(isinstance(value, str) for value in codings)
-        ):
-            return unavailable
-        with Path(payload["path"]).open("rb") as handle:
-            body = handle.read(max_bytes + 1)
-        if len(body) != payload["size"] or hashlib.sha256(body).hexdigest() != payload["sha256"]:
-            return unavailable
-        return ManagedRawContent(
-            body=body,
-            content_encoding=tuple(codings),
-            sha256=payload["sha256"],
-            source_url=payload["source_url"],
-            final_url=payload["final_url"],
-        )
     except (OSError, RuntimeError, TypeError, ValueError):
         return unavailable
     finally:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import logging
 import math
 import ntpath
 import os
@@ -65,6 +66,7 @@ from .discovery import (
 )
 from .file_locking import lock_daemon_file as _lock_daemon_start_file
 from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
+from .handed_off_launch import resolve_handed_off_guard_daemon_pending_launch
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .pipx_import_paths import pipx_shared_import_paths
 from .start_classification import (
@@ -84,6 +86,7 @@ from .start_heartbeat import (
 from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 from .startup_phase import timed_phase
 
+_LOGGER = logging.getLogger(__name__)
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
 # Slowest observed cold start on a loaded host.  The resident adds its own
@@ -984,6 +987,7 @@ def _retire_guard_daemons_for_home(
     retired: list[int] = []
     handled_pids: set[int] = set()
     pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
+    handed_off_launch_nonce: object = None
     if (
         _guard_daemon_pending_launch_is_generation_bound(pending_launch)
         and not _guard_daemon_pending_launch_state_is_resolved(guard_home)
@@ -993,7 +997,10 @@ def _retire_guard_daemons_for_home(
         # owner publishes the matching handoff or its root is gone. Inventory
         # cannot prove that a same-home process is one of a live launch's
         # descendants.
-        return retired
+        if not resolve_handed_off_guard_daemon_pending_launch(guard_home, pending_launch):
+            return retired
+        assert pending_launch is not None
+        handed_off_launch_nonce = pending_launch["launch_nonce"]
     if isinstance(pending_launch, dict):
         pending_pid = pending_launch.get("pid")
         pending_port = pending_launch.get("port")
@@ -1026,6 +1033,15 @@ def _retire_guard_daemons_for_home(
                     handled_pids.add(pending_pid)
 
     authenticated_state = load_authenticated_daemon_state(guard_home)
+    if handed_off_launch_nonce is not None and (
+        not _guard_daemon_pending_launch_state_is_resolved(guard_home)
+        or (
+            isinstance(authenticated_state, dict) and authenticated_state.get("launch_nonce") != handed_off_launch_nonce
+        )
+    ):
+        # A start replaced the handed-off daemon after its receipt cleared.
+        # That launch owns the home now, so this retirement leaves it alone.
+        return retired
     if isinstance(authenticated_state, dict):
         state_pid = authenticated_state.get("pid")
         state_port = authenticated_state.get("port")
@@ -1114,58 +1130,48 @@ def _retire_guard_daemons_for_home(
     return retired
 
 
+_ORPHAN_REAP_TIMEOUT_SECONDS = 15.0
+_ORPHAN_REAP_LAUNCH_RESERVE_SECONDS = 0.25
+_ORPHAN_REAP_MAX_BUDGET_MS = 60_000
+_ORPHAN_REAP_OUTPUT_LIMIT = 64 * 1024
+
+
 def reap_orphaned_daemon_workers(*, deadline: float | None = None) -> None:
-    """Stop hook workers whose daemon parent is already gone."""
+    """Stop hook workers whose daemon parent is already gone.
+
+    The native runtime lists the processes, selects the orphaned workers and
+    stops them. A runtime that cannot answer leaves them for the next start,
+    as a missing process listing did before. Without a caller deadline the
+    status check and the reap share `_ORPHAN_REAP_TIMEOUT_SECONDS`.
+    """
 
     if os.name == "nt":
         return
-    if deadline is not None and time.monotonic() >= deadline:
-        return
-    from .orphaned_daemon_workers import (
-        orphaned_daemon_workers,
-        parse_process_snapshot,
-        terminate_orphaned_daemon_workers,
-    )
+    from ..mdm.runtime_request import runtime_answer
 
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return
-    query_timeout = _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS
-    if deadline is not None:
-        query_timeout = min(query_timeout, deadline - time.monotonic())
-    if query_timeout <= 0:
-        return
-    output = _bounded_process_query_stdout(
-        [ps_path, "-axww", "-o", "pid=,ppid=,state=,command="],
-        timeout_seconds=query_timeout,
-    )
-    if output is None:
-        return
-    grace_seconds = 1.0
-    if deadline is not None:
-        grace_seconds = min(grace_seconds, max(0.0, deadline - time.monotonic()))
-    terminate_orphaned_daemon_workers(
-        orphaned_daemon_workers(parse_process_snapshot(output)),
-        command_for_pid=_orphan_worker_command,
-        start_token_for_pid=process_start_token,
-        grace_seconds=grace_seconds,
-    )
+    reap_deadline = time.monotonic() + _ORPHAN_REAP_TIMEOUT_SECONDS if deadline is None else deadline
 
+    def request() -> dict[str, object] | None:
+        # Sized after the status check, so a cold lookup never leaves the
+        # runtime a budget longer than the launch has left.
+        budget = reap_deadline - time.monotonic() - _ORPHAN_REAP_LAUNCH_RESERVE_SECONDS
+        if budget <= 0:
+            return None
+        return {
+            "schema": "orphaned-worker-reap.v1",
+            "self_pid": os.getpid(),
+            "budget_ms": min(int(budget * 1000), _ORPHAN_REAP_MAX_BUDGET_MS),
+        }
 
-def _orphan_worker_command(pid: int) -> str | None:
-    if pid <= 1:
-        return None
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    output = _bounded_process_query_stdout(
-        [ps_path, "-p", str(pid), "-ww", "-o", "command="],
-        timeout_seconds=0.5,
+    if request() is None:
+        return
+    runtime_answer(
+        "native-orphaned-worker-reap-v1",
+        "orphaned-worker-reap",
+        request,
+        output_limit=_ORPHAN_REAP_OUTPUT_LIMIT,
+        deadline=reap_deadline,
     )
-    if output is None:
-        return None
-    command = output.strip()
-    return command or None
 
 
 def guard_daemon_retirement_is_complete(guard_home: Path) -> bool:
@@ -2415,7 +2421,7 @@ def _guard_daemon_pending_launch_state_is_resolved(guard_home: Path) -> bool:
 
 
 def _resolve_abandoned_guard_daemon_pending_launch(guard_home: Path, pending: dict[str, object] | None) -> bool:
-    """Tombstone a launch whose root is gone and whose home runs no daemon.
+    """Tombstone a launch that handed off, or whose root is gone with no daemon left.
 
     Only a matching handoff resolves a launch that may still publish. A launch
     that timed out or crashed before its handoff never publishes one, so its
@@ -2428,6 +2434,8 @@ def _resolve_abandoned_guard_daemon_pending_launch(guard_home: Path, pending: di
     the same launch.
     """
 
+    if resolve_handed_off_guard_daemon_pending_launch(guard_home, pending):
+        return True
     if pending is None or not _guard_daemon_pending_launch_is_abandoned(pending):
         return False
     if _guard_daemon_process_inventory_for_guard_home(guard_home) != []:
@@ -2530,12 +2538,12 @@ def _set_private_mode(path: Path, mode: int) -> None:
 
 def _set_windows_private_directory(path: Path) -> None:
     from ..native_policy_snapshot import NativePolicySnapshotError
-    from ..native_policy_snapshot_windows_state import _windows_ensure_private_directory
+    from ..native_policy_snapshot_windows_atomic import _windows_ensure_private_directory
 
     try:
         _windows_ensure_private_directory(path)
-    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError):
-        return
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        _LOGGER.warning("Could not make a Windows daemon directory private: %s", type(exc).__name__)
 
 
 def _guard_home_is_ephemeral(guard_home: Path) -> bool:
@@ -3230,8 +3238,15 @@ def _guard_daemon_handoff_matches_launch(
     launch_nonce: str,
     expected_pid: int,
     expected_port: int | None = None,
+    require_same_runtime: bool = True,
 ) -> bool:
-    """Accept a startup endpoint only when its signed state binds this launch."""
+    """Accept a startup endpoint only when its signed state binds this launch.
+
+    A launch of this process's own runtime must also publish this runtime's
+    fingerprint. A launch of another executable, such as an updated Desktop
+    Core, runs different bytes by design; the nonce, process ancestry, start
+    markers and owner still bind it to this launch.
+    """
 
     if not _launch_nonce_is_valid(launch_nonce) or expected_pid <= 0:
         return False
@@ -3253,7 +3268,7 @@ def _guard_daemon_handoff_matches_launch(
         or pending.get("pid") != expected_pid
         or pending.get("port") != state.get("port")
         or (expected_port is not None and state.get("port") != expected_port)
-        or pending.get("runtime_fingerprint") != state.get("runtime_fingerprint")
+        or (require_same_runtime and pending.get("runtime_fingerprint") != state.get("runtime_fingerprint"))
         or pending.get("owner", pending.get("user")) != state.get("owner", state.get("user"))
     ):
         return False
@@ -3322,6 +3337,7 @@ def _wait_for_guard_daemon_url(
                 launch_nonce=expected_launch_nonce,
                 expected_pid=expected_pid if expected_pid is not None else -1,
                 expected_port=_guard_daemon_url_port(url),
+                require_same_runtime=require_current_runtime,
             )
         ):
             return url

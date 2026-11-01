@@ -9,6 +9,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 from codex_plugin_scanner.guard.cli import update_desktop_core
 from codex_plugin_scanner.guard.cli.update_desktop_core import DesktopCoreUpdateError
@@ -17,6 +18,11 @@ VERSION = "3.0.0a200"
 TARGET = "aarch64-apple-darwin"
 TAG = f"alpha/v{VERSION}"
 ARTIFACT = f"hol-guard-core-{VERSION}-{TARGET}"
+
+
+@pytest.fixture(autouse=True)
+def _no_installed_desktop_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: None)
 
 
 def _v1_manifest(*, sha256: str, size: int, minimum: str = "0.1.0") -> dict[str, object]:
@@ -195,6 +201,57 @@ class TestTryApplyOnedirFallback:
             is None
         )
         assert requested == []
+
+    def test_terminal_run_reads_the_installed_desktop_app(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("HOL_GUARD_DESKTOP_VERSION", raising=False)
+        monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
+        monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: Version("3.0.145"))
+        requested: list[str] = []
+
+        def fetch(url: str, limit: int) -> bytes:
+            requested.append(url)
+            raise DesktopCoreUpdateError("desktop_core_asset_missing")
+
+        assert (
+            update_desktop_core._try_apply_onedir(
+                fetch,
+                tag=TAG,
+                artifact=ARTIFACT,
+                channel="alpha",
+                expected_version=VERSION,
+                expected_target=TARGET,
+            )
+            is None
+        )
+        assert requested == [update_desktop_core._release_url(TAG, f"{ARTIFACT}.onedir.json")]
+
+    def test_terminal_run_with_an_old_desktop_app_falls_back(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("HOL_GUARD_DESKTOP_VERSION", raising=False)
+        monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
+        monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: Version("3.0.50"))
+        archive = _onedir_zip(tmp_path)
+        manifest = _v2_manifest(
+            archive=archive,
+            launcher_sha256=update_desktop_core._sha256_hex(b"launcher-bytes"),
+            file_count=2,
+        )
+
+        def fetch(url: str, limit: int) -> bytes:
+            return json.dumps(manifest).encode("utf-8")
+
+        assert (
+            update_desktop_core._try_apply_onedir(
+                fetch,
+                tag=TAG,
+                artifact=ARTIFACT,
+                channel="alpha",
+                expected_version=VERSION,
+                expected_target=TARGET,
+            )
+            is None
+        )
 
     def test_other_download_errors_propagate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "3.0.113")
@@ -756,91 +813,53 @@ class TestInstallFrameworkLinks:
 
 
 class TestVerifyOnedirTreeSignatures:
-    """Every Mach-O anywhere in the tree must carry the expected team."""
+    """The runtime's first failing Mach-O decides the reason code."""
 
-    def _tree(self, tmp_path: Path) -> Path:
-        tree = tmp_path / "hol-guard"
-        (tree / "_internal").mkdir(parents=True)
-        (tree / "hol-guard").write_bytes(b"\xcf\xfa\xed\xfe" + b"launcher")
-        (tree / "_internal" / "libx.dylib").write_bytes(b"\xcf\xfa\xed\xfe" + b"lib")
-        return tree
+    def test_a_tree_the_runtime_accepts_passes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Path, str]] = []
 
-    def test_whole_tree_matching_teams_pass(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _p: "TEAMID")
-        tree = self._tree(tmp_path)
-        (tree / "tool").write_bytes(b"\xcf\xfa\xed\xfe" + b"tool")
-        update_desktop_core._verify_onedir_tree_signatures(tree, expected_team="TEAMID")
+        def failure(tree: Path, *, expected_team: str) -> str | None:
+            calls.append((tree, expected_team))
+            return None
 
-    def test_macho_outside_internal_with_wrong_team_fails(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        monkeypatch.setattr(update_desktop_core, "macos_tree_signature_failure", failure)
+        update_desktop_core._verify_onedir_tree_signatures(tmp_path, expected_team="TEAMID")
+        assert calls == [(tmp_path, "TEAMID")]
+
+    @pytest.mark.parametrize(
+        "reason",
+        ["desktop_core_signature_mismatch", "desktop_core_signature_invalid", "desktop_core_install_failed"],
+    )
+    def test_the_runtime_failure_is_the_reason(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str
     ) -> None:
-        tree = self._tree(tmp_path)
-        (tree / "tool").write_bytes(b"\xcf\xfa\xed\xfe" + b"tool")
-        monkeypatch.setattr(
-            update_desktop_core,
-            "_macos_signing_team",
-            lambda path: "OTHERTEAM" if path.name == "tool" else "TEAMID",
-        )
+        monkeypatch.setattr(update_desktop_core, "macos_tree_signature_failure", lambda *_a, **_k: reason)
         with pytest.raises(DesktopCoreUpdateError) as error:
-            update_desktop_core._verify_onedir_tree_signatures(tree, expected_team="TEAMID")
-        assert error.value.reason_code == "desktop_core_signature_mismatch"
-
-    def test_missing_internal_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        tree = tmp_path / "hol-guard"
-        tree.mkdir(parents=True)
-        (tree / "hol-guard").write_bytes(b"\xcf\xfa\xed\xfe" + b"launcher")
-        monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _p: "TEAMID")
-        with pytest.raises(DesktopCoreUpdateError) as error:
-            update_desktop_core._verify_onedir_tree_signatures(tree, expected_team="TEAMID")
-        assert error.value.reason_code == "desktop_core_install_failed"
+            update_desktop_core._verify_onedir_tree_signatures(tmp_path, expected_team="TEAMID")
+        assert error.value.reason_code == reason
 
 
 class TestRequireSealedOnedir:
-    SEALED_DISPLAY = (
-        "Executable=/x/hol-guard\n"
-        "Format=app bundle with Mach-O thin (arm64)\n"
-        "Sealed Resources version=2 rules=10 files=148\n"
-        "TeamIdentifier=TEAMID\n"
-    )
-
-    def _launcher(self, tmp_path: Path) -> Path:
-        tree = tmp_path / "hol-guard"
-        (tree / "_CodeSignature").mkdir(parents=True)
-        (tree / "_CodeSignature" / "CodeResources").write_text("<resources/>", encoding="utf-8")
-        launcher = tree / "hol-guard"
-        launcher.write_bytes(b"launcher")
-        return launcher
-
-    def _fake_codesign(self, monkeypatch: pytest.MonkeyPatch, stderr: str) -> None:
-        result = type("Result", (), {"returncode": 0, "stderr": stderr, "stdout": ""})()
-        monkeypatch.setattr(update_desktop_core.subprocess, "run", lambda *a, **k: result)
-
     def test_passes_with_sealed_bundle(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
-        self._fake_codesign(monkeypatch, self.SEALED_DISPLAY)
-        update_desktop_core._require_sealed_onedir(self._launcher(tmp_path))
+        monkeypatch.setattr(update_desktop_core, "macos_bundle_sealed", lambda _launcher: True)
+        update_desktop_core._require_sealed_onedir(tmp_path / "hol-guard")
 
-    def test_fails_without_sealed_resources_line(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_fails_without_a_sealed_bundle(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
-        self._fake_codesign(monkeypatch, "Format=app bundle with Mach-O thin (arm64)\n")
+        monkeypatch.setattr(update_desktop_core, "macos_bundle_sealed", lambda _launcher: False)
         with pytest.raises(DesktopCoreUpdateError) as error:
-            update_desktop_core._require_sealed_onedir(self._launcher(tmp_path))
+            update_desktop_core._require_sealed_onedir(tmp_path / "hol-guard")
         assert error.value.reason_code == "desktop_core_signature_invalid"
 
-    def test_fails_with_macho_only_format(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
-        self._fake_codesign(monkeypatch, "Format=Mach-O thin (arm64)\nSealed Resources version=2 rules=10 files=1\n")
-        with pytest.raises(DesktopCoreUpdateError) as error:
-            update_desktop_core._require_sealed_onedir(self._launcher(tmp_path))
-        assert error.value.reason_code == "desktop_core_signature_invalid"
+    def test_other_platforms_need_no_seal(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(update_desktop_core.sys, "platform", "linux")
 
-    def test_fails_without_code_resources(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(update_desktop_core.sys, "platform", "darwin")
-        launcher = self._launcher(tmp_path)
-        (launcher.parent / "_CodeSignature" / "CodeResources").unlink()
-        with pytest.raises(DesktopCoreUpdateError) as error:
-            update_desktop_core._require_sealed_onedir(launcher)
-        assert error.value.reason_code == "desktop_core_signature_invalid"
+        def unexpected(_launcher: Path) -> bool:
+            raise AssertionError("the seal is a macOS check")
+
+        monkeypatch.setattr(update_desktop_core, "macos_bundle_sealed", unexpected)
+        update_desktop_core._require_sealed_onedir(tmp_path / "hol-guard")
 
 
 class TestPartialInstallCleanup:

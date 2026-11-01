@@ -21,7 +21,7 @@ from codex_plugin_scanner.guard.native_request_context import (
 )
 from codex_plugin_scanner.guard.native_sensitive_request import _ask, _bool
 from codex_plugin_scanner.guard.runtime import approval_context
-from codex_plugin_scanner.guard.runtime.shell_execution_context import (
+from tests.request_context_support import (
     SHELL_CWD_NATIVE_UNAVAILABLE,
     SHELL_CWD_PATH_CHANGED,
     ShellExecutionContext,

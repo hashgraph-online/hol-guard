@@ -5,9 +5,10 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import native_runner_authority, native_signal_projection, store_review_event_outbox
-from codex_plugin_scanner.guard.decision_boundaries import canonical_approval_surfaces_batch
+from codex_plugin_scanner.guard import native_runner_authority, store_review_event_outbox
 from codex_plugin_scanner.guard.native_signal_projection import NativeSignalProjectionUnavailableError
+from tests import decision_boundaries_support as native_signal_projection
+from tests.decision_boundaries_support import canonical_approval_surfaces_batch
 
 
 def test_boundary_native_outage_has_no_local_verdict(monkeypatch: pytest.MonkeyPatch) -> None:

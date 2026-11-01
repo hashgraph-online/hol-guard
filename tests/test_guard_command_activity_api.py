@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.store_command_activity_api import (
     CommandActivityNotFoundError,
 )
 from tests.guard_command_activity_api_support import evidence, seed
+from tests.native_store_shims import record_command_activity
 
 
 def test_api_schema_is_atomic_strict_and_reopens(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -138,7 +139,7 @@ def test_analytics_reconciles_rollups_and_exposes_bounded_health(tmp_path: Path)
 def test_filtered_analytics_excludes_out_of_scope_feedback(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     seed(store)
-    store.record_command_activity(evidence("activity:claude", minute=4, harness="claude-code"))
+    record_command_activity(store, evidence("activity:claude", minute=4, harness="claude-code"))
     store.record_command_activity_feedback(
         activity_id="activity:claude",
         label=CommandActivityFeedbackLabel.EXPECTED_GUARD_TO_STOP_THIS,

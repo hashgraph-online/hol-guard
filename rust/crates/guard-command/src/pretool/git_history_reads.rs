@@ -87,12 +87,12 @@ const REFLOG_FLAGS: [&str; 8] = [
 const REFLOG_VALUES: [&str; 5] = ["-n", "--max-count", "--date", "--format", "--pretty"];
 
 /// `reflog` operations that rewrite or drop entries.
-const REFLOG_WRITES: [&str; 4] = ["expire", "delete", "drop", "write"];
+pub(in crate::pretool) const REFLOG_WRITES: [&str; 4] = ["expire", "delete", "drop", "write"];
 
 /// Whether `subcommand rest...` is a proven history read.
 pub(super) fn read_form(subcommand: &str, rest: &[String]) -> bool {
     match subcommand {
-        "blame" => blame_read_form(rest),
+        "blame" | "annotate" => blame_read_form(rest),
         "describe" => describe_read_form(rest),
         "reflog" => reflog_read_form(rest),
         _ => false,
@@ -305,11 +305,12 @@ mod tests;
 
 /// Whether the read turns a working-tree file into its stored form, which
 /// runs the repository's clean filters and can start `core.fsmonitor`.
-/// `git blame` annotates the working-tree copy through a fake commit,
+/// `git blame` annotates the working-tree copy through a fake commit, as does
+/// the `git annotate` that prints the same walk another way,
 /// `git ls-files -m` hashes a file whose stat data left it undecided, and
 /// `--dirty` and `--broken` make `git describe` refresh the index first.
 pub(super) fn cleans_working_tree(subcommand: &str, rest: &[String]) -> bool {
-    subcommand == "blame"
+    matches!(subcommand, "blame" | "annotate")
         || super::git_listing_reads::compares_working_tree(subcommand, rest)
         || refreshes_the_index(subcommand, rest)
 }

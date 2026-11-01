@@ -21,6 +21,11 @@
 use crate::parser_executables::executable_basename;
 use crate::CommandSegmentV1;
 
+#[path = "read_only_fanout_fd.rs"]
+pub(crate) mod fd;
+#[path = "read_only_fanout_listing.rs"]
+pub(crate) mod listing;
+
 /// Placeholder operand the child proof stands in for the unknown file names.
 pub(crate) const PLACEHOLDER: &str = "guard-fanout-result";
 
@@ -67,6 +72,23 @@ fn without_stderr_merge(arguments: &[String]) -> &[String] {
         end -= 1;
     }
     &arguments[..end]
+}
+
+/// Source and documentation extensions a content reader may fan out over.
+///
+/// A glob's `*` also matches a leading dot, so a denylist of secret
+/// extensions would still reach `.env.local` through `*.local`; configuration
+/// formats such as JSON and YAML are left out because they often hold keys.
+pub(crate) const SOURCE_EXTENSIONS: [&str; 46] = [
+    "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "py", "pyi", "rs", "go", "java", "kt",
+    "kts", "scala", "c", "h", "cc", "cpp", "hpp", "cs", "rb", "php", "swift", "m", "dart", "lua",
+    "ex", "exs", "hs", "md", "mdx", "rst", "txt", "html", "htm", "css", "scss", "sass", "less",
+    "vue", "svelte", "sql", "graphql", "proto",
+];
+
+/// Whether an extension, written without its dot, names such a file.
+pub(crate) fn source_extension(extension: &str) -> bool {
+    SOURCE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
 }
 
 /// Whether the child reads file contents (and so needs a bounded name test).
@@ -464,6 +486,9 @@ mod tests {
             "find src -type f -exec cat {} +",
             "find src -type f -print0 | xargs -0 cat",
             "find src -type f | xargs grep -n x",
+            "rg -l TODO src | xargs wc -l",
+            "grep -rl TODO src | xargs wc -l",
+            "rg -l --null TODO src | xargs -0 cat",
         ] {
             assert_eq!(confidence(command), "exact", "{command}");
         }
@@ -475,6 +500,10 @@ mod tests {
             "echo a | xargs cat",
             "xargs cat",
             "find src -type f | sort | xargs cat",
+            "rg -l TODO | xargs wc -l",
+            "rg -n TODO src | xargs wc -l",
+            "rg -l TODO src | xargs rm",
+            "rg -l TODO src | sort | xargs wc -l",
         ] {
             assert_eq!(confidence(command), "uncertain", "{command}");
         }

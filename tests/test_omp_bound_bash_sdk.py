@@ -29,10 +29,10 @@ from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,
 )
-from codex_plugin_scanner.guard.store import GuardStore
 from tests import omp_bound_bash_package_source as package_fixture
 from tests import omp_bound_bash_sdk_source as sdk_source
 from tests.bash_http_registry import local_registry
+from tests.context_pi_sdk_support import assert_context_execution, cli_bootstrap, prepare_store
 from tests.omp_bound_bash_lifecycle import assert_sdk_host_death_cancels, pause_native_execute_source
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="native Bash owner is macOS-only")
@@ -75,6 +75,8 @@ def test_pinned_sdk_bash_tool_delivers_consent_and_preserves_execution_cwd(
     duration,
     harness,
     http_registry,
+    *,
+    cigar_execution=False,
 ):
     del native_context_digest
     native_post = duration.startswith("native-post-")
@@ -128,24 +130,17 @@ def test_pinned_sdk_bash_tool_delivers_consent_and_preserves_execution_cwd(
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("LANG", "C")
     monkeypatch.setenv("PATH", f"{execution_cwd}:/usr/bin:/bin:{Path(bun).parent}")
-    settings: dict[str, object] = {"blocked_request_mode": "ask"}
-    if duration == "quiet":
-        settings.update(
-            {
-                "default_action": "allow",
-                "subprocess_action": "allow",
-                "risk_actions": {"network_egress": "allow", "persistence": "allow"},
-            }
-        )
-    else:
-        # Deliberate Ask must not depend on whether this machine classifies
-        # the temporary report directory as a persistence location.
-        settings["subprocess_action"] = "require-reapproval"
-    update_guard_settings(guard, settings)
-    store = GuardStore(guard)
+    session_cwd = workspace if harness == "omp" else execution_cwd
+    store = prepare_store(
+        guard,
+        duration,
+        cigar_execution=cigar_execution,
+        binary=status.identity.path,
+        workspace=session_cwd,
+        app=harness,
+    )
     command = f"/bin/bash {shlex.quote(str(script))} dry"
     original_input = {"command": command, "timeout": 45}
-    session_cwd = workspace if harness == "omp" else execution_cwd
     if harness == "omp":
         original_input["cwd"] = "subproject"
     worker = HookWorker(store=store, workspace=session_cwd, home_dir=home, wait_for_native_policy=False)
@@ -184,9 +179,7 @@ def test_pinned_sdk_bash_tool_delivers_consent_and_preserves_execution_cwd(
     wrapper = tmp_path / "guard-cli"
     ready_marker, resume_marker = tmp_path / "cli-ready", tmp_path / "cli-resume"
     pause_source = pause_native_execute_source(ready_marker, resume_marker) if duration == "host-parent-death" else ""
-    package_bootstrap = ""
-    if os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") != "1":
-        package_bootstrap = f"sys.path.insert(0, {str(repo / 'src')!r})\n"
+    package_bootstrap = cli_bootstrap(repo)
     sdk_source.write_cli_wrapper(wrapper, status.identity.path, bootstrap=package_bootstrap, pause=pause_source)
     routing = tmp_path / "routing.ts"
     routing.write_text(
@@ -497,4 +490,8 @@ pi.on("tool_call", async (event, ctx) => {
         refused("fresh-operation", "native_bash_consent_required")
         assert report.read_text() == "preserve SDK report"
     finally:
-        assert close_native_residents(guard_home=guard)
+        try:
+            if cigar_execution and sys.exc_info()[0] is None:
+                assert_context_execution(guard)
+        finally:
+            assert close_native_residents(guard_home=guard)

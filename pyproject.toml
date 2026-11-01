@@ -157,6 +157,7 @@ only-include = [
     "src",
     "scripts",
     "rust",
+    "integrations/cigar/bridge.py",
     "contracts",
     "contributions",
     "tests/fixtures",

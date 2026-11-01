@@ -6,11 +6,9 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import native_workspace_snapshot as native
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
@@ -20,12 +18,8 @@ from codex_plugin_scanner.guard.runtime import workspace_assessment_sync as sync
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
-    HOOKS_COMPLETE,
     PLUGINS_COMPLETE,
     SCANNED,
-    SECRETS_COMPLETE,
-    SKILLS_COMPLETE,
-    SNAPSHOT,
     T0,
     queued_run,
 )
@@ -160,56 +154,6 @@ def test_a_plugin_without_hooks_or_servers_is_complete(tmp_path: Path, monkeypat
     _, _, outcome = run_with(tmp_path, monkeypatch, result)
     assert outcome.coverage is not None
     assert outcome.coverage["detectors"]["plugin_manifest_v1"] == "complete"
-
-
-def test_older_runtime_keeps_earlier_scans_and_reports_plugins_not_run(tmp_path: Path, monkeypatch) -> None:
-    store, claimed = queued_run(tmp_path)
-    requested: list[tuple[bool, bool, bool]] = []
-
-    def snapshot(root: Path, *, secrets: bool = False, hooks: bool = False, plugins: bool = False, **_):
-        requested.append((secrets, hooks, plugins))
-        if plugins:
-            raise native.WorkspaceSnapshotError("workspace_snapshot_plugins_unavailable")
-        if secrets:
-            return replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=SKILLS_COMPLETE, hooks=HOOKS_COMPLETE)
-        return SNAPSHOT
-
-    monkeypatch.setattr(runner, "workspace_snapshot", snapshot)
-    monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
-    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
-    # Detector snapshot with plugins, again without them, then the plain recheck.
-    assert requested == [(True, True, True), (True, True, False), (False, False, False)]
-    assert outcome.state == "partial"
-    assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == [
-        "detector_not_run:plugin_manifest_v1",
-        "detector_not_run:ci_workflow_v1",
-        "detector_not_run:editor_task_v1",
-        "detector_not_run:instruction_file_v1",
-    ]
-    assert outcome.coverage["detectors"]["hook_config_v1"] == "no_inputs"
-    assert outcome.coverage["detectors"]["plugin_manifest_v1"] == "not_run"
-
-
-def test_a_runtime_without_the_plugin_scan_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import native_runtime
-
-    features = (
-        native.WORKSPACE_SNAPSHOT_FEATURE,
-        native.WORKSPACE_SECRETS_FEATURE,
-        native.WORKSPACE_SKILLS_FEATURE,
-        native.WORKSPACE_HOOKS_FEATURE,
-    )
-    status = SimpleNamespace(
-        available=True,
-        compatible=True,
-        identity=SimpleNamespace(path=Path("/runtime/hol-guard-runtime")),
-        capabilities=SimpleNamespace(features=features),
-    )
-    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda: status)
-    with pytest.raises(native.WorkspaceSnapshotError) as raised:
-        native._native_request({}, needs_secrets=True, needs_skills=True, needs_hooks=True, needs_plugins=True)
-    assert raised.value.code == "workspace_snapshot_plugins_unavailable"
 
 
 @pytest.mark.parametrize(

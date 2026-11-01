@@ -1,4 +1,4 @@
-"""Local invocation preview for command-activity evidence."""
+"""Storage of the local invocation preview beside command-activity evidence."""
 
 from __future__ import annotations
 
@@ -7,118 +7,14 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityListQuery
-from codex_plugin_scanner.guard.runtime.command_activity_display import (
-    build_invocation_preview,
-    build_invocation_preview_from_payload,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_command_activity_api_support import evidence
-
-
-def test_invocation_preview_redacts_secrets_and_keeps_the_command() -> None:
-    preview = build_invocation_preview(
-        "git push origin release/2.2 --force # ghp_0123456789FORBIDDEN",
-        home_dir=None,
-    )
-    assert preview is not None
-    assert "git push origin release/2.2 --force" in preview
-    assert "ghp_0123456789FORBIDDEN" not in preview
-
-
-def test_invocation_preview_omits_shell_comments_without_removing_quoted_hashes() -> None:
-    preview = build_invocation_preview('printf "# visible" # private-note\ngit status')
-    assert preview == 'printf "# visible"\ngit status'
-    private_preview = build_invocation_preview("rm -rf ./stale-lab-dir # guard-private-command-sentinel")
-    assert private_preview is not None
-    assert private_preview.startswith("rm -rf")
-    assert "guard-private-command-sentinel" not in private_preview
-    for operator in (";", "&&", "||", "|", "&", ")", "("):
-        operator_preview = build_invocation_preview(f"echo ok{operator}# private-note\ngit status")
-        assert operator_preview is not None
-        assert "private-note" not in operator_preview
-    continuation_preview = build_invocation_preview("echo ok \\\n# private-note\ngit status")
-    assert continuation_preview is not None
-    assert "private-note" not in continuation_preview
-
-
-def test_invocation_preview_redacts_colon_delimited_credentials() -> None:
-    preview = build_invocation_preview(
-        "tool --meta 'password: hunter2' --meta 'authorization: abc123' --meta 'access_key: xyz789'"
-    )
-    assert preview is not None
-    for secret in ("hunter2", "abc123", "xyz789"):
-        assert secret not in preview
-    assert preview.count("[redacted]") == 3
-
-
-def test_invocation_preview_redacts_authorization_scheme_credentials() -> None:
-    preview = build_invocation_preview(
-        "tool --header 'Authorization: Bearer live-jwt-token' --header 'Authorization: Basic live-basic-token'"
-    )
-    assert preview is not None
-    assert "live-jwt-token" not in preview
-    assert "live-basic-token" not in preview
-    assert preview.count("[redacted]") + preview.count("*****") >= 2
-
-
-def test_invocation_preview_scrubs_spaced_heredocs_urls_and_quoted_secrets() -> None:
-    heredoc = build_invocation_preview("git push origin main << EOF\nHEREDOC_PRIVATE\nEOF")
-    assert heredoc is not None
-    assert "git push origin main" in heredoc
-    assert "HEREDOC_PRIVATE" not in heredoc
-    quoted = build_invocation_preview("AWS_SECRET_ACCESS_KEY='alpha beta' git status")
-    assert quoted is not None
-    assert "git status" in quoted
-    assert "alpha beta" not in quoted
-    remote = build_invocation_preview("git push ssh://internal.example/path")
-    assert remote is not None
-    assert "git push" in remote
-    assert "ssh://internal.example/path" not in remote
-    posix_path = build_invocation_preview("cat /etc/passwd")
-    assert posix_path is not None
-    assert "/etc/passwd" not in posix_path
-    windows_path = build_invocation_preview(r"type C:\Secrets\token.txt")
-    assert windows_path is not None
-    assert r"C:\Secrets\token.txt" not in windows_path
-    windows_slash = build_invocation_preview("type C:/Secrets/token.txt")
-    assert windows_slash is not None
-    assert "C:/Secrets/token.txt" not in windows_slash
-    quoted_windows = build_invocation_preview(r'type "C:/Docs/alice/My Documents/token.txt"')
-    assert quoted_windows is not None
-    assert "Documents/token.txt" not in quoted_windows
-    assert "My Documents" not in quoted_windows
-    quoted_windows_backslash = build_invocation_preview(r"type 'C:\Docs\alice\My Documents\token.txt'")
-    assert quoted_windows_backslash is not None
-    assert r"Documents\token.txt" not in quoted_windows_backslash
-    quoted_posix = build_invocation_preview('cat "/var/secret dir/token.txt"')
-    assert quoted_posix is not None
-    assert "secret dir/token.txt" not in quoted_posix
-    punctuated = build_invocation_preview("git push origin main << 'end.json'\nHEREDOC_PRIVATE\nend.json")
-    assert punctuated is not None
-    assert "HEREDOC_PRIVATE" not in punctuated
-
-
-def test_payload_preview_reads_native_tool_input() -> None:
-    preview = build_invocation_preview_from_payload(
-        {"toolUseId": "call_test_0123456789abcdef", "toolInput": {"command": "echo example"}}
-    )
-    assert preview == "echo example"
-
-
-def test_payload_preview_reads_codex_tool_calls() -> None:
-    preview = build_invocation_preview_from_payload(
-        {
-            "toolCalls": [
-                {"name": "Bash", "args": {"command": "git status"}},
-            ]
-        }
-    )
-    assert preview == "git status"
+from tests.native_store_shims import record_command_activity
 
 
 def test_legacy_activity_rows_report_missing_command(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity(evidence("activity:01", minute=1))
+    record_command_activity(store, evidence("activity:01", minute=1))
     page = store.list_command_activity_page(CommandActivityListQuery())
     assert page["items"][0]["invocation_preview"] is None
 
@@ -126,7 +22,8 @@ def test_legacy_activity_rows_report_missing_command(tmp_path: Path) -> None:
 def test_compaction_deletes_invocation_preview(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     old = date(2026, 1, 1)
-    store.record_command_activity(
+    record_command_activity(
+        store,
         evidence("activity:old", minute=1, occurred_on=old),
         invocation_preview="git status",
     )

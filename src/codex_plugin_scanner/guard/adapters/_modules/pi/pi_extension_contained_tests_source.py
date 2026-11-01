@@ -152,12 +152,20 @@ CONTAINED_TEST_HELPERS_SOURCE = (
         profile === "node-build-output-v1" || profile === "node-tool-readonly-v1" ||
         profile === "pytest-readonly-v2") &&
       GUARD_CONTAINED_SINK_COMMAND.length > 0 && GUARD_CONTAINED_REQUEST_ROOT !== "";
+    // The runtime's bridge marks a resident's workspace sandbox that its own
+    // sink runs as Guard's does; that sink then takes the call, with no
+    // Python start. It asks the resident again before anything runs. On Linux
+    // it also runs the read-only profiles Guard's own sink leaves to review.
+    const nativeSink = !boundBash && !windowsSink && process.platform !== "win32" &&
+      Reflect.get(response, "native_contained_sink") === true &&
+      typeof GUARD_NATIVE_HOOK_RUNTIME === "string" && GUARD_NATIVE_HOOK_RUNTIME.startsWith("/");
     if (
       response.decision !== "deny" || response.policy_action !== "sandbox-required" ||
       !profileMatches || response.observe_mode === true ||
-      (process.platform !== "darwin" && !(process.platform === "linux" && profile === "workspace-contained-v1") &&
-        !windowsSink) ||
-      (!windowsSink && (GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS || !GUARD_CLI_WRAPPER_COMMAND.startsWith("/"))) ||
+      (process.platform !== "darwin" &&
+        !(process.platform === "linux" && (profile === "workspace-contained-v1" || nativeSink)) && !windowsSink) ||
+      (!windowsSink && !nativeSink &&
+        (GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS || !GUARD_CLI_WRAPPER_COMMAND.startsWith("/"))) ||
       snapshot.payload.tool_name !== "bash" || !key || containedTestRequests.has(key) ||
       (boundBash && (!boundBashIntent || process.platform !== "darwin" ||
         !Number.isSafeInteger(process.pid) || process.pid <= 1 ||
@@ -195,13 +203,18 @@ CONTAINED_TEST_HELPERS_SOURCE = (
         "--guard-home", GUARD_HOME, "--workspace", snapshot.cwd,
         "--request-file", requestPath, "--request-sha256", digest,
         "--timeout-seconds", String(timeoutSeconds),
+      ] : nativeSink ? [
+        "contained-workspace-sink", "--harness", boundBashHarness, "--guard-home", GUARD_HOME,
+        "--workspace", snapshot.cwd, "--request-file", requestPath, "--request-sha256", digest,
+        "--home", GUARD_HOME_DIR,
       ] : [
         "execute-contained-test", "--guard-home", GUARD_HOME, "--workspace", snapshot.cwd,
         "--request-file", requestPath, "--request-sha256", digest,
       ];
-      if (!GUARD_HOME_DIR_IS_DEFAULT) args.push("--home", GUARD_HOME_DIR);
+      if (!nativeSink && !GUARD_HOME_DIR_IS_DEFAULT) args.push("--home", GUARD_HOME_DIR);
       const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
-      const prefix = windowsSink ? GUARD_CONTAINED_SINK_COMMAND : [GUARD_CLI_WRAPPER_COMMAND];
+      const prefix = windowsSink ? GUARD_CONTAINED_SINK_COMMAND
+        : nativeSink ? [GUARD_NATIVE_HOOK_RUNTIME as string] : [GUARD_CLI_WRAPPER_COMMAND];
       const command = [...prefix, ...args].map(quote).join(" ");
       containedTestRequests.set(key, directory);
       if (boundBash) boundBashInvocations.set(key, { operationId, cwd: snapshot.cwd });

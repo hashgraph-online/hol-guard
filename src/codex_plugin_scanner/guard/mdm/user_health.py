@@ -3,20 +3,17 @@
 from __future__ import annotations
 
 import base64
-import binascii
 import hashlib
-import json
 import os
 import secrets
 import stat
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
-from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
@@ -27,12 +24,23 @@ from .health_lease_contract import HealthLeaseOutbox, canonical_json_bytes, cano
 from .health_transport import GuardCloudMachineHealthTransport, MachineHealthTransport
 from .integrity import machine_integrity_snapshot
 from .protection_lease_contract import ProtectionLeaseClaims, SignedProtectionLease
+from .runtime_request import runtime_answer
 
 _SCHEMA = "hol-guard-user-health-state.v1"
-_STATE_NAME = "user-health-state.json"
 _LOCK_NAME = "user-health-state.lock"
-_MAX_STATE_BYTES = 512 * 1024
-_MAX_UINT64 = (1 << 64) - 1
+USER_HEALTH_STATE_COMMAND = "user-health-state"
+USER_HEALTH_STATE_FEATURE = "native-user-health-state-v1"
+USER_HEALTH_STATE_SCHEMA = "user-health-state.v1"
+_COMMAND_TIMEOUT_SECONDS = 10.0
+# A stored state is bounded at 512 KiB.
+_OUTPUT_LIMIT_BYTES = 1024 * 1024
+_STATE_NAME = "user-health-state.json"
+_STATE_UNAVAILABLE = "user_health_state_native_unavailable"
+_STATE_ERROR_TYPES: dict[str, type[Exception]] = {
+    "permission": PermissionError,
+    "value": ValueError,
+    "os": OSError,
+}
 _P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
 
 
@@ -69,10 +77,6 @@ class UserHealthState:
         }
 
 
-def _state_path(guard_home: Path) -> Path:
-    return guard_home / _STATE_NAME
-
-
 def _low_s_signature(signature: bytes) -> bytes:
     try:
         r, s = decode_dss_signature(signature)
@@ -91,112 +95,77 @@ def _private_directory(guard_home: Path) -> None:
         raise PermissionError("user_health_state_acl_invalid")
 
 
-def _read_state(guard_home: Path) -> UserHealthState | None:
-    try:
-        _private_directory(guard_home)
-    except FileNotFoundError:
-        return None
-    try:
-        descriptor = os.open(
-            _state_path(guard_home),
-            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-        )
-    except FileNotFoundError:
-        return None
-    try:
-        metadata = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_size > _MAX_STATE_BYTES
-            or (os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o077))
-        ):
-            raise PermissionError("user_health_state_acl_invalid")
-        payload = os.read(descriptor, _MAX_STATE_BYTES + 1)
-    finally:
-        os.close(descriptor)
-    try:
-        raw = json.loads(payload)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("user_health_state_invalid") from exc
-    expected = {
-        "schemaVersion",
-        "enabled",
-        "workspaceId",
-        "deviceId",
-        "machineInstallationId",
-        "installationGeneration",
-        "sequence",
-        "lastLeaseDigest",
-        "keyId",
-        "publicKeySpki",
-        "privateKeyPem",
-        "pendingOutbox",
-        "updatedAt",
+def _state_owner_uid() -> int:
+    """The only owner a Unix state file is trusted from; Windows skips the check."""
+
+    return cast(int, getattr(os, "geteuid", lambda: 0)())
+
+
+def _native_state(guard_home: Path, op: str, state: UserHealthState | None = None) -> dict[str, object]:
+    """Ask the native runtime to read or write the user health state.
+
+    The runtime trusts only a private Guard home and a private regular file of
+    this user that held still while read, validates every field and the key
+    pair, and writes through a synced private temporary file. Without it the
+    user health lease fails closed.
+    """
+
+    request: dict[str, object] = {
+        "schema": USER_HEALTH_STATE_SCHEMA,
+        "op": op,
+        "guard_home": str(guard_home),
+        "owner_uid": _state_owner_uid(),
     }
-    if not isinstance(raw, dict) or set(raw) != expected or raw.get("schemaVersion") != _SCHEMA:
-        raise ValueError("user_health_state_invalid")
-    state = UserHealthState(
-        cast(bool, raw["enabled"]),
-        cast(str, raw["workspaceId"]),
-        cast(str, raw["deviceId"]),
-        cast(str, raw["machineInstallationId"]),
-        cast(str, raw["installationGeneration"]),
-        cast(int, raw["sequence"]),
-        cast(str | None, raw["lastLeaseDigest"]),
-        cast(str, raw["keyId"]),
-        cast(str, raw["publicKeySpki"]),
-        cast(str, raw["privateKeyPem"]),
-        cast(str | None, raw["pendingOutbox"]),
-        cast(str, raw["updatedAt"]),
+    if state is not None:
+        request["state"] = state.to_dict()
+    answer = runtime_answer(
+        USER_HEALTH_STATE_FEATURE,
+        USER_HEALTH_STATE_COMMAND,
+        request,
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
     )
-    _validate_state(state)
-    return state
+    if answer is None:
+        raise OSError(_STATE_UNAVAILABLE)
+    if answer.get("ok") is True:
+        return answer
+    reason_code = answer.get("reason_code")
+    error_type = _STATE_ERROR_TYPES.get(str(answer.get("error_class")))
+    if error_type is None or not isinstance(reason_code, str):
+        raise OSError(_STATE_UNAVAILABLE)
+    raise error_type(reason_code)
 
 
-def _validate_state(state: UserHealthState) -> None:
-    if (
-        not isinstance(state.enabled, bool)
-        or not all(isinstance(value, str) and value for value in (state.workspace_id, state.device_id))
-        or any(
-            len(value) != 32 or any(char not in "0123456789abcdef" for char in value)
-            for value in (state.machine_installation_id, state.installation_generation)
-        )
-        or not isinstance(state.sequence, int)
-        or isinstance(state.sequence, bool)
-        or not 0 <= state.sequence <= _MAX_UINT64
-        or (state.sequence == 0) != (state.last_lease_digest is None)
-        or (
-            state.last_lease_digest is not None
-            and (
-                len(state.last_lease_digest) != 64
-                or any(char not in "0123456789abcdef" for char in state.last_lease_digest)
-            )
-        )
-        or len(state.key_id) != 43
-        or len(state.public_key_spki) > 1024
-        or len(state.private_key_pem) > 4096
-        or (state.pending_outbox is not None and len(state.pending_outbox) > 400_000)
-    ):
-        raise ValueError("user_health_state_invalid")
+def _read_state(guard_home: Path) -> UserHealthState | None:
+    # Most installs never enable the user health lease; skip the native round
+    # trip so cloud sync never waits on it for a file that is not there. Only
+    # a missing file is absence; any other probe error goes to the runtime.
     try:
-        updated_at = datetime.fromisoformat(state.updated_at)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("user_health_state_invalid") from exc
-    if updated_at.tzinfo is None:
-        raise ValueError("user_health_state_invalid")
-    try:
-        private_key = serialization.load_pem_private_key(state.private_key_pem.encode(), password=None)
-        public_der = base64.b64decode(state.public_key_spki, validate=True)
-        key_digest = base64.b64decode(f"{state.key_id}=", altchars=b"-_", validate=True)
-    except (binascii.Error, TypeError, UnsupportedAlgorithm, ValueError) as exc:
-        raise ValueError("user_health_state_invalid") from exc
-    if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
-        raise ValueError("user_health_state_invalid")
-    expected_der = private_key.public_key().public_bytes(
-        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+        os.lstat(guard_home / _STATE_NAME)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        pass
+    raw = _native_state(guard_home, "read").get("state")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise OSError(_STATE_UNAVAILABLE)
+    fields = cast(dict[str, object], raw)
+    return UserHealthState(
+        cast(bool, fields["enabled"]),
+        cast(str, fields["workspaceId"]),
+        cast(str, fields["deviceId"]),
+        cast(str, fields["machineInstallationId"]),
+        cast(str, fields["installationGeneration"]),
+        cast(int, fields["sequence"]),
+        cast(str | None, fields["lastLeaseDigest"]),
+        cast(str, fields["keyId"]),
+        cast(str, fields["publicKeySpki"]),
+        cast(str, fields["privateKeyPem"]),
+        cast(str | None, fields["pendingOutbox"]),
+        cast(str, fields["updatedAt"]),
     )
-    if expected_der != public_der or hashlib.sha256(public_der).digest() != key_digest:
-        raise ValueError("user_health_state_invalid")
 
 
 @contextmanager
@@ -243,21 +212,7 @@ def _state_lock(guard_home: Path) -> Iterator[None]:
 
 
 def _write_state(guard_home: Path, state: UserHealthState) -> None:
-    _validate_state(state)
-    _private_directory(guard_home)
-    payload = canonical_json_bytes(state.to_dict())
-    temporary = guard_home / f".{_STATE_NAME}.{secrets.token_hex(16)}.tmp"
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, _state_path(guard_home))
-        os.chmod(_state_path(guard_home), 0o600)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
+    _ = _native_state(guard_home, "write", state)
 
 
 def _new_state(workspace_id: str, device_id: str, now: datetime) -> UserHealthState:

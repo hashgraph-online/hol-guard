@@ -7233,6 +7233,32 @@
             },
             {
               "action_classes": [
+                "git workspace command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies git bisect operations.",
+              "example_command": "git bisect",
+              "family": "git-workspace",
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.59.0",
+              "label": "Git bisect",
+              "permission_id": "command.git.permission.bisect",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the current branch and working tree before changing them."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
                 "git read command"
               ],
               "baseline_floor": "allow",
@@ -7709,6 +7735,32 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
+              "description": "Identifies git maintenance operations.",
+              "example_command": "git maintenance",
+              "family": "git-workspace",
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.59.0",
+              "label": "Git maintenance",
+              "permission_id": "command.git.permission.maintenance",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the configured maintenance tasks and schedule before running or registering them."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
               "description": "Identifies git merge operations.",
               "example_command": "git merge",
               "family": "git-history",
@@ -7748,6 +7800,32 @@
               "risk_tier": "high",
               "safer_guidance": [
                 "Inspect the current branch and working tree before changing them."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies git notes operations.",
+              "example_command": "git notes",
+              "family": "git-workspace",
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.59.0",
+              "label": "Git notes",
+              "permission_id": "command.git.permission.notes",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Read the note with `git notes show` before writing or removing one."
               ],
               "typed_capabilities": []
             },
@@ -7904,6 +7982,32 @@
               "risk_tier": "high",
               "safer_guidance": [
                 "List the exact remote branch and confirm its merge state before deletion."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies git replace operations.",
+              "example_command": "git replace",
+              "family": "git-workspace",
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "3.59.0",
+              "label": "Git replace",
+              "permission_id": "command.git.permission.replace",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "List the replacement refs with `git replace --list` before adding or deleting one."
               ],
               "typed_capabilities": []
             },
@@ -9378,6 +9482,94 @@
               ],
               "severity": "high",
               "title": "Git worktree"
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies git bisect operations.",
+              "family": "git-workspace",
+              "matcher": null,
+              "native_capability": "command.git.bisect.v1",
+              "permission_id": "command.git.permission.bisect",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.git.bisect",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the current branch and working tree before changing them."
+              ],
+              "severity": "high",
+              "title": "Git bisect"
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies git notes operations.",
+              "family": "git-workspace",
+              "matcher": null,
+              "native_capability": "command.git.notes.v1",
+              "permission_id": "command.git.permission.notes",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.git.notes",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Read the note with `git notes show` before writing or removing one."
+              ],
+              "severity": "high",
+              "title": "Git notes"
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies git replace operations.",
+              "family": "git-workspace",
+              "matcher": null,
+              "native_capability": "command.git.replace.v1",
+              "permission_id": "command.git.permission.replace",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.git.replace",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "List the replacement refs with `git replace --list` before adding or deleting one."
+              ],
+              "severity": "high",
+              "title": "Git replace"
+            },
+            {
+              "action_classes": [
+                "git workspace command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies git maintenance operations.",
+              "family": "git-workspace",
+              "matcher": null,
+              "native_capability": "command.git.maintenance.v1",
+              "permission_id": "command.git.permission.maintenance",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.git.maintenance",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the configured maintenance tasks and schedule before running or registering them."
+              ],
+              "severity": "high",
+              "title": "Git maintenance"
             },
             {
               "action_classes": [

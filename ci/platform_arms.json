@@ -3,6 +3,30 @@
  "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
+   "verdict": "windows-unsupported",
+   "note": "Private directory creation needs POSIX ownership and mode checks; this arm returns PlatformUnsupported.",
+   "file": "rust/crates/guard-cigar-artifacts/src/paths.rs",
+   "item": "fn private_directory -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "725ff950593e"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Private child creation needs POSIX ownership and mode checks; this arm returns PlatformUnsupported.",
+   "file": "rust/crates/guard-cigar-artifacts/src/paths.rs",
+   "item": "fn private_child -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "23a342b0eaf6"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The Python snapshot requires uid, gid, mode and inode identity; this arm returns PlatformUnsupported.",
+   "file": "rust/crates/guard-cigar-artifacts/src/python_snapshot.rs",
+   "item": "fn stamp -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "f92ed341b447"
+  },
+  {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
    "item": "fn resolve_host(text: &str, env: &PathEnv) -> Option<String>",
    "verdict": "windows-permissive",
@@ -715,6 +739,38 @@
    "body": "4183089b80f8"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The persistence compile doctor requires a POSIX broker store; this arm returns PlatformUnqualified.",
+   "file": "rust/crates/guard-context-assistance/src/broker_persistence_doctor.rs",
+   "item": "fn verify_persistence_compile -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "398387831d92"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Private broker storage inspection requires POSIX ownership and mode checks; this arm returns PlatformUnqualified.",
+   "file": "rust/crates/guard-context-assistance/src/broker_storage.rs",
+   "item": "fn inspect -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "83289c3b671b"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Private broker storage revalidation requires POSIX identity checks; this arm returns PlatformUnqualified.",
+   "file": "rust/crates/guard-context-assistance/src/broker_storage.rs",
+   "item": "fn revalidate -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "6fc33b160b25"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Source root revalidation cannot compare stable device and inode identity here; it returns PlatformUnqualified before a source read.",
+   "file": "rust/crates/guard-context-assistance/src/source.rs",
+   "item": "fn revalidate -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e114a3678e26"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows names its own ignorable spawn codes; elsewhere `false` treats every code as worth reporting, which over-reports rather than hiding a failure.",
    "file": "rust/crates/guard-runtime/src/adapters/adapter_inventory.rs",
@@ -939,6 +995,294 @@
    "body": "8ebb1bb3d55c"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Cache expiration is skipped and false is returned; persistent cache opening is Unix-only, so no cache can be active here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn expire_cache -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "943742c6aff3"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "This reports false because the persistent cache can only be opened on Unix; memory mode has no saved cache.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn has_cache -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "08914a24a235"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Staging saved notes is skipped with success; the persistent backend cannot be opened here and memory notes remain actor-owned.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn stage_notes -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "8e252a691752"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Committing saved notes is skipped with success; the persistent backend cannot be opened here and memory notes remain actor-owned.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_backend_persistence.rs",
+   "item": "fn commit_notes -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "62fea81c0f23"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Read-only bundled catalog is returned only when no local catalog file exists; any local overlay is refused.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog.rs",
+   "item": "fn installed -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "2b73fd848c2f"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog trust authority configuration requires the private POSIX store; this arm returns platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog.rs",
+   "item": "fn configure -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "1854837a61ec"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog import requires the private POSIX store; this arm returns platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog.rs",
+   "item": "fn import -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "c51034204177"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Remote catalog feed configuration requires the private POSIX store; this arm rejects it.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_feed.rs",
+   "item": "fn configure -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "6c25b5e28bdd"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog refresh requires the private POSIX job store; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_refresh_jobs.rs",
+   "item": "fn refresh_catalog_inner -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "47c336ee48cc"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog refresh worker directory requires private POSIX ownership checks; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_refresh_worker.rs",
+   "item": "fn directory -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "054a1358725a"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog refresh recovery requires the private POSIX job store; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_catalog_refresh_worker.rs",
+   "item": "fn recover -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e9457c35a455"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Generation index validation is skipped with success; generation storage and version switching are Unix-only and cannot be opened here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn validate_generations -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "8f4f603465db"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Saved evidence inspection returns an unsupported status with PlatformUnqualified, rather than describing any saved slots.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn inspect -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "118a0390cbb5"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "This removal entry point is compiled off Unix only to report PlatformUnqualified for private saved evidence.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "pub(crate) fn remove(home: &Path) -> Result<(), RuntimeError>",
+   "cfg": "any(test, not(unix))",
+   "body": "3a5764e00324"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Saved evidence removal returns PlatformUnqualified; it does not claim erasure of a private store.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn remove -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "398387831d92"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Retention sweep is skipped with success; the private evidence and generation stores are Unix-only and cannot be opened here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_data.rs",
+   "item": "fn sweep -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "ce0e263dd06a"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Clear still removes in-memory scopes, graphs and agents; saved evidence removal is inert because no persistent backend can open here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_engine.rs",
+   "item": "fn execute -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "91d1d19de243"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Opening a saved backend returns PlatformUnqualified; only the memory backend is available.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_engine_cache.rs",
+   "item": "fn open_backend -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "5364ae426cdd"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows lacks the Unix uid, mode and link-count proof for this retry. Returning false keeps uncertain reads fail-closed before any job view is exposed; Windows native-runtime CI compiles this arm.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_job_store.rs",
+   "item": "fn replacement_candidate -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "5c14a37d30fd"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Install job leasing requires the private POSIX job store; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_job_store.rs",
+   "item": "fn lease -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e9d7693b8ef0"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Counts available install, Python and catalog jobs; switch jobs are Unix-only and cannot exist here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_jobs.rs",
+   "item": "fn total_job_count(home: &Path) -> Result<usize, String>",
+   "cfg": "not(unix)",
+   "body": "32d0ddb3ca23"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Checks catalog job IDs; switch job IDs cannot exist because switch jobs are Unix-only.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_jobs.rs",
+   "item": "fn switch_job_id_exists -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "78fd32b35e53"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Catalog installation is rejected off Unix before preparing an SDK install job.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_jobs.rs",
+   "item": "fn install_from_catalog -- cfg! expression",
+   "cfg": "unix",
+   "body": "9d10759fa9de"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Installer space reservation needs private POSIX directories; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_worker.rs",
+   "item": "fn space -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "0c4f2945527f"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Installer ownership and directory creation need POSIX controls; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_install_worker.rs",
+   "item": "fn create_owned -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "7b3b58575d71"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Python installer ownership and directory creation need POSIX controls; this arm reports platform unqualified.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_python_worker.rs",
+   "item": "fn create_owned -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "7b3b58575d71"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Non-memory persistence requests are rejected off Unix; memory mode remains available.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service.rs",
+   "item": "fn schedule -- cfg! expression",
+   "cfg": "unix",
+   "body": "f9cea4d1e602"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Background retention maintenance is skipped off Unix; private saved evidence and generation stores are unavailable here.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_data.rs",
+   "item": "fn arm_housekeeping -- cfg! expression",
+   "cfg": "unix",
+   "body": "924baa998dfe"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Resuming saved-data erasure is rejected because the private POSIX removal journal is unavailable.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_data.rs",
+   "item": "fn offline_data -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "e2e6068d1450"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Clear and ForgetSaved call saved-data removal, which returns PlatformUnqualified rather than claiming disk erasure.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_data.rs",
+   "item": "fn offline_data -- non-Unix block #2",
+   "cfg": "not(unix)",
+   "body": "3ba6e3fe2552"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "No upgrade status is returned because native CIGAR version switching is Unix-only.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_status.rs",
+   "item": "fn status -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "d4f633a6182f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "The status capability explicitly reports private_persistence false off Unix.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_status.rs",
+   "item": "fn status -- cfg! expression",
+   "cfg": "unix",
+   "body": "17245a06342c"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Returns false because switch jobs are Unix-only; available update jobs still use their own lookup.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn is_switch -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "429c405be4a3"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Switch recovery cannot run because switch jobs do not exist off Unix; update recovery still uses its separate job store.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn recover -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "1305d3fc2bb4"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Preparing a runtime switch returns native_context_assistance_switch_platform_unsupported.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn prepare -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "941bde62ad34"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Committing a runtime switch returns native_context_assistance_switch_platform_unsupported.",
+   "file": "rust/crates/guard-runtime/src/context_assistance_service_version_jobs.rs",
+   "item": "fn commit -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "a67970660785"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Windows has no stale-copy hand-off yet: a stale Cursor bridge that misses the resident keeps the hook and takes the daemon path, exactly as before this arm existed. Nothing is decided differently; the hook only stays on the slower route. The Unix arm is pinned by hook_bridge_successor_tests.rs.",
    "file": "rust/crates/guard-runtime/src/cursor_hook_bridge.rs",
@@ -1067,6 +1411,54 @@
    "body": "d82502e748db"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "The Grok registration directory is created without POSIX mode bits, as the Python writer's `mkdir(mode=0o700)` never applied them on Windows either; the directory still lives under the per-user Guard home. `an_explicit_selection_is_registered_and_bound_to_its_hash` in `grok_executable_tests.rs` is not `cfg(unix)`-gated, so the Windows test job writes through this arm.",
+   "file": "rust/crates/guard-runtime/src/grok_executable.rs",
+   "item": "fn private_directory_builder() -> fs::DirBuilder",
+   "cfg": "not(unix)",
+   "body": "bf492cbff997"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no executable or group/other write bits; the Python check returned after the regular-file and `os.access` test there, and `os.access(X_OK)` only reports existence on Windows. The launcher is still refused from the workspace, the Guard home and the cwd, and its content hash is still bound. The non-`cfg(unix)` tests in `grok_executable_tests.rs` resolve launchers through this arm on the Windows test job.",
+   "file": "rust/crates/guard-runtime/src/grok_executable_paths.rs",
+   "item": "fn security_error -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "382540123484"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "The Python directory-chain check only ran off Windows (`os.name != \"nt\"`), so Windows PATH entries and launcher directories were never judged by owner or mode. Location rules (workspace, Guard home, cwd, absolute paths) still apply there; `the_launch_environment_drops_loaders_and_unsafe_path_entries` runs on the Windows test job.",
+   "file": "rust/crates/guard-runtime/src/grok_executable_paths.rs",
+   "item": "pub(crate) fn chain_secure(_directory: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "0d69dbe445f9"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Home identity capture retains canonical path but skips Unix device and inode checks; replacement at the same path may escape this check, while path comparison still runs.",
+   "file": "rust/crates/guard-runtime/src/guard_config_update_assistance_preflight.rs",
+   "item": "fn capture -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "41d469586b8c"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "The retained Windows writer has no Unix cross-process lock or atomic replacement; expected-byte comparison still detects prior changes.",
+   "file": "rust/crates/guard-runtime/src/guard_config_update_io.rs",
+   "item": "pub(crate) struct WriteLock(PathBuf)",
+   "cfg": "not(unix)",
+   "body": "7882dbb1cd82"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "The retained Windows writer checks expected bytes before fs::write but skips Unix atomic replacement; concurrent writes or partial writes remain possible.",
+   "file": "rust/crates/guard-runtime/src/guard_config_update_io.rs",
+   "item": "impl WriteLock",
+   "cfg": "not(unix)",
+   "body": "b91ecc406a49"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/guard_paths.rs",
    "item": "pub(crate) fn owned_by_current_user(_path: &Path) -> bool",
    "verdict": "windows-unsupported",
@@ -1081,6 +1473,118 @@
    "note": "There is no POSIX file key off Unix, so the write cache never claims a cached identity and re-reads instead.",
    "cfg": "not(unix)",
    "body": "05adc32b95e0"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "The Windows write still refuses a planted name with `create_new` and flushes the file with `sync_all` before it takes the state file's name; only the POSIX mode bits are left out, which the Python writer's `os.open(..., 0o600)` never set on Windows either. The round-trip tests in `health_lease_state_tests.rs` are not `cfg(unix)`-gated, so the Windows test job runs this arm.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn write_private_file(path: &Path, payload: &[u8]) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "0dc761715662"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private_regular_file`, so no error code needs classifying there.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn is_link_loop(_error: &io::Error) -> bool",
+   "cfg": "not(unix)",
+   "body": "2fd3a565b13a"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "On Windows the metadata file is opened with `FILE_FLAG_OPEN_REPARSE_POINT` and read-only sharing, so it cannot be replaced or written while it is read, and the lstat-before/after and fstat-before/after comparisons still run; only the opened-handle versus path identity check is Unix-only, because a path lstat on Windows carries no file index to compare with the handle's. The index tests in `local_skill_index_tests.rs` are not `cfg(unix)`-gated, so the Windows test job runs this arm.",
+   "file": "rust/crates/guard-runtime/src/local_skill_index.rs",
+   "item": "fn read_metadata -- cfg! expression",
+   "cfg": "unix",
+   "body": "86cc00090e5f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Discovery reports each document path below its root as `/`-joined UTF-8 on Windows (OS bytes on Unix), so decoding it as UTF-8 is the Windows spelling of the same path; an undecodable path is refused as `metadata-unreadable`. The index tests in `local_skill_index_tests.rs` are not `cfg(unix)`-gated, so the Windows test job runs this arm.",
+   "file": "rust/crates/guard-runtime/src/local_skill_index.rs",
+   "item": "fn relative_path -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "1c50e42314a2"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Orphaned hook workers are reaped only on Unix, as before the move: the selection reads POSIX `ps` output and the daemon manager returns before it asks on Windows. The Windows arm answers `orphaned_worker_reap_unsupported`, pinned by `reaping_is_unsupported_off_unix`.",
+   "file": "rust/crates/guard-runtime/src/orphaned_worker_reap.rs",
+   "item": "fn answer(_request: &Request) -> Value",
+   "cfg": "not(unix)",
+   "body": "4fbf180853ce"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private`, so no error code needs classifying there.",
+   "file": "rust/crates/guard-runtime/src/user_health_state.rs",
+   "item": "fn is_link_loop(_error: &io::Error) -> bool",
+   "cfg": "not(unix)",
+   "body": "2fd3a565b13a"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Python parity: `mdm/user_health.py` checked only the file type on Windows because `os.stat` reports no owner or mode bits there. The Guard home's own ACL is what keeps the state private on Windows; a DACL check was never ported. A link is still refused, since `symlink_metadata` and the reparse-point open report it as neither a directory nor a regular file. Covered by `a_state_reads_back_without_owner_bits` in `user_health_state_tests.rs`.",
+   "file": "rust/crates/guard-runtime/src/user_health_state.rs",
+   "item": "fn is_private(metadata: &Metadata, _owner_uid: u32, directory: bool) -> bool",
+   "cfg": "not(unix)",
+   "body": "695d774d653b"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Python parity: `mdm/health_lease.py` accepted any regular file on Windows because `os.stat` reports no owner or mode bits there. The machine state root's own ACL is what keeps the files private on Windows; a DACL check was never ported. Covered by `a_regular_file_reads_back_without_owner_bits` in `health_lease_state_tests.rs`.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn is_private_regular_file(metadata: &Metadata, _owner_uid: u32) -> bool",
+   "cfg": "not(unix)",
+   "body": "4c7624b921d8"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Fsyncing a directory to make a new name durable is a POSIX primitive with no Windows counterpart, and `durable_io.fsync_directory` was a no-op on Windows too; each state file is still flushed with `sync_all` before it takes its name. The tests in `health_lease_state_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn sync_directory(_directory: &Path) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "e88822ef3716"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_artifacts.rs",
+   "item": "pub(super) fn open_without_following(path: &Path) -> io::Result<File>",
+   "verdict": "windows-permissive",
+   "note": "Windows has no `O_NOFOLLOW`, so the open follows a reparse point at the last component, as the Python registry did. Every caller lstats the path first and refuses a symlink, then compares the opened file's size and times with that lstat, so a link swapped in after the lstat is caught by the stamp check rather than the open. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "51989753051d"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_artifacts.rs",
+   "item": "pub(super) fn stamp(metadata: &Metadata) -> Stamp",
+   "verdict": "windows-permissive",
+   "note": "Windows `Metadata` exposes no device or inode number on stable Rust, so the stamp is the size with the modified and created times. A file replaced by one of the same size carrying the same times between two reads is not noticed; the Unix arm also compares device, inode and change time. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "14f0d404cabe"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_registry.rs",
+   "item": "fn registry_acl_is_private(_metadata: &Metadata, _owner_uid: u32) -> bool",
+   "verdict": "windows-permissive",
+   "note": "The registry's owner and mode are only checked on Unix, matching the Python registry, which skipped the check when `os.name == \"nt\"`. On Windows the registry lives under the machine state root the administrator-only install creates, and every change is made under the machine-state lock by an administrator. Reading a Windows DACL is not ported. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "ce37d9a6c3da"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_registry.rs",
+   "item": "fn sync_directory(_directory: &Path) -> io::Result<()>",
+   "verdict": "posix-primitive",
+   "note": "Fsyncing a directory to make a new name durable is a POSIX primitive with no Windows counterpart; the registry file itself is flushed before it is renamed into place, and NTFS orders the rename with the file's own data. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "e88822ef3716"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_request.rs",
+   "item": "fn request_acl_is_private(_home: &Metadata, _guard_home: &Metadata, _request: &Metadata) -> bool",
+   "verdict": "windows-unsupported",
+   "note": "A Windows coverage request is never trusted, matching the Python reader, whose owner and mode checks always failed there because `st_mode` carries no permission bits and `st_uid` is zero. Reading the request's DACL is not ported, so device registration from a user's request stays refused on Windows. `harness_coverage_request_tests.rs` runs this arm on Windows in `a_request_is_never_trusted_without_owner_and_mode_bits`.",
+   "cfg": "not(unix)",
+   "body": "279bd89f2f4f"
   },
   {
    "file": "rust/crates/guard-runtime/src/hook_approval_context/support.rs",
@@ -1105,6 +1609,14 @@
    "note": "The other arm this inventory was written for. Every contained hook route defers with `ContainedRouteFailed` off Unix, so a command that would run contained on macOS is reviewed on Windows. PR #5397 shipped this with `#![cfg(unix)]` test files, so the Windows arm never entered a test binary. Closing it needs a Windows containment sink.",
    "cfg": "not(unix)",
    "body": "7414d586df8b"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The `cwd` argument is written as a `cd` only for the runtime's own sink, which is Unix-only (contained_workspace_sink). Off Unix no call takes that sink and the contained route defers with `ContainedRouteFailed` (`mod request`), so the call is decided as sent, exactly as before.",
+   "file": "rust/crates/guard-runtime/src/hook_direct_contained_projection.rs",
+   "item": "pub(super) fn directory_input( _original: &Map<String, Value>, _workspace: &str, _home_dir: &str, ) -> Option<Map<String, Value>>",
+   "cfg": "not(unix)",
+   "body": "70d0bf8ff484"
   },
   {
    "verdict": "other-platform",
@@ -1283,6 +1795,22 @@
    "body": "9d7f0700684d"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "No generation snapshot is captured off Unix; stop still uses the selected resident identity and owner-lock containment checks.",
+   "file": "rust/crates/guard-runtime/src/managed_resident_stop_snapshot.rs",
+   "item": "fn capture_for_stop -- cfg! expression",
+   "cfg": "unix",
+   "body": "ede87be2449f"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "The legacy stop wait may include a later generation; known process identity is still checked before termination, but the Unix snapshot bound is absent.",
+   "file": "rust/crates/guard-runtime/src/managed_resident_stop_snapshot.rs",
+   "item": "fn wait_for_stop -- cfg! expression",
+   "cfg": "unix",
+   "body": "167b996ae6d8"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/managed_resident_supervisor.rs",
    "item": "fn remove_managed_endpoint -- non-Unix block",
    "verdict": "windows-unsupported",
@@ -1387,6 +1915,14 @@
    "body": "d8031d1df298"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The macOS ownership walk reads Unix owner and mode bits, which Windows does not have. Without them every surface reports `ownership_acl_probe_failed`, so a Windows host never reads as healthy through this op; Windows surfaces go through `windows-probe` instead. ownership_acl_macos_tests.rs::without_unix_metadata_every_surface_fails_the_probe pins the refusal off Unix on the native-op gate in .github/actions/ci-job-windows-shim-admin/action.yml.",
+   "file": "rust/crates/guard-runtime/src/ownership_acl_macos.rs",
+   "item": "pub(super) fn lstat(_path: &Path) -> io::Result<Fingerprint>",
+   "cfg": "not(unix)",
+   "body": "9c80ab6ea759"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/pack_lifecycle/offline/fresh.rs",
    "item": "fn batch -- non-Unix block",
    "verdict": "posix-primitive",
@@ -1419,11 +1955,11 @@
    "body": "d4309f13f345"
   },
   {
-   "verdict": "windows-unsupported",
-   "note": "Python's `platform.node()` is the DNS host name on Windows, which `COMPUTERNAME` (the upper-cased, 15-character NetBIOS name) does not match, and a bundle rule scoped to a device compares its name exactly. The arm reports no host name, so a device still on a generic label has no known name, `cached_bundle_identities` answers none, and every caller defers the bundle's rows to the store rather than authorizing them under a name the store would not use.",
+   "verdict": "other-platform",
+   "note": "Unix reads `gethostname` and Windows reads the physical DNS host name `platform.node()` reports, each in its own arm; this one answers no host name on a platform Guard does not ship, so a device still on a generic label has no known name and the bundle's rows defer to the store.",
    "file": "rust/crates/guard-runtime/src/policy_bundle_store_identities.rs",
    "item": "fn host_name() -> Option<String>",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "6a7c0c4ecb3c"
   },
   {
@@ -1489,6 +2025,46 @@
    "item": "fn ignorable -- non-Unix block",
    "cfg": "not(unix)",
    "body": "80fd5f269335"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/release_manifest_verify.rs",
+   "item": "fn owner_verdict(_metadata: &Metadata, _owner_uid: u32) -> Result<OwnerVerdict, Invalid>",
+   "verdict": "windows-unsupported",
+   "note": "Machine-runtime owner and mode bits are never proven off Unix, so a requested owner leaves the release manifest invalid; Windows callers pass no owner and rely on the signed per-file hashes.",
+   "cfg": "not(unix)",
+   "body": "66d059ccc9a3"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "fn private_directory -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Creates the directory without a POSIX mode; Windows has no mode bits. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "3a2ba7a1a9d0"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "fn set_private_mode -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Leaves the file's ACL as inherited from the protected state root; Windows has no mode bits. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "c3b1ab2206f8"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "pub(super) fn open_without_following(path: &Path) -> io::Result<File>",
+   "verdict": "windows-equivalent",
+   "note": "Opens by path without `O_NOFOLLOW`. The caller already refused a tombstone whose `symlink_metadata` is not a regular file, and the tombstone root is inside the ACL-protected state root, so no other account can swap in a link between the check and the read. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "51989753051d"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
+   "item": "fn sync_directory -- non-Unix block",
+   "verdict": "windows-equivalent",
+   "note": "Windows cannot open a directory for `fsync`, so this is a no-op, matching `durable_io.fsync_directory`. The file itself is flushed with `sync_all` before the rename. Python's `mdm/removal.py` behaved the same way on Windows, and the state root's ACL is verified by `verify_protected_ownership_and_acl` before any removal evidence is issued or checked.",
+   "cfg": "not(unix)",
+   "body": "4792471c9913"
   },
   {
    "file": "rust/crates/guard-runtime/src/request_context_op.rs",
@@ -1777,6 +2353,22 @@
    "item": "pub(crate) fn secure_open(_path: &Path, _canonical_path: &Path) -> Result<File, SecureOpenError>",
    "cfg": "not(any(unix, windows))",
    "body": "6b310cc8c25c"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn current_uid() -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "43e9f362db32"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "5efc5e13f499"
   }
  ]
 }

@@ -18,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_workspace_snapshot as native
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
@@ -274,46 +273,6 @@ def test_runner_hands_the_native_scan_a_stable_per_install_key(tmp_path: Path, m
     assert isinstance(keys[0], str) and len(keys[0]) >= 32
     assert keys[0] not in json.dumps(first.coverage) + json.dumps(list(first.findings))
     assert keys[0] == secret_findings.load_fingerprint_key(store, "2026-10-24T00:00:00Z")
-
-
-def test_older_runtime_falls_back_and_reports_the_detector_not_run(tmp_path: Path, monkeypatch) -> None:
-    store, claimed = queued_run(tmp_path)
-    requested: list[bool] = []
-
-    def snapshot(
-        root: Path,
-        *,
-        mode: str = "content",
-        secrets: bool = False,
-        secret_key: str | None = None,
-        skills: bool = False,
-        hooks: bool = False,
-        plugins: bool = False,
-        workflows: bool = False,
-        editor_tasks: bool = False,
-        instructions: bool = False,
-    ) -> native.WorkspaceSnapshot:
-        requested.append(secrets)
-        if secrets:
-            raise native.WorkspaceSnapshotError("workspace_snapshot_secrets_unavailable")
-        return SNAPSHOT
-
-    monkeypatch.setattr(runner, "workspace_snapshot", snapshot)
-    monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
-    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
-    assert requested == [True, False, False]
-    assert outcome.state == "partial"
-    assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == [
-        "detector_not_run:secrets",
-        "detector_not_run:skill_content_v1",
-        "detector_not_run:hook_config_v1",
-        "detector_not_run:plugin_manifest_v1",
-        "detector_not_run:ci_workflow_v1",
-        "detector_not_run:editor_task_v1",
-        "detector_not_run:instruction_file_v1",
-    ]
-    assert outcome.coverage["detectors"]["secrets"] == "not_run"
 
 
 def test_merged_findings_stay_bounded_and_most_severe_first() -> None:

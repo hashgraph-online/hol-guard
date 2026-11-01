@@ -12,6 +12,10 @@ pub struct PathContext<'a> {
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
     /// toolchain the rustup proxy runs. Literal contexts leave this false.
     pub rustup_override_absent: bool,
+    /// No inherited Cargo registry, transport, credential or alias variable
+    /// can move the registry a Cargo query contacts, the index it reads or
+    /// the credential provider it starts. Literal contexts leave this false.
+    pub cargo_config_inert: bool,
     /// No inherited npm or Node variable can move npm's registry, config
     /// files or loaded code. Literal contexts leave this false.
     pub npm_config_inert: bool,
@@ -26,6 +30,16 @@ pub struct PathContext<'a> {
     /// `--pre`, `--hidden` or extra search paths to an `rg` command that
     /// omits `--no-config`. Literal contexts leave this false.
     pub ripgrep_config_absent: bool,
+    /// No inherited `GEMRC`, `RUBYOPT`, `RUBYLIB` or `RUBYGEMS_GEMDEPS` can
+    /// hand a RubyGems query a second configuration file, a load path or code
+    /// to require before it starts, and no redirected `XDG_CONFIG_HOME`
+    /// moves the user `gemrc` out of the directory the proof reads. Literal
+    /// contexts leave this false.
+    pub gem_config_absent: bool,
+    /// No inherited `HTTPIE_CONFIG_DIR` or `XH_CONFIG_DIR` can move the
+    /// `config.json` whose `default_options` HTTPie and `xh` prepend to
+    /// every request. Literal contexts leave this false.
+    pub http_config_absent: bool,
     /// No step of this command creates a filesystem entry, so a path with
     /// nothing at it now still has nothing at it when a read runs and cannot
     /// be a link a peer step planted. Literal contexts leave this false.
@@ -52,6 +66,7 @@ mod digest_reads;
 pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
+mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
@@ -85,6 +100,7 @@ mod fanout_reads;
 mod filter_pattern_text;
 mod find_reads;
 mod for_loop_unroll;
+mod gem_reads;
 pub(crate) mod git_apply_check;
 pub(crate) mod git_branch_listing;
 pub(crate) mod git_clean_preview;
@@ -128,18 +144,22 @@ pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
 mod guard_names;
-mod help_probes;
+mod helm_usage;
+pub(crate) mod help_probes;
 mod installed_program_path;
 mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;
+mod liveness_probes;
 mod lookup_reads;
+mod manager_usage;
 mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
 mod path_word_reads;
 mod pip_reads;
+mod pnpm_reads;
 mod postgres_reads;
 mod process_stops;
 mod pytest_contained;
@@ -177,6 +197,7 @@ mod search;
 mod search_pattern_clearance;
 mod search_pattern_text;
 mod search_scope;
+mod search_scope_budget;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
@@ -185,14 +206,17 @@ mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
+mod shell_flow;
 pub(crate) mod shell_literal;
 mod shell_script;
 mod sink_peel;
 mod stderr_merge;
 mod stdin_filters;
 mod symlink_writes;
+mod tool_inventory_reads;
 mod tree_reads;
-mod version_probes;
+pub(crate) mod version_probes;
+pub(crate) mod wget_reads;
 #[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;
@@ -880,6 +904,18 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<PreToolDecisionV1, String> {
+    // One submission is read again for every spelling a rewrite reaches, and
+    // each reading may ask the include walk about a recursive root. The walk
+    // is the one proof here that spends its own wall clock, so the clock is
+    // started here, where the submission starts, and shared by every walk
+    // below rather than handed out afresh to each one.
+    //
+    // This function is also where each of those readings arrives: an envelope
+    // evaluates its projections by calling back in. The guard counts that
+    // nesting, so a projection joins the submission already open instead of
+    // starting one of its own, and the budget ends when the outermost
+    // reading returns.
+    let _budget = search_scope_budget::begin_include_scope_budget();
     evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
 }
 

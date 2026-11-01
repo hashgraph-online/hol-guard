@@ -114,7 +114,7 @@ const REGISTRY_VERBS: &[&str] = &[
 
 /// Where a literal `target` below the workspace moves a run that stands in
 /// `directory`, or `None` when the sandbox cannot follow it there.
-fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
+pub(super) fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
     super::cd::below(target, workspace).then(|| {
         let path = Path::new(target);
         if path.is_absolute() {
@@ -188,7 +188,18 @@ pub(super) fn local_package_work(
                 .map(String::as_str)
                 .take_while(|argument| *argument != "--")
                 .collect();
-            return super::compiled::local_go_work(&arguments, directory, workspace);
+            // A leading `-C` moves the run before go reads the verb, so it is
+            // judged as the `cd` it is: the directory it names is followed
+            // where the sandbox can follow it there, and the verb behind it is
+            // read against that directory rather than this one.
+            let (started, verb) = match super::compiled::go_chdir(&arguments) {
+                Some((target, read)) => match entered(directory, target, workspace) {
+                    Some(moved) => (moved, read),
+                    None => return false,
+                },
+                None => (directory.to_owned(), 0),
+            };
+            return super::compiled::local_go_work(&arguments[verb..], &started, workspace);
         }
         if maven_executable(&name) {
             let Some(directory) = directory.as_deref() else {
@@ -223,6 +234,7 @@ pub(super) fn local_package_work(
                 executable,
                 &segment.arguments,
                 directory,
+                workspace,
             );
         }
         if name == "uv" {

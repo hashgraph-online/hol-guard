@@ -4,8 +4,7 @@
 //! Git steps that follow contained checks, and a `git worktree add` whose
 //! checkout the checks then run in. The sink runs the first itself: the
 //! checks contained, then the Git steps on the host once the resident proves
-//! them again. The second stays with `guard execute-contained-test`, which
-//! re-proves the checkout; the native sink must never take it.
+//! them again. The second runs the add on the host first (`worktree`).
 
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
@@ -51,9 +50,8 @@ const GIT_LOCATION: [&str; 7] = [
     "GIT_WORK_TREE",
 ];
 
-/// Whether a receipt's `reason` names a chain whose host step this sink
-/// cannot run.
-pub(crate) fn host_split(reason: Option<&Value>) -> bool {
+/// Whether a receipt's `reason` names a `git worktree add` chain.
+pub(super) fn host_split(reason: Option<&Value>) -> bool {
     reason.and_then(Value::as_str) == Some(guard_command::pretool::CONTAINED_WORKTREE_ADD_REASON)
 }
 
@@ -95,20 +93,38 @@ pub(super) fn run_publish_steps(
     let mut asked = payload.clone();
     asked.insert("tool_input".to_owned(), Value::Object(tool_input));
     let answer = settled(|| authority.authorize(&asked), std::thread::sleep);
-    let proven = answer.is_some_and(|response| {
-        let text = |name: &str| response.get(name).and_then(Value::as_str);
-        text("decision") == Some("allow")
-            && text("policy_action") == Some("allow")
-            && response.get("observe_mode") != Some(&Value::Bool(true))
-    });
-    if !proven {
+    if !answer.as_ref().is_some_and(proven) {
         return Err(Failure::invalid(STEPS_UNPROVEN));
     }
+    run_on_host(suffix, "The Git steps", workspace, &[], signals)
+}
+
+/// Whether the resident's answer lets a command run as it stands.
+pub(super) fn proven(response: &Map<String, Value>) -> bool {
+    let text = |name: &str| response.get(name).and_then(Value::as_str);
+    text("decision") == Some("allow")
+        && text("policy_action") == Some("allow")
+        && response.get("observe_mode") != Some(&Value::Bool(true))
+}
+
+/// Run `script` on the host from `workspace`, with a search path that
+/// leaves out `workspace` and every `excluded` directory: either could hold
+/// a `git` or `gh` the contained work or a new checkout planted. `label`
+/// names the step when it fails.
+pub(super) fn run_on_host(
+    script: &str,
+    label: &str,
+    workspace: &Path,
+    excluded: &[&Path],
+    signals: &process::Signals,
+) -> Outcome<i32> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut roots = vec![workspace];
+    roots.extend_from_slice(excluded);
     run_host(
-        suffix,
-        &GIT_LOCATION,
-        &outside_search_path(&search_path, workspace),
+        script,
+        label,
+        &outside_search_path(&search_path, &roots),
         workspace,
         signals,
         RUN_TIMEOUT_SECONDS,
@@ -120,7 +136,7 @@ pub(super) fn run_publish_steps(
 /// moment would otherwise cancel the steps they were run for. A decision is
 /// deterministic and arrives on the first ask; only a missing answer is
 /// asked again, and only while asking stays quick.
-fn settled(
+pub(super) fn settled(
     mut authorize: impl FnMut() -> Option<Map<String, Value>>,
     pause: impl Fn(Duration),
 ) -> Option<Map<String, Value>> {
@@ -144,11 +160,11 @@ fn settled(
 }
 
 /// Run `script` with `/bin/sh` on the host, in `cwd`, in its own session:
-/// without the `removed` variables, with `search_path` as `PATH`, and with
+/// without the variables that name another Git repository, with `search_path` as `PATH`, and with
 /// the sink's own output. Its exit code.
 fn run_host(
     script: &str,
-    removed: &[&str],
+    label: &str,
     search_path: &OsStr,
     cwd: &Path,
     signals: &process::Signals,
@@ -156,13 +172,13 @@ fn run_host(
 ) -> Outcome<i32> {
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();
-    let launcher = std::env::current_exe().map_err(|error| host_not_started(&error))?;
+    let launcher = std::env::current_exe().map_err(|error| host_not_started(label, &error))?;
     let mut command = Command::new(launcher);
     command.args([LAUNCH_COMMAND, process::HOST_STEP]);
     run_launched(
         command,
         script,
-        removed,
+        label,
         search_path,
         cwd,
         signals,
@@ -174,7 +190,7 @@ fn run_host(
 fn run_launched(
     mut launcher: Command,
     script: &str,
-    removed: &[&str],
+    label: &str,
     search_path: &OsStr,
     cwd: &Path,
     signals: &process::Signals,
@@ -185,35 +201,38 @@ fn run_launched(
         .env("PATH", search_path)
         .current_dir(cwd)
         .stdin(Stdio::null());
-    for name in removed {
+    for name in GIT_LOCATION {
         launcher.env_remove(name);
     }
     let (status, timed_out) = process::run_tracked(&mut launcher, signals, timeout_seconds, false)
-        .map_err(|error| host_not_started(&error))?;
+        .map_err(|error| host_not_started(label, &error))?;
     if timed_out {
         return Err(Failure::with_exit(
             "pytest_restricted_timeout",
-            format!("The Git steps exceeded the {timeout_seconds}-second execution deadline."),
+            format!("{label} exceeded the {timeout_seconds}-second execution deadline."),
             124,
         ));
     }
     Ok(status.map_or(1, process::exit_code))
 }
 
-fn host_not_started(error: &std::io::Error) -> Failure {
+fn host_not_started(label: &str, error: &std::io::Error) -> Failure {
     Failure::new(
         SANDBOX_UNAVAILABLE,
-        format!("The Git steps could not start; they did not run: {error}"),
+        format!("{label} could not start: {error}"),
     )
 }
 
-/// `search_path` without relative entries or entries inside `workspace`:
+/// `search_path` without relative entries or entries inside any of `roots`:
 /// the checks could plant a `git` or `gh` in either, and a host step would
 /// run it unsandboxed.
-fn outside_search_path(search_path: &OsStr, workspace: &Path) -> OsString {
-    let root = resolved(workspace);
+fn outside_search_path(search_path: &OsStr, roots: &[&Path]) -> OsString {
+    let roots: Vec<PathBuf> = roots.iter().map(|root| resolved(root)).collect();
     let kept: Vec<PathBuf> = std::env::split_paths(search_path)
-        .filter(|entry| entry.is_absolute() && !resolved(entry).starts_with(&root))
+        .filter(|entry| {
+            let entry_root = resolved(entry);
+            entry.is_absolute() && !roots.iter().any(|root| entry_root.starts_with(root))
+        })
         .collect();
     std::env::join_paths(kept).unwrap_or_default()
 }

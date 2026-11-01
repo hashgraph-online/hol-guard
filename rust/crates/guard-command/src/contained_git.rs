@@ -16,6 +16,19 @@
 //! `git hash-object` runs the repository's clean filter and `git notes show`
 //! hands its note to a second Git for the same reason; `git notes list`
 //! prints the ref itself and stays.
+//! The comparison verbs read the same history `git log` does and write
+//! nothing of their own: `git diff-tree` prints through the diff machinery,
+//! so it defines its whole option set and is screened for it, and
+//! `git cherry` prints commit names through no helper at all and defines
+//! none of those options, so the screens are left off a verb that would
+//! refuse them. `git range-diff` is absent because the screens cannot reach
+//! what it runs: it parses `--no-ext-diff` and `--no-textconv` into its own
+//! option set and then starts a second `git log -p` that is given neither,
+//! so the pair this module writes ahead of the caller would leave that child
+//! free to run the program a `diff.<driver>.textconv` setting names.
+//! `git format-patch` is absent for the opposite reason:
+//! its ordinary form writes a numbered patch file for every commit it walks,
+//! and only `--stdout` prints.
 //! `git config` prints the settings themselves, among them the credential
 //! helper a repository names, so it keeps its review rather than reaching a
 //! sandbox that would print it. `git clean -n` and `git apply --check` print
@@ -41,22 +54,34 @@
 
 /// Verbs whose every form reads the repository.
 const READ_ONLY_VERBS: &[&str] = &[
+    "annotate",
     "blame",
     "cat-file",
     "check-attr",
     "check-ignore",
+    "check-mailmap",
+    "check-ref-format",
+    "cherry",
     "count-objects",
     "describe",
     "diff",
+    "diff-files",
+    "diff-index",
+    "diff-tree",
     "for-each-ref",
     "grep",
     "log",
     "ls-tree",
     "merge-base",
+    "name-rev",
+    "patch-id",
     "rev-list",
     "shortlog",
     "show",
+    "show-branch",
     "show-ref",
+    "stripspace",
+    "var",
 ];
 
 /// Verbs that both read and write, with the subcommands that only read. An
@@ -97,10 +122,15 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
         // `git reflog show` and `git stash list` are `git log` written another
         // way: both hand their words to the log walk, so both define the whole
         // log option set and are read for it here.
-        ("diff" | "log" | "show" | "reflog", _) | ("stash", "show" | "list") => {
-            &["--ext-diff", "--output", "--textconv"]
-        }
-        ("blame", _) => &["--textconv"],
+        ("diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog", _)
+        | ("stash", "show" | "list") => &["--ext-diff", "--output", "--textconv"],
+        // `git annotate` is `git blame` in another output format and takes
+        // the same options, this one included.
+        ("blame" | "annotate", _) => &["--textconv"],
+        // Both of these name a file or an object the caller chose rather
+        // than the repository's own mailmap, so the contained route holds
+        // them back the same way the inspection grammar does.
+        ("check-mailmap", _) => &["--mailmap-file", "--mailmap-blob"],
         ("grep", _) => &["--open-files-in-pager", "--textconv"],
         // `--filters` runs the repository's smudge filter over the blob it
         // prints, which is the same program `--textconv` would have named.
@@ -115,7 +145,7 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
 /// abbreviation of `--textconv` where it has none.
 fn spelled_in_full(verb: &str) -> &'static [&'static str] {
     match verb {
-        "diff" | "log" | "show" | "grep" => &["--text"],
+        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "grep" => &["--text"],
         _ => &[],
     }
 }
@@ -127,8 +157,9 @@ fn spelled_in_full(verb: &str) -> &'static [&'static str] {
 fn short_value_letters(verb: &str) -> &'static str {
     match verb {
         "grep" => "efmABCO",
-        "diff" | "log" | "show" | "stash" | "reflog" => "USGlLnOBCM",
-        "blame" => "LCMS",
+        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "stash"
+        | "reflog" => "USGlLnOBCM",
+        "blame" | "annotate" => "LCMS",
         _ => "",
     }
 }
@@ -140,10 +171,10 @@ fn disabled_helpers(verb: &str, subcommand: &str) -> &'static [&'static str] {
         // `stash show` prints a diff, and `stash list` and `reflog show` print
         // one for `-p`, so all three read the same two helpers the diff family
         // does. `reflog exists` answers about a ref and defines neither.
-        ("diff" | "log" | "show", _) | ("stash", "show" | "list") | ("reflog", "" | "show") => {
-            &["--no-ext-diff", "--no-textconv"]
-        }
-        ("blame" | "grep", _) => &["--no-textconv"],
+        ("diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show", _)
+        | ("stash", "show" | "list")
+        | ("reflog", "" | "show") => &["--no-ext-diff", "--no-textconv"],
+        ("blame" | "annotate" | "grep", _) => &["--no-textconv"],
         _ => &[],
     }
 }
@@ -241,6 +272,14 @@ fn refused_long(word: &str, verb: &str, subcommand: &str) -> bool {
         .iter()
         .chain(REFUSED_EVERYWHERE)
         .any(|option| option.starts_with(name))
+}
+
+/// Whether the word names a program for Git to run or a file for Git to write,
+/// for a verb this grammar screens. The workspace containment route asks the
+/// same question of the same verbs, so the screens are written once here
+/// rather than kept in step by hand in two places.
+pub(crate) fn names_helper_or_output(word: &str, verb: &str, subcommand: &str) -> bool {
+    refused_long(word, verb, subcommand) || refused_short(word, verb)
 }
 
 /// Whether a short-option word carries a refused letter in a position Git

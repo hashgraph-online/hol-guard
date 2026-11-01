@@ -10,10 +10,11 @@ unchanged; a transport or shape failure raises ``NativeRunnerAuthorityError``.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
@@ -62,6 +63,35 @@ def sync_url(route: str, url: str, **parameters: object) -> str:
     """
 
     return _derived_url(route, url, tuple(sorted(parameters.items())))
+
+
+class CloudHttpError(NamedTuple):
+    """How one Guard Cloud HTTP error reads, as the resident decided it."""
+
+    message: str
+    retryable: bool
+    sync_message: str
+    plan_restricted: bool
+    plan_message: str
+    edge_block: str | None
+
+
+def cloud_http_error(*, status: int, reason: str, headers: Mapping[str, str] | None, body: str) -> CloudHttpError:
+    payload = native_runner_authority(
+        "cloud_http_error",
+        {"status": status, "reason": reason, "headers": None if headers is None else dict(headers), "body": body},
+    )
+    edge_block = payload.get("edge_block")
+    if edge_block is not None and not isinstance(edge_block, str):
+        raise _malformed()
+    return CloudHttpError(
+        message=_field(payload, "message", str),
+        retryable=_field(payload, "retryable", bool),
+        sync_message=_field(payload, "sync_message", str),
+        plan_restricted=_field(payload, "plan_restricted", bool),
+        plan_message=_field(payload, "plan_message", str),
+        edge_block=edge_block,
+    )
 
 
 def normalized_receipts_sync_url(url: str) -> str:
@@ -176,6 +206,92 @@ def completed_guard_event_ids(payload: Mapping[str, object]) -> list[str]:
     return ids
 
 
+# The session fields the runtime reads; nothing else crosses the transport.
+_SESSION_KEYS = (
+    "session_id",
+    "sessionId",
+    "workspace",
+    "harness",
+    "surface",
+    "status",
+    "client_name",
+    "clientName",
+    "client_title",
+    "clientTitle",
+    "client_version",
+    "clientVersion",
+    "capabilities",
+    "created_at",
+    "createdAt",
+    "updated_at",
+    "updatedAt",
+    "policy_document_versions",
+    "policyDocumentVersions",
+    "policy_bundle_versions",
+    "policyBundleVersions",
+    "policy_contracts",
+    "policyContracts",
+    "yaml_import",
+    "yamlImport",
+    "canonical_policy_enforcement",
+    "canonicalPolicyEnforcement",
+)
+
+
+def runtime_session_payload(
+    session: Mapping[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    cwd: str,
+    now: str,
+    version: str,
+) -> dict[str, object]:
+    """The runtime session the Cloud handshake sends, before the store-read fields."""
+
+    payload = native_runner_authority(
+        "runtime_session_payload",
+        {
+            "session": {key: session[key] for key in _SESSION_KEYS if key in session},
+            "device_id": device_id,
+            "device_name": device_name,
+            "cwd": cwd,
+            "now": now,
+            "version": version,
+        },
+    )
+    for key in ("sessionId", "harness", "surface", "workspace", "deviceId", "updatedAt"):
+        _field(payload, key, str)
+    return dict(payload)
+
+
+_STALE_INTEL_KEYS = (
+    "synced_at",
+    "syncedAt",
+    "runtime_session_synced_at",
+    "runtimeSessionSyncedAt",
+    "local_guard_online_at",
+    "next_refresh_at",
+    "nextRefreshAt",
+)
+
+
+def stale_intel(summaries: Sequence[object], *, generated_at: str, now: str) -> dict[str, object]:
+    """The ``staleIntel`` block for the stored sync, runtime-session and bundle summaries."""
+
+    slim = [
+        {key: summary[key] for key in _STALE_INTEL_KEYS if key in summary} if isinstance(summary, dict) else None
+        for summary in summaries
+    ]
+    answer = native_runner_authority("stale_intel", {"summaries": slim, "generated_at": generated_at, "now": now})
+    status = _field(answer, "status", str)
+    last_synced_at = answer.get("lastSyncedAt")
+    next_refresh_at = answer.get("nextRefreshAt")
+    if not all(value is None or isinstance(value, str) for value in (last_synced_at, next_refresh_at)):
+        raise _malformed()
+    return {"status": status, "lastSyncedAt": last_synced_at, "nextRefreshAt": next_refresh_at}
+
+
 _BUNDLE_KEYS = ("issuedAt", "bundleVersion", "payloadHash", "workspaceId")
 
 
@@ -207,3 +323,43 @@ def policy_bundle_downgrade_reference(
     if not isinstance(chosen, dict):
         raise _malformed()
     return chosen
+
+
+_CLOUD_EXCEPTION_BUNDLE_KEYS = ("bundleHash", "bundleVersion", "cloudExceptions", "acknowledgements")
+_CLOUD_EXCEPTION_ACK_KEYS = ("status", "bundleHash", "bundleVersion", "deviceId", "appliedAt")
+
+
+def cloud_exceptions(
+    policy_bundle: Mapping[str, object],
+    *,
+    device_id: str | None,
+    policy_bundle_ack: Mapping[str, object] | None = None,
+    harness: str | None = None,
+    active_at: str | None = None,
+) -> list[dict[str, object]]:
+    """The deduplicated Cloud exception records a policy bundle carries.
+
+    With ``active_at`` only the exceptions still in force at that instant are
+    returned, narrowed to ``harness`` when it is given. Only the bundle and
+    acknowledgement fields the owner reads cross the transport.
+    """
+
+    args: dict[str, object] = {
+        # As JSON text: the transport refuses arrays wider than 4,096 items.
+        "policy_bundle": json.dumps(
+            {key: policy_bundle[key] for key in _CLOUD_EXCEPTION_BUNDLE_KEYS if key in policy_bundle},
+            sort_keys=True,
+        ),
+        "device_id": device_id,
+        "policy_bundle_ack": (
+            {key: policy_bundle_ack[key] for key in _CLOUD_EXCEPTION_ACK_KEYS if key in policy_bundle_ack}
+            if isinstance(policy_bundle_ack, Mapping)
+            else None
+        ),
+        "harness": harness,
+        "active_at": active_at,
+    }
+    items = _field(native_runner_authority("cloud_exceptions", args), "items", list)
+    if not all(isinstance(item, dict) for item in items):
+        raise _malformed()
+    return items

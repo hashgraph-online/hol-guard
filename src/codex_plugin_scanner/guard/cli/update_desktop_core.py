@@ -26,10 +26,14 @@ from typing import TypedDict
 
 from packaging.version import InvalidVersion, Version
 
-from ..macos_code_signing import verified_macos_signing_team
+from ..macos_code_signing import (
+    macos_bundle_sealed,
+    macos_tree_signature_failure,
+    verified_macos_signing_team,
+)
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
-from .desktop_core_paths import executable_is_desktop_core
+from .desktop_core_paths import executable_is_desktop_core, installed_desktop_app_version
 
 UPDATE_SCHEMA = "hol-guard-core-update.v1"
 ONEDIR_UPDATE_SCHEMA = "hol-guard-core-update.v2"
@@ -37,16 +41,6 @@ INSTALL_SCHEMA = "hol-guard-core-install.v1"
 BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 _ONEDIR_FORMAT = "onedir-zip"
 _ONEDIR_TREE_ROOT = "hol-guard"
-_MACHO_MAGICS = {
-    b"\xce\xfa\xed\xfe",
-    b"\xcf\xfa\xed\xfe",
-    b"\xfe\xed\xfa\xce",
-    b"\xfe\xed\xfa\xcf",
-    b"\xca\xfe\xba\xbe",
-    b"\xca\xfe\xba\xbf",
-    b"\xbe\xba\xfe\xca",
-    b"\xbf\xba\xfe\xca",
-}
 _RELEASE_DOWNLOAD_PREFIX = "https://github.com/hashgraph-online/hol-guard/releases/download/"
 _DESKTOP_APP_ID = "org.hol.guard.desktop"
 _MAX_MANIFEST_BYTES = 128 * 1024
@@ -441,8 +435,19 @@ def _parse_onedir_manifest(
     }
 
 
+def _desktop_version() -> str:
+    launched_by = os.environ.get("HOL_GUARD_DESKTOP_VERSION", "").strip()
+    if launched_by or sys.platform != "darwin":
+        return launched_by
+    # Run from a terminal there is no Desktop environment. Read the installed
+    # app instead, or the update swaps the Desktop's onedir Core for the slower
+    # onefile build.
+    installed = installed_desktop_app_version()
+    return str(installed) if installed is not None else ""
+
+
 def _enforce_minimum_desktop_version(minimum: str) -> None:
-    installed = os.environ.get("HOL_GUARD_DESKTOP_VERSION", "").strip()
+    installed = _desktop_version()
     if not installed:
         return
     try:
@@ -484,7 +489,7 @@ def _try_apply_onedir(
     expected_version: str,
     expected_target: str,
 ) -> Path | None:
-    if not os.environ.get("HOL_GUARD_DESKTOP_VERSION", "").strip():
+    if not _desktop_version():
         return None
     try:
         raw = downloader(_release_url(tag, f"{artifact}.onedir.json"), _MAX_MANIFEST_BYTES)
@@ -684,40 +689,17 @@ def _extract_onedir_zip_portable(archive: Path, destination: Path) -> None:
         raise DesktopCoreUpdateError("desktop_core_install_failed") from error
 
 
-def _is_macho_file(path: Path) -> bool:
-    try:
-        with path.open("rb") as handle:
-            return handle.read(4) in _MACHO_MAGICS
-    except OSError:
-        return False
-
-
 def _require_sealed_onedir(launcher: Path) -> None:
     if sys.platform != "darwin":
         return
-    resources = launcher.parent / "_CodeSignature" / "CodeResources"
-    if not resources.is_file():
-        raise DesktopCoreUpdateError("desktop_core_signature_invalid")
-    result = subprocess.run(
-        ["/usr/bin/codesign", "--display", "--verbose=4", str(launcher)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    output = result.stderr + result.stdout
-    if result.returncode != 0 or "Format=app bundle" not in output or "Sealed Resources version=2" not in output:
+    if not macos_bundle_sealed(launcher):
         raise DesktopCoreUpdateError("desktop_core_signature_invalid")
 
 
 def _verify_onedir_tree_signatures(tree: Path, *, expected_team: str) -> None:
-    internal = tree / "_internal"
-    if not internal.is_dir():
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-    for path in sorted(tree.rglob("*")):
-        if path.is_symlink() or not path.is_file() or not _is_macho_file(path):
-            continue
-        if _macos_signing_team(path) != expected_team:
-            raise DesktopCoreUpdateError("desktop_core_signature_mismatch")
+    failure = macos_tree_signature_failure(tree, expected_team=expected_team)
+    if failure is not None:
+        raise DesktopCoreUpdateError(failure)
 
 
 def _install_managed_core_onedir(tree: Path, manifest: _ParsedOnedirManifest, target: str) -> Path:

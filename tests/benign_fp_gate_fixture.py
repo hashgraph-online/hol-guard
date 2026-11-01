@@ -212,6 +212,13 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(home / ".agent" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
     _write(home / ".agent" / "artifacts" / "report.md", "# Report\nInert build report text.\n")
     _write(home / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
+    # A skill is its document and the helpers that document names. Reading the
+    # helper before running it is the careful step, so the tree carries one.
+    _write(home / ".agents" / "skills" / "x" / "scripts" / "run.sh", "#!/bin/sh\necho fixture\n")
+    _write(home / ".agents" / "skills" / "x" / "scripts" / "backup.db", "inert fixture bytes\n")
+    # A credential store keeps its review wherever it sits, a skill tree
+    # included, whatever language the file inside it is written in.
+    _write(home / ".agents" / "skills" / "x" / "secrets" / "export.sh", "#!/bin/sh\necho fixture\n")
     _write(home / ".config" / "app-portal" / "settings.json", '{"theme": "dark"}\n')
     # A tool Guard knows no name for, with the two trees every one of them
     # keeps: a skills folder and a lane of dated reports. Agents look both up
@@ -316,6 +323,10 @@ def build_fixture(root: Path) -> BenignFixture:
     # Worktree package borrowing the canonical checkout's installed node_modules through a symlink.
     _node_toolchain(parent / "dashboard")
     _write(worktree / "dashboard" / "package.json", (parent / "dashboard" / "package.json").read_text())
+    # pnpm's workspace root: `pnpm -w run build` runs the root package's script
+    # from anywhere in the checkout. Only `packages` is set, so the install
+    # checks still read the file as inert.
+    _write(worktree / "pnpm-workspace.yaml", "packages:\n  - dashboard\n")
     (worktree / "dashboard" / "node_modules").symlink_to(parent / "dashboard" / "node_modules")
     # The live Gauntlet's placeholder docs and field-copy source, read by its shell cases.
     _write(worktree / "docs" / "review-notes.md", REVIEW_NOTES)

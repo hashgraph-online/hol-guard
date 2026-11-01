@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.decision_boundaries import canonical_approval_surfaces_batch
+from tests.decision_boundaries_support import canonical_approval_surfaces_batch
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 

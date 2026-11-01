@@ -3,7 +3,7 @@
 The rewrite itself is pinned by the Rust tests beside ``edge_containment``.
 These cover the wire: the envelope asks for it only from a resident that
 advertises it, the decoder accepts the mark only on a sink route, and the
-daemon skips its second resident call only when the edge says it rewrote.
+daemon answers an unmarked sink route in a workspace with the host outage.
 """
 
 from __future__ import annotations
@@ -17,9 +17,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import zcode_contained_tests
 from codex_plugin_scanner.guard.daemon import hook_worker_native
 from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
-from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from codex_plugin_scanner.guard.native_hook_edge import (
-    CONTAINMENT_REWRITE_FEATURE,
     _decode_edge,
     review_raw_hook_native,
 )
@@ -95,7 +93,7 @@ def test_the_decoder_refuses_a_rewrite_mark_off_a_sink_route(fields: dict[str, o
     assert _decode_edge(_edge(**fields)) is None
 
 
-def _status(tmp_path: Path, *, advertised: bool, native_sink: bool = False) -> NativeRuntimeStatus:
+def _status(tmp_path: Path) -> NativeRuntimeStatus:
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
     identity = NativeRuntimeIdentity(
@@ -117,8 +115,6 @@ def _status(tmp_path: Path, *, advertised: bool, native_sink: bool = False) -> N
             "native-resident-client-v1",
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
-            *([CONTAINMENT_REWRITE_FEATURE] if advertised else []),
-            *(["edge-cursor-native-sink-v1"] if native_sink else []),
         ),
     )
     return NativeRuntimeStatus(
@@ -132,19 +128,17 @@ def _status(tmp_path: Path, *, advertised: bool, native_sink: bool = False) -> N
 
 
 @pytest.mark.parametrize(
-    ("advertised", "asked", "workspace", "event", "sent"),
+    ("asked", "workspace", "event", "sent"),
     (
-        (True, True, True, "PreToolUse", True),
-        (False, True, True, "PreToolUse", False),
-        (True, False, True, "PreToolUse", False),
-        (True, True, False, "PreToolUse", False),
-        (True, True, True, "UserPromptSubmit", False),
+        (True, True, "PreToolUse", True),
+        (False, True, "PreToolUse", False),
+        (True, False, "PreToolUse", False),
+        (True, True, "UserPromptSubmit", False),
     ),
 )
-def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_a_resident_can_rewrite(
+def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_in_a_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    advertised: bool,
     asked: bool,
     workspace: bool,
     event: str,
@@ -168,7 +162,7 @@ def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_a_resident_can_
         observe_mode=False,
         deadline=None,
         policy_snapshot={"generation": 1},
-        runtime_status=_status(tmp_path, advertised=advertised),
+        runtime_status=_status(tmp_path),
         containment_sink=asked,
     )
     encoded = captured["payload"]
@@ -177,17 +171,16 @@ def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_a_resident_can_
     if sent:
         assert sink == {"sink_command": list(zcode_contained_tests.contained_sink_command_prefix())}
     else:
-        # An older resident would refuse the field, and without a workspace
-        # there is no snapshot to write.
+        # Without a workspace there is no snapshot to write.
         assert sink is None
 
 
 @pytest.mark.parametrize(
-    ("harness", "advertised", "sent"),
-    (("cursor", True, True), ("cursor", False, False), ("claude", True, False)),
+    ("harness", "sent"),
+    (("cursor", True), ("claude", False)),
 )
-def test_only_a_cursor_envelope_a_resident_reads_offers_the_runtime_sink(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, advertised: bool, sent: bool
+def test_only_a_cursor_envelope_offers_the_runtime_sink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str, sent: bool
 ) -> None:
     captured: dict[str, object] = {}
 
@@ -207,14 +200,13 @@ def test_only_a_cursor_envelope_a_resident_reads_offers_the_runtime_sink(
         observe_mode=False,
         deadline=None,
         policy_snapshot={"generation": 1},
-        runtime_status=_status(tmp_path, advertised=True, native_sink=advertised),
+        runtime_status=_status(tmp_path),
         containment_sink=True,
     )
     encoded = captured["payload"]
     assert isinstance(encoded, bytes)
     sink = json.loads(encoded)["containment_sink"]
-    # An older resident would refuse the field; the daemon admits the
-    # runtime's sink only on Cursor's `beforeShellExecution`.
+    # The daemon admits the runtime's sink only on Cursor's `beforeShellExecution`.
     assert sink.get("native_sink") is (True if sent else None)
 
 
@@ -250,7 +242,7 @@ class _SinkRouteFixture(HookWorkerNativeMixin):
         raise AssertionError("a PreToolUse sink route reads no structured view")
 
 
-def _review(fixture: _SinkRouteFixture, tmp_path: Path) -> tuple[dict[str, object], bool]:
+def _review(fixture: _SinkRouteFixture, tmp_path: Path, *, workspace: Path | None) -> tuple[dict[str, object], bool]:
     return fixture._review_native_edge_with_snapshot(
         payload=dict(_PAYLOAD),
         harness="claude-code",
@@ -258,7 +250,7 @@ def _review(fixture: _SinkRouteFixture, tmp_path: Path) -> tuple[dict[str, objec
         default_harness="claude-code",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard",
-        workspace=tmp_path,
+        workspace=workspace,
         deadline=None,
         policy_snapshot={"mode": "enforce"},
         recording_only=False,
@@ -270,49 +262,30 @@ def _review(fixture: _SinkRouteFixture, tmp_path: Path) -> tuple[dict[str, objec
     (("routed", _ROUTED_RESPONSE), ("kept", _RECEIPT_RESPONSE)),
 )
 def test_the_daemon_answers_with_the_edge_rewrite_in_one_resident_call(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    rewrite: str,
-    response: dict[str, object],
+    tmp_path: Path, rewrite: str, response: dict[str, object]
 ) -> None:
-    def second_call(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise AssertionError("the edge already rewrote the sink route")
-
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", second_call)
     fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(response), containment_rewrite=rewrite))
-    answer, native = _review(fixture, tmp_path)
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
     assert native is True
     assert answer == response
     assert [call["containment_sink"] for call in fixture.captured] == [True]
 
 
-def test_an_edge_that_did_not_rewrite_is_asked_as_before(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    asked: list[dict[str, object]] = []
-
-    def route(response: dict[str, object], **kwargs: object) -> dict[str, object]:
-        asked.append(kwargs)
-        assert response == _RECEIPT_RESPONSE
-        return dict(_ROUTED_RESPONSE)
-
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", route)
-    answer, native = _review(_SinkRouteFixture(edge=_edge()), tmp_path)
-    assert native is True
-    assert answer == _ROUTED_RESPONSE
-    assert [call["workspace"] for call in asked] == [tmp_path]
-
-
-def test_an_unmarked_sink_route_without_a_resident_answer_is_the_outage(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise NativeHookDecisionError("native_containment_rewrite_unavailable")
-
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", unavailable)
-    answer, native = _review(_SinkRouteFixture(edge=_edge()), tmp_path)
-    # Never the receipt's rewrite picked here, and never an allow.
+def test_an_unmarked_sink_route_in_a_workspace_is_the_outage(tmp_path: Path) -> None:
+    fixture = _SinkRouteFixture(edge=_edge())
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
+    # Never the receipt's rewrite picked here, never a second resident call, and never an allow.
     assert native is False
     assert answer.get("reason_code") == "native_containment_rewrite_unavailable"
     assert answer.get("policy_action") != "allow"
+    assert len(fixture.captured) == 1
+
+
+def test_without_a_workspace_an_unmarked_sink_route_keeps_the_receipt(tmp_path: Path) -> None:
+    # No snapshot can be written without a workspace, so the receipt stands.
+    answer, native = _review(_SinkRouteFixture(edge=_edge()), tmp_path, workspace=None)
+    assert native is True
+    assert answer == _RECEIPT_RESPONSE
 
 
 @pytest.mark.parametrize(
@@ -332,15 +305,9 @@ def test_an_unmarked_sink_route_without_a_resident_answer_is_the_outage(
         _RECEIPT_RESPONSE,
     ),
 )
-def test_an_edge_routed_allow_off_the_routed_shape_is_the_outage(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, routed: dict[str, object]
-) -> None:
-    def second_call(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise AssertionError("a refused edge rewrite is not asked again")
-
-    monkeypatch.setattr(zcode_contained_tests, "route_zcode_containment", second_call)
+def test_an_edge_routed_allow_off_the_routed_shape_is_the_outage(tmp_path: Path, routed: dict[str, object]) -> None:
     fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(routed), containment_rewrite="routed"))
-    answer, native = _review(fixture, tmp_path)
+    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
     assert native is False
     assert answer.get("reason_code") == "native_containment_rewrite_invalid"
     assert answer.get("policy_action") != "allow"

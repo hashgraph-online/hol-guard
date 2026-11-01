@@ -639,3 +639,81 @@ fn a_grouped_lookup_lifts_each_candidate_on_its_own() {
     assert_eq!(lookup_action(&request), Value::Null);
     crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
 }
+
+/// Seed a cached bundle the resident cannot read, and optionally one row the
+/// bundle saved.
+fn unreadable_bundle_store(tag: &str, bundle_row: bool) -> PathBuf {
+    let store = tmp_store(tag);
+    seed_store(&store);
+    let conn = Connection::open(&store).unwrap();
+    conn.execute_batch(
+        "create table sync_state (state_key text primary key, payload_json text not null,
+           updated_at text not null);
+         insert into sync_state values ('policy_bundle', 'not json', '2030-01-01T00:00:00+00:00');",
+    )
+    .unwrap();
+    if bundle_row {
+        conn.execute(
+            "insert into policy_decisions values
+             (1,'codex','artifact','npm:lodash','block','sha256:abc',NULL,NULL,
+              'policy-bundle','bundle block',NULL,'2029-01-01T00:00:00+00:00',
+              '2030-01-01T00:00:00+00:00',NULL,1,NULL,'h','m','k','s')",
+            [],
+        )
+        .unwrap();
+    }
+    store
+}
+
+fn lookup_code(request: &PolicyDecisionLookupRequestV1) -> String {
+    let bytes = evaluate_policy_decision_lookup_request(request).unwrap();
+    let result: PolicyDecisionLookupResultV1 = serde_json::from_slice(&bytes).unwrap();
+    result.code
+}
+
+/// A request without bundle identities has them derived from its own store:
+/// only when a bundle row could need them, and a bundle the resident cannot
+/// read fails the lookup rather than dropping the bundle's rules.
+#[test]
+fn a_lookup_without_bundle_identities_derives_them_from_its_store() {
+    let without_row = unreadable_bundle_store("bundle-ids-none", false);
+    assert_eq!(lookup_code(&base_request(&without_row)), "ok");
+
+    let with_row = unreadable_bundle_store("bundle-ids-row", true);
+    let mut request = base_request(&with_row);
+    assert_eq!(
+        lookup_code(&request),
+        "native_policy_decision_lookup_bundle_unavailable"
+    );
+    request.policy_bundle_decision_identities = Some(Vec::new());
+    assert_eq!(lookup_code(&request), "ok");
+}
+
+/// A lookup that never reads policy rows never derives bundle identities, so a
+/// bundle the resident cannot read does not fail it: the local-once peek and a
+/// trusted-tool grant probe for an action no review asked for.
+#[test]
+fn a_lookup_that_reads_no_policy_rows_skips_bundle_derivation() {
+    let store = unreadable_bundle_store("bundle-ids-skip", true);
+    let mut once = base_request(&store);
+    once.local_once_only = true;
+    once.consume_one_shot = false;
+    assert_eq!(lookup_code(&once), "ok");
+
+    let mut grant = base_request(&store);
+    grant.artifact_id = None;
+    grant.artifact_hash = None;
+    grant.consume_one_shot = false;
+    grant.probe_groups = Some(
+        serde_json::from_value(json!({
+            "groups": [],
+            "local_tool_grant": {
+                "tool_identity_hash": "a1".repeat(32),
+                "capability": "read-only-inspect",
+                "current_action": "block",
+            },
+        }))
+        .unwrap(),
+    );
+    assert_eq!(lookup_code(&grant), "ok");
+}

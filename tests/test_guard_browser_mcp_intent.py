@@ -128,7 +128,7 @@ class TestBrowserIntentLiterals:
 
     def test_browser_intent_literals_importable(self) -> None:
         """HGBM012: BrowserIntent type can be imported."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import BrowserIntent
+        from tests.browser_mcp_intent_client import BrowserIntent
 
         assert "browser.navigation" in BrowserIntent.__args__  # type: ignore[attr-defined]
         assert "browser.inspect" in BrowserIntent.__args__  # type: ignore[attr-defined]
@@ -293,7 +293,7 @@ class TestOperationMaps:
 
     def test_chrome_devtools_navigation_operations(self) -> None:
         """HGBM023: Chrome DevTools navigation operation map."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             classify_browser_operation,
         )
 
@@ -303,7 +303,7 @@ class TestOperationMaps:
 
     def test_chrome_devtools_inspect_operations(self) -> None:
         """HGBM024: Chrome DevTools inspect/read operation map."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             classify_browser_operation,
         )
 
@@ -313,7 +313,7 @@ class TestOperationMaps:
 
     def test_chrome_devtools_interact_operations(self) -> None:
         """HGBM025: Chrome DevTools interact operation map."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             classify_browser_operation,
         )
 
@@ -323,7 +323,7 @@ class TestOperationMaps:
 
     def test_chrome_devtools_privileged_operations(self) -> None:
         """HGBM026: Chrome DevTools privileged operation map."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             classify_browser_operation,
         )
 
@@ -333,7 +333,7 @@ class TestOperationMaps:
 
     def test_playwright_navigation_and_inspect(self) -> None:
         """HGBM027: Playwright navigation and inspect maps."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             classify_browser_operation,
         )
 
@@ -343,7 +343,7 @@ class TestOperationMaps:
 
     def test_playwright_interact_transfer_privileged(self) -> None:
         """HGBM028: Playwright interact, transfer, privileged maps."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             classify_browser_operation,
         )
 
@@ -355,7 +355,7 @@ class TestOperationMaps:
 
     def test_generic_fallback_requires_browser_server(self) -> None:
         """HGBM029: Non-browser server 'navigate' does not classify as browser."""
-        from codex_plugin_scanner.guard.runtime.browser_mcp_intent import (
+        from tests.browser_mcp_intent_client import (
             classify_browser_operation,
         )
 

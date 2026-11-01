@@ -136,6 +136,23 @@ fn a_read_the_sandbox_would_answer_for_itself_keeps_its_review() {
         ".venv/bin/pip list --user",
         ".venv/bin/pip freeze --user",
         "uv pip list --user",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+        }
+    }
+}
+
+#[test]
+fn a_launcher_inventory_read_answers_from_the_developers_own_home() {
+    // These print what pipx already keeps on disk, so containment would answer
+    // them from the workspace `HOME` and report the wrong inventory. The tool
+    // inventory proof admits them instead of asking, which leaves the real
+    // layout to answer for itself.
+    let ws = project("python-home-reads");
+    for command in [
         "pipx list",
         "pipx list --short",
         "pipx environment",
@@ -144,7 +161,7 @@ fn a_read_the_sandbox_would_answer_for_itself_keeps_its_review() {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, minimum) = outcome(harness, command, &ws);
             assert_ne!(reason, CONTAINED, "{harness}: {command}");
-            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+            assert_eq!(minimum, "allow", "{harness}: {command} ({reason})");
         }
     }
 }
@@ -507,6 +524,70 @@ fn a_redirected_pytest_run_routes_to_the_workspace_sandbox() {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, _) = outcome(harness, command, &ws);
             assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
+fn the_directory_options_move_the_run_the_way_a_cd_does() {
+    // `poetry -C api run pytest` is the work `cd api && poetry run pytest` is,
+    // so the project the verb reaches is the one the option names, and the
+    // environment it has to already hold is that project's own.
+    let ws = poetry_project("poetry-directory");
+    std::fs::create_dir_all(ws.join("docs")).unwrap();
+    let api = ws.join("api");
+    std::fs::create_dir_all(api.join(".venv/bin")).unwrap();
+    std::fs::write(api.join("pyproject.toml"), PROJECT).unwrap();
+    std::fs::write(api.join("poetry.lock"), "# generated\n").unwrap();
+    std::fs::write(
+        api.join(".venv/pyvenv.cfg"),
+        "home = /usr/bin\nversion = 3.12.3\n",
+    )
+    .unwrap();
+    for command in [
+        "poetry -C api run pytest -q",
+        "poetry --directory api run pytest -q",
+        "poetry --directory=api run pytest -q",
+        "poetry -P api run pytest -q",
+        "poetry --project api run pytest -q",
+        "poetry --project=api run pytest -q",
+        "poetry -C . run pytest -q",
+        "poetry -C api check",
+        "poetry --directory api version --short",
+        // A reporting flag on either side of the option leaves both the
+        // option and the verb where they were.
+        "poetry --quiet -C api run pytest -q",
+        "poetry -C api --quiet run pytest -q",
+        "poetry -C api run --quiet pytest -q",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+        }
+    }
+    for command in [
+        // A project the sandbox cannot follow the run into keeps its review,
+        // for the same reason the matching `cd` target does.
+        "poetry -C /etc run pytest -q",
+        "poetry --directory ../outside run pytest -q",
+        "poetry --project=../outside run pytest -q",
+        // A directory holding no environment of its own is one Poetry would
+        // build before it ran anything.
+        "poetry -C docs run pytest -q",
+        // An option naming nothing names no project.
+        "poetry -C",
+        "poetry -C api",
+        "poetry --directory= run pytest -q",
+        // The attached short spelling is not one this reads.
+        "poetry -Capi run pytest -q",
+        // And an installing verb is still one wherever it is run.
+        "poetry -C api install",
+        "poetry -C api add requests",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
         }
     }
 }

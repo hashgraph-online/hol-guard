@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -86,6 +86,42 @@ def test_value_metrics_accepts_a_store_wider_than_the_resident_array_limit() -> 
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_runtime_session_payload_ignores_fields_the_runtime_never_reads() -> None:
+    # A session carrying an unused field the transport cannot carry (a set, or a
+    # list past the resident array limit) used to fail before the Cloud request.
+    session = {
+        "workspace": "/work/repo",
+        "sessionId": "session-1",
+        "operations": set(),
+        "history": list(range(5_000)),
+    }
+    payload = sync.runtime_session_payload(
+        session, device_id="device", device_name="Laptop", cwd="/gone", now="2026-01-01T00:00:00Z", version="1"
+    )
+    assert payload["sessionId"] == "session-1"
+    assert payload["workspace"] == "/work/repo"
+
+
+def test_runtime_session_sync_survives_a_removed_working_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    class CapturedCwdError(Exception):
+        pass
+
+    def removed_directory() -> str:
+        raise FileNotFoundError("cwd removed")
+
+    def capture(_session: object, **kwargs: object) -> dict[str, object]:
+        raise CapturedCwdError(kwargs["cwd"])
+
+    monkeypatch.setattr(runner.os, "getcwd", removed_directory)
+    monkeypatch.setattr(runner, "_guard_device_metadata", lambda _store: ("device", "Laptop"))
+    monkeypatch.setattr(runner._sync, "runtime_session_payload", capture)
+    with pytest.raises(CapturedCwdError, match="/work/repo"):
+        runner._cloud_runtime_session_payload(cast(Any, None), {"workspace": "/work/repo"})
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_rollout_reads_the_environment_value_it_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(sync.POLICY_CANONICAL_ENFORCEMENT_ENV, "canonical")
     assert sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id=None) is True
@@ -106,6 +142,10 @@ def test_rollout_reads_the_environment_value_it_is_given(monkeypatch: pytest.Mon
         "canonical_rollout",
         "downgrade_reference",
         "policy_simulation",
+        "cloud_exceptions",
+        "runtime_session_payload",
+        "cloud_http_error",
+        "stale_intel",
     ],
 )
 def test_malformed_arguments_fail_closed(kind: str) -> None:
@@ -161,3 +201,36 @@ def test_url_derivation_is_reused_for_the_same_inputs(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(sync, "native_runner_authority", refuse)
     assert sync.normalized_runtime_sessions_sync_url(url) == first
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_cloud_exceptions_list_a_bundle_wider_than_the_transport_allows() -> None:
+    entries = [
+        {
+            "exceptionId": f"artifact:npm/pkg-{index}",
+            "scope": "artifact",
+            "owner": "sec@example.test",
+            "expiresAt": "2099-01-01T00:00:00Z",
+        }
+        for index in range(5_000)
+    ]
+    items = sync.cloud_exceptions({"bundleHash": "sha256:abc", "cloudExceptions": entries}, device_id=None)
+    assert len(items) == 5_000
+    assert items[-1]["id"] == "artifact:npm/pkg-4999"
+
+
+def test_a_refused_cloud_exception_listing_is_a_native_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_policy_bundle import PolicyBundleNativeUnavailableError
+    from codex_plugin_scanner.guard.runtime import runner
+
+    def refuse(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(runner._sync, "cloud_exceptions", refuse)
+    with pytest.raises(PolicyBundleNativeUnavailableError):
+        runner._policy_bundle_cloud_exception_items(
+            cast(Any, None),
+            device_id="device-1",
+            policy_bundle={"cloudExceptions": []},
+            policy_bundle_ack={},
+        )

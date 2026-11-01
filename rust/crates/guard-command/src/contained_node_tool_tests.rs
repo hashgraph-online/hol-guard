@@ -46,6 +46,10 @@ fn a_local_runner_spelling_reaches_the_tool_it_names() {
         ["npm", "x", "eslint", "src"].as_slice(),
         ["pnpm", "exec", "eslint", "src"].as_slice(),
         ["yarn", "exec", "--", "eslint", "src"].as_slice(),
+        ["npm", "--silent", "exec", "eslint", "src"].as_slice(),
+        ["pnpm", "--silent", "exec", "eslint", "src"].as_slice(),
+        ["pnpm", "--reporter=silent", "exec", "eslint", "src"].as_slice(),
+        ["yarn", "--silent", "exec", "--", "eslint", "src"].as_slice(),
         ["/usr/local/bin/eslint", "src"].as_slice(),
     ] {
         let route = route(command);
@@ -81,7 +85,7 @@ fn a_manager_subcommand_is_not_a_script_name() {
         ["pnpm", "install"].as_slice(),
         ["yarn", "publish"].as_slice(),
         ["npm", "lint"].as_slice(),
-        ["npm", "run", "lint", "--", "--fix"].as_slice(),
+        ["npm", "run", "lint", "extra"].as_slice(),
     ] {
         assert_eq!(
             refusal(&route(command)).map(|(_, message)| message),
@@ -89,6 +93,37 @@ fn a_manager_subcommand_is_not_a_script_name() {
             "{command:?}"
         );
     }
+}
+
+#[test]
+fn a_run_carries_its_own_arguments_into_the_script_body() {
+    // `npm run lint -- --max-warnings=0` names the `lint` script and hands it
+    // `--max-warnings=0`, so the first reading names the script and the second
+    // gates the body holding the word the run passed on.
+    let command = words(&["npm", "run", "lint", "--", "--max-warnings=0"]);
+    assert_eq!(
+        node_tool_route(&command, None, false),
+        NodeToolRoute::Script {
+            task: "lint".to_owned()
+        }
+    );
+    let body = words(&["eslint", "."]);
+    assert_eq!(
+        tool(&node_tool_route(&command, Some(&body), false)),
+        Some((
+            "eslint",
+            words(&[".", "--max-warnings=0"]),
+            ToolMode::Report
+        ))
+    );
+
+    // A word the run passes on is gated as the body's own, so a fixing run is
+    // refused with the body rather than slipping past between the readings.
+    let fixing = words(&["npm", "run", "lint", "--", "--fix"]);
+    assert_eq!(
+        refusal(&node_tool_route(&fixing, Some(&body), false)).map(|(_, message)| message),
+        Some("The lint/typecheck input has write or shell effects.")
+    );
 }
 
 #[test]

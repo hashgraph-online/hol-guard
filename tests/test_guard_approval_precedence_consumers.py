@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.local_supply_chain import (
-    apply_stored_package_policy_override,
-    package_request_policy_hash,
-)
+from codex_plugin_scanner.guard.local_supply_chain import package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -32,6 +30,12 @@ from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
+def apply_stored_package_policy_override(evaluation: object, **kwargs: Any) -> PackageRequestEvaluation:
+    """The saved-policy override the package lane applies, as its resolver returns it."""
+
+    return local_supply_chain_module._resolve_stored_package_policy_override(evaluation, **kwargs).evaluation
 
 
 def _exact_package_context_token() -> str:

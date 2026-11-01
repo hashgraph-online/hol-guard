@@ -1,6 +1,9 @@
 //! Package-manager directory flags: `bun --cwd <dir>`, `npm --prefix <dir>`,
 //! `pnpm -C <dir>` and `yarn --cwd <dir>` run the rest exactly as
-//! `cd <dir> && <manager> <rest>` would. The flag form is rewritten into that
+//! `cd <dir> && <manager> <rest>` would. `pnpm -w` names the same kind of
+//! directory without spelling it: it runs the rest in the workspace root,
+//! which is the nearest directory at or above the working directory holding
+//! `pnpm-workspace.yaml`. The flag form is rewritten into that
 //! list with the directory resolved the way the manager resolves it, so it
 //! faces the same directory proof, sibling-repository rule and containment
 //! checks as the `cd` form. The execution sink peels the same flag
@@ -20,6 +23,38 @@ fn directory_flags(manager: &str) -> &'static [&'static str] {
         "npm" => &["--prefix", "-C"],
         "pnpm" => &["--dir", "-C"],
         _ => &[],
+    }
+}
+
+/// Flags that name the workspace root rather than spell a directory.
+///
+/// `pnpm -w run build` runs the root package's `build` script from anywhere
+/// in the workspace, so it is `cd <workspace root> && pnpm run build`. Only
+/// the two exact spellings are read: a boolean flag carries no attached
+/// value, so `-wx` is some other flag and keeps the review. npm's `-w` takes
+/// a workspace *name* rather than naming the root, which is why this is
+/// pnpm's alone.
+fn workspace_root_flags(manager: &str) -> &'static [&'static str] {
+    match manager {
+        "pnpm" => &["-w", "--workspace-root"],
+        _ => &[],
+    }
+}
+
+/// The directory `pnpm -w` runs in: the nearest directory at or above the
+/// physical working directory holding `pnpm-workspace.yaml`, which is how
+/// pnpm finds its own root. `None` when there is no workspace above the
+/// working directory, where `pnpm -w` has no root to run in either.
+fn workspace_root(cwd: &str) -> Option<String> {
+    let mut directory = std::fs::canonicalize(cwd).ok()?;
+    loop {
+        if directory.join("pnpm-workspace.yaml").is_file() {
+            let root = directory.to_str().filter(|path| plain(path))?;
+            return Some(root.to_owned());
+        }
+        if !directory.pop() {
+            return None;
+        }
     }
 }
 
@@ -80,6 +115,8 @@ fn resolve(value: &str, cwd: &str) -> Option<String> {
 
 /// Rewrite `<manager> [run] <flag> <dir> <rest>` (with only a bounded output
 /// filter or status echo after it) into `cd <resolved dir> && <manager> [run] <rest>`.
+/// `pnpm [run] -w <rest>` is rewritten the same way, with the workspace root
+/// standing in for the directory the flag does not spell.
 pub(in crate::pretool) fn as_cd_list(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
@@ -94,7 +131,8 @@ pub(in crate::pretool) fn as_cd_list(
     let (first, later) = model.segments.split_first()?;
     let executable = first.executable.as_deref()?;
     let flags = directory_flags(executable);
-    if flags.is_empty()
+    let root_flags = workspace_root_flags(executable);
+    if (flags.is_empty() && root_flags.is_empty())
         || first.pipeline_index != 0
         || !first.environment_names.is_empty()
         || !first.wrapper_chain.is_empty()
@@ -128,19 +166,27 @@ pub(in crate::pretool) fn as_cd_list(
     let arguments = &words[1..];
     let options = arguments.iter().take_while(|word| **word != "--");
     // One directory flag, before the verb or right after `run`; a repeated
-    // or later one could be passed to the script or override the first.
-    if options.filter(|word| names_flag(word, flags)).count() != 1 {
+    // or later one could be passed to the script or override the first. A
+    // workspace-root flag counts as one of them: two directories named at
+    // once is not a list this rewrites.
+    if options
+        .filter(|word| names_flag(word, flags) || root_flags.contains(*word))
+        .count()
+        != 1
+    {
         return None;
     }
     let index = usize::from(arguments.first() == Some(&"run"));
     let flag = *arguments.get(index)?;
-    let (value, consumed) = if flags.contains(&flag) {
-        (*arguments.get(index + 1)?, 2)
+    let (directory, consumed) = if root_flags.contains(&flag) {
+        (workspace_root(context.cwd?)?, 1)
+    } else if flags.contains(&flag) {
+        (resolve(arguments.get(index + 1)?, context.cwd?)?, 2)
     } else {
         let (name, value) = flag.split_once('=')?;
-        (flags.contains(&name) && name.starts_with("--")).then_some((value, 1))?
+        (flags.contains(&name) && name.starts_with("--")).then_some(())?;
+        (resolve(value, context.cwd?)?, 1)
     };
-    let directory = resolve(value, context.cwd?)?;
     let removed = index..index + consumed;
     let rest: Vec<&str> = arguments
         .iter()

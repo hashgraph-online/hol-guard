@@ -411,6 +411,12 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      ),\n"
         "      ...(/^(?:__INERT_NODE_OPTIONS__)$/.test(process.env.NODE_OPTIONS ?? '')\n"
         "        ? { node_options_inert: true } : {}),\n"
+        # `CARGO_HOME` at its default moves no configuration file; the value is never stamped.
+        "      ...((() => {\n"
+        "        const home = (process.env.HOME ?? '').replace(/\\/+$/, '');\n"
+        "        const cargoHome = (process.env.CARGO_HOME ?? '').replace(/\\/+$/, '');\n"
+        "        return home !== '' && cargoHome === `${home}/.cargo`;\n"
+        "      })() ? { cargo_home_default: true } : {}),\n"
         "    },\n"
         "  };\n"
         "  let serializedPayload = '';\n"

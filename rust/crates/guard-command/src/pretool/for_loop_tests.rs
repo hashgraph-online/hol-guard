@@ -245,6 +245,38 @@ fn a_flag_named_like_the_loop_variable_is_not_a_rebinding() {
     );
 }
 
+/// A braced loop name glued to a word character is still the loop's own name.
+///
+/// The unroller replaces the reference with the header word it stands for, so
+/// `${f}_backup` is written out as `a_backup` -- the word the body would have
+/// built. Nothing is rewritten as an expansion here, so the brace spelling
+/// never has to survive the rewrite, and `for f in a b; do cp "$f" "${f}.bak"`
+/// -- a loop that names each copy after the file it came from -- reads as the
+/// copies it makes.
+#[test]
+fn a_braced_loop_name_glued_to_a_word_is_substituted() {
+    for (looped, unrolled) in [
+        (
+            "for f in a b; do echo \"${f}_backup\"; done",
+            "echo \"a_backup\"; echo \"b_backup\"",
+        ),
+        (
+            "for f in a b; do wc -l \"${f}.txt\"; done",
+            "wc -l \"a.txt\"; wc -l \"b.txt\"",
+        ),
+        (
+            "for n in 1 2; do cat \"report${n}\"; done",
+            "cat \"report1\"; cat \"report2\"",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped} lost the word its braced name stands for"
+        );
+    }
+}
+
 #[test]
 fn a_leading_cd_stays_in_front_of_the_unrolled_list() {
     let looped =
@@ -435,5 +467,59 @@ fn a_group_opening_or_closing_on_a_pipe_keeps_its_review() {
         "for p in a b; do (echo \"$p\" |||| ls); done",
     ] {
         assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
+    }
+}
+
+/// A `|` inside quotes is part of one word the shell hands the command, not a
+/// stage separator, so a loop body carrying a jq filter unrolls to the same
+/// reads it runs.
+#[test]
+fn a_quoted_pipe_in_a_body_word_is_not_a_pipeline_stage() {
+    for (looped, unrolled) in [
+        (
+            "for n in 1 2; do gh pr view \"$n\" --json a --jq '.a | select(.b==\"x\")'; done",
+            "gh pr view \"1\" --json a --jq '.a | select(.b==\"x\")'; gh pr view \"2\" --json a --jq '.a | select(.b==\"x\")'",
+        ),
+        (
+            "for n in 1 2; do jq \"[.[] | select(.a==\\\"x\\\")]\" \"$n.json\"; done",
+            "jq \"[.[] | select(.a==\\\"x\\\")]\" \"1.json\"; jq \"[.[] | select(.a==\\\"x\\\")]\" \"2.json\"",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped}"
+        );
+    }
+}
+
+/// The stage check still reads the command word of every stage an unquoted
+/// `|` really opens, and an item that ends inside a quoted run spells no
+/// pipeline at all.
+#[test]
+fn an_unquoted_stage_without_a_plain_command_word_keeps_its_review() {
+    for command in [
+        "for n in 1 2; do echo \"$n\" | FOO=bar cat; done",
+        "for n in 1 2; do echo \"$n\" | >out cat; done",
+        "for n in 1 2; do echo \"$n\" | /usr/bin/ca?; done",
+        "for n in 1 2; do echo '$n | cat; done",
+    ] {
+        assert_eq!(super::for_loop_unroll::unroll(command), None, "{command}");
+    }
+}
+
+/// The same cut applies inside a double-quoted word whose own quotes are
+/// written as escapes, the spelling a `gh ... --jq` read reaches for when the
+/// filter compares a string.
+#[test]
+fn an_escaped_quote_run_holding_a_pipe_stays_one_word() {
+    for command in [
+        "for n in 1 2; do echo \"$n\"; gh run list --commit \"$n\" --json name --jq \"[.[] | select(.conclusion==\\\"ok\\\")]\"; done",
+        "for n in 1 2; do gh pr view \"$n\" --json a --jq '[.a[] | select(.b==\"x\")] | unique | .[0:12]'; done",
+    ] {
+        assert!(
+            super::for_loop_unroll::unroll(command).is_some(),
+            "{command}"
+        );
     }
 }

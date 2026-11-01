@@ -1,22 +1,24 @@
-"""Protected installation identity and read-only lease-continuity evidence."""
+"""Protected installation identity and read-only lease-continuity evidence.
+
+The native runtime reads, parses and writes the continuity record, observes
+the boot and decides what a verification reports. This module keeps the
+device-key lookup and the lock.
+"""
 
 from __future__ import annotations
 
-import ctypes
-import errno
+import base64
 import json
 import os
 import platform
 import secrets
 import stat
-import time
-import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager, suppress
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast, get_args
 
 from .contracts import MachinePaths, default_machine_paths
 from .device_key import require_machine_device_context, verified_machine_device_key_ids
@@ -26,12 +28,18 @@ from .file_lock import (
 from .file_lock import (
     release_file_lock as _release_lock,
 )
+from .runtime_request import runtime_answer
+from .state_file import read_state, replace_state
 
 _SCHEMA = "hol-guard-installation-continuity.v1"
-_STATE_NAME = "installation-continuity.json"
 _LOCK_NAME = ".installation-continuity.lock"
-_MAX_STATE_BYTES = 64 * 1024
 _MAX_UINT64 = (1 << 64) - 1
+INSTALLATION_CONTINUITY_FEATURE = "native-installation-continuity-v1"
+INSTALLATION_CONTINUITY_COMMAND = "installation-continuity"
+INSTALLATION_CONTINUITY_SCHEMA = "installation-continuity.v1"
+BOOT_OBSERVATION_FEATURE = "native-boot-observation-v1"
+_COMMAND_TIMEOUT_SECONDS = 30.0
+_OUTPUT_LIMIT_BYTES = 16 * 1024
 
 ContinuityState = Literal["healthy", "degraded", "absent", "tampered", "unknown", "unsupported"]
 
@@ -88,10 +96,6 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _state_path(paths: MachinePaths) -> Path:
-    return paths.state_root / _STATE_NAME
-
-
 def _lock_path(paths: MachinePaths) -> Path:
     return paths.state_root / _LOCK_NAME
 
@@ -102,127 +106,47 @@ def _private_regular_file(metadata: os.stat_result) -> bool:
     return os.name == "nt" or (metadata.st_uid == 0 and not stat.S_IMODE(metadata.st_mode) & 0o077)
 
 
-def _bounded_private_file(path: Path) -> bytes:
-    try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
-    except OSError as exc:
-        if exc.errno == errno.ELOOP:
-            raise PermissionError("installation_identity_acl_invalid") from exc
-        raise
-    try:
-        before = os.fstat(descriptor)
-        if before.st_size > _MAX_STATE_BYTES or not _private_regular_file(before):
-            raise PermissionError("installation_identity_acl_invalid")
-        payload = os.read(descriptor, _MAX_STATE_BYTES + 1)
-        after = os.fstat(descriptor)
-        before_identity = (before.st_dev, before.st_ino, before.st_size, before.st_ctime_ns)
-        after_identity = (after.st_dev, after.st_ino, after.st_size, after.st_ctime_ns)
-        if len(payload) > _MAX_STATE_BYTES or len(payload) != before.st_size or before_identity != after_identity:
-            raise OSError("installation_identity_invalid")
-        return payload
-    finally:
-        os.close(descriptor)
+def _native_answer(request: dict[str, object], *, extra_features: tuple[str, ...] = ()) -> dict[str, Any]:
+    """The runtime's answer to one continuity request, with any record as the dataclass."""
 
-
-def _hex_string(value: object, length: int) -> str:
-    if not isinstance(value, str) or len(value) != length or any(char not in "0123456789abcdef" for char in value):
-        raise ValueError("installation_identity_invalid")
-    return value
-
-
-def _timestamp(value: object) -> str:
-    if not isinstance(value, str) or len(value) > 64:
-        raise ValueError("installation_identity_invalid")
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise ValueError("installation_identity_invalid") from exc
-    if parsed.tzinfo is None:
-        raise ValueError("installation_identity_invalid")
-    return value
-
-
-def _optional_bounded_string(value: object, *, length: int | None = None) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value or len(value) > 256:
-        raise ValueError("installation_identity_invalid")
-    if length is not None:
-        return _hex_string(value, length)
-    return value
-
-
-def _uint64(value: object) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > _MAX_UINT64:
-        raise ValueError("installation_identity_invalid")
-    return value
+    answer = runtime_answer(
+        INSTALLATION_CONTINUITY_FEATURE,
+        INSTALLATION_CONTINUITY_COMMAND,
+        {"schema": INSTALLATION_CONTINUITY_SCHEMA, **request},
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+        extra_features=extra_features,
+    )
+    if answer is None or not isinstance(answer.get("ok"), bool):
+        # A record nothing could check is never read as active continuity.
+        raise OSError("installation_identity_native_unavailable")
+    fields = cast(dict[str, Any], answer)
+    if isinstance(fields.get("record"), dict):
+        try:
+            fields["record"] = InstallationContinuityRecord(**cast(dict[str, Any], fields["record"]))
+        except TypeError as exc:
+            raise OSError("installation_identity_native_unavailable") from exc
+    return fields
 
 
 def _parse_record(payload: bytes) -> InstallationContinuityRecord:
-    try:
-        raw = json.loads(payload)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError("installation_identity_invalid") from exc
-    if not isinstance(raw, dict) or raw.get("schemaVersion") != _SCHEMA:
+    answer = _native_answer({"op": "parse", "content": base64.b64encode(payload).decode("ascii")})
+    if answer["ok"] is not True:
         raise ValueError("installation_identity_invalid")
-    sequence = _uint64(raw.get("lastIssuedSequence"))
-    digest = _optional_bounded_string(raw.get("lastLeaseDigest"), length=64)
-    boot_id = _optional_bounded_string(raw.get("lastLeaseBootSessionId"))
-    uptime_raw = raw.get("lastLeaseMonotonicUptimeNs")
-    uptime = None if uptime_raw is None else _uint64(uptime_raw)
-    lease_key_id = _optional_bounded_string(raw.get("lastLeaseKeyId"))
-    if sequence == 0 and any(value is not None for value in (digest, boot_id, uptime, lease_key_id)):
-        raise ValueError("installation_identity_invalid")
-    if sequence > 0 and any(value is None for value in (digest, boot_id, uptime, lease_key_id)):
-        raise ValueError("installation_identity_invalid")
-    key_id = raw.get("keyIdAtGenerationCreation")
-    if not isinstance(key_id, str) or not key_id or len(key_id) > 256:
-        raise ValueError("installation_identity_invalid")
-    return InstallationContinuityRecord(
-        _hex_string(raw.get("machineInstallationId"), 32),
-        _hex_string(raw.get("installationGeneration"), 32),
-        _timestamp(raw.get("generationCreatedAt")),
-        key_id,
-        sequence,
-        digest,
-        boot_id,
-        uptime,
-        _timestamp(raw.get("updatedAt")),
-        lease_key_id,
-    )
+    record = answer.get("record")
+    if not isinstance(record, InstallationContinuityRecord):
+        raise OSError("installation_identity_native_unavailable")
+    return record
 
 
 def _read_record(paths: MachinePaths) -> InstallationContinuityRecord | None:
-    try:
-        return _parse_record(_bounded_private_file(_state_path(paths)))
-    except FileNotFoundError:
-        return None
+    content = read_state(paths.state_root, "continuity")
+    return None if content is None else _parse_record(content)
 
 
 def _atomic_write(paths: MachinePaths, record: InstallationContinuityRecord) -> None:
-    parent = paths.state_root
-    if parent.is_symlink() or not parent.is_dir():
-        raise OSError("installation_identity_state_root_invalid")
-    target = _state_path(paths)
-    temporary = parent / f".{target.name}.{secrets.token_hex(16)}.tmp"
     payload = json.dumps(record.to_dict(), sort_keys=True, separators=(",", ":")).encode("utf-8")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, target)
-        if os.name != "nt":
-            parent_descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(parent_descriptor)
-            finally:
-                os.close(parent_descriptor)
-    finally:
-        with suppress(FileNotFoundError):
-            temporary.unlink()
+    replace_state(paths.state_root, "continuity", payload)
 
 
 @contextmanager
@@ -248,71 +172,43 @@ def _continuity_lock(paths: MachinePaths) -> Iterator[None]:
             _release_lock(handle)
 
 
-def _validated_boot_session_id(value: str) -> str:
-    normalized = value.strip()
-    if not normalized or len(normalized) > 256 or not normalized.strip("0-{}"):
-        raise OSError("lease_continuity_boot_probe_failed")
-    return normalized
-
-
-def _darwin_boot_observation() -> BootObservation:
-    libc = ctypes.CDLL(None, use_errno=True)
-    size = ctypes.c_size_t(0)
-    if libc.sysctlbyname(b"kern.bootsessionuuid", None, ctypes.byref(size), None, 0) != 0 or size.value > 256:
-        raise OSError("lease_continuity_boot_probe_failed")
-    buffer = ctypes.create_string_buffer(size.value)
-    if libc.sysctlbyname(b"kern.bootsessionuuid", buffer, ctypes.byref(size), None, 0) != 0:
-        raise OSError("lease_continuity_boot_probe_failed")
-    boot_session_id = _validated_boot_session_id(buffer.value.decode("ascii"))
-
-    class Timebase(ctypes.Structure):
-        _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
-
-    timebase = Timebase()
-    if libc.mach_timebase_info(ctypes.byref(timebase)) != 0 or timebase.denom == 0:
-        raise OSError("lease_continuity_monotonic_probe_failed")
-    libc.mach_continuous_time.restype = ctypes.c_uint64
-    uptime = libc.mach_continuous_time() * timebase.numer // timebase.denom
-    return BootObservation(boot_session_id, uptime)
-
-
-def _windows_boot_observation() -> BootObservation:
-    class Guid(ctypes.Structure):
-        _fields_ = [
-            ("data1", ctypes.c_uint32),
-            ("data2", ctypes.c_uint16),
-            ("data3", ctypes.c_uint16),
-            ("data4", ctypes.c_ubyte * 8),
-        ]
-
-    class BootEnvironment(ctypes.Structure):
-        _fields_ = [("identifier", Guid), ("firmware_type", ctypes.c_uint32), ("boot_flags", ctypes.c_uint64)]
-
-    info = BootEnvironment()
-    returned = ctypes.c_ulong(0)
-    status = ctypes.windll.ntdll.NtQuerySystemInformation(
-        90, ctypes.byref(info), ctypes.sizeof(info), ctypes.byref(returned)
-    )
-    if status != 0:
-        raise OSError("lease_continuity_boot_probe_failed")
-    raw_guid = bytes(ctypes.string_at(ctypes.byref(info.identifier), ctypes.sizeof(Guid)))
-    boot_session_id = _validated_boot_session_id(str(uuid.UUID(bytes_le=raw_guid)))
-    get_tick_count = ctypes.windll.kernel32.GetTickCount64
-    get_tick_count.restype = ctypes.c_ulonglong
-    uptime = int(get_tick_count()) * 1_000_000
-    return BootObservation(boot_session_id, uptime)
-
-
 def observe_boot(*, system_name: str | None = None) -> BootObservation:
-    resolved = system_name or platform.system()
-    if resolved == "Darwin":
-        return _darwin_boot_observation()
-    if resolved == "Windows":
-        return _windows_boot_observation()
-    if resolved == "Linux":
-        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
-        return BootObservation(_validated_boot_session_id(boot_id), time.monotonic_ns())
-    raise OSError("lease_continuity_platform_unsupported")
+    """This boot's session identifier and an uptime that never goes backwards within the boot.
+
+    The uptime keeps counting through sleep on macOS and Windows; on Linux it
+    is ``CLOCK_MONOTONIC``, which stops while the machine is suspended.
+    """
+
+    if (system_name or platform.system()) not in ("Darwin", "Linux", "Windows"):
+        raise OSError("lease_continuity_platform_unsupported")
+    answer = _native_answer({"op": "observe-boot"}, extra_features=(BOOT_OBSERVATION_FEATURE,))
+    if answer["ok"] is not True:
+        error = answer.get("error")
+        raise OSError(
+            error
+            if isinstance(error, str) and error.startswith("lease_continuity_")
+            else "lease_continuity_probe_failed"
+        )
+    boot = answer.get("boot")
+    if not isinstance(boot, dict):
+        raise OSError("lease_continuity_probe_failed")
+    session, uptime = boot.get("boot_session_id"), boot.get("monotonic_uptime_ns")
+    if not isinstance(session, str) or not session or type(uptime) is not int or uptime < 0:
+        raise OSError("lease_continuity_probe_failed")
+    return BootObservation(session, uptime)
+
+
+def _probe(read: Callable[[], dict[str, object]]) -> dict[str, object]:
+    """What a probe returned, or the exception it raised for the runtime to map."""
+
+    try:
+        return read()
+    except PermissionError as exc:
+        return {"kind": "permission", "error": str(exc)}
+    except ValueError as exc:
+        return {"kind": "value", "error": str(exc)}
+    except OSError as exc:
+        return {"kind": "os", "error": str(exc)}
 
 
 def verify_installation_continuity(
@@ -323,48 +219,56 @@ def verify_installation_continuity(
     """Read and validate continuity evidence without changing protected state."""
 
     resolved = system_name or platform.system()
+    probe_failed = ContinuityVerification(
+        "unknown", "installation_identity_probe_failed", "lease_continuity_probe_failed"
+    )
     try:
-        record = _read_record(paths)
-        if record is None:
-            return ContinuityVerification("absent", "installation_identity_absent", "lease_continuity_absent")
-        _, verified_ids = verified_machine_device_key_ids(paths, system_name=resolved)
-        if record.key_id_at_generation_creation not in verified_ids:
-            return ContinuityVerification("tampered", "installation_identity_key_mismatch", "lease_continuity_invalid")
-        try:
-            observation = observe_boot(system_name=resolved)
-        except OSError as exc:
-            reason = str(exc)
-            if reason == "lease_continuity_platform_unsupported":
-                return ContinuityVerification("unsupported", "installation_identity_active", reason, record)
-            lease_reason = reason if reason.startswith("lease_continuity_") else "lease_continuity_probe_failed"
-            return ContinuityVerification("unknown", "installation_identity_active", lease_reason, record)
-        if (
-            record.last_lease_boot_session_id == observation.boot_session_id
-            and record.last_lease_monotonic_uptime_ns is not None
-            and observation.monotonic_uptime_ns < record.last_lease_monotonic_uptime_ns
-        ):
-            return ContinuityVerification(
-                "tampered", "installation_identity_active", "lease_continuity_monotonic_regression", record, observation
-            )
-        if record.last_issued_sequence == _MAX_UINT64:
-            return ContinuityVerification(
-                "degraded", "installation_identity_active", "lease_continuity_sequence_exhausted", record, observation
-            )
-        reason = "lease_continuity_uninitialized" if record.last_issued_sequence == 0 else "lease_continuity_active"
-        return ContinuityVerification("healthy", "installation_identity_active", reason, record, observation)
+        content = read_state(paths.state_root, "continuity")
     except PermissionError:
         return ContinuityVerification("tampered", "installation_identity_acl_invalid", "lease_continuity_invalid")
-    except ValueError:
+    except OSError:
+        return probe_failed
+    if content is None:
+        return ContinuityVerification("absent", "installation_identity_absent", "lease_continuity_absent")
+    encoded = base64.b64encode(content).decode("ascii")
+    try:
+        # A record the runtime cannot read never costs a key or boot probe.
+        parsed = _native_answer({"op": "parse", "content": encoded})
+    except OSError:
+        return probe_failed
+    if parsed["ok"] is not True:
         return ContinuityVerification("tampered", "installation_identity_invalid", "lease_continuity_invalid")
-    except OSError as exc:
-        reason = str(exc)
-        if reason in {"device_key_absent", "device_key_revoked", "device_key_public_mismatch"}:
-            return ContinuityVerification("tampered", "installation_identity_key_mismatch", "lease_continuity_invalid")
-        if reason.startswith("device_key_"):
-            return ContinuityVerification(
-                "unknown", "installation_identity_probe_failed", "lease_continuity_probe_failed"
-            )
-        return ContinuityVerification("unknown", "installation_identity_probe_failed", "lease_continuity_probe_failed")
+    observations: list[BootObservation] = []
+
+    def boot() -> dict[str, object]:
+        observations.append(observe_boot(system_name=resolved))
+        return asdict(observations[0])
+
+    request: dict[str, object] = {
+        "op": "verify",
+        "content": encoded,
+        "key": _probe(lambda: {"ids": sorted(verified_machine_device_key_ids(paths, system_name=resolved)[1])}),
+        "boot": _probe(boot),
+    }
+    try:
+        answer = _native_answer(request)
+        state = answer["state"]
+        identity_reason = answer["identity_reason_code"]
+        lease_reason = answer["lease_reason_code"]
+        record = answer.get("record")
+        observed = answer["observed"] is True and bool(observations)
+    except (OSError, KeyError):
+        return probe_failed
+    if not (
+        state in get_args(ContinuityState)
+        and isinstance(identity_reason, str)
+        and isinstance(lease_reason, str)
+        and (record is None or isinstance(record, InstallationContinuityRecord))
+    ):
+        return probe_failed
+    return ContinuityVerification(
+        cast(ContinuityState, state), identity_reason, lease_reason, record, observations[0] if observed else None
+    )
 
 
 def provision_machine_continuity() -> dict[str, object]:

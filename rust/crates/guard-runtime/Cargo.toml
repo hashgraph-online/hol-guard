@@ -13,6 +13,9 @@ path = "src/main.rs"
 [dependencies]
 guard-command = { path = "../guard-command" }
 guard-contained-process = { path = "../guard-contained-process" }
+guard-context-assistance = { path = "../guard-context-assistance" }
+guard-cigar-release = { path = "../guard-cigar-release" }
+guard-cigar-install = { path = "../guard-cigar-install" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
@@ -59,6 +62,7 @@ sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["time"] }
 nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount", "hostname"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

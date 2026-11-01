@@ -74,9 +74,21 @@ runs:
     run: uv run --no-sync pytest tests/test_mcp_relay_handoff.py tests/test_mcp_relay_lane_ready_install.py
       tests/test_mcp_relay_native_launch.py --tb=short
     shell: pwsh
-  - name: Run Windows direct-lane ACK regressions
+  - name: Read Windows process command lines through the native runtime
     if: runner.os == 'Windows'
-    run: uv run --no-sync pytest tests/test_native_policy_snapshot_direct_lane_windows.py --tb=short
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+      HOL_GUARD_NATIVE_REGRESSION: "1"
+    run: uv run --no-sync pytest tests/test_windows_processes.py --tb=short
+    shell: pwsh
+  - name: Run Windows direct-lane ACK and token-user regressions
+    # The runtime writes and withdraws the private ACK file and reads the
+    # token user that owns it.
+    if: runner.os == 'Windows'
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+      HOL_GUARD_NATIVE_REGRESSION: "1"
+    run: uv run --no-sync pytest tests/test_native_policy_snapshot_direct_lane_windows.py tests/test_guard_mdm_windows_machine_context.py --tb=short
     shell: pwsh
   - name: Run Windows Codex hook process-tree regressions
     if: runner.os == 'Windows'

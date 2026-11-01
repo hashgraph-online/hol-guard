@@ -11,6 +11,7 @@
 //! published in the direct-lane binding.
 
 use super::HookDirectDefer;
+use projection::{directory_input, projected_input};
 #[cfg(unix)]
 use serde_json::json;
 use serde_json::{Map, Value};
@@ -23,14 +24,8 @@ const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 /// Set to `0` to keep every workspace sandbox on the daemon's sink.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const NATIVE_SINK_SWITCH: &str = "HOL_GUARD_NATIVE_CONTAINED_SINK";
-/// Command text whose meaning depends on what the native sink does not yet
-/// replay: home expansion. Pipes, stderr folding and exit-status reads run
-/// whole in the sandbox, as the edge classified them, so the shell gives
-/// them their own meaning.
-#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
-const NATIVE_SINK_UNSUPPORTED: [&str; 1] = ["~"];
 /// Package manager flags that run a script in another directory. The native
-/// sink takes them only when `inner_package_directory` holds.
+/// sink takes them only when `package_directory` holds.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 const PACKAGE_DIRECTORY_FLAGS: [&str; 3] = ["--cwd", "--prefix", "--dir"];
 /// The short directory flag, which moves the working directory for every
@@ -139,53 +134,27 @@ fn route_on(
     let Some(original) = shell_input(payload) else {
         return Ok(None);
     };
-    let projected = projected_input(original, target.workspace, target.home_dir);
+    let (workspace, home_dir) = (target.workspace, target.home_dir);
+    let projected = projected_input(original, workspace, home_dir);
     let original = projected.as_ref().unwrap_or(original);
-    let native = (host.native)(response, original, target.workspace, target.home_dir);
+    let decided = directory_input(original, workspace, home_dir);
+    let native = (host.native)(
+        response,
+        decided.as_ref().unwrap_or(original),
+        workspace,
+        home_dir,
+    );
     request::write_and_route(temp, payload, original, target, native.as_deref())
-}
-
-/// The call the denial was answered for, when a trailing group or a
-/// virtualenv activation moved it. `source .venv/bin/activate && pytest -q`
-/// exports settings and runs nothing else, so the pre-tool pass hands the
-/// verdict to `pytest` and answers for `.venv/bin/pytest -q`; and
-/// `(.venv/bin/pytest -q)` runs exactly the list inside its parentheses, so
-/// the pass answers for that list. The sink plans the command it is given,
-/// and it models neither a shell builtin nor a group, so handing it the
-/// unprojected text leaves it unable to build a plan for a call Guard already
-/// judged. This cannot widen authority: the sink reruns native authority on
-/// the snapshot and needs a matching denial of its own, and the projected
-/// text is the user's own command with the wrapping it already resolved
-/// removed. Any other command has no projection and keeps its own bytes.
-fn projected_input(
-    original: &Map<String, Value>,
-    workspace: &str,
-    home_dir: &str,
-) -> Option<Map<String, Value>> {
-    let command = original.get("command")?.as_str()?;
-    // The pre-tool pass answered with the settled workspace, not the spelling
-    // the harness sent. Reading the payload's own `cwd` here would resolve the
-    // activation script against `~/project` or a symlinked path the verdict
-    // never used, and the route would carry text Guard did not answer for.
-    let projected = guard_command::pretool::generic::contained_target(
-        command,
-        guard_command::pretool::PathContext {
-            home_dir: Some(home_dir),
-            cwd: Some(workspace),
-            ..Default::default()
-        },
-    )?;
-    let mut input = original.clone();
-    input.insert("command".to_owned(), Value::String(projected));
-    Some(input)
 }
 
 /// The runtime's own sink command for a call whose request snapshot keeps
 /// the text the harness sent, as the Codex bridge writes it. A verdict
 /// answered for a projection of that text (a virtualenv activation, a
 /// trailing group or a home-spelled launcher) decides on the projected
-/// call, as the direct route does; the native sink projects the text again
-/// before it plans it, as Guard's own sink does.
+/// call, as the direct route does, and a call with its own `cwd` argument
+/// decides on that directory's `cd` form; the native sink settles the
+/// directory and projects the text again before it plans it, as Guard's own
+/// sink does.
 #[cfg(unix)]
 pub(crate) fn unprojected_sink_command(
     response: &Value,
@@ -194,9 +163,14 @@ pub(crate) fn unprojected_sink_command(
     home_dir: &str,
     native: NativeSink,
 ) -> Option<Vec<String>> {
-    let projected = projected_input(original, workspace, home_dir);
-    let decided = projected.as_ref().unwrap_or(original);
-    let executable = native(response, decided, workspace, home_dir)?;
+    let decided = directory_input(original, workspace, home_dir)
+        .or_else(|| projected_input(original, workspace, home_dir));
+    let executable = native(
+        response,
+        decided.as_ref().unwrap_or(original),
+        workspace,
+        home_dir,
+    )?;
     Some(vec![
         executable,
         crate::contained_workspace_sink::SINK_COMMAND.to_owned(),
@@ -247,9 +221,12 @@ pub(crate) fn native_sink(
 }
 
 /// Whether the native sink reproduces this workspace sandbox: a workspace
-/// run, or checks followed by Git steps, but not a `git worktree add` chain,
-/// started in the workspace itself or below a sibling repository's root,
-/// with no home expansion or directory change the sink does not yet replay.
+/// run, checks followed by Git steps, or a `git worktree add` chain, started
+/// in the workspace itself or below a sibling repository's root, with no
+/// directory change the sink does not yet replay. Home paths need no check
+/// of their own: the native sink projects a `~/<dir>/<program>` launcher and
+/// peels a `cd ~/<dir>` from the declared home as Guard's own sink does, and
+/// any other `~` is the sandbox shell's to expand in both.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn native_shape(
     response: &Value,
@@ -257,7 +234,7 @@ fn native_shape(
     workspace: &str,
     home: &str,
 ) -> bool {
-    use crate::contained_workspace_sink::{host_split, WORKSPACE_PROFILE, WORKSPACE_REASON};
+    use crate::contained_workspace_sink::{WORKSPACE_PROFILE, WORKSPACE_REASON};
     let text = |name: &str| response.get(name).and_then(Value::as_str);
     let Some(command) = original.get("command").and_then(Value::as_str) else {
         return false;
@@ -267,59 +244,74 @@ fn native_shape(
     }
     text("reason_code") == Some(WORKSPACE_REASON)
         && text("required_execution_profile") == Some(WORKSPACE_PROFILE)
-        && !host_split(response.get("reason"))
         && !original.contains_key("cwd")
         && (!command.trim_start().starts_with("cd")
-            || inner_directory_change(command, workspace)
+            || leading_directory_change(command, workspace, home)
             || crate::contained_workspace_sink::entered_sibling(command, workspace, home).is_some())
         && (!PACKAGE_DIRECTORY_FLAGS
             .iter()
             .chain([&SHORT_DIRECTORY_FLAG])
             .any(|flag| command.contains(flag))
-            || inner_package_directory(command, workspace))
-        && !NATIVE_SINK_UNSUPPORTED
-            .iter()
-            .any(|fragment| command.contains(fragment))
+            || package_directory(command, workspace, home))
 }
 
-/// Whether a leading `cd` leaves the call as the daemon's sink runs it: a
-/// plain target naming a directory strictly inside the workspace, then `&&`.
-/// The daemon runs such a command whole, `cd` included, from the workspace
-/// root, as the native sink does. A `cd` to the root itself or to a sibling
-/// repository's root is planned again there, so it keeps the daemon's sink;
-/// one below a sibling's root runs from that root (`entered_sibling`).
+/// Whether a leading `cd` leaves the call as both sinks run it: one target
+/// word (`leading_word`), then `&&`, naming a directory strictly inside the
+/// workspace, the workspace root, or a sibling repository's root. A directory
+/// strictly inside runs whole, `cd` included, from the workspace root. At a
+/// root the sinks peel the `cd` and ask about the rest again from there. One
+/// below a sibling's root runs from that root (`entered_sibling`).
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
-fn inner_directory_change(command: &str, workspace: &str) -> bool {
+fn leading_directory_change(command: &str, workspace: &str, home: &str) -> bool {
     let Some(rest) = command.trim_start_matches([' ', '\t']).strip_prefix("cd") else {
         return false;
     };
     let Some(target) = rest
         .strip_prefix([' ', '\t'])
         .map(|rest| rest.trim_start_matches([' ', '\t']))
-        .and_then(|rest| rest.split_once([' ', '\t']))
-        .filter(|(target, after)| {
-            plain(target)
-                && after
-                    .trim_start_matches([' ', '\t'])
-                    .strip_prefix("&&")
-                    .is_some_and(|core| core.starts_with([' ', '\t']) && !core.trim().is_empty())
+        .and_then(leading_word)
+        .filter(|(_, after)| {
+            after
+                .trim_start_matches([' ', '\t'])
+                .strip_prefix("&&")
+                .is_some_and(|core| core.starts_with([' ', '\t']) && !core.trim().is_empty())
         })
         .map(|(target, _)| target)
     else {
         return false;
     };
-    strictly_inside(workspace, target)
+    strictly_inside(workspace, target) || projection::project_root(workspace, home, target)
+}
+
+/// The first word of `text` as the shell reads it, and the text after it,
+/// which must start with a blank: a plain word, or one in single or double
+/// quotes holding plain characters joined by single spaces. Both quotes leave
+/// such text literal, and both sinks peel the `cd` from the command model,
+/// which reads the target with its quotes removed.
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
+fn leading_word(text: &str) -> Option<(&str, &str)> {
+    let (word, after) = match text.chars().next()? {
+        quote @ ('\'' | '"') => {
+            let (inner, after) = text[1..].split_once(quote)?;
+            (inner.split(' ').all(plain).then_some(inner)?, after)
+        }
+        _ => {
+            let end = text.find([' ', '\t'])?;
+            (plain(&text[..end]).then_some(&text[..end])?, &text[end..])
+        }
+    };
+    after.starts_with([' ', '\t']).then_some((word, after))
 }
 
 /// Whether a package manager's directory flags (`bun --cwd web run build`,
 /// `pnpm -C web run build`) all name a plain directory strictly inside the
-/// workspace. A short flag counts only as its own word right after `npm` or
-/// `pnpm`. The daemon runs
-/// such a call whole from the workspace root, as the native sink does. The
-/// root itself or a sibling repository is planned again there, so it keeps
-/// the daemon's sink, as does any other spelling of the flags.
+/// workspace, the workspace root, or a sibling repository's root. A short
+/// flag counts only as its own word right after `npm` or `pnpm`. Both sinks
+/// peel the flag as they peel a leading `cd` to the same directory
+/// (`leading_directory_change`). Any other spelling of the flags keeps the
+/// daemon's sink.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
-fn inner_package_directory(command: &str, workspace: &str) -> bool {
+fn package_directory(command: &str, workspace: &str, home: &str) -> bool {
     if command.trim_start().starts_with("cd") {
         return false;
     }
@@ -355,7 +347,10 @@ fn inner_package_directory(command: &str, workspace: &str) -> bool {
     !targets.is_empty()
         && targets.len() == mentions
         && targets.iter().all(|target| {
-            !target.starts_with('-') && plain(target) && strictly_inside(workspace, target)
+            !target.starts_with('-')
+                && plain(target)
+                && (strictly_inside(workspace, target)
+                    || projection::project_root(workspace, home, target))
         })
 }
 
@@ -452,6 +447,9 @@ fn routed_response(original: &Map<String, Value>, command: &[String]) -> Value {
         },
     })
 }
+
+#[path = "hook_direct_contained_projection.rs"]
+mod projection;
 
 #[cfg(unix)]
 #[path = "hook_direct_contained_request.rs"]

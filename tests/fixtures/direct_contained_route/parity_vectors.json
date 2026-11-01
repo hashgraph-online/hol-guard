@@ -1,6 +1,6 @@
 {
  "schema": "guard-direct-contained-route-vectors.v1",
- "source": "codex_plugin_scanner.guard.adapters.zcode_contained_tests.route_zcode_containment",
+ "source": "tests.containment_rewrite_client.route_zcode_containment",
  "cases": [
   {
    "name": "profile native_pytest_readonly_containment_required",

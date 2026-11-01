@@ -55,8 +55,16 @@ def _now() -> str:
 def _settings_export_payload(config: object) -> dict[str, object]:
     from ..config import editable_guard_settings
 
+    settings = editable_guard_settings(config)  # pyright: ignore[reportArgumentType]
+    portable_assistance = getattr(config, "context_assistance_export", None)
+    if portable_assistance is None:
+        settings.pop("context_assistance", None)
+    else:
+        settings["context_assistance"] = portable_assistance
+    settings.pop("context_assistance_diagnostic", None)
+    settings.pop("context_assistance_requested", None)
     return {
         "schema_version": 1,
         "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
-        "settings": editable_guard_settings(config),  # pyright: ignore[reportArgumentType]
+        "settings": settings,
     }

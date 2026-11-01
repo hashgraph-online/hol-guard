@@ -110,15 +110,22 @@ def diff_artifact(
     current: GuardArtifact,
     *,
     guard_home: Path | None = None,
+    content_hash: str | None = None,
 ) -> ArtifactDiff:
-    """Compare a stored snapshot to the current artifact (resident-decided)."""
+    """Compare a stored snapshot to the current artifact (resident-decided).
+
+    A caller diffing many artifacts passes each ``content_hash`` from one
+    batched request instead of paying a resident round trip per artifact.
+    """
 
     payload = _serialize_artifact(current)
     evidence = projection.artifact_evidence(
         None,
         current,
         payload=payload,
-        content_hash=native_artifact_content_hash(current, guard_home=guard_home),
+        content_hash=(
+            content_hash if content_hash is not None else native_artifact_content_hash(current, guard_home=guard_home)
+        ),
         previous=previous,
         with_history=False,
         guard_home=guard_home,

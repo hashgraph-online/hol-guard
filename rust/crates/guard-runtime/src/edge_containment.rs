@@ -15,13 +15,13 @@
 //! The rewrite never changes the result or the receipt: a call the sink
 //! takes comes back as the routed allow (`routed`), and any other keeps its
 //! receipt (`kept`). A rewrite that fails is not answered, and the daemon
-//! asks the resident as before, so its outage stays the host outage
+//! answers a sink route the edge did not mark with the host outage
 //! response.
 
 use guard_contracts::{ContainmentRewriteInputsV1, GuardHookEdgeResultV2, GuardHookEnvelopeV2};
 use serde_json::{json, Map, Value};
 
-use crate::hook_decision_containment_rewrite::{containment_rewrite_with, Native};
+use crate::hook_decision_containment_rewrite::containment_rewrite_with;
 use crate::hook_decision_containment_route::host_platform;
 use crate::hook_direct::contained::NativeSink;
 
@@ -69,9 +69,10 @@ pub(super) fn attach(envelope: &GuardHookEnvelopeV2, edge: &mut GuardHookEdgeRes
 
 /// The edge's rewrite of a sink-routed `PreToolUse`, replacing
 /// `harness_response` with the routed allow when the sink takes the call.
+/// A custom block or a review answers the call first, so its receipt stands.
 /// `None` when the daemon sent no sink argv, the call is not routed to the
-/// sink, a custom block or a review answers it first, or the rewrite fails.
-/// A call `native` reproduces runs in the runtime's own sink.
+/// sink, or the rewrite fails. A call `native` reproduces runs in the
+/// runtime's own sink.
 fn rewrite(
     envelope: &GuardHookEnvelopeV2,
     harness: &str,
@@ -83,25 +84,22 @@ fn rewrite(
 ) -> Option<&'static str> {
     let sink = envelope.containment_sink.as_ref()?;
     let minimum_action = result.get("minimum_action").and_then(Value::as_str);
-    if route != SINK_ROUTE
-        || envelope.recording_only
-        || custom_block
-        || minimum_action.is_some_and(|action| REVIEW_ACTIONS.contains(&action))
-    {
+    if route != SINK_ROUTE || envelope.recording_only {
         return None;
     }
-    let rendered = harness_response.as_ref()?.as_object()?;
-    let payload = envelope.raw_payload.as_object()?;
+    if custom_block || minimum_action.is_some_and(|action| REVIEW_ACTIONS.contains(&action)) {
+        return Some(KEPT);
+    }
+    let (Some(rendered), Some(payload)) = (
+        harness_response.as_ref().and_then(Value::as_object),
+        envelope.raw_payload.as_object(),
+    ) else {
+        return Some(KEPT);
+    };
     let inputs = inputs(envelope, harness, payload, rendered, &sink.sink_command);
     // Cursor's shell check admits the runtime's sink only for a probe its
     // own scope routes, so any other Cursor call keeps Guard's sink.
-    let native = rendered
-        .get("reason")
-        .filter(|_| harness != CURSOR)
-        .map(|reason| Native {
-            reason,
-            sink: native,
-        });
+    let native = (harness != CURSOR).then_some(native);
     match containment_rewrite_with(&inputs, native).ok()?.response {
         Some(routed) => {
             *harness_response = Some(routed);

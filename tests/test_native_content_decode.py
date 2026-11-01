@@ -1,7 +1,7 @@
-"""Managed content fetch: raw boundary, contained decode and fail-closed binding.
+"""Contained content decode: the worker end to end and fail-closed binding.
 
 End-to-end cases spawn the compiled ``hol-guard-runtime content-decode
---stdin`` worker through the production adapter. Fault injection replaces the
+--stdin`` worker through the test client in ``content_decode_support``. Fault injection replaces the
 bounded process runner or the native transport; it never reaches into coding
 semantics, which only the Rust worker owns.
 """
@@ -24,12 +24,9 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import native_archive_acquisition as acquisition
-from codex_plugin_scanner.guard import native_content_decode as client
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
-from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
-from codex_plugin_scanner.guard.runtime.restricted_archive_contract import RestrictedArchiveFailure
 from codex_plugin_scanner.guard.store_base import _acquire_advisory_file_lock
+from tests import content_decode_support as client
 
 _CORPUS = Path(__file__).resolve().parents[1] / "rust/crates/guard-archive/tests/fixtures/content-coding"
 _PLAIN = (_CORPUS / "plain.txt").read_bytes()
@@ -273,159 +270,6 @@ def test_invalid_policies_are_refused_before_any_spawn(
     result = client.decode_content_native(b"raw", ["br"], state_dir=state_dir, **kwargs)
 
     assert (result.status, result.code) == ("incomplete", "content_decode_policy_invalid")
-
-
-# --- raw fetch boundary (fake resident) --------------------------------------
-
-
-def _resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: Any) -> list[dict[str, Any]]:
-    from codex_plugin_scanner.guard.mdm import network_transport, network_trust
-
-    calls: list[dict[str, Any]] = []
-    status = SimpleNamespace(
-        available=True,
-        compatible=True,
-        identity=SimpleNamespace(path=tmp_path / "runtime"),
-        capabilities=SimpleNamespace(
-            features={"archive-acquisition-v1", "managed-content-fetch-v1", "resident-protocol-v2"}
-        ),
-    )
-    policy = SimpleNamespace(allow_public_registries=True)
-    monkeypatch.setattr(acquisition, "native_runtime_status", lambda **_kw: status)
-    monkeypatch.setattr(acquisition, "_resolve_digest_home", lambda _home: tmp_path)
-    monkeypatch.setattr(acquisition, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(acquisition, "_isolated_environment", lambda: {})
-    monkeypatch.setattr(network_transport, "resolved_network_policy", lambda _policy: (policy, False))
-    monkeypatch.setattr(
-        network_transport, "managed_ssl_context", lambda _policy: SimpleNamespace(get_ca_certs=lambda **_kw: [])
-    )
-    monkeypatch.setattr(network_trust, "export_managed_trust_roots", lambda _context: [])
-
-    def transport(**kwargs: Any) -> bytes:
-        request = json.loads(kwargs["payload"])["request"]
-        calls.append(request)
-        return json.dumps(
-            {
-                "schema": acquisition._RESULT_SCHEMA,
-                "request_id": request["request_id"],
-                "request_sha256": "sha256:" + _canonical_request_sha256(request),
-                "status": "ok",
-                "code": "ok",
-                "payload": payload(request["query"]),
-            }
-        ).encode()
-
-    monkeypatch.setattr(acquisition, "native_resident_client_request", transport)
-    return calls
-
-
-def _content_blob(body: bytes, codings: list[str], source: str) -> Any:
-    def write(query: dict[str, Any]) -> dict[str, Any]:
-        path = Path(query["temp_dir"]) / "content"
-        path.write_bytes(body)
-        return {
-            "kind": "content",
-            "path": str(path),
-            "size": len(body),
-            "sha256": hashlib.sha256(body).hexdigest(),
-            "source_url": source,
-            "final_url": source + "?final",
-            "content_encoding": codings,
-        }
-
-    return write
-
-
-def test_raw_fetch_returns_the_encoded_body_and_cleans_its_spool(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    source = "https://advisories.example.test/feed.json"
-    calls = _resident(monkeypatch, tmp_path, _content_blob(_PLAIN_BR, ["br"], source))
-
-    raw = acquisition.fetch_managed_content_raw(source)
-
-    assert isinstance(raw, acquisition.ManagedRawContent)
-    # The body is still brotli: nothing between the socket and here decoded it.
-    assert raw.body == _PLAIN_BR
-    assert raw.content_encoding == ("br",)
-    query = calls[0]["query"]
-    assert query["action"] == "content"
-    assert query["max_bytes"] == 3 * 1024 * 1024
-    assert not Path(query["temp_dir"]).exists()
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        {"kind": "download"},
-        {"content_encoding": "br"},
-        {"content_encoding": [1]},
-        {"content_encoding": ["br"] * 9},
-        {"sha256": "0" * 64},
-        {"size": 1},
-        {"source_url": "https://elsewhere.example.test/"},
-    ],
-)
-def test_raw_fetch_refuses_unbound_blobs(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mutation: dict[str, Any]
-) -> None:
-    source = "https://advisories.example.test/feed.json"
-    blob = _content_blob(_PLAIN_BR, ["br"], source)
-    _resident(monkeypatch, tmp_path, lambda query: {**blob(query), **mutation})
-
-    raw = acquisition.fetch_managed_content_raw(source)
-
-    assert raw == RestrictedArchiveFailure(
-        "native_content_fetch_unavailable", "Native managed content fetch is unavailable."
-    )
-
-
-def test_raw_fetch_requires_the_managed_content_feature(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    source = "https://advisories.example.test/feed.json"
-    _resident(monkeypatch, tmp_path, _content_blob(_PLAIN_BR, ["br"], source))
-    status = SimpleNamespace(
-        available=True,
-        compatible=True,
-        identity=SimpleNamespace(path=tmp_path / "runtime"),
-        capabilities=SimpleNamespace(features={"archive-acquisition-v1", "resident-protocol-v2"}),
-    )
-    monkeypatch.setattr(acquisition, "native_runtime_status", lambda **_kw: status)
-
-    assert isinstance(acquisition.fetch_managed_content_raw(source), RestrictedArchiveFailure)
-
-
-def test_fetch_refusal_before_body_never_spawns_a_decoder(monkeypatch: pytest.MonkeyPatch, state_dir: Path) -> None:
-    refused = RestrictedArchiveFailure(
-        "content_coding_unsupported", "The response uses a content coding Guard does not decode."
-    )
-    monkeypatch.setattr(client, "fetch_managed_content_raw", lambda *_a, **_kw: refused)
-    monkeypatch.setattr(client, "run_isolated_hook_process", pytest.fail)
-
-    result = client.fetch_managed_content("https://advisories.example.test/feed.json", state_dir=state_dir)
-
-    assert (result.status, result.code, result.body) == ("rejected", "content_coding_unsupported", None)
-
-
-def test_fetch_hands_the_raw_body_to_the_contained_decoder(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, state_dir: Path
-) -> None:
-    raw = acquisition.ManagedRawContent(
-        body=_PLAIN_BR,
-        content_encoding=("br",),
-        sha256=hashlib.sha256(_PLAIN_BR).hexdigest(),
-        source_url="https://advisories.example.test/feed.json",
-        final_url="https://advisories.example.test/feed.json?final",
-    )
-    monkeypatch.setattr(client, "fetch_managed_content_raw", lambda *_a, **_kw: raw)
-    _fake_status(monkeypatch, tmp_path)
-    calls = _fake_worker(monkeypatch, _decoded(_PLAIN))
-
-    result = client.fetch_managed_content(raw.source_url, state_dir=state_dir)
-
-    assert result.status == "decoded"
-    assert result.body == _PLAIN
-    assert result.final_url == raw.final_url
-    assert base64.b64decode(calls[0]["request"]["body_base64"]) == _PLAIN_BR
 
 
 # --- contained worker, end to end --------------------------------------------

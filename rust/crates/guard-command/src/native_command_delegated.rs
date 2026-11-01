@@ -17,16 +17,39 @@ fn basename(value: &str) -> &str {
 /// observe, so for them the flag is not an inspection.
 const VERBOSE_SHORT_V: &[&str] = &["mvn", "mvnw", "gradle", "gradlew", "bundle", "bundler"];
 
+/// The managers that read a single-dash word as a whole option name before
+/// they read it as a cluster of short flags, so `-version` is the same probe
+/// as `--version`: Maven parses its command line with Commons CLI, and
+/// Gradle's own parser looks the whole token up among its registered names
+/// first. Both print the version and exit. Everywhere else that word is a
+/// cluster -- npm reads `-version` as `-v -e -r -s -i -o -n`, and Bundler's
+/// option parser reads it the same way -- so there it is no inspection.
+const SINGLE_DASH_LONG_VERSION: &[&str] = &[
+    "mvn",
+    "mvnw",
+    "mvn.cmd",
+    "mvnw.cmd",
+    "gradle",
+    "gradlew",
+    "gradle.bat",
+    "gradlew.bat",
+];
+
 /// A lone inspection flag is the whole argument list, so it names no package
 /// and no subcommand: the manager prints its version or its usage and exits.
 /// `-v` is the short spelling of that everywhere here, and the one agents
 /// reach for first. `-V` is the same probe for most of them, and for the
-/// managers in [`VERBOSE_SHORT_V`] it is not a probe at all.
+/// managers in [`VERBOSE_SHORT_V`] it is not a probe at all. `-version` is
+/// the spelling the JVM build tools document, and a probe only for the
+/// managers in [`SINGLE_DASH_LONG_VERSION`].
 fn inspection_only(executable: &str, arguments: &[String]) -> bool {
     let [only] = arguments else { return false };
     match only.as_str() {
         "--version" | "--help" | "-h" | "-v" => true,
         "-V" => !VERBOSE_SHORT_V
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(executable)),
+        "-version" => SINGLE_DASH_LONG_VERSION
             .iter()
             .any(|name| name.eq_ignore_ascii_case(executable)),
         _ => false,
@@ -184,5 +207,54 @@ impl CompiledNativeCommandControls {
             return Err("native_command_evidence_limit_exceeded");
         }
         Ok(floor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inspection_only;
+
+    fn arguments(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn the_jvm_build_tools_read_a_single_dash_long_version_as_a_probe() {
+        for executable in ["mvn", "mvnw", "MVN.CMD", "gradle", "gradlew", "gradlew.bat"] {
+            assert!(
+                inspection_only(executable, &arguments(&["-version"])),
+                "{executable} -version"
+            );
+        }
+    }
+
+    #[test]
+    fn a_single_dash_long_version_is_a_cluster_elsewhere_and_never_a_lone_word() {
+        for (executable, words) in [
+            // npm reads it as `-v -e -r -s -i -o -n`, and Bundler's option
+            // parser splits it the same way, so neither prints a version.
+            ("npm", vec!["-version"]),
+            ("bundle", vec!["-version"]),
+            ("yarn", vec!["-version"]),
+            // A build still runs beside the flag, whichever way it is read.
+            ("gradle", vec!["-version", "build"]),
+            ("mvn", vec!["-version", "-q"]),
+            ("mvn", vec!["-q", "-version"]),
+        ] {
+            assert!(
+                !inspection_only(executable, &arguments(&words)),
+                "{executable} {words:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_short_spellings_keep_the_readings_they_had() {
+        assert!(inspection_only("mvn", &arguments(&["-v"])));
+        assert!(inspection_only("mvn", &arguments(&["--version"])));
+        // `-V` is `--show-version` for Maven and Gradle: the build runs.
+        assert!(!inspection_only("mvn", &arguments(&["-V"])));
+        assert!(!inspection_only("gradle", &arguments(&["-V"])));
+        assert!(inspection_only("npm", &arguments(&["-V"])));
     }
 }

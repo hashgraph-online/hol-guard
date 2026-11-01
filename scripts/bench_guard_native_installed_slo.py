@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time  # noqa: F401
 from collections.abc import Mapping
+from contextlib import nullcontext
 from pathlib import Path
 from typing import cast
 
@@ -37,6 +38,7 @@ from scripts.bench_guard_native_installed_slo_runtime import (  # noqa: E402
     _require,
     _runtime_summary,
 )
+from scripts.native_slo_activity import SloActivity  # noqa: E402
 from scripts.native_slo_adapter import (  # noqa: E402
     Observation,
     process_rss_bytes,
@@ -81,7 +83,7 @@ _INSTALLED_WHEEL_OWNERSHIP_CONTRACT = "installed_wheel_ownership_contract"
 _safe_failure_rate = safe_failure_rate
 
 
-def _installed_corpus(runtime: Path, expected_routes: int) -> dict[str, int]:
+def _installed_corpus(runtime: Path, expected_routes: int, *, activity: SloActivity | None = None) -> dict[str, int]:
     """Exercise the canonical all-harness installed ingress corpus."""
 
     with tempfile.TemporaryDirectory(prefix="hol-guard-installed-corpus-") as temporary:
@@ -90,11 +92,13 @@ def _installed_corpus(runtime: Path, expected_routes: int) -> dict[str, int]:
         root = Path(temporary).resolve()
         report: Mapping[str, object] | None = None
         try:
-            candidate = _installed_hook_corpus(root)
+            candidate = _installed_hook_corpus(root, **({"activity": activity} if activity is not None else {}))
             if isinstance(candidate, Mapping):
                 report = candidate
         finally:
-            stop_native_resident(runtime, root / "hook-home")
+            stopped = stop_native_resident(runtime, root / "hook-home")
+            if activity is not None:
+                activity.contained("installed_corpus", stopped.diagnostic)
         if report is None:
             raise RuntimeError("native_installed_slo_failed: installed all-harness corpus returned no aggregate")
         values_by_name: dict[str, object] = {}
@@ -198,17 +202,20 @@ def _measure_slo(
     readiness_samples: int,
     include_capacity: bool,
     progress: SloProgress | None = None,
+    activity: SloActivity | None = None,
 ) -> SloMeasurements:
     # Cold probes stop the session's resident before each one-shot call. Keep
     # them separate so this lifecycle exercise does not consume the bounded
     # restart budget used by warmup and recovery.
     cold_entered = False
+    factory = activity.session if activity is not None else AdapterSession
+    activity_args = {"activity": activity} if activity is not None else {}
     if progress is not None:
         progress.activate("cold")
     try:
-        with AdapterSession(runtime) as cold_session:
+        with factory(runtime) as cold_session:
             cold_entered = True
-            cold = _run_cold(runtime, cold_session, cold_iterations, progress=progress)
+            cold = _run_cold(runtime, cold_session, cold_iterations, progress=progress, **activity_args)
     except Exception as error:
         if progress is not None and not cold_entered:
             progress.fail_request("cold")
@@ -221,13 +228,23 @@ def _measure_slo(
         progress.submit("readiness")
         progress.attempt("readiness")
     try:
-        with AdapterSession(runtime) as session:
+        with factory(runtime) as session:
             readiness = [session.readiness_ms]
             readiness_completed = True
             if progress is not None:
                 progress.complete("readiness")
-            warm = _run_warm(session, routes, warm_iterations, progress=progress)
-            sizes = _run_sizes(session, routes, progress=progress)
+            with (
+                activity.background("warm", session.guard_home, session.workspace)
+                if activity is not None
+                else nullcontext()
+            ):
+                warm = _run_warm(session, routes, warm_iterations, progress=progress)
+            with (
+                activity.background("sizes", session.guard_home, session.workspace)
+                if activity is not None
+                else nullcontext()
+            ):
+                sizes = _run_sizes(session, routes, progress=progress)
             recovery_adapter: list[float] = []
             recovery_enclosing: list[float] = []
             recovery = _run_recovery(
@@ -236,6 +253,7 @@ def _measure_slo(
                 progress=progress,
                 adapter_values=recovery_adapter,
                 enclosing_values=recovery_enclosing,
+                **activity_args,
             )
             warmup_harness, warmup_event = routes[0]
             _run_serialized_warmup(session, warmup_harness, warmup_event, progress=progress)
@@ -255,17 +273,22 @@ def _measure_slo(
                     complete=stage != "capacity_prewarm",
                 )
 
-            capacity = measure_capacity(
-                session,
-                routes,
-                include_capacity=include_capacity,
-                observer=observe_capacity if progress is not None else None,
-                on_submitted=progress.submit if progress is not None else None,
-                on_cancelled=progress.cancel if progress is not None else None,
-                on_deferred_complete=progress.complete if progress is not None else None,
-                on_deferred_failure=progress.fail_request if progress is not None else None,
-                progress=progress,
-            )
+            with (
+                activity.background("capacity", session.guard_home, session.workspace)
+                if activity is not None
+                else nullcontext()
+            ):
+                capacity = measure_capacity(
+                    session,
+                    routes,
+                    include_capacity=include_capacity,
+                    observer=observe_capacity if progress is not None else None,
+                    on_submitted=progress.submit if progress is not None else None,
+                    on_cancelled=progress.cancel if progress is not None else None,
+                    on_deferred_complete=progress.complete if progress is not None else None,
+                    on_deferred_failure=progress.fail_request if progress is not None else None,
+                    progress=progress,
+                )
     except Exception as error:
         if progress is not None and not readiness_completed:
             progress.fail_request("readiness")
@@ -280,6 +303,7 @@ def _measure_slo(
                     progress_submit=progress.submit if progress is not None else None,
                     progress_attempt=progress.attempt if progress is not None else None,
                     progress_complete=progress.complete if progress is not None else None,
+                    **activity_args,
                 )
             )
         except Exception as error:
@@ -314,6 +338,7 @@ def run_slo(
     readiness_samples: int,
     include_capacity: bool,
     progress: SloProgress | None = None,
+    activity: SloActivity | None = None,
 ) -> dict[str, object]:
     progress = progress or SloProgress()
     progress.set_warm_iterations(warm_iterations)
@@ -336,7 +361,9 @@ def run_slo(
     progress.submit("installed_corpus")
     progress.attempt("installed_corpus")
     try:
-        installed_corpus = _installed_corpus(runtime, len(routes))
+        installed_corpus = _installed_corpus(
+            runtime, len(routes), **({"activity": activity} if activity is not None else {})
+        )
     except Exception as error:
         progress.fail_request("installed_corpus")
         progress.record_failure(error, stage="installed_corpus")
@@ -355,6 +382,7 @@ def run_slo(
         readiness_samples=readiness_samples,
         include_capacity=include_capacity,
         progress=progress,
+        **({"activity": activity} if activity is not None else {}),
     )
     summary = summarize_measurements(measurements)
     gates = slo_gates(

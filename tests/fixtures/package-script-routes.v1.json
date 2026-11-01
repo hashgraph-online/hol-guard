@@ -971,6 +971,137 @@
         "typescript/bin/tsc"
       ],
       "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "named-test-unit-script",
+      "scripts": {
+        "test:unit": "vitest run"
+      },
+      "command": "npm run test:unit",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "named-test-unit-bare-pnpm",
+      "scripts": {
+        "test:unit": "vitest run"
+      },
+      "command": "pnpm test:unit",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "named-test-e2e-bare-yarn",
+      "scripts": {
+        "test:e2e": "jest --ci"
+      },
+      "command": "yarn test:e2e",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "named-test-integration-node",
+      "scripts": {
+        "test:integration": "node --test"
+      },
+      "command": "npm run test:integration",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "named-test-bun-run",
+      "scripts": {
+        "test:unit": "vitest run"
+      },
+      "command": "bun run test:unit",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "named-test-separator-args",
+      "scripts": {
+        "test:unit": "vitest run"
+      },
+      "command": "npm run test:unit -- --reporter=dot",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "named-test-types-tool-body",
+      "scripts": {
+        "test:types": "tsc --noEmit -p ."
+      },
+      "command": "npm run test:types",
+      "entries": [
+        "typescript/bin/tsc"
+      ],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "named-test-bun-bare",
+      "scripts": {
+        "test:unit": "vitest run"
+      },
+      "command": "bun test:unit",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "named-test-unflagged-args",
+      "scripts": {
+        "test:unit": "vitest run"
+      },
+      "command": "pnpm test:unit --coverage",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "named-test-watching-body",
+      "scripts": {
+        "test:unit": "vitest"
+      },
+      "command": "npm run test:unit",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "named-test-unknown-body",
+      "scripts": {
+        "test:deploy": "./scripts/deploy.sh"
+      },
+      "command": "npm run test:deploy",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "named-test-lifecycle",
+      "scripts": {
+        "test:unit": "vitest run",
+        "pretest:unit": "rm -rf dist"
+      },
+      "command": "npm run test:unit",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "named-test-build-body",
+      "scripts": {
+        "test:bundle": "vite build"
+      },
+      "command": "npm run test:bundle",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "named-test-prefix-only",
+      "scripts": {
+        "testing": "vitest run"
+      },
+      "command": "npm run testing",
+      "entries": [],
+      "reason": null
     }
   ]
 }

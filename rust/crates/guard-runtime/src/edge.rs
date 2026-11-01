@@ -5,7 +5,7 @@ use crate::native_hook_receipt::{
     receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
 };
 use crate::policy_enforcement::AdmittedPolicySnapshot;
-use crate::runtime_known_vulnerable as runtime_risk;
+use crate::{edge_exact_command_review as exact_review, runtime_known_vulnerable as runtime_risk};
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
     HookSourceFileRefV1, NativeHookRequestV1, PreToolResultV1, GUARD_HOOK_EDGE_RESULT_V2_SCHEMA,
@@ -86,9 +86,8 @@ pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String
     Ok((request_id, digest))
 }
 
-/// The full source material of a request. `execution_intent_digest` carries a
-/// deliberately narrower source, so anything bound to the guard home, the home
-/// directory or the external source-ref flag builds its commitment from this.
+/// Full request source. `execution_intent_digest` is narrower, so commitments
+/// to the guard home, home directory, or source-ref flag use this instead.
 fn request_source(envelope: &GuardHookEnvelopeV2, error: &str) -> Result<Value, String> {
     let mut source = serde_json::json!({
         "cwd": envelope.source.cwd,
@@ -344,6 +343,7 @@ fn evaluate_validated_envelope(
             );
             let evaluated = crate::network_protection::apply_to_envelope(&envelope, evaluated);
             let evaluated = runtime_risk::apply_to_envelope(&envelope, policy_snapshot, evaluated);
+            let evaluated = exact_review::apply_to_envelope(&envelope, policy_snapshot, evaluated);
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             edge_result_check::validate_pre_tool_result(&value)?;
@@ -370,10 +370,9 @@ fn evaluate_validated_envelope(
                 home_dir: envelope.source.home_dir.clone(),
                 guard_home: envelope.source.guard_home.clone(),
                 source_ref_external_allowed: envelope.source.source_ref_external_allowed,
-                // Keep the intrinsic result intact. The authenticated policy
-                // join below owns observe-mode semantics and suppresses only
-                // policy-only escalation; passing observe here would erase a
-                // native source/content block before that join runs.
+                // Keep the intrinsic result intact. The authenticated policy join below owns
+                // observe-mode semantics and suppresses only policy-only escalation; passing
+                // observe here would erase a native source/content block before that join runs.
                 observe_mode: false,
                 deadline_budget_ms: envelope.deadline_budget_ms,
             };
@@ -392,9 +391,8 @@ fn evaluate_validated_envelope(
             } else {
                 native
             };
-            // The policy join above may rewrite the verdict or the output
-            // action, so the answer to "may the model read this" is settled
-            // here, once, after everything that can change it has run.
+            // The policy join may rewrite the verdict or output action, so
+            // "may the model read this" is settled once, after all of it ran.
             evaluated.seal_output_mask();
             let receipt = receipt_from_post_tool(
                 &envelope,
@@ -412,6 +410,7 @@ fn evaluate_validated_envelope(
     };
     if let Some(store) = origin_store {
         crate::policy_store::native_review_origin::authenticate(store, &mut receipt)?;
+        crate::context_assistance_notifications::notify_hook(&envelope, &receipt, &result);
     }
     if event_name == "PreToolUse" {
         crate::command_policy_repair::apply_at_edge(&mut result, policy_snapshot, &envelope.source);
@@ -447,6 +446,7 @@ fn evaluate_validated_envelope(
         containment_rewrite: None,
         local_cli_rule: local_cli_rule?,
         receipt_recorded: false,
+        activity_recorded: false,
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
         request_id: Some(request_id),

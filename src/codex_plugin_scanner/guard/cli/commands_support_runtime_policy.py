@@ -18,10 +18,6 @@ if TYPE_CHECKING:
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from .commands_support_runtime_artifact_policy import (
-    _runtime_artifact_command_action_floor,
-    _runtime_artifact_policy_action,
-)
 
 # Bump when runtime scanner or action-composition semantics change. Product and
 # approval-surface versions deliberately do not participate in this identity.
@@ -336,7 +332,6 @@ __all__ = [
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
     "_localize_pending_approval_copy", "_native_approval_center_context",
-    "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action",
     "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_strip_cloud_inbox_urls",
     "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail",

@@ -14,8 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Final, Protocol
 
-from .sqlite_recovery import prune_quarantined_store_snapshots
-from .update_staging import prune_stale_update_staging
+from .storage_retention import prune_quarantined_store_snapshots, prune_stale_update_staging
 
 STORAGE_MAINTENANCE_MIGRATION_VERSION: Final = 20
 STORAGE_QUERY_INDEX_MIGRATION_VERSION: Final = 21

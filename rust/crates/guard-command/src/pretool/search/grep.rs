@@ -123,6 +123,7 @@ fn safe_arguments(
     arguments_pass(arguments, context, stdin_only, absent, false)
 }
 
+mod includes;
 mod reach;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
 
@@ -210,6 +211,7 @@ fn scan_into(
     let mut excluded_directories = Vec::new();
     let mut pending_exclusion = None;
     let mut includes_present = false;
+    let mut includes = includes::Includes::default();
     let mut positional_started = false;
     for argument in arguments {
         if let Some(directory) = pending_exclusion.take() {
@@ -230,6 +232,9 @@ fn scan_into(
                 && argument.eq_ignore_ascii_case("recurse")
             {
                 recursive = true;
+                continue;
+            }
+            if includes.held(role, argument, context) {
                 continue;
             }
             if unsafe_search_value(role, argument, context) {
@@ -302,12 +307,15 @@ fn scan_into(
                 }
                 if attached.is_empty() {
                     pending_value = Some(role);
-                } else if unsafe_search_value(role, attached, context) {
-                    return false;
-                } else if matches!(role, SearchValueRole::Pattern) {
-                    pattern_supplied = true;
-                    pattern_option_seen = true;
-                    scan.patterns.push(attached.to_owned());
+                } else if !includes.held(role, attached, context) {
+                    if unsafe_search_value(role, attached, context) {
+                        return false;
+                    }
+                    if matches!(role, SearchValueRole::Pattern) {
+                        pattern_supplied = true;
+                        pattern_option_seen = true;
+                        scan.patterns.push(attached.to_owned());
+                    }
                 }
             }
             continue;
@@ -407,6 +415,7 @@ fn scan_into(
         // Include/exclude precedence differs across grep implementations. Do not
         // use exclusions as proof when an include could re-enable a file.
         && (!includes_present || (excluded_files.is_empty() && excluded_directories.is_empty()))
+        && includes.scope_proven(&targets, context)
         && (!stdin_only || (pattern_supplied && !recursive))
         && (!recursive || {
             let proven = |target: &str| {
@@ -436,6 +445,10 @@ fn scan_into(
                             clearance,
                         )
                     })
+                    // An include opens only the files its globs select. This
+                    // walks the tree again, so it is asked last: every reading
+                    // above answers the same question without it.
+                    || (!dereference && includes.narrows(target, context))
             };
             recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
         })

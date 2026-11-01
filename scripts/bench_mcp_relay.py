@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Native MCP relay versus Python proxy on one installed Guard wheel (measurement only).
 
-Installs the Codex MCP proxy around the stdlib canary server with the
-pre-activation relay canary (``HOL_GUARD_MCP_RELAY=native``), then drives the
+Installs the Codex MCP proxy around the stdlib canary server, then drives the
 same Python proxy argv two ways against one Guard home and one resident:
 
 * ``python``: the Python proxy, as installers launch it today.
@@ -337,7 +336,7 @@ def run(python: Path, args: argparse.Namespace) -> dict[str, object]:
         baseline = alive_pids()
         sessions: list[_Session] = []
         try:
-            _run_install(cli, "codex", {**env, "HOL_GUARD_MCP_RELAY": "native"}, home, guard_home, workspace)
+            _run_install(cli, "codex", env, home, guard_home, workspace)
             installed, proxy_env = _codex_proxy_command(home)
             selected = len(installed) > 2 and installed[1] == RELAY_COMMAND
             python_argv = installed[2:] if selected else installed

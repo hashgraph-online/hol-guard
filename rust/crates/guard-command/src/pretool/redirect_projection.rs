@@ -58,6 +58,11 @@ enum Quote {
 
 const MAX_HEREDOC_DELIMITER: usize = 64;
 
+/// The shell's successful no-op. It stands in for a command the projection
+/// has nothing left to parse for, so the redirect it carries is still read
+/// as the write it is.
+const NO_OP: &str = "true";
+
 pub(super) fn project(
     raw: &str,
     context: super::super::PathContext<'_>,
@@ -175,6 +180,16 @@ pub(super) fn project(
     if same_command_aside_from_descriptor_spacing(raw, &command) {
         return None;
     }
+    // A redirect with no command word runs no program: the shell opens the
+    // file it names and stops, which is the create or truncate `: > log`
+    // spells with a no-op in front. Removing the redirect leaves nothing to
+    // parse, so stand that no-op in its place and let the target check and
+    // the sandbox decide the write exactly as they decide the spelled form.
+    let command = if command.is_empty() {
+        NO_OP.to_owned()
+    } else {
+        command
+    };
     // `cmd < file` reads `file` and hands its bytes to `cmd` on standard
     // input, which is what `cat file | cmd` does. Modelling it that way keeps
     // the read under the proof `cat` already gets and leaves `cmd` an
@@ -226,7 +241,7 @@ pub(super) fn project(
         && targets.iter().all(|target| {
             plan_note_output_target(target, context) || sibling_heredoc_target(target, context)
         }) {
-        "true".to_owned()
+        NO_OP.to_owned()
     } else {
         command
     };

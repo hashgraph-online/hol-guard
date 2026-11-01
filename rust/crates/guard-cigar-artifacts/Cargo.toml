@@ -1,0 +1,18 @@
+[package]
+name = "guard-cigar-artifacts"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+guard-cigar-release = { path = "../guard-cigar-release" }
+guard-secure-fs = { path = "../guard-secure-fs" }
+sha2.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["user"] }
+
+[lints]
+workspace = true

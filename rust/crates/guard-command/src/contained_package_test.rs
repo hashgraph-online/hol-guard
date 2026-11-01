@@ -8,7 +8,7 @@
 #[path = "contained_package_test_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{jest_contained_call, program_name};
+use crate::contained_argv::{jest_contained_call, mocha_contained_call, program_name};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, SCRIPT_LEXER};
 use serde_json::{Map, Value};
@@ -39,9 +39,17 @@ pub(crate) fn lifecycle(scripts: &Map<String, Value>, task: &str) -> bool {
         .any(|phase| truthy(scripts.get(&format!("{phase}{task}"))))
 }
 
-/// True when the command is a package manager running its project's own
-/// `test` script. `bun test` is Bun's own runner rather than the script, so
-/// for Bun only the explicit `run test` spelling names the script.
+/// A manifest entry named for tests: `test` itself, or one of the `test:`
+/// family a project splits its suites across, such as `test:unit` and
+/// `test:e2e`. The name only says which entry to read; the body behind it
+/// still has to spell a run this module admits.
+pub(crate) fn test_task(name: &str) -> bool {
+    name == "test" || name.starts_with("test:")
+}
+
+/// True when the command is a package manager running one of its project's
+/// own test scripts. `bun test` is Bun's own runner rather than the script,
+/// so for Bun only the explicit `run` spelling names a script.
 pub(crate) fn is_package_test(command: &[String]) -> bool {
     let Some(manager) = command.first().map(|value| program_name(value)) else {
         return false;
@@ -49,8 +57,8 @@ pub(crate) fn is_package_test(command: &[String]) -> bool {
     if !matches!(manager, "npm" | "pnpm" | "bun" | "yarn") {
         return false;
     }
-    (command.len() >= 2 && command[1] == "test" && manager != "bun")
-        || (command.len() >= 3 && command[1] == "run" && command[2] == "test")
+    (command.len() >= 2 && manager != "bun" && test_task(&command[1]))
+        || (command.len() >= 3 && command[1] == "run" && test_task(&command[2]))
 }
 
 /// The words the declared `test` script runs, read from the manager's own
@@ -64,21 +72,21 @@ pub(crate) fn script_tokens(
     arguments: &[String],
     scripts: Option<&Map<String, Value>>,
 ) -> Result<Vec<String>, RestrictedPytestError> {
-    let trailing = match arguments {
-        [task, rest @ ..] if task == "test" => rest,
-        [_, _, rest @ ..] => rest,
+    let (task, trailing) = match arguments {
+        [run, task, rest @ ..] if run == "run" && test_task(task) => (task.as_str(), rest),
+        [task, rest @ ..] if test_task(task) => (task.as_str(), rest),
         _ => return Err(invalid("Only local package test scripts are supported.")),
     };
     if trailing.first().is_some_and(|word| word != "--") {
         return Err(invalid("Test arguments must follow an explicit --."));
     }
     let Some(script) = scripts
-        .and_then(|scripts| scripts.get("test"))
+        .and_then(|scripts| scripts.get(task))
         .and_then(Value::as_str)
     else {
         return Err(invalid("The local test script is unavailable."));
     };
-    if scripts.is_some_and(|scripts| lifecycle(scripts, "test")) {
+    if scripts.is_some_and(|scripts| lifecycle(scripts, task)) {
         return Err(invalid(
             "Test lifecycle actions need separate evaluation; none were skipped.",
         ));
@@ -109,10 +117,44 @@ pub(crate) fn script_tokens(
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         jest_contained_call(&call)
     };
-    if !node && !vitest && !jest {
+    let mocha = program_name(runner) == "mocha" && {
+        let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+        mocha_contained_call(&call)
+    };
+    if !node && !vitest && !jest && !mocha {
+        // A project may name a read-only tool run for the suite it checks,
+        // such as a `test:types` entry holding `tsc --noEmit`. The words the
+        // manifest declares are the run either way, so the body goes back as
+        // the tool call it spells and is gated as that tool, not as a runner.
+        // Only the declared words travel: an argument the caller appended was
+        // never read against this tool's own rules.
+        if passthrough.is_empty()
+            && !crate::contained_node_tool::writes_or_chains(rest)
+            && crate::contained_node_tool::supported_tool(runner, rest)
+                .is_some_and(|(_, _, mode)| mode != crate::contained_node_tool::ToolMode::Build)
+        {
+            return Ok(tokens);
+        }
         return Err(invalid("The test script is not a supported local runner."));
     }
     Ok(tokens.iter().chain(passthrough.iter()).cloned().collect())
+}
+
+/// The tool call a test-named script body spells, when the body is a
+/// read-only tool run rather than one of the runners read above.
+///
+/// `script_tokens` admits such a body on the tool's own name and arguments
+/// alone. Whether that tool is installed where the sink resolves it is a
+/// question about a directory this module never sees, so the body comes back
+/// out for the route to answer.
+pub(crate) fn script_tool_body(
+    arguments: &[String],
+    scripts: Option<&Map<String, Value>>,
+) -> Option<(String, Vec<String>)> {
+    let tokens = script_tokens(arguments, scripts).ok()?;
+    let (runner, rest) = tokens.split_first()?;
+    crate::contained_node_tool::supported_tool(runner, rest)?;
+    Some((runner.clone(), rest.to_vec()))
 }
 
 /// The whole alias: the manager's command and the manifest's scripts in, the

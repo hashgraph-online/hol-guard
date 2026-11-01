@@ -5,7 +5,7 @@ Run at the commit that still carries ``_runtime_artifact_policy_action`` in
 ``cli/commands_support_runtime_artifact_policy.py`` (32cfe23f49), in a checkout
 that has the generated command catalog:
 
-    PYTHONPATH=src .venv/bin/python scripts/ci/record_config_action_vectors.py
+    PYTHONPATH=src:. .venv/bin/python scripts/ci/record_config_action_vectors.py
 
 Each vector records the config and artifact specification, the typed native
 query a Python projection of that specification produces, and the action plus
@@ -289,9 +289,9 @@ def _recorded_risk_classes(artifact) -> list[str]:  # type: ignore[no-untyped-de
 def record() -> list[dict[str, object]]:
     import codex_plugin_scanner.guard.cli.commands  # noqa: F401  (wires the shared command namespace)
     from codex_plugin_scanner.guard import protection_events
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifact_policy as policy
     from codex_plugin_scanner.guard.cli.commands_support_prompts import _prompt_requires_hard_block
     from codex_plugin_scanner.guard.harness_posture import harness_posture_override
+    from tests import runtime_artifact_policy_support as policy
 
     events: list[dict[str, object]] = []
     protection_events.record_protection_event = lambda _home, _name, payload: events.append(dict(payload))

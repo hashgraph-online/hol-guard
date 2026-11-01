@@ -13,26 +13,27 @@ Python proxy. A frozen build launches the verified runtime copy under the
 proxy's ``--guard-home``, as its hooks do, because its bundled runtime can
 live in a per-launch extraction directory. A session whose calls the resident cannot decide is handed to the
 Python proxy by the relay at startup. There is no setting that keeps the Python
-proxy for a session the relay can serve. ``HOL_GUARD_MCP_RELAY=native``
-selects the relay from any validated runtime that serves the resident's relay
-decision, including one that does not advertise the relay. Calls the resident
-defers are still refused.
+proxy for a session the relay can serve.
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 NATIVE_MCP_RELAY_COMMAND = "mcp-relay"
 NATIVE_MCP_RELAY_FEATURE = "mcp-stdio-relay-v1"
-NATIVE_MCP_RELAY_DECIDE_FEATURE = "mcp-relay-decide-v2"
-MCP_RELAY_SELECTION_ENV = "HOL_GUARD_MCP_RELAY"
 # The proxies the native relay parses; other Guard proxies stay on Python.
 RELAY_PROXY_COMMANDS = frozenset(
-    {"codex-mcp-proxy", "copilot-mcp-proxy", "cursor-mcp-proxy", "hermes-mcp-proxy", "opencode-mcp-proxy"}
+    {
+        "cline-mcp-proxy",
+        "codex-mcp-proxy",
+        "copilot-mcp-proxy",
+        "cursor-mcp-proxy",
+        "hermes-mcp-proxy",
+        "opencode-mcp-proxy",
+    }
 )
 _PYTHON_PROXY_PREFIX = ("-m", "codex_plugin_scanner.cli", "guard")
 
@@ -43,11 +44,9 @@ def native_mcp_relay(guard_home: Path | None = None) -> Path | None:
     A frozen build needs ``guard_home`` to name its durable runtime copy.
     """
 
-    selection = os.environ.get(MCP_RELAY_SELECTION_ENV)
-    feature = NATIVE_MCP_RELAY_DECIDE_FEATURE if selection == "native" else NATIVE_MCP_RELAY_FEATURE
     from .native_hook_bridge import native_hook_bridge_executable
 
-    return native_hook_bridge_executable(feature, guard_home=guard_home)
+    return native_hook_bridge_executable(NATIVE_MCP_RELAY_FEATURE, guard_home=guard_home)
 
 
 def _relays(python_args: Sequence[str]) -> bool:
@@ -120,9 +119,7 @@ def python_proxy_launch(command: str | None, args: Sequence[str]) -> tuple[str |
 
 
 __all__ = [
-    "MCP_RELAY_SELECTION_ENV",
     "NATIVE_MCP_RELAY_COMMAND",
-    "NATIVE_MCP_RELAY_DECIDE_FEATURE",
     "NATIVE_MCP_RELAY_FEATURE",
     "RELAY_PROXY_COMMANDS",
     "mcp_proxy_command",

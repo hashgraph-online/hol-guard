@@ -16,7 +16,6 @@ def _lookup_transport(monkeypatch, store):
     result = {"decision": None, "source": None}
     transport = Mock(return_value={"status": "ok", "payload": result})
     monkeypatch.setattr(store_policy, "_resident_request", transport)
-    monkeypatch.setattr(store, "_cached_policy_bundle_decision_identities", lambda **_: ())
     return transport, result
 
 

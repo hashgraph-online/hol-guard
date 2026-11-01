@@ -75,8 +75,8 @@ above ship.
 
 ## Current standing
 
-196 arms, all reviewed: 68 `windows-unsupported`, 43 `windows-equivalent`, 40
-`posix-primitive`, 30 `other-platform`, 15 `windows-permissive`.
+264 arms, all reviewed: 93 `windows-unsupported`, 58 `windows-equivalent`, 46
+`posix-primitive`, 38 `other-platform`, 29 `windows-permissive`.
 
 The first pass of this gate matched `not(unix)` as text against attributes only and found
 155. Evaluating the predicate and reading `cfg!` expressions found 40 more that were deciding
@@ -84,21 +84,20 @@ Windows behaviour with nobody having looked at them: 25 `not(any(unix, windows))
 which a text match spells differently, and 15 runtime `cfg!` branches, which have no
 attribute to match at all. One of the `cfg!` branches is permissive.
 
-One permissive arm was closed in this change: `sed_edits.rs::executable` reviewed an in-place
+One permissive arm was closed when the inventory was introduced: `sed_edits.rs::executable` reviewed an in-place
 `sed` of an executable file by its mode bits on Unix and skipped the review entirely off
 Unix, so rewriting a `.ps1`, `.bat`, `.cmd` or `.exe` in place was silent on Windows. It now
 reads the name the way Win32 opens it — trailing dots and spaces trimmed, so `tool.exe.` does
 not read as extensionless — against the shared `WINDOWS_PROGRAM_EXTENSIONS` list.
 
-The fourteen that remain, each with the check it skips. None is an open hole on its own —
-every one sits behind another condition that still holds — but each is a place where Windows
-is enforcing less than macOS and Linux:
+The 18 earlier permissive arms, each with the check it skips:
 
 | Arm | Skipped on Windows |
 | --- | --- |
 | `hook_adapter_paths.rs::resolve_host` | No `GetFinalPathNameByHandle`, so a junction that aliases into a trusted root still reads as inside it. |
 | `github_conversation_files.rs::single_link` | Hard-link count skipped; `number_of_links` needs `GetFileInformationByHandle`, which stable `MetadataExt` does not expose. Size and regular-file bounds still apply. |
 | `kubeconfig_trust.rs::outside_agent_trees` | Group/other-writable mode mask skipped; closing it needs an ACL read. The file must still sit outside the agent trees and outside any repository. |
+| `listing_temporary.rs::writable_by_anyone` | Directory DACL is not read, so a glob under a shared writable root may avoid review. |
 | `process_probes.rs::trusted_postgres_socket` | Socket-directory ownership walk skipped. Windows clients reach a local server over TCP loopback, where there is no socket directory. |
 | `trusted_location.rs::agent_writable_loader_tree` | Agent-writable loader directories are not excluded on that ground; the enclosing condition still requires trust by another route. |
 | `worktree_add_destination.rs::fixed_symlinks` | Only the leaf is checked; the Unix arm walks parents with a hop bound. Junctions do report as symlinks to `file_type`. |
@@ -106,15 +105,34 @@ is enforcing less than macOS and Linux:
 | `sfrs_gh_body_file_check.rs::ancestor_chain_for_uid` | uid ownership walk skipped; needs an ACL owner read. The candidate must still sit under the private root. |
 | `shell_execution_context_support.rs::directory_is_readable` | No `access(R_OK\|X_OK, effective_ids=True)` equivalent; a real read failure surfaces later as an I/O error. |
 | `shell_execution_context_support.rs::check_eaccess` | Same, for the eaccess probe. |
+| `verified_npm.rs::is_executable_file` | Every regular file on the search path reads as executable; the resolved shim still needs to be outside the workspace and match `npm-cli.js`. |
+| `managed_resident_prewarm.rs::executable_identity` | Length and modification time stand in for device and inode; a matching replacement may extend a prewarm hold until its bounded deadline. |
 | `managed_resident_stop.rs::endpoint_is_contained` | Filesystem-socket containment does not apply; Windows residents use an authenticated loopback endpoint, with the stopped acknowledgement and the owner-lock probe standing in. |
+| `skill_document_evidence.rs::open_without_following` | The path can become a symlink between canonicalization and open; the earlier parent and leaf checks still run. |
 | `git_execution_safety_binary.rs::exists_and_executable` | Mode probe skipped, so every existing path reads as runnable. Permissive in the safe direction: the callers use it to decide whether a path *could* run, and treating more paths as runnable widens review rather than admitting a command. |
 | `workspace_review_claim_index.rs::sync_directories_before_commit` | Directory fsync, which Windows has no equivalent for, so the claim index commits unsynced. The shards are still persisted by the node writer, so the exposure is a claim lost to a crash, not a claim wrongly granted. Closable with `FlushFileBuffers` on the directory handles. |
 | `guard-secure-fs/src/lib.rs::open_immutable_blob` | Device, inode, link count and write-mode comparison; the arm compares length and mtime and the caller pairs it with a `GetFileInformationByHandle` file-id check. The file id proves the descriptor is the file that was stat'd, not that the file is immutable, so a writable blob is admitted. The caller rehashes what it streams. Closable with a share-mode or read-only-attribute check at open. |
 
-These fourteen are recorded, not fixed. Each needs a Win32 call Guard does not make
-yet — `GetFileInformationByHandle`, `GetFinalPathNameByHandle`, `FlushFileBuffers`, or an ACL
-read — and each is a separate change with its own Windows test. The inventory is where they
-stay visible.
+The CIGAR integration adds 11 permissive arms. Its saved evidence and version switching
+are Unix-only; these Windows paths retain limited memory and config behavior:
+
+| Arm | Skipped off Unix |
+| --- | --- |
+| `context_assistance_backend_persistence.rs::expire_cache` | No saved-cache expiry check; no persistent cache can be opened. |
+| `context_assistance_backend_persistence.rs::stage_notes` | Saved-note staging returns success without writing; memory notes remain actor-owned. |
+| `context_assistance_backend_persistence.rs::commit_notes` | Saved-note commit returns success without writing; memory notes remain actor-owned. |
+| `context_assistance_data.rs::validate_generations` | No generation-index validation; generation storage is unavailable. |
+| `context_assistance_data.rs::sweep` | No retention sweep; the private stores are unavailable. |
+| `context_assistance_service_data.rs::arm_housekeeping` | No background retention worker; the private stores are unavailable. |
+| `guard_config_update_assistance_preflight.rs::capture` | Canonical path is checked, but a directory replaced at the same path may pass without a device and inode comparison. |
+| `guard_config_update_io.rs::WriteLock` | The retained Windows writer has no cross-process lock or atomic replacement; it still compares expected config bytes before writing. |
+| `guard_config_update_io.rs::impl WriteLock` | Concurrent writes and partial writes remain possible with `fs::write`; expected bytes are checked before the write. |
+| `managed_resident_stop_snapshot.rs::capture_for_stop` | No generation snapshot; the selected resident identity and owner-lock containment checks remain. |
+| `managed_resident_stop_snapshot.rs::wait_for_stop` | The legacy wait can include a later generation; known process identity is still checked before termination. |
+
+Each arm has its full reason in `ci/platform_arms.json`. Windows CIGAR runtime,
+persistence, installation, and switching remain unqualified; the accepted macOS
+qualification does not extend to them.
 
 ## Adding an arm
 

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import policy_bundle_v2
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer, server_control_sync
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
 )
@@ -197,6 +197,32 @@ def test_daemon_persists_only_post_commit_managed_ack(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
     assert acknowledgement["appliedEffectiveProjectionDigest"] == f"sha256:{snapshot.effective_digest}"
+
+
+def test_daemon_builds_the_acknowledgement_on_the_stored_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A repeat sync of the same bundle must build on the stored receipt, or the
+    # device restarts its sequence and Cloud sees a conflict.
+    _enable(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-managed-controls")
+    bundle, delivery = _fixture(store)
+    stored = {"contractVersion": "guard-policy-bundle.v2", "sequence": 3, "status": "applied"}
+    store.set_sync_payload("policy_bundle_ack", stored, "2026-08-25T12:00:00Z")
+
+    previous_seen: list[object] = []
+    build = server_control_sync.policy_bundle_acknowledgement_payload
+
+    def _spy(**kwargs: object) -> dict[str, object]:
+        previous_seen.append(kwargs.get("previous"))
+        return build(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(server_control_sync, "policy_bundle_acknowledgement_payload", _spy)
+    _sync(store, bundle=bundle, delivery=delivery)
+
+    assert previous_seen == [stored]
 
 
 def test_daemon_accepts_cloud_normalized_device_identity(

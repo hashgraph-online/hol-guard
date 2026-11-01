@@ -73,6 +73,7 @@ mod binding_capture_record;
 #[cfg(all(test, unix))]
 mod binding_capture_vectors_tests;
 mod blocked_request_mode;
+mod boot_observation;
 mod bounded_hook_bridge;
 mod bounded_hook_bridge_grok;
 mod bounded_hook_bridge_grok_render;
@@ -149,6 +150,7 @@ mod codex_hook_identity;
 mod codex_hook_manifest_iso_time;
 mod codex_hook_manifest_verify_op;
 mod codex_hook_response;
+mod codex_hook_trust;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
@@ -207,6 +209,16 @@ mod contained_workspace_sink;
 mod contained_wrapper_plan_op;
 mod content_decode;
 mod content_sensitivity_op;
+mod context_assistance_action_facts;
+mod context_assistance_agent_op;
+mod context_assistance_agents;
+mod context_assistance_data;
+mod context_assistance_engine;
+mod context_assistance_execution;
+mod context_assistance_history;
+mod context_assistance_notifications;
+mod context_assistance_op;
+mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
@@ -262,8 +274,10 @@ mod decision_authority_op;
 #[cfg(test)]
 mod decision_authority_vectors_tests;
 mod delivery_object;
+mod desktop_notification;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
+mod device_key_helper;
 #[path = "adapters/detection/devin_detect.rs"]
 mod devin_detect;
 mod direct_tool_context_op;
@@ -273,6 +287,7 @@ mod direct_tool_managed_bun;
 mod directory_trust;
 mod discovery_placement_op;
 mod edge;
+mod edge_exact_command_review;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
@@ -306,6 +321,8 @@ mod github_workflow_context_io;
 mod github_workflow_prepare_op;
 #[path = "adapters/detection/grok_detect.rs"]
 mod grok_detect;
+mod grok_executable;
+mod grok_executable_paths;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
@@ -475,8 +492,14 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+mod harness_coverage;
+mod harness_coverage_command;
+mod health_lease_contract;
+mod health_lease_state;
+mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
+mod hermes_file_inspect;
 mod hermes_inspect;
 mod hermes_printable;
 mod hermes_skills;
@@ -534,6 +557,9 @@ mod hook_direct;
 mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
+mod hook_removal_prune;
+mod hook_removal_sweep;
+mod html_unescape;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
 #[path = "adapters/detection/muse_detect.rs"]
@@ -563,6 +589,7 @@ mod hook_path_rules;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+mod installation_continuity;
 mod inventory_item_classification_op;
 mod inventory_scan_findings_op;
 mod inventory_scan_targets_op;
@@ -581,14 +608,17 @@ mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
+mod local_skill_index;
 mod local_store_read;
 mod local_tool_eligibility_op;
 mod local_tool_grant_op;
+mod macos_code_signing;
 mod managed_controls_policy_fields;
 mod managed_policy;
 mod managed_policy_file_trust;
 mod managed_policy_floor;
 mod managed_policy_load;
+mod managed_policy_load_command;
 mod managed_policy_plist;
 mod managed_policy_registry;
 mod managed_resident;
@@ -654,6 +684,7 @@ mod mcp_tool_policy_grants;
 mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
+mod mdm_integrity_snapshot;
 mod memory_pattern;
 #[cfg(target_os = "macos")]
 mod native_bash_client;
@@ -663,11 +694,13 @@ mod native_bash_review_scope;
 mod native_decision_receipt;
 mod native_exact_action_op;
 mod native_hook_receipt;
+mod native_install_verdict;
 mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
 mod network_protection;
 mod network_protection_verify_op;
+mod network_status_validation;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oci_bundle_evidence;
@@ -677,6 +710,7 @@ mod oci_bundle_op;
 mod oci_bundle_vectors_tests;
 mod oci_path;
 mod omp_yield_input_scan;
+mod onefile_open_paths;
 mod oneshot;
 #[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
@@ -687,6 +721,8 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+mod orphaned_worker_reap;
+mod ownership_acl_verdict;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
 mod package_authority_config;
@@ -743,10 +779,14 @@ mod project_identity_op;
 mod prompt_analyze_op;
 mod protect_request_op;
 mod protection_health_report_op;
+mod proxy_credentials;
 use guard_runtime_pyjson as pyjson;
 #[cfg(test)]
 mod registry_vectors_tests;
 mod release_feed_op;
+mod release_manifest_verify;
+mod release_manifest_verify_command;
+mod removal_evidence;
 mod request_context_op;
 mod request_context_shell;
 mod resident_client;
@@ -779,6 +819,9 @@ mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
 mod runner_authority_signature;
+mod runner_cloud_exceptions;
+mod runner_cloud_http_error;
+mod runner_runtime_session;
 mod runner_sync_policy;
 mod runner_sync_signals;
 mod runner_sync_url;
@@ -821,9 +864,12 @@ mod skill_identity_walk;
 mod skill_workflow_preflight_op;
 #[cfg(unix)]
 mod state_directory_lock;
+mod storage_retention;
+mod store_quarantine_forensics;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;
+mod supervisor_verdict;
 mod supply_chain_bundle_verify_op;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;
@@ -832,12 +878,14 @@ mod supply_chain_eval_caller;
 mod supply_chain_eval_rounds;
 mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
+mod system_proxies;
 mod tool_action_identity_op;
 mod totp;
 mod trust_attestation_verify_op;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
+mod user_health_state;
 mod verified_read_decision_op;
 #[cfg(unix)]
 mod verified_read_execute;
@@ -846,10 +894,14 @@ mod verified_read_execute_op;
 mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
+mod windows_private_state;
+mod windows_process_command_lines;
+mod windows_process_lifecycle;
 #[cfg(windows)]
 mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
+mod windows_trusted_directories;
 mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;

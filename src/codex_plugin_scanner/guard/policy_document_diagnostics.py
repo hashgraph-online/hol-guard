@@ -83,7 +83,7 @@ _MESSAGES: Final[dict[str, str]] = {
     "invalid_policy_spec": "The spec section is malformed.",
     "policy_compilation_limit": "The rules expand into more enforcement rows than one policy may hold.",
     "sensitive_local_policy_requires_provenance": "This rule needs provenance before Guard will enforce it.",
-    "unsupported_local_policy_action": "Guard enforces only allow and block rules.",
+    "unsupported_local_policy_action": "Guard exports only allow, block and review rules.",
     "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
     "unsupported_policy_effect": "Guard enforces only allow and block rules.",
     "unsupported_policy_lifetime": "Guard enforces only permanent and until lifetimes.",
@@ -105,13 +105,13 @@ _MESSAGES: Final[dict[str, str]] = {
 }
 
 _NOT_ENFORCEABLE_EXPECTED: Final[dict[str, object]] = {
-    "unsupported_local_policy_action": ["allow", "block"],
+    "unsupported_local_policy_action": ["allow", "block", "review"],
     "unsupported_policy_effect": ["allow", "block"],
     "unsupported_policy_lifetime": ["permanent", "until"],
 }
 
 _NOT_ENFORCEABLE_SUGGESTIONS: Final[dict[str, str]] = {
-    "unsupported_local_policy_action": "Set effect to allow or block.",
+    "unsupported_local_policy_action": "Set the action to allow, block or review.",
     "unsupported_policy_effect": "Set effect to allow or block.",
     "unsupported_policy_lifetime": "Use lifetime.mode permanent, or until with an expiresAt time.",
     "unsupported_policy_budgets": "Remove the budgets field; Guard does not enforce it.",

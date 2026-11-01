@@ -364,7 +364,7 @@
       {
         "id": "cli-presentation-and-parsing",
         "category": "cli_only",
-        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded. commands_support_service.py (service login/status/sync, daemon start/stop/status handlers) is imported only by the commands_support facade and the excluded admin, cloud and records dispatchers. codebase_commands.py backs `hol-guard codebases add|list`, which admits a folder to the background check queue and lists it; nothing on the hook path imports it.",
+        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. The context assistance command modules only parse and render explicit operator requests; native CIGAR admission and work stay in Rust. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded. commands_support_service.py (service login/status/sync, daemon start/stop/status handlers) is imported only by the commands_support facade and the excluded admin, cloud and records dispatchers. codebase_commands.py backs `hol-guard codebases add|list`, which admits a folder to the background check queue and lists it; nothing on the hook path imports it.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/commands_parser*.py",
           "src/codex_plugin_scanner/guard/cli/product.py",
@@ -383,6 +383,8 @@
           "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
           "src/codex_plugin_scanner/guard/cli/approval_commands.py",
           "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py",
+          "src/codex_plugin_scanner/guard/cli/context_assistance_commands.py",
+          "src/codex_plugin_scanner/guard/cli/context_assistance_versions_commands.py",
           "src/codex_plugin_scanner/guard/cli/codebase_commands.py"
         ]
       },
@@ -396,7 +398,6 @@
           "src/codex_plugin_scanner/guard/mdm/health_lease_ack.py",
           "src/codex_plugin_scanner/guard/mdm/health_lease_contract.py",
           "src/codex_plugin_scanner/guard/mdm/health_reporter.py",
-          "src/codex_plugin_scanner/guard/mdm/health_snapshot_validation.py",
           "src/codex_plugin_scanner/guard/mdm/health_transport.py",
           "src/codex_plugin_scanner/guard/mdm/lifecycle.py",
           "src/codex_plugin_scanner/guard/mdm/protection_lease_contract.py",
@@ -418,7 +419,6 @@
           "src/codex_plugin_scanner/guard/daemon/policy_authority_api.py",
           "src/codex_plugin_scanner/guard/daemon/dashboard_reconnect.py",
           "src/codex_plugin_scanner/guard/daemon/diagnostics.py",
-          "src/codex_plugin_scanner/guard/daemon/orphaned_daemon_workers.py",
           "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
           "src/codex_plugin_scanner/guard/daemon/approval_connector_recommendation.py",
           "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
@@ -571,6 +571,10 @@
     ],
     "reviewed_runtime": [
       {
+        "path": "src/codex_plugin_scanner/guard/runtime/runner_native_sync.py",
+        "reason": "Reviewed native runner-authority projections: store_cloud_events lazily imports cloud_exceptions from this module, alongside the sync URL, pain-signal, value-metric and policy-bundle projections the cloud sync transport uses. Every function ships a minimal projection to the resident and returns its answer unchanged; count the complete module in runtime scope. No runtime behavior is excluded."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/runtime/extension_control_proof.py",
         "reason": "Retained conservatively in runtime scope: installed-upgrade recovery imports the existing authority phase and error contracts from this proof module. Count the complete module, including its proof helpers, rather than exclude code reached by startup recovery. Installed-upgrade authorization remains native."
       },
@@ -645,7 +649,6 @@
           "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_prompts.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifact_policy.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifacts.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py",
@@ -750,17 +753,15 @@
           "src/codex_plugin_scanner/guard/store_policy_list.py",
           "src/codex_plugin_scanner/guard/text.py",
           "src/codex_plugin_scanner/guard/trust_metadata_boundary.py",
-          "src/codex_plugin_scanner/guard/cloud_exceptions.py",
           "src/codex_plugin_scanner/guard/policy_bundle_decisions.py"
         ],
-        "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_* trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server), cloud_exceptions (store_cloud_events) and policy_bundle_decisions (local_supply_chain policy-bundle handling)."
+        "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_* trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server) and policy_bundle_decisions (local_supply_chain policy-bundle handling)."
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
-          "src/codex_plugin_scanner/guard/mdm/device_key_windows_api.py"
+          "src/codex_plugin_scanner/guard/mdm/device_key_native.py"
         ],
-        "reason": "Reviewed: windows_current_user_sid and its token-API loader: native_policy_snapshot_windows_support lazily imports it to bind the Windows policy snapshot owner, so it runs when a snapshot is written; the rest of device_key_native is excluded by mdm-device-key-native-signing."
+        "reason": "Reviewed: windows_current_user_sid asks the runtime's windows-process-lifecycle owner_sid for this process: native_policy_snapshot_windows_support lazily imports it to bind the Windows policy snapshot owner, so it runs when a snapshot is written; the rest of device_key_native is excluded by mdm-device-key-native-signing."
       },
       {
         "path": [
@@ -890,7 +891,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/native_review_bound_bash.py",
           "src/codex_plugin_scanner/guard/runtime/bound_bash_review.py",
           "src/codex_plugin_scanner/guard/runtime/bound_bash_sink.py"
         ],
@@ -914,6 +914,12 @@
           "src/codex_plugin_scanner/guard/runtime/jsonc.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/durable_io.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the retired Python command activity lifecycle imported it at load, so it counted as eager. It is now reached lazily through the Codex hook integrity and repair writers, which fsync a directory after a durable write. It runs while Guard records state, so it stays counted as runtime."
       }
     ],
     "tests": {
@@ -953,19 +959,15 @@
         "category": "async_control_plane",
         "path": "src/codex_plugin_scanner/guard/mdm/acl.py",
         "symbols": [
-          "_WINDOWS_ACTIVE_SETUP",
-          "_WINDOWS_POLICY",
           "OwnershipAclVerification",
-          "_aggregate",
+          "_native_verdict",
+          "_probe_failed",
           "_macos_surfaces",
-          "_windows_registry_chain",
-          "_windows_surface_payload",
-          "_run_windows_acl_probe",
           "verify_protected_ownership_and_acl"
         ],
         "entry_points": [],
         "reason": "Whole-machine ownership and ACL verification for the managed-device integrity snapshot. It runs when the health lease reports, when removal is authorized and for the guard mdm command, on their own cadence rather than during hook handling.",
-        "evidence": "verify_protected_ownership_and_acl and OwnershipAclVerification are called only from mdm/integrity.py (whose machine_integrity_snapshot is imported only by mdm/user_health.py, mdm/health_lease.py and cli/commands_dispatch_mdm.py) and mdm/removal.py (mdm-health). The per-path helpers that in-scope mdm/managed_file_trust.py imports (_PathSurface, _run_windows_acl_payload, _verify_macos_surface, _windows_filesystem_chain, _windows_result) stay in scope. The report validates this reference closure on every run."
+        "evidence": "verify_protected_ownership_and_acl and OwnershipAclVerification are called only from mdm/integrity.py (whose machine_integrity_snapshot is imported only by mdm/user_health.py, mdm/health_lease.py and cli/commands_dispatch_mdm.py) and mdm/removal.py (mdm-health). The per-path helpers that in-scope mdm/managed_file_trust.py imports (_PathSurface, _macos_request, _native_answer and _native_deadline) stay in scope. The report validates this reference closure on every run."
       },
       {
         "id": "local-trust-backend-checks",
@@ -1336,12 +1338,14 @@
         "category": "async_control_plane",
         "path": "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
         "symbols": [
-          "_MAX_HELPER_OUTPUT_BYTES",
-          "_MAX_HELPER_STDERR_BYTES",
+          "DEVICE_KEY_HELPER_FEATURE",
           "_MAX_HEALTH_LEASE_CLAIMS_BYTES",
-          "_HELPER_TIMEOUT_SECONDS",
+          "_COMMAND_TIMEOUT_SECONDS",
+          "_MAX_ANSWER_BYTES",
           "_SYSTEM_SID",
-          "_P256_ORDER",
+          "_PLATFORMS",
+          "_STATES",
+          "_PROTECTION_LEVELS",
           "_HEALTH_LEASE_KEYS",
           "_HEALTH_KEY_REGISTRATION_KEYS",
           "NativeKeyEvidence",
@@ -1349,9 +1353,7 @@
           "_validated_canonical_health_lease_claims",
           "_validated_canonical_protection_lease",
           "_validated_canonical_health_key_registration",
-          "_validated_der_signature",
-          "windows_directory",
-          "_helper_invocation",
+          "_native_helper",
           "run_helper",
           "_sign_payload_with_device_key",
           "sign_health_lease",
@@ -1360,8 +1362,8 @@
           "require_machine_context"
         ],
         "entry_points": [],
-        "reason": "Native device-key helper invocation and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership.",
-        "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which is retained together with the token API module it loads."
+        "reason": "Requests to the runtime's device-key-helper command and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership; the runtime reads the token user.",
+        "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which asks the runtime for this process's token user."
       },
       {
         "id": "adapter-inventory-snapshot",
@@ -1807,7 +1809,7 @@
         ],
         "entry_points": [],
         "reason": "The local integrity snapshot models and reason codes describe managed-device health reports. They are built by mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py and mdm/harness_coverage.py and consumed by the health lease and the mdm CLI, all of which run on the health-reporting cadence rather than a hook request. Managed-policy contracts in this module stay counted.",
-        "evidence": "rg -ln 'IntegrityReasonCode|LocalIntegritySnapshot|SnapshotComponents|KeyProtectionStatus|SupervisorStatus|IntegrityComponent' src -g '*.py' lists only mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py, mdm/harness_coverage.py, mdm/health_lease.py, mdm/health_snapshot_validation.py and cli/commands_dispatch_mdm.py besides mdm/contracts.py; the adapters' HarnessCoverageSummary comes from adapters/contracts.py. None of those mdm modules is in the runtime import closure."
+        "evidence": "rg -ln 'IntegrityReasonCode|LocalIntegritySnapshot|SnapshotComponents|KeyProtectionStatus|SupervisorStatus|IntegrityComponent' src -g '*.py' lists only mdm/integrity.py, mdm/supervisor.py, mdm/device_key.py, mdm/harness_coverage.py, mdm/health_lease.py and cli/commands_dispatch_mdm.py besides mdm/contracts.py; the adapters' HarnessCoverageSummary comes from adapters/contracts.py. None of those mdm modules is in the runtime import closure."
       },
       {
         "id": "store2-oauth-connect-lifecycle",

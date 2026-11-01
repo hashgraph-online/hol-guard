@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import native_artifact_content_hash as content_hash_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -166,6 +167,53 @@ args = ["workspace-skill.js", "--changed"]
         codex_summary = next(item for item in payload["harnesses"] if item["harness"] == "codex")
 
         assert codex_summary["review_count"] >= 1
+
+    def test_guard_status_hashes_a_harness_in_one_batched_request(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+        config = GuardConfig(guard_home=guard_home, workspace=workspace_dir)
+        store = GuardStore(guard_home)
+        codex_detection = next(item for item in detect_all(context) if item.harness == "codex")
+        assert len(codex_detection.artifacts) > 1
+        hash_requests: list[int] = []
+        hashes_for_batch = content_hash_module._hashes_for_batch
+
+        def counting_hashes_for_batch(batch, home):
+            if any(artifact.harness == "codex" for artifact in batch):
+                hash_requests.append(len(batch))
+            return hashes_for_batch(batch, home)
+
+        monkeypatch.setattr(content_hash_module, "_hashes_for_batch", counting_hashes_for_batch)
+
+        payload = build_guard_status_payload(context, store, config)
+        codex_summary = next(item for item in payload["harnesses"] if item["harness"] == "codex")
+
+        assert hash_requests == [len(codex_detection.artifacts)]
+        assert codex_summary["review_count"] == len(codex_detection.artifacts)
+
+    def test_guard_status_counts_every_artifact_for_review_when_hashes_are_unavailable(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+        config = GuardConfig(guard_home=guard_home, workspace=workspace_dir)
+        store = GuardStore(guard_home)
+        codex_detection = next(item for item in detect_all(context) if item.harness == "codex")
+        assert codex_detection.artifacts
+
+        def unavailable(batch, home):
+            raise content_hash_module.ArtifactContentHashUnavailableError
+
+        monkeypatch.setattr(content_hash_module, "_hashes_for_batch", unavailable)
+
+        payload = build_guard_status_payload(context, store, config)
+        codex_summary = next(item for item in payload["harnesses"] if item["harness"] == "codex")
+
+        assert codex_summary["review_count"] == len(codex_detection.artifacts)
 
     def test_guard_bootstrap_stays_local_when_cloud_is_unreachable(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

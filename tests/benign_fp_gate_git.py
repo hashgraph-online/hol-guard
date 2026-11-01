@@ -74,6 +74,10 @@ def _session_worktree(org: Path, home: Path) -> None:
     _git(home, "clone", "--quiet", str(portal), str(org.parent / "app-portal-clone"), home=home)
     _write(worktree / "scripts" / "report.ts", "console.log(process.env.REPORT_WINDOW ?? '7d');\n")
     _git(worktree, "commit", "--quiet", "-am", "widen report window", home=home)
+    # The lane this worktree left before it came back, so ``-`` names a
+    # branch the checkout still holds rather than a detached commit.
+    _git(worktree, "switch", "--quiet", "-c", "spike/report-window", home=home)
+    _git(worktree, "switch", "--quiet", "fix/report-lane", home=home)
     portal_manifest = {"name": "app-portal", "private": True, "devDependencies": {"vite": "^7.1.5"}}
     _write(worktree / "package.json", json.dumps(portal_manifest) + "\n")
     _bun_lockfile(worktree, {"vite": _NODE_PACKAGES["vite"]})

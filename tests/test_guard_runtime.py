@@ -16,7 +16,7 @@ import sys
 import threading
 import urllib.error
 import urllib.request
-from base64 import urlsafe_b64decode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -34,7 +34,6 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import runtime_policy_artifact_facts
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
@@ -94,6 +93,7 @@ from tests.policy_bundle_signing_helpers import (
     sign_policy_bundle,
 )
 from tests.policy_store_support import replace_remote_policies, resolve_policy
+from tests.runtime_artifact_policy_support import _runtime_artifact_policy_action, runtime_policy_artifact_facts
 from tests.support.network import stub_authenticated_urlopen
 
 # A credential-shaped literal in source output, assembled so that repository
@@ -4378,6 +4378,8 @@ clearer UX and an implementation plan with technical references.
                     "local-daemon",
                     "fleet-posture/v1",
                     "policy-bundle-v2-cloud-exceptions.v1",
+                    "policy-document-exact-commands.v1",
+                    "policy-document-review-rules.v1",
                 ],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",
@@ -15092,10 +15094,7 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15122,10 +15121,7 @@ def test_guard_runtime_tool_action_policy_prefers_configured_risk_action_over_de
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15152,9 +15148,7 @@ def test_guard_runtime_tool_action_policy_includes_defaults_for_unconfigured_ris
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == "require-reapproval"
     )
 
@@ -15181,9 +15175,7 @@ def test_guard_runtime_tool_action_policy_does_not_let_warn_default_override_ris
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == "require-reapproval"
     )
 
@@ -15207,10 +15199,7 @@ def test_guard_runtime_artifact_policy_includes_stronger_global_default(tmp_path
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15233,10 +15222,7 @@ def test_guard_runtime_artifact_exact_allow_replaces_stricter_global_default(tmp
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "allow"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "allow"
     )
 
 
@@ -15265,10 +15251,7 @@ def test_guard_runtime_artifact_exact_allow_cannot_lower_independent_risk_block(
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
-        == "block"
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime) == "block"
     )
 
 
@@ -15305,9 +15288,7 @@ def test_guard_runtime_artifact_policy_composes_exact_current_override(
     )
 
     assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, artifact, "codex", guard_home=native_approval_reuse_runtime
-        )
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
         == expected_action
     )
 
@@ -17543,15 +17524,13 @@ def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
     assert persisted_local_keyring["keys"] == []
     assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") == keyring
     assert summary["remote_policies_stored"] == 1
-    assert (
-        resolve_policy(
-            store,
-            "codex",
-            "codex:project:package-request:fresh-managed-device",
-            "hash",
-        )
-        == "block"
-    )
+    # The resident reads machine MDM policy natively and cannot see the policy
+    # patched in above, so the check stops at the row the sync stored.
+    with sqlite3.connect(store.path) as connection:
+        stored = connection.execute(
+            "select action from policy_decisions where source = 'policy-bundle' and harness = 'codex'"
+        ).fetchall()
+    assert stored == [("block",)]
 
 
 def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
@@ -18968,7 +18947,14 @@ def test_sync_receipts_enforces_an_exact_command_rule_from_a_v2_bundle(tmp_path,
     ] == [("codex", "artifact", "block", f"memory:exact-shell-command:{digest}", "rule.block-install")]
 
 
-def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True, mode="prompt"):
+def _prepare_shadow_candidate_sync(
+    tmp_path,
+    monkeypatch,
+    *,
+    canonical=True,
+    mode="prompt",
+    legacy_issued_at="2026-06-05T13:30:00+00:00",
+):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     if canonical:
@@ -18985,7 +18971,7 @@ def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True, mod
             }
         ],
         bundle_version="policy-2026-06-05.4",
-        issued_at="2026-06-05T13:29:00+00:00",
+        issued_at=legacy_issued_at,
     )
     store.set_sync_payload(
         "policy_bundle_keyring",
@@ -19111,6 +19097,47 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
         "reasonCodes": ["action"],
         "status": "mismatch",
     }
+
+
+def test_sync_receipts_activates_v2_over_a_shadow_from_an_older_publication(
+    tmp_path,
+    monkeypatch,
+):
+    # The stored v1 bundle was issued for an earlier publication, so its rows
+    # are a different policy, not a second compile of this one. Holding the
+    # candidate against them left canonical devices on the old policy forever.
+    store, _legacy = _prepare_shadow_candidate_sync(
+        tmp_path,
+        monkeypatch,
+        legacy_issued_at="2026-06-05T13:29:00+00:00",
+    )
+
+    guard_runner_module.sync_receipts(store)
+
+    applied = store.get_sync_payload("policy_bundle")
+    assert isinstance(applied, dict)
+    assert applied["contractVersion"] == "guard-policy-bundle.v2"
+    assert not store.get_sync_payload("policy_bundle_last_error")
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["allow"]
+
+
+def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
+    tmp_path,
+    monkeypatch,
+):
+    # Cloud sends v2 only when v1 cannot carry the policy, so a device outside
+    # the canonical rollout must enforce it instead of keeping the older v1
+    # decisions. The shadow comparison is still recorded.
+    store, _legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch, canonical=False)
+
+    guard_runner_module.sync_receipts(store)
+
+    applied = store.get_sync_payload("policy_bundle")
+    assert isinstance(applied, dict)
+    assert applied["contractVersion"] == "guard-policy-bundle.v2"
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["allow"]
+    mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
+    assert mismatch_events[-1]["payload"]["reasonCodes"] == ["action"]
 
 
 def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavailable(
@@ -19731,7 +19758,7 @@ def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:
 
     claims = _decode_jwt_segment(proof.split(".")[1])
 
-    expected_ath = guard_runner_module._base64url_encode(hashlib.sha256(access_token.encode("ascii")).digest())
+    expected_ath = urlsafe_b64encode(hashlib.sha256(access_token.encode("ascii")).digest()).decode("ascii").rstrip("=")
 
     assert claims["ath"] == expected_ath
 
@@ -20310,6 +20337,37 @@ def test_sign_guard_dpop_proof_sets_nonce_claim() -> None:
     claims = _decode_jwt_segment(proof.split(".")[1])
 
     assert claims["nonce"] == "nonce-123"
+
+
+def test_sign_guard_dpop_proof_reports_a_resident_outage_as_retryable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _outage(**_kwargs: object) -> str:
+        raise guard_runner_module.PolicyBundleNativeUnavailableError("native_unavailable")
+
+    monkeypatch.setattr(guard_runner_module, "signed_dpop_proof", _outage)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
+        guard_runner_module._sign_guard_dpop_proof(
+            request_url="https://hol.org/api/guard/runtime/sessions/sync",
+            method="POST",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
+
+    assert error.value.retryable is True
+    assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
+
+
+def test_sign_guard_dpop_proof_asks_to_reconnect_when_the_key_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _refused(**_kwargs: object) -> str:
+        raise guard_runner_module.PolicyBundleNativeError("invalid_dpop_private_key")
+
+    monkeypatch.setattr(guard_runner_module, "signed_dpop_proof", _refused)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError):
+        guard_runner_module._sign_guard_dpop_proof(
+            request_url="https://hol.org/api/guard/runtime/sessions/sync",
+            method="POST",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
 
 
 def test_guard_http_header_value_matches_case_insensitive_mapping() -> None:

@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.cli.connect_flow import build_connect_status_pay
 from codex_plugin_scanner.guard.daemon.cloud_review_settings import cloud_review_settings_status
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_store_shims import refresh_review_event_outbox_binding
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownLambdaType=false
@@ -66,7 +67,7 @@ def test_unavailable_error_is_never_swallowed_by_non_status_callers(
     store = GuardStore(tmp_path / "guard-home")
     _unavailable_native(monkeypatch)
     with pytest.raises(NativeGuardStoreUnavailable):
-        store.refresh_review_event_outbox_binding()
+        refresh_review_event_outbox_binding(store)
 
 
 def test_invalid_reason_from_the_resident_is_surfaced() -> None:

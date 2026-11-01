@@ -18,6 +18,11 @@ fn listing_inspections_are_proven_reads() {
             "git shortlog --group=committer -s",
             "git shortlog --group trailer:Signed-off-by -sn",
             "git shortlog --max-count=20 -s",
+            // Git's revision parser reads a bare count as `--max-count`, and
+            // a shortlog takes the revision options the walk defines.
+            "git shortlog -sn -20",
+            "git shortlog -20 HEAD",
+            "git shortlog -s -n -1",
             "git check-ignore -v src",
             "git check-ignore build/ dist/",
             "git check-ignore -q node_modules",
@@ -42,6 +47,10 @@ fn listing_inspections_are_proven_reads() {
             "git shortlog --group format:%GK",
             "git shortlog --group=author:name",
             "git shortlog --max-count=all",
+            // Git refuses a count that is not an integer, so a word that only
+            // begins with digits names no revision limit this proof read.
+            "git shortlog -20x",
+            "git shortlog -2,0",
             "git shortlog --unknown-option",
             // A bundle is only a bundle when every letter is a known flag.
             "git shortlog -sx",

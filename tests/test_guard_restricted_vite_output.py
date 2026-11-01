@@ -1,10 +1,22 @@
 """A Vite config's literal output directory becomes the build's only write grant."""
 
+from pathlib import Path
+
 import pytest
 
+from codex_plugin_scanner.guard.native_restricted_pytest import restricted_native
 from codex_plugin_scanner.guard.runtime import restricted_node_tool as tool
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
-from codex_plugin_scanner.guard.runtime.restricted_vite_output import declared_vite_output
+
+
+def declared_vite_output(cwd: Path, workspace: Path, *, config: Path | None = None) -> Path | None:
+    """Native authority's reading of the config's literal output directory."""
+
+    fields: dict[str, object] = {"cwd": cwd, "workspace": workspace}
+    if config is not None:
+        fields["config"] = config
+    answer = restricted_native("vite_declared_output", fields, (str, type(None)))
+    return None if answer is None else Path(answer)
 
 
 def _dashboard(workspace, config):

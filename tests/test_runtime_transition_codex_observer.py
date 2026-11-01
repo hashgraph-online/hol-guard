@@ -20,8 +20,6 @@ from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvi
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
-    load_or_create_installation_correlation_key,
-    rotate_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
@@ -30,6 +28,8 @@ from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
     transition_hook_observation,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.command_activity_correlation_key_support import write_correlation_key
+from tests.native_store_shims import count_command_shadow_observations
 from tests.test_native_decision_receipt import _receipt
 
 
@@ -315,7 +315,7 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(
     identity = NativeRuntimeIdentity(tmp_path / "fixture-native", 1, 1, "d" * 64)
     writer = None
     if fault not in {"no_store", "missing_key"}:
-        load_or_create_installation_correlation_key(context.guard_home)
+        write_correlation_key(context.guard_home)
     if fault == "unsafe_key":
         (context.guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE).chmod(0o644)
     elif fault == "malformed_key":
@@ -323,14 +323,14 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(
     if fault in {"unrelated_nonce", "wrong_runtime", "changed_receipt", "stale_receipt"}:
         writer = NativeHookEvidenceWriter(store=store)
         # The deadline measures the observer, not one-time native store provisioning.
-        _ = store.count_command_shadow_observations()
+        _ = count_command_shadow_observations(store)
     launched = []
 
     def launch(argv, *, input_text, **kwargs):
         payload = json.loads(input_text)
         launched.append(payload["tool_call_id"])
         if fault == "changed_key":
-            rotate_installation_correlation_key(context.guard_home)
+            write_correlation_key(context.guard_home)
         if writer is not None:
             receipt = _receipt(
                 harness="codex",

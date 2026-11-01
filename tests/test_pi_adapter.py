@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_fro
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
-from codex_plugin_scanner.guard.runtime.secret_sensitivity import classify_secret_content
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.live_hook_review_support import LIVE_REVIEWS_RETIRED_ALLOW, assert_secret_output_held, live_post_tool_flag
 
@@ -796,7 +795,6 @@ class TestPiRuntime:
                 f"{source_path}:43:  email: test@example.com",
             )
         )
-        assert any(match.sensitivity == "medium" for match in classify_secret_content(output))
 
         artifact = live_post_tool_flag(
             harness="pi",

@@ -63,6 +63,9 @@ pub(crate) const HOOK_DIRECT_SAVED_DECISION_FEATURE: &str = "hook-direct-saved-d
 /// The resident queues a connector-setup review itself when the binding says
 /// the daemon's evidence drain raises its desktop setup notice.
 pub(crate) const HOOK_DIRECT_CONNECTOR_NOTICE_FEATURE: &str = "hook-direct-connector-notice-v1";
+/// The resident queues a direct tool answer's command activity behind
+/// its receipt when the binding says the daemon's evidence drain skips it.
+pub(crate) const HOOK_DIRECT_ACTIVITY_RECORD_FEATURE: &str = "hook-direct-activity-record-v1";
 /// The resident takes the bound managed-policy view, resolves an Oh My Pi
 /// `PostToolUse`'s structured output mediation from it, and answers the hook
 /// with the mediation the edge attaches on the daemon path.
@@ -485,6 +488,8 @@ fn answer(
         local_cli_rules: None,
         observe_local_cli: false,
         record_receipt: false,
+        record_activity: false,
+        record_pre_tool_activity: false,
         structured_output_config: None,
         containment_sink: None,
     };
@@ -658,6 +663,7 @@ fn answer(
         policy_store.direct_evidence(),
         Path::new(&guard_home),
         evidence,
+        binding.resident_activity == Some(true),
     ) {
         return Err(HookDirectDefer::EvidenceFull);
     }

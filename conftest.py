@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import re
 import traceback
 
 import pytest
@@ -54,16 +55,11 @@ _GUARD_POST_TOOL_DIAGNOSTIC_TEST = (
 
 def _guard_post_tool_failure_diagnostic(payload: dict[str, object]) -> dict[str, object]:
     from codex_plugin_scanner.guard.config_constants import VALID_GUARD_ACTIONS
-    from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
-        _INTEGRITY_FAIL_CLOSED_REASON_CODES,
-        _REVIEW_CANNOT_FINISH_REASON_CODES,
-    )
 
     diagnostic: dict[str, object] = {}
     reason_code = payload.get("reason_code")
-    if isinstance(reason_code, str) and reason_code in (
-        _REVIEW_CANNOT_FINISH_REASON_CODES | _INTEGRITY_FAIL_CLOSED_REASON_CODES
-    ):
+    # Only a bounded code-shaped value is echoed into the report, never free text.
+    if isinstance(reason_code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,95}", reason_code):
         diagnostic["reason_code"] = reason_code
     policy_action = payload.get("policy_action")
     if isinstance(policy_action, str) and policy_action in VALID_GUARD_ACTIONS:

@@ -127,7 +127,10 @@
   "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
   "src/codex_plugin_scanner/guard/runtime/command_action_risk_metadata.py",
   "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
-  "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py"
+  "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
+  "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
+  "src/codex_plugin_scanner/guard/runtime/command_activity_display.py",
+  "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
   {
@@ -8242,7 +8245,7 @@
    "path": "src/codex_plugin_scanner/guard/decision_boundaries.py",
    "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
    "source_sha256": "411d6e1e3a400955c466de1338c3725c60fb8458d321342c7f448cd3c64eca2f",
-   "remaining_role": "Approval-surface DTO and bounded batch framing; receipt DTOs retired. Rust validates aliases, preserves Watch observations and synchronizes canonical surfaces.",
+   "remaining_role": "Retired: module deleted; the batch framing only tests used moved to a test client. Rust validates aliases, preserves Watch observations and synchronizes canonical surfaces.",
    "native_replacements": [
     "rust/crates/guard-runtime/src/signal_projection_receipt.rs",
     "rust/crates/guard-runtime/src/signal_projection_op.rs"

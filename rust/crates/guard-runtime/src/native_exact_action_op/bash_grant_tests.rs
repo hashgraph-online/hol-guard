@@ -14,6 +14,8 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use std::sync::atomic::AtomicBool;
 
+#[path = "bash_context_tests.rs"]
+mod context_execution_tests;
 #[path = "bash_grant_journal_tests.rs"]
 mod journal_tests;
 #[path = "bash_grant_lifecycle_tests.rs"]
@@ -74,6 +76,8 @@ fn policy_store(request: &NativeBashCaptureV1) -> (PolicySnapshotStore, GuardHoo
         local_cli_rules: None,
         observe_local_cli: false,
         record_receipt: false,
+        record_activity: false,
+        record_pre_tool_activity: false,
         structured_output_config: None,
         containment_sink: None,
     };

@@ -13,8 +13,8 @@ import pytest
 from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard import native_request_context as client
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
-from codex_plugin_scanner.guard.runtime import shell_execution_context as shell
-from codex_plugin_scanner.guard.runtime._shell_execution_context_support import ShellPathIdentity
+from tests import request_context_support as shell
+from tests.request_context_support import ShellPathIdentity
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "request-context-parity" / "cases.v1.json"
 
@@ -47,8 +47,8 @@ def _reply(
     return seen
 
 
-def _build(tmp_path: Path) -> client.NativeRequestContext | client.NativeRequestContextFailure:
-    return client.native_request_context_build(
+def _build(tmp_path: Path) -> shell.NativeRequestContext | client.NativeRequestContextFailure:
+    return shell.native_request_context_build(
         source="direct_command", guard_home=tmp_path, script="ls", cwd=tmp_path, workspace=tmp_path
     )
 
@@ -103,7 +103,7 @@ def test_relative_paths_are_anchored_to_this_process_before_sending(
 ) -> None:
     seen = _reply(monkeypatch, status="error", code="native_request_context_budget_invalid")
     monkeypatch.chdir(tmp_path)
-    client.native_request_context_build(
+    shell.native_request_context_build(
         source="hook", guard_home=tmp_path, script="ls", cwd=Path("."), workspace="ws", home_dir=Path("home")
     )
     body = seen[0]["action"]["body"]
@@ -117,10 +117,10 @@ def test_partial_executable_is_sent_with_the_residents_defaults(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     seen = _reply(monkeypatch, status="error", code="native_request_context_budget_invalid")
-    client.native_request_context_build(
+    shell.native_request_context_build(
         source="hook", guard_home=tmp_path, cwd=tmp_path, executable={"command": "/bin/ls", "args": ["-l"]}
     )
-    client.native_request_context_build(source="hook", guard_home=tmp_path, cwd=tmp_path, executable={})
+    shell.native_request_context_build(source="hook", guard_home=tmp_path, cwd=tmp_path, executable={})
     assert seen[0]["action"]["body"]["executable"] == {
         "command": "/bin/ls",
         "args": ["-l"],
@@ -147,7 +147,7 @@ def test_malformed_payload_is_not_an_authoritative_context(monkeypatch: pytest.M
 
 def test_request_carries_owner_budget_and_process_cwd_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     seen = _reply(monkeypatch, status="error", code="native_request_context_budget_invalid")
-    client.native_request_context_build(source="guard_run", guard_home=tmp_path, script="ls", budget_ms=1234)
+    shell.native_request_context_build(source="guard_run", guard_home=tmp_path, script="ls", budget_ms=1234)
     request = seen[0]
     assert request["source"] == "guard_run"
     assert request["budget_ms"] == 1234
@@ -189,7 +189,7 @@ def _valid_shell_report(tmp_path: Path) -> dict[str, Any]:
 def _model_with_shell(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, report: dict[str, Any]
 ) -> shell.ShellExecutionContext:
-    shell_context = client.NativeRequestContext("sha256:" + "2" * 64, {}, report, None, None)
+    shell_context = shell.NativeRequestContext("sha256:" + "2" * 64, {}, report, None, None)
     monkeypatch.setattr(shell, "native_request_context_build", lambda **_kwargs: shell_context)
     return shell.model_shell_execution_context("ls", cwd=tmp_path, workspace_root=tmp_path)
 

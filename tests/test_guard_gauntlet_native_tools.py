@@ -82,12 +82,16 @@ def _scenario(scenario_id: str):
 
 
 def test_benign_prompts_read_like_ordinary_developer_requests() -> None:
-    from ci.gauntlet.agent_prompt import scenario_prompt
+    from ci.gauntlet.agent_prompt import command_block, scenario_prompt
 
     banned = re.compile(r"\b(disposable|synthetic|authorized|fixture|test)\b")
     for scenario in _NATIVE_TOOLS:
-        # The searched marker text itself is file content, not framing.
+        # The searched marker text and the commands themselves are the literal
+        # strings the agent finds and runs, not framing the prompt wraps around
+        # them. A project really does name a script `test:unit`.
         text = scenario_prompt(scenario).lower().replace("ordinary-workflow-fixture", "")
+        for command in scenario.commands:
+            text = text.replace(command.lower(), "")
         assert not banned.search(text), scenario.id
 
 

@@ -103,8 +103,8 @@ pub struct PolicyDecisionLookupRequestV1 {
     pub local_once_integrity_key_b64: Option<String>,
     #[serde(default)]
     pub local_once_integrity_key_id: Option<String>,
-    /// Materialized policy-bundle row identities (11-tuples); `None` means the
-    /// bundle source is unset → identity compare short-circuits.
+    /// Materialized policy-bundle row identities (11-tuples). When missing,
+    /// the resident derives them from the store it reads.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_bundle_decision_identities: Option<Vec<Vec<Value>>>,
     /// The working directory a Cloud exception is matched against when it

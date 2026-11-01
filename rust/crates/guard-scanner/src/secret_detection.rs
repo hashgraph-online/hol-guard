@@ -27,6 +27,22 @@ use zeroize::{Zeroize, Zeroizing};
 
 type HmacSha256 = Hmac<Sha256>;
 
+#[path = "secret_detection_encoded.rs"]
+mod encoded;
+
+use encoded::{encoded_payload_findings, ENCODED_PAYLOAD_POLICY_VERSION};
+
+#[path = "secret_detection_shell.rs"]
+mod shell;
+
+use shell::{
+    shell_credential_findings, shell_credential_material_line, SHELL_RULE_DESCRIPTION,
+    SHELL_RULE_META,
+};
+pub use shell::{AUTHORIZATION_HEADER_REASON, CREDENTIAL_OPTION_REASON};
+
+pub use encoded::{encoded_payload_spans, ENCODED_REASON};
+
 /// How the scan tells two candidates apart without keeping either one.
 ///
 /// Deduplication only ever asks whether it has seen these exact bytes before,
@@ -868,6 +884,160 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "Perplexity API key.",
             None,
         ),
+        secret_rule(
+            "azure-storage-account-key",
+            "Azure Storage account key",
+            "critical",
+            r"(?:^|[^A-Za-z0-9+/=])(?P<secret>AccountKey=[A-Za-z0-9+/=]{86,512})(?P<overrun>[A-Za-z0-9+/=]*)",
+            FLAG_UNICODE,
+            "azure_storage",
+            true,
+            "Azure Storage account key in a connection string.",
+            None,
+        ),
+        secret_rule(
+            "gcp-oauth-refresh-token",
+            "Google Cloud OAuth refresh token",
+            "critical",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>1//0[A-Za-z0-9_-]{30,255})(?P<overrun>[A-Za-z0-9_-]*)",
+            FLAG_UNICODE,
+            "gcp_oauth",
+            true,
+            "Google Cloud OAuth refresh token.",
+            None,
+        ),
+        secret_rule(
+            "twilio-api-key",
+            "Twilio API key SID",
+            "high",
+            r"\b(?P<secret>SK[0-9a-fA-F]{32})\b",
+            FLAG_UNICODE,
+            "twilio",
+            true,
+            "Twilio API key SID: the identifier of the key pair, not the key secret.",
+            None,
+        ),
+        secret_rule(
+            "new-relic-api-key",
+            "New Relic API key",
+            "critical",
+            r"\b(?P<secret>NR(?:AK|II|JS|IQ)-[A-Za-z0-9]{20,64})\b",
+            FLAG_UNICODE,
+            "new_relic",
+            true,
+            "New Relic user, ingest, browser or query key.",
+            None,
+        ),
+        secret_rule(
+            "terraform-cloud-token",
+            "Terraform Cloud API token",
+            "critical",
+            r"(?:^|[^A-Za-z0-9_.-])(?P<secret>[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{30,255})(?P<overrun>[A-Za-z0-9_-]*)",
+            FLAG_UNICODE,
+            "terraform_cloud",
+            true,
+            "Terraform Cloud or Enterprise API token.",
+            None,
+        ),
+        secret_rule(
+            "rubygems-api-key",
+            "RubyGems API key",
+            "critical",
+            r"\b(?P<secret>rubygems_[0-9a-f]{48})\b",
+            FLAG_UNICODE,
+            "rubygems",
+            true,
+            "RubyGems API key.",
+            None,
+        ),
+        secret_rule(
+            "nuget-api-key",
+            "NuGet API key",
+            "critical",
+            r"\b(?P<secret>oy2[a-z0-9]{43})\b",
+            FLAG_UNICODE,
+            "nuget",
+            true,
+            "NuGet gallery API key.",
+            None,
+        ),
+        secret_rule(
+            "sonarqube-token",
+            "SonarQube token",
+            "critical",
+            r"\b(?P<secret>sq[apu]_[0-9a-f]{40})\b",
+            FLAG_UNICODE,
+            "sonarqube",
+            true,
+            "SonarQube or SonarCloud analysis, user or project token.",
+            None,
+        ),
+        secret_rule(
+            "langsmith-api-key",
+            "LangSmith API key",
+            "critical",
+            r"\b(?P<secret>lsv2_(?:pt|sk)_[0-9a-f]{32}_[0-9a-f]{10})\b",
+            FLAG_UNICODE,
+            "langsmith",
+            true,
+            "LangSmith personal or service API key.",
+            None,
+        ),
+        secret_rule(
+            "tailscale-auth-key",
+            "Tailscale auth key",
+            "critical",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>tskey-(?:auth|api|client|scim|webhook)-[A-Za-z0-9]{8,64}-[A-Za-z0-9]{8,64})(?P<overrun>[A-Za-z0-9_-]*)",
+            FLAG_UNICODE,
+            "tailscale",
+            true,
+            "Tailscale auth, API, OAuth client, SCIM or webhook key.",
+            None,
+        ),
+        secret_rule(
+            "pulumi-access-token",
+            "Pulumi access token",
+            "critical",
+            r"\b(?P<secret>pul-[0-9a-f]{40})\b",
+            FLAG_UNICODE,
+            "pulumi",
+            true,
+            "Pulumi Cloud access token.",
+            None,
+        ),
+        secret_rule(
+            "supabase-access-token",
+            "Supabase access token",
+            "critical",
+            r"\b(?P<secret>sb[ps]_[0-9a-f]{40})\b",
+            FLAG_UNICODE,
+            "supabase",
+            true,
+            "Supabase personal or service access token.",
+            None,
+        ),
+        secret_rule(
+            "jfrog-access-token",
+            "JFrog Artifactory access token",
+            "critical",
+            r"(?:^|[^A-Za-z0-9+/=])(?P<secret>cmVmdGtuOjAx[A-Za-z0-9]{40,255})(?P<overrun>[A-Za-z0-9+/=]*)",
+            FLAG_UNICODE,
+            "jfrog",
+            true,
+            "JFrog Artifactory reference or access token.",
+            None,
+        ),
+        secret_rule(
+            "asana-pat",
+            "Asana personal access token",
+            "critical",
+            r"\b(?P<secret>[12]/[0-9]{10,20}:[0-9a-f]{32})\b",
+            FLAG_UNICODE,
+            "asana",
+            true,
+            "Asana personal access token.",
+            None,
+        ),
     ]
 });
 
@@ -1134,6 +1304,8 @@ fn round4(value: f64) -> f64 {
 pub fn detector_version() -> String {
     let mut material_parts: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
     material_parts.push(assignment_material_line());
+    material_parts.push(encoded_payload_material_line());
+    material_parts.push(shell_credential_material_line());
     detector_version_over(&material_parts)
 }
 
@@ -1145,11 +1317,20 @@ fn rule_material_line(rule: &SecretRule) -> String {
     )
 }
 
-/// The synthetic `credential-assignment` contribution, always last.
+/// The synthetic `credential-assignment` contribution. It stays in the place
+/// Python gave it, directly after the rules, so the digest Python published is
+/// still reproducible from a prefix of this material.
 fn assignment_material_line() -> String {
     format!(
         "credential-assignment|{ASSIGNMENT_PATTERN_SOURCE}|{FLAG_IGNORECASE_MULTILINE_UNICODE}|{GENERIC_CANDIDATE_POLICY_VERSION}"
     )
+}
+
+/// Where a text is read, rather than which rules read it. A scan taken before
+/// the detector looked inside base64 payloads saw less of the same file, so it
+/// has to be recognisable as a different detector.
+fn encoded_payload_material_line() -> String {
+    format!("encoded-payload|{ENCODED_PAYLOAD_POLICY_VERSION}")
 }
 
 /// Digest over an explicit material list. Hashing a subset is how the rules
@@ -1174,6 +1355,14 @@ pub fn secret_rule_catalog() -> Vec<SecretRuleCatalogEntry> {
             description: rule.description,
         })
         .collect();
+    entries.push(SecretRuleCatalogEntry {
+        rule_id: SHELL_RULE_META.rule_id,
+        family: SHELL_RULE_META.family,
+        severity: SHELL_RULE_META.severity,
+        validation: SHELL_RULE_META.validation,
+        strong_format: SHELL_RULE_META.strong_format,
+        description: SHELL_RULE_DESCRIPTION,
+    });
     entries.push(SecretRuleCatalogEntry {
         rule_id: "credential-assignment",
         family: "Contextual credential assignment",
@@ -1794,12 +1983,45 @@ fn finding_from_match(
     provider_rule: Option<&SecretRule>,
     lines: &LineIndex,
 ) -> Option<SecretFinding> {
-    let line_text = line_text(text, match_start);
+    finding_in_context(
+        rule,
+        candidate,
+        text,
+        match_start,
+        lines.line_of(text, match_start),
+        path,
+        source,
+        commit,
+        provider_rule,
+    )
+}
+
+/// One match, read against whatever text actually surrounds it.
+///
+/// For a match on the page that text is the file itself. For one decoded out of
+/// a base64 payload it is the decoded bytes, because that is where the words
+/// saying what the value is were written: a sample marker beside a fixture
+/// token still marks it after an encoding, while the encoded characters the
+/// match would otherwise be read against say nothing about anything. `line`
+/// stays the line of the file a reader has to go to either way.
+#[allow(clippy::too_many_arguments)] // Mirrors the Python keyword arguments verbatim.
+fn finding_in_context(
+    rule: &RuleMeta,
+    candidate: &str,
+    context: &str,
+    context_start: usize,
+    line: usize,
+    path: &str,
+    source: &str,
+    commit: Option<&str>,
+    provider_rule: Option<&SecretRule>,
+) -> Option<SecretFinding> {
+    let line_text = line_text(context, context_start);
     if rule.strong_format {
         // Provider fixtures need the full SecretRule for `rule_id`-specific
         // suppression; only provider rules take this branch.
         if let Some(rule) = provider_rule {
-            if provider_match_is_fixture(rule, candidate, text, match_start, path) {
+            if provider_match_is_fixture(rule, candidate, context, context_start, path) {
                 return None;
             }
         }
@@ -1817,7 +2039,7 @@ fn finding_from_match(
         severity: rule.severity,
         confidence: confidence_label(score),
         confidence_score: score,
-        line: lines.line_of(text, match_start),
+        line,
         path: path.to_string(),
         source: source.to_string(),
         commit: commit.map(str::to_string),
@@ -1972,6 +2194,43 @@ pub fn scan_secret_text(
         }
     }
 
+    // Command lines are read after assignments for the same reason assignments
+    // come after provider formats: a credential both rules can see is reported
+    // under the more specific one.
+    let claimed: HashSet<CandidateDigest> = findings
+        .iter()
+        .map(|finding| candidate_digest(&finding.candidate))
+        .collect();
+    let remaining = bounded_max.saturating_sub(findings.len());
+    for finding in
+        shell_credential_findings(text, path, source, commit, &lines, &claimed, remaining)
+    {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
+            continue;
+        }
+        findings.push(finding);
+    }
+
+    // Encoded payloads are read last. A credential that is also written out in
+    // the clear is already reported from the line it sits on, which is the
+    // place a reader can act on; the encoded pass only adds what no plain read
+    // of the file could have found.
+    let remaining = bounded_max.saturating_sub(findings.len());
+    for finding in encoded_payload_findings(text, path, source, commit, &lines, remaining) {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
+            continue;
+        }
+        findings.push(finding);
+    }
+
     findings.sort_by(|a, b| finding_sort_key(a).cmp(&finding_sort_key(b)));
     SecretScanSummary {
         detector_version: detector_version(),
@@ -2101,8 +2360,10 @@ mod tests {
     #[test]
     fn catalog_keeps_the_python_entries_in_python_order() {
         let catalog = secret_rule_catalog();
-        // The provider rules Python published lead, later ones follow, and the
-        // synthetic contextual entry stays last however many are appended.
+        // The provider rules Python published lead and later ones follow. The
+        // contextual entry Python published closes the list, because the CLI
+        // vectors pin it there; a contextual rule added since sits ahead of
+        // it, however many provider rules are appended before them.
         assert!(catalog.len() > PYTHON_ERA_PROVIDER_RULES);
         assert_eq!(
             catalog
@@ -2132,6 +2393,17 @@ mod tests {
                 "validation": "none",
                 "strong_format": true,
                 "description": "Private-key material in PEM/OpenSSH-style form.",
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(&catalog[catalog.len() - 2]).unwrap(),
+            serde_json::json!({
+                "rule_id": "credential-command",
+                "family": "Contextual credential on a command line",
+                "severity": "high",
+                "validation": "none",
+                "strong_format": false,
+                "description": "Credential written as an authorization header or as the value of a credential-naming option.",
             })
         );
         assert_eq!(
@@ -2583,7 +2855,7 @@ mod tests {
     /// each is assembled to satisfy its own pattern and nothing else. Each is
     /// held in two pieces, as `jwt_fixture` is, so no complete provider-shaped
     /// token ever appears as a literal in this file.
-    const RULES_ADDED_AFTER_PYTHON: [(&str, &str, &str); 25] = [
+    const RULES_ADDED_AFTER_PYTHON: [(&str, &str, &str); 39] = [
         (
             "atlassian-api-token",
             "ATATT3xFfGF0A1b2C3d4E5",
@@ -2701,6 +2973,76 @@ mod tests {
             "pplx-Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9m",
             "Q2vL8nP4",
         ),
+        (
+            "azure-storage-account-key",
+            "AccountKey=",
+            "Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9mQq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ2vL8nP4wR7tY1uI6oP3aS==",
+        ),
+        (
+            "gcp-oauth-refresh-token",
+            "1//0gQq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ2",
+            "vL8nP4wR",
+        ),
+        (
+            "twilio-api-key",
+            "SK9f3b7c2a1d4e8f60b5a9c7d3",
+            "e1f2a4b6",
+        ),
+        (
+            "new-relic-api-key",
+            "NRAK-QQ2VL8NP4WR7TY1UI6O",
+            "P3AS5DFG",
+        ),
+        (
+            "terraform-cloud-token",
+            "Qq2VL8nP4wR7tY.atlasv1.K9mQ2vL8nP4wR7tY1uI6oP3",
+            "aS5dFgHj",
+        ),
+        (
+            "rubygems-api-key",
+            "rubygems_9f3b7c2a1d4e8f60b5a9c7d3e1f2a4b69c8d7e5f",
+            "3a1b2c4d",
+        ),
+        (
+            "nuget-api-key",
+            "oy2a9f3b7c2a1d4e8f60b5a9c7d3e1f2a4b69c",
+            "8d7e5f3a",
+        ),
+        (
+            "sonarqube-token",
+            "squ_9f3b7c2a1d4e8f60b5a9c7d3e1f2a4b6",
+            "9c8d7e5f",
+        ),
+        (
+            "langsmith-api-key",
+            "lsv2_pt_9f3b7c2a1d4e8f60b5a9c7d3e1f2a4b6_9c",
+            "8d7e5f3a",
+        ),
+        (
+            "tailscale-auth-key",
+            "tskey-auth-kQ2vL8nP4w-R7tY1uI6oP3aS5dF",
+            "gHjK9mQ2",
+        ),
+        (
+            "pulumi-access-token",
+            "pul-9f3b7c2a1d4e8f60b5a9c7d3e1f2a4b6",
+            "9c8d7e5f",
+        ),
+        (
+            "supabase-access-token",
+            "sbp_9f3b7c2a1d4e8f60b5a9c7d3e1f2a4b6",
+            "9c8d7e5f",
+        ),
+        (
+            "jfrog-access-token",
+            "cmVmdGtuOjAxQq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ2",
+            "vL8nP4wR",
+        ),
+        (
+            "asana-pat",
+            "1/1201234567890123:9f3b7c2a1d4e8f60b5a9c7d3",
+            "e1f2a4b6",
+        ),
     ];
 
     #[test]
@@ -2811,6 +3153,38 @@ mod tests {
             (
                 "sentry-auth-token",
                 format!("sntrys_{}", sentry_tail.repeat(10)),
+            ),
+            // Longer than the 512 characters the rule caps at, in an
+            // alphabet whose `=` a word boundary cannot refuse.
+            (
+                "azure-storage-account-key",
+                format!("AccountKey={}", google_tail.repeat(20)),
+            ),
+            // Longer than the 255 characters the rule caps at, in an
+            // alphabet whose `-` a word boundary cannot refuse.
+            (
+                "gcp-oauth-refresh-token",
+                format!("1//0{}", google_tail.repeat(10)),
+            ),
+            (
+                "terraform-cloud-token",
+                format!("{}.atlasv1.{}", &google_tail[..14], google_tail.repeat(10)),
+            ),
+            // A third hyphenated segment, where the rule takes two.
+            (
+                "tailscale-auth-key",
+                format!(
+                    "tskey-auth-{}-{}-{}",
+                    &google_tail[..10],
+                    &google_tail[..16],
+                    &google_tail[..12]
+                ),
+            ),
+            // Longer than the 255 characters the rule caps at, with no
+            // boundary to stop at: `=` is not a word character.
+            (
+                "jfrog-access-token",
+                format!("cmVmdGtuOjAx{}", google_tail.repeat(10)),
             ),
         ] {
             let text = format!("SERVICE_CREDENTIAL = \"{value}\"");

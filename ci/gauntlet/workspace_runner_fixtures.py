@@ -1,6 +1,7 @@
-"""The project's own Jest, installed in the workspace and launched through npx.
+"""The project's own test runner, installed in the workspace and launched through npx.
 
-An agent that runs a repository's tests types ``npx jest``: npm resolves the
+An agent that runs a repository's tests types ``npx jest`` or ``npx mocha``: npm
+resolves the
 runner from the workspace's own ``node_modules`` and runs it once. The install
 is the shape npm leaves behind — a manifest that declares the version, a
 lockfile that pins it, the package's own manifest and bin, and the
@@ -15,6 +16,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import NamedTuple
 
 WORKSPACE_JEST_CASE = "omp-native-workspace-npx-jest"
 # The same install, launched the way a Node project's own scripts name it: the
@@ -29,12 +31,27 @@ WORKSPACE_NPM_EXEC_CASE = "omp-native-workspace-npm-exec-inert-option"
 # front of it. The setting only sizes the engine, so the run has to finish the
 # same way the unprefixed launch does.
 WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
+# The other runner a Node project installs for itself. Mocha runs its suite once
+# and exits unless it is told to watch, so the plain launch is the routine one.
+WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
+# The same install, launched through the project's own name for one part of its
+# suite. A project with more than one kind of test names them `test:unit`,
+# `test:types` and so on, and npm runs whatever the entry holds, so the named
+# entry has to be read the way the plain `test` entry is.
+WORKSPACE_NAMED_TEST_SCRIPT_CASE = "omp-native-workspace-named-test-script"
+# A checking script run with one more option of its own: the manager hands the
+# words after `--` to the script, so the run is the tool the manifest names
+# holding them.
+WORKSPACE_SCRIPT_PASSED_OPTION_CASE = "omp-native-workspace-script-passed-option"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
         WORKSPACE_NODE_ENTRY_CASE,
         WORKSPACE_NPM_EXEC_CASE,
         WORKSPACE_HEAP_PREFIX_CASE,
+        WORKSPACE_MOCHA_CASE,
+        WORKSPACE_NAMED_TEST_SCRIPT_CASE,
+        WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -51,6 +68,7 @@ RUNNER_MARKER = f"jest-cli {_VERSION}"
 _FILES = {
     "package.json": (
         '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "test:unit": "jest --ci"\n  },\n'
         f'  "devDependencies": {{\n    "jest": "{_VERSION}"\n  }}\n}}\n'
     ),
     "package-lock.json": (
@@ -73,21 +91,115 @@ _FILES = {
     "node_modules/import-local/index.js": "module.exports = () => false;\n",
     "node_modules/jest-cli/bin/jest.js": f"console.log('{RUNNER_MARKER}');\n",
 }
+_MOCHA_VERSION = "11.7.5"
+# The one line the workspace's own Mocha prints, which only a real launch produces.
+MOCHA_MARKER = f"mocha {_MOCHA_VERSION}"
+_MOCHA_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        f'  "devDependencies": {{\n    "mocha": "{_MOCHA_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "mocha": "{_MOCHA_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/mocha": {\n'
+        f'      "version": "{_MOCHA_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "mocha": "bin/mocha.js",\n'
+        '        "_mocha": "bin/_mocha.js"\n      }\n    }\n  }\n}\n'
+    ),
+    ".mocharc.json": '{\n  "spec": "test/**/*.spec.js"\n}\n',
+    "test/sample.spec.js": (
+        "const assert = require('node:assert');\n\n"
+        "describe('settings', () => {\n"
+        "  it('reads its own defaults', () => {\n    assert.ok(true);\n  });\n});\n"
+    ),
+    "node_modules/mocha/package.json": (
+        f'{{"name": "mocha", "version": "{_MOCHA_VERSION}", "bin": '
+        '{"mocha": "bin/mocha.js", "_mocha": "bin/_mocha.js"}}\n'
+    ),
+    # Mocha's launcher hands the run to the worker beside it, the way the real
+    # package does once it has settled on the options the run needs.
+    "node_modules/mocha/bin/mocha.js": ("#!/usr/bin/env node\nrequire('./_mocha.js');\n"),
+    "node_modules/mocha/bin/_mocha.js": (f"#!/usr/bin/env node\nconsole.log('{MOCHA_MARKER}');\n"),
+}
+
+
+_ESLINT_VERSION = "9.33.0"
+# The option the case's script forwards to the linter. The scenario spells it on
+# the command line, and the installed executable below answers only to it.
+ESLINT_PASSED_OPTION = "--max-warnings=0"
+# The one line the workspace's own ESLint prints, which only a real launch
+# carrying the forwarded option produces.
+ESLINT_MARKER = f"eslint {_ESLINT_VERSION}"
+_ESLINT_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "lint": "eslint ."\n  },\n'
+        f'  "devDependencies": {{\n    "eslint": "{_ESLINT_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "eslint": "{_ESLINT_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/eslint": {\n'
+        f'      "version": "{_ESLINT_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "eslint": "bin/eslint.js"\n      }\n    }\n  }\n}\n'
+    ),
+    "eslint.config.js": "export default [];\n",
+    "src/settings.ts": "export const settings = { retries: 3 };\n",
+    "node_modules/eslint/package.json": (
+        f'{{"name": "eslint", "version": "{_ESLINT_VERSION}", "bin": {{"eslint": "bin/eslint.js"}}}}\n'
+    ),
+    # A launch that dropped the forwarded tail would still start this file, so
+    # the version line is printed only when the option actually arrives. The
+    # oracle reads that line, which makes the case fail when the tail is lost
+    # instead of passing on the launch alone.
+    "node_modules/eslint/bin/eslint.js": (
+        "#!/usr/bin/env node\n"
+        f"const strict = process.argv.slice(2).includes('{ESLINT_PASSED_OPTION}');\n"
+        f"console.log(strict ? '{ESLINT_MARKER}' : 'eslint: {ESLINT_PASSED_OPTION} was not forwarded');\n"
+    ),
+}
+
+
+class _Install(NamedTuple):
+    """One runner's install: the package npm links, its files and its own line."""
+
+    name: str
+    files: dict[str, str]
+    marker: str
+
+
+_JEST_INSTALL = _Install("jest", _FILES, RUNNER_MARKER)
+_INSTALLS = {
+    WORKSPACE_MOCHA_CASE: _Install("mocha", _MOCHA_FILES, MOCHA_MARKER),
+    WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
+}
+
+
+def runner_marker(scenario_id: str | None) -> str:
+    """The line the runner this case installs prints when it really launches."""
+    return _INSTALLS.get(scenario_id or "", _JEST_INSTALL).marker
 
 
 def add_workspace_test_runner(workspace: Path, scenario_id: str | None) -> None:
     """Install the runner inside the workspace, untracked as ``npm install`` leaves it."""
     if scenario_id not in WORKSPACE_RUNNER_CASES:
         return
-    for relative, text in _FILES.items():
+    installed = _INSTALLS.get(scenario_id or "", _JEST_INSTALL)
+    for relative, text in installed.files.items():
         target = workspace / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8", newline="\n")
-    (workspace / "node_modules/jest/bin/jest.js").chmod(0o755)
+    entry = Path(f"node_modules/{installed.name}/bin/{installed.name}.js")
+    (workspace / entry).chmod(0o755)
     link = workspace / "node_modules/.bin"
     link.mkdir(parents=True, exist_ok=True)
     # npm links each bin relative to node_modules/.bin.
-    (link / "jest").symlink_to(Path("../jest/bin/jest.js"))
+    (link / installed.name).symlink_to(Path("..") / entry.relative_to("node_modules"))
 
 
 def workspace_node_bin(home: Path) -> Path | None:

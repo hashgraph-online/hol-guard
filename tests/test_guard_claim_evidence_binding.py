@@ -13,6 +13,7 @@ import logging
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -252,21 +253,25 @@ def test_claim_refuses_local_evidence_shipped_without_a_binding(
     assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is False
 
 
-def test_bundle_binding_is_read_before_the_identities_it_binds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A source that moves while the identities are derived must differ from the binding."""
+def test_the_resident_derives_the_bundle_identities_it_claims_against(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The claim ships the binding but not the identities; the resident derives them after it."""
 
     store, selected = _bundle_store(tmp_path)
-    real = store._cached_policy_bundle_decision_identities
+    shipped: list[dict[str, object]] = []
+    real = store_policy.native_claim_approval_reuse_decisions
 
-    def moving(**kwargs: object) -> frozenset[tuple[object, ...]]:
-        identities = real(**kwargs)
-        _set_workspace(store)()
-        return identities
+    def capture(*, evidence: native_store_policy.IntegrityEvidence, **kwargs: Any) -> bool:
+        shipped.append(dict(evidence))
+        return real(evidence=evidence, **kwargs)
 
-    monkeypatch.setattr(store, "_cached_policy_bundle_decision_identities", moving)
+    monkeypatch.setattr(store_policy, "native_claim_approval_reuse_decisions", capture)
 
-    assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is False
-    assert _claim_events(store) == 0
+    assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is True
+    assert "evidence_binding" in shipped[0]
+    assert "policy_bundle_decision_identities" not in shipped[0]
+    assert _claim_events(store) == 1
 
 
 def _record_saved_rows(store: GuardStore) -> None:
@@ -299,7 +304,6 @@ def test_native_diagnostic_without_a_resident_raises_the_typed_value_error(
             publisher=None,
             now=_NOW,
             evidence_provider=lambda _policy, _local_once: {},
-            current_action=None,
         )
     assert isinstance(raised.value, native_store_policy.ApprovalReuseDiagnosticUnavailableError)
 

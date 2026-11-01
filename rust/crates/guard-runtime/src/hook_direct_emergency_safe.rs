@@ -118,6 +118,7 @@ pub(super) fn answer(
         policy_store.direct_evidence(),
         Path::new(guard_home),
         evidence,
+        false,
     ) {
         return Err(HookDirectDefer::EvidenceFull);
     }

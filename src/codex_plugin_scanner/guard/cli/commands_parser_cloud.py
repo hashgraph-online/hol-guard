@@ -487,6 +487,20 @@ def _configure_guard_cloud_parsers(
     cursor_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
     cursor_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
+    # Cline installs before this parser existed wrote ``guard mcp-proxy``.
+    cline_proxy_parser = guard_subparsers.add_parser(
+        "cline-mcp-proxy", aliases=["mcp-proxy"], help=argparse.SUPPRESS
+    )
+    _add_guard_common_args(cline_proxy_parser)
+    cline_proxy_parser.add_argument("--server-name", required=True)
+    cline_proxy_parser.add_argument("--server-id")
+    cline_proxy_parser.add_argument("--source-scope", default="project")
+    cline_proxy_parser.add_argument("--config-path", required=True)
+    cline_proxy_parser.add_argument("--transport", default="stdio")
+    cline_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    cline_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    cline_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
+
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
     hermes_mcp_proxy_parser.add_argument("--server")
@@ -528,6 +542,7 @@ def _configure_guard_cloud_parsers(
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",
+        "cline-mcp-proxy",
         "hermes-mcp-proxy",
     }
     guard_subparsers._choices_actions = [

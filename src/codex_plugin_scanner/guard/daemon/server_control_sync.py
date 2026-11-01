@@ -31,6 +31,7 @@ from ..native_policy_bundle import (
     PolicyBundleNativeUnavailableError,
     native_rejection_code,
 )
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..policy_bundle_activation import activate_with_reason
 from ..policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
@@ -40,9 +41,9 @@ from ..policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
+from ..runtime import runner_native_sync as _sync
 from ..runtime.extension_control_authority import ExtensionControlAuthorityError
 from ..runtime.runner import (
-    _build_policy_bundle_decisions,
     _daemon_version_supported,
     _guard_device_metadata,
     _persist_cloud_receipt_redaction_level,
@@ -52,6 +53,7 @@ from ..runtime.runner import (
     _policy_bundle_is_version_downgrade,
     _reset_cloud_receipt_redaction_authority,
     _validate_cached_policy_bundle,
+    policy_bundle_candidate_decisions,
 )
 from .managed_policy_delivery import daemon_managed_controls_candidate
 from .server_common import (
@@ -205,25 +207,58 @@ class _ControlSyncRoutes:
                     self._write_json({"error": managed_error}, status=400)
                     return
             applied_at = _now()
-            signed_remote_decisions = _build_policy_bundle_decisions(
+            store = self.server.store  # type: ignore[attr-defined]
+            is_v2 = validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT
+            # Only a v2 bundle reads the rollout, and a resident that cannot
+            # answer is an outage, not a refusal of the bundle.
+            try:
+                canonical_enforcement = is_v2 and _sync.canonical_policy_enforcement_enabled(
+                    device_id=device_id,
+                    workspace_id=store.get_cloud_workspace_id(),
+                )
+            except NativeRunnerAuthorityError:
+                self._write_native_policy_bundle_unavailable()
+                return
+            (
+                signed_remote_decisions,
+                candidate_rejection_reason,
+                _candidate_rejection_rule_id,
+            ) = policy_bundle_candidate_decisions(
+                store,
                 validated_policy_bundle,
+                is_v2=is_v2,
                 device_id=device_id,
                 device_name=device_name,
+                canonical_enforcement=canonical_enforcement,
+                existing_policy_bundle=existing_policy_bundle,
+                now=applied_at,
             )
+            if candidate_rejection_reason == NATIVE_UNAVAILABLE_REJECTION:
+                self._write_native_policy_bundle_unavailable()
+                return
+            if candidate_rejection_reason is not None:
+                self._write_native_policy_bundle_rejection(candidate_rejection_reason)
+                return
+            stored_ack = store.get_sync_payload("policy_bundle_ack")
             policy_bundle_ack = policy_bundle_acknowledgement_payload(
                 device_id=device_id,
                 device_name=device_name,
                 policy_bundle=validated_policy_bundle,
                 synced_at=applied_at,
+                previous=stored_ack if isinstance(stored_ack, dict) else None,
                 delivery=validated_policy_bundle_delivery,
             )
-            cloud_exception_items = _policy_bundle_cloud_exception_items(
-                self.server.store,  # type: ignore[attr-defined]
-                sync_exceptions=[],
-                policy_bundle=validated_policy_bundle,
-                policy_bundle_ack=policy_bundle_ack,
-                device_id=device_id,
-            )
+            try:
+                cloud_exception_items = _policy_bundle_cloud_exception_items(
+                    self.server.store,  # type: ignore[attr-defined]
+                    sync_exceptions=[],
+                    policy_bundle=validated_policy_bundle,
+                    policy_bundle_ack=policy_bundle_ack,
+                    device_id=device_id,
+                )
+            except PolicyBundleNativeUnavailableError:
+                self._write_native_policy_bundle_unavailable()
+                return
             try:
                 activated, activation_rejection_reason = activate_with_reason(
                     self.server.store.apply_policy_bundle_authority,  # type: ignore[attr-defined]

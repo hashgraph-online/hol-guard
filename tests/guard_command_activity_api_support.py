@@ -27,6 +27,7 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
 from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind
 from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_store_shims import record_command_activity
 
 # Suites that assert this exact day stay pinned. The daemon list only keeps
 # ninety days, so the routes that read a live daemon pass recent_day() instead.
@@ -97,13 +98,14 @@ def recent_day() -> date:
 
 def seed(store: GuardStore, *, occurred_on: date = _FIXTURE_OCCURRED_ON) -> None:
     for index in range(3):
-        store.record_command_activity(
+        record_command_activity(
+            store,
             evidence(
                 f"activity:{index + 1:02d}",
                 minute=index,
                 prompted=index == 1,
                 occurred_on=occurred_on,
-            )
+            ),
         )
 
 

@@ -360,13 +360,13 @@ fn queued_review_reply() -> (Value, Value) {
 #[test]
 fn native_bash_reply_queued_review_binds_token_lineage_host_and_receipt() {
     let (reply, request) = queued_review_reply();
-    assert!(validate("review", &reply, &request));
+    assert!(queued_review(&reply, &request));
     let mut pi = reply.clone();
     pi["subject"]["context"]["host"] = json!("pi-input-mutation-v1");
     let mut pi_request = request.clone();
     pi_request["harness"] = json!("pi");
-    assert!(!validate("review", &pi, &request));
-    assert!(!validate("review", &reply, &pi_request));
+    assert!(!queued_review(&pi, &request));
+    assert!(!queued_review(&reply, &pi_request));
 
     let other = "guard-approval-context:v1:other";
     for (pointer, invalid) in [
@@ -389,7 +389,7 @@ fn native_bash_reply_queued_review_binds_token_lineage_host_and_receipt() {
     ] {
         let mut forged = reply.clone();
         *forged.pointer_mut(pointer).unwrap() = invalid;
-        assert!(!validate("review", &forged, &request), "{pointer}");
+        assert!(!queued_review(&forged, &request), "{pointer}");
     }
     for (field, invalid) in [
         ("harness", json!("codex")),
@@ -402,44 +402,75 @@ fn native_bash_reply_queued_review_binds_token_lineage_host_and_receipt() {
     ] {
         let mut forged = request.clone();
         forged[field] = invalid;
-        assert!(!validate("review", &reply, &forged), "{field}");
+        assert!(!queued_review(&reply, &forged), "{field}");
     }
 
     let mut tampered = reply.clone();
     tampered["review"]["receipt"]["reason_code"] = json!("some_other_reason");
     let mut tampered_request = request.clone();
     tampered_request["native_receipt"] = tampered["review"]["receipt"].clone();
-    assert!(!validate("review", &tampered, &tampered_request));
+    assert!(!queued_review(&tampered, &tampered_request));
 
     let mut renamed = reply.clone();
     renamed["review"]["decision"]["reason_code"] = json!("some_other_reason");
     let mut renamed_request = request.clone();
     renamed_request["decision"] = renamed["review"]["decision"].clone();
-    assert!(!validate("review", &renamed, &renamed_request));
+    assert!(!queued_review(&renamed, &renamed_request));
+}
+
+/// The query `queue_bound_bash_review` reads for `reply` and `request`.
+fn bound_bash_query(reply: &Value, request: &Value) -> Value {
+    let payload = json!({"tool_name": "Bash", "tool_input": {"command": "pwd"}});
+    json!({
+        "envelope": {
+            "harness": request["harness"], "event_name": "PreToolUse",
+            "payload": crate::hook_direct::saved_decision::review_request::tagged(&payload),
+            "workspace": "/work", "home_dir": "/home/u", "devin_project_dir": null,
+            "path_env": null,
+            "host": {"tilde_home": "/home/u", "default_home": "/home/u", "cwd": "/work"},
+        },
+        "result": request["decision"], "native_receipt": request["native_receipt"],
+        "request_id": "req1", "approval_center_url": "http://127.0.0.1:4781/approvals",
+        "guard_home": "/home/u/.hol-guard", "review_binding": request["review_binding"],
+        "exact_token": request["exact_token"], "once_only_reason": null,
+        "queue_group_id": null, "bound_bash": reply,
+    })
+}
+
+fn refused<T>(result: Result<T, crate::guard_store_db::StoreError>) -> bool {
+    matches!(
+        result,
+        Err(crate::guard_store_db::StoreError::Invalid(
+            "native_guard_store_review_request_refused"
+        ))
+    )
 }
 
 #[test]
-fn native_bash_reply_context_transport_answers_queued_reviews() {
-    use guard_contracts::{
-        ContextDigestKindV1, ContextDigestRequestV1, ContextDigestResultV1,
-        CONTEXT_DIGEST_REQUEST_SCHEMA,
-    };
+fn a_bound_bash_review_queues_only_as_the_reply_the_owner_prepared() {
+    use crate::guard_store_native_review_queue::{delegate, BOUND_BASH_METHOD, METHOD};
     let (reply, request) = queued_review_reply();
-    let mut forged = request.clone();
-    forged["review_binding"] = json!("guard-approval-context:v1:other");
-    for (request, expected) in [(request, true), (forged, false)] {
-        let digest = ContextDigestRequestV1 {
-            schema: CONTEXT_DIGEST_REQUEST_SCHEMA.into(),
-            request_id: "review-validation".into(),
-            kind: ContextDigestKindV1::NativeBashReplyValidation {
-                reply_kind: "review".into(),
-                material: reply.clone(),
-                request,
-            },
-        };
-        let bytes = crate::context_digest::evaluate_context_digest_request(&digest).unwrap();
-        let result: ContextDigestResultV1 = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(result.status, "ok");
-        assert_eq!(result.native_bash_reply_valid, Some(expected));
+    let call = |method: &str, reply: &Value, request: &Value| {
+        let query = bound_bash_query(reply, request);
+        let args = json!({"review": query, "hint": null, "now": "2026-10-31T00:00:00+00:00"});
+        delegate(method, args.as_object().unwrap(), None, 10_000, |_| None)
+    };
+    assert!(call(BOUND_BASH_METHOD, &reply, &request).is_ok());
+    // The ordinary queue never takes a prepared review, nor this method one
+    // without it.
+    assert!(refused(call(METHOD, &reply, &request)));
+    assert!(refused(call(BOUND_BASH_METHOD, &Value::Null, &request)));
+    let mut forged = reply.clone();
+    forged["artifact_hash"] = json!("guard-approval-context:v1:other");
+    assert!(refused(call(BOUND_BASH_METHOD, &forged, &request)));
+    for (field, changed) in [
+        ("decision", json!({"decision": "review"})),
+        ("native_receipt", Value::Null),
+        ("harness", json!("pi")),
+        ("exact_token", Value::Null),
+    ] {
+        let mut forged = request.clone();
+        forged[field] = changed;
+        assert!(refused(call(BOUND_BASH_METHOD, &reply, &forged)), "{field}");
     }
 }

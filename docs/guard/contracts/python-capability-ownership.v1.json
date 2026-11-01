@@ -1900,6 +1900,44 @@
    "native_replacements": [
     "rust/crates/guard-command/src/command_reviewed_literal.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_activity_lifecycle",
+   "source_sha256": "26fa797e3fd38e385d541154e2faa262ffed4eed5b941656df579e95e846399b",
+   "forbidden_symbols": [
+    "build_correlated_post_activity",
+    "build_unpaired_post_evidence"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_decision_adapter.rs",
+    "rust/crates/guard-command/src/hook_evidence_deferred_post.rs",
+    "rust/crates/guard-runtime/src/hook_evidence_activity.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_display.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_activity_display",
+   "source_sha256": "52e2b4479f6c40e9293c184f83a50ef9f38391b9dfb1cc22666311fa682bf25b",
+   "forbidden_symbols": [
+    "build_invocation_preview",
+    "build_invocation_preview_from_payload",
+    "checked_command_from_payload"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/hook_evidence_preview.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/store_command_shadow.py",
+   "module": "codex_plugin_scanner.guard.store_command_shadow",
+   "source_sha256": "88e5d1b550d1e941d0d211958b90eaa8fc179315c03fea1d5c21300840d83e82",
+   "forbidden_symbols": [
+    "StoreCommandShadowMixin"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/guard_store_cmd_privacy.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -2040,20 +2078,6 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
-   "source_sha256": "2f692c209f962b918c70a38b30235a8284d2889daa4df07e885dc584754a114b",
-   "forbidden_symbols": [
-    "_SECRET_CONTENT_PATTERNS",
-    "_SAMPLE_SECRET_VALUE_PATTERN",
-    "_secret_content_match_is_sample",
-    "_extract_secret_assignment_value"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/content_sensitivity.rs",
-    "rust/crates/guard-runtime/src/content_sensitivity_op.rs"
-   ]
-  },
-  {
    "path": "src/codex_plugin_scanner/guard/continuation_payload.py",
    "source_sha256": "59edb10a1c1aa0fdc1f5a8e646a928a573e817ca457344a525ea3b0bfb755d5a",
    "forbidden_symbols": [
@@ -2122,47 +2146,6 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/cli_runtime_support_op.rs",
     "rust/crates/guard-runtime/src/cli_copilot_resolution.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
-   "source_sha256": "f6d0184abba2aae634007a8480cbfc4d30e2715c1bfb0c166e421d73d886f2cc",
-   "forbidden_symbols": [
-    "_READ_ONLY_SEARCH_FILE_INPUT_FLAGS",
-    "_GREP_SHORT_VALUE_FLAGS",
-    "_READ_ONLY_SEARCH_SHORT_VALUE_FLAGS"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/developer_inspection_authority.rs",
-    "rust/crates/guard-runtime/src/developer_inspection_authority_op.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py",
-   "source_sha256": "895e59d8fb5e9d1f275a2c4eb5ae27c4e61cc4662ac4645dba98bec79263bc1c",
-   "forbidden_symbols": [
-    "index_inspection_execution_context",
-    "model_shell_execution_context",
-    "_without_safe_inspection_redirections",
-    "_leading_literal_cd_workspace_root"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/developer_inspection_authority.rs",
-    "rust/crates/guard-runtime/src/developer_inspection_authority_op.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py",
-   "source_sha256": "d584623615ba075ac4ab57cc81f9db42a8c4448638308935dff08e5172484317",
-   "forbidden_symbols": [
-    "_SHELL_FUNCTION_DEFINITION",
-    "_SHELL_ALIAS_DEFINITION",
-    "_DEFERRED_GITHUB_EFFECT",
-    "parse_env_wrapper"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/shell_request_authority.rs",
-    "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
    ]
   },
   {
@@ -2459,29 +2442,6 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/runtime/_shell_execution_context_support.py",
-   "source_sha256": "4a9321dd3c0b42da089ddc14d0ba67869752d5116fef2890985c197e2eaf4bd4",
-   "forbidden_symbols": [
-    "DIRECTORY_COMMANDS",
-    "DirectoryOperation",
-    "_ESCAPED_SEMICOLON_SENTINEL",
-    "_FD_AMPERSAND_SENTINEL",
-    "_FIND_PLACEHOLDER_SENTINEL",
-    "_NEWLINE_SENTINEL",
-    "_NOCLOBBER_PIPE_SENTINEL",
-    "_REDIRECTION_TOKEN",
-    "_SHELL_ASSIGNMENT",
-    "_UNMODELED_SHELL_CONTROL_WORDS",
-    "_directory_arguments",
-    "_operand_is_dynamic",
-    "_path_contains_symlink",
-    "directory_operation"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/shell_execution_context_support.rs"
-   ]
-  },
-  {
    "path": "src/codex_plugin_scanner/guard/inventory_contract_metadata.py",
    "source_sha256": "33d04296fa0f81e2dfdc261f047aa4bdab6918efeed1ffc09c47340d20594e70",
    "forbidden_symbols": [
@@ -2509,21 +2469,6 @@
    "native_replacements": [
     "rust/crates/guard-contracts/src/decision_lattice.rs",
     "rust/crates/guard-policy-snapshot/src/lib.rs"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
-   "source_sha256": "aa240d99aee2f85396db7a7176be2671c72aa984e34872bd3818e40d431c955b",
-   "forbidden_symbols": [
-    "_RULE_MODE_FLOOR",
-    "_SEVERITY",
-    "_UNCERTAINTY_REASON",
-    "_UNMAPPED_RISK_CLASS_EFFECTS"
-   ],
-   "native_replacements": [
-    "rust/crates/guard-command/src/command_decision_adapter.rs",
-    "rust/crates/guard-command/src/command_model.rs",
-    "rust/crates/guard-command/src/native_command_controls_floor.rs"
    ]
   }
  ]

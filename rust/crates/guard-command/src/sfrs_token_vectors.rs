@@ -25,10 +25,11 @@ use crate::sfrs_shell_tokens::{
     iter_shell_command_segments, normalized_shell_command_name, shell_segment_primary_command,
     split_shell_parts,
 };
+use crate::shell_secret_read_glob::search_glob_pattern_is_safe;
 use crate::shell_secret_read_support::{
     cat_file_operand_tokens, plain_file_operand_tokens, ripgrep_args_expand_hidden_files,
-    search_file_operand_roles, search_glob_pattern_is_safe, search_operands_are_safe,
-    sed_file_operand_tokens, shell_segment_file_operand_tokens,
+    search_file_operand_roles, search_operands_are_safe, sed_file_operand_tokens,
+    shell_segment_file_operand_tokens,
 };
 
 pub(crate) fn records() -> Vec<Value> {

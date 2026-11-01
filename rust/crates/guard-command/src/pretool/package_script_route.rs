@@ -189,9 +189,19 @@ fn resolved(
         // narrower or broader execution is offered. A conventional name says
         // what the script does on its own; any other name is only as good as
         // the body behind it, so without the manifest it stays a package
-        // script and keeps the generic route.
-        return (test || task.is_some_and(|task| matches!(task, "lint" | "typecheck" | "build")))
-            .then_some(reason);
+        // script and keeps the generic route. A checking name runs read-only
+        // whatever the run passes on, and the words it passes have already
+        // been read for writes and shell effects, so a tail rides with it. A
+        // build's receipt names an output directory instead, and `--outDir`
+        // arriving in that tail can only be read against the manifest, so a
+        // build with a tail keeps the generic route.
+        return (test
+            || task.is_some_and(|(task, tail)| match task {
+                "lint" | "typecheck" => true,
+                "build" => tail.is_empty(),
+                _ => false,
+            }))
+        .then_some(reason);
     };
     let package = nearest(&directory, &workspace, "package.json");
     let (manifest, _) = read_json_with_integrity(&package.join("package.json"), false);
@@ -200,10 +210,31 @@ fn resolved(
             .as_ref()
             .and_then(|manifest| manifest.get("scripts")),
     );
+    let scripts = scripts?;
     if test {
-        return test_script(scripts?, arguments).then_some(PACKAGE_TEST);
+        // The sink reads the same manifest and runs whatever the body spells,
+        // so a test-named entry keeps the package route even when the body is
+        // a read-only tool rather than a runner. A body the sink refuses
+        // leaves the command on the generic route.
+        if !test_script(scripts, arguments) {
+            return None;
+        }
+        // A tool body is gated as that tool, and the tool's own gate includes
+        // being installed where the sink looks. Without that check a
+        // `test:types` entry holding `tsc --noEmit` would take the package
+        // route with no local TypeScript, and the sink would fail the run
+        // that the generic route would have put to the user instead.
+        if let Some((tool, tool_arguments)) =
+            crate::contained_package_test::script_tool_body(arguments, Some(scripts))
+        {
+            let (_, entries, _) =
+                crate::contained_node_tool::supported_tool(&tool, &tool_arguments)?;
+            return tool_entry_installed(entries, &directory, &workspace).then_some(PACKAGE_TEST);
+        }
+        return Some(PACKAGE_TEST);
     }
-    tool_script(scripts?, task?, &directory, &workspace)
+    let (task, tail) = task?;
+    tool_script(scripts, task, tail, &directory, &workspace)
 }
 
 #[cfg(unix)]
@@ -339,6 +370,7 @@ fn test_script(scripts: &Map<String, Value>, arguments: &[String]) -> bool {
 fn tool_script(
     scripts: &Map<String, Value>,
     task: &str,
+    tail: &[String],
     directory: &Path,
     workspace: &Path,
 ) -> Option<&'static str> {
@@ -346,7 +378,15 @@ fn tool_script(
         return None;
     }
     let tokens = split_with(PLAIN_LEXER, scripts.get(task)?.as_str()?).ok()?;
-    let (tool, arguments) = tokens.split_first()?;
+    let (tool, body) = tokens.split_first()?;
+    // The words after `--` are the run's own arguments, so the tool is gated
+    // holding them: an `--outDir` or a redirection arriving that way is read
+    // here rather than reaching the sink unseen.
+    if !crate::contained_node_tool::passed_tail_reports_only(tool, tail) {
+        return None;
+    }
+    let passed = [body, tail].concat();
+    let arguments = passed.as_slice();
     let (_, entries, mode) = crate::contained_node_tool::supported_tool(tool, arguments)?;
     let build = mode == crate::contained_node_tool::ToolMode::Build;
     let reason = if build { NODE_BUILD } else { NODE_TOOL };
@@ -356,9 +396,18 @@ fn tool_script(
     if crate::contained_node_tool::writes_or_chains(arguments) {
         return None;
     }
-    // A tool that publishes one entrypoint per major is installed under
-    // whichever spelling its version uses, and the sink resolves the same set.
-    let installed = entries.iter().any(|entry| {
+    tool_entry_installed(entries, directory, workspace).then_some(reason)
+}
+
+#[cfg(unix)]
+/// Whether the tool is installed where the sink resolves it.
+///
+/// A tool that publishes one entrypoint per major is installed under
+/// whichever spelling its version uses, and the sink resolves the same set.
+/// A receipt issued for a tool that is not there names a run the sink cannot
+/// make, so the command belongs on the generic route instead.
+fn tool_entry_installed(entries: &[&str], directory: &Path, workspace: &Path) -> bool {
+    entries.iter().any(|entry| {
         let relative = format!("node_modules/{entry}");
         let modules = nearest(directory, workspace, &relative).join("node_modules");
         // `node_modules` may be a link to another directory in the workspace.
@@ -369,6 +418,5 @@ fn tool_script(
         };
         std::fs::canonicalize(modules.join(entry))
             .is_ok_and(|resolved| resolved.is_file() && resolved.starts_with(&modules))
-    });
-    installed.then_some(reason)
+    })
 }

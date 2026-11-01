@@ -63,6 +63,8 @@ _COMMON_HANDLERS = {
     "install": "_run_guard_install_command",
     "codex-mcp-proxy": "_run_guard_codex_mcp_proxy_command",
     "cursor-mcp-proxy": "_run_guard_cursor_mcp_proxy_command",
+    "cline-mcp-proxy": "_run_guard_cline_mcp_proxy_command",
+    "mcp-proxy": "_run_guard_cline_mcp_proxy_command",
     "opencode-mcp-proxy": "_run_guard_opencode_mcp_proxy_command",
     "copilot-mcp-proxy": "_run_guard_copilot_mcp_proxy_command",
     "hermes-mcp-proxy": "_run_guard_hermes_mcp_proxy_command",
@@ -206,6 +208,11 @@ def _dispatch_guard_command(
     error_stream: TextIO | None = None,
 ) -> int:
     "Route one Guard subcommand to its handler."
+
+    if args.guard_command == "context":
+        from .context_assistance_commands import run_context_command
+
+        return _invoke_guard_handler(run_context_command, args, input_text=input_text, output_stream=output_stream)
 
     inventory_list = is_inventory_list_command(args)
     if args.guard_command == "extensions" and not inventory_list:

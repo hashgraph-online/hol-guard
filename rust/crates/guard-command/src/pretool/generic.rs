@@ -261,10 +261,13 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
+            gem_config_absent: false,
+            http_config_absent: false,
             psql_environment: Default::default(),
             creates_nothing: false,
         },
@@ -1114,6 +1117,7 @@ fn evaluate_envelope(
                 Some(
                     "native_vitest_readonly_containment_required"
                         | "native_package_test_readonly_containment_required"
+                        | "native_node_test_readonly_containment_required"
                         | "native_node_tool_readonly_containment_required"
                         | "native_node_build_output_containment_required"
                 )
@@ -1128,6 +1132,7 @@ fn evaluate_envelope(
                     "native_node_tool_readonly_containment_required"
                         | "native_vitest_readonly_containment_required"
                         | "native_package_test_readonly_containment_required"
+                        | "native_node_test_readonly_containment_required"
                         | "native_node_build_output_containment_required"
                 )
             ) && result.reason_code == "native_package_review"))

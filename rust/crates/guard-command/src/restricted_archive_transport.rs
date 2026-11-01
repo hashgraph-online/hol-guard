@@ -10,6 +10,13 @@
 //! end-to-end (SNI + cert).
 
 use std::io::Read;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+#[path = "restricted_archive_cancel_transport.rs"]
+mod cancellable;
+pub use cancellable::CancellableUreqPinnedTransport;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
@@ -132,10 +139,18 @@ impl ureq::unversioned::resolver::Resolver for PinnedResolver {
 
 struct UreqResponse {
     inner: ureq::http::Response<ureq::Body>,
+    cancel: Option<Arc<AtomicBool>>,
 }
 
 impl ReadableResponse for UreqResponse {
     fn read(&mut self, amount: usize) -> Result<Vec<u8>, RestrictedDownloadError> {
+        if self
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+        {
+            return Err(cancellable::cancelled());
+        }
         let mut buf = vec![0u8; amount.max(1)];
         let n = self
             .inner
@@ -143,6 +158,13 @@ impl ReadableResponse for UreqResponse {
             .as_reader()
             .read(&mut buf)
             .map_err(|error| {
+                if self
+                    .cancel
+                    .as_ref()
+                    .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+                {
+                    return cancellable::cancelled();
+                }
                 if matches!(
                     error.kind(),
                     std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
@@ -161,6 +183,13 @@ impl ReadableResponse for UreqResponse {
                     "External archive response ended before the body completed.",
                 )
             })?;
+        if self
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+        {
+            return Err(cancellable::cancelled());
+        }
         buf.truncate(n);
         Ok(buf)
     }
@@ -264,6 +293,7 @@ impl PinnedHttpsTransport for ManagedUreqPinnedTransport {
             address,
             deadline,
             Some(ureq::tls::RootCerts::from(certificates)),
+            None,
         )
     }
 }
@@ -306,7 +336,7 @@ impl PinnedHttpsTransport for UreqPinnedTransport {
         address: &str,
         deadline: Instant,
     ) -> Result<Box<dyn ReadableResponse>, RestrictedDownloadError> {
-        open_pinned(destination, address, deadline, None)
+        open_pinned(destination, address, deadline, None, None)
     }
 }
 
@@ -315,6 +345,7 @@ fn open_pinned(
     address: &str,
     deadline: Instant,
     roots: Option<ureq::tls::RootCerts>,
+    cancel: Option<Arc<AtomicBool>>,
 ) -> Result<Box<dyn ReadableResponse>, RestrictedDownloadError> {
     use ureq::unversioned::transport::{Connector, RustlsConnector};
     let addr = address
@@ -355,6 +386,7 @@ fn open_pinned(
         super::restricted_archive_peer::PinnedConnector {
             peer: SocketAddr::new(addr, destination.port),
             deadline,
+            cancel: cancel.clone(),
         }
         .chain(RustlsConnector::default()),
         PinnedResolver { addr },
@@ -367,7 +399,14 @@ fn open_pinned(
         .header("Connection", "close")
         .header("User-Agent", "hol-guard-restricted-archive/1")
         .call()
-        .map_err(|e| match e {
+        .map_err(|e| {
+            if cancel
+                .as_ref()
+                .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+            {
+                return cancellable::cancelled();
+            }
+            match e {
             ureq::Error::Timeout(_) => RestrictedDownloadError::new(
                 "external_archive_download_timeout",
                 "External archive download exceeded Guard's time limit.",
@@ -398,6 +437,10 @@ fn open_pinned(
                 "external_archive_connection_failed",
                 "External archive connection failed.",
             ),
+        }
         })?;
-    Ok(Box::new(UreqResponse { inner: response }))
+    Ok(Box::new(UreqResponse {
+        inner: response,
+        cancel,
+    }))
 }

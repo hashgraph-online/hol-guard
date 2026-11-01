@@ -128,6 +128,11 @@ fn grep_recursive_workspace_searches_are_allowed() {
         "grep -r foo rust/crates",
         "grep -rn foo src",
         "grep -rn foo rust/crates --include='*.rs'",
+        // The workspace root holds a gitignored `.env`, and grep walks it.
+        // An include that selects no file below the root reaches none of it:
+        // the walk opens `*.rs` and skips the rest, so the search prints
+        // nothing the plain recursive spelling would have printed.
+        "grep -rn main . --include='*.rs'",
     ] {
         check(&f, "app", c, true);
     }
@@ -160,11 +165,7 @@ fn searches_that_can_reach_secrets_stay_reviewed() {
     }
     // grep walks hidden files and ignores .gitignore, so `.env` is in reach.
     // The pattern is one that file holds, so the search would print from it.
-    for c in [
-        "grep -r main .",
-        "grep -rn main config",
-        "grep -rn main . --include='*.rs'",
-    ] {
+    for c in ["grep -r main .", "grep -rn main config"] {
         check(&f, "app", c, false);
     }
 }

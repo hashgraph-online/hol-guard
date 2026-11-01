@@ -101,12 +101,14 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         .unwrap_or(arguments.len());
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
-                        "diff" | "log" | "show" => !(active_options
-                            .iter()
-                            .any(|argument| argument == "--no-ext-diff")
-                            && active_options
+                        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" => {
+                            !(active_options
                                 .iter()
-                                .any(|argument| argument == "--no-textconv")),
+                                .any(|argument| argument == "--no-ext-diff")
+                                && active_options
+                                    .iter()
+                                    .any(|argument| argument == "--no-textconv"))
+                        }
                         // A clean filter is the only helper hash-object runs.
                         "hash-object" => {
                             !super::git_hash_object::filters_disabled(&arguments[1..])
@@ -115,13 +117,31 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         "config" => super::git_config_reads::read_form(&arguments[1..]).is_some(),
                         // These do not page by default, but pager.<name> can, and
                         // an object read can fetch from a partial clone's promisor.
-                        "merge-base" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
-                        | "rev-list" => true,
+                        // `cherry` prints commit names through no helper of its
+                        // own, so the pager is the whole of what it can start.
+                        "cherry" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
+                        | "for-each-ref" | "rev-list" => true,
                         // blame and reflog page by default; describe honors
                         // pager.describe when it is set.
-                        "blame" | "describe" | "reflog" => true,
+                        "blame" | "annotate" | "describe" | "reflog" => true,
                         // grep pages by default through pager.grep or core.pager.
                         "grep" => true,
+                        // None of these starts a pager of its own, runs a
+                        // configured driver or opens a working-tree file, but
+                        // an explicit pager.<name> key can still name a
+                        // program, so the probe clears that first. The
+                        // `symbolic-ref` spellings that write a ref never
+                        // reach here: the inspection proof screens them.
+                        "name-rev" | "show-branch" | "check-ref-format" | "symbolic-ref" => true,
+                        // The stdin filters and `var` print without opening a
+                        // working-tree file, but an explicit `pager.<name>`
+                        // key can still name a program, so the probe clears
+                        // that first. The `check-mailmap` and
+                        // `interpret-trailers` spellings that open a file the
+                        // caller names never reach here: the inspection proof
+                        // screens them.
+                        "var" | "patch-id" | "stripspace" | "check-mailmap"
+                        | "interpret-trailers" => true,
                         // A stash listing is a log that pages under
                         // pager.stash, and `stash show` runs the diff drivers.
                         "stash" => true,
@@ -131,9 +151,11 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // configuration.
                         "shortlog" | "check-ignore" | "count-objects" | "check-attr"
                         | "sparse-checkout" => true,
-                        // A bisect log replays through the pager, and a note
-                        // prints through it too; both honor core.pager.
-                        "bisect" | "notes" => true,
+                        // A bisect log replays through the pager, a note
+                        // prints through it too, and a replacement listing
+                        // reads the repository's configuration to print the
+                        // refs; all three honor core.pager.
+                        "bisect" | "notes" | "replace" => true,
                         // Finding the untracked paths refreshes the index,
                         // which starts a configured core.fsmonitor.
                         "clean" => true,
@@ -252,3 +274,7 @@ pub(super) fn stdout_piped(model: &CanonicalCommandV1, index: usize) -> bool {
         _ => false,
     }
 }
+
+#[cfg(test)]
+#[path = "git_helper_context_tests.rs"]
+mod tests;

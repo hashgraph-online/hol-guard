@@ -62,6 +62,18 @@ pub(crate) enum NodeToolRoute {
     },
 }
 
+/// The words a manager run passes on to the script it names.
+///
+/// The first reading answered `Script`, so the command is a manager run; a
+/// command that is not leaves no tail to carry.
+fn script_tail(command: &[String], windows: bool) -> &[String] {
+    let Some((program, rest)) = command.split_first() else {
+        return &[];
+    };
+    let name = program_name(program, windows);
+    manager_script_task(&name, rest).map_or(&[][..], |(_, tail)| tail)
+}
+
 fn invalid(message: &'static str) -> NodeToolRoute {
     NodeToolRoute::Invalid {
         code: INVALID,
@@ -151,6 +163,91 @@ pub(crate) fn supported_tool(
     };
     let (tool, entries) = tool_entries(name)?;
     Some((tool, entries, mode))
+}
+
+/// Whether any supported tool could take every word the manager passed on.
+///
+/// The admission reads the command before the manifest is resolved, so the
+/// task name is all it has and the tool behind it is not yet known. Asking
+/// whether some supported tool admits the whole tail keeps the routing receipt
+/// from being handed to a run no tool could take, while leaving the exact
+/// reading to the sink, which knows which tool the body spells.
+pub(crate) fn passed_tail_reports_only_for_some_tool(tail: &[String]) -> bool {
+    ["eslint", "tsc", "prettier"]
+        .iter()
+        .any(|tool| passed_tail_reports_only(tool, tail))
+}
+
+/// Whether every word a manager passed on after `--` only changes how the
+/// tool reports what it found.
+///
+/// The tail is the agent's own text rather than the manifest's, so it is read
+/// against the options each tool may be handed instead of screened for the
+/// writes it must not contain. A refused-word list would have to keep up with
+/// every spelling that turns writing back on, and tsc alone defeats one:
+/// its parser reads an optional `true`/`false` after a boolean option, so
+/// `tsc --noEmit false` emits while still carrying `--noEmit`. A word this
+/// list has not met is refused, and the run is left to ordinary review.
+pub(crate) fn passed_tail_reports_only(tool: &str, tail: &[String]) -> bool {
+    // An entry ending in `=` admits that option with a value attached. The
+    // separated spelling is not accepted: its value is a bare word, and a bare
+    // word is what turns a boolean option around or names a file to write.
+    let allowed: &[&str] = match tool {
+        "eslint" => &[
+            "--quiet",
+            "--color",
+            "--no-color",
+            "--no-warn-ignored",
+            "--max-warnings=",
+        ],
+        "tsc" => &[
+            "--noEmit",
+            "--pretty",
+            "--noErrorTruncation",
+            "--listFilesOnly",
+            "--explainFiles",
+            "--diagnostics",
+            "--extendedDiagnostics",
+            "--skipLibCheck",
+            "--strict",
+        ],
+        "prettier" => &["--check", "--list-different", "-l", "--no-color"],
+        // `vite build` writes its output, and every option it takes moves or
+        // widens that write, so it is run as the manifest spells it.
+        _ => &[],
+    };
+    // The one option whose value a run may spell as a separate word, and the
+    // only shape that value may take. A count is not a file name and not the
+    // `true`/`false` a boolean option reads back, so admitting it carries
+    // nothing the attached spelling does not already carry.
+    let counted: &[&str] = if tool == "eslint" {
+        &["--max-warnings"]
+    } else {
+        &[]
+    };
+    let mut words = tail.iter();
+    while let Some(word) = words.next() {
+        if counted.contains(&word.as_str()) {
+            if !words
+                .next()
+                .is_some_and(|value| !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()))
+            {
+                return false;
+            }
+            continue;
+        }
+        let known = allowed.iter().any(|option| match option.strip_suffix('=') {
+            Some(name) => word
+                .strip_prefix(name)
+                .and_then(|rest| rest.strip_prefix('='))
+                .is_some_and(|value| !value.is_empty()),
+            None => word == option,
+        });
+        if !known {
+            return false;
+        }
+    }
+    true
 }
 
 /// Whether an argument list rewrites the files it visits or runs more than
@@ -253,7 +350,23 @@ pub(crate) fn node_tool_route(
         let Some((name, arguments)) = tokens.split_first() else {
             return invalid("The requested local script is empty.");
         };
-        return gate(name, arguments.to_vec(), Vec::new(), None);
+        // The manager hands the words after `--` to the body it starts, so
+        // `npm run lint -- --fix` is the body holding `--fix`. Reading them
+        // back off the command gates them with the run they belong to instead
+        // of losing them between the two readings.
+        let mut arguments = arguments.to_vec();
+        let tail = script_tail(command, windows);
+        // A tail carrying a write or a shell effect is refused with the body
+        // it belongs to, which names the effect found. This screen answers
+        // the narrower question left over: a word that writes nothing by
+        // itself but is not one the tool may be handed.
+        if !writes_or_chains(tail) && !passed_tail_reports_only(name, tail) {
+            return invalid(
+                "The requested local script was passed an option the tool may not take.",
+            );
+        }
+        arguments.extend_from_slice(tail);
+        return gate(name, arguments, Vec::new(), None);
     }
     let Some((program, rest)) = command.split_first() else {
         return gate("", Vec::new(), Vec::new(), None);
@@ -267,13 +380,17 @@ pub(crate) fn node_tool_route(
     }
     let mut runtime_arguments = Vec::new();
     let mut expected_entry = None;
-    if arguments
+    if crate::contained_argv::manager_reporting_options_peeled(&name, &arguments)
         .first()
         .is_some_and(|word| local_bin_verb(&name, word))
     {
         // `npm exec`, `npm x`, `pnpm exec` and `yarn exec` are each manager's
         // spelling of a local-bin run. A manager option before the tool (`-c`
-        // runs a shell, `-r`/`--filter` fan out) is not accepted.
+        // runs a shell, `-r`/`--filter` fan out) is not accepted. An option
+        // that only chooses how much the manager prints names no verb, so the
+        // subcommand is read behind it, the same way the admission reads it:
+        // otherwise a quiet `exec` the admission routed here would arrive as
+        // a package script and never start its tool.
         let Some(peeled) = manager_local_bin_arguments(&name, &arguments).map(|local_run| {
             let (runner, rest) = local_run.split_first().expect("a peeled run names a tool");
             (runner.clone(), rest.to_vec())
@@ -282,7 +399,7 @@ pub(crate) fn node_tool_route(
         };
         (name, arguments) = peeled;
     } else if matches!(name.as_str(), "bun" | "npm" | "pnpm" | "yarn") {
-        let Some(task) = manager_script_task(&name, &arguments) else {
+        let Some((task, _)) = manager_script_task(&name, &arguments) else {
             return invalid("Only a single named package script is supported.");
         };
         if windows {

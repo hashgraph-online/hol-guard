@@ -22,7 +22,7 @@
 //!
 //! The relay answers only what the resident decided. A call it cannot send
 //! as the proxy would see it (arguments whose key order or numbers the
-//! decoded map lost, a tool name that is not ASCII), a resident
+//! decoded map lost, an empty tool name), a resident
 //! that cannot be reached, and every deferred decision get the proxy's
 //! fail-closed "no native decision" response.
 

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.vulnify",
+  "version": "1.0.0",
+  "name": "Vulnify",
+  "description": "Hosted Vulnify MCP server at https://mcp.vulnify.io/mcp. An agent describes an action (agent, action, resource, destination, record count) and gets ALLOW, REVIEW or BLOCK with a risk score and reasons. decide_action and check_mcp_tool_call record a decision in the caller's Vulnify organization; the other tools only read or dry-run. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.vulnify",
+    "displayName": "Vulnify",
+    "url": "https://vulnify.io"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#0F172A"
+  },
+  "homepage": "https://docs.vulnify.io/mcp/",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://mcp.vulnify.io/mcp",
+    "serverNames": [
+      "vulnify"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-shared-state-write"
+  ],
+  "tools": [
+    {
+      "name": "check_action",
+      "state": "inherit"
+    },
+    {
+      "name": "decide_action",
+      "state": "review"
+    },
+    {
+      "name": "get_decision",
+      "state": "inherit"
+    },
+    {
+      "name": "list_policies",
+      "state": "inherit"
+    },
+    {
+      "name": "test_policies",
+      "state": "inherit"
+    },
+    {
+      "name": "plan_policy_changes",
+      "state": "inherit"
+    },
+    {
+      "name": "check_mcp_tool_call",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/vulnify/vulnify-mcp",
+    "https://github.com/vulnify/vulnify-mcp/blob/main/src/tools.ts",
+    "https://docs.vulnify.io/mcp/",
+    "https://www.npmjs.com/package/@vulnify/mcp"
+  ],
+  "saferAlternatives": [
+    "Dry-run check_action/test_policies (and plan_policy_changes with dryRun true) record nothing; a REVIEW from them does not open human review. Record via decide_action or check_mcp_tool_call first.",
+    "A recorded REVIEW waits for a person in the Vulnify app or Slack; this server cannot approve or deny. Treat tool errors as not allowed, never as ALLOW."
+  ]
+}

@@ -15,17 +15,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from base64 import urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from uuid import uuid4
-
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
@@ -35,12 +29,8 @@ from ..cli.oauth_client import (
     resolve_guard_oauth_client_config,
     validate_guard_sync_endpoint,
 )
-from ..cloud_exceptions import (
-    build_cloud_exceptions_from_policy_bundle,
-    cloud_exception_to_dict,
-    dedupe_cloud_exceptions,
-)
 from ..config import VALID_RECEIPT_REDACTION_LEVELS
+from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
@@ -55,6 +45,7 @@ from ..native_prompt import request_from_dict as _prompt_request_from_dict  # no
 from ..native_runner_authority import NativeRunnerAuthorityError
 from ..native_supply_chain_bundle import (
     MAX_SUPPLY_CHAIN_BUNDLE_RESPONSE_BYTES,
+    VerifiedSupplyChainBundle,
     native_verify_supply_chain_bundle_response,
 )
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
@@ -145,10 +136,9 @@ from .managed_controls_sync import (
 )
 from .supply_chain_bundle import (
     SupplyChainBundleError,
-    load_supply_chain_bundle_response,
+    SupplyChainVerificationKey,
     load_supply_chain_verification_keys,
 )
-from .supply_chain_bundle_models import SupplyChainBundleResponse, SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 from .workspace_assessment_sync import (
     MAX_REQUEST_BYTES as _WORKSPACE_ASSESSMENT_REQUEST_BYTES,
@@ -167,6 +157,10 @@ _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
 # exact-shell-command rows the hook looks up, so Guard Cloud may deliver exact
 # command rules in a v2 bundle to a device that advertises this.
 POLICY_EXACT_COMMAND_RULES_CAPABILITY = "policy-document-exact-commands.v1"
+# The canonical compiler turns a signed bundle's `review` rule into the same
+# review row a v1 bundle materializes, so Guard Cloud may deliver review rules
+# in a v2 bundle to a device that advertises this.
+POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY = "policy-document-review-rules.v1"
 # Accepts Cloud exceptions signed into a v2 bundle (``cloudExceptions``).
 POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY = "policy-bundle-v2-cloud-exceptions.v1"
 # Re-exported for the supply-chain services; the resident derives the endpoint.
@@ -224,7 +218,6 @@ _PAIN_SIGNAL_EVENTS = frozenset(
         "approval_gate/remote_policy_sync_blocked",
     }
 )
-_EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 _LOGGER = logging.getLogger(__name__)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
@@ -397,11 +390,11 @@ def _build_policy_bundle_decisions(
     *,
     device_id: str,
     device_name: str,
-    canonical_enforcement: bool = False,
 ) -> list[PolicyDecision]:
+    # Cloud sends a v2 bundle only when v1 cannot carry the policy, so every
+    # device enforces its compiled rules. The rollout flag only decides whether
+    # a v2 bundle that disagrees with the legacy shadow is refused.
     if policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        if not canonical_enforcement:
-            return []
         return _build_canonical_policy_bundle_decisions(
             policy_bundle,
             device_id=device_id,
@@ -412,6 +405,127 @@ def _build_policy_bundle_decisions(
         device_id=device_id,
         device_name=device_name,
     )
+
+
+def _legacy_shadow_predates_candidate(legacy: Mapping[str, object], candidate: Mapping[str, object]) -> bool:
+    """Whether the stored v1 bundle was issued for an older publication than the candidate.
+
+    Cloud issues a publication's v1 bundle at or after the publication itself,
+    so one issued earlier carries a different policy and cannot show whether
+    the candidate's compiler agrees. Unreadable times keep the comparison.
+    """
+
+    legacy_issued = _parse_iso_timestamp(str(legacy.get("issuedAt") or ""))
+    candidate_issued = _parse_iso_timestamp(str(candidate.get("issuedAt") or ""))
+    return legacy_issued is not None and candidate_issued is not None and legacy_issued < candidate_issued
+
+
+def policy_bundle_candidate_decisions(
+    store: GuardStore,
+    policy_bundle: dict[str, object],
+    *,
+    is_v2: bool,
+    device_id: str,
+    device_name: str,
+    canonical_enforcement: bool,
+    existing_policy_bundle: object,
+    now: str,
+) -> tuple[list[PolicyDecision], str | None, str | None]:
+    """The decisions a verified bundle activates, or the reason it is refused.
+
+    Both sync routes answer this the same way: the CLI's ``sync_receipts`` and
+    the daemon's headless policy sync. A v2 bundle compiles to canonical
+    decisions and is then held against the legacy shadow, so a device that
+    cannot prove the two agree keeps the policy it already has. A bundle that
+    fails to compile is reported here rather than raised at the caller, which
+    on the daemon route would otherwise drop the request without a response.
+    """
+
+    try:
+        if not is_v2:
+            return (
+                _build_policy_bundle_decisions(
+                    policy_bundle,
+                    device_id=device_id,
+                    device_name=device_name,
+                ),
+                None,
+                None,
+            )
+        canonical_decisions = _build_canonical_policy_bundle_decisions(
+            policy_bundle,
+            device_id=device_id,
+            device_name=device_name,
+        )
+    except PolicyCompilationError as error:
+        rule_id = None if error.code in CANONICAL_COMPILE_DOCUMENT_CODES else error.rule_id
+        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", rule_id
+    except PolicyBundleNativeError as error:
+        return [], native_rejection_code(error), None
+
+    legacy_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
+    if not isinstance(legacy_payload, dict):
+        legacy_payload = (
+            existing_policy_bundle
+            if isinstance(existing_policy_bundle, dict)
+            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
+            else None
+        )
+    if isinstance(legacy_payload, dict) and _legacy_shadow_predates_candidate(legacy_payload, policy_bundle):
+        legacy_payload = None
+    try:
+        legacy_decisions = (
+            _build_policy_bundle_decisions(
+                legacy_payload,
+                device_id=device_id,
+                device_name=device_name,
+            )
+            if isinstance(legacy_payload, dict)
+            else []
+        )
+    except PolicyCompilationError:
+        # The stored legacy bundle is the shadow, not the candidate. One that no
+        # longer compiles cannot show agreement, so it stands in as unavailable
+        # rather than refusing a candidate that is itself well formed.
+        legacy_decisions = []
+    except PolicyBundleNativeError as error:
+        return [], native_rejection_code(error), None
+
+    native_shadow_unavailable = False
+    try:
+        # An Evaluate bundle compiles to no rows on purpose, so an older
+        # bundle's rows say nothing about its drift.
+        mismatch_reasons = (
+            ()
+            if _policy_bundle_is_evaluating(policy_bundle)
+            else _authority.policy_shadow_mismatch(
+                legacy_decisions,
+                canonical_decisions,
+            )
+        )
+    except NativeRunnerAuthorityError:
+        # Rust owns the shadow comparison. Without its verdict the candidate
+        # cannot be proven equivalent, so treat it as a blocking mismatch: keep
+        # the existing policy and never activate the new bundle.
+        native_shadow_unavailable = True
+        mismatch_reasons = ("native_shadow_unavailable",)
+    blocking_mismatch_reasons = tuple(reason for reason in mismatch_reasons if reason != "legacy_unavailable")
+    if mismatch_reasons:
+        store.add_event(
+            "policy_bundle/shadow_mismatch",
+            {
+                "canonicalRows": len(canonical_decisions),
+                "legacyRows": len(legacy_decisions),
+                "reasonCodes": list(mismatch_reasons),
+                "status": "mismatch",
+            },
+            now,
+        )
+    if native_shadow_unavailable:
+        return canonical_decisions, "native_shadow_unavailable", None
+    if canonical_enforcement and blocking_mismatch_reasons:
+        return canonical_decisions, "canonical_shadow_mismatch", None
+    return canonical_decisions, None, None
 
 
 def sync_receipts(
@@ -651,7 +765,6 @@ def sync_receipts(
     # response, but they are not covered by the pinned policy-bundle signature
     # and therefore cannot be persisted or materialized as local authority.
     # Only decisions and exceptions inside a validated signed bundle are used.
-    deduped_exceptions: list[dict[str, object]] = []
     advisories_stored = 0
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
@@ -738,89 +851,24 @@ def sync_receipts(
         if managed_controls_error is not None:
             policy_bundle_rejection_reason = managed_controls_error
         if validated_policy_bundle is not None:
-            try:
-                if validated_bundle_is_v2:
-                    canonical_decisions = _build_canonical_policy_bundle_decisions(
-                        validated_policy_bundle,
-                        device_id=device_id,
-                        device_name=device_name,
-                    )
-                    legacy_payload = store.get_sync_payload("policy_bundle_legacy_last_good")
-                    if not isinstance(legacy_payload, dict):
-                        legacy_payload = (
-                            existing_policy_bundle
-                            if isinstance(existing_policy_bundle, dict)
-                            and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
-                            else None
-                        )
-                    legacy_decisions = (
-                        _build_policy_bundle_decisions(
-                            legacy_payload,
-                            device_id=device_id,
-                            device_name=device_name,
-                        )
-                        if isinstance(legacy_payload, dict)
-                        else []
-                    )
-                    native_shadow_unavailable = False
-                    try:
-                        # An Evaluate bundle compiles to no rows on purpose, so
-                        # an older bundle's rows say nothing about its drift.
-                        mismatch_reasons = (
-                            ()
-                            if _policy_bundle_is_evaluating(validated_policy_bundle)
-                            else _authority.policy_shadow_mismatch(
-                                legacy_decisions,
-                                canonical_decisions,
-                            )
-                        )
-                    except NativeRunnerAuthorityError:
-                        # Rust owns the shadow comparison. Without its verdict
-                        # the candidate cannot be proven equivalent, so treat it
-                        # as a blocking mismatch: keep the existing policy and
-                        # never activate the new bundle.
-                        native_shadow_unavailable = True
-                        mismatch_reasons = ("native_shadow_unavailable",)
-                    blocking_mismatch_reasons = tuple(
-                        reason for reason in mismatch_reasons if reason != "legacy_unavailable"
-                    )
-                    candidate_policy_decisions = (
-                        canonical_decisions
-                        if canonical_enforcement and not blocking_mismatch_reasons
-                        else legacy_decisions
-                    )
-                    if mismatch_reasons:
-                        store.add_event(
-                            "policy_bundle/shadow_mismatch",
-                            {
-                                "canonicalRows": len(canonical_decisions),
-                                "legacyRows": len(legacy_decisions),
-                                "reasonCodes": list(mismatch_reasons),
-                                "status": "mismatch",
-                            },
-                            now,
-                        )
-                    if native_shadow_unavailable:
-                        validated_policy_bundle = None
-                        policy_bundle_rejection_reason = "native_shadow_unavailable"
-                    elif canonical_enforcement and blocking_mismatch_reasons:
-                        validated_policy_bundle = None
-                        policy_bundle_rejection_reason = "canonical_shadow_mismatch"
-                else:
-                    candidate_policy_decisions = _build_policy_bundle_decisions(
-                        validated_policy_bundle,
-                        device_id=device_id,
-                        device_name=device_name,
-                    )
-            except PolicyCompilationError as error:
+            (
+                candidate_policy_decisions,
+                candidate_rejection_reason,
+                candidate_rejection_rule_id,
+            ) = policy_bundle_candidate_decisions(
+                store,
+                validated_policy_bundle,
+                is_v2=validated_bundle_is_v2,
+                device_id=device_id,
+                device_name=device_name,
+                canonical_enforcement=canonical_enforcement,
+                existing_policy_bundle=existing_policy_bundle,
+                now=now,
+            )
+            if candidate_rejection_reason is not None:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}"
-                if error.code not in CANONICAL_COMPILE_DOCUMENT_CODES:
-                    policy_bundle_rejection_rule_id = error.rule_id
-            except PolicyBundleNativeError as error:
-                candidate_policy_decisions = []
-                validated_policy_bundle = None
-                policy_bundle_rejection_reason = native_rejection_code(error)
+                policy_bundle_rejection_reason = candidate_rejection_reason
+                policy_bundle_rejection_rule_id = candidate_rejection_rule_id
         if validated_policy_bundle is not None:
             effective_policy_bundle = validated_policy_bundle
             update_last_good = True
@@ -955,7 +1003,6 @@ def sync_receipts(
                     effective_policy_bundle,
                     device_id=device_id,
                     device_name=device_name,
-                    canonical_enforcement=canonical_enforcement,
                 )
             )
             policy_bundle_ack = effective_policy_bundle_acknowledgement(
@@ -985,14 +1032,14 @@ def sync_receipts(
             policy_bundle_ack = {}
         if effective_policy_bundle is not None:
             remote_decisions.update(selected_policy_decisions)
-            cloud_exception_items = _policy_bundle_cloud_exception_items(
-                store,
-                device_id=device_id,
-                sync_exceptions=[],
-                policy_bundle=effective_policy_bundle,
-                policy_bundle_ack=policy_bundle_ack,
-            )
             try:
+                cloud_exception_items = _policy_bundle_cloud_exception_items(
+                    store,
+                    device_id=device_id,
+                    sync_exceptions=[],
+                    policy_bundle=effective_policy_bundle,
+                    policy_bundle_ack=policy_bundle_ack,
+                )
                 custom_extension_continuity = apply_custom_extension_continuity_from_sync(
                     store,
                     effective_policy_bundle,
@@ -1073,6 +1120,8 @@ def sync_receipts(
             except ApprovalGateError as error:
                 cloud_exception_items = []
                 remote_policy_sync_blocked = True
+                activation_last_error = _policy_bundle_rejection_payload(error.code)
+                persist_activation_rejection(store, activation_last_error, now)
                 store.add_event(
                     "approval_gate/remote_policy_sync_blocked",
                     {
@@ -1111,7 +1160,6 @@ def sync_receipts(
         store=store,
         advisories=deduped_advisories,
         alert_preferences=alert_preferences_payload,
-        exceptions=deduped_exceptions,
         now=now,
     )
     try:
@@ -1126,7 +1174,7 @@ def sync_receipts(
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
-        "exceptions_stored": len(deduped_exceptions),
+        "exceptions_stored": 0,
         "cloud_exceptions_stored": len(cloud_exception_items),
         "remote_policies_stored": remote_policies_stored,
         "pain_signals_uploaded": pain_signals_uploaded,
@@ -1178,32 +1226,8 @@ def sync_receipts(
 
 
 def _guard_cloud_http_error_details(error: urllib.error.HTTPError) -> tuple[str, bool]:
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    retryable = error.code in {429, 503, 524}
-    payload: object = None
-    if raw_body:
-        try:
-            payload = json.loads(raw_body)
-        except json.JSONDecodeError:
-            payload = None
-    message: str | None = None
-    if isinstance(payload, dict):
-        message = _read_guard_cloud_error_message(payload)
-        guard_error = payload.get("guardError")
-        if isinstance(guard_error, dict):
-            if guard_error.get("retryable") is True:
-                retryable = True
-            guard_code = guard_error.get("code")
-            unavailable_codes = {"guard_unavailable", "guard_cloud_unavailable"}
-            if isinstance(guard_code, str) and guard_code.strip().lower() in unavailable_codes:
-                retryable = True
-    if message is None:
-        normalized_body = raw_body.strip()
-        message = normalized_body or f"HTTP Error {error.code}: {error.reason}"
-    return message, retryable
+    answer = _cloud_http_error(error)
+    return answer.message, answer.retryable
 
 
 def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[str, object]:
@@ -1239,25 +1263,23 @@ def _verified_supply_chain_bundle_response(
     trusted_keys: tuple[SupplyChainVerificationKey, ...],
     cached_bundle_version: str | None,
     store: GuardStore,
-) -> SupplyChainBundleResponse:
-    """Read one bundle response and have the resident verify it.
+) -> VerifiedSupplyChainBundle:
+    """Have the resident verify one bundle response.
 
-    Reading is transport. The resident recomputes the canonical payload over
+    The resident reads the response and recomputes the canonical payload over
     ``payload`` itself and owns every verdict about it: the payload hash, the
     keyring the signing key anchors to, that key's rotation state, freshness,
     rollback and the signature. A resident that cannot answer raises, so an
     unverified bundle is never treated as verified.
     """
 
-    response = load_supply_chain_bundle_response(payload)
-    native_verify_supply_chain_bundle_response(
+    return native_verify_supply_chain_bundle_response(
         payload,
         trusted_keys=[key.to_dict() for key in trusted_keys] or None,
         cached_bundle_version=cached_bundle_version,
         guard_home=store.guard_home,
         store=store,
     )
-    return response
 
 
 def _sync_supply_chain_bundle_incremental(
@@ -1339,7 +1361,7 @@ def _sync_supply_chain_bundle_incremental(
             refreshed_partitions += 1
         next_partition_cache[cache_key] = {
             "payload_hash": payload_hash,
-            "response": response.to_dict(),
+            "response": response.response,
         }
     if not next_partition_cache:
         return None
@@ -1441,7 +1463,8 @@ def sync_supply_chain_bundle(
         except SupplyChainBundleError as error:
             raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
     synced_at = _now()
-    store.cache_supply_chain_bundle(workspace_id, response.to_dict(), synced_at)
+    store.cache_supply_chain_bundle(workspace_id, response.response, synced_at)
+    verified = response.summary
     store.set_sync_payload(
         "supply_chain_bundle_keyring",
         {
@@ -1453,10 +1476,10 @@ def sync_supply_chain_bundle(
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
         {
-            "bundle_version": response.bundle.bundle_version,
-            "key_id": response.bundle.key_id,
-            "policy_hash": response.bundle.policy_hash,
-            "tier": response.bundle.tier,
+            "bundle_version": verified.get("bundle_version"),
+            "key_id": verified.get("key_id"),
+            "policy_hash": verified.get("policy_hash"),
+            "tier": verified.get("tier"),
             "workspace_id": workspace_id,
         },
         synced_at,
@@ -1470,15 +1493,15 @@ def sync_supply_chain_bundle(
                 synced_at,
             )
     summary: dict[str, object] = {
-        "advisory_count": len(response.bundle.advisories),
-        "bundle_version": response.bundle.bundle_version,
+        "advisory_count": verified.get("advisory_count"),
+        "bundle_version": verified.get("bundle_version"),
         "ecosystem_support": list(ecosystem_support_matrix()),
-        "feed_snapshot_hash": response.bundle.feed_snapshot_hash,
-        "package_count": len(response.bundle.packages),
-        "policy_hash": response.bundle.policy_hash,
+        "feed_snapshot_hash": verified.get("feed_snapshot_hash"),
+        "package_count": verified.get("package_count"),
+        "policy_hash": verified.get("policy_hash"),
         "status": "synced",
         "synced_at": synced_at,
-        "tier": response.bundle.tier,
+        "tier": verified.get("tier"),
         "workspace_id": workspace_id,
     }
     if partition_sync is not None:
@@ -1871,6 +1894,10 @@ def _local_guard_runtime_session(
         "local-daemon",
         FLEET_POSTURE_CAPABILITY,
         POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY,
+        # Exact command rules reach the hook through canonical decisions,
+        # which every device activates from a verified v2 bundle.
+        POLICY_EXACT_COMMAND_RULES_CAPABILITY,
+        POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY,
     ]
     session: dict[str, object] = {
         "harness": "hol-guard",
@@ -1891,9 +1918,6 @@ def _local_guard_runtime_session(
         workspace_id=workspace_id,
     ):
         session["canonical_policy_enforcement"] = True
-        # Exact command rules reach the hook only through canonical decisions,
-        # so only a device that activates them can claim to enforce them.
-        capabilities.append(POLICY_EXACT_COMMAND_RULES_CAPABILITY)
     return session
 
 
@@ -2036,37 +2060,18 @@ def _policy_bundle_cloud_exception_items(
     if bundle_ack is None:
         bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
         bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
-    items = []
     # ``sync_exceptions`` is retained as an explicit compatibility boundary so
     # callers can demonstrate that legacy unsigned siblings were considered
     # and rejected. It must never contribute enforcement authority.
     del sync_exceptions
-    if isinstance(policy_bundle, dict):
-        items.extend(
-            build_cloud_exceptions_from_policy_bundle(
-                policy_bundle,
-                device_id=resolved_device_id,
-                policy_bundle_ack=bundle_ack,
-            )
-        )
-    serialized = [cloud_exception_to_dict(item) for item in dedupe_cloud_exceptions(items)]
-    return serialized
-
-
-def _base64url_encode(data: bytes) -> str:
-    return urlsafe_b64encode(data).decode("ascii").rstrip("=")
-
-
-def _encode_jwt_segment(payload: Mapping[str, object]) -> str:
-    return _base64url_encode(json.dumps(dict(payload), separators=(",", ":"), sort_keys=True).encode("utf-8"))
-
-
-def _dpop_access_token_confirmation_claim(access_token: str) -> str:
-    # RFC 9449 requires the DPoP `ath` claim to be the SHA-256 hash of the access token.
-    # codeql[py/weak-sensitive-data-hashing]
-    digest = hashes.Hash(hashes.SHA256())
-    digest.update(access_token.encode("ascii"))
-    return _base64url_encode(digest.finalize())
+    if not isinstance(policy_bundle, dict):
+        return []
+    try:
+        return _sync.cloud_exceptions(policy_bundle, device_id=resolved_device_id, policy_bundle_ack=bundle_ack)
+    except NativeRunnerAuthorityError as error:
+        # Without the runtime's listing the bundle cannot be activated with
+        # the exceptions it grants: an outage, not a verdict on the bundle.
+        raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION) from error
 
 
 def _sign_guard_dpop_proof(
@@ -2078,40 +2083,26 @@ def _sign_guard_dpop_proof(
     nonce: str | None = None,
     now: datetime | None = None,
 ) -> str:
-    issued_at = int((now or datetime.now(timezone.utc)).timestamp())
-    header = {
-        "alg": dpop_key_material.algorithm,
-        "jwk": dpop_key_material.public_jwk,
-        "typ": "dpop+jwt",
-    }
-    claims: dict[str, object] = {
-        "htu": request_url,
-        "htm": method.upper(),
-        "iat": issued_at,
-        "jti": str(uuid4()),
-    }
-    if isinstance(access_token, str) and access_token:
-        claims["ath"] = _dpop_access_token_confirmation_claim(access_token)
-    if isinstance(nonce, str):
-        normalized_nonce = nonce.strip()
-        if normalized_nonce:
-            claims["nonce"] = normalized_nonce
-    signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
     try:
-        private_key = serialization.load_pem_private_key(
-            dpop_key_material.private_key_pem.encode("ascii"),
-            password=None,
+        return signed_dpop_proof(
+            private_key_pem=dpop_key_material.private_key_pem,
+            algorithm=dpop_key_material.algorithm,
+            public_jwk=dpop_key_material.public_jwk,
+            request_url=request_url,
+            method=method,
+            issued_at=int((now or datetime.now(timezone.utc)).timestamp()),
+            access_token=access_token if isinstance(access_token, str) else None,
+            nonce=nonce if isinstance(nonce, str) else None,
         )
-    except (TypeError, ValueError) as exc:
+    except PolicyBundleNativeUnavailableError as exc:
+        raise GuardSyncNotAvailableError(
+            "Guard could not sign the Guard Cloud request. Try again shortly.",
+            retryable=True,
+        ) from exc
+    except PolicyBundleNativeError as exc:
         raise GuardSyncAuthorizationExpiredError(
             "Guard Cloud authorization key is invalid. Reconnect Guard Cloud."
         ) from exc
-    if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
-        raise RuntimeError("Guard DPoP key must be a P-256 (SECP256R1) EC private key.")
-    der_signature = private_key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
-    r_value, s_value = decode_dss_signature(der_signature)
-    jose_signature = _base64url_encode(r_value.to_bytes(32, byteorder="big") + s_value.to_bytes(32, byteorder="big"))
-    return f"{signing_input.decode('ascii')}.{jose_signature}"
 
 
 def _guard_http_header_value(response: object, header_name: str) -> str | None:
@@ -2395,6 +2386,8 @@ def _refresh_guard_oauth_access_token_once(
                 dpop_key_material=dpop_key_material,
                 nonce=dpop_nonce,
             )
+        except GuardSyncNotAvailableError:
+            raise
         except (RuntimeError, TypeError, ValueError) as error:
             raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
         request = urllib.request.Request(
@@ -3293,136 +3286,67 @@ def _refresh_guard_sync_request(
     )
 
 
-def _read_guard_cloud_error_message(payload: dict[str, object]) -> str | None:
-    guard_error = payload.get("guardError")
-    if isinstance(guard_error, dict):
-        for key in ("msg", "message"):
-            nested = guard_error.get(key)
-            if isinstance(nested, str) and nested.strip():
-                return nested.strip()
-    for key in ("err", "message", "error"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
+# Bounds the body shipped to the resident well inside its request cap; Guard
+# Cloud and Cloudflare error bodies are far smaller.
+_CLOUD_HTTP_ERROR_BODY_CHARS = 512 * 1024
+_CLOUD_HTTP_ERROR_HEADERS = ("cf-mitigated", "cf-ray", "server", "content-type")
+# The statuses the runtime itself treats as retryable (`RETRYABLE_STATUSES`).
+_CLOUD_HTTP_ERROR_RETRYABLE_STATUSES = frozenset({429, 503, 524})
 
 
-CLOUD_EDGE_BLOCK_REASON_PREFIX = "Guard Cloud is unreachable from this network"
+def _cloud_http_error(error: urllib.error.HTTPError) -> _sync.CloudHttpError:
+    """Read the error once and return how the resident reads it.
 
-
-def _cloud_edge_block_message(error: urllib.error.HTTPError, raw_body: str) -> str | None:
-    """Cloudflare's own block or challenge page instead of a Guard Cloud answer.
-
-    Mirrors ``cloud_edge_block_message`` in guard_sync_transport.rs. The page is HTML
-    a client cannot pass, so its raw text is no use as an error message.
+    The answer carries the sync message, the retryable flag, the 403
+    plan-restriction verdict and Cloudflare's edge-block message, so a caller
+    never drains the stream twice.
     """
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
     headers = error.headers
-    if headers is None:
-        return None
-    challenged = headers.get("cf-mitigated") is not None
-    from_cloudflare = headers.get("cf-ray") is not None or str(headers.get("server") or "").lower() == "cloudflare"
-    html = str(headers.get("content-type") or "").lower().startswith("text/html")
-    page = raw_body[: 64 * 1024]
-    challenge_page = "Just a moment..." in page or "challenge-platform" in page
-    block_page = "Attention Required! | Cloudflare" in page or "Sorry, you have been blocked" in page
-    if not challenged and not (from_cloudflare and html and (challenge_page or block_page)):
-        return None
-    action = "challenged" if challenged or challenge_page else "blocked"
-    ray = str(headers.get("cf-ray") or "").split("-", 1)[0]
-    if ray.isascii() and ray.isalnum():
-        ray_detail, ray_hint = f", Ray ID {ray}", "; the Guard Cloud operator can look up that Ray ID"
-    else:
-        ray_detail, ray_hint = "", ""
-    return (
-        f"{CLOUD_EDGE_BLOCK_REASON_PREFIX}: Cloudflare in front of Guard Cloud {action} the request "
-        f"(HTTP {error.code}{ray_detail}). This is not a sign-in problem, so reconnecting will not help{ray_hint}."
+    projected = (
+        None
+        if headers is None
+        else {name: str(value) for name in _CLOUD_HTTP_ERROR_HEADERS if (value := headers.get(name)) is not None}
     )
+    try:
+        return _sync.cloud_http_error(
+            status=error.code,
+            reason=str(error.reason),
+            headers=projected,
+            body=raw_body[:_CLOUD_HTTP_ERROR_BODY_CHARS],
+        )
+    except NativeRunnerAuthorityError:
+        # The HTTP error still has to reach the user when the runtime cannot
+        # answer, without a verdict the runtime never gave: the status alone
+        # decides a retry, and the status line stands in as the edge block so
+        # an unread 401 is reported as it came rather than as an expired sign-in.
+        status_line = f"HTTP Error {error.code}: {error.reason}"
+        retryable = error.code in _CLOUD_HTTP_ERROR_RETRYABLE_STATUSES
+        return _sync.CloudHttpError(status_line, retryable, status_line, False, status_line, status_line)
 
 
 def _cloud_edge_block_from_http_error(error: urllib.error.HTTPError) -> str | None:
-    """Read the body once and return the edge-block message, if Cloudflare answered."""
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    return _cloud_edge_block_message(error, raw_body)
+    """The edge-block message, if Cloudflare answered instead of Guard Cloud."""
+    return _cloud_http_error(error).edge_block
 
 
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    edge_block = _cloud_edge_block_message(error, raw_body)
-    if edge_block is not None:
-        return edge_block
-    try:
-        payload = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        message = _read_guard_cloud_error_message(payload)
-        if message is not None:
-            return message
-    normalized_body = raw_body.strip()
-    if normalized_body:
-        return normalized_body
-    return f"HTTP Error {error.code}: {error.reason}"
+    return _cloud_http_error(error).sync_message
 
 
 def _redact_sync_text(value: str) -> str:
     return redact_sensitive_text(value)
 
 
-_PLAN_403_KEYWORDS: frozenset[str] = frozenset(
-    {
-        "sync_not_available",
-        "plan_restriction",
-        "requires a pro",
-        "requires a team",
-        "upgrade your plan",
-        "upgrade to",
-        "subscription required",
-        "not included in your plan",
-        "guard sync requires",
-    }
-)
-
-
 def _check_plan_restriction_403(
     error: urllib.error.HTTPError,
 ) -> tuple[bool, str]:
-    """Read a 403 response body exactly once.
-
-    Returns (is_plan_restriction, error_message) so callers never
-    drain the stream more than once regardless of which branch they take.
-    Checks both machine-readable fields (syncEnabled, error, code) and
-    human-readable error messages for plan-restriction signals.
-    """
-    try:
-        raw_body = error.read().decode("utf-8", errors="replace")
-    except OSError:
-        raw_body = ""
-    try:
-        payload: object = json.loads(raw_body) if raw_body else None
-    except json.JSONDecodeError:
-        payload = None
-    edge_block = _cloud_edge_block_message(error, raw_body)
-    if edge_block is not None:
-        return False, edge_block
-    fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
-    if not isinstance(payload, dict):
-        return False, fallback
-    message = payload.get("error")
-    message_str = message.strip() if isinstance(message, str) and message.strip() else fallback
-    if payload.get("syncEnabled") is False:
-        return True, message_str
-    error_field = str(payload.get("error") or "").lower()
-    code_field = str(payload.get("code") or "").lower()
-    combined = f"{error_field} {code_field}"
-    if any(kw in combined for kw in _PLAN_403_KEYWORDS):
-        return True, message_str
-    return False, message_str
+    """Read a 403 response body exactly once; return (is_plan_restriction, error_message)."""
+    answer = _cloud_http_error(error)
+    return answer.plan_restricted, answer.plan_message
 
 
 def _sync_url_error_message(error: OSError) -> str:
@@ -4228,60 +4152,26 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
 
 def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
     device_id, device_name = _guard_device_metadata(store)
-    workspace = _optional_string(session.get("workspace")) or os.getcwd()
-    session_id = (
-        _optional_string(session.get("session_id") or session.get("sessionId"))
-        or hashlib.sha256(f"{device_id}:{workspace}".encode()).hexdigest()[:24]
+    # The working directory only stands in for a missing workspace; a process
+    # whose directory was removed still syncs a session that names its own.
+    workspace = session.get("workspace")
+    payload = _sync.runtime_session_payload(
+        session,
+        device_id=device_id,
+        device_name=device_name,
+        cwd=workspace if isinstance(workspace, str) and workspace.strip() else os.getcwd(),
+        now=_now(),
+        version=__version__,
     )
-    created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
-    updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
-    capabilities = list(_string_items(session.get("capabilities")))
-    policy_document_versions = list(
-        _string_items(session.get("policy_document_versions") or session.get("policyDocumentVersions"))
-    )
-    policy_bundle_versions = list(
-        _string_items(session.get("policy_bundle_versions") or session.get("policyBundleVersions"))
-    )
-    policy_contracts = list(_string_items(session.get("policy_contracts") or session.get("policyContracts")))
-    yaml_import = session.get("yaml_import") is True or session.get("yamlImport") is True
-    canonical_policy_enforcement = (
-        session.get("canonical_policy_enforcement") is True or session.get("canonicalPolicyEnforcement") is True
-    )
-    package_manager_coverage = _cloud_package_manager_coverage(
+    updated_at = str(payload["updatedAt"])
+    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
+    payload["localIdentity"] = local_identity
+    payload["localIdentitySource"] = _cloud_local_identity_source_payload(local_identity)
+    payload["packageManagerCoverage"] = _cloud_package_manager_coverage(
         store,
-        workspace=workspace,
+        workspace=str(payload["workspace"]),
         generated_at=updated_at,
     )
-    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
-    payload: dict[str, object] = {
-        "sessionId": session_id,
-        "harness": _optional_string(session.get("harness")) or "hol-guard",
-        "surface": _optional_string(session.get("surface")) or "cli",
-        "status": _optional_string(session.get("status")) or "active",
-        "clientName": _optional_string(session.get("client_name") or session.get("clientName")) or "hol-guard",
-        "clientTitle": _optional_string(session.get("client_title") or session.get("clientTitle"))
-        or f"HOL Guard on {device_name}",
-        "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
-        "deviceId": device_id,
-        "deviceName": device_name,
-        "localIdentity": local_identity,
-        "localIdentitySource": _cloud_local_identity_source_payload(local_identity),
-        "packageManagerCoverage": package_manager_coverage,
-        "workspace": workspace,
-        "capabilities": capabilities,
-        "operations": [],
-        "createdAt": created_at,
-        "updatedAt": updated_at,
-    }
-    if policy_document_versions:
-        payload["policyDocumentVersions"] = policy_document_versions
-    if policy_bundle_versions:
-        payload["policyBundleVersions"] = policy_bundle_versions
-    if policy_contracts:
-        payload["policyContracts"] = policy_contracts
-    payload["yamlImport"] = yaml_import
-    if canonical_policy_enforcement:
-        payload["canonicalPolicyEnforcement"] = True
     payload.update(_managed_controls_runtime_sync_posture(store, generated_at=updated_at))
     return payload
 
@@ -4485,52 +4375,15 @@ def _cloud_package_manager_coverage(
         ),
         generated_at=generated_at,
     )
-    synced_at = None
-    next_refresh_at = None
-    synced_timestamp = None
-    for source_name, summary in (
-        ("sync", store.get_sync_payload("sync_summary")),
-        ("runtime", store.get_sync_payload("runtime_session_summary")),
-        ("bundle", store.get_sync_payload("supply_chain_bundle_summary")),
-    ):
-        if not isinstance(summary, dict):
-            continue
-        candidate_synced_at = _optional_string(
-            summary.get("synced_at")
-            or summary.get("syncedAt")
-            or summary.get("runtime_session_synced_at")
-            or summary.get("runtimeSessionSyncedAt")
-            or summary.get("local_guard_online_at"),
-        )
-        candidate_timestamp = _parse_iso_timestamp(candidate_synced_at) if candidate_synced_at is not None else None
-        if candidate_timestamp is None:
-            continue
-        if synced_timestamp is not None and candidate_timestamp <= synced_timestamp:
-            continue
-        synced_at = candidate_synced_at
-        synced_timestamp = candidate_timestamp
-        next_refresh_at = (
-            _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
-            if source_name == "bundle"
-            else None
-        )
-    reference_timestamp = _parse_iso_timestamp(generated_at) or datetime.now(timezone.utc)
-    stale_status = "unknown"
-    if synced_at is not None:
-        stale_status = "fresh"
-    next_refresh_timestamp = _parse_iso_timestamp(next_refresh_at) if next_refresh_at is not None else None
-    if next_refresh_timestamp is None and synced_at is not None:
-        next_refresh_timestamp = _parse_iso_timestamp(synced_at)
-        if next_refresh_timestamp is not None:
-            next_refresh_timestamp += timedelta(minutes=15)
-            next_refresh_at = next_refresh_timestamp.isoformat()
-    if next_refresh_timestamp is not None and next_refresh_timestamp <= reference_timestamp:
-        stale_status = "stale"
-    coverage["staleIntel"] = {
-        "status": stale_status,
-        "lastSyncedAt": synced_at,
-        "nextRefreshAt": next_refresh_at,
-    }
+    coverage["staleIntel"] = _sync.stale_intel(
+        (
+            store.get_sync_payload("sync_summary"),
+            store.get_sync_payload("runtime_session_summary"),
+            store.get_sync_payload("supply_chain_bundle_summary"),
+        ),
+        generated_at=generated_at,
+        now=_now(),
+    )
     return coverage
 
 
@@ -4544,7 +4397,6 @@ def _record_synced_alert_events(
     store: GuardStore,
     advisories: Sequence[dict[str, object]],
     alert_preferences: dict[str, object] | None,
-    exceptions: Sequence[dict[str, object]],
     now: str,
 ) -> None:
     advisories_enabled = not (
@@ -4565,31 +4417,6 @@ def _record_synced_alert_events(
                 },
                 now,
             )
-    current_time = _parse_iso_timestamp(now)
-    for item in exceptions:
-        artifact_id = _optional_string(item.get("artifactId"))
-        expires_at = _optional_string(item.get("expiresAt"))
-        if artifact_id is None or expires_at is None:
-            continue
-        expiry_time = _parse_iso_timestamp(expires_at)
-        if expiry_time is None or current_time is None:
-            continue
-        if (
-            expiry_time <= current_time
-            or (expiry_time - current_time).total_seconds() > _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS * 60 * 60
-        ):
-            continue
-        store.add_event(
-            "exception_expiring",
-            {
-                "artifact_id": artifact_id,
-                "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
-                "expires_at": expires_at,
-                "reason": _optional_string(item.get("reason")),
-                "owner": _optional_string(item.get("owner")),
-            },
-            now,
-        )
 
 
 def _sync_timestamp(payload: dict[str, object]) -> str:

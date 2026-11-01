@@ -6,7 +6,8 @@ use std::path::{Component, Path, PathBuf};
 use winapi::shared::minwindef::{DWORD, FALSE, FILETIME};
 use winapi::shared::ntdef::HANDLE;
 use winapi::um::fileapi::{
-    GetFileInformationByHandle, GetFileType, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_TAG_INFO,
+    GetFileInformationByHandle, GetFileType, GetFinalPathNameByHandleW, BY_HANDLE_FILE_INFORMATION,
+    FILE_ATTRIBUTE_TAG_INFO,
 };
 use winapi::um::minwinbase::{FileAttributeTagInfo, FileIdInfo};
 use winapi::um::winbase::{
@@ -234,6 +235,35 @@ pub fn open_skill_directory(path: &Path) -> io::Result<std::fs::File> {
 /// Return the identity of the file behind an open handle.
 pub fn handle_file_id(file: &std::fs::File) -> io::Result<FileId> {
     Ok(handle_info(file, true)?.id)
+}
+
+/// The normalized path the open handle refers to, spelled as
+/// `std::fs::canonicalize` spells it (with the `\\?\` prefix).
+///
+/// This is where the handle points now, not the path it was opened by, so a
+/// link swapped in or out of an ancestor after the open cannot change it.
+pub fn handle_final_path(file: &std::fs::File) -> io::Result<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    // FILE_NAME_NORMALIZED | VOLUME_NAME_DOS.
+    const FLAGS: DWORD = 0;
+    let raw = file.as_raw_handle() as HANDLE;
+    let mut buffer = vec![0u16; 512];
+    loop {
+        // SAFETY: The buffer holds `buffer.len()` writable UTF-16 units and
+        // `raw` stays open for the call.
+        let length = unsafe {
+            GetFinalPathNameByHandleW(raw, buffer.as_mut_ptr(), buffer.len() as DWORD, FLAGS)
+        } as usize;
+        if length == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if length < buffer.len() {
+            return Ok(PathBuf::from(OsString::from_wide(&buffer[..length])));
+        }
+        // A too-small buffer reports the size it needs, terminator included.
+        buffer.resize(length, 0);
+    }
 }
 
 /// Open an existing single-link regular file for reading by walking its

@@ -26,8 +26,8 @@ from typing import TypeGuard
 
 import codex_plugin_scanner
 from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
-from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_rewrite
 from tests.containment_resident import native_containment_sink
+from tests.containment_rewrite_client import native_containment_rewrite
 
 _MIN_VERSION = (0, 131, 0)
 _MAX_ANCESTORS = 6

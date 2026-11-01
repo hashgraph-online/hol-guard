@@ -194,6 +194,12 @@ def test_edge_decoder_reads_whether_the_edge_recorded_its_receipt(recorded: obje
     assert _decode_edge(edge) == (edge if accepted else None)
 
 
+@pytest.mark.parametrize(("recorded", "accepted"), [(True, True), (False, True), ("yes", False), (1, False)])
+def test_edge_decoder_reads_whether_the_edge_recorded_its_activity(recorded: object, accepted: bool) -> None:
+    edge = {**_edge_result(), "activity_recorded": recorded}
+    assert _decode_edge(edge) == (edge if accepted else None)
+
+
 @pytest.mark.parametrize(("hint", "accepted"), [(True, True), (False, True), ("no", False), (0, False)])
 def test_edge_decoder_reads_whether_a_saved_block_may_name_the_command(hint: object, accepted: bool) -> None:
     edge = {**_edge_result(), "exact_command_block": hint}
@@ -536,19 +542,9 @@ def test_a_review_evidence_request_needs_a_resident_that_proves_it(
     assert rules["exact_action_control_digest"] == "d" * 64
 
 
-@pytest.mark.parametrize(
-    ("feature", "option"),
-    [("edge-local-cli-observation-v1", "observe_local_cli"), ("edge-receipt-record-v1", "record_receipt")],
-)
-@pytest.mark.parametrize(("advertised", "asked"), [(True, True), (True, False), (False, True)])
-def test_the_envelope_asks_for_an_edge_option_only_from_a_resident_that_supports_it(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    feature: str,
-    option: str,
-    advertised: bool,
-    asked: bool,
-) -> None:
+def _advertise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *features: str) -> dict[str, object]:
+    """Answer from a resident advertising `features`; returns what it was sent."""
+
     runtime = tmp_path / "hol-guard-runtime"
     runtime.write_bytes(b"runtime")
     identity = NativeRuntimeIdentity(
@@ -570,7 +566,7 @@ def test_the_envelope_asks_for_an_edge_option_only_from_a_resident_that_supports
             "native-resident-client-v1",
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
-            *([feature] if advertised else []),
+            *features,
         ),
     )
     monkeypatch.setattr(
@@ -591,6 +587,12 @@ def test_the_envelope_asks_for_an_edge_option_only_from_a_resident_that_supports
         return json.dumps(_edge_result(), separators=(",", ":")).encode()
 
     monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    return captured
+
+
+def _sent_envelope(
+    tmp_path: Path, captured: dict[str, object], *, observe_local_cli: bool = False, record_receipt: bool = False
+) -> dict[str, object]:
     assert (
         review_raw_hook_native(
             payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
@@ -603,14 +605,43 @@ def test_the_envelope_asks_for_an_edge_option_only_from_a_resident_that_supports
             observe_mode=False,
             deadline=None,
             policy_snapshot={"generation": 1},
-            **{option: asked},
+            observe_local_cli=observe_local_cli,
+            record_receipt=record_receipt,
         )
         == _edge_result()
     )
     encoded = captured["payload"]
     assert isinstance(encoded, bytes)
-    # An older resident would refuse the field, so it is sent only when advertised.
-    assert json.loads(encoded).get(option) is ((advertised and asked) or None)
+    return json.loads(encoded)
+
+
+@pytest.mark.parametrize("option", ["observe_local_cli", "record_receipt"])
+@pytest.mark.parametrize("asked", [True, False])
+def test_the_envelope_asks_for_an_edge_option_only_when_the_caller_does(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    option: str,
+    asked: bool,
+) -> None:
+    captured = _advertise(tmp_path, monkeypatch)
+    sent = _sent_envelope(tmp_path, captured, **{option: asked})
+    assert sent.get(option) is (asked or None)
+
+
+@pytest.mark.parametrize("option", ["record_activity", "record_pre_tool_activity"])
+@pytest.mark.parametrize("record_receipt", [True, False])
+def test_the_envelope_asks_the_edge_for_the_activity_only_with_its_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    option: str,
+    record_receipt: bool,
+) -> None:
+    asked = record_receipt
+    captured = _advertise(tmp_path, monkeypatch)
+    sent = _sent_envelope(tmp_path, captured, record_receipt=record_receipt)
+    # The activity rides behind the receipt the resident queues, so a daemon
+    # that records the receipt itself also records the activity.
+    assert sent.get(option) is (asked or None)
 
 
 @pytest.mark.parametrize(

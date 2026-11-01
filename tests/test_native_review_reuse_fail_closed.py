@@ -13,17 +13,15 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_guard_store, native_store_policy, store_policy
-from codex_plugin_scanner.guard.daemon.hook_native_review_binding import (
-    native_review_claimed_allow,
-    native_review_settle,
-)
+from codex_plugin_scanner.guard.daemon.hook_native_review_binding import native_review_settle
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.store import GuardStore
 
 _IDENTITY = f"native-review-v4:{'a' * 64}:deny:review:review:native_sensitive_access_review"
 _ARTIFACT = "claude-code:native-pretool:Bash"
 
 
-def _resolved_allow(store: GuardStore, workspace: str) -> None:
+def _resolved_allow(store: GuardStore, workspace: str, *, action: str = "allow") -> None:
     now = datetime.now(timezone.utc).isoformat()
     with store._connect() as connection:
         connection.execute(
@@ -34,8 +32,8 @@ def _resolved_allow(store: GuardStore, workspace: str) -> None:
                 resolution_scope, created_at, resolved_at)
                values ('r1', 'claude-code', ?, 'Bash', 'native_review', ?, 'require-reapproval', 'once',
                        '[]', 'workspace', '/cfg', ?, 'cat .env', 'cmd', 'http://127.0.0.1/a', 'resolved',
-                       'allow', 'once', ?, ?)""",
-            (_ARTIFACT, _IDENTITY, workspace, now, now),
+                       ?, 'once', ?, ?)""",
+            (_ARTIFACT, _IDENTITY, workspace, action, now, now),
         )
 
 
@@ -92,16 +90,28 @@ def test_settle_spends_an_approve_once_only_when_asked(tmp_path: Path) -> None:
     assert _effects(store) == 1
 
 
-def _claimed(store: GuardStore, tmp_path: Path, *, claim: bool) -> bool:
-    return native_review_claimed_allow(
-        store,
-        harness="claude-code",
-        artifact_id=_ARTIFACT,
-        workspace=tmp_path,
-        identity=_IDENTITY,
-        claimed_saved_allow_hash=_IDENTITY,
-        claimed_approval_request_id=None,
-        claim_saved_approval=claim,
+def _claimed(
+    store: GuardStore,
+    tmp_path: Path,
+    *,
+    claim: bool,
+    claimed_saved_allow_hash: str = _IDENTITY,
+    claimed_approval_request_id: str | None = None,
+) -> bool:
+    return (
+        native_review_settle(
+            store,
+            harness="claude-code",
+            artifact_id=_ARTIFACT,
+            tool_name="Bash",
+            launch_target="cat .env",
+            workspace=tmp_path,
+            identity=_IDENTITY,
+            spend=claim,
+            claimed_saved_allow_hash=claimed_saved_allow_hash,
+            claimed_approval_request_id=claimed_approval_request_id,
+        )
+        == "allowed"
     )
 
 
@@ -141,7 +151,7 @@ def test_claimed_allow_denies_when_the_resident_gives_no_answer(
     for claim in (False, True):
         calls.clear()
         assert _claimed(store, tmp_path, claim=claim) is False
-        assert calls == ["settle_claimed_native_allow"]
+        assert calls == ["settle_claimed_native_review"]
 
 
 def test_claimed_allow_provisions_the_resident_verifier_before_settling(
@@ -157,14 +167,82 @@ def test_claimed_allow_provisions_the_resident_verifier_before_settling(
 
     def settle(method: str, _args: object) -> object:
         steps.append(method)
-        return True
+        return "allowed"
 
     monkeypatch.setattr(store, "_native_store_call", settle)
 
     # A resident that restarted without its verifier is served again from the
     # keyring key the settle already read, as the policy lookup does.
     assert _claimed(store, tmp_path, claim=False) is True
-    assert steps == [key, "settle_claimed_native_allow"]
+    assert steps == [key, "settle_claimed_native_review"]
+
+
+def test_a_mismatched_verifier_leaves_the_block_check_and_the_spend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    def mismatched(_key: object = None) -> None:
+        raise NativePolicySnapshotError("native_policy_verifier_key_mismatch")
+
+    sent: list[dict[str, object]] = []
+
+    def settle(method: str, args: dict[str, object]) -> object:
+        sent.append({"method": method, **args})
+        return "blocked"
+
+    monkeypatch.setattr(store, "_provision_resident_verifier", mismatched)
+    monkeypatch.setattr(store, "_native_store_call", settle)
+
+    # The claimed allow reads as no authority without the key, but the saved
+    # Keep blocked still answers.
+    assert (
+        native_review_settle(
+            store,
+            harness="claude-code",
+            artifact_id=_ARTIFACT,
+            tool_name="Bash",
+            launch_target="cat .env",
+            workspace=tmp_path,
+            identity=_IDENTITY,
+            spend=True,
+            claimed_saved_allow_hash=_IDENTITY,
+        )
+        == "blocked"
+    )
+    assert [call["method"] for call in sent] == ["settle_claimed_native_review"]
+    assert "integrity_key_b64" not in sent[0]
+
+
+def test_a_resident_without_the_combined_settle_is_not_asked_step_by_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda create=False: (b"k" * 32, "key-id"))
+    monkeypatch.setattr(store, "_provision_resident_verifier", lambda _key=None: None)
+    calls: list[str] = []
+
+    def unknown(method: str, _args: dict[str, object]) -> object:
+        calls.append(method)
+        raise native_guard_store.NativeGuardStoreUnavailable("native_guard_store_method_unknown")
+
+    monkeypatch.setattr(store, "_native_store_call", unknown)
+
+    # The settle is never split into separate spends: the unanswered call
+    # reads as no allow.
+    settled = native_review_settle(
+        store,
+        harness="claude-code",
+        artifact_id=_ARTIFACT,
+        tool_name="Bash",
+        launch_target="cat .env",
+        workspace=tmp_path,
+        identity=_IDENTITY,
+        spend=True,
+        claimed_saved_allow_hash=_IDENTITY,
+    )
+    assert settled is None
+    assert calls == ["settle_claimed_native_review"]
 
 
 def _record_once(store: GuardStore, tmp_path: Path, *, request_id: str = "r1") -> None:
@@ -199,34 +277,49 @@ def test_claimed_allow_refuses_another_identity_or_request(tmp_path: Path) -> No
     _record_once(store, tmp_path)
     other = _IDENTITY.replace("a" * 64, "b" * 64)
 
-    assert (
-        native_review_claimed_allow(
-            store,
-            harness="claude-code",
-            artifact_id=_ARTIFACT,
-            workspace=tmp_path,
-            identity=_IDENTITY,
-            claimed_saved_allow_hash=other,
-            claimed_approval_request_id=None,
-            claim_saved_approval=True,
-        )
-        is False
-    )
-    assert (
-        native_review_claimed_allow(
-            store,
-            harness="claude-code",
-            artifact_id=_ARTIFACT,
-            workspace=tmp_path,
-            identity=_IDENTITY,
-            claimed_saved_allow_hash=_IDENTITY,
-            claimed_approval_request_id="another-request",
-            claim_saved_approval=True,
-        )
-        is False
-    )
+    assert _claimed(store, tmp_path, claim=True, claimed_saved_allow_hash=other) is False
+    assert _claimed(store, tmp_path, claim=True, claimed_approval_request_id="another-request") is False
     # Neither refusal spent the approval.
     assert _claimed(store, tmp_path, claim=True) is True
+
+
+def test_a_claimed_retry_keeps_the_users_block_before_its_claimed_allow(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _record_once(store, tmp_path)
+    _resolved_allow(store, str(tmp_path), action="block")
+
+    # Keep blocked answers first, and the once-approval stays unspent.
+    for claim in (True, False):
+        assert (
+            native_review_settle(
+                store,
+                harness="claude-code",
+                artifact_id=_ARTIFACT,
+                tool_name="Bash",
+                launch_target="cat .env",
+                workspace=tmp_path,
+                identity=_IDENTITY,
+                spend=claim,
+                claimed_saved_allow_hash=_IDENTITY,
+            )
+            == "blocked"
+        )
+    with store._connect() as connection:
+        connection.execute("delete from approval_requests")
+    assert _claimed(store, tmp_path, claim=True) is True
+
+
+def test_a_claimed_retry_without_its_allow_spends_an_approve_once(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _resolved_allow(store, str(tmp_path))
+
+    # A live completion that does not claim spends nothing; a retry that
+    # claims falls through to the approve-once in the same call, once.
+    assert _claimed(store, tmp_path, claim=False) is False
+    assert _effects(store) == 0
+    assert _claimed(store, tmp_path, claim=True) is True
+    assert _claimed(store, tmp_path, claim=True) is False
+    assert _effects(store) == 1
 
 
 def test_claim_denies_when_the_resident_gives_no_answer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -35,6 +35,8 @@ fn launch_fence_holds_policy_push_until_dispatch_or_abort() {
         local_cli_rules: None,
         observe_local_cli: false,
         record_receipt: false,
+        record_activity: false,
+        record_pre_tool_activity: false,
         structured_output_config: None,
         containment_sink: None,
     };

@@ -195,18 +195,23 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     # Git read case behind a review that real agents never see.
     # A developer's RIPGREP_CONFIG_PATH likewise keeps every rg case on
     # review; a case that models one sets it through its environment.
-    # NPM_CONFIG_*, NODE_* and PIP_* are the same shape: a CI runner or a
-    # developer shell that exports one makes npm and pip read a redirected
-    # configuration, which keeps their probes on review no matter what the
-    # case says.
+    # NPM_CONFIG_*, NODE_*, PIP_* and CARGO_* are the same shape: a CI runner or
+    # a developer shell that exports one makes npm, pip or cargo read a
+    # redirected configuration, which keeps their probes on review no matter
+    # what the case says.
     for name in list(os.environ):
         upper = name.upper()
         if (
-            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_"))
+            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_"))
             or upper == "RIPGREP_CONFIG_PATH"
         ):
             patch.delenv(name)
     patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
+    # Hosted runners and devcontainers export CARGO_HOME at the place Cargo
+    # reads anyway, so the cases meet the spelling real sessions carry; the
+    # inherited value is dropped above because it names the runner's own home,
+    # which this fixture has moved.
+    patch.setenv("CARGO_HOME", str(fixture.home / ".cargo"))
     patch.setenv("HOL_GUARD_NATIVE", "force")
     binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
     if not binary:

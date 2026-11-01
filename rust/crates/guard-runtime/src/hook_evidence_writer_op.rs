@@ -343,8 +343,9 @@ fn with_live<T>(guard_home: &Path, act: impl FnOnce(&ResidentWriter) -> T) -> Op
 }
 
 /// Encode an edge answer that says its receipt was recorded, then queue
-/// `receipt` with the live writer for `guard_home`, holding that writer the
-/// whole time so it cannot exit or start draining between the two.
+/// `receipt` with the live writer for `guard_home` and hand that writer to
+/// `then` for the evidence that follows the receipt, holding the writer the
+/// whole time so it cannot exit or start draining in between.
 ///
 /// `None` means nothing was queued and the answer must say so: no live writer
 /// runs for the home, its slot is busy starting one (a journal replay) or
@@ -355,6 +356,7 @@ pub(crate) fn record_edge_receipt<E>(
     guard_home: &Path,
     receipt: &NativeHookDecisionReceiptV1,
     encode: impl FnOnce() -> Result<Vec<u8>, E>,
+    then: impl FnOnce(&RuntimeHookEvidenceWriter),
 ) -> Option<Result<Vec<u8>, E>> {
     let Ok(Value::Object(receipt)) = serde_json::to_value(receipt) else {
         return None;
@@ -364,32 +366,28 @@ pub(crate) fn record_edge_receipt<E>(
             Ok(encoded) => encoded,
             Err(error) => return Some(Err(error)),
         };
-        resident
-            .writer
-            .submit_native_decision_receipt(&receipt)
-            .then_some(Ok(encoded))
+        if !resident.writer.submit_native_decision_receipt(&receipt) {
+            return None;
+        }
+        then(resident.writer.as_ref());
+        Some(Ok(encoded))
     })
     .flatten()
 }
 
 /// Queue a direct answer's evidence with `queue`, which may first record its
-/// `receipt` with the live writer for `guard_home` through the function it is
+/// receipt and command activity with the live writer for `guard_home` it is
 /// handed, holding that writer the whole time.
 ///
-/// The drain submits a record's command activity to this writer through the
+/// The drain submits whatever a record leaves to this writer through the
 /// same slot, so the activity cannot reach the writer before the receipt it
-/// cites. The handed function says whether the writer accepted the receipt;
-/// a record queued after a refusal must leave the receipt to the drain.
-/// `None` means `queue` did not run, because no live writer is free to take
-/// the receipt, which then stays with the drain.
-pub(crate) fn record_direct_receipt<T>(
+/// cites. `None` means `queue` did not run, because no live writer is free to
+/// take the evidence, which then stays with the drain.
+pub(crate) fn record_direct<T>(
     guard_home: &Path,
-    receipt: &Map<String, Value>,
-    queue: impl FnOnce(&dyn Fn() -> bool) -> T,
+    queue: impl FnOnce(&RuntimeHookEvidenceWriter) -> T,
 ) -> Option<T> {
-    with_live(guard_home, |resident| {
-        queue(&|| resident.writer.submit_native_decision_receipt(receipt))
-    })
+    with_live(guard_home, |resident| queue(resident.writer.as_ref()))
 }
 
 /// Run `act` while this Guard home's writer slot is held, as starting a

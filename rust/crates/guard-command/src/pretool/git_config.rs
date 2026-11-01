@@ -81,10 +81,15 @@ pub(super) fn execution_free_paging(
     if !matches!(
         operation,
         "status"
+            | "cherry"
             | "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
             | "log"
             | "show"
             | "blame"
+            | "annotate"
             | "describe"
             | "reflog"
             | "grep"
@@ -109,7 +114,17 @@ pub(super) fn execution_free_paging(
             | "apply"
             | "bisect"
             | "notes"
+            | "replace"
             | "submodule"
+            | "name-rev"
+            | "show-branch"
+            | "check-ref-format"
+            | "symbolic-ref"
+            | "var"
+            | "patch-id"
+            | "stripspace"
+            | "check-mailmap"
+            | "interpret-trailers"
     ) {
         return None;
     }
@@ -127,7 +142,7 @@ pub(super) fn execution_free_paging(
     if operation == "rev-list" && !super::git_rev_list::read_form(&remaining[1..]) {
         return None;
     }
-    if matches!(operation, "blame" | "describe" | "reflog")
+    if matches!(operation, "blame" | "annotate" | "describe" | "reflog")
         && !super::git_history_reads::read_form(operation, &remaining[1..])
     {
         return None;
@@ -145,7 +160,7 @@ pub(super) fn execution_free_paging(
     {
         return None;
     }
-    if matches!(operation, "bisect" | "notes")
+    if matches!(operation, "bisect" | "notes" | "replace")
         && !super::git_side_record_reads::read_form(operation, &remaining[1..])
     {
         return None;
@@ -413,7 +428,10 @@ fn probe(
     // An external driver renders a diff, so only a read that renders one can
     // start it. A tag listing, a clean preview, a ref listing or an ignore
     // check prints names, and a configured driver leaves all of them alone.
-    let renders_diff = matches!(rendering, "diff" | "log" | "show" | "reflog" | "stash");
+    let renders_diff = matches!(
+        rendering,
+        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+    );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
@@ -425,11 +443,15 @@ fn probe(
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
         // `clean` prints its preview, and `apply` its check report, without
-        // a pager. `rev-parse` and `ls-files` are plumbing: Git starts no
-        // pager for either, so only their own `pager.*` key can ask for one.
+        // a pager. `rev-parse`, `ls-files` and the two index comparisons are
+        // plumbing: Git starts no pager for any of them, so only their own
+        // `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files" => false,
+        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
+        | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
+        | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
+        | "interpret-trailers" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -467,7 +489,8 @@ fn probe(
         .then(|| super::git_hash_object::read_operands(&remaining[1..]))
         .flatten()
         .filter(|_| !super::git_hash_object::filters_disabled(&remaining[1..]));
-    let filtered = matches!(operation, "status" | "diff")
+    let filtered = matches!(operation, "status" | "diff" | "diff-files")
+        || (operation == "diff-index" && compares_working_tree(&remaining[1..]))
         || super::git_history_reads::cleans_working_tree(operation, &remaining[1..])
         || hashed.is_some();
     let has_filters = filtered
@@ -493,11 +516,19 @@ fn probe(
             // Reading the index can start the monitor; grep reads it too, a
             // clean preview refreshes the index before it walks the untracked
             // tree, and a patch check refreshes it before it reads the files
-            // the patch names.
+            // the patch names. A scripted index comparison loads the index
+            // whether or not `--cached` keeps the working tree out of it.
             "core.fsmonitor" => {
                 (matches!(
                     operation,
-                    "status" | "diff" | "grep" | "clean" | "apply" | "submodule"
+                    "status"
+                        | "diff"
+                        | "diff-files"
+                        | "diff-index"
+                        | "grep"
+                        | "clean"
+                        | "apply"
+                        | "submodule"
                 ) || super::git_listing_reads::reads_index(operation, &remaining[1..])
                     || super::git_history_reads::cleans_working_tree(operation, &remaining[1..]))
                     && !disabled
@@ -582,12 +613,48 @@ fn probe(
     Some(true)
 }
 
+/// The switches that change how Git reads a pathspec. The probe spells its
+/// own index query as `:/`, the magic naming the repository root, so a probe
+/// that inherited `--literal-pathspecs` from the agent's command would read
+/// that word as a literal path, match no entry under it and report a
+/// repository holding no gitlinks. Only `--literal-pathspecs` reaches a
+/// routed read today; the other three are refused with the rest of the
+/// unrecognised spellings. The family is dropped together so widening that
+/// admission cannot reopen the hole, and none of them names the
+/// configuration, hook path or index the probe asks about.
+const PATHSPEC_MAGIC: [&str; 4] = [
+    "--literal-pathspecs",
+    "--glob-pathspecs",
+    "--noglob-pathspecs",
+    "--icase-pathspecs",
+];
+
+/// Whether the index comparison also reads the files on disk.
+///
+/// `git diff-index HEAD` compares the index against the working tree, so Git
+/// runs a configured clean filter over every file it has to re-examine.
+/// `--cached` compares the index against the named tree alone and never opens
+/// a working-tree file, so that spelling consumes no filter. `diff-files`
+/// always compares the index against the working tree and has no such
+/// spelling, so it is screened without asking here. `diff-tree` compares two
+/// trees and reaches neither the index nor the working tree.
+fn compares_working_tree(rest: &[String]) -> bool {
+    !rest
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
+}
+
 /// The probe runs Git without a shell, so a `-C ~/repo` target the shell
 /// would expand must be expanded here or the probe inspects nothing.
 fn expand_home_targets(leading: &[String], home: &Path) -> Vec<String> {
     let mut expanded = Vec::with_capacity(leading.len());
     let mut directory_next = false;
     for argument in leading {
+        if PATHSPEC_MAGIC.contains(&argument.as_str()) {
+            directory_next = false;
+            continue;
+        }
         let value = if directory_next {
             match argument.strip_prefix('~') {
                 Some("") => home.to_string_lossy().into_owned(),

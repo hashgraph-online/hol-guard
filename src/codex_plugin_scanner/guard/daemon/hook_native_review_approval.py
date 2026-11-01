@@ -24,11 +24,7 @@ from .hook_fail_closed import (
 )
 from .hook_native_exact_action import review_evidence_parts
 from .hook_native_package_review import native_package_review_response
-from .hook_native_review_binding import (
-    native_review_claimed_allow,
-    native_review_policy_binding,
-    native_review_settle,
-)
+from .hook_native_review_binding import native_review_policy_binding, native_review_settle
 from .hook_native_saved_approval import native_exact_command_block_response, native_saved_decision_response
 from .hook_request_parsing import native_review_launch_target as _native_review_launch_target
 from .hook_request_parsing import native_review_tool_name as _native_review_tool_name
@@ -41,11 +37,6 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
-# An older resident renders the silent block only from facts the daemon names,
-# including the setup text it no longer looks up; a call without them is
-# refused there and the review never reaches the inbox. The current resident
-# renders from its own lookup and ignores these.
-_OLDER_RESIDENT_SETUP: dict[str, object] = {"setup_reason": None, "connector_is_local": False}
 
 
 def _policy_binding_failed(harness: str, native_result: Mapping[str, object], guard_home: Path) -> dict[str, object]:
@@ -121,8 +112,8 @@ def pause_native_pre_tool_for_approval(
         return saved
     if custom is not None:
         return custom
-    # Without a claimed cloud allow to check in between, the block check and
-    # the approve-once spend run in one resident transaction.
+    # The Keep blocked check, a claimed once-approval and the approve-once
+    # spend run in one resident call.
     reuse = native_review_settle(
         store,
         harness=harness,
@@ -131,7 +122,9 @@ def pause_native_pre_tool_for_approval(
         launch_target=launch_target,
         workspace=workspace,
         identity=identity,
-        spend=claim_saved_approval and claimed_saved_allow_hash is None,
+        spend=claim_saved_approval,
+        claimed_saved_allow_hash=claimed_saved_allow_hash,
+        claimed_approval_request_id=claimed_approval_request_id,
     )
     if reuse == "blocked":
         blocked = dict(native_result)
@@ -148,36 +141,7 @@ def pause_native_pre_tool_for_approval(
         response["prompted"] = False
         response["approval_reuse_status"] = "blocked"
         return response
-    if claimed_saved_allow_hash is not None and native_review_claimed_allow(
-        store,
-        harness=harness,
-        artifact_id=_native_review_artifact_id(harness, tool_name),
-        workspace=workspace,
-        identity=identity,
-        claimed_saved_allow_hash=claimed_saved_allow_hash,
-        claimed_approval_request_id=claimed_approval_request_id,
-        claim_saved_approval=claim_saved_approval,
-    ):
-        allowed = dict(native_result)
-        allowed["decision"] = "allow"
-        allowed["minimum_action"] = "allow"
-        allowed["policy_action"] = "allow"
-        return render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
-    if reuse == "allowed" or (
-        claim_saved_approval
-        and claimed_saved_allow_hash is not None
-        and native_review_settle(
-            store,
-            harness=harness,
-            tool_name=tool_name,
-            artifact_id=_native_review_artifact_id(harness, tool_name),
-            launch_target=launch_target,
-            workspace=workspace,
-            identity=identity,
-            spend=True,
-        )
-        == "allowed"
-    ):
+    if reuse == "allowed":
         allowed = dict(native_result)
         allowed["decision"] = "allow"
         allowed["minimum_action"] = "allow"
@@ -213,7 +177,8 @@ def pause_native_pre_tool_for_approval(
         # The agent stays on the silent block. The inbox row is a separate record.
         facts = {"ask": ask, "home_dir": str(home_dir or Path.home())}
         # The queued row is stored with this same binding; without one a
-        # one-time approval cannot match the agent's retry.
+        # one-time approval cannot match the agent's retry. The resident
+        # derives it and the setup facts itself for the queued render.
         bound = {"retry_reuses_approval": identity is not None, "exact_action_allowable": exact_token is not None}
         queued = queue_native_pre_tool_review(
             store,
@@ -232,7 +197,7 @@ def pause_native_pre_tool_for_approval(
             connector_lookup=connector_lookup,
             policy_binding_verified=True,
             silent=True,
-            respond={"silent_review_block": {**facts, **bound, **_OLDER_RESIDENT_SETUP}},
+            respond={"silent_review_block": facts},
         )
         if queued is None:
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
@@ -332,18 +297,6 @@ def queue_native_pre_tool_review(
     queue = getattr(store, "queue_native_review", None)
     if not callable(queue):
         return None
-    if bound_bash is not None:
-        from .native_review_bound_bash import valid_bound_bash_review
-
-        if not valid_bound_bash_review(
-            bound_bash,
-            harness=harness,
-            exact_token=exact_token,
-            review_binding=review_binding,
-            decision=native_result,
-            native_receipt=native_receipt,
-        ):
-            return None
     request_id = uuid.uuid4().hex
     live_wait = _codex_live_wait(payload, workspace) if codex_live_wait else None
     review = {
@@ -359,11 +312,9 @@ def queue_native_pre_tool_review(
         "once_only_reason": once_only_reason,
         # A connector the queue call finds groups the row under its setup.
         "queue_group_id": None,
-        "bound_bash": (
-            None
-            if bound_bash is None
-            else {"subject": bound_bash["subject"], "review_lineage": bound_bash["review_lineage"]}
-        ),
+        # The resident queues a prepared Bash review only as the reply the
+        # native Bash owner prepared, with the receipt's policy binding.
+        "bound_bash": None if bound_bash is None else dict(bound_bash),
     }
     try:
         query = native_review_query(harness, payload, review, workspace=workspace, home_dir=home_dir)
@@ -390,6 +341,7 @@ def queue_native_pre_tool_review(
             codex_live_wait=live_wait,
             respond=respond,
             connector_lookup=connector_lookup,
+            bound_bash=bound_bash is not None,
         )
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
         # The action fails closed. Only the store's fixed reason code, never an

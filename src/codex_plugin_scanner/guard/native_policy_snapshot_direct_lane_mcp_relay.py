@@ -25,22 +25,16 @@ from .native_policy_snapshot_constants import NativePolicySnapshotError
 if TYPE_CHECKING:
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
-# The resident accepts the view below in its direct-lane binding.
-MCP_RELAY_DECIDE_FEATURE = "mcp-relay-decide-v2"
 MCP_RELAY_BINDING_KEY = "mcp_relay"
 MCP_RELAY_VIEW_SCHEMA = "guard-mcp-relay-view.v2"
 # The harnesses whose MCP proxy the relay replaces.
-MCP_RELAY_HARNESSES = ("codex", "copilot", "cursor", "hermes", "opencode")
+MCP_RELAY_HARNESSES = ("cline", "codex", "copilot", "cursor", "hermes", "opencode")
 
 # The field a bound harness carries its receipt redaction level in.
 REDACTION_LEVEL_KEY = "receipt_redaction_level"
 _REDACTION_LEVELS = frozenset({"full", "partial", "none"})
 _MAX_VIEW_BYTES = 262_144
 _MAX_SAFE_INTEGER = 2**53 - 1
-
-
-def mcp_relay_bound(features: Iterable[str]) -> bool:
-    return MCP_RELAY_DECIDE_FEATURE in set(features)
 
 
 def _plain(value: object) -> bool:
@@ -174,22 +168,19 @@ class NativePolicySnapshotMcpRelayMixin:
         runtime = getattr(publisher, "_command_control_runtime", None)
         return mcp_relay_view(publisher._compiled_mcp_relay_harnesses, extension_layers(runtime))
 
-    def _with_mcp_relay_view(
-        self, binding: dict[str, object] | None, features: Iterable[str]
-    ) -> dict[str, object] | None:
-        """Add the view, for a resident that accepts it."""
+    def _with_mcp_relay_view(self, binding: dict[str, object] | None) -> dict[str, object] | None:
+        """Add the view."""
 
-        if binding is None or not mcp_relay_bound(features):
+        if binding is None:
             return binding
         view = self._current_mcp_relay_view()
         return binding if view is None else {**binding, MCP_RELAY_BINDING_KEY: view}
 
-    def _bind_mcp_relay_view(self, binding: object, features: Iterable[str]) -> None:
+    def _bind_mcp_relay_view(self, binding: object) -> None:
         """Record the view an ACKed binding carries, for the reconcile recheck."""
 
         view = binding.get(MCP_RELAY_BINDING_KEY) if isinstance(binding, Mapping) else None
-        bound = mcp_relay_bound(features) and isinstance(view, Mapping)
-        self._direct_lane_mcp_relay = dict(cast(Mapping[str, object], view)) if bound else None
+        self._direct_lane_mcp_relay = dict(cast(Mapping[str, object], view)) if isinstance(view, Mapping) else None
 
     def _recheck_direct_lane_mcp_relay(self) -> None:
         """Rebind the lane once the view it carries moves.

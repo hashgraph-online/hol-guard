@@ -74,6 +74,8 @@ fn the_named_workspace_subcommands_run_inside_the_sandbox_too() {
         "cargo expand --lib",
         "cargo machete",
         "cargo udeps --workspace",
+        "cargo mutants",
+        "cargo mutants --in-place",
     ] {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, minimum) = outcome(harness, command, &ws);
@@ -261,4 +263,67 @@ fn an_option_that_decides_what_the_run_reads_keeps_its_review() {
             assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
         }
     }
+}
+
+/// A subcommand cargo resolves to its own program may carry its own
+/// directory option, and that option moves the whole run: `cargo-mutants`
+/// builds, tests and rewrites the sources of the crate `-d`/`--dir` names,
+/// and `cargo-tarpaulin` builds and tests the one under `-r`/`--root`. A
+/// crate the workspace holds stays contained; one outside it, or a line that
+/// leaves no one directory to judge, keeps its review.
+#[test]
+fn a_subcommand_directory_option_is_read_against_the_workspace() {
+    let ws = package("cargo-subcommand-directory");
+    std::fs::create_dir_all(ws.join("crates/engine")).unwrap();
+    std::fs::write(ws.join("crates/engine/Cargo.toml"), MANIFEST).unwrap();
+    let outside = std::env::temp_dir().join(format!(
+        "guard-outside-{}-cargo-subcommand-directory",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&outside);
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("Cargo.toml"), MANIFEST).unwrap();
+    let outside = outside.canonicalize().unwrap();
+
+    for command in [
+        "cargo mutants -d crates/engine",
+        "cargo mutants --dir crates/engine --in-place",
+        "cargo mutants --dir=crates/engine",
+        "cargo mutants -dcrates/engine",
+        "cargo tarpaulin --root crates/engine --out Xml",
+        "cargo tarpaulin --root=crates/engine",
+        "cargo tarpaulin -r crates/engine",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(minimum, "review", "{reason}: {command}");
+            }
+        }
+    }
+
+    let escapes = [
+        format!("cargo mutants -d {} --in-place", outside.display()),
+        format!("cargo mutants --dir={}", outside.display()),
+        format!("cargo mutants -d{}", outside.display()),
+        format!("cargo tarpaulin --root {} --out Xml", outside.display()),
+        format!("cargo tarpaulin -r{}", outside.display()),
+        "cargo mutants -d ../".to_owned(),
+        "cargo mutants -d crates/../crates/engine".to_owned(),
+        "cargo mutants -d crates/missing".to_owned(),
+        "cargo mutants -d docs".to_owned(),
+        "cargo mutants --dir crates/engine --dir crates/engine".to_owned(),
+        "cargo mutants --dir=".to_owned(),
+        "cargo mutants --dir".to_owned(),
+    ];
+    std::fs::create_dir_all(ws.join("docs")).unwrap();
+    for command in &escapes {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&outside);
 }

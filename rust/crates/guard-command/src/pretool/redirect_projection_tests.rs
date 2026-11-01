@@ -18,10 +18,13 @@ fn context() -> crate::pretool::PathContext<'static> {
         cwd: Some(CWD),
         cdpath_unset: false,
         rustup_override_absent: false,
+        cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
+        gem_config_absent: false,
+        http_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     }
@@ -218,10 +221,13 @@ fn file_writes_never_follow_an_existing_symlink() {
         cwd: Some(&cwd),
         cdpath_unset: false,
         rustup_override_absent: false,
+        cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
+        gem_config_absent: false,
+        http_config_absent: false,
         psql_environment: Default::default(),
         creates_nothing: false,
     };
@@ -456,4 +462,40 @@ fn a_control_flow_construct_still_reviews_the_file_it_writes() {
     ] {
         assert_eq!(evaluate(command).minimum_action, "review", "{command}");
     }
+}
+
+#[test]
+fn a_redirect_with_no_command_is_read_as_the_write_it_performs() {
+    // The shell opens the file and runs nothing. Removing the redirect leaves
+    // no text to parse, so the projection stands its no-op in and the write
+    // keeps the review it earns wherever a command is spelled in front of it.
+    for command in ["> notes.txt", ">> listing.txt", "2> build/errors.log"] {
+        let projection = project(command, context()).expect(command);
+        assert_eq!(projection.command, NO_OP, "{command}");
+        assert!(projection.writes_file, "{command}");
+        // The test workspace does not exist, so no write is bounded here; the
+        // target check below is what decides a real one.
+        assert!(!projection.bounded_writes, "{command}");
+        let result = evaluate(command);
+        assert_eq!(
+            result.reason_code, "native_command_redirect_write_review",
+            "{command}"
+        );
+        assert_eq!(
+            result.reason_code,
+            evaluate(&format!("true {command}")).reason_code,
+            "{command}"
+        );
+    }
+    // The target check still decides the write: a file in the home directory
+    // is left unprojected, the same answer a redirect behind a command gets,
+    // so the review it earns is the one the sensitive target carries.
+    assert!(
+        project(&format!("> {HOME}/.bashrc"), context()).is_none(),
+        "home target"
+    );
+    assert_ne!(
+        evaluate(&format!("> {HOME}/.bashrc")).minimum_action,
+        "allow"
+    );
 }

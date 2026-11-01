@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from .adapters import list_adapters
 from .adapters.base import HarnessContext
-from .hook_removal_sweep import harness_hook_files, sweep_harness
+from .hook_removal_sweep import SweepUnavailableError, harness_hook_files, sweep_harness
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -66,7 +66,14 @@ def plan_hook_removal(context: HarnessContext, store: GuardStore) -> list[Harnes
         plan = HarnessPlan(harness=harness)
         if harness in active:
             plan.reasons.append("managed_install")
-        for result in sweep_harness(harness, context, dry_run=True).files:
+        try:
+            found = sweep_harness(harness, context, dry_run=True).files
+        except SweepUnavailableError:
+            # Without the scan nothing proves the app is clean, so it stays
+            # in the plan and removal reports why it could not finish.
+            plan.reasons.append("hook_scan_unavailable")
+            found = []
+        for result in found:
             if result.removed:
                 plan.files_with_hooks.append(str(result.path))
                 plan.hook_count += result.removed
@@ -204,7 +211,7 @@ def remove_all_guard_hooks(
                 files=harness_hook_files(plan.harness, context),
                 backed_up=backed_up,
             )
-        except BackupError as error:
+        except (BackupError, SweepUnavailableError) as error:
             # Never edit a config file we could not restore.
             entry["adapter_uninstall"] = "skipped"
             entry["backup_error"] = str(error)
@@ -216,16 +223,27 @@ def remove_all_guard_hooks(
         except Exception as error:  # one harness failing must not strand the others
             entry["adapter_uninstall"] = "error"
             entry["adapter_error"] = _error_text(error)
-        swept = sweep_harness(plan.harness, context, dry_run=False)
-        entry["swept_hook_count"] = swept.removed
-        entry["sweep_errors"] = [f"{item.path.name}:{item.error}" for item in swept.files if item.error]
+        try:
+            swept = sweep_harness(plan.harness, context, dry_run=False)
+        except SweepUnavailableError:
+            entry["swept_hook_count"] = 0
+            entry["sweep_errors"] = ["runtime_unavailable"]
+        else:
+            entry["swept_hook_count"] = swept.removed
+            entry["sweep_errors"] = [f"{item.path.name}:{item.error}" for item in swept.files if item.error]
         results.append(entry)
 
     final_backup_dir, backups = _finalize_backups(backup_dir=backup_dir, backed_up=backed_up, stamp=stamp)
     remaining: list[dict[str, object]] = []
     remaining_count = 0
     for plan in plans:
-        for item in sweep_harness(plan.harness, context, dry_run=True).files:
+        try:
+            rescanned = sweep_harness(plan.harness, context, dry_run=True).files
+        except SweepUnavailableError:
+            remaining.append({"harness": plan.harness, "path": "", "hook_count": plan.hook_count})
+            remaining_count += plan.hook_count
+            continue
+        for item in rescanned:
             if item.removed:
                 remaining.append({"harness": plan.harness, "path": str(item.path), "hook_count": item.removed})
                 remaining_count += item.removed

@@ -26,12 +26,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import BinaryIO
 
-from ..mdm.network import platform_system_proxies
+from ..mdm.network import ManagedNetworkError, available_system_proxies, resolved_network_policy
 from ..redaction import redact_sensitive_text
 from ..shims import _trusted_python_flags
 from ..update_staging import note_update_activity, reject_linked_path_components
 from ..windows_paths import (
-    _WindowsByHandleFileInformation,
     trusted_windows_roaming_appdata,
     trusted_windows_system_directories,
     trusted_windows_system_executable,
@@ -306,6 +305,21 @@ class _FilesystemSnapshot:
     size: int
     sha256: str | None
     prefix: bytes | None
+
+
+class _WindowsByHandleFileInformation(ctypes.Structure):
+    _fields_ = [
+        ("dwFileAttributes", wintypes.DWORD),
+        ("ftCreationTime", wintypes.FILETIME),
+        ("ftLastAccessTime", wintypes.FILETIME),
+        ("ftLastWriteTime", wintypes.FILETIME),
+        ("dwVolumeSerialNumber", wintypes.DWORD),
+        ("nFileSizeHigh", wintypes.DWORD),
+        ("nFileSizeLow", wintypes.DWORD),
+        ("nNumberOfLinks", wintypes.DWORD),
+        ("nFileIndexHigh", wintypes.DWORD),
+        ("nFileIndexLow", wintypes.DWORD),
+    ]
 
 
 class _WindowsJobObjectBasicLimitInformation(ctypes.Structure):
@@ -1286,7 +1300,12 @@ def _trusted_environment(
         environment["HTTP_PROXY"] = proxy_url.strip()
         environment["HTTPS_PROXY"] = proxy_url.strip()
     elif proxy_mode == "system":
-        for scheme, value in platform_system_proxies().items():
+        _network_policy, managed = resolved_network_policy(None)
+        try:
+            system_proxies = available_system_proxies(managed=managed)
+        except ManagedNetworkError as error:
+            raise UpdateSubprocessError("update_source_invalid") from error
+        for scheme, value in system_proxies.items():
             environment[f"{scheme.upper()}_PROXY"] = value
     elif proxy_mode != "none":
         raise UpdateSubprocessError("update_source_invalid")

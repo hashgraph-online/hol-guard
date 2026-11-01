@@ -67,53 +67,6 @@ def _patch_exchange(monkeypatch: pytest.MonkeyPatch, handler: Callable[[Path, di
     monkeypatch.setattr(capture, "_exchange", handler)
 
 
-def test_without_marker_no_runtime_traffic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[object] = []
-    _patch_exchange(monkeypatch, lambda *args: calls.append(args))
-    assert not capture.record_bridge_ingress(guard_home=tmp_path, raw_payload="{}", event_name="PreToolUse")
-    assert not capture.record_native_worker(
-        guard_home=tmp_path, payload={}, harness="codex", event_name="PreToolUse", receipt={}
-    )
-    assert calls == []
-
-
-def test_bridge_forwards_bounded_text_and_reports_runtime_answer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _enable(tmp_path)
-    monkeypatch.setattr(capture, "_bridge_resident_status", lambda _home: object())
-    seen: list[dict[str, object]] = []
-
-    def answer(_home: Path, command: dict[str, object], **_kwargs: object) -> object:
-        seen.append(command)
-        return {"recorded": True}
-
-    _patch_exchange(monkeypatch, answer)
-    assert capture.record_bridge_ingress(
-        guard_home=tmp_path, raw_payload=b'{"a":1}', forwarded_payload='{"a":2}', event_name="PreToolUse"
-    )
-    assert seen == [
-        {
-            "kind": "bridge",
-            "raw_payload": '{"a":1}',
-            "forwarded_payload": '{"a":2}',
-            "event_name": "PreToolUse",
-            "harness": "codex",
-        }
-    ]
-    assert not capture.record_bridge_ingress(guard_home=tmp_path, raw_payload=b"\xff", event_name="PreToolUse")
-    assert not capture.record_bridge_ingress(guard_home=tmp_path, raw_payload="\ud800", event_name="PreToolUse")
-    assert not capture.record_bridge_ingress(guard_home=tmp_path, raw_payload="x" * 65537, event_name="PreToolUse")
-    assert not capture.record_bridge_ingress(
-        guard_home=tmp_path, raw_payload="{}", event_name="PreToolUse", harness="claude"
-    )
-    assert len(seen) == 1
-    _patch_exchange(monkeypatch, lambda *_args, **_kwargs: {"recorded": False})
-    assert not capture.record_bridge_ingress(guard_home=tmp_path, raw_payload="{}", event_name="PreToolUse")
-    _patch_exchange(monkeypatch, lambda *_args, **_kwargs: None)
-    assert not capture.record_bridge_ingress(guard_home=tmp_path, raw_payload="{}", event_name="PreToolUse")
-
-
 def test_exchange_rejects_unbound_or_failed_runtime_replies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(capture, "ensure_resident_prerequisite", lambda _home: True)
     replies: list[dict[str, object] | None] = []
@@ -373,34 +326,12 @@ def test_capture_queue_keeps_bounded_immutable_snapshots(tmp_path: Path, monkeyp
         _finish(writer, release)
 
 
-def test_bridge_skips_when_no_idle_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _enable(tmp_path)
-    calls: list[object] = []
-    _patch_exchange(monkeypatch, lambda *args, **kwargs: calls.append((args, kwargs)))
-    monkeypatch.setattr(capture, "_bridge_resident_status", lambda _home: None)
-    assert not capture.record_bridge_ingress(guard_home=tmp_path, raw_payload="{}", event_name="PreToolUse")
-    assert calls == []
-
-
-def test_unicode_payload_is_bounded_by_utf8_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _enable(tmp_path)
-    seen: list[dict[str, object]] = []
-
-    def answer(_home: Path, command: dict[str, object]) -> object:
-        seen.append(command)
-        return {"recorded": True}
-
-    _patch_exchange(monkeypatch, answer)
-    assert capture.record_native_worker(
-        guard_home=tmp_path,
-        payload={"text": "é" * 10922},
-        harness="codex",
-        event_name="PreToolUse",
-        receipt={"ok": True},
-    )
-    payload = str(seen[0]["payload"])
+def test_unicode_payload_is_bounded_by_utf8_bytes() -> None:
+    payload = capture._bounded_json({"text": "é" * 10922})
+    assert payload is not None
     assert "\\u00e9" not in payload
     assert len(payload.encode("utf-8")) <= capture._MAX_TEXT_BYTES
+    assert capture._bounded_json({"text": "é" * 32768}) is None
 
 
 def test_join_serializes_only_enough_records_to_show_the_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
