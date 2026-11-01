@@ -11,17 +11,13 @@
 .cigar-workspace button:focus-visible, .cigar-workspace summary:focus-visible { outline: 2px solid #3972c8; outline-offset: 4px; }
 .cigar-hero { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 1fr); gap: 2rem; border-radius: 1.25rem; padding: clamp(1.5rem, 3vw, 2.6rem); background: radial-gradient(ellipse at 15% 0%, #53538c 0%, transparent 65%), linear-gradient(120deg, #34345d, #303955); color: #fff; overflow: hidden; }
 .cigar-hero-copy { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
-.cigar-hero-kicker { display: flex; align-items: center; gap: .5rem; font-size: .7rem; color: #d8e0fa; }
-.cigar-hero-kicker > span { height: .4rem; width: .4rem; border-radius: 50%; background: #87c6fe; }
 .cigar-hero h2 { margin: .9rem 0; font-size: clamp(1.7rem, 2.7vw, 2.45rem); line-height: 1.18; letter-spacing: -.045em; font-weight: 600; }
 .cigar-hero-copy > p { max-width: 32rem; color: #d4daf1; font-size: .875rem; line-height: 1.8; }
-.cigar-hero-actions { justify-content: flex-start; gap: 1.25rem; margin-top: 1.5rem; }
+.cigar-hero-actions { justify-content: flex-start; gap: 1.25rem; margin-top: .5rem; }
 .cigar-button-primary { background: #fff; color: #303955; border-color: #fff; }
 .cigar-hero-link { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 600; color: #eef2ff; cursor: pointer; }
 .cigar-hero button:focus-visible { outline-color: #bfdbfe; }
-.cigar-runtime-card { align-self: center; border: 1px solid #ffffff26; border-radius: .95rem; padding: 1.3rem; background: #ffffff0b; box-shadow: 0 8px 32px #10152a1a; min-width: 0; }
-.cigar-runtime-card .cigar-eyebrow { color: #c8d1ec; font-size: .6rem; }
-.cigar-runtime-symbol { height: 2.3rem; width: 2.3rem; color: #b6cdfb; margin: 1.25rem 0 .65rem; }
+.cigar-runtime-card { align-self: center; border: 1px solid #ffffff26; border-radius: .95rem; padding: 1.3rem; background: #ffffff0b; min-width: 0; }
 .cigar-runtime-card h3 { font-size: 1.1rem; font-weight: 600; letter-spacing: -.02em; }
 .cigar-runtime-card > p { font-size: .75rem; line-height: 1.6; color: #c8d1ec; margin-top: .3rem; }
 .cigar-runtime-note { margin-top: 1rem; border-top: 1px solid #ffffff26; padding-top: .85rem; font-size: .72rem; line-height: 1.65; color: #d6ddf3; }
@@ -48,7 +44,6 @@
 .cigar-text-button { display: inline-flex; align-items: center; gap: .4rem; min-height: 2.75rem; margin-top: .6rem; color: #416aa7; font-size: .75rem; font-weight: 600; cursor: pointer; text-align: left; }
 .cigar-text-button:hover { color: #264c83; }
 .cigar-overview-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1.25rem; }
-.cigar-count { border-radius: 1rem; background: #f1f5f9; color: #64748b; padding: .35rem .65rem; font-size: .65rem; font-weight: 600; }
 .cigar-steps { margin-top: 1.4rem; }
 .cigar-steps > li { display: flex; gap: .9rem; padding: 0 0 1.15rem; position: relative; }
 .cigar-steps > li:not(:last-child)::before { content: ""; position: absolute; left: .91rem; top: 2.1rem; bottom: .25rem; width: 1px; background: #e2e8f0; }
@@ -59,9 +54,6 @@
 .cigar-steps h3 { padding-top: .3rem; }
 .cigar-steps p { margin-top: .3rem; font-size: .8rem; }
 .cigar-steps .cigar-text-button { margin-top: .1rem; }
-.cigar-next-step { display: flex; gap: .9rem; border-top: 1px solid #e8edf3; padding-top: 1.2rem; }
-.cigar-next-step > svg { height: 1.25rem; width: 1.25rem; flex-shrink: 0; color: #6386bc; margin: .1rem .3rem; }
-.cigar-next-step p { font-size: .8rem; }
 .cigar-boundaries { background: linear-gradient(155deg, #f9faff, #f8fafc); }
 .cigar-boundaries h2 { font-size: 1.2rem; margin-top: 1.3rem; }
 .cigar-boundaries > p { font-size: .8rem; }
@@ -89,6 +81,39 @@
 .cigar-footer { display: flex; align-items: flex-start; gap: .6rem; border-top: 1px solid #e8edf3; padding-top: 1.1rem; color: #64748b; font-size: .7rem; line-height: 1.75; }
 .cigar-footer > svg { width: 1rem; height: 1rem; flex-shrink: 0; margin-top: .15rem; }
 .cigar-footer strong { margin-left: auto; flex-shrink: 0; font-weight: 600; color: #684eb0; }
+.cigar-setup-action { display: grid; justify-items: start; gap: .65rem; margin-top: 1.5rem; max-width: 32rem; }
+.cigar-note .cigar-setup-action { margin-top: .9rem; }
+.cigar-setup-action .cigar-button-primary { min-height: 3rem; padding: .75rem 1.3rem; font-size: .875rem; }
+.cigar-button-solid { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.cigar-button-solid:hover { background: #1e40af; }
+.cigar-hero .cigar-button-primary:not(:disabled):hover { background: #eef2ff; }
+.cigar-setup-caption { font-size: .75rem; line-height: 1.6; color: #64748b; }
+.cigar-hero .cigar-setup-caption { color: #c8d1ec; }
+.cigar-setup-block { border-top: 1px solid #cbdcf5; padding-top: .65rem; font-size: .78rem; line-height: 1.65; color: #475569; }
+.cigar-setup-block strong { display: block; color: #3f4174; font-weight: 600; }
+.cigar-setup-block p { margin: .2rem 0 0; }
+.cigar-setup-block .cigar-text-button { margin-top: .2rem; }
+.cigar-hero .cigar-setup-block { border-top-color: #ffffff26; color: #d4daf1; }
+.cigar-hero .cigar-setup-block strong { color: #fff; }
+.cigar-hero .cigar-setup-block .cigar-text-button { color: #bfdbfe; }
+.cigar-setup-progress h3 { font-size: 1rem; font-weight: 600; letter-spacing: -.02em; }
+.cigar-setup-stages { display: grid; gap: .9rem; margin-top: 1.1rem; }
+.cigar-setup-stages > li { display: flex; gap: .75rem; align-items: flex-start; }
+.cigar-setup-stages strong { display: block; font-size: .8rem; font-weight: 600; color: #e2e8f0; }
+.cigar-setup-stages p { margin-top: .1rem; font-size: .72rem; line-height: 1.55; color: #c8d1ec; }
+.cigar-setup-stages [data-state="active"] strong { color: #fff; }
+.cigar-setup-mark { display: flex; align-items: center; justify-content: center; height: 1.6rem; width: 1.6rem; flex-shrink: 0; border: 1px solid #ffffff40; border-radius: 50%; font-size: .7rem; font-weight: 600; color: #d6ddf3; }
+.cigar-setup-mark svg { height: .85rem; width: .85rem; }
+[data-state="done"] > .cigar-setup-mark { color: #b1f4c9; border-color: #b1f4c94d; background: #b1f4c914; }
+[data-state="active"] > .cigar-setup-mark { color: #87c6fe; border-color: #87c6fe; }
+[data-state="failed"] > .cigar-setup-mark { color: #fecaca; border-color: #fecaca80; }
+.cigar-overview-title { font-size: 1.05rem; font-weight: 600; letter-spacing: -.025em; margin-bottom: .9rem; }
+.cigar-why { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; }
+.cigar-why > li { display: flex; gap: .75rem; border-top: 1px solid #e2e8f0; padding-top: 1rem; }
+.cigar-why svg { height: 1.25rem; width: 1.25rem; flex-shrink: 0; color: #4d77bb; margin-top: .1rem; }
+.cigar-why h3 { font-size: .875rem; font-weight: 600; letter-spacing: -.015em; }
+.cigar-why p { margin-top: .3rem; font-size: .8rem; line-height: 1.65; color: #64748b; max-width: 36ch; }
+.cigar-setup h2 { margin-top: 0; }
 @media (max-width: 64rem) {
   .cigar-hero { grid-template-columns: minmax(0, 1.1fr) minmax(15rem, 1fr); gap: 1.25rem; }
   .cigar-overview-grid { grid-template-columns: minmax(0, 1fr); }
@@ -97,11 +122,11 @@
 @media (max-width: 42rem) {
   .cigar-hero { grid-template-columns: minmax(0, 1fr); padding: 1.35rem; }
   .cigar-hero h2 { font-size: 1.85rem; }
-  .cigar-runtime-symbol { float: right; margin: 1rem 0 0 .5rem; }
   .cigar-runtime-card { padding: 1rem; }
-  .cigar-runtime-card h3 { margin-top: 1rem; }
   .cigar-runtime-note { margin-top: .75rem; }
-  .cigar-benefits, .cigar-flow { grid-template-columns: minmax(0, 1fr); }
+  .cigar-benefits, .cigar-flow, .cigar-why { grid-template-columns: minmax(0, 1fr); }
+  .cigar-why { gap: 1rem; }
+  .cigar-setup-action, .cigar-setup-action .cigar-button-primary { width: 100%; }
   .cigar-heading-actions { gap: .5rem; }
   .cigar-heading-actions .cigar-button { font-size: .75rem; }
   .cigar-card { padding: 1.15rem; }
@@ -114,4 +139,6 @@
   .cigar-hero, .cigar-runtime-card, .cigar-card, .cigar-note, .cigar-icon { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
   .cigar-hero :is(p, h2, h3, span, button, svg, .cigar-runtime-note) { color: CanvasText; }
   .cigar-tabs [aria-selected="true"] { border-bottom-color: Highlight; color: Highlight; }
+  .cigar-setup-mark, .cigar-setup-block { border-color: CanvasText; color: CanvasText; background: Canvas; }
+  .cigar-button-solid, .cigar-button-primary { background: ButtonFace; color: ButtonText; border-color: ButtonText; }
 }

@@ -18,7 +18,7 @@ export async function contextSharingFlow(page: Page, state: IntegrationState, sa
   await save(page, state);
   await page.getByRole("button", { name: "Start context assistance", exact: true }).click();
   await expect.poll(async () => (await status()).runtime?.shared_compile_verified, { timeout: 30_000 }).toBe(true);
-  await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
+  await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
   writeFileSync(resolve(state.workspace, "README.md"), "Shared deployment workspace uses a reviewed release process.\n");
   const probes = [new ContextAgentProbe(String(seed.pythonExecutable), state.guardHome), new ContextAgentProbe(String(seed.pythonExecutable), state.guardHome)];
   try {

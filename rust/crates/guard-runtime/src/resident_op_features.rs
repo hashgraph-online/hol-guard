@@ -282,11 +282,12 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-integrity-snapshot-v1",
     "native-orphaned-worker-reap-v1",
     "native-codex-hook-trust-v1",
+    "native-local-authority-integrity-v1",
     "native-storage-retention-v1",
     "native-desktop-notification-v1",
     "native-grok-executable-v1",
     "native-process-identity-v1",
     "native-macos-code-signing-v1",
     "native-business-source-current-fence-v2",
-    "native-local-authority-integrity-v1",
+    "native-agent-safety-guidance-v1",
 ];

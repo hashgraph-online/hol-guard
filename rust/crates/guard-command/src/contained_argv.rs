@@ -412,6 +412,11 @@ const NPM_REPORTING_FLAGS: &[&str] = &[
 /// npm's one reporting option that takes a value.
 const NPM_REPORTING_VALUES: &[&str] = &["--loglevel"];
 
+/// Bun's one output option. `--bun` chooses the runtime the script runs on,
+/// `--watch` and `--hot` keep the run alive, and `--filter` fans it out, so
+/// none of them is peeled here.
+const BUN_REPORTING_FLAGS: &[&str] = &["--silent"];
+
 /// yarn's output options. yarn classic chooses packages with a `workspace`
 /// verb rather than an option, so there is no fan-out spelling to exclude.
 const YARN_REPORTING_FLAGS: &[&str] = &[
@@ -424,9 +429,10 @@ const YARN_REPORTING_FLAGS: &[&str] = &[
 ];
 
 /// `arguments` with the leading npm, pnpm or yarn options that only change
-/// what the run prints removed, so the `exec` behind them is read as the verb it
-/// is. A reporting option names no package and moves no directory, so
-/// `pnpm --silent exec tsc` runs the same local bin `pnpm exec tsc` does.
+/// what the run prints removed, so the verb or script behind them is read as
+/// the one it is. A reporting option names no package and moves no directory,
+/// so `pnpm --silent exec tsc` runs the same local bin `pnpm exec tsc` does,
+/// and `npm --silent test` runs the same script `npm test` does.
 ///
 /// A value option whose value is written separately eats the next word, so
 /// `pnpm --reporter exec tsc` consumes `exec` and leaves `tsc`, which is not
@@ -440,6 +446,7 @@ pub(crate) fn manager_reporting_options_peeled<'a>(
         "npm" => (NPM_REPORTING_FLAGS, NPM_REPORTING_VALUES),
         "pnpm" => (PNPM_REPORTING_FLAGS, PNPM_REPORTING_VALUES),
         "yarn" => (YARN_REPORTING_FLAGS, &[]),
+        "bun" => (BUN_REPORTING_FLAGS, &[]),
         _ => return arguments,
     };
     while let [option, tail @ ..] = arguments {

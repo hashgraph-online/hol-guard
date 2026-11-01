@@ -76,8 +76,9 @@ export async function requestCigarVersions(
   });
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code)
-      ? body.code : "context_assistance_unavailable";
+    const code = object(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code
+      : object(body) && typeof body.error === "string" && /^approval_gate_[a-z0-9_]{1,140}$/.test(body.error) ? body.error
+      : "context_assistance_unavailable";
     throw new ContextAssistanceApiError(code, errorMessage(code, response.status));
   }
   return parseCigarVersionsReply(body);
