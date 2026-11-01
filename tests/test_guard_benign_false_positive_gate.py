@@ -114,6 +114,10 @@ class GateCase:
     source_ref: bool = False
     # Variables the agent shell inherits, such as a user's RIPGREP_CONFIG_PATH.
     environment: tuple[tuple[str, str], ...] = ()
+    # The allow this case was written for is the contained one: the command may
+    # run only inside the workspace sandbox. Kept so the assertion can say so,
+    # rather than accepting any quiet allow.
+    requires_sandbox: bool = False
 
 
 def _expand() -> list[GateCase]:
@@ -139,6 +143,7 @@ def _expand() -> list[GateCase]:
                     tool_response=entry.get("tool_response"),
                     source_ref=bool(entry.get("source_ref", False)),
                     environment=tuple(sorted(entry.get("environment", {}).items())),
+                    requires_sandbox=bool(entry.get("requires_sandbox", False)),
                 )
             )
     return expanded
@@ -440,6 +445,11 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         _assert_pending(case.case_id, _PENDING_FIX[case.case_id], result, approvals, description)
     else:
         assert _quiet_allow(result, approvals), f"benign work was reviewed: {description}"
+        # An allow that only the sandbox route can give has to arrive that way.
+        # A plain uncontained allow would pass the quiet check while losing the
+        # containment the case exists to pin.
+        if case.requires_sandbox:
+            assert _contained(result), f"benign work was allowed uncontained: {description}"
     if case.case_id in _PENDING_ALWAYS:
         if gap:
             pytest.xfail(f"{_PENDING_ALWAYS[case.case_id]}: review row without Always: {description}")
