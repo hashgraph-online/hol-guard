@@ -51,6 +51,12 @@ fn an_exec_that_names_no_program_stays_unbounded() {
         // fd's own placeholder for the path it found, and an operand built
         // from an expansion or a glob: none of them is a program name.
         "fd -e ts -x {}",
+        // A placeholder anywhere in the walk builds the child's arguments by
+        // substitution, so the command a review would show is not the one
+        // that runs.
+        "fd -X rm {}",
+        "fd -a SKILL.md ~/.codex/skills -d 1 -x sed -i '1,180p' {}",
+        "fd -e ts -x wc -l {.}",
         "fd -e ts -x $TOOL",
         "fd -e ts -x ./bin/*",
         // No operand at all.

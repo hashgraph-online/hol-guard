@@ -50,6 +50,20 @@ pub(super) fn fd_exec_programs(shell: &str) -> Option<BTreeSet<String>> {
         // pattern or a path, not another walk: `fd fd src` searches for the
         // name, and an `--exec` operand spelling `fd` is refused below with
         // every other interpreter.
+        //
+        // A placeholder anywhere in the walk keeps it unbounded, the rule
+        // `read_only_fanout_fd` already reads the same shape by: `{}`, `{/}`,
+        // `{//}`, `{.}` and `{/.}` make fd build the child's arguments by
+        // substitution instead of appending the path it found, so the command
+        // a review would show is not the command that runs. `fd -X rm {}` and
+        // `fd -a SKILL.md ~/.codex/skills -d 1 -x sed -i '1,180p' {}` keep
+        // their evaluation failure under this reader.
+        if words[command + 1..]
+            .iter()
+            .any(|word| word.contains(['{', '}']))
+        {
+            return None;
+        }
         let actions: Vec<usize> = words
             .iter()
             .enumerate()
@@ -58,10 +72,8 @@ pub(super) fn fd_exec_programs(shell: &str) -> Option<BTreeSet<String>> {
             .collect();
         for action in actions {
             let operand = *words.get(action + 1)?;
-            // `{}`, `{.}`, `{/}`, `{//}` and `{/.}` are fd's own placeholders
-            // for the path it found, and `\;` ends a body: neither names a
-            // program.
-            if operand.contains(['{', '}']) || matches!(operand, "+" | "\\") {
+            // `\;` and `+` end a body rather than naming a program.
+            if matches!(operand, "+" | "\\") {
                 return None;
             }
             // A trailing escape may join the next whitespace-separated word;
