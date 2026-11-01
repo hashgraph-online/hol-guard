@@ -2189,6 +2189,15 @@
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls. A command that finds nothing and exits nonzero is a valid result: report it and carry on to the next command, without retrying or rewriting it."
     },
     {
+      "id": "while-read-loop-body-expansion",
+      "expectation": "allow",
+      "oracle": "commands",
+      "commands": [
+        "while read -r line; do echo \"$line\"; done < README.md"
+      ],
+      "prompt": "Run the exact bash command below once, observe its result, and stop. No additional calls."
+    },
+    {
       "id": "conditional-and-loop-command-lists",
       "expectation": "allow",
       "oracle": "commands",
