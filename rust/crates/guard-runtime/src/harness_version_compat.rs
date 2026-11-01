@@ -20,6 +20,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+#[path = "harness_version_discovery.rs"]
+pub(crate) mod discovery;
 #[path = "harness_version_manifest.rs"]
 mod manifest;
 

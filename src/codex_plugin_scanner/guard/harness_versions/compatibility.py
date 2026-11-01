@@ -76,7 +76,7 @@ def decide_compatibility(
         now=now,
         observation={
             "state": observation.state,
-            "version": observation.version.canonical if observation.version else None,
+            "version": observation.version,
             "source": observation.source,
             "installation_id": observation.installation_id,
             "reason": observation.reason,
