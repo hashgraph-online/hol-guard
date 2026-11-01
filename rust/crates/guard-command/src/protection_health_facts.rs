@@ -22,7 +22,7 @@
 use std::collections::BTreeMap;
 
 use guard_contracts::{
-    DaemonFactsV1, DecisionStreamFactsV1, ManagedInstallFactV1, ProtectionHealthFactsRequestV1,
+    DaemonFactsV1, DecisionStreamFactsV1, HarnessInstallFactV1, ProtectionHealthFactsRequestV1,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -125,7 +125,7 @@ fn stable_harness(value: &Value) -> Option<&str> {
 /// `_hook_signals`: one signal per active install, where a failed
 /// verification on any row of a harness fails the whole harness.
 fn hook_signals(
-    installs: &[ManagedInstallFactV1],
+    installs: &[HarnessInstallFactV1],
     verification: Option<&BTreeMap<String, Value>>,
 ) -> BTreeMap<String, ProtectionSignal> {
     let mut result: BTreeMap<String, ProtectionSignal> = BTreeMap::new();

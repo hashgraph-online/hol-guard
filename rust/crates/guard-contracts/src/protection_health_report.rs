@@ -91,7 +91,7 @@ pub const PROTECTION_HEALTH_FACTS_REQUEST_SCHEMA: &str = "guard-protection-healt
 /// unchanged and proves nothing there.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct ManagedInstallFactV1 {
+pub struct HarnessInstallFactV1 {
     pub harness: Value,
     pub active: Value,
 }
@@ -128,7 +128,7 @@ pub struct ProtectionHealthFactsRequestV1 {
     pub request_id: String,
     /// When the facts were read: an ISO-8601 instant with a UTC offset.
     pub now: String,
-    pub managed_installs: Vec<ManagedInstallFactV1>,
+    pub managed_installs: Vec<HarnessInstallFactV1>,
     /// Each harness's live hook verification, or `null` when none ran.
     pub hook_verification: Option<BTreeMap<String, Value>>,
     /// `null` when there is no daemon runtime row.
