@@ -35,6 +35,9 @@ use std::io::{Cursor, Read};
 
 use super::{decode_text, scan_secret_text, SecretFinding};
 use crate::secret_detection::{candidate_digest, CandidateDigest};
+use crate::wiped_read::read_whole;
+
+use zeroize::Zeroizing;
 
 // The zip container is a directory of fixed-width records rather than a
 // stream, so reading it shares none of the tar walk's code. It lives in its
@@ -186,8 +189,12 @@ fn zip_start(bytes: &[u8]) -> Option<usize> {
 }
 
 /// Inflated bytes either own their buffer or point at the caller's.
+///
+/// An owned buffer is a whole archive's plaintext, so it wipes itself when the
+/// scan is done with it rather than being left in freed memory for a crash
+/// dump to carry; a borrowed one belongs to the caller, who owns that choice.
 enum Payload<'a> {
-    Owned(Vec<u8>),
+    Owned(Zeroizing<Vec<u8>>),
     Borrowed(&'a [u8]),
 }
 
@@ -222,7 +229,7 @@ fn is_tar(data: &[u8]) -> bool {
 /// refused once it has produced the few hundred kilobytes its own size allows,
 /// instead of after the absolute cap's worth of memory has been filled on its
 /// behalf. A thousand-byte stream is held to half a megabyte, not to thirty-two.
-fn inflate_gzip(data: &[u8], total_cap: usize) -> Option<Vec<u8>> {
+fn inflate_gzip(data: &[u8], total_cap: usize) -> Option<Zeroizing<Vec<u8>>> {
     let allowance = data
         .len()
         .saturating_mul(MAX_EXPANSION_RATIO)
@@ -232,12 +239,10 @@ fn inflate_gzip(data: &[u8], total_cap: usize) -> Option<Vec<u8>> {
     // does it when it is handed more than one input — and a single-member
     // decoder stops at the first, leaving the rest of the file unread.
     let mut decoder = flate2::read::MultiGzDecoder::new(data);
-    let mut inflated: Vec<u8> = Vec::new();
     // One byte past the allowance, so a stream that exactly fills it is told
-    // apart from one that would have run over.
-    let read = (&mut decoder)
-        .take(allowance as u64 + 1)
-        .read_to_end(&mut inflated);
+    // apart from one that would have run over. The read keeps no partial
+    // copies of what it inflates, which is a file's plaintext.
+    let (inflated, failure) = read_whole(&mut (&mut decoder).take(allowance as u64 + 1));
     if inflated.len() > allowance {
         return None;
     }
@@ -246,7 +251,7 @@ fn inflate_gzip(data: &[u8], total_cap: usize) -> Option<Vec<u8>> {
     // header that will not parse. What was already inflated is whole archive
     // up to that point, and a credential inside it is still a credential, so
     // the error only ends the read rather than discarding it.
-    if read.is_err() && inflated.is_empty() {
+    if failure.is_some() && inflated.is_empty() {
         return None;
     }
     Some(inflated)
@@ -335,10 +340,12 @@ fn scan_tar(
         let Some(member_name) = entry_name(&entry) else {
             continue;
         };
-        let mut member: Vec<u8> = Vec::new();
         // Bounded by the header's claim and by the member cap, so a header
         // that lies about a short member cannot pull in the rest of the tar.
-        if entry.by_ref().take(size).read_to_end(&mut member).is_err() {
+        // The member is a file's contents, so it is read without leaving
+        // partial copies behind and wiped once it has been scanned.
+        let (member, failure) = read_whole(&mut entry.by_ref().take(size));
+        if failure.is_some() {
             continue;
         }
         scanned = scanned.saturating_add(member.len());

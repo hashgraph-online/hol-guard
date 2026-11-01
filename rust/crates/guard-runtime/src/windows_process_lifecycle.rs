@@ -7,6 +7,9 @@
 //! - `creation_time` answers each process's kernel creation time, or `null`.
 //! - `owner_sid` answers `sid:` and the SID each process's token runs as,
 //!   or `null`.
+//! - `current_owner_sid` answers `sid:` and the SID the runtime's own token
+//!   runs as, or `null`. The runtime inherits its caller's primary token, so
+//!   this is the caller's user without opening the caller by id.
 //! - `terminate_if_creation_time` terminates one process only while its
 //!   creation time still matches, and answers whether that generation
 //!   exited.
@@ -49,6 +52,7 @@ trait Processes {
     fn liveness(&self, process_id: u32) -> Option<bool>;
     fn creation_time(&self, process_id: u32) -> Option<u64>;
     fn owner_sid(&self, process_id: u32) -> Option<String>;
+    fn current_owner_sid(&self) -> Option<String>;
     fn terminate_if_creation_time(
         &self,
         process_id: u32,
@@ -71,6 +75,10 @@ impl Processes for SystemProcesses {
 
     fn owner_sid(&self, process_id: u32) -> Option<String> {
         guard_runtime_windows_process::process_owner_sid(process_id)
+    }
+
+    fn current_owner_sid(&self) -> Option<String> {
+        current_owner_sid()
     }
 
     fn terminate_if_creation_time(
@@ -146,6 +154,12 @@ fn answer<P: Processes>(request: &Request, processes: &P) -> Result<Value, Strin
                 .collect();
             Ok(json!({ "owner_sids": owner_sids }))
         }
+        "current_owner_sid" => {
+            if !request.pids.is_empty() || request.pid.is_some() {
+                return Err(invalid());
+            }
+            Ok(json!({ "owner_sid": processes.current_owner_sid() }))
+        }
         "terminate_if_creation_time" => {
             let timeout = match request.timeout_ms {
                 None => None,
@@ -176,6 +190,21 @@ fn answer<P: Processes>(request: &Request, processes: &P) -> Result<Value, Strin
         }
         _ => Err(invalid()),
     }
+}
+
+/// The SID this process's token runs as, read through the current-process
+/// pseudo-handle, which a restricted token can always query.
+#[cfg(windows)]
+fn current_owner_sid() -> Option<String> {
+    let sid = windows_permissions::utilities::current_process_sid()
+        .ok()?
+        .to_string();
+    sid.starts_with("S-").then(|| format!("sid:{sid}"))
+}
+
+#[cfg(not(windows))]
+fn current_owner_sid() -> Option<String> {
+    None
 }
 
 /// A process id Windows can name: positive and within `u32`.

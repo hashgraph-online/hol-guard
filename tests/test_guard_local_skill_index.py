@@ -7,14 +7,33 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
+from codex_plugin_scanner.guard.runtime import local_skill_index
 from codex_plugin_scanner.guard.runtime.local_skill_index import (
+    LocalSkillRecord,
     approved_skill_roots,
     index_local_skills,
     inspect_indexed_skill,
     public_skill_page,
-    read_skill_metadata,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+_METADATA: dict[str, object] = {
+    "name": "report",
+    "description": "Prepare a report.",
+    "compatibility": None,
+    "requested_tools": None,
+    "metadata_digest": "a" * 64,
+    "requirements_complete": False,
+    "instruction_content_loaded": False,
+    "dependencies": [],
+}
+_IDENTITY: dict[str, object] = {
+    "status": "complete",
+    "manifest_digest": "sha256:" + "b" * 64,
+    "entry_count": 2,
+    "total_bytes": 40,
+    "reason": None,
+}
 
 
 def _skill(root: Path, name: str = "report", *, frontmatter: str = "", body: str = "PRIVATE INSTRUCTIONS") -> Path:
@@ -75,11 +94,126 @@ def test_symlink_roots_and_documents_are_explicit_gaps(tmp_path: Path):
         ("# " + "x" * 20_000 + "\n", "metadata-frontmatter-limit"),
     ],
 )
-def test_malformed_or_over_limit_metadata_is_not_loaded(tmp_path: Path, header: str, reason: str):
+def test_malformed_or_over_limit_metadata_is_an_issue(tmp_path: Path, header: str, reason: str):
     root = tmp_path / "skills"
-    document = _skill(root, frontmatter=header)
-    with pytest.raises(ValueError, match=reason):
-        read_skill_metadata(document, root=root)
+    _skill(root, frontmatter=header)
+    records, issues = index_local_skills({"root": root}, home=tmp_path, cancel=threading.Event())
+    assert not records
+    assert issues == [{"root_id": "root", "reason": reason}]
+
+
+def test_an_unavailable_runtime_reports_every_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(local_skill_index, "_skill_index_answer", lambda *_args, **_kwargs: None)
+    roots = {"a": tmp_path / "a", "b": tmp_path / "b"}
+    records, issues = index_local_skills(roots, home=tmp_path, cancel=threading.Event())
+    assert not records
+    assert issues == [
+        {"root_id": "a", "reason": "skill-index-unavailable"},
+        {"root_id": "b", "reason": "skill-index-unavailable"},
+    ]
+
+
+@pytest.mark.parametrize("relative", ["/etc/passwd", "../outside/SKILL.md", "a//SKILL.md", "./SKILL.md"])
+def test_runtime_records_outside_their_root_are_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str):
+    record = {"root_id": "root", "document_hex": relative.encode().hex(), "metadata": _METADATA}
+    monkeypatch.setattr(
+        local_skill_index, "_skill_index_answer", lambda *_args, **_kwargs: {"records": [record], "issues": []}
+    )
+    records, issues = index_local_skills({"root": tmp_path}, home=tmp_path, cancel=threading.Event())
+    assert not records
+    assert issues == [{"root_id": "root", "reason": "metadata-unreadable"}]
+
+
+def test_a_cancelled_scan_stops_before_its_next_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cancel = threading.Event()
+    requested: list[object] = []
+
+    def fake_answer(request: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        requested.append(request["roots"])
+        cancel.set()
+        return {"records": [], "issues": []}
+
+    monkeypatch.setattr(local_skill_index, "_skill_index_answer", fake_answer)
+    roots = {"a": tmp_path / "a", "b": tmp_path / "b"}
+    assert index_local_skills(roots, home=tmp_path, cancel=cancel) == ({}, [])
+    assert requested == [[{"root_id": "a", "root_hex": str(tmp_path / "a").encode().hex()}]]
+
+
+def test_the_skill_cap_spans_every_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    requested: list[object] = []
+
+    def fake_answer(request: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        roots = request["roots"]
+        assert isinstance(roots, list)
+        root_id = roots[0]["root_id"]
+        requested.append(root_id)
+        documents = (b"a/SKILL.md", b"b/SKILL.md")
+        return {
+            "records": [{"root_id": root_id, "document_hex": doc.hex(), "metadata": _METADATA} for doc in documents],
+            "issues": [],
+        }
+
+    monkeypatch.setattr(local_skill_index, "_skill_index_answer", fake_answer)
+    monkeypatch.setattr(local_skill_index, "_INDEX_LIMIT", 3)
+    roots = {"a": tmp_path / "a", "b": tmp_path / "b", "c": tmp_path / "c"}
+    records, issues = index_local_skills(roots, home=tmp_path, cancel=threading.Event())
+    assert len(records) == 3
+    assert issues == [{"root_id": "b", "reason": "skill-index-limit"}]
+    assert requested == ["a", "b"]
+
+    monkeypatch.setattr(local_skill_index, "_INDEX_LIMIT", 2)
+    requested.clear()
+    records, issues = index_local_skills(roots, home=tmp_path, cancel=threading.Event())
+    assert len(records) == 2
+    assert issues == [{"root_id": "b", "reason": "skill-index-limit"}]
+    assert requested == ["a"]
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"root_id": ["root"], "document_hex": b"a/SKILL.md".hex(), "metadata": _METADATA},
+        {"root_id": "root", "document_hex": b"a/SKILL.md".hex(), "metadata": {**_METADATA, "name": 7}},
+        {"root_id": "root", "document_hex": b"a/SKILL.md".hex(), "metadata": {**_METADATA, "description": None}},
+        {"root_id": "root", "document_hex": b"a/SKILL.md".hex(), "metadata": {**_METADATA, "metadata_digest": "x"}},
+        {"root_id": "root", "document_hex": b"a/SKILL.md".hex(), "metadata": {**_METADATA, "uri": "file:///etc"}},
+        {"root_id": "root", "document_hex": b"a/SKILL.md".hex(), "metadata": {"name": "report"}},
+    ],
+)
+def test_malformed_runtime_records_are_issues(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, record: object):
+    issue = {"root_id": [], "reason": "metadata-unreadable"}
+    monkeypatch.setattr(
+        local_skill_index, "_skill_index_answer", lambda *_args, **_kwargs: {"records": [record], "issues": [issue]}
+    )
+    records, issues = index_local_skills({"root": tmp_path}, home=tmp_path, cancel=threading.Event())
+    assert not records
+    assert issues == [{"root_id": "root", "reason": "metadata-unreadable"}]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"status": "granted"},
+        {"status": 1},
+        {"manifest_digest": 7},
+        {"manifest_digest": "b" * 64},
+        {"entry_count": -1},
+        {"entry_count": True},
+        {"total_bytes": "40"},
+        {"reason": ["changed"]},
+    ],
+)
+def test_malformed_identity_answers_are_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: dict[str, object]
+):
+    record = LocalSkillRecord("id", "root", tmp_path / "a" / "SKILL.md", tmp_path, _METADATA)
+    monkeypatch.setattr(local_skill_index, "_skill_index_answer", lambda *_a, **_k: {"identity": _IDENTITY})
+    assert inspect_indexed_skill(record, home=tmp_path)["manifest_digest"] == _IDENTITY["manifest_digest"]
+    monkeypatch.setattr(
+        local_skill_index, "_skill_index_answer", lambda *_a, **_k: {"identity": {**_IDENTITY, **change}}
+    )
+    with pytest.raises(OSError, match="skill-inspection-unavailable"):
+        inspect_indexed_skill(record, home=tmp_path)
 
 
 def test_lazy_directory_identity_changes_with_supporting_file_without_grants(tmp_path: Path):

@@ -67,6 +67,11 @@ _NODE_TOOLS = {
     "turbo": ("2.5.5", ("turbo",)),
 }
 _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "prettier --check ."}
+# The suite split into named parts, which is how a project with more than one
+# kind of test spells them. The route reads the body rather than the name, so
+# the fixture holds a runner body and a read-only tool body under the same
+# `test:` family.
+_TEST_FAMILY_SCRIPTS = {"test:unit": "vitest run tests/", "test:types": "tsc --noEmit"}
 _INSTALLED_PACKAGES = _NODE_PACKAGES | {name: version for name, (version, _) in _NODE_TOOLS.items()}
 
 
@@ -79,7 +84,8 @@ def _node_toolchain(workspace: Path, *, tools: bool = False) -> None:
         f"node_modules/{name}": {"version": version, "integrity": "sha512-fixture"}
         for name, version in packages.items()
     }
-    scripts = {"build": "vite build", "test": "vitest run"} | (_TOOL_SCRIPTS if tools else {})
+    extra = (_TOOL_SCRIPTS | _TEST_FAMILY_SCRIPTS) if tools else {}
+    scripts = {"build": "vite build", "test": "vitest run"} | extra
     manifest = {"private": True, "scripts": scripts, "devDependencies": dependencies}
     _write(workspace / "package.json", json.dumps(manifest) + "\n")
     _write(workspace / "package-lock.json", json.dumps({"lockfileVersion": 3, "packages": locked}) + "\n")

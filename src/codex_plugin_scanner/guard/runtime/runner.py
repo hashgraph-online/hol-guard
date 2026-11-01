@@ -407,6 +407,19 @@ def _build_policy_bundle_decisions(
     )
 
 
+def _legacy_shadow_predates_candidate(legacy: Mapping[str, object], candidate: Mapping[str, object]) -> bool:
+    """Whether the stored v1 bundle was issued for an older publication than the candidate.
+
+    Cloud issues a publication's v1 bundle at or after the publication itself,
+    so one issued earlier carries a different policy and cannot show whether
+    the candidate's compiler agrees. Unreadable times keep the comparison.
+    """
+
+    legacy_issued = _parse_iso_timestamp(str(legacy.get("issuedAt") or ""))
+    candidate_issued = _parse_iso_timestamp(str(candidate.get("issuedAt") or ""))
+    return legacy_issued is not None and candidate_issued is not None and legacy_issued < candidate_issued
+
+
 def policy_bundle_candidate_decisions(
     store: GuardStore,
     policy_bundle: dict[str, object],
@@ -458,6 +471,8 @@ def policy_bundle_candidate_decisions(
             and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
             else None
         )
+    if isinstance(legacy_payload, dict) and _legacy_shadow_predates_candidate(legacy_payload, policy_bundle):
+        legacy_payload = None
     try:
         legacy_decisions = (
             _build_policy_bundle_decisions(

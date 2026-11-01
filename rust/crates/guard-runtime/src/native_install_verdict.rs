@@ -54,27 +54,27 @@ struct Request {
 /// One child process to run: no shell, stdin closed, stdout and stderr
 /// captured up to [`MAX_OUTPUT_BYTES`] each.
 #[derive(Debug, PartialEq, Eq)]
-struct Invocation {
-    program: String,
-    arguments: Vec<String>,
+pub(crate) struct Invocation {
+    pub(crate) program: String,
+    pub(crate) arguments: Vec<String>,
     /// `None` keeps the runtime's working directory and environment.
-    context: Option<WindowsContext>,
-    timeout: Duration,
+    pub(crate) context: Option<WindowsContext>,
+    pub(crate) timeout: Duration,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct WindowsContext {
+pub(crate) struct WindowsContext {
     cwd: String,
     environment: Vec<(String, String)>,
 }
 
-struct Ran {
-    success: bool,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
+pub(crate) struct Ran {
+    pub(crate) success: bool,
+    pub(crate) stdout: Vec<u8>,
+    pub(crate) stderr: Vec<u8>,
 }
 
-trait Runner {
+pub(crate) trait Runner {
     /// The finished child, or an error when it could not start, outlived its
     /// timeout or wrote more than the output bound.
     fn run(&mut self, invocation: &Invocation) -> io::Result<Ran>;
@@ -400,7 +400,7 @@ fn is_line_break(character: char) -> bool {
     )
 }
 
-struct SystemRunner;
+pub(crate) struct SystemRunner;
 
 impl Runner for SystemRunner {
     fn run(&mut self, invocation: &Invocation) -> io::Result<Ran> {

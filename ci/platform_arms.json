@@ -1467,6 +1467,22 @@
    "body": "2fd3a565b13a"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "On Windows the metadata file is opened with `FILE_FLAG_OPEN_REPARSE_POINT` and read-only sharing, so it cannot be replaced or written while it is read, and the lstat-before/after and fstat-before/after comparisons still run; only the opened-handle versus path identity check is Unix-only, because a path lstat on Windows carries no file index to compare with the handle's. The index tests in `local_skill_index_tests.rs` are not `cfg(unix)`-gated, so the Windows test job runs this arm.",
+   "file": "rust/crates/guard-runtime/src/local_skill_index.rs",
+   "item": "fn read_metadata -- cfg! expression",
+   "cfg": "unix",
+   "body": "86cc00090e5f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Discovery reports each document path below its root as `/`-joined UTF-8 on Windows (OS bytes on Unix), so decoding it as UTF-8 is the Windows spelling of the same path; an undecodable path is refused as `metadata-unreadable`. The index tests in `local_skill_index_tests.rs` are not `cfg(unix)`-gated, so the Windows test job runs this arm.",
+   "file": "rust/crates/guard-runtime/src/local_skill_index.rs",
+   "item": "fn relative_path -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "1c50e42314a2"
+  },
+  {
    "verdict": "windows-unsupported",
    "note": "Orphaned hook workers are reaped only on Unix, as before the move: the selection reads POSIX `ps` output and the daemon manager returns before it asks on Windows. The Windows arm answers `orphaned_worker_reap_unsupported`, pinned by `reaping_is_unsupported_off_unix`.",
    "file": "rust/crates/guard-runtime/src/orphaned_worker_reap.rs",
@@ -2313,6 +2329,22 @@
    "item": "pub(crate) fn secure_open(_path: &Path, _canonical_path: &Path) -> Result<File, SecureOpenError>",
    "cfg": "not(any(unix, windows))",
    "body": "6b310cc8c25c"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn current_uid() -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "43e9f362db32"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "uid is a POSIX concept, and only the Linux `/proc` scan asks who owns an unreadable process, and `Platform::current()` never picks it off Linux, so the Windows arm is unreachable there. `scan` answers `None` for every non-Linux, non-macOS platform, exactly as `onefile_open_paths.py` returned `None` on win32, and `other_platforms_never_scan` in `onefile_open_paths_tests.rs` covers that answer without a `cfg` gate.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32>",
+   "cfg": "not(unix)",
+   "body": "5efc5e13f499"
   }
  ]
 }
