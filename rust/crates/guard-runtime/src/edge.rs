@@ -344,6 +344,11 @@ fn evaluate_validated_envelope(
             );
             let evaluated = crate::network_protection::apply_to_envelope(&envelope, evaluated);
             let evaluated = runtime_risk::apply_to_envelope(&envelope, policy_snapshot, evaluated);
+            let evaluated = crate::edge_exact_command_review::apply_to_envelope(
+                &envelope,
+                policy_snapshot,
+                evaluated,
+            );
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             edge_result_check::validate_pre_tool_result(&value)?;

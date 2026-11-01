@@ -98,7 +98,8 @@ fn export_rule(row: &Value, provenance: bool) -> Result<Value, Error> {
     if optional(&row["workspace"]).is_some() && !provenance {
         return Err(error("sensitive_local_policy_requires_provenance", &id));
     }
-    if !matches!(row["action"].as_str(), Some("allow" | "block")) {
+    // A synced Cloud rule can ask before one exact command; show it as is.
+    if !matches!(row["action"].as_str(), Some("allow" | "block" | "review")) {
         return Err(error("unsupported_local_policy_action", &id));
     }
     let expiry = expiry(&row["expires_at"], &id, "invalid_local_policy_expiry")?;

@@ -74131,11 +74131,45 @@
         "include_provenance": false
       },
       "expected": {
-        "error": {
-          "type": "PolicyCompilationError",
-          "message": "unsupported_local_policy_action: local-2",
-          "code": "unsupported_local_policy_action",
-          "rule_id": "local-2"
+        "ok": {
+          "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+          "kind": "GuardPolicy",
+          "metadata": {
+            "id": "local-policy",
+            "name": "Local Guard policy",
+            "revision": 0
+          },
+          "spec": {
+            "defaults": {
+              "mode": "prompt"
+            },
+            "rules": [
+              {
+                "id": "local-2",
+                "enabled": true,
+                "effect": "review",
+                "match": {
+                  "harnesses": [
+                    "pi"
+                  ]
+                },
+                "lifetime": {
+                  "mode": "permanent",
+                  "expiresAt": null
+                },
+                "provenance": {
+                  "source": "export-redacted",
+                  "createdAt": "1970-01-01T00:00:00Z"
+                },
+                "x-hol-local": {
+                  "artifactHash": null,
+                  "harness": "pi",
+                  "publisher": null,
+                  "scope": "harness"
+                }
+              }
+            ]
+          }
         }
       }
     },
@@ -74155,11 +74189,50 @@
         "include_provenance": true
       },
       "expected": {
-        "error": {
-          "type": "PolicyCompilationError",
-          "message": "unsupported_local_policy_action: local-2",
-          "code": "unsupported_local_policy_action",
-          "rule_id": "local-2"
+        "ok": {
+          "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+          "kind": "GuardPolicy",
+          "metadata": {
+            "id": "local-policy",
+            "name": "Local Guard policy",
+            "revision": 0
+          },
+          "spec": {
+            "defaults": {
+              "mode": "prompt"
+            },
+            "rules": [
+              {
+                "id": "local-2",
+                "enabled": true,
+                "effect": "review",
+                "match": {
+                  "harnesses": [
+                    "pi"
+                  ]
+                },
+                "lifetime": {
+                  "mode": "permanent",
+                  "expiresAt": null
+                },
+                "provenance": {
+                  "source": "local",
+                  "createdAt": "2026-01-01T00:00:00Z"
+                },
+                "x-hol-local": {
+                  "artifactHash": null,
+                  "harness": "pi",
+                  "owner": null,
+                  "publisher": null,
+                  "reason": null,
+                  "scope": "harness",
+                  "source": "local",
+                  "updatedAt": "2026-01-01T00:00:00+00:00",
+                  "workspace": null
+                }
+              }
+            ]
+          }
         }
       }
     },
