@@ -211,6 +211,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = onefile_extraction_reclaim::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if resident_state_prune::is_command(command) && flag == "--stdin" => {
+            let response = resident_state_prune::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
             let response = device_key_helper::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

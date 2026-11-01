@@ -823,6 +823,7 @@ mod resident_protocol;
 mod resident_runtime_verification;
 mod resident_state;
 mod resident_state_encoding;
+mod resident_state_prune;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;

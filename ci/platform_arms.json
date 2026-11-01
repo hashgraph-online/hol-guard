@@ -2406,9 +2406,9 @@
    "verdict": "windows-equivalent",
    "note": "Windows asks `guard_runtime_windows_process::process_liveness`, the same OpenProcess-based check `onefile_extraction.py` reached through `windows_process_is_running`, and keeps the fail-closed rule: a pid that is not provably exited (`Some(false)`), or does not fit a process id, counts as alive, so a marked directory is never deleted on an unknown answer. `liveness_fails_closed` runs on every platform.",
    "file": "rust/crates/guard-runtime/src/onefile_extraction_reclaim.rs",
-   "item": "fn pid_alive(pid: i64) -> bool",
+   "item": "pub(crate) fn pid_alive(pid: i64) -> bool",
    "cfg": "not(unix)",
-   "body": "aeb9e90f0af4"
+   "body": "59e85e4c718e"
   },
   {
    "verdict": "windows-unsupported",
@@ -2433,6 +2433,54 @@
    "item": "fn kill_group(_child: &Child)",
    "cfg": "not(unix)",
    "body": "42851029dd12"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Python parity: `resident_state_prune.py` was POSIX only and reported `unsupported` on Windows, where the resident has no `resident-v3-*` socket directories or owner flock to prove dead. The Windows arm answers `{\"outcome\": \"unsupported\"}` and removes nothing, and `repair_native_runtime` shows the step as skipped.",
+   "file": "rust/crates/guard-runtime/src/resident_state_prune.rs",
+   "item": "fn run_command -- cfg! expression",
+   "cfg": "unix",
+   "body": "23859dc7f986"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Opens the lock without `O_NOFOLLOW`, which Windows lacks. `run_command` answers `unsupported` off Unix before any prune runs, so this arm is never reached on Windows; `resident_state_prune_tests.rs` is `cfg(unix)`-gated for the same reason.",
+   "file": "rust/crates/guard-runtime/src/resident_state_prune.rs",
+   "item": "fn open_owner_lock(directory: &Path) -> io::Result<File>",
+   "cfg": "not(unix)",
+   "body": "9998545c3f20"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Answers `Unknown`, which keeps every socket. `run_command` answers `unsupported` off Unix before any prune runs, so this arm is never reached on Windows; `resident_state_prune_tests.rs` is `cfg(unix)`-gated for the same reason.",
+   "file": "rust/crates/guard-runtime/src/resident_state_prune_sockets.rs",
+   "item": "pub(super) fn probe_socket(_socket: &Path) -> SocketState",
+   "cfg": "not(unix)",
+   "body": "15e874268607"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Reports no file as a socket, so nothing is unlinked. `run_command` answers `unsupported` off Unix before any prune runs, so this arm is never reached on Windows; `resident_state_prune_tests.rs` is `cfg(unix)`-gated for the same reason.",
+   "file": "rust/crates/guard-runtime/src/resident_state_prune_sockets.rs",
+   "item": "fn is_socket(_metadata: &Metadata) -> bool",
+   "cfg": "not(unix)",
+   "body": "3b898b22b80d"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Treats every directory as shared, so no socket root is walked. `run_command` answers `unsupported` off Unix before any prune runs, so this arm is never reached on Windows; `resident_state_prune_tests.rs` is `cfg(unix)`-gated for the same reason.",
+   "file": "rust/crates/guard-runtime/src/resident_state_prune_sockets.rs",
+   "item": "fn shared_writable(_metadata: &Metadata) -> bool",
+   "cfg": "not(unix)",
+   "body": "96322b1b62f4"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Reports every socket as changed, so nothing is unlinked. `run_command` answers `unsupported` off Unix before any prune runs, so this arm is never reached on Windows; `resident_state_prune_tests.rs` is `cfg(unix)`-gated for the same reason.",
+   "file": "rust/crates/guard-runtime/src/resident_state_prune_sockets.rs",
+   "item": "fn same_inode(_left: &Metadata, _right: &Metadata) -> bool",
+   "cfg": "not(unix)",
+   "body": "f242a646d757"
   },
   {
    "verdict": "windows-equivalent",
