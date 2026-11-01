@@ -19,7 +19,6 @@ from .windows_support import windows_directory
 NATIVE_INSTALL_FEATURE = "native-install-verdict-v1"
 NATIVE_INSTALL_COMMAND = "native-install-verdict"
 NATIVE_INSTALL_SCHEMA = "native-install-verdict.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 40.0
 _MAX_OUTPUT_BYTES = 64 * 1024
 _PLATFORMS = {"Darwin": "macos", "Windows": "windows"}
@@ -90,7 +89,7 @@ def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
     from ..native_runtime import _run_native_process, native_runtime_status
 
     deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
+    status = native_runtime_status(deadline_monotonic=deadline)
     if (
         not status.available
         or not status.compatible

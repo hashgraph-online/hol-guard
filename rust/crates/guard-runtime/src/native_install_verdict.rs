@@ -247,7 +247,13 @@ fn verify_macos(request: &Request, runner: &mut impl Runner) -> Verdict {
 /// list, `Some(None)` when it is one without a string `pkg-version`.
 fn receipt_version(bytes: &[u8]) -> Option<Option<String>> {
     let text = std::str::from_utf8(bytes).ok()?;
-    let document = roxmltree::Document::parse(text).ok()?;
+    // `pkgutil` always writes Apple's PLIST DOCTYPE. Allowing the declaration
+    // resolves no external entity; an unresolvable reference fails the parse.
+    let options = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..roxmltree::ParsingOptions::default()
+    };
+    let document = roxmltree::Document::parse_with_options(text, options).ok()?;
     let root = document.root_element();
     if root.tag_name().name() != "plist" {
         return None;
@@ -332,12 +338,8 @@ fn verify_windows(request: &Request, runner: &mut impl Runner) -> Verdict {
     };
     let field = |name: &str| payload.get(name).and_then(Value::as_str);
     let thumbprint = field("Thumbprint").map(|value| value.replace(' ', "").to_uppercase());
-    let pinned = thumbprint.is_some_and(|value| {
-        request
-            .windows_signer_thumbprints
-            .iter()
-            .any(|pin| *pin == value)
-    });
+    let pinned =
+        thumbprint.is_some_and(|value| request.windows_signer_thumbprints.contains(&value));
     match field("Version").and_then(|value| validated_version(value.to_owned())) {
         Some(version) if payload.is_object() && field("Status") == Some("Valid") && pinned => {
             verdict("healthy", "native_install_valid", identity, "valid").with_version(version)
