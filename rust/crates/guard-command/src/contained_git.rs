@@ -58,6 +58,7 @@ const READ_ONLY_VERBS: &[&str] = &[
     "cat-file",
     "check-attr",
     "check-ignore",
+    "check-mailmap",
     "check-ref-format",
     "cherry",
     "count-objects",
@@ -72,11 +73,14 @@ const READ_ONLY_VERBS: &[&str] = &[
     "ls-tree",
     "merge-base",
     "name-rev",
+    "patch-id",
     "rev-list",
     "shortlog",
     "show",
     "show-branch",
     "show-ref",
+    "stripspace",
+    "var",
 ];
 
 /// Verbs that both read and write, with the subcommands that only read. An

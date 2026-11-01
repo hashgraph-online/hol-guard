@@ -175,6 +175,13 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # network and no home.
         "neg-git-diff-abbreviated-ext-diff",
         "neg-git-log-abbreviated-textconv",
+        # Translating contacts against a mailmap file the line names is a read
+        # of that path, not of the repository's own mailmap, and a contained
+        # run reaches only the sandbox's copy of it.
+        "neg-git-check-mailmap-other-file",
+        # `--in-place` makes the trailer filter edit the file it names, and a
+        # contained run keeps that edit inside the sandbox.
+        "neg-git-interpret-trailers-in-place",
         # A pager named on the line for a ref reading: Git runs the program the
         # `core.pager` value names, so the reading keeps its review, and a
         # contained run gives that program only the sandbox's reach.
