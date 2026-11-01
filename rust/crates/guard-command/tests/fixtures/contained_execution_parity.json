@@ -1784,8 +1784,9 @@
         ]
       },
       "expected": {
-        "reason_code": "vitest_restricted_invalid_command",
-        "message": "Protected Jest requires a run that does not watch."
+        "value": [
+          "--watch-all=false"
+        ]
       }
     },
     {

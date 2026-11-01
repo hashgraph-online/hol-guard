@@ -663,10 +663,10 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
             contained_runner_call(arguments)
                 || matches!(arguments, [flag, rest @ ..] if flag == "--no-install" && contained_runner_call(rest))
         }
-        "vitest" => arguments.first().is_some_and(|arg| arg == "run"),
+        "vitest" => crate::contained_argv::vitest_runs_once(arguments),
         "jest" => jest_contained_call(arguments),
         "node" | "nodejs" => {
-            matches!(arguments, [entry, run, ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && run == "run")
+            matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
                 || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
         }
         _ => false,

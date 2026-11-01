@@ -6194,6 +6194,108 @@
       "expect": "allow"
     },
     {
+      "id": "runner-watch-off-jest-watchall-false",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx jest --watchAll=false"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-watch-off-jest-watchall-separate",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx jest --watchAll false"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-watch-off-jest-watch-kebab-false",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx jest --watch-all=false"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-watch-off-vitest-dash-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest --run"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-watch-off-vitest-no-watch",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest --no-watch"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-watch-off-vitest-related-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest related src/a.test.ts --run"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "gauntlet-node-jest-entry-ci",
       "fix_area": "shell",
       "harnesses": [
