@@ -23,7 +23,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 const SCHEMA: &str = "local-authority-integrity.v1";
-const MAX_REQUEST_BYTES: u64 = 512 * 1024;
+const MAX_REQUEST_BYTES: u64 = 80 * 1024 * 1024;
 const MAX_KEY_BYTES: usize = 1024;
 
 #[derive(Deserialize)]

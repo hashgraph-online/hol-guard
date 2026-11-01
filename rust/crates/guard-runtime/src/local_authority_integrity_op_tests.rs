@@ -181,3 +181,12 @@ fn requests_are_validated() {
         );
     }
 }
+
+/// Runtime-transition inverses carry whole restored files, well past the
+/// size of an approval row.
+#[test]
+fn a_large_transition_inverse_signs_and_verifies() {
+    let payload = json!({"files": ["x".repeat(2 * 1024 * 1024)]});
+    let signed = sign(payload.clone(), PURPOSE);
+    assert_eq!(verify(payload, signed)["status"], "valid");
+}
