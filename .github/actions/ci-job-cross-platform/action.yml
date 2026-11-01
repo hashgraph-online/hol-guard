@@ -82,7 +82,11 @@ runs:
     run: uv run --no-sync pytest tests/test_windows_processes.py --tb=short
     shell: pwsh
   - name: Run Windows direct-lane ACK regressions
+    # The runtime writes and withdraws the private ACK file.
     if: runner.os == 'Windows'
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+      HOL_GUARD_NATIVE_REGRESSION: "1"
     run: uv run --no-sync pytest tests/test_native_policy_snapshot_direct_lane_windows.py --tb=short
     shell: pwsh
   - name: Run Windows Codex hook process-tree regressions

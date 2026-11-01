@@ -88,16 +88,23 @@ fn skill_directories_list_without_review() {
         ),
         "allow"
     );
+    assert_eq!(
+        action(
+            &home,
+            "zcode",
+            "cat ~/.agents/skills/review-loop/scripts/approve.sh"
+        ),
+        "allow"
+    );
     for command in [
         // Other agent state, hidden entries inside a skill, actions and
-        // content reads keep their review.
+        // content reads outside the skill rules keep their review.
         "ls -R ~/.codex",
         "find ~/.codex -name auth.json",
         "ls ~/.agents/skills/review-loop/.cache",
         "find ~/.agents -name approve.sh -exec cat {} +",
         "find ~/.agents -name approve.sh -delete",
         "find -L ~/.agents -name approve.sh",
-        "cat ~/.agents/skills/review-loop/scripts/approve.sh",
         "ls ~/.ssh",
     ] {
         assert_ne!(action(&home, "zcode", command), "allow", "{command}");

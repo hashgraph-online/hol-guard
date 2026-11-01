@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
 from codex_plugin_scanner.guard.runtime import native_workspace_review as native
 from tests.test_native_workspace_review import _request, _status, _Store
@@ -97,14 +98,14 @@ def test_staging_maps_directory_and_atomic_write_failures_to_unavailable(
 
 
 def test_windows_directory_security_failure_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_ensure(_path: Path) -> None:
-        raise OSError("ACL unavailable")
+    def fail_write(**_kwargs: object) -> None:
+        raise NativePolicySnapshotError("native_resident_windows_access_denied")
 
     monkeypatch.setattr(native.os, "name", "nt")
     monkeypatch.setattr(
         native,
         "_native_policy_snapshot",
-        SimpleNamespace(_windows_ensure_private_directory=fail_ensure),
+        SimpleNamespace(_windows_write_private_file_atomic=fail_write),
     )
     with pytest.raises(native.NativeWorkspaceReviewError) as error:
         native.stage_workspace_review_request(_Store(_request()), tmp_path, "request-1")

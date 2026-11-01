@@ -144,6 +144,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = local_skill_index::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if windows_private_state::is_command(command) && flag == "--stdin" => {
+            let response = windows_private_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
             let response = device_key_helper::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

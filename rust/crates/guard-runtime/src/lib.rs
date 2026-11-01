@@ -73,6 +73,7 @@ mod binding_capture_record;
 #[cfg(all(test, unix))]
 mod binding_capture_vectors_tests;
 mod blocked_request_mode;
+mod boot_observation;
 mod bounded_hook_bridge;
 mod bounded_hook_bridge_grok;
 mod bounded_hook_bridge_grok_render;
@@ -879,6 +880,7 @@ mod verified_read_execute_op;
 mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
+mod windows_private_state;
 mod windows_process_command_lines;
 mod windows_process_lifecycle;
 #[cfg(windows)]

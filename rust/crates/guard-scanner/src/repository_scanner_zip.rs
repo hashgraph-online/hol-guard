@@ -66,6 +66,9 @@ use super::{member_path, Caps, MAX_MEMBERS};
 use crate::repository_scanner::decode_text;
 use crate::secret_detection::{candidate_digest, scan_secret_text, CandidateDigest, SecretFinding};
 
+#[path = "repository_scanner_zip_prefix.rs"]
+mod prefix;
+
 /// `PK\x03\x04`, which begins the first member's local header and so begins
 /// every zip that holds anything.
 const LOCAL_SIGNATURE: &[u8] = &[0x50, 0x4b, 0x03, 0x04];
@@ -104,6 +107,16 @@ const ZIP64_SENTINEL: u32 = u32::MAX;
 /// Whether these bytes begin a zip archive.
 pub(super) fn is_zip(data: &[u8]) -> bool {
     data.starts_with(LOCAL_SIGNATURE) || data.starts_with(EOCD_SIGNATURE)
+}
+
+/// Where the zip in `data` begins when something else is written in front of
+/// it, or `None` when there is no archive behind those bytes.
+///
+/// Finding it is `repository_scanner_zip_prefix`'s work. This is the name the
+/// walk beside this module calls, because an item a child module owns cannot
+/// be re-exported from here.
+pub(super) fn embedded_start(data: &[u8]) -> Option<usize> {
+    prefix::embedded_start(data)
 }
 
 /// Findings from the members of a zip archive, with the number of member bytes

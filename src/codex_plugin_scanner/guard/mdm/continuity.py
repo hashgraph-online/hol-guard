@@ -1,21 +1,18 @@
 """Protected installation identity and read-only lease-continuity evidence.
 
-The native runtime reads, parses and writes the continuity record and decides
-what a verification reports. This module keeps the device-key lookup, the
-boot probe and the lock.
+The native runtime reads, parses and writes the continuity record, observes
+the boot and decides what a verification reports. This module keeps the
+device-key lookup and the lock.
 """
 
 from __future__ import annotations
 
 import base64
-import ctypes
 import json
 import os
 import platform
 import secrets
 import stat
-import time
-import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -40,6 +37,7 @@ _MAX_UINT64 = (1 << 64) - 1
 INSTALLATION_CONTINUITY_FEATURE = "native-installation-continuity-v1"
 INSTALLATION_CONTINUITY_COMMAND = "installation-continuity"
 INSTALLATION_CONTINUITY_SCHEMA = "installation-continuity.v1"
+BOOT_OBSERVATION_FEATURE = "native-boot-observation-v1"
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _OUTPUT_LIMIT_BYTES = 16 * 1024
 
@@ -108,7 +106,7 @@ def _private_regular_file(metadata: os.stat_result) -> bool:
     return os.name == "nt" or (metadata.st_uid == 0 and not stat.S_IMODE(metadata.st_mode) & 0o077)
 
 
-def _native_answer(request: dict[str, object]) -> dict[str, Any]:
+def _native_answer(request: dict[str, object], *, extra_features: tuple[str, ...] = ()) -> dict[str, Any]:
     """The runtime's answer to one continuity request, with any record as the dataclass."""
 
     answer = runtime_answer(
@@ -117,6 +115,7 @@ def _native_answer(request: dict[str, object]) -> dict[str, Any]:
         {"schema": INSTALLATION_CONTINUITY_SCHEMA, **request},
         timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
         output_limit=_OUTPUT_LIMIT_BYTES,
+        extra_features=extra_features,
     )
     if answer is None or not isinstance(answer.get("ok"), bool):
         # A record nothing could check is never read as active continuity.
@@ -173,71 +172,30 @@ def _continuity_lock(paths: MachinePaths) -> Iterator[None]:
             _release_lock(handle)
 
 
-def _validated_boot_session_id(value: str) -> str:
-    normalized = value.strip()
-    if not normalized or len(normalized) > 256 or not normalized.strip("0-{}"):
-        raise OSError("lease_continuity_boot_probe_failed")
-    return normalized
-
-
-def _darwin_boot_observation() -> BootObservation:
-    libc = ctypes.CDLL(None, use_errno=True)
-    size = ctypes.c_size_t(0)
-    if libc.sysctlbyname(b"kern.bootsessionuuid", None, ctypes.byref(size), None, 0) != 0 or size.value > 256:
-        raise OSError("lease_continuity_boot_probe_failed")
-    buffer = ctypes.create_string_buffer(size.value)
-    if libc.sysctlbyname(b"kern.bootsessionuuid", buffer, ctypes.byref(size), None, 0) != 0:
-        raise OSError("lease_continuity_boot_probe_failed")
-    boot_session_id = _validated_boot_session_id(buffer.value.decode("ascii"))
-
-    class Timebase(ctypes.Structure):
-        _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
-
-    timebase = Timebase()
-    if libc.mach_timebase_info(ctypes.byref(timebase)) != 0 or timebase.denom == 0:
-        raise OSError("lease_continuity_monotonic_probe_failed")
-    libc.mach_continuous_time.restype = ctypes.c_uint64
-    uptime = libc.mach_continuous_time() * timebase.numer // timebase.denom
-    return BootObservation(boot_session_id, uptime)
-
-
-def _windows_boot_observation() -> BootObservation:
-    class Guid(ctypes.Structure):
-        _fields_ = [
-            ("data1", ctypes.c_uint32),
-            ("data2", ctypes.c_uint16),
-            ("data3", ctypes.c_uint16),
-            ("data4", ctypes.c_ubyte * 8),
-        ]
-
-    class BootEnvironment(ctypes.Structure):
-        _fields_ = [("identifier", Guid), ("firmware_type", ctypes.c_uint32), ("boot_flags", ctypes.c_uint64)]
-
-    info = BootEnvironment()
-    returned = ctypes.c_ulong(0)
-    status = ctypes.windll.ntdll.NtQuerySystemInformation(
-        90, ctypes.byref(info), ctypes.sizeof(info), ctypes.byref(returned)
-    )
-    if status != 0:
-        raise OSError("lease_continuity_boot_probe_failed")
-    raw_guid = bytes(ctypes.string_at(ctypes.byref(info.identifier), ctypes.sizeof(Guid)))
-    boot_session_id = _validated_boot_session_id(str(uuid.UUID(bytes_le=raw_guid)))
-    get_tick_count = ctypes.windll.kernel32.GetTickCount64
-    get_tick_count.restype = ctypes.c_ulonglong
-    uptime = int(get_tick_count()) * 1_000_000
-    return BootObservation(boot_session_id, uptime)
-
-
 def observe_boot(*, system_name: str | None = None) -> BootObservation:
-    resolved = system_name or platform.system()
-    if resolved == "Darwin":
-        return _darwin_boot_observation()
-    if resolved == "Windows":
-        return _windows_boot_observation()
-    if resolved == "Linux":
-        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
-        return BootObservation(_validated_boot_session_id(boot_id), time.monotonic_ns())
-    raise OSError("lease_continuity_platform_unsupported")
+    """This boot's session identifier and an uptime that never goes backwards within the boot.
+
+    The uptime keeps counting through sleep on macOS and Windows; on Linux it
+    is ``CLOCK_MONOTONIC``, which stops while the machine is suspended.
+    """
+
+    if (system_name or platform.system()) not in ("Darwin", "Linux", "Windows"):
+        raise OSError("lease_continuity_platform_unsupported")
+    answer = _native_answer({"op": "observe-boot"}, extra_features=(BOOT_OBSERVATION_FEATURE,))
+    if answer["ok"] is not True:
+        error = answer.get("error")
+        raise OSError(
+            error
+            if isinstance(error, str) and error.startswith("lease_continuity_")
+            else "lease_continuity_probe_failed"
+        )
+    boot = answer.get("boot")
+    if not isinstance(boot, dict):
+        raise OSError("lease_continuity_probe_failed")
+    session, uptime = boot.get("boot_session_id"), boot.get("monotonic_uptime_ns")
+    if not isinstance(session, str) or not session or type(uptime) is not int or uptime < 0:
+        raise OSError("lease_continuity_probe_failed")
+    return BootObservation(session, uptime)
 
 
 def _probe(read: Callable[[], dict[str, object]]) -> dict[str, object]:

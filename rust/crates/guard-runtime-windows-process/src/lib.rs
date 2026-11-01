@@ -14,6 +14,8 @@ use std::io;
 use std::path::Path;
 
 #[cfg(windows)]
+mod boot_environment;
+#[cfg(windows)]
 mod drives;
 #[cfg(windows)]
 mod host_name;
@@ -54,6 +56,9 @@ pub use windows::{
     terminate_process, terminate_process_verified, wait_for_process_exit, FileId, PathStat,
     PrivateDirectoryBinding, ProcessQuery,
 };
+
+#[cfg(windows)]
+pub use boot_environment::{boot_identifier, tick_count_ms};
 
 #[cfg(windows)]
 pub use drives::local_drive_letters;
