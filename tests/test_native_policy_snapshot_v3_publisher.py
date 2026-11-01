@@ -5,7 +5,6 @@ the original import path and pytest collection contract.
 """
 
 from . import native_policy_snapshot_windows_handles as _windows_handle_tests
-from . import native_policy_snapshot_windows_storage as _windows_storage_tests
 from . import test_native_policy_snapshot_contract as _contract_tests
 from . import test_native_policy_snapshot_persistence as _persistence_tests
 from . import test_native_policy_snapshot_publisher as _publisher_tests
@@ -81,9 +80,6 @@ test_windows_cache_read_rejects_ancestor_reparse_before_open = (
 test_windows_directory_binding_fails_closed_on_reparse_parent = (
     _windows_tests.test_windows_directory_binding_fails_closed_on_reparse_parent
 )
-test_windows_private_state_binding_closes_replaced_state_handle = (
-    _windows_storage_tests.test_windows_private_state_binding_closes_replaced_state_handle
-)
 test_windows_create_new_validation_failure_deletes_before_close = (
     _windows_handle_tests.test_windows_create_new_validation_failure_deletes_before_close
 )
@@ -129,6 +125,5 @@ __all__ = [
     "test_windows_existing_directory_reapplies_private_dacl_on_same_handle",
     "test_windows_open_handle_uses_disk_nonreparse_read_contract",
     "test_windows_private_descriptor_deduplicates_system_owner_ace",
-    "test_windows_private_state_binding_closes_replaced_state_handle",
     "test_windows_scope_aliases_share_one_digest_identity",
 ]

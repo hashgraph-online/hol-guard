@@ -1,30 +1,38 @@
 """Owner-private Windows state files, kept by the native runtime.
 
 The runtime's ``windows-private-state`` command reads, replaces and deletes
-each file through held directory handles and checks its owner and DACL; these
-wrappers only encode the request and raise its failure code.
+each file through held directory handles and checks its owner and DACL, and
+creates or repairs the private directories they live in; these wrappers only
+encode the request and raise its failure code.
 """
 
 from __future__ import annotations
 
 import base64
 import binascii
+import os
 from pathlib import Path
 
 from .native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_BYTES, NativePolicySnapshotError
 
 _PRIVATE_STATE_FEATURE = "native-windows-private-state-v1"
+_PRIVATE_DIRECTORY_FEATURE = "native-windows-private-directory-v1"
 _PRIVATE_STATE_COMMAND = "windows-private-state"
 _PRIVATE_STATE_SCHEMA = "windows-private-state.v1"
 _PRIVATE_STATE_TIMEOUT_SECONDS = 10.0
 _PRIVATE_STATE_ANSWER_OVERHEAD = 4096
 
 
-def _private_state_answer(request: dict[str, object], *, output_limit: int) -> dict[str, object] | None:
+def _private_state_answer(
+    request: dict[str, object],
+    *,
+    output_limit: int,
+    feature: str,
+) -> dict[str, object] | None:
     from .mdm.runtime_request import runtime_answer
 
     return runtime_answer(
-        _PRIVATE_STATE_FEATURE,
+        feature,
         _PRIVATE_STATE_COMMAND,
         {"schema": _PRIVATE_STATE_SCHEMA, **request},
         output_limit=output_limit,
@@ -37,17 +45,20 @@ def _private_state(
     field: str,
     *,
     directory: Path,
-    name: str,
+    name: str | None,
     private_root: Path | None,
     output_limit: int = _PRIVATE_STATE_ANSWER_OVERHEAD,
+    feature: str = _PRIVATE_STATE_FEATURE,
     **request: object,
 ) -> object:
-    """The runtime's `field` answer for one file, or its failure code raised."""
+    """The runtime's `field` answer for one file or directory, or its failure code raised."""
 
-    body: dict[str, object] = {"op": op, "directory": str(directory), "name": name, **request}
+    body: dict[str, object] = {"op": op, "directory": str(directory), **request}
+    if name is not None:
+        body["name"] = name
     if private_root is not None:
         body["private_root"] = str(private_root)
-    answer = _private_state_answer(body, output_limit=output_limit)
+    answer = _private_state_answer(body, output_limit=output_limit, feature=feature)
     if answer is None:
         raise NativePolicySnapshotError("native_windows_private_state_unavailable")
     error = answer.get("error")
@@ -150,8 +161,26 @@ def _windows_delete_private_child(
     )
 
 
+def _windows_ensure_private_directory(path: Path, *, private_root: Path | None = None) -> None:
+    """Create `path` and its missing ancestors, and make it owner-private.
+
+    The directories from `private_root` (`path` itself by default) down are
+    created or have their ACLs repaired; missing ancestors are created private.
+    """
+
+    _private_state(
+        "ensure",
+        "ensured",
+        directory=Path(os.path.abspath(path)),
+        name=None,
+        private_root=None if private_root is None else Path(os.path.abspath(private_root)),
+        feature=_PRIVATE_DIRECTORY_FEATURE,
+    )
+
+
 __all__ = [
     "_windows_delete_private_child",
+    "_windows_ensure_private_directory",
     "_windows_read_private_file",
     "_windows_read_snapshot_bytes",
     "_windows_write_private_file_atomic",

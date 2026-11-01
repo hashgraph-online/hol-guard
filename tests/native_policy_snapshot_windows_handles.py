@@ -169,7 +169,8 @@ def test_windows_existing_directory_reapplies_owner_and_dacl_on_same_handle(
     )
     monkeypatch.setattr(ctypes, "get_last_error", lambda: snapshot_module._WINDOWS_ERROR_ALREADY_EXISTS, raising=False)
 
-    snapshot_module._windows_ensure_private_directory(tmp_path / "native-runtime")
+    with snapshot_module._windows_private_directory_binding(tmp_path / "native-runtime"):
+        pass
 
     target_open = (
         "open",

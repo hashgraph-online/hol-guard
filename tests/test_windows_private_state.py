@@ -13,13 +13,25 @@ STATE = Path("C:/Users/guard/.hol-guard/native-runtime")
 HOME = Path("C:/Users/guard/.hol-guard")
 
 
+class _WindowsOSProxy:
+    """Expose Windows branching without mutating process-wide ``os.name``."""
+
+    name = "nt"
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(os, name)
+
+
 def _fake_runtime(
     monkeypatch: pytest.MonkeyPatch,
     answer: dict[str, object] | None,
 ) -> list[tuple[dict[str, object], int]]:
     requests: list[tuple[dict[str, object], int]] = []
 
-    def fake_answer(request: dict[str, object], *, output_limit: int) -> dict[str, object] | None:
+    def fake_answer(request: dict[str, object], *, output_limit: int, feature: str) -> dict[str, object] | None:
+        # Directories have their own feature, so a runtime without them is unavailable.
+        ensure = request["op"] == "ensure"
+        assert feature == ("native-windows-private-directory-v1" if ensure else "native-windows-private-state-v1")
         requests.append((request, output_limit))
         return answer
 
@@ -101,6 +113,70 @@ def test_deletes_report_whether_the_file_existed(monkeypatch: pytest.MonkeyPatch
     ]
 
 
+def test_ensure_sends_absolute_directories_without_a_file_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests = _fake_runtime(monkeypatch, {"ensured": True})
+
+    private_state._windows_ensure_private_directory(STATE)
+    private_state._windows_ensure_private_directory(STATE, private_root=HOME)
+
+    assert [request for request, _limit in requests] == [
+        {"op": "ensure", "directory": os.path.abspath(STATE)},
+        {"op": "ensure", "directory": os.path.abspath(STATE), "private_root": os.path.abspath(HOME)},
+    ]
+
+
+def test_runtime_state_directory_is_ensured_below_the_guard_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic, store_base
+    from codex_plugin_scanner.guard import native_policy_snapshot_windows_support as windows_support
+
+    ensured: list[tuple[Path, Path | None]] = []
+
+    def ensure(path: Path, *, private_root: Path | None = None) -> None:
+        ensured.append((path, private_root))
+
+    monkeypatch.setattr(windows_support, "os", _WindowsOSProxy())
+    monkeypatch.setattr(native_policy_snapshot_windows_atomic, "_windows_ensure_private_directory", ensure)
+    monkeypatch.setattr(store_base, "_windows_private_directory_bound", {})
+    clock = [100.0]
+    monkeypatch.setattr(store_base.time, "monotonic", lambda: clock[0])
+    home = tmp_path / "guard-home"
+    state = Path(os.path.abspath(home)) / "native-runtime"
+    state.mkdir(parents=True)
+
+    # A plain ensure of the same directory never stands in for the rooted one.
+    store_base._set_windows_private_directory(state)
+    assert windows_support._runtime_state_directory(home) == state
+    assert windows_support._runtime_state_directory(home) == state
+    assert ensured == [(state, None), (state, state.parent)]
+
+    clock[0] += store_base._WINDOWS_PRIVATE_DIRECTORY_RECHECK_SECONDS
+    assert windows_support._runtime_state_directory(home) == state
+    assert ensured == [(state, None), (state, state.parent), (state, state.parent)]
+
+
+def test_runtime_state_directory_failure_is_raised_and_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_policy_snapshot_windows_atomic, store_base
+    from codex_plugin_scanner.guard import native_policy_snapshot_windows_support as windows_support
+
+    calls: list[Path] = []
+
+    def deny(path: Path, *, private_root: Path | None = None) -> None:
+        calls.append(path)
+        raise NativePolicySnapshotError("native_resident_windows_access_denied")
+
+    monkeypatch.setattr(windows_support, "os", _WindowsOSProxy())
+    monkeypatch.setattr(native_policy_snapshot_windows_atomic, "_windows_ensure_private_directory", deny)
+    monkeypatch.setattr(store_base, "_windows_private_directory_bound", {})
+    (tmp_path / "native-runtime").mkdir()
+
+    for _ in range(2):
+        with pytest.raises(NativePolicySnapshotError, match="access_denied"):
+            windows_support._runtime_state_directory(tmp_path)
+    assert len(calls) == 2
+
+
 def test_runtime_failure_codes_are_raised(monkeypatch: pytest.MonkeyPatch) -> None:
     _fake_runtime(monkeypatch, {"error": "native_resident_windows_access_denied"})
 
@@ -134,3 +210,13 @@ def test_native_runtime_round_trips_private_state(tmp_path: Path) -> None:
     assert sorted(path.name for path in state.iterdir()) == ["a.json"]
     assert private_state._windows_delete_private_child(directory=state, name="a.json", private_root=home) is True
     assert private_state._windows_delete_private_child(directory=state, name="a.json", private_root=home) is False
+
+
+@pytest.mark.skipif(os.name != "nt", reason="needs the Windows private-state runtime")
+def test_native_runtime_ensures_missing_private_directories(tmp_path: Path) -> None:
+    nested = tmp_path / "missing" / "deeper" / "state"
+
+    private_state._windows_ensure_private_directory(nested)
+    private_state._windows_ensure_private_directory(nested, private_root=tmp_path / "missing")
+
+    assert nested.is_dir()
