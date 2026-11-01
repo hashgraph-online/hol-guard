@@ -165,6 +165,19 @@ pub(crate) fn supported_tool(
     Some((tool, entries, mode))
 }
 
+/// Whether any supported tool could take every word the manager passed on.
+///
+/// The admission reads the command before the manifest is resolved, so the
+/// task name is all it has and the tool behind it is not yet known. Asking
+/// whether some supported tool admits the whole tail keeps the routing receipt
+/// from being handed to a run no tool could take, while leaving the exact
+/// reading to the sink, which knows which tool the body spells.
+pub(crate) fn passed_tail_reports_only_for_some_tool(tail: &[String]) -> bool {
+    ["eslint", "tsc", "prettier"]
+        .iter()
+        .any(|tool| passed_tail_reports_only(tool, tail))
+}
+
 /// Whether every word a manager passed on after `--` only changes how the
 /// tool reports what it found.
 ///
@@ -343,7 +356,11 @@ pub(crate) fn node_tool_route(
         // of losing them between the two readings.
         let mut arguments = arguments.to_vec();
         let tail = script_tail(command, windows);
-        if !passed_tail_reports_only(name, tail) {
+        // A tail carrying a write or a shell effect is refused with the body
+        // it belongs to, which names the effect found. This screen answers
+        // the narrower question left over: a word that writes nothing by
+        // itself but is not one the tool may be handed.
+        if !writes_or_chains(tail) && !passed_tail_reports_only(name, tail) {
             return invalid(
                 "The requested local script was passed an option the tool may not take.",
             );

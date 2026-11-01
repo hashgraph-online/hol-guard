@@ -655,7 +655,15 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     // `format:check` and `ci:lint` are the work `lint` is. The route below
     // reads the manifest and keeps this only for a body the sink runs.
     let read_only_node_tool = if manager {
-        manager_script_task(executable, arguments).is_some()
+        // The tail is the agent's own text, and the manifest that names the
+        // tool behind the task is only read at the sink. The admission can
+        // therefore ask no more than whether some supported tool could take
+        // these words; the sink reads them again against the one tool the
+        // body spells. A tail no tool could take is left to ordinary review
+        // instead of being handed a read-only routing receipt.
+        manager_script_task(executable, arguments).is_some_and(|(_, tail)| {
+            crate::contained_node_tool::passed_tail_reports_only_for_some_tool(tail)
+        })
     } else {
         mode == Some(ToolMode::Report)
     };
