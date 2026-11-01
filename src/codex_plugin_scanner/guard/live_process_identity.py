@@ -1,27 +1,31 @@
-"""Bounded process identity proof for a locally waiting hook."""
+"""Bounded process identity proof for a locally waiting hook.
+
+The native runtime reads each process's start token and owner marker
+(`process-identity --stdin`), with the same code the Codex hook bridge uses
+to record its own identity. Without a runtime that offers it, no identity is
+proven.
+"""
 
 from __future__ import annotations
 
+import json
 import os
-import stat
-import subprocess
 import time
-from collections.abc import Mapping
-from pathlib import Path
-from typing import cast
+from collections.abc import Callable, Mapping
 
-from .windows_paths import windows_process_creation_time, windows_process_owner_sid
-
-_TRUSTED_POSIX_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 CODEX_BROWSER_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY = "guard_codex_browser_wait_timeout_seconds"
+_FEATURE = "native-process-identity-v1"
+_SCHEMA = "process-identity.v1"
+_PS_TIMEOUT_SECONDS = 0.5
+_TIMEOUT_SECONDS = 5.0
 
 
 def current_process_identity() -> dict[str, object] | None:
     """Capture an opaque identity that distinguishes PID reuse."""
 
     pid = os.getpid()
-    start_token = _process_start_token(pid)
+    start_token = process_start_token(pid)
     if start_token is None:
         return None
     return {"pid": pid, "startToken": start_token}
@@ -32,24 +36,33 @@ def process_identity_matches(value: object) -> bool:
 
     if not isinstance(value, Mapping):
         return False
-    raw = cast(Mapping[object, object], value)
-    if set(raw) != {"pid", "startToken"}:
+    try:
+        identity = json.loads(json.dumps(value))
+    except (TypeError, ValueError):
         return False
-    pid = raw.get("pid")
-    start_token = raw.get("startToken")
-    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
-        return False
-    if not isinstance(start_token, str) or not start_token:
-        return False
-    return _process_start_token(pid) == start_token
+    answer = _ask({"op": "matches", "identity": identity})
+    return answer is not None and answer.get("matches") is True
 
 
 def process_start_token(pid: int, *, deadline_monotonic: float | None = None) -> str | None:
     """Return the platform-specific marker for the process currently using ``pid``."""
 
-    if deadline_monotonic is None:
-        return _process_start_token(pid)
-    return _process_start_token(pid, deadline_monotonic=deadline_monotonic)
+    if type(pid) is not int or pid <= 0:
+        return None
+
+    def request() -> dict[str, object] | None:
+        remaining = _PS_TIMEOUT_SECONDS
+        if deadline_monotonic is not None:
+            remaining = min(remaining, deadline_monotonic - time.monotonic())
+        if remaining <= 0:
+            return None
+        return {"op": "start_token", "pid": pid, "timeout_ms": max(1, int(remaining * 1000))}
+
+    answer = _ask(request, deadline=deadline_monotonic)
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        return None
+    token = None if answer is None else answer.get("start_token")
+    return token if isinstance(token, str) and token else None
 
 
 def process_owner_marker(pid: int) -> str | None:
@@ -57,99 +70,32 @@ def process_owner_marker(pid: int) -> str | None:
 
     if type(pid) is not int or pid <= 0:
         return None
-    if os.name == "nt":
-        return windows_process_owner_sid(pid)
-    return _posix_process_owner_marker(pid)
+    answer = _ask({"op": "owner_marker", "pid": pid})
+    marker = None if answer is None else answer.get("owner_marker")
+    return marker if isinstance(marker, str) and marker else None
 
 
-def _process_start_token(pid: int, *, deadline_monotonic: float | None = None) -> str | None:
-    def expired() -> bool:
-        return deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+def _ask(
+    request: dict[str, object] | Callable[[], dict[str, object] | None],
+    *,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    def built() -> dict[str, object] | None:
+        body = request() if callable(request) else request
+        return None if body is None else {"schema": _SCHEMA, **body}
 
-    if expired():
+    if deadline is not None and time.monotonic() >= deadline:
         return None
-    if os.name == "nt":
-        created_at = windows_process_creation_time(pid)
-        return f"windows:{created_at}" if created_at is not None and not expired() else None
-    proc_stat = _linux_proc_stat(pid)
-    if proc_stat is not None:
-        return f"linux:{proc_stat}" if not expired() else None
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    timeout = 0.5 if deadline_monotonic is None else min(0.5, max(0.0, deadline_monotonic - time.monotonic()))
-    if timeout <= 0:
-        return None
-    try:
-        result = subprocess.run(
-            [ps_path, "-p", str(pid), "-o", "lstart="],
-            check=False,
-            capture_output=True,
-            env={"LANG": "C", "LC_ALL": "C"},
-            text=True,
-            timeout=timeout,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    started_at = result.stdout.strip()
-    return f"posix:{started_at}" if result.returncode == 0 and started_at and not expired() else None
+    from .mdm.runtime_request import runtime_answer
 
-
-def _posix_process_owner_marker(pid: int) -> str | None:
-    try:
-        with open(f"/proc/{pid}/status", encoding="ascii") as handle:
-            for line in handle:
-                if not line.startswith("Uid:"):
-                    continue
-                fields = line.split()
-                raw_uid = fields[1] if len(fields) > 1 else ""
-                return f"uid:{int(raw_uid)}" if raw_uid.isdigit() else None
-    except (OSError, UnicodeError, ValueError):
-        pass
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    try:
-        result = subprocess.run(
-            [ps_path, "-p", str(pid), "-o", "uid="],
-            check=False,
-            capture_output=True,
-            env={"LANG": "C", "LC_ALL": "C"},
-            text=True,
-            timeout=0.5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    raw_uid = result.stdout.strip().split(maxsplit=1)[0] if result.stdout.strip() else ""
-    return f"uid:{int(raw_uid)}" if result.returncode == 0 and raw_uid.isdigit() else None
-
-
-def _trusted_posix_ps_path() -> str | None:
-    for raw_path in _TRUSTED_POSIX_PS_PATHS:
-        candidate = Path(raw_path)
-        try:
-            resolved = candidate.resolve(strict=True)
-            metadata = resolved.stat()
-        except (OSError, RuntimeError):
-            continue
-        if stat.S_ISREG(metadata.st_mode) and os.access(resolved, os.X_OK):
-            return str(resolved)
-    return None
-
-
-def _linux_proc_stat(pid: int) -> str | None:
-    try:
-        raw = os.path.join("/proc", str(pid), "stat")
-        with open(raw, encoding="ascii") as handle:
-            value = handle.read(4096)
-    except (OSError, UnicodeError):
-        return None
-    _, separator, suffix = value.rpartition(")")
-    if not separator:
-        return None
-    fields = suffix.split()
-    # The suffix starts at proc field 3; field 22 is the process start tick.
-    return fields[19] if len(fields) > 19 and fields[19].isdigit() else None
+    return runtime_answer(
+        _FEATURE,
+        "process-identity",
+        built,
+        output_limit=4096,
+        timeout_seconds=None if deadline is not None else _TIMEOUT_SECONDS,
+        deadline=deadline,
+    )
 
 
 __all__ = [

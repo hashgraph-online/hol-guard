@@ -222,6 +222,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if process_identity::is_command(command) && flag == "--stdin" => {
+            let response = process_identity::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&business_document_compile::compile_bytes(&bytes)?)
