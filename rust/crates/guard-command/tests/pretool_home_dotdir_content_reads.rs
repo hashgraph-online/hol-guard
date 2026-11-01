@@ -62,6 +62,10 @@ fn home(name: &str) -> PathBuf {
         (".agents/skills/release-check/config.json", "{}\n"),
         (".agents/skills/release-check/scripts/run.sh", "#!/bin/sh\n"),
         (
+            ".agents/skills/release-check/scripts/inventory.db",
+            "rows\n",
+        ),
+        (
             ".cargo/registry/src/index.crates.io/serde-1.0.0/src/lib.rs",
             "pub fn parse() {}\n",
         ),
@@ -382,7 +386,10 @@ fn narrower_document_rules_keep_their_paths() {
     ] {
         assert_eq!(action(&home, "codex", command), "allow", "{command}");
     }
-    for command in ["cat ~/.agents/skills/release-check/config.json"] {
+    for command in [
+        "cat ~/.agents/skills/release-check/config.json",
+        "cat ~/.agents/skills/release-check/scripts/inventory.db",
+    ] {
         assert_ne!(action(&home, "codex", command), "allow", "{command}");
     }
 }
