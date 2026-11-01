@@ -3281,6 +3281,8 @@ def _refresh_guard_sync_request(
 # Cloud and Cloudflare error bodies are far smaller.
 _CLOUD_HTTP_ERROR_BODY_CHARS = 512 * 1024
 _CLOUD_HTTP_ERROR_HEADERS = ("cf-mitigated", "cf-ray", "server", "content-type")
+# The statuses the runtime itself treats as retryable (`RETRYABLE_STATUSES`).
+_CLOUD_HTTP_ERROR_RETRYABLE_STATUSES = frozenset({429, 503, 524})
 
 
 def _cloud_http_error(error: urllib.error.HTTPError) -> _sync.CloudHttpError:
@@ -3308,9 +3310,13 @@ def _cloud_http_error(error: urllib.error.HTTPError) -> _sync.CloudHttpError:
             body=raw_body[:_CLOUD_HTTP_ERROR_BODY_CHARS],
         )
     except NativeRunnerAuthorityError:
-        # The HTTP error still has to reach the user when the runtime cannot answer.
+        # The HTTP error still has to reach the user when the runtime cannot
+        # answer, without a verdict the runtime never gave: the status alone
+        # decides a retry, and the status line stands in as the edge block so
+        # an unread 401 is reported as it came rather than as an expired sign-in.
         status_line = f"HTTP Error {error.code}: {error.reason}"
-        return _sync.CloudHttpError(status_line, False, status_line, False, status_line, None)
+        retryable = error.code in _CLOUD_HTTP_ERROR_RETRYABLE_STATUSES
+        return _sync.CloudHttpError(status_line, retryable, status_line, False, status_line, status_line)
 
 
 def _cloud_edge_block_from_http_error(error: urllib.error.HTTPError) -> str | None:
