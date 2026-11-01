@@ -75,3 +75,68 @@ pub struct ProtectionHealthReportResultV1 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }
+
+/// Resident feature advertising [`ProtectionHealthFactsRequestV1`].
+pub const PROTECTION_HEALTH_FACTS_FEATURE: &str = "protection-health-facts-v1";
+
+/// Request schema for [`ProtectionHealthFactsRequestV1`]. The reply is a
+/// [`ProtectionHealthReportResultV1`], the same report the signals request
+/// gets.
+pub const PROTECTION_HEALTH_FACTS_REQUEST_SCHEMA: &str = "guard-protection-health-facts-request.v1";
+
+/// One managed install, as the caller's store recorded it.
+///
+/// Both fields are the JSON the store held, so a harness that is not a
+/// stable identifier or an `active` that is not `true` reaches the resident
+/// unchanged and proves nothing there.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedInstallFactV1 {
+    pub harness: Value,
+    pub active: Value,
+}
+
+/// The daemon's runtime row: only the three fields a signal reads.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DaemonFactsV1 {
+    pub registration_status: Value,
+    pub last_heartbeat_at: Value,
+    /// The containment evidence the daemon published, or `null`.
+    pub containment_health: Value,
+}
+
+/// The decision stream's live counters.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionStreamFactsV1 {
+    pub active_error_count: i64,
+    pub activity_count: i64,
+}
+
+/// Request for one machine's protection health, from the facts the caller
+/// read rather than from signals it derived.
+///
+/// What each fact proves is the resident's to decide, as is what the proofs
+/// add up to. A `null` fact is one the caller could not read.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProtectionHealthFactsRequestV1 {
+    /// Must equal [`PROTECTION_HEALTH_FACTS_REQUEST_SCHEMA`].
+    pub schema: String,
+    /// Caller-chosen identifier the reply echoes.
+    pub request_id: String,
+    /// When the facts were read: an ISO-8601 instant with a UTC offset.
+    pub now: String,
+    pub managed_installs: Vec<ManagedInstallFactV1>,
+    /// Each harness's live hook verification, or `null` when none ran.
+    pub hook_verification: Option<BTreeMap<String, Value>>,
+    /// `null` when there is no daemon runtime row.
+    pub daemon: Option<DaemonFactsV1>,
+    /// The policy trust status's `remembered_rules`.
+    pub remembered_rules: Value,
+    /// The policy trust status's `runtime_protection`.
+    pub runtime_protection: Value,
+    /// `null` when the store could not report its counters.
+    pub decision_stream: Option<DecisionStreamFactsV1>,
+}

@@ -210,6 +210,9 @@ mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
 pub mod protection_health;
+pub mod protection_health_facts;
+#[cfg(test)]
+mod protection_health_facts_tests;
 #[cfg(test)]
 mod protection_health_tests;
 pub mod pytest_argv;

@@ -801,6 +801,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ProtectionHealthReport(request) => {
                 crate::protection_health_report_op::evaluate_protection_health_report(&request)
             }
+            ResidentOperationV1::ProtectionHealthFacts(request) => {
+                crate::protection_health_report_op::evaluate_protection_health_facts(&request)
+            }
             // Diagnostic correlation only: the lineage never authorizes an action.
             ResidentOperationV1::RetryLineageCapture(request) => {
                 crate::retry_lineage_capture_op::evaluate_retry_lineage_capture(&request)
