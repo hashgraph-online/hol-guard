@@ -45,6 +45,7 @@ from .native_package_protect_projection import (
     native_package_protect_projection,
 )
 from .native_package_workspace_scope import NativePackageWorkspaceScopeError
+from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .native_shim_admin import NativeShimAdminError
 from .native_supply_chain_posture import native_local_supply_chain_posture
 from .native_workspace_inventory import native_workspace_inventory
@@ -118,6 +119,8 @@ _CLOUD_AUDIT_JOB_PAGE_SIZE = 1
 _CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS = 0.5
 _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
+# The job fields the native summary reads; the rest of a cloud reply stays here.
+_AUDIT_JOB_SUMMARY_FIELDS = ("status", "totalPackages", "processedCount", "error")
 _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
 _PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
@@ -1250,29 +1253,15 @@ def sync_managed_workspace_audits(
             "or use `hol-guard login` as a compatibility alias for the same browser flow."
         )
     synced_at = datetime.now(timezone.utc).isoformat()
-    workspaces_payload: list[dict[str, object]] = []
-    completed_jobs = 0
-    failed_jobs = 0
-    incomplete_jobs = 0
-    queued_jobs = 0
-    skipped_workspaces = 0
+    outcomes: list[dict[str, object]] = []
     for candidate_path in native_managed_workspaces(store, candidates=True, workspace_dir=workspace_dir):
         candidate = Path(candidate_path)
         workspace_label = candidate.name or str(candidate)
         try:
             workspace_inventory = native_workspace_inventory(store, candidate)
-            manifest_paths, lockfile_paths = workspace_inventory.manifest_paths, workspace_inventory.lockfile_paths
             inventory = workspace_inventory.inventory
             if not inventory:
-                skipped_workspaces += 1
-                workspaces_payload.append(
-                    {
-                        "workspace": workspace_label,
-                        "status": "skipped",
-                        "message": "No supported package inventory was detected for workspace audit sync.",
-                        "package_count": 0,
-                    }
-                )
+                outcomes.append({"outcome": "skipped", "workspace": workspace_label})
                 continue
             request_payload = native_cloud_audit_payload(
                 store,
@@ -1295,43 +1284,17 @@ def sync_managed_workspace_audits(
                 job_id=job_id,
                 workspace_id=workspace_id,
             )
-            final_status = (
-                str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
-            )
-            cloud_visible_count = _int_value(final_response.get("totalPackages"))
-            cloud_processed_count = _int_value(final_response.get("processedCount"))
-            incomplete_cloud_projection = (
-                final_status == "completed" and cloud_visible_count is not None and cloud_visible_count < len(inventory)
-            )
-            if incomplete_cloud_projection:
-                incomplete_jobs += 1
-                workspace_status = "partial"
-            else:
-                workspace_status = final_status
-                if final_status == "completed":
-                    completed_jobs += 1
-                elif final_status == "failed":
-                    failed_jobs += 1
-                else:
-                    queued_jobs += 1
-            message = final_response.get("error")
-            if incomplete_cloud_projection:
-                message = (
-                    "Guard Cloud accepted fewer package rows than hol-guard discovered "
-                    f"({cloud_visible_count} of {len(inventory)} visible)."
-                )
-            workspaces_payload.append(
+            outcomes.append(
                 {
+                    "outcome": "job",
                     "workspace": workspace_label,
                     "workspace_fingerprint": request_payload.get("workspaceFingerprint"),
                     "job_id": job_id,
-                    "status": workspace_status,
                     "package_count": len(inventory),
-                    "cloud_processed_count": cloud_processed_count,
-                    "cloud_visible_count": cloud_visible_count,
-                    "manifest_paths": list(manifest_paths),
-                    "lockfile_paths": list(lockfile_paths),
-                    "message": message,
+                    "enqueue_status": enqueue_response.get("status"),
+                    "final": {key: final_response[key] for key in _AUDIT_JOB_SUMMARY_FIELDS if key in final_response},
+                    "manifest_paths": list(workspace_inventory.manifest_paths),
+                    "lockfile_paths": list(workspace_inventory.lockfile_paths),
                 }
             )
         except (
@@ -1341,34 +1304,17 @@ def sync_managed_workspace_audits(
         ):
             raise
         except (OSError, RuntimeError, ValueError) as error:
-            failed_jobs += 1
-            workspaces_payload.append(
-                {
-                    "workspace": workspace_label,
-                    "status": "failed",
-                    "message": str(error),
-                    "package_count": 0,
-                }
-            )
-    if failed_jobs > 0 and completed_jobs == 0 and queued_jobs == 0 and incomplete_jobs == 0:
-        status = "failed"
-    elif failed_jobs > 0 or incomplete_jobs > 0:
-        status = "partial"
-    elif completed_jobs > 0 or queued_jobs > 0:
-        status = "synced"
-    else:
-        status = "idle"
-    summary: dict[str, object] = {
-        "synced_at": synced_at,
-        "status": status,
-        "workspace_count": len(workspaces_payload),
-        "completed_jobs": completed_jobs,
-        "queued_jobs": queued_jobs,
-        "failed_jobs": failed_jobs,
-        "incomplete_jobs": incomplete_jobs,
-        "skipped_workspaces": skipped_workspaces,
-        "workspaces": workspaces_payload,
-    }
+            outcomes.append({"outcome": "failed", "workspace": workspace_label, "message": str(error)})
+    try:
+        summary = native_runner_authority(
+            "workspace_audit_sync",
+            {"synced_at": synced_at, "workspaces": outcomes},
+            guard_home=store.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        # Sync callers degrade on RuntimeError; the jobs already ran, only the
+        # summary is missing.
+        raise RuntimeError("Guard could not summarize the workspace audit sync.") from error
     store.set_sync_payload("workspace_audits_sync_summary", summary, synced_at)
     return summary
 
