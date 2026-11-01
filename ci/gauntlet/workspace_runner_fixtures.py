@@ -55,6 +55,10 @@ WORKSPACE_SCRIPT_RUN_ALIAS_CASE = "omp-native-workspace-script-run-alias"
 # inside `typescript`, so the tree, the manifest and the lockfile all say
 # `typescript` while `node_modules/.bin` says `tsc`.
 WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
+# The same checker run as a repository script runs it: a generated project keeps
+# the no-emit mode in the file, so the command line carries no option at all and
+# the run is proven read-only from the project it names.
+WORKSPACE_TSC_GENERATED_PROJECT_CASE = "omp-native-workspace-tsc-generated-project"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -67,6 +71,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
         WORKSPACE_SCRIPT_RUN_ALIAS_CASE,
         WORKSPACE_TSC_CASE,
+        WORKSPACE_TSC_GENERATED_PROJECT_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -239,6 +244,18 @@ _TYPESCRIPT_FILES = {
 }
 
 
+# The project a type-check script generates: it names the same sources and keeps
+# the no-emit mode in the file, which is the whole reason the run carries no
+# `--noEmit` of its own.
+_GENERATED_PROJECT_FILES = {
+    **_TYPESCRIPT_FILES,
+    "tsconfig.check.json": (
+        '{\n  "compilerOptions": {\n    "strict": true,\n    "noEmit": true\n  },\n'
+        '  "include": ["src"]\n}\n'
+    ),
+}
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
@@ -267,6 +284,13 @@ _INSTALLS = {
     WORKSPACE_TSC_CASE: _Install(
         "tsc",
         _TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_TSC_GENERATED_PROJECT_CASE: _Install(
+        "tsc",
+        _GENERATED_PROJECT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",
