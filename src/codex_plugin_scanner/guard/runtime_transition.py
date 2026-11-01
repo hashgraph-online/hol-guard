@@ -29,7 +29,11 @@ from .codex_hook_recovery import _decode, _encode, _snapshot
 from .codex_install_transaction import require_codex_install_owner
 from .durable_io import fsync_directory
 from .live_process_identity import current_process_identity
-from .local_authority_integrity import sign_local_authority_payload, verify_local_authority_payload
+from .local_authority_integrity import (
+    LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE,
+    sign_local_authority_payload,
+    verify_local_authority_payload,
+)
 from .private_file_io import read_private_regular_text
 from .runtime_transition_modes import normalized_after_mode, publishes_user_file, recorded_noop
 from .sqlite_tuning import sqlite_operation_deadline
@@ -813,14 +817,19 @@ class RuntimeTransition:
         require_codex_install_owner(self.home)
         key, key_id = self._key()
         signed = dict(payload)
-        signed["authentication"] = sign_local_authority_payload(
-            payload,
-            key=key,
-            key_id=key_id,
-            purpose=_PURPOSE,
-            signed_at=str(payload["operation_id"]),
-            deadline=deadline,
-        )
+        try:
+            signed["authentication"] = sign_local_authority_payload(
+                payload,
+                key=key,
+                key_id=key_id,
+                purpose=_PURPOSE,
+                signed_at=str(payload["operation_id"]),
+                deadline=deadline,
+            )
+        except RuntimeError as error:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TransitionError("deadline_exceeded") from error
+            raise TransitionError(LOCAL_AUTHORITY_INTEGRITY_UNAVAILABLE) from error
         if deadline is not None and time.monotonic() >= deadline:
             raise TransitionError("deadline_exceeded")
         encoded = canonical_manifest_bytes(signed) + b"\n"

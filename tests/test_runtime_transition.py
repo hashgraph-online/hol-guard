@@ -1820,6 +1820,28 @@ def test_transition_begin_dependency_wait_consumes_original_coordinator_deadline
     assert bindings.read_bytes() == b"previous hooks" and pointer.read_bytes() == b"previous pointer"
 
 
+@pytest.mark.parametrize(
+    "expired,reason", [(True, "deadline_exceeded"), (False, "local_authority_integrity_runtime_unavailable")]
+)
+def test_transition_begin_reports_a_signer_failure_as_a_stable_reason(transition, monkeypatch, expired, reason):
+    from codex_plugin_scanner.guard import runtime_transition as module
+
+    runtime, plan, bindings, pointer = transition
+    deadline = time.monotonic() + 60
+
+    def unavailable(*_args, **_kwargs):
+        if expired:
+            monkeypatch.setattr(module.time, "monotonic", lambda: deadline + 1)
+        raise RuntimeError("local authority signing requires the native runtime")
+
+    monkeypatch.setattr(module, "sign_local_authority_payload", unavailable)
+    with pytest.raises(TransitionError) as caught:
+        runtime.begin(plan, authority_home=plan.guard_home, grant=None, deadline_monotonic=deadline)
+    assert caught.value.reason == reason
+    assert not runtime.path.exists()
+    assert bindings.read_bytes() == b"previous hooks" and pointer.read_bytes() == b"previous pointer"
+
+
 def test_core_coordinator_records_inverse_failure_once_with_original_cause(transition, monkeypatch):
     from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
 
