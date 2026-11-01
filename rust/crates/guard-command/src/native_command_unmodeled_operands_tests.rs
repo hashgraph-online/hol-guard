@@ -83,8 +83,10 @@ fn only_a_bare_operand_leaves_the_command_positions() {
         // all; the body's own words are operands the `-exec` reader bounds.
         (r"find src -exec sh -c cat", "find -exec sh -c cat"),
         // `xargs` is the program `-exec` runs; dropping it would hide the
-        // unbounded `xargs` the piece is refused for.
-        (r"find . -exec xargs wc", "find -exec xargs wc"),
+        // unbounded `xargs` the piece is refused for. Its own operand follows
+        // no option, so it leaves with the other bare words; `wc` names no
+        // owner, and the refusal rests on the `xargs` that stays.
+        (r"find . -exec xargs wc", "find -exec xargs"),
     ] {
         assert_eq!(text_in_command_positions(command), kept, "{command}");
     }
