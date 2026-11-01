@@ -18,6 +18,11 @@ pub const LOCAL_CLI_HELP_PARSE_FEATURE: &str = "local-cli-help-parse-v1";
 /// [`LocalCliHelpParseRequestV1::script_source`]. A caller sends that field
 /// only to a runtime that advertises this, since older ones refuse it.
 pub const LOCAL_CLI_HELP_VARIATIONS_FEATURE: &str = "local-cli-help-variations-v1";
+/// Capability advertised when a script-source read also reports how the
+/// script answers `--help` (`help_handler`: `none`, `script` or `framework`)
+/// and the local modules it imports (`imports`). A caller that sees it reads a
+/// script's source before deciding whether to run the script with `--help`.
+pub const LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE: &str = "local-cli-help-source-first-v1";
 /// Largest canonical request serialization the op will accept. Python bounds
 /// the probed output at 8 KiB; this leaves room for the envelope around it.
 pub const LOCAL_CLI_HELP_PARSE_MAX_BYTES: usize = 256 * 1024;

@@ -69,11 +69,11 @@ def collect_runtime_candidates(
     environment: Mapping[str, str] | None = None,
     workspace_dir: Path | None = None,
     limit: int = MAX_RUNTIME_CANDIDATES,
-    known_instances: Sequence[Mapping[str, object]] | None = None,
+    instance_home: Path | None = None,
 ) -> tuple[RuntimeCandidates, RuntimeProbe]:
     """Resolve and describe every enabled stdio MCP server's launch executable natively.
 
-    ``known_instances`` also asks for the processes running from those files.
+    ``instance_home`` also asks for the processes running from those files.
     """
 
     process_environment = os.environ if environment is None else environment
@@ -98,7 +98,7 @@ def collect_runtime_candidates(
         specs,
         environment=_shared_environment(process_environment, specs),
         candidate_limit=limit,
-        known_instances=known_instances,
+        instance_home=instance_home,
     )
     return _map_launches(servers, probe), probe
 

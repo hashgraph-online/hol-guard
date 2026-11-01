@@ -79,6 +79,18 @@
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
     },
     {
+      "id": "sed-context-address-read",
+      "expectation": "allow",
+      "oracle": "commands",
+      "commands": [
+        "sed -n '/export/,/^};/p' src/settings.ts",
+        "sed -n '/timeoutSeconds/p' src/settings.ts",
+        "sed -n '0,/export/p' src/settings.ts",
+        "sed -n '/export/,/^  timeoutSeconds: 10,/p' src/settings.ts"
+      ],
+      "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
+    },
+    {
       "id": "absolute-recursive-source-grep",
       "expectation": "allow",
       "oracle": "commands",

@@ -22,10 +22,10 @@ from codex_plugin_scanner.guard.runtime_identity_probe import (
     RUNTIME_PROBE_LAUNCH_FEATURE,
     probe_runtime_launches,
 )
-from codex_plugin_scanner.guard.runtime_instance_store import INSTANCE_STORE_NAME
 from codex_plugin_scanner.guard.runtime_posture import ADVISORIES_UNAVAILABLE, build_runtime_posture
 
 NOW = "2026-01-01T00:00:00+00:00"
+INSTANCE_STORE_NAME = "runtime-instances.json"
 
 
 def _executable(path: Path, body: str = "binary-not-a-script\n") -> Path:
