@@ -81,9 +81,7 @@ fn fd_exec_sites(words: &[&str], start: usize) -> Option<Vec<FdExecSite>> {
             break;
         }
         if word == "--exec" || word == "--exec-batch" {
-            let Some(site) = exec_site(words, index) else {
-                return None;
-            };
+            let site = exec_site(words, index)?;
             index = (site.body_end + 1).min(words.len());
             sites.push(site);
             continue;
@@ -113,9 +111,7 @@ fn fd_exec_sites(words: &[&str], start: usize) -> Option<Vec<FdExecSite>> {
                     // `-xbash` carries the program inside the option word.
                     return None;
                 }
-                let Some(site) = exec_site(words, index) else {
-                    return None;
-                };
+                let site = exec_site(words, index)?;
                 index = (site.body_end + 1).min(words.len());
                 sites.push(site);
                 break;
@@ -276,8 +272,8 @@ pub(super) fn text_outside_fd_exec_arguments(shell: &str) -> String {
         };
         let mut is_argument = vec![false; words.len()];
         for site in sites {
-            for position in site.program + 1..site.body_end {
-                is_argument[position] = true;
+            for word_is_argument in &mut is_argument[site.program + 1..site.body_end] {
+                *word_is_argument = true;
             }
         }
         let kept: Vec<&str> = words
