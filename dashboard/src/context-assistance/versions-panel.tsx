@@ -24,8 +24,8 @@ export function CigarVersionsPanel(props: Props) {
     else void versions.perform(action.input);
   }
   return <div className="space-y-6" data-testid="cigar-versions">
-    <div className="cigar-section-intro"><span className="cigar-eyebrow">Keep your workflow moving</span><h2>Versions & updates</h2>
-      <p>Prepare CIGAR beside your current runtime, then choose when to switch. Opening this page only reads registration and update metadata.</p></div>
+    <div className="cigar-section-intro"><h2>Updates</h2>
+      <p>Guard handles this for you when you turn CIGAR on. Come here only to pick a specific version, check for new ones, or go back to an earlier one. Opening this page changes nothing.</p></div>
     <div className="flex flex-wrap gap-2">
       <button type="button" className={versionButton} disabled={props.disabled || versions.busy || versions.loading} onClick={() => void versions.refresh()}>Refresh versions & jobs</button>
       <button type="button" className={versionButton} disabled={changesDisabled || !data?.catalog.catalog.remote_feed_configured || !data.catalog.catalog.trust_configured || Boolean(data.catalog.catalog.feed_diagnostic)}

@@ -44,7 +44,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
   let probe: ContextAgentProbe | undefined;
   try {
     await expect(page.locator(".cigar-status")).toHaveText("Not started");
-    await page.getByRole("button", { name: "Start CIGAR", exact: true }).click();
+    await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).click();
     await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);
     const ready = await status();
     expect(ready.runtime?.interpreter.version.slice(0, 2)).toEqual([3, 14]);
@@ -57,7 +57,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
       headers: { "x-guard-token": state.daemonToken }, data: { input: { action: "grant", workspace: state.workspace, app: "dashboard", sources: ["README.md"] } },
     });
     expect([401, 403, 423]).toContain(unproved.status());
-    await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
+    await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
     await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
     await page.getByLabel("Files relative to the workspace, one per line").fill("README.md");
     await page.getByRole("button", { name: "Grant review source access" }).click();
@@ -201,7 +201,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     const disabled = await probe.request("get_guard_context", { query: "release procedure" });
     expect(disabled.error.code).toBe("native_context_assistance_disabled");
     await overview.getByRole("button", { name: "Open CIGAR" }).click();
-    await page.getByRole("tab", { name: "Runtime & preferences", exact: true }).click();
+    await page.getByRole("tab", { name: "Settings", exact: true }).click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await page.getByRole("button", { name: "Refresh runtime list" }).click();
     await expect(page.getByLabel("Local runtime", { exact: true })).toHaveValue(String(seed.runtimeId));
@@ -211,7 +211,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     await page.getByRole("button", { name: "Start context assistance" }).click();
     await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
+    await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
     await expect(page.getByText("No workspace has context access.", { exact: true })).toBeVisible();
     const off = page.getByRole("button", { name: "Turn off CIGAR", exact: true });
     await off.scrollIntoViewIfNeeded();
@@ -220,7 +220,7 @@ test("real candidate sources, proof-backed MCP pairing and opt-out survive reloa
     await expect.poll(async () => (await status()).requested_enabled).toBe(false);
     expect((await status()).runtime).toBeNull();
     await page.reload();
-    await page.getByRole("tab", { name: "Runtime & preferences", exact: true }).click();
+    await page.getByRole("tab", { name: "Settings", exact: true }).click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await expectNoErrorBoundary(page);
     // Browser-supplied runtime assertions cannot replace native verification.

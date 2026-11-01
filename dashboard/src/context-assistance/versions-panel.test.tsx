@@ -72,7 +72,7 @@ assert.match(preferences, /notifications and automatic preparation are not avail
 assert.match(preferences, /disabled="">Notify/);
 assert.doesNotMatch(preferences, /Enable automatic/);
 const panel = renderToStaticMarkup(<CigarVersionsPanel status={state} gate={null} disabled={false} locked={false} dirty={false} captureStatus={() => () => {}} />);
-assert.match(panel, /Versions &amp; updates/);
-assert.match(panel, /only reads registration and update metadata/);
+assert.match(panel, /<h2>Updates<\/h2>/);
+assert.match(panel, /Opening this page changes nothing/);
 assert.doesNotMatch(panel, /Switch now|Prepare this build/);
 console.log("CIGAR Versions controls preserve native readiness, stale-generation rejection, reconnect consent, disabled selection and honest capability labels.");
