@@ -69,7 +69,10 @@ use runner::{bootstrap_init, Launch, PrivateRoot};
 use snapshot::read_request;
 
 pub(crate) use directory::directory_change;
-pub(crate) use filters::{matched, matched_within};
+#[cfg(all(unix, test))]
+pub(crate) use filters::matched;
+#[cfg(unix)]
+pub(crate) use filters::matched_within;
 pub(crate) use plan_check::entered_sibling;
 pub(crate) use process::launch;
 pub(crate) use readonly::readonly_shape;
