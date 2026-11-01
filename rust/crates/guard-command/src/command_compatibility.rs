@@ -57,6 +57,12 @@ pub(crate) fn git_inspection_arguments<'a>(
     git::inspection_arguments(arguments, context)
 }
 
+/// Whether a `symbolic-ref` form only prints where a symbolic ref points. A
+/// second operand writes that ref instead.
+pub(crate) fn git_symbolic_ref_read(rest: &[String]) -> bool {
+    git::symbolic_ref_read(rest)
+}
+
 /// `origin` followed by quiet/prune flags and simple named refs.
 pub(crate) fn git_fetch_origin_shaped(arguments: &[String]) -> bool {
     git::fetch_origin_shaped(arguments)

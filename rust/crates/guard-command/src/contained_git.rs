@@ -58,6 +58,7 @@ const READ_ONLY_VERBS: &[&str] = &[
     "cat-file",
     "check-attr",
     "check-ignore",
+    "check-ref-format",
     "cherry",
     "count-objects",
     "describe",
@@ -70,9 +71,11 @@ const READ_ONLY_VERBS: &[&str] = &[
     "log",
     "ls-tree",
     "merge-base",
+    "name-rev",
     "rev-list",
     "shortlog",
     "show",
+    "show-branch",
     "show-ref",
 ];
 

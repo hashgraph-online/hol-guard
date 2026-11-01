@@ -115,6 +115,10 @@ pub(super) fn execution_free_paging(
             | "notes"
             | "replace"
             | "submodule"
+            | "name-rev"
+            | "show-branch"
+            | "check-ref-format"
+            | "symbolic-ref"
     ) {
         return None;
     }
@@ -439,7 +443,8 @@ fn probe(
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
         | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
-        | "diff-index" | "diff-files" => false,
+        | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
+        | "symbolic-ref" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
