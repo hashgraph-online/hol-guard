@@ -19,7 +19,7 @@ use regex::Regex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::daemon_lifecycle_text::shlex_split;
+use crate::daemon_lifecycle_text::{py_isspace as py_space, shlex_split};
 use crate::guard_store_json::dumps_default;
 
 const COMMAND: &str = "hook-launch-scan";
@@ -418,11 +418,6 @@ fn normcase(value: &str) -> String {
 
 fn posix(value: &str) -> String {
     value.replace("\\\\", "/").replace('\\', "/")
-}
-
-/// Python's `\s` on text.
-fn py_space(c: char) -> bool {
-    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
 }
 
 /// Python's `\w` on text.

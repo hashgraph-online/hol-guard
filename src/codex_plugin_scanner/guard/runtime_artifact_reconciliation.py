@@ -181,8 +181,13 @@ def _scan_launchers(
     *,
     current_digest: str | None,
     guard_home: Path | None,
-) -> Mapping[str, object]:
-    """``hook_launch_scan.rs`` over the install's artifacts; empty without a runtime."""
+) -> Mapping[str, object] | None:
+    """``hook_launch_scan.rs`` over the install's artifacts; None when the scan did not run.
+
+    A scan that never answered is not a clean one: callers treat it as a
+    launcher that still needs repair, so the harness reports as failed rather
+    than keeping a stale or foreign launcher in place.
+    """
 
     if not paths or (current_digest is None and guard_home is None):
         return {}
@@ -201,7 +206,7 @@ def _scan_launchers(
         output_limit=4 * 1024,
         timeout_seconds=_LAUNCH_SCAN_TIMEOUT_SECONDS,
     )
-    return answer or {}
+    return answer
 
 
 def _pins_stale_native_runtime(
@@ -216,7 +221,7 @@ def _pins_stale_native_runtime(
     """
 
     scan = _scan_launchers(_scanned_paths(install, extra_paths), current_digest=current_digest, guard_home=None)
-    return scan.get("stale_runtime") is True
+    return scan is None or scan.get("stale_runtime") is True
 
 
 def _launches_stale_client(
@@ -235,7 +240,7 @@ def _launches_stale_client(
 
     paths = _scanned_paths(install, _planned_artifact_paths(harness, context))
     scan = _scan_launchers(paths, current_digest=current_digest, guard_home=context.guard_home)
-    return scan.get("stale_runtime") is True or scan.get("foreign_interpreter") is True
+    return scan is None or scan.get("stale_runtime") is True or scan.get("foreign_interpreter") is True
 
 
 def _managed_install_needs_artifact_repair(

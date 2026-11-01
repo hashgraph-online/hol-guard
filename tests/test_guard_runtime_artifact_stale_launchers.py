@@ -12,6 +12,7 @@ import pytest
 from codex_plugin_scanner.guard import runtime_artifact_reconciliation as reconciliation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline_hooks import _posix_wrapper
+from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 
 _FOREIGN = "/home/u/.local/pipx/venvs/hol-guard/bin/python"
@@ -132,6 +133,20 @@ def test_repair_fails_when_reinstall_leaves_the_foreign_launcher(
     monkeypatch.setattr(reconciliation, "apply_managed_install", lambda *_args: None)
 
     assert reconciliation.repair_failing_managed_harness_hooks(store, home_dir=tmp_path / "home") == ((), ("cline",))
+
+
+def test_a_scan_that_never_answers_reports_the_harness_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store, launcher = _cline_store(tmp_path, _current())
+    applied = _patch_reconciliation(monkeypatch, launcher, store.guard_home)
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+
+    repaired, failed = reconciliation.repair_failing_managed_harness_hooks(store, home_dir=tmp_path / "home")
+
+    assert (repaired, failed) == ((), ("cline",))
+    assert applied == ["cline"]
 
 
 def test_a_launcher_beyond_the_path_bound_is_still_read(tmp_path: Path) -> None:
