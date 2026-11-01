@@ -31,6 +31,7 @@ from .file_lock import (
 from .file_lock import (
     release_file_lock as _release_lock,
 )
+from .runtime_request import runtime_answer
 from .state_file import read_state, replace_state
 
 _SCHEMA = "hol-guard-installation-continuity.v1"
@@ -39,7 +40,6 @@ _MAX_UINT64 = (1 << 64) - 1
 INSTALLATION_CONTINUITY_FEATURE = "native-installation-continuity-v1"
 INSTALLATION_CONTINUITY_COMMAND = "installation-continuity"
 INSTALLATION_CONTINUITY_SCHEMA = "installation-continuity.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _OUTPUT_LIMIT_BYTES = 16 * 1024
 
@@ -111,29 +111,14 @@ def _private_regular_file(metadata: os.stat_result) -> bool:
 def _native_answer(request: dict[str, object]) -> dict[str, Any]:
     """The runtime's answer to one continuity request, with any record as the dataclass."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    output = None
-    if (
-        status.available
-        and status.compatible
-        and status.identity is not None
-        and status.capabilities is not None
-        and INSTALLATION_CONTINUITY_FEATURE in status.capabilities.features
-    ):
-        output = _run_native_process(
-            status.identity.path,
-            (INSTALLATION_CONTINUITY_COMMAND, "--stdin"),
-            input_text=json.dumps({"schema": INSTALLATION_CONTINUITY_SCHEMA, **request}, sort_keys=True),
-            timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
-            output_limit=_OUTPUT_LIMIT_BYTES,
-        )
-    try:
-        answer = cast(object, json.loads(output or ""))
-    except ValueError:
-        answer = None
-    if not isinstance(answer, dict) or not isinstance(cast(dict[str, Any], answer).get("ok"), bool):
+    answer = runtime_answer(
+        INSTALLATION_CONTINUITY_FEATURE,
+        INSTALLATION_CONTINUITY_COMMAND,
+        {"schema": INSTALLATION_CONTINUITY_SCHEMA, **request},
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+    )
+    if answer is None or not isinstance(answer.get("ok"), bool):
         # A record nothing could check is never read as active continuity.
         raise OSError("installation_identity_native_unavailable")
     fields = cast(dict[str, Any], answer)

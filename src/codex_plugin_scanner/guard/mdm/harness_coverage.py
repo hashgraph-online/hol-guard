@@ -7,21 +7,19 @@ runtime's answer back to the MDM contract.
 
 from __future__ import annotations
 
-import json
 import os
 import platform
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
 
 from .contracts import HarnessCoverage, MachinePaths, ManagedPolicyState
 from .machine_state_lock import protected_machine_state_lock
+from .runtime_request import runtime_answer
 
 HARNESS_COVERAGE_FEATURE = "native-harness-coverage-v1"
 HARNESS_COVERAGE_COMMAND = "harness-coverage"
 HARNESS_COVERAGE_SCHEMA = "harness-coverage.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 60.0
 _OUTPUT_LIMIT_BYTES = 64 * 1024
 _UNAVAILABLE = "harness_coverage_native_unavailable"
@@ -62,17 +60,6 @@ def _registry_owner_uid() -> int:
 def _native_request(op: str, paths: MachinePaths, **fields: object) -> dict[str, object] | None:
     """The runtime's answer to one registry request, or ``None`` when it cannot answer."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or HARNESS_COVERAGE_FEATURE not in status.capabilities.features
-    ):
-        return None
     request = {
         "schema": HARNESS_COVERAGE_SCHEMA,
         "op": op,
@@ -81,23 +68,15 @@ def _native_request(op: str, paths: MachinePaths, **fields: object) -> dict[str,
         **fields,
     }
     try:
-        input_text = json.dumps(request, sort_keys=True)
+        return runtime_answer(
+            HARNESS_COVERAGE_FEATURE,
+            HARNESS_COVERAGE_COMMAND,
+            request,
+            timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+            output_limit=_OUTPUT_LIMIT_BYTES,
+        )
     except (TypeError, ValueError) as error:
         raise ValueError("harness_coverage_registry_invalid") from error
-    output = _run_native_process(
-        status.identity.path,
-        (HARNESS_COVERAGE_COMMAND, "--stdin"),
-        input_text=input_text,
-        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
-        output_limit=_OUTPUT_LIMIT_BYTES,
-    )
-    if output is None:
-        return None
-    try:
-        response = cast(object, json.loads(output))
-    except ValueError:
-        return None
-    return cast(dict[str, object], response) if isinstance(response, dict) else None
 
 
 def _apply_change(op: str, paths: MachinePaths, **fields: object) -> None:

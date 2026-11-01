@@ -7,16 +7,15 @@ lifecycle surfaces report.
 
 from __future__ import annotations
 
-import json
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from .runtime_request import runtime_answer
+
 RELEASE_MANIFEST_VERIFY_FEATURE = "native-release-manifest-verify-v1"
 RELEASE_MANIFEST_VERIFY_COMMAND = "release-manifest-verify"
 RELEASE_MANIFEST_VERIFY_SCHEMA = "release-manifest-verify.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 # The runtime walk is bounded at 30 seconds and hashing at 2 GiB.
 _VERIFY_TIMEOUT_SECONDS = 120.0
 _OUTPUT_LIMIT_BYTES = 64 * 1024
@@ -82,18 +81,7 @@ def verify_release_manifest(
     reported as an invalid manifest.
     """
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or RELEASE_MANIFEST_VERIFY_FEATURE not in status.capabilities.features
-    ):
-        return _INVALID
-    request = {
+    request: dict[str, object] = {
         "schema": RELEASE_MANIFEST_VERIFY_SCHEMA,
         "manifest_path": str(manifest_path),
         "runtime_root": str(runtime_root),
@@ -107,22 +95,16 @@ def verify_release_manifest(
         "minimum_version": minimum_version,
     }
     try:
-        input_text = json.dumps(request, sort_keys=True)
+        answer = runtime_answer(
+            RELEASE_MANIFEST_VERIFY_FEATURE,
+            RELEASE_MANIFEST_VERIFY_COMMAND,
+            request,
+            timeout_seconds=_VERIFY_TIMEOUT_SECONDS,
+            output_limit=_OUTPUT_LIMIT_BYTES,
+        )
     except (TypeError, ValueError):
         return _INVALID
-    output = _run_native_process(
-        status.identity.path,
-        (RELEASE_MANIFEST_VERIFY_COMMAND, "--stdin"),
-        input_text=input_text,
-        timeout_seconds=_VERIFY_TIMEOUT_SECONDS,
-        output_limit=_OUTPUT_LIMIT_BYTES,
-    )
-    if output is None:
-        return _INVALID
-    try:
-        return _verification_from_native(json.loads(output))
-    except ValueError:
-        return _INVALID
+    return _INVALID if answer is None else _verification_from_native(answer)
 
 
 __all__ = ["ManifestVerification", "verify_release_manifest"]

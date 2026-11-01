@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 import secrets
 import stat
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -26,13 +24,13 @@ from .health_lease_contract import HealthLeaseOutbox, canonical_json_bytes, cano
 from .health_transport import GuardCloudMachineHealthTransport, MachineHealthTransport
 from .integrity import machine_integrity_snapshot
 from .protection_lease_contract import ProtectionLeaseClaims, SignedProtectionLease
+from .runtime_request import runtime_answer
 
 _SCHEMA = "hol-guard-user-health-state.v1"
 _LOCK_NAME = "user-health-state.lock"
 USER_HEALTH_STATE_COMMAND = "user-health-state"
 USER_HEALTH_STATE_FEATURE = "native-user-health-state-v1"
 USER_HEALTH_STATE_SCHEMA = "user-health-state.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 10.0
 # A stored state is bounded at 512 KiB.
 _OUTPUT_LIMIT_BYTES = 1024 * 1024
@@ -112,17 +110,6 @@ def _native_state(guard_home: Path, op: str, state: UserHealthState | None = Non
     user health lease fails closed.
     """
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or USER_HEALTH_STATE_FEATURE not in status.capabilities.features
-    ):
-        raise OSError(_STATE_UNAVAILABLE)
     request: dict[str, object] = {
         "schema": USER_HEALTH_STATE_SCHEMA,
         "op": op,
@@ -131,20 +118,15 @@ def _native_state(guard_home: Path, op: str, state: UserHealthState | None = Non
     }
     if state is not None:
         request["state"] = state.to_dict()
-    output = _run_native_process(
-        status.identity.path,
-        (USER_HEALTH_STATE_COMMAND, "--stdin"),
-        input_text=json.dumps(request, sort_keys=True),
+    answer = runtime_answer(
+        USER_HEALTH_STATE_FEATURE,
+        USER_HEALTH_STATE_COMMAND,
+        request,
         timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
         output_limit=_OUTPUT_LIMIT_BYTES,
     )
-    try:
-        response = cast(object, json.loads(output)) if output is not None else None
-    except ValueError:
-        response = None
-    if not isinstance(response, dict):
+    if answer is None:
         raise OSError(_STATE_UNAVAILABLE)
-    answer = cast(dict[str, object], response)
     if answer.get("ok") is True:
         return answer
     reason_code = answer.get("reason_code")
