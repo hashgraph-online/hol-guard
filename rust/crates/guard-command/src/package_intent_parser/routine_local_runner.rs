@@ -25,10 +25,18 @@ use super::*;
 use crate::direct_vitest::semver_spec_matches;
 use crate::jsonc::loads_jsonc;
 
-/// The runners whose local identity is worth establishing: the lint, test and
-/// TypeScript entry points a project pins in its own manifest and runs through
-/// `bunx` or `npx` on every change.
-const ROUTINE_RUNNERS: [&str; 6] = ["eslint", "jest", "mocha", "tsc", "tsx", "vitest"];
+/// The runners whose local identity is worth establishing: the lint, test,
+/// commit-hook and TypeScript entry points a project pins in its own manifest
+/// and runs through `bunx` or `npx` on every change.
+const ROUTINE_RUNNERS: [&str; 7] = [
+    "eslint",
+    "jest",
+    "lint-staged",
+    "mocha",
+    "tsc",
+    "tsx",
+    "vitest",
+];
 
 /// Declared-version prefixes that name a source outside the registry, where a
 /// version string proves nothing about what is installed.

@@ -235,3 +235,18 @@ def test_protect_reviews_a_runner_another_dialect_contradicts(
     assert (
         _protect(tmp_path, workspace, [manager, "tsx", "scripts/generate-inventory.ts"]) is not None
     )
+
+
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_protect_builds_no_package_request_for_pinned_lint_staged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+) -> None:
+    """The commit hook a project pins is as routine as the linter it drives."""
+
+    workspace = _pinned_runner_workspace(
+        tmp_path, monkeypatch, "lint-staged", locked="4.22.4", lockfile="pnpm-lock.yaml"
+    )
+
+    assert _protect(tmp_path, workspace, [manager, "lint-staged"]) is None
