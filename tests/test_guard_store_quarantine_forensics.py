@@ -192,3 +192,20 @@ def test_no_runtime_records_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPa
             guard_home, "20260101T000000000000Z-test", outcome="restored"
         )
     assert list(guard_home.iterdir()) == []
+
+
+def test_a_failed_native_write_names_its_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import sqlite_quarantine_forensics
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    answers = iter([{"written": False, "error": "PermissionDenied"}, {"written": False, "error": "/home/x"}])
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: next(answers))
+
+    with pytest.raises(RuntimeError, match=r"were not written: PermissionDenied$"):
+        sqlite_quarantine_forensics.update_quarantine_forensics_outcome(
+            tmp_path, "20260101T000000000000Z-test", outcome="restored"
+        )
+    with pytest.raises(RuntimeError, match=r"were not written: unknown$"):
+        sqlite_quarantine_forensics.update_quarantine_forensics_outcome(
+            tmp_path, "20260101T000000000000Z-test", outcome="restored"
+        )

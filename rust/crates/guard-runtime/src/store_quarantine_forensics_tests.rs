@@ -232,6 +232,44 @@ fn the_wal_reset_bug_window_ends_at_3_51_3() {
 }
 
 #[test]
+fn branch_backports_of_the_wal_reset_fix_count_as_fixed() {
+    assert!(wal_reset_bug_possible("3.50.6"));
+    assert!(!wal_reset_bug_possible("3.50.7"));
+    assert!(!wal_reset_bug_possible("3.50.7.1"));
+    assert!(wal_reset_bug_possible("3.44.5"));
+    assert!(!wal_reset_bug_possible("3.44.6"));
+    assert!(wal_reset_bug_possible("3.49.9"));
+}
+
+#[test]
+fn a_record_at_the_size_limit_survives_an_outcome_read() {
+    let home = tempfile::tempdir().expect("home");
+    let path = record_file(home.path());
+    let pad = "a".repeat(MAX_RECORD_BYTES as usize - r#"{"pad":""}"#.len());
+    write_owner_only(&path, &json!({ "pad": pad })).expect("written at the limit");
+    assert_eq!(
+        fs::metadata(&path).expect("record").len(),
+        MAX_RECORD_FILE_BYTES
+    );
+    assert_eq!(
+        read_record(&path).expect("readable")["pad"].as_str(),
+        Some(pad.as_str())
+    );
+}
+
+#[test]
+fn a_failed_write_answers_its_reason() {
+    let home = tempfile::tempdir().expect("home");
+    let missing = home.path().join("missing");
+    let answer = ask(&request(
+        &missing,
+        json!({"op": "outcome", "outcome": "restored"}),
+    ))
+    .expect("answered");
+    assert_eq!(answer, json!({"written": false, "error": "NotFound"}));
+}
+
+#[test]
 fn requests_are_validated() {
     let home = tempfile::tempdir().expect("home");
     let record = json!({"op": "record", "record": facts(home.path(), None)});

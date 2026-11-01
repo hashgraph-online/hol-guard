@@ -146,5 +146,9 @@ def _record(guard_home: Path, quarantine_id: str, request: dict[str, object]) ->
         output_limit=256,
         timeout_seconds=_TIMEOUT_SECONDS,
     )
-    if answer is None or answer.get("written") is not True:
+    if answer is None:
         raise RuntimeError("quarantine forensics require the native runtime")
+    if answer.get("written") is not True:
+        error = answer.get("error")
+        reason = error if isinstance(error, str) and error.isidentifier() else "unknown"
+        raise RuntimeError(f"quarantine forensics were not written: {reason}")

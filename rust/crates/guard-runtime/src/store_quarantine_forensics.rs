@@ -23,12 +23,16 @@ const RECORD_SCHEMA: &str = "guard.store-quarantine-forensics.v1";
 const RECORD_SUFFIX: &str = ".forensics.json";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 const MAX_RECORD_BYTES: u64 = 64 * 1024;
+/// A record on disk is its JSON line plus the trailing newline.
+const MAX_RECORD_FILE_BYTES: u64 = MAX_RECORD_BYTES + 1;
 const MESSAGE_LIMIT: usize = 500;
 const MAX_ID_BYTES: usize = 64;
 const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
 /// SQLite 3.7.0 through 3.51.2 can corrupt a WAL database when several
-/// connections write and checkpoint concurrently (the "WAL-reset" bug).
+/// connections write and checkpoint concurrently (the "WAL-reset" bug). The
+/// fix shipped in 3.51.3 and was backported to 3.50.7 and 3.44.6.
 const WAL_RESET_BUG_FIXED_IN: [u64; 3] = [3, 51, 3];
+const WAL_RESET_BUG_BACKPORTS: [[u64; 3]; 2] = [[3, 50, 7], [3, 44, 6]];
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -92,9 +96,20 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         }
         _ => return Err(invalid()),
     };
-    write_owner_only(&path, &Value::Object(payload))
-        .map_err(|_| "store_quarantine_forensics_write_failed".to_owned())?;
-    Ok(json!({ "written": true }).to_string().into_bytes())
+    let answer = match write_owner_only(&path, &Value::Object(payload)) {
+        Ok(()) => json!({ "written": true }),
+        Err(error) => json!({ "written": false, "error": write_failure(&error) }),
+    };
+    Ok(answer.to_string().into_bytes())
+}
+
+/// A bounded reason for a failed write: the I/O error kind, never a path or
+/// any of the record's content.
+fn write_failure(error: &std::io::Error) -> String {
+    match error.kind() {
+        std::io::ErrorKind::InvalidData => "record_too_large".to_owned(),
+        kind => format!("{kind:?}"),
+    }
 }
 
 fn invalid() -> String {
@@ -154,11 +169,18 @@ fn record(guard_home: &str, quarantine_id: &str, facts: Facts) -> Map<String, Va
     payload
 }
 
-/// True when `version` predates the WAL-reset fix. A version that does not
-/// read as dotted numbers cannot be shown to carry the fix.
+/// True when `version` predates the WAL-reset fix on its release branch. A
+/// version that does not read as dotted numbers cannot be shown to carry the
+/// fix.
 pub(crate) fn wal_reset_bug_possible(version: &str) -> bool {
     let parts: Option<Vec<u64>> = version.split('.').map(|part| part.parse().ok()).collect();
-    parts.is_none_or(|parts| parts.as_slice() < WAL_RESET_BUG_FIXED_IN.as_slice())
+    parts.is_none_or(|parts| {
+        let fixed = WAL_RESET_BUG_BACKPORTS
+            .iter()
+            .find(|backport| parts.starts_with(&backport[..2]))
+            .unwrap_or(&WAL_RESET_BUG_FIXED_IN);
+        parts.as_slice() < fixed.as_slice()
+    })
 }
 
 /// Classify the store's first page without recording any of its content.
@@ -245,10 +267,10 @@ fn read_record(path: &Path) -> Option<Map<String, Value>> {
     let mut bytes = Vec::new();
     File::open(path)
         .ok()?
-        .take(MAX_RECORD_BYTES + 1)
+        .take(MAX_RECORD_FILE_BYTES + 1)
         .read_to_end(&mut bytes)
         .ok()?;
-    if bytes.len() as u64 > MAX_RECORD_BYTES {
+    if bytes.len() as u64 > MAX_RECORD_FILE_BYTES {
         return None;
     }
     match serde_json::from_slice(&bytes).ok()? {
