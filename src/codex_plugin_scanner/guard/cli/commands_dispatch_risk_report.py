@@ -10,11 +10,7 @@ from typing import TextIO
 
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
-from ..local_risk_report import (
-    build_local_risk_report,
-    local_risk_report_json,
-    render_local_risk_report_html,
-)
+from ..mdm.runtime_request import runtime_answer
 from ..store import GuardStore
 from .product import build_guard_status_payload
 
@@ -24,6 +20,24 @@ def _package_version() -> str:
         return version("hol-guard")
     except PackageNotFoundError:
         return "unknown"
+
+
+# The only status fields the report reads; nothing else leaves this process.
+_REPORT_FIELDS = ("generated_at", "runtime_status", "managed_harnesses", "pending_approvals", "receipt_count")
+_HARNESS_FIELDS = ("harness", "installed", "review_count")
+
+
+def _report_status(status_payload: dict[str, object]) -> dict[str, object]:
+    status: dict[str, object] = {name: status_payload.get(name) for name in _REPORT_FIELDS}
+    status["sync_configured"] = bool(status_payload.get("sync_configured"))
+    harnesses = status_payload.get("harnesses")
+    if isinstance(harnesses, list):
+        status["harnesses"] = [
+            {name: item.get(name) for name in _HARNESS_FIELDS if name in item}
+            for item in harnesses
+            if isinstance(item, dict)
+        ]
+    return status
 
 
 def run_guard_risk_report_command(
@@ -42,10 +56,24 @@ def run_guard_risk_report_command(
         raise RuntimeError("Guard context, store, and config are required")
 
     status_payload = build_guard_status_payload(context, store, config)
-    report = build_local_risk_report(status_payload, guard_version=_package_version())
-    report_format = str(getattr(args, "format", "json"))
-    body = render_local_risk_report_html(report) if report_format == "html" else local_risk_report_json(report)
     stream = output_stream or sys.stdout
+    # ``local_risk_report.rs`` builds, signs and renders the report.
+    answer = runtime_answer(
+        "native-local-risk-report-v1",
+        "local-risk-report",
+        {
+            "schema": "local-risk-report.v1",
+            "status": _report_status(status_payload),
+            "guard_version": _package_version(),
+            "format": str(getattr(args, "format", "json")),
+        },
+        output_limit=1024 * 1024,
+        timeout_seconds=10.0,
+    )
+    body = None if answer is None else answer.get("body")
+    if not isinstance(body, str):
+        print("Guard's native runtime is unavailable, so the risk report was not built.", file=sys.stderr)
+        return 1
 
     output = getattr(args, "output", None)
     if isinstance(output, str) and output.strip():

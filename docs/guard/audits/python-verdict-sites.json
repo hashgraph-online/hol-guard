@@ -483,16 +483,6 @@
       "note": "Decodes the stored resume resolution into the enforced vocabulary."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/local_risk_report.py",
-      "func": "_risk_band",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "review"
-      ],
-      "note": "A local risk-report band."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
       "func": "allow_tool_call",
       "root": "mcp",
