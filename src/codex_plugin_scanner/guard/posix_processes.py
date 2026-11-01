@@ -14,8 +14,7 @@ _FEATURE = "native-posix-processes-v1"
 _COMMAND = "posix-processes"
 _SCHEMA = "posix-processes.v1"
 _TIMEOUT_SECONDS = 10.0
-# The runtime reads at most 1 MiB of process text; JSON may spell one byte as
-# six (`\u001f`), and each procfs entry adds its id and punctuation.
+# The runtime answers `null` rather than write more than 6 MiB of JSON.
 _OUTPUT_LIMIT_BYTES = 6 * 1024 * 1024 + 64 * 1024
 
 

@@ -122,6 +122,27 @@ fn procfs_inventory_fails_closed_past_its_budget() {
     assert_eq!(proc_entries(&directory.path().join("missing"), 16), None);
 }
 
+/// Each control byte in a command line is six bytes of JSON, so a procfs
+/// inventory within the output budget can outgrow what the caller reads; such
+/// an answer is `null` rather than cut off.
+#[test]
+fn an_answer_past_the_response_budget_proves_nothing() {
+    let entries: Vec<(i64, String)> = (1..=8).map(|pid| (pid, "\u{1}".repeat(128))).collect();
+    let answer = json!({ "listing": null, "entries": entries });
+    let whole = encode(&answer, MAX_RESPONSE_BYTES).expect("encoded");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&whole).expect("json"),
+        answer
+    );
+    let raw_bytes: usize = 8 * 128;
+    let over = encode(&answer, raw_bytes * 6).expect("encoded");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&over).expect("json"),
+        json!({ "listing": null, "entries": null })
+    );
+    assert!(OUTPUT_LIMIT_BYTES as usize * 6 >= MAX_RESPONSE_BYTES);
+}
+
 #[cfg(unix)]
 mod with_ps {
     use super::*;
@@ -240,6 +261,51 @@ mod with_ps {
             Ok(json!({ "listing": null }))
         );
         assert!(started.elapsed() < Duration::from_secs(4));
+    }
+
+    /// A descendant that keeps stdout open after `ps` exits is killed with
+    /// the query instead of outliving it.
+    #[test]
+    fn a_failed_query_kills_what_ps_started() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let pid_file = directory.path().join("child.pid");
+        let body = format!(
+            "/bin/sleep 30 &\necho $! > '{}'\necho listed",
+            pid_file.display()
+        );
+        let slow = Host {
+            timeout: Duration::from_millis(300),
+            ..host(Some(fake_ps(directory.path(), &body)), None)
+        };
+        assert_eq!(
+            answer(&request("elapsed", None), &slow),
+            Ok(json!({ "listing": null }))
+        );
+        let child: i32 = fs::read_to_string(&pid_file)
+            .expect("pid")
+            .trim()
+            .parse()
+            .expect("pid number");
+        // A killed orphan may linger as a zombie until its new parent reaps
+        // it; that counts as gone.
+        let running = || {
+            std::process::Command::new("/bin/ps")
+                .args(["-o", "stat=", "-p", &child.to_string()])
+                .output()
+                .is_ok_and(|output| {
+                    let state = String::from_utf8_lossy(&output.stdout);
+                    let state = state.trim();
+                    !state.is_empty() && !state.starts_with('Z')
+                })
+        };
+        let gone = (0..200).any(|_| {
+            let alive = running();
+            if alive {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            !alive
+        });
+        assert!(gone, "the background child is still running");
     }
 
     #[test]

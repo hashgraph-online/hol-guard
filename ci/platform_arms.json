@@ -2353,6 +2353,22 @@
    "item": "fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32>",
    "cfg": "not(unix)",
    "body": "5efc5e13f499"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn isolate_group(_command: &mut Command)",
+   "cfg": "not(unix)",
+   "body": "ec39219807ef"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn kill_group(_child: &Child)",
+   "cfg": "not(unix)",
+   "body": "42851029dd12"
   }
  ]
 }

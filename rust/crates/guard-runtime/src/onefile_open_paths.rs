@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -301,11 +301,30 @@ fn system_lsof() -> Option<Vec<u8>> {
 /// Stdout of `command` when it exits cleanly within `timeout` and writes at
 /// most `limit` bytes. Output past the limit kills the child at once rather
 /// than leaving it blocked on a full pipe until the timeout.
-pub(crate) fn bounded_stdout(
-    mut command: Command,
+pub(crate) fn bounded_stdout(command: Command, limit: u64, timeout: Duration) -> Option<Vec<u8>> {
+    bounded_output(command, limit, timeout, false)
+}
+
+/// [`bounded_stdout`] with `command` in a process group of its own. A query
+/// that fails kills the whole group, so a descendant that inherited stdout
+/// cannot outlive the answer or keep the reader waiting.
+pub(crate) fn bounded_stdout_in_group(
+    command: Command,
     limit: u64,
     timeout: Duration,
 ) -> Option<Vec<u8>> {
+    bounded_output(command, limit, timeout, true)
+}
+
+fn bounded_output(
+    mut command: Command,
+    limit: u64,
+    timeout: Duration,
+    group: bool,
+) -> Option<Vec<u8>> {
+    if group {
+        isolate_group(&mut command);
+    }
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -313,8 +332,7 @@ pub(crate) fn bounded_stdout(
         .spawn()
         .ok()?;
     let Some(stdout) = child.stdout.take() else {
-        let _ = child.kill();
-        let _ = child.wait();
+        stop(&mut child, group);
         return None;
     };
     let (sender, receiver) = mpsc::channel();
@@ -329,8 +347,7 @@ pub(crate) fn bounded_stdout(
         if output.is_none() {
             if let Ok(bytes) = receiver.try_recv() {
                 if bytes.len() as u64 > limit {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    stop(&mut child, group);
                     return None;
                 }
                 output = Some(bytes);
@@ -342,23 +359,60 @@ pub(crate) fn bounded_stdout(
                 std::thread::sleep(Duration::from_millis(10));
             }
             _ => {
-                let _ = child.kill();
-                let _ = child.wait();
+                stop(&mut child, group);
                 return None;
             }
         }
     };
     let bytes = match output {
         Some(bytes) => bytes,
-        None => receiver
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-            .ok()?,
+        None => match receiver.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                // The child exited but something it started still holds
+                // stdout open.
+                if group {
+                    kill_group(&child);
+                }
+                return None;
+            }
+        },
     };
     if !status.success() || bytes.len() as u64 > limit {
         return None;
     }
     Some(bytes)
 }
+
+fn stop(child: &mut Child, group: bool) {
+    if group {
+        kill_group(child);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// `process_group(0)` makes the child's pid its group id, so the group
+/// outlives the child for as long as any descendant is still in it.
+#[cfg(unix)]
+fn isolate_group(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn isolate_group(_command: &mut Command) {}
+
+#[cfg(unix)]
+fn kill_group(child: &Child) {
+    use nix::sys::signal::{killpg, Signal};
+    if let Ok(id) = i32::try_from(child.id()) {
+        let _ = killpg(nix::unistd::Pid::from_raw(id), Signal::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_group(_child: &Child) {}
 
 #[cfg(test)]
 #[path = "onefile_open_paths_tests.rs"]

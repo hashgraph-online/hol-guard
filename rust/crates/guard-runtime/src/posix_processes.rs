@@ -14,7 +14,10 @@
 //! UTF-8 answers `null`: callers read that as "cannot be proven". The procfs
 //! inventory shares the same 1 MiB budget, and an unreadable or oversized
 //! process table answers `null` as well, since an incomplete list could hide
-//! a running daemon. Off POSIX every answer is `null`.
+//! a running daemon. An answer larger than the 6 MiB the caller reads has
+//! every field `null` for the same reason. `ps` runs in a process group of
+//! its own, killed whole when a query fails. Off POSIX every answer is
+//! `null`.
 
 use std::fs;
 use std::io::Read;
@@ -26,12 +29,16 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::cloud_request_text::py_strip;
-use crate::onefile_open_paths::bounded_stdout;
+use crate::onefile_open_paths::bounded_stdout_in_group;
 
 const SCHEMA: &str = "posix-processes.v1";
 const MAX_REQUEST_BYTES: u64 = 4 * 1024;
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const OUTPUT_LIMIT_BYTES: u64 = 1024 * 1024;
+/// What the caller reads of an answer. JSON may spell one byte of process
+/// text as six (`\u001f`) and each procfs entry adds its id and punctuation,
+/// so an answer within the output budget can still be larger than this.
+const MAX_RESPONSE_BYTES: usize = 6 * 1024 * 1024;
 const TRUSTED_PS_PATHS: [&str; 2] = ["/bin/ps", "/usr/bin/ps"];
 const PROC_ROOT: &str = "/proc";
 
@@ -64,8 +71,24 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         timeout: QUERY_TIMEOUT,
         output_limit: OUTPUT_LIMIT_BYTES,
     };
-    let answer = answer(&request, &host)?;
-    serde_json::to_vec(&answer).map_err(|_| "posix_processes_response_unencodable".to_owned())
+    encode(&answer(&request, &host)?, MAX_RESPONSE_BYTES)
+}
+
+/// The answer as JSON, or with every field `null` when it would be larger
+/// than `limit`: a process list the caller cannot read whole proves nothing.
+fn encode(answer: &Value, limit: usize) -> Result<Vec<u8>, String> {
+    let unencodable = |_| "posix_processes_response_unencodable".to_owned();
+    let encoded = serde_json::to_vec(answer).map_err(unencodable)?;
+    if encoded.len() <= limit {
+        return Ok(encoded);
+    }
+    let unknown: serde_json::Map<String, Value> = answer
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(key, _)| (key.clone(), Value::Null))
+        .collect();
+    serde_json::to_vec(&unknown).map_err(unencodable)
 }
 
 /// Where the queries run: the trusted `ps`, the procfs root used without
@@ -120,7 +143,7 @@ fn ps(host: &Host, arguments: &[&str]) -> Option<String> {
         .env_clear()
         .env("LANG", "C")
         .env("LC_ALL", "C");
-    let stdout = bounded_stdout(command, host.output_limit, host.timeout)?;
+    let stdout = bounded_stdout_in_group(command, host.output_limit, host.timeout)?;
     String::from_utf8(stdout).ok()
 }
 
