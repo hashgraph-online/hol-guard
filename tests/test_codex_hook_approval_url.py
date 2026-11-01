@@ -128,3 +128,25 @@ def test_watch_posture_with_stale_prompt_mode_does_not_block_codex_hook(tmp_path
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert output["policy_action"] == "warn"
     assert store.list_approval_requests(limit=5) == []
+
+
+def test_unavailable_runtime_leaves_review_copy_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _localize_pending_approval_copy
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    review_url = "http://127.0.0.1:5474/requests/req-codex-3"
+    payload: dict[str, object] = {
+        "primary_approval_url": review_url,
+        "decision_v2_json": {"action": "ask", "harness_message": "Held for review."},
+        "supply_chain_evaluation": {"user_copy": {"harness_message": "Package held."}},
+    }
+    assert _native_approval_center_context(payload, harness="codex") is None
+    _localize_pending_approval_copy(payload, harness="codex")
+    assert payload["decision_v2_json"] == {"action": "ask", "harness_message": "Held for review."}
+    assert payload["supply_chain_evaluation"] == {
+        "user_copy": {"harness_message": "Package held.", "dashboard_url": review_url}
+    }
