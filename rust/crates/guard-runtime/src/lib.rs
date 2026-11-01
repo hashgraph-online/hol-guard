@@ -264,6 +264,7 @@ mod decision_authority_vectors_tests;
 mod delivery_object;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
+mod device_key_helper;
 #[path = "adapters/detection/devin_detect.rs"]
 mod devin_detect;
 mod direct_tool_context_op;

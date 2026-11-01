@@ -1,28 +1,28 @@
-"""Bounded execution contract for platform-native device-key helpers."""
+"""Platform device-key helper operations, run and checked by the native runtime."""
 
 from __future__ import annotations
 
 import base64
-import ctypes
 import json
-import ntpath
 import os
 import re
-import subprocess
+import time
 from dataclasses import dataclass
 from typing import Literal, cast
-
-from cryptography.hazmat.primitives.asymmetric import utils
 
 from .contracts import KeyProtectionLevel, MachinePaths
 from .device_key_windows_api import load_windows_token_api
 
-_MAX_HELPER_OUTPUT_BYTES = 16 * 1024
-_MAX_HELPER_STDERR_BYTES = 4096
+DEVICE_KEY_HELPER_FEATURE = "native-device-key-helper-v1"
 _MAX_HEALTH_LEASE_CLAIMS_BYTES = 4096
-_HELPER_TIMEOUT_SECONDS = 15
+_STATUS_TIMEOUT_SECONDS = 10.0
+# The runtime gives the helper 15 seconds.
+_COMMAND_TIMEOUT_SECONDS = 30.0
+_MAX_ANSWER_BYTES = 64 * 1024
 _SYSTEM_SID = "S-1-5-18"
-_P256_ORDER = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
+_PLATFORMS = {"Darwin": "macos", "Windows": "windows"}
+_STATES = frozenset({"active", "absent", "unknown", "tampered"})
+_PROTECTION_LEVELS = frozenset({"hardware-backed", "os-protected", "unknown"})
 _HEALTH_LEASE_KEYS = {
     "deviceId",
     "installationGeneration",
@@ -143,150 +143,72 @@ def _validated_canonical_health_key_registration(registration: bytes) -> str:
     return text
 
 
-def _validated_der_signature(encoded: object) -> bytes:
-    if not isinstance(encoded, str) or len(encoded) > 128:
-        raise OSError("device_key_probe_failed")
-    try:
-        signature = base64.b64decode(encoded, validate=True)
-        r, s = utils.decode_dss_signature(signature)
-    except (ValueError, TypeError) as exc:
-        raise OSError("device_key_probe_failed") from exc
-    if not 0 < r < _P256_ORDER or not 0 < s < _P256_ORDER or utils.encode_dss_signature(r, s) != signature:
-        raise OSError("device_key_probe_failed")
-    return signature
+def _native_helper(
+    paths: MachinePaths, verb: str, generation: str, *, system_name: str, payload: str | None = None
+) -> dict[str, object]:
+    """The runtime's checked answer from the platform helper for one operation."""
 
+    from ..native_runtime import _run_native_process, native_runtime_status
 
-def windows_directory() -> str:
-    buffer = ctypes.create_unicode_buffer(32_768)
-    length = int(ctypes.windll.kernel32.GetSystemWindowsDirectoryW(buffer, len(buffer)))
-    if length == 0 or length >= len(buffer):
-        raise OSError("device_key_probe_failed")
-    return ntpath.normpath(str(buffer.value))
-
-
-def _helper_invocation(
-    paths: MachinePaths, verb: str, generation: str, system_name: str
-) -> tuple[list[str], dict[str, str], str]:
-    if system_name == "Darwin":
-        command = [str(paths.runtime_root / "hol-guard-device-key"), verb, generation]
-        environment = {
-            "HOME": "/var/root",
-            "LC_ALL": "C",
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-            "TMPDIR": "/var/tmp",
-        }
-        cwd = "/"
-    elif system_name == "Windows":
-        system_root = windows_directory()
-        system_directory = ntpath.join(system_root, "System32")
-        command = [
-            ntpath.join(system_directory, "WindowsPowerShell", "v1.0", "powershell.exe"),
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(paths.runtime_root / "hol-guard" / "device-key-helper.ps1"),
-            "-Verb",
-            verb,
-            "-Generation",
-            generation,
-        ]
-        drive, _ = ntpath.splitdrive(system_root)
-        if not drive:
-            raise OSError("device_key_probe_failed")
-        environment = {
-            "ComSpec": ntpath.join(system_directory, "cmd.exe"),
-            "SystemDrive": drive,
-            "SystemRoot": system_root,
-            "WINDIR": system_root,
-        }
-        cwd = system_directory
-    else:
+    platform_name = _PLATFORMS.get(system_name)
+    if platform_name is None:
         raise OSError("device_key_platform_unsupported")
-    return command, environment, cwd
+    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or DEVICE_KEY_HELPER_FEATURE not in status.capabilities.features
+    ):
+        raise OSError("device_key_native_unavailable")
+    request: dict[str, object] = {
+        "schema": "device-key-helper.v1",
+        "platform": platform_name,
+        "runtime_root": str(paths.runtime_root),
+        "verb": verb,
+        "generation": generation,
+    }
+    if payload is not None:
+        request["payload"] = payload
+    output = _run_native_process(
+        status.identity.path,
+        ("device-key-helper", "--stdin"),
+        input_text=json.dumps(request),
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_MAX_ANSWER_BYTES,
+    )
+    try:
+        answer = cast(object, json.loads(output)) if output is not None else None
+    except ValueError:
+        answer = None
+    if not isinstance(answer, dict):
+        raise OSError("device_key_native_unavailable")
+    fields = cast(dict[str, object], answer)
+    if fields.get("ok") is not True:
+        raise OSError("device_key_probe_failed")
+    return fields
 
 
 def run_helper(paths: MachinePaths, verb: str, generation: str, *, system_name: str) -> NativeKeyEvidence:
     if verb not in {"create", "inspect", "delete"}:
         raise ValueError("device_key_request_invalid")
-    if system_name not in {"Darwin", "Windows"}:
+    if system_name not in _PLATFORMS:
         return NativeKeyEvidence("unknown", "unavailable", None, "device_key_platform_unsupported")
-    command, environment, cwd = _helper_invocation(paths, verb, generation, system_name)
-    result = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        cwd=cwd,
-        env=environment,
-        input="",
-        text=True,
-        timeout=_HELPER_TIMEOUT_SECONDS,
-    )
+    answer = _native_helper(paths, verb, generation, system_name=system_name)
+    state, level, reason = answer.get("state"), answer.get("protection_level"), answer.get("reason_code")
+    public_key = answer.get("public_key_x963")
     if (
-        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
-        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
-    ):
-        raise OSError("device_key_probe_failed")
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise OSError("device_key_probe_failed") from exc
-    if not isinstance(payload, dict) or set(payload) != {
-        "ok",
-        "state",
-        "protectionLevel",
-        "publicKeyX963",
-        "reasonCode",
-    }:
-        raise OSError("device_key_probe_failed")
-    state = payload.get("state")
-    level = payload.get("protectionLevel")
-    reason = payload.get("reasonCode")
-    public_raw = payload.get("publicKeyX963")
-    ok = payload.get("ok")
-    if (
-        not isinstance(ok, bool)
-        or state not in {"active", "absent", "unknown", "tampered"}
-        or level not in {"hardware-backed", "os-protected", "unknown"}
+        state not in _STATES
+        or level not in _PROTECTION_LEVELS
         or not isinstance(reason, str)
-        or reason
-        not in {
-            "device_key_active",
-            "device_key_absent",
-            "device_key_generation_collision",
-            "device_key_system_context_required",
-            "device_key_request_invalid",
-            "device_key_provider_unavailable",
-            "device_key_unusable",
-            "device_key_probe_failed",
-        }
+        or not (public_key is None or isinstance(public_key, str))
     ):
-        raise OSError("device_key_probe_failed")
-    public_key: bytes | None = None
-    if public_raw is not None:
-        if not isinstance(public_raw, str) or len(public_raw) > 256:
-            raise OSError("device_key_probe_failed")
-        try:
-            public_key = base64.b64decode(public_raw, validate=True)
-        except ValueError as exc:
-            raise OSError("device_key_probe_failed") from exc
-        if len(public_key) != 65 or public_key[0] != 4:
-            raise OSError("device_key_probe_failed")
-    successful = (verb in {"create", "inspect"} and state == "active") or (verb == "delete" and state == "absent")
-    if successful:
-        expected_return_code = 0
-    elif verb == "inspect" and state == "absent":
-        expected_return_code = 1
-    else:
-        expected_return_code = 2
-    if result.returncode != expected_return_code or ok != successful:
         raise OSError("device_key_probe_failed")
     return NativeKeyEvidence(
         cast(Literal["active", "absent", "unknown", "tampered"], state),
         cast(KeyProtectionLevel, level),
-        public_key,
+        base64.b64decode(public_key) if public_key is not None else None,
         reason,
     )
 
@@ -299,36 +221,11 @@ def _sign_payload_with_device_key(
     *,
     system_name: str,
 ) -> NativeHealthLeaseSignature:
-    command, environment, cwd = _helper_invocation(paths, subcommand, generation, system_name)
-    result = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        cwd=cwd,
-        env=environment,
-        input=payload_text,
-        text=True,
-        timeout=_HELPER_TIMEOUT_SECONDS,
-    )
-    if (
-        len(result.stdout.encode("utf-8")) > _MAX_HELPER_OUTPUT_BYTES
-        or len(result.stderr.encode("utf-8")) > _MAX_HELPER_STDERR_BYTES
-    ):
+    answer = _native_helper(paths, subcommand, generation, system_name=system_name, payload=payload_text)
+    signature = answer.get("signature")
+    if not isinstance(signature, str):
         raise OSError("device_key_probe_failed")
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise OSError("device_key_probe_failed") from exc
-    if (
-        result.returncode != 0
-        or not isinstance(payload, dict)
-        or set(payload) != {"ok", "signature", "signatureAlgorithm", "signatureEncoding"}
-        or payload.get("ok") is not True
-        or payload.get("signatureAlgorithm") != "ecdsa-p256-sha256"
-        or payload.get("signatureEncoding") != "asn1-der"
-    ):
-        raise OSError("device_key_probe_failed")
-    return NativeHealthLeaseSignature(_validated_der_signature(payload.get("signature")))
+    return NativeHealthLeaseSignature(base64.b64decode(signature))
 
 
 def sign_health_lease(

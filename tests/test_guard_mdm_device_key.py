@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import secrets
 import subprocess
 from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
-from unittest.mock import Mock
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from codex_plugin_scanner import cli
+from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.cli import commands_dispatch_mdm
 from codex_plugin_scanner.guard.mdm import device_key, device_key_native, state_file
 from codex_plugin_scanner.guard.mdm.contracts import MachinePaths
@@ -26,6 +28,31 @@ def _paths(root: Path) -> MachinePaths:
         log_root=root / "logs",
         manifest_path=root / "runtime" / "release-manifest.json",
     )
+
+
+def _fake_native(
+    monkeypatch: pytest.MonkeyPatch, answer: object, *, features: tuple[str, ...] | None = None
+) -> list[dict[str, object]]:
+    """Route the device-key helper through a fake runtime that records each request."""
+
+    requests: list[dict[str, object]] = []
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("/opt/hol-guard/hol-guard-native")),
+        capabilities=SimpleNamespace(
+            features=features if features is not None else (device_key_native.DEVICE_KEY_HELPER_FEATURE,)
+        ),
+    )
+
+    def spawn(_path: Path, args: tuple[str, ...], *, input_text: str, **_kwargs: object) -> str:
+        assert args == ("device-key-helper", "--stdin")
+        requests.append(json.loads(input_text))
+        return json.dumps(answer)
+
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", spawn)
+    return requests
 
 
 def _prepare_lifecycle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MachinePaths:
@@ -278,142 +305,88 @@ def test_device_key_metadata_fails_closed_without_the_native_runtime(
     assert (status.state, status.reason_code) == ("unknown", "device_key_probe_failed")
 
 
-def test_native_helper_response_is_strict_and_bounded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_native_helper_request_names_the_operation_and_maps_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     paths = _paths(tmp_path)
-    run = Mock(
-        return_value=subprocess.CompletedProcess(
-            ["helper"],
-            0,
-            json.dumps(
-                {
-                    "ok": True,
-                    "state": "active",
-                    "protectionLevel": "os-protected",
-                    "publicKeyX963": "not-base64",
-                    "reasonCode": "device_key_active",
-                }
-            ),
-            "",
-        )
+    public_key = b"\x04" + b"\x01" * 64
+    requests = _fake_native(
+        monkeypatch,
+        {
+            "ok": True,
+            "state": "active",
+            "protection_level": "os-protected",
+            "public_key_x963": base64.b64encode(public_key).decode(),
+            "reason_code": "device_key_active",
+        },
     )
-    monkeypatch.setattr(device_key_native.subprocess, "run", run)
 
-    with pytest.raises(OSError, match="device_key_probe_failed"):
-        device_key._run_helper(paths, "inspect", "a" * 32, system_name="Darwin")
+    evidence = device_key._run_helper(paths, "inspect", "a" * 32, system_name="Darwin")
 
-    command = run.call_args.args[0]
-    kwargs = run.call_args.kwargs
-    assert command == [str(paths.runtime_root / "hol-guard-device-key"), "inspect", "a" * 32]
-    assert kwargs["cwd"] == "/"
-    assert kwargs["env"] == {
-        "HOME": "/var/root",
-        "LC_ALL": "C",
-        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-        "TMPDIR": "/var/tmp",
-    }
+    assert requests == [
+        {
+            "schema": "device-key-helper.v1",
+            "platform": "macos",
+            "runtime_root": str(paths.runtime_root),
+            "verb": "inspect",
+            "generation": "a" * 32,
+        }
+    ]
+    assert (evidence.state, evidence.protection_level, evidence.reason_code) == (
+        "active",
+        "os-protected",
+        "device_key_active",
+    )
+    assert evidence.public_key_x963 == public_key
+
+
+def test_native_helper_absent_key_maps_to_absent_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_native(
+        monkeypatch,
+        {
+            "ok": True,
+            "state": "absent",
+            "protection_level": "os-protected",
+            "public_key_x963": None,
+            "reason_code": "device_key_absent",
+        },
+    )
+
+    evidence = device_key._run_helper(_paths(tmp_path), "delete", "a" * 32, system_name="Darwin")
+
+    assert (evidence.state, evidence.public_key_x963) == ("absent", None)
 
 
 @pytest.mark.parametrize(
-    ("verb", "return_code", "ok"),
-    [("inspect", 1, False), ("delete", 0, True)],
+    "answer",
+    [
+        {"ok": False, "reason_code": "device_key_probe_failed"},
+        {
+            "ok": True,
+            "state": "rotated",
+            "protection_level": "os-protected",
+            "public_key_x963": None,
+            "reason_code": "x",
+        },
+        "not an object",
+    ],
 )
-def test_native_helper_absent_result_is_operation_aware(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    verb: str,
-    return_code: int,
-    ok: bool,
+def test_native_helper_refuses_an_unsuccessful_or_unknown_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: object
 ) -> None:
-    paths = _paths(tmp_path)
-    run = Mock(
-        return_value=subprocess.CompletedProcess(
-            ["helper"],
-            return_code,
-            json.dumps(
-                {
-                    "ok": ok,
-                    "state": "absent",
-                    "protectionLevel": "os-protected",
-                    "publicKeyX963": None,
-                    "reasonCode": "device_key_absent",
-                }
-            ),
-            "",
-        )
-    )
-    monkeypatch.setattr(device_key_native.subprocess, "run", run)
+    _fake_native(monkeypatch, answer)
 
-    evidence = device_key._run_helper(paths, verb, "a" * 32, system_name="Darwin")
-
-    assert evidence.state == "absent"
+    with pytest.raises(OSError, match=r"device_key_probe_failed|device_key_native_unavailable"):
+        device_key._run_helper(_paths(tmp_path), "inspect", "a" * 32, system_name="Darwin")
 
 
-def test_native_helper_rejects_inconsistent_success_marker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    paths = _paths(tmp_path)
-    monkeypatch.setattr(
-        device_key_native.subprocess,
-        "run",
-        Mock(
-            return_value=subprocess.CompletedProcess(
-                ["helper"],
-                0,
-                json.dumps(
-                    {
-                        "ok": False,
-                        "state": "active",
-                        "protectionLevel": "os-protected",
-                        "publicKeyX963": None,
-                        "reasonCode": "device_key_active",
-                    }
-                ),
-                "",
-            )
-        ),
-    )
+def test_native_helper_needs_the_runtime_feature(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    requests = _fake_native(monkeypatch, {"ok": True}, features=())
 
-    with pytest.raises(OSError, match="device_key_probe_failed"):
-        device_key._run_helper(paths, "inspect", "a" * 32, system_name="Darwin")
+    with pytest.raises(OSError, match="device_key_native_unavailable"):
+        device_key._run_helper(_paths(tmp_path), "inspect", "a" * 32, system_name="Darwin")
 
-
-@pytest.mark.parametrize(
-    ("verb", "state", "return_code", "ok"),
-    [("delete", "active", 0, True), ("create", "absent", 1, False)],
-)
-def test_native_helper_rejects_cross_operation_result_contracts(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    verb: str,
-    state: str,
-    return_code: int,
-    ok: bool,
-) -> None:
-    paths = _paths(tmp_path)
-    reason_code = "device_key_absent"
-    if state == "active":
-        reason_code = "device_key_active"
-    monkeypatch.setattr(
-        device_key_native.subprocess,
-        "run",
-        Mock(
-            return_value=subprocess.CompletedProcess(
-                ["helper"],
-                return_code,
-                json.dumps(
-                    {
-                        "ok": ok,
-                        "state": state,
-                        "protectionLevel": "os-protected",
-                        "publicKeyX963": None,
-                        "reasonCode": reason_code,
-                    }
-                ),
-                "",
-            )
-        ),
-    )
-
-    with pytest.raises(OSError, match="device_key_probe_failed"):
-        device_key._run_helper(paths, verb, "a" * 32, system_name="Darwin")
+    assert requests == []
 
 
 def test_device_key_cli_status_emits_only_component_state(
