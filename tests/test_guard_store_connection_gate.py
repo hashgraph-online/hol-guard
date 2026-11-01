@@ -459,12 +459,10 @@ def test_budgeted_bulk_write_preserves_sqlite_result_accounting(tmp_path: Path) 
         assert connection.execute("select count(*) from guard_events where event_name like 'bulk-%'").fetchone()[0] == 3
 
 
-@pytest.mark.parametrize("path_kind", ["probe", "write-probe", "salvage"])
 @pytest.mark.parametrize("expired", [False, True])
 def test_recovery_connections_obey_deadline_and_close_handles(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    path_kind: str,
     expired: bool,
 ) -> None:
     from codex_plugin_scanner.guard import sqlite_recovery
@@ -482,16 +480,11 @@ def test_recovery_connections_obey_deadline_and_close_handles(
         return connection
 
     def recover() -> None:
-        if path_kind == "probe":
-            assert sqlite_recovery._probe_sqlite_store(source.path) == "healthy"
-        elif path_kind == "write-probe":
-            assert sqlite_recovery._guard_home_accepts_sqlite_write(source.guard_home)
-        else:
-            # Generated empty source has no cloud consent to recover.
-            assert sqlite_recovery.salvage_quarantined_state(source=source.path, destination=destination.path) == (
-                False,
-                True,
-            )
+        # Generated empty source has no cloud consent to recover.
+        assert sqlite_recovery.salvage_quarantined_state(source=source.path, destination=destination.path) == (
+            False,
+            True,
+        )
 
     monkeypatch.setattr(sqlite3, "connect", observed_connect)
     with sqlite_operation_deadline(time.monotonic() + (-1 if expired else 2)):
@@ -506,6 +499,82 @@ def test_recovery_connections_obey_deadline_and_close_handles(
         with pytest.raises(sqlite3.ProgrammingError, match="closed"):
             connection.execute("select 1")
     assert not list(source.guard_home.glob("storage-probe-*"))
+
+
+@pytest.mark.parametrize("op", ["detail", "restore"])
+def test_store_probe_obeys_the_operation_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    op: str,
+) -> None:
+    from codex_plugin_scanner.guard import sqlite_recovery
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    requests: list[dict[str, object]] = []
+    deadlines: list[float] = []
+
+    def answer(_feature: str, _command: str, request: dict[str, object], **kwargs: float) -> dict[str, object]:
+        requests.append(request)
+        deadlines.append(kwargs["deadline"])
+        return {"restored": False}
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", answer)
+
+    def probe() -> None:
+        if op == "detail":
+            _ = sqlite_recovery.sqlite_store_probe_detail(
+                path=tmp_path / "guard.db",
+                guard_home=tmp_path,
+                error=sqlite3.DatabaseError("database disk image is malformed"),
+                fatal_error=True,
+            )
+        else:
+            _ = sqlite_recovery.restore_readable_sqlite_store(
+                destination=tmp_path / "guard.db", quarantined=tmp_path / "guard.db.corrupt-1"
+            )
+
+    with sqlite_operation_deadline(time.monotonic() - 1), pytest.raises(TimeoutError, match="deadline expired"):
+        probe()
+    assert requests == []
+
+    operation_deadline = time.monotonic() + 2
+    with sqlite_operation_deadline(operation_deadline):
+        probe()
+    assert [request["op"] for request in requests] == [op]
+    wait = requests[0]["wait_seconds"]
+    assert isinstance(wait, float) and 0 < wait <= 2
+    assert deadlines == [operation_deadline]
+
+
+def test_unanswered_store_probe_proves_nothing_and_restores_nothing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import sqlite_recovery
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    quarantined = tmp_path / "guard.db.corrupt-1"
+    quarantined.write_bytes(b"store")
+
+    detail = sqlite_recovery.sqlite_store_probe_detail(
+        path=tmp_path / "guard.db",
+        guard_home=tmp_path,
+        error=sqlite3.DatabaseError("database disk image is malformed"),
+        fatal_error=True,
+    )
+    assert detail.proven_unusable is False
+    assert (
+        sqlite_recovery.restore_readable_sqlite_store(destination=tmp_path / "guard.db", quarantined=quarantined)
+        is False
+    )
+
+    # A lost answer after the native move still reports the restore.
+    quarantined.replace(tmp_path / "guard.db")
+    assert (
+        sqlite_recovery.restore_readable_sqlite_store(destination=tmp_path / "guard.db", quarantined=quarantined)
+        is True
+    )
 
 
 def test_recovery_connection_keeps_its_shorter_local_wait_cap(tmp_path: Path) -> None:

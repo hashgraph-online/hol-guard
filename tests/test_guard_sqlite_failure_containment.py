@@ -186,26 +186,6 @@ def test_nonfatal_numeric_code_prevents_message_from_entering_recovery(
 
 
 @pytest.mark.parametrize(
-    "code", [pytest.param(266, id="SQLITE_IOERR_READ"), pytest.param(1034, id="SQLITE_IOERR_FSYNC")]
-)
-def test_coded_io_probe_is_not_corruption_even_with_misleading_message(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    code: int,
-) -> None:
-    from codex_plugin_scanner.guard import sqlite_recovery
-
-    error = sqlite3.OperationalError("database disk image is malformed")
-    error.sqlite_errorcode = code
-
-    def failed_connect(*_args: object, **_kwargs: object) -> sqlite3.Connection:
-        raise error
-
-    monkeypatch.setattr(sqlite_recovery.sqlite3, "connect", failed_connect)
-    assert sqlite_recovery._probe_sqlite_store(tmp_path / "generated.db") == "io"
-
-
-@pytest.mark.parametrize(
     "code, message, expected",
     [
         (517, "generated opaque diagnostic", True),  # SQLITE_BUSY_SNAPSHOT
@@ -395,48 +375,6 @@ def test_connect_retries_busy_lock_without_quarantine(
     assert store.get_runtime_state() is None
     assert _quarantined_databases(store.guard_home) == []
     assert calls["count"] >= 2
-
-
-def test_probe_encodes_reserved_path_characters(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.sqlite_recovery import _probe_sqlite_store, _sqlite_readonly_uri
-
-    home = tmp_path / "guard?home"
-    home.mkdir()
-    path = home / "guard.db"
-    with sqlite3.connect(path) as connection:
-        connection.execute("create table keep (value integer)")
-        connection.commit()
-    uri = _sqlite_readonly_uri(path)
-    assert "%3F" in uri.upper()
-    assert _probe_sqlite_store(path) == "healthy"
-
-
-def test_restore_rolls_back_when_sidecar_move_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from codex_plugin_scanner.guard.sqlite_recovery import restore_readable_sqlite_store
-
-    destination = tmp_path / "guard.db"
-    quarantined = tmp_path / "guard.db.corrupt-1"
-    with sqlite3.connect(quarantined) as connection:
-        connection.execute("create table keep (value integer)")
-        connection.execute("insert into keep values (7)")
-        connection.commit()
-    wal = Path(f"{quarantined}-wal")
-    wal.write_bytes(b"wal")
-    original_replace = Path.replace
-
-    def fail_wal(self: Path, target: Path, /, **_kwargs: object) -> Path:
-        if self == wal:
-            raise OSError("sidecar busy")
-        return original_replace(self, target)
-
-    monkeypatch.setattr(Path, "replace", fail_wal)
-    assert restore_readable_sqlite_store(destination=destination, quarantined=quarantined) is False
-    assert destination.exists() is False
-    assert quarantined.exists() is True
-    assert wal.exists() is True
 
 
 def test_stale_fatal_error_does_not_quarantine_healthy_store(tmp_path: Path) -> None:
