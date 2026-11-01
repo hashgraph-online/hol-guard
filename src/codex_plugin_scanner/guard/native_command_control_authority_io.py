@@ -12,7 +12,7 @@ from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_GATE_NAME, AUTHORITY_LOCK_NAME
-from .native_policy_snapshot_constants import NativePolicySnapshotError
+from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY, NativePolicySnapshotError
 
 # One acquisition budget covers the entry gate and the lease behind it, so a
 # caller that chains reads can divide this span instead of paying it twice.
@@ -125,8 +125,12 @@ def read_private_state(guard_home: Path, name: str, maximum_bytes: int) -> bytes
     if os.name == "nt":
         from . import native_policy_snapshot as api
 
-        with api._windows_private_state_binding(guard_home) as binding:
-            return api._windows_read_snapshot_bytes(binding.path / name, maximum_bytes=maximum_bytes)
+        return api._windows_read_private_file(
+            guard_home / NATIVE_RUNTIME_STATE_DIRECTORY,
+            name,
+            maximum_bytes=maximum_bytes,
+            private_root=guard_home,
+        )
     with _unix_state_directory(guard_home) as directory:
         flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
         try:
@@ -153,22 +157,18 @@ def read_private_state(guard_home: Path, name: str, maximum_bytes: int) -> bytes
 def write_private_state(guard_home: Path, name: str, payload: bytes, maximum_bytes: int) -> None:
     if not payload or len(payload) > maximum_bytes or Path(name).name != name or name in {"", ".", ".."}:
         raise _invalid()
-    temporary = f".{name}.{secrets.token_hex(16)}.tmp"
     if os.name == "nt":
         from . import native_policy_snapshot as api
 
-        with api._windows_private_state_binding(guard_home) as binding:
-            api._windows_write_private_file_atomic(
-                parent_path=binding.path,
-                parent_handle=binding.handle,
-                directory_handles=binding.handles,
-                temporary_name=temporary,
-                destination_name=name,
-                payload=payload,
-                maximum_bytes=maximum_bytes,
-                kind="command_control_authority",
-            )
+        api._windows_write_private_file_atomic(
+            directory=guard_home / NATIVE_RUNTIME_STATE_DIRECTORY,
+            name=name,
+            payload=payload,
+            maximum_bytes=maximum_bytes,
+            private_root=guard_home,
+        )
         return
+    temporary = f".{name}.{secrets.token_hex(16)}.tmp"
     with _unix_state_directory(guard_home) as directory:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
         descriptor = os.open(temporary, flags, 0o600, dir_fd=directory)

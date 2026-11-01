@@ -62,5 +62,5 @@ runs:
       HOL_GUARD_NATIVE_REGRESSION: "1"
     run: uv run --no-sync pytest tests/test_guard_update_artifact.py tests/test_guard_update_subprocess.py tests/test_guard_update_isolation.py
       tests/test_guard_phase03_local_install.py tests/test_guard_phase03_remainder.py tests/test_dashboard_update.py tests/test_guard_daemon_manager.py
-      tests/test_guard_mdm_policy.py --tb=short
+      tests/test_guard_mdm_policy.py tests/test_windows_private_state.py --tb=short
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
