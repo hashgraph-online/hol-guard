@@ -3,7 +3,7 @@
   "id": "mcp.aseprite",
   "version": "1.0.0",
   "name": "Aseprite Lua MCP",
-  "description": "Runs agent-written Lua scripts through Aseprite's headless CLI with native PNG preview blocks, sprite editing, and filtered API docs. Off until you turn it on.",
+  "description": "Runs one agent-written Lua script per call through Aseprite's headless CLI and returns text status. Also serves a static Aseprite Lua API cheat sheet. Because the script is arbitrary code, the execute tool is reviewed. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -48,6 +48,6 @@
   ],
   "saferAlternatives": [
     "Keep execute_aseprite_script on Review: the Lua it runs can write files and call out to the host, not only draw sprites.",
-    "Set ASEPRITE_OUTPUT_DIR or DEFAULT_OUTPUT_DIR to a dedicated sprite folder so relative output files stay out of project directories."
+    "Set DEFAULT_OUTPUT_DIR when you want ordinary relative output_filename paths to land in a sprite folder. Absolute paths and .. are still accepted, and the Lua script can write other files."
   ]
 }
