@@ -1,5 +1,7 @@
 use super::*;
 
+use std::io;
+
 use crate::native_install_verdict::Ran;
 
 const REGULAR: u32 = 0o100644;
