@@ -139,7 +139,7 @@ impl CloudActionEvaluator {
         };
         match self.decide(&request, &program) {
             Ok(result) => result,
-            Err(code) => error_result(Some(&request.request_id), code),
+            Err(code) => error_result(request_id.as_deref(), code),
         }
     }
 
@@ -187,6 +187,10 @@ impl CloudActionEvaluator {
         if let Some(tightened) = catalog_tightening(admitted, program, &activation, action) {
             action = tightened;
             reason_codes.push("catalog_mcp_extension");
+        }
+        if activation.global_lockdown && action != GuardAction::Block {
+            action = GuardAction::Block;
+            reason_codes.push("global_lockdown");
         }
         let missing: Vec<&'static str> = binding
             .required_capabilities

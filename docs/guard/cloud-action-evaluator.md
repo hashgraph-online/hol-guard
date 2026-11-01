@@ -100,7 +100,7 @@ Schema `guard.cloud-action-evaluation-result.v1`.
 | `engine` | Evaluator `version` and request `contract` |
 
 Reason codes are `effect_floor`, `policy_rule`, `admin_effect_unsupported`, `catalog_mcp_extension`,
-`capability_unavailable`, `saved_consent_once`, and `saved_consent_always`.
+`global_lockdown`, `capability_unavailable`, `saved_consent_once`, and `saved_consent_always`.
 
 An error result has only `schema`, `request_id` (the caller's label if the request got far enough to read one,
 otherwise `null`), `action: "block"`, `dispatch_permitted: false`, and `error: {"code": ...}`.
@@ -119,9 +119,11 @@ otherwise `null`), `action: "block"`, `dispatch_permitted: false`, and `error: {
    `destructive` requires reapproval.
 6. **Catalog tightening.** For a `remote-mcp` binding, a packaged catalog entry for that server can raise an action
    to `review` or `block`. It never lowers one.
-7. **Target capabilities.** If the binding requires a capability the target does not enforce, anything below
+7. **Lockdown.** A verified activation with `global_lockdown` blocks every action. Nothing after this step
+   lowers it.
+8. **Target capabilities.** If the binding requires a capability the target does not enforce, anything below
    `sandbox-required` becomes `sandbox-required`.
-8. **Saved consent.** A consent whose `action_identity_sha256` equals this action's identity turns `review` or
+9. **Saved consent.** A consent whose `action_identity_sha256` equals this action's identity turns `review` or
    `require-reapproval` into `allow`. It never lowers `block` or `sandbox-required`, and it does not apply to
    an action that already allows. When both kinds match, `always` is reported.
 

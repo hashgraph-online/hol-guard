@@ -1649,3 +1649,69 @@ fn strings_serde_json_treats_as_internal_tokens_are_rejected_not_reinterpreted()
     );
     assert_error(&evaluator.evaluate(number.as_bytes()), "malformed");
 }
+
+#[test]
+fn a_reserved_token_spelled_entirely_in_escapes_is_still_rejected() {
+    let token = "$serde_json::private::RawValue";
+    let escaped: String = token
+        .chars()
+        .map(|ch| format!("\\u{:04x}", ch as u32))
+        .collect();
+    assert!(escaped.len() > token.len() * 6 - 1);
+    let document = format!(
+        r#"{{"x":{{"{escaped}":"{{\"channel\":\"C0SYNTH01\",\"channel\":\"C0OTHER\"}}"}}}}"#
+    );
+    assert_eq!(
+        parse_strict(document.as_bytes()),
+        Err(CanonicalError::Malformed),
+        "{document}"
+    );
+
+    let evaluator = evaluator();
+    let smuggled = line_with_raw_arguments(
+        &request_for(&evaluator),
+        &format!(r#"{{"{escaped}":"{{\"channel\":\"C0SYNTH01\",\"channel\":\"C0OTHER\"}}"}}"#),
+    );
+    assert_error(&evaluator.evaluate(smuggled.as_bytes()), "malformed");
+}
+
+#[test]
+fn an_error_result_never_echoes_an_unprintable_request_id() {
+    let evaluator = evaluator();
+    let mut request = request_for(&evaluator);
+    request["request_id"] = "a b\n".into();
+    let result = run(&evaluator, &request);
+    assert!(result.get("error").is_some(), "{result}");
+    assert_eq!(result["request_id"], Value::Null, "{result}");
+}
+
+#[test]
+fn a_signed_global_lockdown_blocks_every_action_and_no_consent_lowers_it() {
+    let signer = signer();
+    let evaluator = evaluator_trusting(&signer);
+    let mut locked = payload("ws-synthetic-1");
+    locked["global_lockdown"] = true.into();
+    let activation = sign(&signer, &locked);
+
+    let mut request = request_for(&evaluator);
+    let identity = identity_of(&evaluator, &request);
+    request["activation"] = activation.clone();
+    request["saved_consents"] = json!([consent("always-1", "always", &identity)]);
+    request["policy"]["rules"] = json!([rule("allow-all", "allow", "*")]);
+    let result = run(&evaluator, &request);
+    assert_success(&result);
+    assert_eq!(result["action"], "block", "{result}");
+    assert_eq!(result["dispatch_permitted"], false);
+    assert_eq!(result["consent_applied"], "none");
+    assert!(
+        result["reason_codes"]
+            .as_array()
+            .unwrap()
+            .contains(&"global_lockdown".into()),
+        "{result}"
+    );
+
+    let unlocked = run_with_activation(&evaluator, sign(&signer, &payload("ws-synthetic-1")));
+    assert_success(&unlocked);
+    assert_ne!(unlocked["action"], "block", "{unlocked}");
+}

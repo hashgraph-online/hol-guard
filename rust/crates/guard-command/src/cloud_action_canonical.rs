@@ -77,10 +77,11 @@ fn spells_reserved_string(bytes: &[u8]) -> bool {
         if end >= bytes.len() {
             return false;
         }
-        // A decoded string is never longer than its encoding, and an escape is
-        // at most six bytes for one character.
+        // A decoded string is never longer than its encoding, so anything
+        // shorter than the prefix cannot spell it. There is no upper bound:
+        // escapes can make an encoding arbitrarily long.
         let inner = end - start - 1;
-        if (shortest..=shortest * 6).contains(&inner)
+        if inner >= shortest
             && serde_json::from_slice::<String>(&bytes[start..=end])
                 .is_ok_and(|text| text.starts_with(RESERVED_STRING_PREFIX))
         {
