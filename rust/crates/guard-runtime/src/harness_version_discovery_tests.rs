@@ -325,3 +325,23 @@ fn malformed_requests_are_refused() {
     schema["schema"] = json!("harness-version-discovery.v0");
     assert_eq!(run(&schema), refused);
 }
+
+#[test]
+fn the_search_path_follows_shutil_which() {
+    let environment = |path: Option<&str>| {
+        path.map(|path| BTreeMap::from([("PATH".to_owned(), path.to_owned())]))
+            .unwrap_or_default()
+    };
+    // No `PATH` searches the platform default; an empty one searches nothing.
+    assert_eq!(
+        search_path(&environment(None)).as_deref(),
+        Some(DEFAULT_SEARCH_PATH)
+    );
+    assert_eq!(search_path(&environment(Some(""))), None);
+    // A relative entry is found from this process's directory.
+    let cwd = std::env::current_dir().expect("cwd");
+    assert_eq!(
+        search_path(&environment(Some("/opt/bin:bin"))),
+        Some(format!("/opt/bin:{}", cwd.join("bin").display()))
+    );
+}

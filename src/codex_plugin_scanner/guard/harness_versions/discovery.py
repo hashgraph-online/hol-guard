@@ -123,6 +123,10 @@ def observe_harness_version(
 def observation_identity_changed(observation: VersionObservation, context: HarnessContext) -> bool:
     """Cheaply detect a replaced executable or package, or a changed set of installs."""
 
+    if observation.reason == "discovery_unsupported":
+        # The runtime that answered has no lookup for this harness, so it has
+        # nothing on disk to watch; skip the process for an unchanged answer.
+        return False
     answer = _runtime(
         "identity-changed",
         observation.harness,

@@ -1611,6 +1611,22 @@
    "body": "279bd89f2f4f"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Without a `PATH`, Python's `shutil.which` searches `os.defpath` (`.;C:\\bin`) on Windows; this arm searches nothing instead, so a harness reachable only through that default is reported as `executable_missing` and its version stays unknown rather than guessed. The `~/.local/bin` and `~/.bun/bin` candidates are still checked. A Windows process always inherits a `PATH`, so the arm only matters for a caller that strips it.",
+   "file": "rust/crates/guard-runtime/src/harness_version_discovery.rs",
+   "item": "const DEFAULT_SEARCH_PATH: &str",
+   "cfg": "not(unix)",
+   "body": "3255acbecd02"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Windows `Metadata` exposes no file index on stable Rust, so the recorded identity carries 0 for the inode there, where Python's `st_ino` read the NTFS file index. A replaced executable or package file is still caught by its size and modified time, which an install or upgrade rewrites; only a swap that keeps both is missed, and that falls back to the next full observation when the cache expires. The identity tuple keeps the same shape on every platform.",
+   "file": "rust/crates/guard-runtime/src/harness_version_discovery.rs",
+   "item": "fn stat_identity -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "fc403f9f4c16"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/hook_approval_context/support.rs",
    "item": "pub(super) fn named_user_home(_text: &str) -> Option<String>",
    "verdict": "posix-primitive",

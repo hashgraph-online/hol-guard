@@ -36,6 +36,8 @@ def _install(root: Path, version: object, *, name: str = PACKAGE) -> Path:
     (package_root / "package.json").write_text(json.dumps({"name": name, "version": version}), encoding="utf-8")
     cli = package_root / "dist" / "cli.js"
     cli.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+    # A PATH lookup only returns an executable file, as an install leaves it.
+    cli.chmod(0o755)
     return cli
 
 
@@ -172,6 +174,15 @@ def test_without_a_runtime_the_version_is_unknown(tmp_path: Path, monkeypatch: p
     )
     # An observation the runtime cannot confirm is never reused.
     assert observation_identity_changed(observation, context)
+
+
+def test_an_unsupported_harness_never_starts_the_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the runtime was started")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", refuse)
+    observation = VersionObservation("hermes", "unavailable", None, "none", None, "discovery_unsupported", 1000.0)
+    assert not observation_identity_changed(observation, _context(tmp_path))
 
 
 def _fixture_manifest(context: HarnessContext) -> Path:

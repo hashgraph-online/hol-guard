@@ -13,12 +13,8 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::sync::OnceLock;
-use std::thread;
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, UNIX_EPOCH};
 
-use regex::Regex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -26,6 +22,10 @@ use sha2::{Digest, Sha256};
 use super::manifest::{parse_version, Version};
 use crate::grok_executable_paths::strip_verbatim;
 use crate::runtime_identity_launch::{which, Environment};
+
+#[path = "harness_version_probe.rs"]
+mod probe;
+use probe::{parse_banner, run_bounded, Probe};
 
 const SCHEMA: &str = "harness-version-discovery.v1";
 const MAX_REQUEST_BYTES: u64 = 256 * 1024;
@@ -36,6 +36,13 @@ const MAX_BANNER_BYTES: usize = 4096;
 const MAX_CANDIDATES: usize = 16;
 /// The variables a `--version` probe sees, beside `HOME` and `NO_COLOR`.
 const PROBE_ENVIRONMENT: [&str; 4] = ["PATH", "SYSTEMROOT", "TEMP", "TMP"];
+/// `os.confstr("CS_PATH")`, which `shutil.which` searches without a `PATH`.
+#[cfg(target_os = "macos")]
+const DEFAULT_SEARCH_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+#[cfg(all(unix, not(target_os = "macos")))]
+const DEFAULT_SEARCH_PATH: &str = "/bin:/usr/bin";
+#[cfg(not(unix))]
+const DEFAULT_SEARCH_PATH: &str = "";
 const SCRIPT_SUFFIXES: [&str; 4] = ["js", "mjs", "cjs", "ts"];
 
 /// A harness with a reliable version source: its npm package, executable,
@@ -218,12 +225,8 @@ fn observe(harness: &str, host: &Host, now: f64) -> Value {
 /// harness, so anything inside the Guard home is skipped.
 fn candidate_executables(source: &VersionSource, host: &Host) -> Vec<PathBuf> {
     let environment = Environment(host.environment);
-    let path = host
-        .environment
-        .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case("PATH"))
-        .map(|(_, value)| value.as_str());
-    let mut raw: Vec<PathBuf> = which(source.executable, path, &environment)
+    let path = search_path(host.environment);
+    let mut raw: Vec<PathBuf> = which(source.executable, path.as_deref(), &environment)
         .map(PathBuf::from)
         .into_iter()
         .collect();
@@ -256,6 +259,28 @@ fn candidate_executables(source: &VersionSource, host: &Host) -> Vec<PathBuf> {
         }
     }
     distinct
+}
+
+/// The directories `shutil.which` walks: the platform default when `PATH` is
+/// unset, and relative entries taken from this process's directory, which
+/// the caller's process shares.
+fn search_path(environment: &BTreeMap<String, String>) -> Option<String> {
+    let path = environment
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("PATH"))
+        .map_or(DEFAULT_SEARCH_PATH, |(_, value)| value.as_str());
+    if path.is_empty() {
+        return None;
+    }
+    let cwd = std::env::current_dir().ok();
+    let entries = std::env::split_paths(path).filter_map(|entry| {
+        if entry.is_absolute() {
+            Some(entry)
+        } else {
+            cwd.as_ref().map(|cwd| cwd.join(entry))
+        }
+    });
+    std::env::join_paths(entries).ok()?.into_string().ok()
 }
 
 fn real_path(path: &Path) -> Option<PathBuf> {
@@ -380,129 +405,13 @@ fn probe_version(
     }
 }
 
-enum Probe {
-    /// Exit status 0, with at most `MAX_BANNER_BYTES + 1` bytes of stdout.
-    Exited(Vec<u8>),
-    Failed,
-    TimedOut,
-}
-
-/// Run `command` for at most `PROBE_TIMEOUT`, killing it on the deadline.
-fn run_bounded(mut command: Command) -> Probe {
-    let Ok(mut child) = command.spawn() else {
-        return Probe::Failed;
-    };
-    // The reader hands its bytes over a channel so a grandchild that keeps
-    // stdout open cannot hold the probe past its deadline.
-    let (sender, receiver) = mpsc::channel();
-    if let Some(stdout) = child.stdout.take() {
-        thread::spawn(move || {
-            let mut bytes = Vec::new();
-            let _ = stdout
-                .take(MAX_BANNER_BYTES as u64 + 1)
-                .read_to_end(&mut bytes);
-            let _ = sender.send(bytes);
-        });
-    }
-    let deadline = Instant::now() + PROBE_TIMEOUT;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Some(status),
-            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
-            Ok(None) | Err(_) => break None,
-        }
-    };
-    let Some(status) = status else {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Probe::TimedOut;
-    };
-    if !status.success() {
-        return Probe::Failed;
-    }
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    match receiver.recv_timeout(remaining) {
-        Ok(stdout) => Probe::Exited(stdout),
-        Err(mpsc::RecvTimeoutError::Timeout) => Probe::TimedOut,
-        Err(mpsc::RecvTimeoutError::Disconnected) => Probe::Failed,
-    }
-}
-
-/// A `--version` banner in the harness's known shape only: one non-empty
-/// line holding exactly one version, after a known prefix and before nothing.
-fn parse_banner(source: &VersionSource, banner: &str) -> Option<Version> {
-    static TOKEN: OnceLock<Regex> = OnceLock::new();
-    let token = TOKEN.get_or_init(|| {
-        Regex::new(r"(?:^|[^0-9])(v?[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)")
-            .expect("banner pattern compiles")
-    });
-    if banner.len() > MAX_BANNER_BYTES {
-        return None;
-    }
-    let lines: Vec<&str> = banner
-        .split(is_line_break)
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect();
-    let [line] = lines.as_slice() else {
-        return None;
-    };
-    let tokens = banner_tokens(token, line);
-    let [found] = tokens.as_slice() else {
-        return None;
-    };
-    let start = line.find(found)?;
-    let prefix = line[..start]
-        .trim()
-        .trim_end_matches([':', '/'])
-        .trim()
-        .to_lowercase();
-    let suffix = line[start + found.len()..].trim();
-    if !source.banner_prefixes.contains(&prefix.as_str()) || !suffix.is_empty() {
-        return None;
-    }
-    parse_version(found)
-}
-
-/// The separators Python's `str.splitlines` breaks on.
-fn is_line_break(character: char) -> bool {
-    matches!(
-        character,
-        '\n' | '\r'
-            | '\x0b'
-            | '\x0c'
-            | '\x1c'
-            | '\x1d'
-            | '\x1e'
-            | '\u{85}'
-            | '\u{2028}'
-            | '\u{2029}'
-    )
-}
-
-/// Non-overlapping version tokens, each not preceded by a digit.
-fn banner_tokens<'a>(token: &Regex, line: &'a str) -> Vec<&'a str> {
-    let mut found = Vec::new();
-    let mut offset = 0;
-    while let Some(captures) = token.captures(&line[offset..]) {
-        let Some(matched) = captures.get(1) else {
-            break;
-        };
-        found.push(&line[offset + matched.start()..offset + matched.end()]);
-        offset += matched.end();
-    }
-    found
-}
-
 /// What one file looks like on disk now, following symlinks.
 fn stat_identity(path: &Path) -> Option<Identity> {
     let meta = fs::metadata(path).ok()?;
-    #[allow(unused_mut)]
-    let mut inode = 0u64;
     #[cfg(unix)]
-    {
-        inode = std::os::unix::fs::MetadataExt::ino(&meta);
-    }
+    let inode = std::os::unix::fs::MetadataExt::ino(&meta);
+    #[cfg(not(unix))]
+    let inode = 0u64;
     let mtime = meta
         .modified()
         .ok()
