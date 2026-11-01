@@ -16,6 +16,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use zeroize::Zeroizing;
 
 use crate::git_read::{run_git, run_git_os, GIT_TIMEOUT_SECONDS};
 use crate::secret_detection::{
@@ -431,7 +432,12 @@ fn git_changed_paths(root: &Path, commit: &str) -> Option<Vec<ScanPath>> {
 /// `_git_blob`: size-check `git cat-file -s <commit>:<path>` against
 /// `max_file_bytes`, then `git cat-file blob <commit>:<path>` with the bound
 /// re-applied to the streamed payload.
-fn git_blob(root: &Path, commit: &str, path: &Path, max_file_bytes: usize) -> Option<Vec<u8>> {
+fn git_blob(
+    root: &Path,
+    commit: &str,
+    path: &Path,
+    max_file_bytes: usize,
+) -> Option<Zeroizing<Vec<u8>>> {
     let mut spec = OsString::from(format!("{commit}:"));
     spec.push(path.as_os_str());
     let blob_args = |op: &str| [OsString::from("cat-file"), OsString::from(op), spec.clone()];
@@ -447,7 +453,11 @@ fn git_blob(root: &Path, commit: &str, path: &Path, max_file_bytes: usize) -> Op
     if blob_result.stdout.len() > max_file_bytes {
         return None;
     }
-    Some(blob_result.stdout)
+    // The blob is a file's whole contents and may be the secret itself. The
+    // buffer is moved rather than copied, so the wrapper owns the only copy
+    // and it is wiped when the caller is done with it rather than left in
+    // freed memory for a crash dump to carry.
+    Some(Zeroizing::new(blob_result.stdout))
 }
 // ---------------------------------------------------------------------------
 
@@ -479,7 +489,7 @@ fn read_working_file(
     canonical_root: &Path,
     relative_path: &Path,
     max_file_bytes: usize,
-) -> Option<Vec<u8>> {
+) -> Option<Zeroizing<Vec<u8>>> {
     let resolved = root.join(relative_path).canonicalize().ok()?;
     resolved.strip_prefix(canonical_root).ok()?;
     let metadata = resolved.metadata().ok()?;
@@ -491,7 +501,10 @@ fn read_working_file(
     if metadata.len() > max_file_bytes as u64 {
         return None;
     }
-    fs::read(&resolved).ok()
+    // Wiped on drop for the same reason as the blob above: a working-tree
+    // file read in full is as likely to hold the credential as any object in
+    // history.
+    fs::read(&resolved).map(Zeroizing::new).ok()
 }
 
 /// Minimal `Path.expanduser()` parity: expands a leading `~` or `~/` via
@@ -1142,6 +1155,31 @@ mod tests {
         let paths: Vec<&str> = result.findings.iter().map(|f| f.path.as_str()).collect();
         assert_eq!(paths, ["app.env", "secrets.zip!/config/prod.env"]);
         assert!(result.findings.iter().all(|f| f.source == "working_tree"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_file_readers_hand_back_buffers_that_wipe_themselves() {
+        // Both readers hold a whole file, and either may be holding the
+        // credential the scan is looking for. Dropping the wrapper from their
+        // signatures would leave those bytes in freed memory, where a core
+        // dump or a crash reporter picks them up long after the scan has
+        // finished, so the wrapper is pinned here by type.
+        fn wipes_itself<T: zeroize::ZeroizeOnDrop>(_value: &Option<T>) {}
+
+        let dir = temp_root("wipe");
+        fs::write(dir.join("app.env"), SECRET_LINE).unwrap();
+        let canonical = dir.canonicalize().unwrap();
+
+        let from_working_tree = read_working_file(&dir, &canonical, Path::new("app.env"), 1024);
+        assert!(from_working_tree.is_some());
+        wipes_itself(&from_working_tree);
+
+        // No repository here, so this one reads nothing; the type it would
+        // have handed back is what the test is holding to.
+        let from_history = git_blob(&dir, "HEAD", Path::new("app.env"), 1024);
+        wipes_itself(&from_history);
+
         let _ = fs::remove_dir_all(&dir);
     }
 }
