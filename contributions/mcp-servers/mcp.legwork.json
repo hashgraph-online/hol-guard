@@ -31,7 +31,7 @@
   "tools": [
     {
       "name": "find_tools",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "install_tool",
@@ -39,11 +39,11 @@
     },
     {
       "name": "install_status",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "list_installed_tools",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "use_tool",
