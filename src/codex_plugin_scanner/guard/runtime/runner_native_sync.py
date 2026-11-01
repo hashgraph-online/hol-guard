@@ -205,6 +205,65 @@ def completed_guard_event_ids(payload: Mapping[str, object]) -> list[str]:
     return ids
 
 
+# The session fields the runtime reads; nothing else crosses the transport.
+_SESSION_KEYS = (
+    "session_id",
+    "sessionId",
+    "workspace",
+    "harness",
+    "surface",
+    "status",
+    "client_name",
+    "clientName",
+    "client_title",
+    "clientTitle",
+    "client_version",
+    "clientVersion",
+    "capabilities",
+    "created_at",
+    "createdAt",
+    "updated_at",
+    "updatedAt",
+    "policy_document_versions",
+    "policyDocumentVersions",
+    "policy_bundle_versions",
+    "policyBundleVersions",
+    "policy_contracts",
+    "policyContracts",
+    "yaml_import",
+    "yamlImport",
+    "canonical_policy_enforcement",
+    "canonicalPolicyEnforcement",
+)
+
+
+def runtime_session_payload(
+    session: Mapping[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    cwd: str,
+    now: str,
+    version: str,
+) -> dict[str, object]:
+    """The runtime session the Cloud handshake sends, before the store-read fields."""
+
+    payload = native_runner_authority(
+        "runtime_session_payload",
+        {
+            "session": {key: session[key] for key in _SESSION_KEYS if key in session},
+            "device_id": device_id,
+            "device_name": device_name,
+            "cwd": cwd,
+            "now": now,
+            "version": version,
+        },
+    )
+    for key in ("sessionId", "harness", "surface", "workspace", "deviceId", "updatedAt"):
+        _field(payload, key, str)
+    return dict(payload)
+
+
 _STALE_INTEL_KEYS = (
     "synced_at",
     "syncedAt",

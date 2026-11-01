@@ -14820,6 +14820,3890 @@
    }
   },
   {
+   "kind": "runtime_session_payload",
+   "name": "session-0",
+   "args": {
+    "session": {},
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-1",
+   "args": {
+    "session": {
+     "session_id": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-2",
+   "args": {
+    "session": {
+     "session_id": " padded "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": " padded ",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-3",
+   "args": {
+    "session": {
+     "session_id": 0
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-4",
+   "args": {
+    "session": {
+     "session_id": "　"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-5",
+   "args": {
+    "session": {
+     "sessionId": "x"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "x",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-6",
+   "args": {
+    "session": {
+     "sessionId": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-7",
+   "args": {
+    "session": {
+     "session_id": "",
+     "sessionId": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "cam",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-8",
+   "args": {
+    "session": {
+     "session_id": 5,
+     "sessionId": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-9",
+   "args": {
+    "session": {
+     "session_id": "sn",
+     "sessionId": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "sn",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-10",
+   "args": {
+    "session": {
+     "updated_at": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-11",
+   "args": {
+    "session": {
+     "updated_at": " padded "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": " padded ",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-12",
+   "args": {
+    "session": {
+     "updated_at": 0
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-13",
+   "args": {
+    "session": {
+     "updated_at": "　"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-14",
+   "args": {
+    "session": {
+     "updatedAt": "x"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "x",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-15",
+   "args": {
+    "session": {
+     "updatedAt": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-16",
+   "args": {
+    "session": {
+     "updated_at": "",
+     "updatedAt": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "cam",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-17",
+   "args": {
+    "session": {
+     "updated_at": 5,
+     "updatedAt": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-18",
+   "args": {
+    "session": {
+     "updated_at": "sn",
+     "updatedAt": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "sn",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-19",
+   "args": {
+    "session": {
+     "client_title": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-20",
+   "args": {
+    "session": {
+     "client_title": " padded "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": " padded ",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-21",
+   "args": {
+    "session": {
+     "client_title": 0
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-22",
+   "args": {
+    "session": {
+     "client_title": "　"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-23",
+   "args": {
+    "session": {
+     "clientTitle": "x"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "x",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-24",
+   "args": {
+    "session": {
+     "clientTitle": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-25",
+   "args": {
+    "session": {
+     "client_title": "",
+     "clientTitle": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "cam",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-26",
+   "args": {
+    "session": {
+     "client_title": 5,
+     "clientTitle": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-27",
+   "args": {
+    "session": {
+     "client_title": "sn",
+     "clientTitle": "cam"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "sn",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-28",
+   "args": {
+    "session": {
+     "workspace": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-29",
+   "args": {
+    "session": {
+     "workspace": " padded "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "3b2468e0bddc13d01ea4a946",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": " padded ",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-30",
+   "args": {
+    "session": {
+     "workspace": 0
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-31",
+   "args": {
+    "session": {
+     "workspace": "　"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-32",
+   "args": {
+    "session": {
+     "harness": " "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-33",
+   "args": {
+    "session": {
+     "harness": " padded "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": " padded ",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-34",
+   "args": {
+    "session": {
+     "harness": 0
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-35",
+   "args": {
+    "session": {
+     "harness": "　"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-36",
+   "args": {
+    "session": {
+     "policy_document_versions": []
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-37",
+   "args": {
+    "session": {
+     "policy_document_versions": [],
+     "policyDocumentVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyDocumentVersions": [
+     "c1"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-38",
+   "args": {
+    "session": {
+     "policyDocumentVersions": []
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-39",
+   "args": {
+    "session": {
+     "policy_document_versions": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyDocumentVersions": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-40",
+   "args": {
+    "session": {
+     "policy_document_versions": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ],
+     "policyDocumentVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyDocumentVersions": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-41",
+   "args": {
+    "session": {
+     "policyDocumentVersions": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyDocumentVersions": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-42",
+   "args": {
+    "session": {
+     "policy_document_versions": "str"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-43",
+   "args": {
+    "session": {
+     "policy_document_versions": "str",
+     "policyDocumentVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-44",
+   "args": {
+    "session": {
+     "policyDocumentVersions": "str"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-45",
+   "args": {
+    "session": {
+     "policy_document_versions": [
+      1,
+      2
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-46",
+   "args": {
+    "session": {
+     "policy_document_versions": [
+      1,
+      2
+     ],
+     "policyDocumentVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-47",
+   "args": {
+    "session": {
+     "policyDocumentVersions": [
+      1,
+      2
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-48",
+   "args": {
+    "session": {
+     "policy_bundle_versions": []
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-49",
+   "args": {
+    "session": {
+     "policy_bundle_versions": [],
+     "policyBundleVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyBundleVersions": [
+     "c1"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-50",
+   "args": {
+    "session": {
+     "policyBundleVersions": []
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-51",
+   "args": {
+    "session": {
+     "policy_bundle_versions": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyBundleVersions": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-52",
+   "args": {
+    "session": {
+     "policy_bundle_versions": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ],
+     "policyBundleVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyBundleVersions": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-53",
+   "args": {
+    "session": {
+     "policyBundleVersions": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyBundleVersions": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-54",
+   "args": {
+    "session": {
+     "policy_bundle_versions": "str"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-55",
+   "args": {
+    "session": {
+     "policy_bundle_versions": "str",
+     "policyBundleVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-56",
+   "args": {
+    "session": {
+     "policyBundleVersions": "str"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-57",
+   "args": {
+    "session": {
+     "policy_bundle_versions": [
+      1,
+      2
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-58",
+   "args": {
+    "session": {
+     "policy_bundle_versions": [
+      1,
+      2
+     ],
+     "policyBundleVersions": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-59",
+   "args": {
+    "session": {
+     "policyBundleVersions": [
+      1,
+      2
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-60",
+   "args": {
+    "session": {
+     "policy_contracts": []
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-61",
+   "args": {
+    "session": {
+     "policy_contracts": [],
+     "policyContracts": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyContracts": [
+     "c1"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-62",
+   "args": {
+    "session": {
+     "policyContracts": []
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-63",
+   "args": {
+    "session": {
+     "policy_contracts": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyContracts": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-64",
+   "args": {
+    "session": {
+     "policy_contracts": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ],
+     "policyContracts": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyContracts": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-65",
+   "args": {
+    "session": {
+     "policyContracts": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyContracts": [
+     "v1",
+     "v2"
+    ],
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-66",
+   "args": {
+    "session": {
+     "policy_contracts": "str"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-67",
+   "args": {
+    "session": {
+     "policy_contracts": "str",
+     "policyContracts": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-68",
+   "args": {
+    "session": {
+     "policyContracts": "str"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-69",
+   "args": {
+    "session": {
+     "policy_contracts": [
+      1,
+      2
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-70",
+   "args": {
+    "session": {
+     "policy_contracts": [
+      1,
+      2
+     ],
+     "policyContracts": [
+      "c1"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-71",
+   "args": {
+    "session": {
+     "policyContracts": [
+      1,
+      2
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-72",
+   "args": {
+    "session": {
+     "capabilities": []
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-73",
+   "args": {
+    "session": {
+     "capabilities": [
+      "v1",
+      2,
+      null,
+      "v2",
+      [
+       "n"
+      ]
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [
+     "v1",
+     "v2"
+    ],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-74",
+   "args": {
+    "session": {
+     "capabilities": "str"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-75",
+   "args": {
+    "session": {
+     "capabilities": [
+      1,
+      2
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-76",
+   "args": {
+    "session": {
+     "yaml_import": true
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": true
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-77",
+   "args": {
+    "session": {
+     "yamlImport": true
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": true
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-78",
+   "args": {
+    "session": {
+     "yaml_import": false,
+     "yamlImport": true
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": true
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-79",
+   "args": {
+    "session": {
+     "yaml_import": false
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-80",
+   "args": {
+    "session": {
+     "yamlImport": false
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-81",
+   "args": {
+    "session": {
+     "yaml_import": false,
+     "yamlImport": false
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-82",
+   "args": {
+    "session": {
+     "yaml_import": 1
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-83",
+   "args": {
+    "session": {
+     "yamlImport": 1
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-84",
+   "args": {
+    "session": {
+     "yaml_import": false,
+     "yamlImport": 1
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-85",
+   "args": {
+    "session": {
+     "yaml_import": "true"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-86",
+   "args": {
+    "session": {
+     "yamlImport": "true"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-87",
+   "args": {
+    "session": {
+     "yaml_import": false,
+     "yamlImport": "true"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-88",
+   "args": {
+    "session": {
+     "yaml_import": null
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-89",
+   "args": {
+    "session": {
+     "yamlImport": null
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-90",
+   "args": {
+    "session": {
+     "yaml_import": false,
+     "yamlImport": null
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-91",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": true
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false,
+    "canonicalPolicyEnforcement": true
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-92",
+   "args": {
+    "session": {
+     "canonicalPolicyEnforcement": true
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false,
+    "canonicalPolicyEnforcement": true
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-93",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": false,
+     "canonicalPolicyEnforcement": true
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false,
+    "canonicalPolicyEnforcement": true
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-94",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": false
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-95",
+   "args": {
+    "session": {
+     "canonicalPolicyEnforcement": false
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-96",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": false,
+     "canonicalPolicyEnforcement": false
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-97",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": 1
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-98",
+   "args": {
+    "session": {
+     "canonicalPolicyEnforcement": 1
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-99",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": false,
+     "canonicalPolicyEnforcement": 1
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-100",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": "true"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-101",
+   "args": {
+    "session": {
+     "canonicalPolicyEnforcement": "true"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-102",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": false,
+     "canonicalPolicyEnforcement": "true"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-103",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": null
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-104",
+   "args": {
+    "session": {
+     "canonicalPolicyEnforcement": null
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-105",
+   "args": {
+    "session": {
+     "canonical_policy_enforcement": false,
+     "canonicalPolicyEnforcement": null
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-106",
+   "args": {
+    "session": {
+     "harness": "codex",
+     "surface": "remote-pair",
+     "status": "active",
+     "client_name": "codex",
+     "client_title": "Laptop",
+     "client_version": null,
+     "workspace": "remote-agent",
+     "capabilities": [
+      "hosted-runtime",
+      "guard-cloud-sync"
+     ]
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "e28399710e7ed3f902fa84b4",
+    "harness": "codex",
+    "surface": "remote-pair",
+    "status": "active",
+    "clientName": "codex",
+    "clientTitle": "Laptop",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "remote-agent",
+    "capabilities": [
+     "hosted-runtime",
+     "guard-cloud-sync"
+    ],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-107",
+   "args": {
+    "session": {
+     "harness": "hol-guard",
+     "surface": "cli",
+     "status": "active",
+     "client_name": "hol-guard",
+     "client_title": "HOL Guard CLI",
+     "client_version": "3.60.0",
+     "workspace": "local-machine",
+     "capabilities": [
+      "approval-center",
+      "guard-cloud-sync"
+     ],
+     "policy_document_versions": [
+      "guard-policy/v1"
+     ],
+     "policy_bundle_versions": [
+      "v1",
+      "v2"
+     ],
+     "policy_contracts": [
+      "c"
+     ],
+     "yaml_import": false,
+     "canonical_policy_enforcement": true
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "44c4690f3eb26adca6bc260a",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard CLI",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "local-machine",
+    "capabilities": [
+     "approval-center",
+     "guard-cloud-sync"
+    ],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "policyDocumentVersions": [
+     "guard-policy/v1"
+    ],
+    "policyBundleVersions": [
+     "v1",
+     "v2"
+    ],
+    "policyContracts": [
+     "c"
+    ],
+    "yamlImport": false,
+    "canonicalPolicyEnforcement": true
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-108",
+   "args": {
+    "session": {
+     "sessionId": "s-1",
+     "createdAt": "2026-01-01T00:00:00Z",
+     "updatedAt": "  "
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "s-1",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-109",
+   "args": {
+    "session": {},
+    "device_id": "inst-1",
+    "device_name": "",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on ",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-110",
+   "args": {
+    "session": {
+     "workspace": "w"
+    },
+    "device_id": "inst-1",
+    "device_name": "",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "23d8d928c1a526b1270533ea",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on ",
+    "clientVersion": "3.60.0",
+    "deviceId": "inst-1",
+    "deviceName": "",
+    "workspace": "w",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-111",
+   "args": {
+    "session": {},
+    "device_id": "",
+    "device_name": "Dev Mac",
+    "cwd": "",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "e7ac0786668e0ff0f02b62bd",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "",
+    "deviceName": "Dev Mac",
+    "workspace": "",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-112",
+   "args": {
+    "session": {
+     "workspace": "w"
+    },
+    "device_id": "",
+    "device_name": "Dev Mac",
+    "cwd": "",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "e6a2e40f4a1c4e736ba8ff9d",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "",
+    "deviceName": "Dev Mac",
+    "workspace": "w",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-113",
+   "args": {
+    "session": {},
+    "device_id": "dév",
+    "device_name": "Dev Mac",
+    "cwd": "/srv/ü",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "b7d0201bd8d971996ec3739e",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "dév",
+    "deviceName": "Dev Mac",
+    "workspace": "/srv/ü",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-114",
+   "args": {
+    "session": {
+     "workspace": "w"
+    },
+    "device_id": "dév",
+    "device_name": "Dev Mac",
+    "cwd": "/srv/ü",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": "3.60.0"
+   },
+   "expected": {
+    "sessionId": "e2585cd7df0ffa5a7035631a",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "3.60.0",
+    "deviceId": "dév",
+    "deviceName": "Dev Mac",
+    "workspace": "w",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-115",
+   "args": {
+    "session": {},
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": ""
+   },
+   "expected": {
+    "sessionId": "d3dcae66bc879a5fd829f3cf",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "/home/dev/proj",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
+   "kind": "runtime_session_payload",
+   "name": "session-116",
+   "args": {
+    "session": {
+     "workspace": "w"
+    },
+    "device_id": "inst-1",
+    "device_name": "Dev Mac",
+    "cwd": "/home/dev/proj",
+    "now": "2026-10-31T12:00:00+00:00",
+    "version": ""
+   },
+   "expected": {
+    "sessionId": "23d8d928c1a526b1270533ea",
+    "harness": "hol-guard",
+    "surface": "cli",
+    "status": "active",
+    "clientName": "hol-guard",
+    "clientTitle": "HOL Guard on Dev Mac",
+    "clientVersion": "",
+    "deviceId": "inst-1",
+    "deviceName": "Dev Mac",
+    "workspace": "w",
+    "capabilities": [],
+    "operations": [],
+    "createdAt": "2026-10-31T12:00:00+00:00",
+    "updatedAt": "2026-10-31T12:00:00+00:00",
+    "yamlImport": false
+   }
+  },
+  {
    "kind": "stale_intel",
    "name": "no summaries",
    "args": {

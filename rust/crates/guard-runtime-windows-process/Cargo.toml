@@ -23,6 +23,8 @@ winapi = { workspace = true, features = [
     "namedpipeapi",
     "processenv",
     "processthreadsapi",
+    "securitybaseapi",
+    "shellapi",
     "shlobj",
     "stringapiset",
     "synchapi",

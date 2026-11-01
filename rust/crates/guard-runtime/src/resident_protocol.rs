@@ -114,6 +114,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-machine-state-files-v1".into(),
         "native-windows-private-state-v1".into(),
         "native-device-key-metadata-v1".into(),
+        "native-windows-process-lifecycle-v1".into(),
         "native-managed-policy-load-v1".into(),
         "native-health-lease-state-v1".into(),
         "native-user-health-state-v1".into(),
