@@ -55,6 +55,7 @@ _SHELL_TOOL = {
     "omp": "bash",
     "cursor": "Shell",
     "muse": "bash",
+    "grok": "run_terminal_command",
 }
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
