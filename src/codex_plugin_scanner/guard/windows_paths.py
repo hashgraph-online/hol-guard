@@ -13,6 +13,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from ctypes import wintypes
 from pathlib import Path
+from typing import cast
 
 _WINDOWS_PATH_BUFFER_SIZE = 32_768
 _WINDOWS_FILE_ATTRIBUTE_DIRECTORY = 0x00000010
@@ -22,18 +23,15 @@ _WINDOWS_FILE_FLAG_SEQUENTIAL_SCAN = 0x08000000
 _WINDOWS_GENERIC_READ = 0x80000000
 _WINDOWS_FILE_SHARE_READ = 0x00000001
 _WINDOWS_OPEN_EXISTING = 3
-_WINDOWS_ERROR_INVALID_PARAMETER = 87
 _WINDOWS_ERROR_SHARING_VIOLATION = 32
 _WINDOWS_LOCK_OPEN_ATTEMPTS = 6
 _WINDOWS_LOCK_RETRY_SECONDS = 0.01
-_WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000
-_WINDOWS_PROCESS_TERMINATE = 0x00000001
-_WINDOWS_SYNCHRONIZE = 0x00100000
-_WINDOWS_TOKEN_QUERY = 0x00000008
-_WINDOWS_TOKEN_USER = 1
-_WINDOWS_WAIT_OBJECT_0 = 0x00000000
-_WINDOWS_WAIT_TIMEOUT = 0x00000102
-_WINDOWS_WAIT_FAILED = 0xFFFFFFFF
+_LIFECYCLE_FEATURE = "native-windows-process-lifecycle-v1"
+_LIFECYCLE_COMMAND = "windows-process-lifecycle"
+_LIFECYCLE_SCHEMA = "windows-process-lifecycle.v1"
+_LIFECYCLE_OUTPUT_LIMIT = 64 * 1024
+_LIFECYCLE_MAX_TIMEOUT_MS = 600_000
+_LIFECYCLE_TIMEOUT_SECONDS = 10.0
 _FOLDERID_PROFILE = uuid.UUID("5e6c858f-0e22-4760-9afe-ea3317b67173").bytes_le
 _FOLDERID_ROAMING_APPDATA = uuid.UUID("3eb685db-65f9-4cf6-a03a-e3ef65729f3d").bytes_le
 
@@ -187,38 +185,44 @@ def _canonical_windows_path(path: Path | str) -> str:
     return value
 
 
+def _lifecycle_answer(request: dict[str, object], *, output_limit: int) -> dict[str, object] | None:
+    from .mdm.runtime_request import runtime_answer
+
+    return runtime_answer(
+        _LIFECYCLE_FEATURE,
+        _LIFECYCLE_COMMAND,
+        {"schema": _LIFECYCLE_SCHEMA, **request},
+        output_limit=output_limit,
+        timeout_seconds=_LIFECYCLE_TIMEOUT_SECONDS,
+    )
+
+
+def _lifecycle_fact(op: str, pid: int, field: str) -> object:
+    """The runtime's one answer for `pid`, or ``None`` when it gave none."""
+
+    answer = _lifecycle_answer({"op": op, "pids": [pid]}, output_limit=_LIFECYCLE_OUTPUT_LIMIT)
+    values = answer.get(field) if answer is not None else None
+    if not isinstance(values, list) or len(cast(list[object], values)) != 1:
+        return None
+    return cast(list[object], values)[0]
+
+
 def windows_command_line_to_argv(command: str) -> list[str] | None:
     """Parse one native Windows command line with the operating-system ABI."""
 
     if os.name != "nt" or not command:
         return None
-    win_dll = getattr(ctypes, "WinDLL", None)
-    if win_dll is None:
+    answer = _lifecycle_answer(
+        {"op": "command_line_to_argv", "command": command},
+        output_limit=len(command.encode("utf-8", "surrogatepass")) * 6 + _LIFECYCLE_OUTPUT_LIMIT,
+    )
+    argv = answer.get("argv") if answer is not None else None
+    if not isinstance(argv, list) or not argv:
         return None
-    try:
-        shell32 = win_dll("shell32", use_last_error=True)
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        argument_count = ctypes.c_int()
-        command_line_to_argv = shell32.CommandLineToArgvW
-        command_line_to_argv.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
-        command_line_to_argv.restype = ctypes.POINTER(wintypes.LPWSTR)
-        local_free = kernel32.LocalFree
-        local_free.argtypes = [ctypes.c_void_p]
-        local_free.restype = ctypes.c_void_p
-        arguments = command_line_to_argv(command, ctypes.byref(argument_count))
-    except (AttributeError, OSError, TypeError, ValueError):
+    arguments = cast(list[object], argv)
+    if not all(isinstance(argument, str) for argument in arguments):
         return None
-    if not arguments:
-        return None
-    try:
-        if argument_count.value <= 0:
-            return None
-        return [str(arguments[index]) for index in range(argument_count.value)]
-    except (OSError, TypeError, ValueError):
-        return None
-    finally:
-        with suppress(OSError, TypeError, ValueError):
-            _ = local_free(ctypes.cast(arguments, ctypes.c_void_p))
+    return cast(list[str], arguments)
 
 
 def windows_process_liveness(pid: int) -> bool | None:
@@ -226,41 +230,8 @@ def windows_process_liveness(pid: int) -> bool | None:
 
     if os.name != "nt" or pid <= 0:
         return False
-    win_dll = getattr(ctypes, "WinDLL", None)
-    if win_dll is None:
-        return None
-    try:
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        open_process = kernel32.OpenProcess
-        open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        open_process.restype = wintypes.HANDLE
-        wait_for_process = kernel32.WaitForSingleObject
-        wait_for_process.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-        wait_for_process.restype = wintypes.DWORD
-        close_handle = kernel32.CloseHandle
-        close_handle.argtypes = [wintypes.HANDLE]
-        close_handle.restype = wintypes.BOOL
-        process_handle = open_process(_WINDOWS_SYNCHRONIZE, False, pid)
-    except (AttributeError, OSError, TypeError, ValueError):
-        return None
-    if not process_handle:
-        if ctypes.get_last_error() == _WINDOWS_ERROR_INVALID_PARAMETER:
-            return False
-        return None
-    try:
-        wait_result = int(wait_for_process(process_handle, 0))
-    except (OSError, TypeError, ValueError):
-        return None
-    finally:
-        with suppress(OSError, TypeError, ValueError):
-            _ = close_handle(process_handle)
-    if wait_result == _WINDOWS_WAIT_TIMEOUT:
-        return True
-    if wait_result == _WINDOWS_WAIT_OBJECT_0:
-        return False
-    if wait_result == _WINDOWS_WAIT_FAILED:
-        return None
-    return None
+    liveness = _lifecycle_fact("liveness", pid, "liveness")
+    return liveness if isinstance(liveness, bool) else None
 
 
 def windows_process_is_running(pid: int) -> bool:
@@ -269,107 +240,13 @@ def windows_process_is_running(pid: int) -> bool:
     return windows_process_liveness(pid) is not False
 
 
-class _WindowsSidAndAttributes(ctypes.Structure):
-    _fields_ = [
-        ("Sid", ctypes.c_void_p),
-        ("Attributes", wintypes.DWORD),
-    ]
-
-
-class _WindowsTokenUser(ctypes.Structure):
-    _fields_ = [("User", _WindowsSidAndAttributes)]
-
-
 def windows_process_owner_sid(pid: int) -> str | None:
     """Return the OS-owned SID for the token attached to one Windows PID."""
 
     if os.name != "nt" or pid <= 0:
         return None
-    win_dll = getattr(ctypes, "WinDLL", None)
-    if win_dll is None:
-        return None
-    process_handle = None
-    token_handle = wintypes.HANDLE()
-    sid_string = wintypes.LPWSTR()
-    close_handle = None
-    local_free = None
-    try:
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        advapi32 = win_dll("advapi32", use_last_error=True)
-        open_process = kernel32.OpenProcess
-        open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        open_process.restype = wintypes.HANDLE
-        open_process_token = advapi32.OpenProcessToken
-        open_process_token.argtypes = [
-            wintypes.HANDLE,
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.HANDLE),
-        ]
-        open_process_token.restype = wintypes.BOOL
-        get_token_information = advapi32.GetTokenInformation
-        get_token_information.argtypes = [
-            wintypes.HANDLE,
-            wintypes.DWORD,
-            ctypes.c_void_p,
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.DWORD),
-        ]
-        get_token_information.restype = wintypes.BOOL
-        convert_sid = advapi32.ConvertSidToStringSidW
-        convert_sid.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.LPWSTR)]
-        convert_sid.restype = wintypes.BOOL
-        close_handle = kernel32.CloseHandle
-        close_handle.argtypes = [wintypes.HANDLE]
-        close_handle.restype = wintypes.BOOL
-        local_free = kernel32.LocalFree
-        local_free.argtypes = [ctypes.c_void_p]
-        local_free.restype = ctypes.c_void_p
-        process_handle = open_process(_WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not process_handle or not open_process_token(
-            process_handle,
-            _WINDOWS_TOKEN_QUERY,
-            ctypes.byref(token_handle),
-        ):
-            return None
-        required_size = wintypes.DWORD()
-        _ = get_token_information(
-            token_handle,
-            _WINDOWS_TOKEN_USER,
-            None,
-            0,
-            ctypes.byref(required_size),
-        )
-        if required_size.value <= 0:
-            return None
-        token_user_buffer = ctypes.create_string_buffer(required_size.value)
-        if not get_token_information(
-            token_handle,
-            _WINDOWS_TOKEN_USER,
-            token_user_buffer,
-            required_size.value,
-            ctypes.byref(required_size),
-        ):
-            return None
-        token_user = ctypes.cast(
-            token_user_buffer,
-            ctypes.POINTER(_WindowsTokenUser),
-        ).contents
-        if not token_user.User.Sid or not convert_sid(token_user.User.Sid, ctypes.byref(sid_string)):
-            return None
-        value = sid_string.value
-        return f"sid:{value}" if value else None
-    except (AttributeError, OSError, TypeError, ValueError):
-        return None
-    finally:
-        if sid_string and local_free is not None:
-            with suppress(OSError, TypeError, ValueError):
-                _ = local_free(ctypes.cast(sid_string, ctypes.c_void_p))
-        if token_handle and close_handle is not None:
-            with suppress(OSError, TypeError, ValueError):
-                _ = close_handle(token_handle)
-        if process_handle and close_handle is not None:
-            with suppress(OSError, TypeError, ValueError):
-                _ = close_handle(process_handle)
+    owner_sid = _lifecycle_fact("owner_sid", pid, "owner_sids")
+    return owner_sid if isinstance(owner_sid, str) and owner_sid.startswith("sid:") and owner_sid != "sid:" else None
 
 
 def windows_process_creation_time(pid: int) -> int | None:
@@ -377,50 +254,8 @@ def windows_process_creation_time(pid: int) -> int | None:
 
     if os.name != "nt" or pid <= 0:
         return None
-    win_dll = getattr(ctypes, "WinDLL", None)
-    if win_dll is None:
-        return None
-    try:
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        open_process = kernel32.OpenProcess
-        open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        open_process.restype = wintypes.HANDLE
-        get_process_times = kernel32.GetProcessTimes
-        get_process_times.argtypes = [
-            wintypes.HANDLE,
-            ctypes.POINTER(wintypes.FILETIME),
-            ctypes.POINTER(wintypes.FILETIME),
-            ctypes.POINTER(wintypes.FILETIME),
-            ctypes.POINTER(wintypes.FILETIME),
-        ]
-        get_process_times.restype = wintypes.BOOL
-        close_handle = kernel32.CloseHandle
-        close_handle.argtypes = [wintypes.HANDLE]
-        close_handle.restype = wintypes.BOOL
-        process_handle = open_process(_WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-    except (AttributeError, OSError, TypeError, ValueError):
-        return None
-    if process_handle is None:
-        return None
-    creation = wintypes.FILETIME()
-    exit_time = wintypes.FILETIME()
-    kernel_time = wintypes.FILETIME()
-    user_time = wintypes.FILETIME()
-    try:
-        if not get_process_times(
-            process_handle,
-            ctypes.byref(creation),
-            ctypes.byref(exit_time),
-            ctypes.byref(kernel_time),
-            ctypes.byref(user_time),
-        ):
-            return None
-        return (int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime)
-    except (OSError, TypeError, ValueError):
-        return None
-    finally:
-        with suppress(OSError, TypeError, ValueError):
-            _ = close_handle(process_handle)
+    creation_time = _lifecycle_fact("creation_time", pid, "creation_times")
+    return creation_time if type(creation_time) is int and creation_time > 0 else None
 
 
 def windows_terminate_process_if_creation_time(
@@ -433,80 +268,15 @@ def windows_terminate_process_if_creation_time(
 
     if os.name != "nt" or pid <= 0 or expected_creation_time <= 0:
         return False
-    win_dll = getattr(ctypes, "WinDLL", None)
-    if win_dll is None:
-        return False
-    termination_deadline = None if timeout is None else time.monotonic() + max(0.0, timeout)
-
-    def wait_timeout_milliseconds() -> int:
-        if termination_deadline is None:
-            return 1000
-        remaining = max(0.0, termination_deadline - time.monotonic())
-        return min(1000, int(remaining * 1000))
-
-    try:
-        kernel32 = win_dll("kernel32", use_last_error=True)
-        open_process = kernel32.OpenProcess
-        open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        open_process.restype = wintypes.HANDLE
-        get_process_times = kernel32.GetProcessTimes
-        get_process_times.argtypes = [
-            wintypes.HANDLE,
-            ctypes.POINTER(wintypes.FILETIME),
-            ctypes.POINTER(wintypes.FILETIME),
-            ctypes.POINTER(wintypes.FILETIME),
-            ctypes.POINTER(wintypes.FILETIME),
-        ]
-        get_process_times.restype = wintypes.BOOL
-        terminate_process = kernel32.TerminateProcess
-        terminate_process.argtypes = [wintypes.HANDLE, wintypes.UINT]
-        terminate_process.restype = wintypes.BOOL
-        wait_for_process = kernel32.WaitForSingleObject
-        wait_for_process.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-        wait_for_process.restype = wintypes.DWORD
-        close_handle = kernel32.CloseHandle
-        close_handle.argtypes = [wintypes.HANDLE]
-        close_handle.restype = wintypes.BOOL
-        process_handle = open_process(
-            _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION | _WINDOWS_PROCESS_TERMINATE | _WINDOWS_SYNCHRONIZE,
-            False,
-            pid,
-        )
-    except (AttributeError, OSError, TypeError, ValueError):
-        return False
-    if process_handle is None:
-        return False
-    creation = wintypes.FILETIME()
-    exit_time = wintypes.FILETIME()
-    kernel_time = wintypes.FILETIME()
-    user_time = wintypes.FILETIME()
-    try:
-        if not get_process_times(
-            process_handle,
-            ctypes.byref(creation),
-            ctypes.byref(exit_time),
-            ctypes.byref(kernel_time),
-            ctypes.byref(user_time),
-        ):
-            return False
-        creation_time = (int(creation.dwHighDateTime) << 32) | int(creation.dwLowDateTime)
-        if creation_time != expected_creation_time:
-            return False
-        wait_result = int(wait_for_process(process_handle, 0))
-        if wait_result == _WINDOWS_WAIT_OBJECT_0:
-            return True
-        if wait_result != _WINDOWS_WAIT_TIMEOUT:
-            return False
-        if termination_deadline is not None and time.monotonic() >= termination_deadline:
-            return False
-        if not terminate_process(process_handle, 1):
-            return False
-        return int(wait_for_process(process_handle, wait_timeout_milliseconds())) == _WINDOWS_WAIT_OBJECT_0
-    except (OSError, TypeError, ValueError):
-        return False
-    finally:
-        with suppress(OSError, TypeError, ValueError):
-            _ = close_handle(process_handle)
+    request: dict[str, object] = {
+        "op": "terminate_if_creation_time",
+        "pid": pid,
+        "expected_creation_time": expected_creation_time,
+    }
+    if timeout is not None:
+        request["timeout_ms"] = min(_LIFECYCLE_MAX_TIMEOUT_MS, int(max(0.0, timeout) * 1000))
+    answer = _lifecycle_answer(request, output_limit=_LIFECYCLE_OUTPUT_LIMIT)
+    return answer is not None and answer.get("terminated") is True
 
 
 def trusted_windows_system_directories() -> tuple[Path, Path]:
