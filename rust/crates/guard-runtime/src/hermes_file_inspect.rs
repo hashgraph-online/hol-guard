@@ -19,7 +19,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::hermes_inspect::{
-    inspect_config, inspect_text_file, FileInspection, Syntax, CONFIG_MAX_BYTES,
+    inspect_config_keeping_file, inspect_text_file, FileInspection, Syntax, CONFIG_MAX_BYTES,
 };
 use crate::pyjson::{float_repr, PyVal};
 
@@ -113,10 +113,10 @@ fn file_json(file: &FileInspection) -> Value {
 }
 
 fn config_answer(path: &Path, syntax: Syntax) -> String {
-    let (file, payload, reason) = match inspect_config(path, syntax) {
+    let (file, payload, reason) = match inspect_config_keeping_file(path, syntax) {
         Ok(inspection) => (inspection.file, inspection.payload, inspection.reason),
         // A refusal still read the file; only the parse is withheld.
-        Err(_) => (inspect_text_file(path, None, None), None, Some(PARSE_ERROR)),
+        Err((file, _)) => (file, None, Some(PARSE_ERROR)),
     };
     let mut file = file_json(&file);
     file["content"] = Value::Null;

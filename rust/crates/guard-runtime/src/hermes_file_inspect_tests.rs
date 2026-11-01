@@ -273,3 +273,59 @@ fn bytes_past_the_reported_size_are_a_change_during_read() {
     assert_eq!(file["reason"], json!("file_changed_during_read"));
     assert_eq!(file["content_hash"], Value::Null);
 }
+
+#[test]
+fn a_lone_surrogate_escape_is_refused_not_replaced() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("config.json");
+    fs::write(&path, r#"{"name": "\ud800"}"#).expect("write");
+
+    let (answer, _) = config(&path, "json");
+
+    assert_eq!(answer["payload"], Value::Null);
+    assert_eq!(answer["reason"], json!("config_parse_error"));
+    // The reported identity is the file the parser refused, not a reread.
+    assert_eq!(answer["file"]["complete"], json!(true));
+    assert_eq!(answer["file"]["size_bytes"], json!(18));
+    assert_eq!(
+        answer["file"]["content_hash"],
+        json!(format!(
+            "sha256:{}",
+            hex::encode(<sha2::Sha256 as sha2::Digest>::digest(
+                br#"{"name": "\ud800"}"#
+            ))
+        ))
+    );
+
+    fs::write(&path, r#"{"name": "�", "pair": "😀"}"#).expect("write");
+    let (answer, _) = config(&path, "json");
+    assert_eq!(answer["reason"], Value::Null);
+    assert_eq!(
+        answer["payload"],
+        json!({ "name": "\u{fffd}", "pair": "\u{1f600}" })
+    );
+}
+
+/// The scope binding compares the read handle with the file the scope
+/// check names: a handle on an outside file (an ancestor junction swapped
+/// between the check and the open) is refused.
+#[cfg(windows)]
+#[test]
+fn a_scoped_handle_must_be_the_checked_file() {
+    use crate::hermes_inspect::handle_within;
+
+    let directory = tempfile::tempdir().expect("tempdir");
+    let scope = directory.path().join("skills");
+    fs::create_dir_all(&scope).expect("scope");
+    let inside = scope.join("SKILL.md");
+    let outside = directory.path().join("outside.md");
+    fs::write(&inside, "inside").expect("write");
+    fs::write(&outside, "inside").expect("write");
+
+    let opened_inside = fs::File::open(&inside).expect("open");
+    let opened_outside = fs::File::open(&outside).expect("open");
+
+    assert!(handle_within(&opened_inside, &inside, &scope));
+    assert!(!handle_within(&opened_outside, &inside, &scope));
+    assert!(!handle_within(&opened_outside, &outside, &scope));
+}
