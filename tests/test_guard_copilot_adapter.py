@@ -521,7 +521,16 @@ def test_copilot_install_and_uninstall_preserve_existing_inline_hook_content(tmp
 
 
 def _tree(root: Path) -> dict[str, bytes]:
-    return {str(path.relative_to(root)): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+    """Every file a refused change could touch, without Guard's own audit logs."""
+
+    def logged(relative: Path) -> bool:
+        return relative.parts[:2] == ("guard-home", "native-runtime") or relative.name == "authority-mutations.jsonl"
+
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and not logged(path.relative_to(root))
+    }
 
 
 def test_copilot_without_a_hook_ownership_answer_changes_no_file(tmp_path, monkeypatch: pytest.MonkeyPatch):
