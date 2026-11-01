@@ -47,6 +47,8 @@ mod case_labels;
 mod compound;
 #[path = "native_command_unmodeled_expansion.rs"]
 mod expansion;
+#[path = "native_command_unmodeled_fd_exec.rs"]
+mod fd_exec;
 #[path = "native_command_unmodeled_find_exec.rs"]
 mod find_exec;
 #[path = "native_command_unmodeled_functions.rs"]
@@ -64,6 +66,7 @@ mod substitution;
 #[path = "native_command_unmodeled_xargs.rs"]
 mod xargs;
 use case_labels::without_case_labels;
+use fd_exec::{fd_exec_programs, text_outside_fd_exec_arguments};
 use find_exec::{find_exec_programs, text_outside_exec_arguments, EXEC_ACTIONS};
 use link_makers::creates_links;
 pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file, Handover};
@@ -298,12 +301,36 @@ impl CompiledNativeCommandControls {
         } else {
             BTreeSet::new()
         };
+        let fd_programs = fd_exec_programs(shell);
+        // `fd` stands among the interpreters for the `--exec` it may carry,
+        // and it is the only one of them whose ordinary use carries none:
+        // `fd -e ts` and `fd -e ts | xargs wc -l` start no program of fd's
+        // own. Reading the walk tells the two apart, so an empty set is a
+        // bounded `fd` just as a named program is, and `None` is an `fd` this
+        // reader could not bind. Until it was read, naming `fd` anywhere in
+        // an unmodeled command reached an evaluation failure and blocked
+        // outright, with no approval left to give it, while the same walk
+        // spelled `find` ran.
+        let fd_bounded = fd_programs.is_some();
+        let fd_names_program = fd_programs
+            .as_ref()
+            .is_some_and(|programs| !programs.is_empty());
+        // The words after the program an `--exec` names are that program's
+        // arguments, not command positions, so a name that appears only there
+        // runs nothing: `fd -e ts -x echo sh` prints `sh`.
+        let outside_fd_exec = if fd_names_program {
+            named_words(&joined_quotes(&text_outside_fd_exec_arguments(&bare)))
+        } else {
+            BTreeSet::new()
+        };
         if INTERPRETERS.iter().any(|name| {
             interpreted.contains(*name)
                 && !(sourced_bounded && matches!(*name, "source" | "."))
                 && !(xargs_bounded && *name == "xargs")
+                && !(fd_bounded && *name == "fd")
                 && !(exec_names_program && EXEC_ACTIONS.contains(name))
                 && (!exec_names_program || outside_exec.contains(*name))
+                && (!fd_names_program || outside_fd_exec.contains(*name))
         }) {
             // An `xargs` whose operands are not in the text is not bounded by
             // reading a script file. `2>/dev/null xargs gh` still takes its
@@ -346,14 +373,15 @@ impl CompiledNativeCommandControls {
                 ),
             }
         }
-        // The programs read out of an `xargs` or a `find -exec`. Reading one
-        // leaves the operands standard input, or find's own search, supplies
-        // unread.
+        // The programs read out of an `xargs`, a `find -exec` or an
+        // `fd --exec`. Reading one leaves the operands standard input, or the
+        // walk's own search, supplies unread.
         let delegated: Option<BTreeSet<String>> =
-            (xargs_names_program || exec_names_program).then(|| {
+            (xargs_names_program || exec_names_program || fd_names_program).then(|| {
                 xargs_programs
                     .iter()
                     .chain(exec_programs.iter())
+                    .chain(fd_programs.iter())
                     .flatten()
                     .cloned()
                     .collect()
@@ -501,7 +529,8 @@ fn backgrounded_nested_executor(normalized: &str) -> bool {
     let foreground = foreground.as_str();
     // Both of these name the program they run, so the floor below can still
     // bound them and backgrounding takes nothing away.
-    if named_xargs_pipeline(foreground) || named_find_exec(foreground) {
+    if named_xargs_pipeline(foreground) || named_find_exec(foreground) || named_fd_exec(foreground)
+    {
         return false;
     }
     // Only one command of the foreground text has to be the executor, and it
@@ -629,6 +658,22 @@ fn glued_redirect_runs_interpreter(text: &str) -> bool {
     }) && words.iter().any(|word| word.contains('.'))
 }
 
+/// An `fd` whose every `--exec` names the program it runs. fd hands the paths
+/// it found to that program the way `find -exec` does, and those paths come
+/// from the roots this text already names, so `fd -e ts -x wc -l` runs the
+/// `wc` the text shows and owns what `wc` owns. Reading it as an unbounded
+/// nested executor refused it outright, with no approval left to give it,
+/// while the same walk spelled `find . -name '*.ts' -exec wc -l {} +` was
+/// allowed by name. `fd -x sh -c ...` runs whatever that reads and names no
+/// bounded program, so it keeps the evaluation failure, as `xargs sh` does.
+fn named_fd_exec(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    fd_exec_programs(text).is_some_and(|programs| !programs.is_empty())
+        && !text.contains(['<', '>', '`', '\n'])
+        && (!text.contains('$') || compound::parameters_only_root_paths(text))
+        && !moves_data(&literal)
+}
+
 /// Loops and conditionals, or one heredoc that only feeds standard input,
 /// with nothing in the shell text that substitutes or overrides `PATH` and no
 /// redirect except to a literal path.
@@ -694,6 +739,7 @@ fn reviewable_structure(
             let literal = unquoted_literal(normalized);
             named_xargs_pipeline(normalized)
                 || named_find_exec(normalized)
+                || named_fd_exec(normalized)
                 || ((!moves_data(&literal) || literal_redirects_only(normalized))
                     && sourcing_names_its_files(command, context))
         }
@@ -1443,6 +1489,10 @@ mod sourced_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_bounded_tests.rs"]
 mod bounded_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_fd_exec_tests.rs"]
+mod fd_exec_tests;
 
 // A Windows shell keeps an unquoted backslash literal, so the evaluator refuses
 // `$'…'` there rather than read it a second way; these vectors are POSIX-only.
