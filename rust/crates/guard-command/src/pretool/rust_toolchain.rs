@@ -474,8 +474,8 @@ fn digits(value: &str, length: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        cargo_config_inert, inert_toolchain, registry_query, rustup_settings_only_official,
-        safe_cargo_probe,
+        cargo_config_inert, inert_toolchain, registry_query, rustup_settings,
+        rustup_settings_only_official, safe_cargo_probe, RustupSettings,
     };
     use std::path::Path;
 
