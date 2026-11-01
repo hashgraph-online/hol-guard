@@ -400,3 +400,24 @@ def test_a_windows_start_record_stays_live_as_long_as_the_client_waits(native_ho
         guard_home=tmp_path,
     )
     assert windows == {"live": True}
+
+
+def test_the_update_refresh_outlasts_the_start_it_waits_on(native_hook_force: Path, tmp_path: Path) -> None:
+    """The subprocess that restarts the daemon after an update gets to finish."""
+
+    from codex_plugin_scanner.guard.cli import update_commands
+    from codex_plugin_scanner.guard.daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
+
+    query = {"desktop": True, "worker_ready_floor": 14.0}
+    windows = native_daemon_lifecycle("start_timeouts", query, platform="nt", guard_home=tmp_path)
+
+    # One refresh attempt is the retirement loop, the start itself and the
+    # stability window the program holds before it reports success. Read those
+    # two bounds off the program rather than restating them here, so a change
+    # to either one lands on this assertion.
+    assert "retirement_deadline = time.monotonic() + 5.0" in DAEMON_REFRESH_SCRIPT
+    assert "for _stability_check in range(3):" in DAEMON_REFRESH_SCRIPT
+    assert "time.sleep(1.0)" in DAEMON_REFRESH_SCRIPT
+    one_attempt = windows["post_update"] + 5.0 + 3.0
+
+    assert one_attempt < update_commands._DAEMON_REFRESH_TIMEOUT_SECONDS
