@@ -155,7 +155,7 @@ fn runner_intent(root: &Path, name: &str, package: &str) -> PackageIntent {
 
 #[test]
 fn every_routine_runner_name_qualifies_and_no_other_does() {
-    for name in ["eslint", "jest", "mocha", "tsx", "vitest"] {
+    for name in ["eslint", "jest", "lint-staged", "mocha", "tsx", "vitest"] {
         let dir = TempDir::new().unwrap();
         let root = dir.path();
         runner_workspace(root, name, name);
@@ -167,6 +167,22 @@ fn every_routine_runner_name_qualifies_and_no_other_does() {
         value.local_executions[0].package_name = Some("prettier".to_owned());
         assert!(!routine_local_runner(&value), "{name}");
     }
+}
+
+/// `lint-staged` is the commit hook a project runs over its staged files, and
+/// it is pinned in the same manifest as the linter it drives. Leaving it out
+/// of the runner list sent every `npx lint-staged` to a package review the
+/// project had already answered by installing and pinning the version.
+#[test]
+fn lint_staged_is_bound_to_the_project_that_pins_it() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "lint-staged", "lint-staged");
+    assert!(routine_local_runner(&runner_intent(
+        root,
+        "lint-staged",
+        "lint-staged"
+    )));
 }
 
 /// `tsc` is published inside `typescript`, so npm installs it at

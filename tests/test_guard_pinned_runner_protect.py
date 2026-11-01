@@ -21,6 +21,27 @@ def _write_executable(path: Path, marker: str) -> None:
     path.chmod(0o755)
 
 
+def _lockfile_body(manager: str, package: str, locked: str) -> str:
+    """What `manager`'s lockfile says when it pins `package` at `locked`."""
+
+    if manager == "bun.lock":
+        return f'{{"packages": {{"{package}": ["{package}@{locked}", "", {{}}, ""]}}}}\n'
+    if manager == "pnpm-lock.yaml":
+        return (
+            "lockfileVersion: '9.0'\n"
+            "packages:\n"
+            f"  {package}@{locked}:\n"
+            "    resolution: {integrity: sha512-demo}\n"
+        )
+    if manager == "yarn.lock":
+        return (
+            f"{package}@^4.22.4:\n"
+            f'  version "{locked}"\n'
+            f'  resolved "https://registry.yarnpkg.com/{package}/-/{package}-{locked}.tgz#abc"\n'
+        )
+    raise AssertionError(f"no body for {manager}")
+
+
 def _pinned_runner_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -28,12 +49,14 @@ def _pinned_runner_workspace(
     *,
     locked: str,
     package: str | None = None,
+    lockfile: str = "bun.lock",
 ) -> Path:
-    """A runner the manifest asks for, installed, and agreed on by bun.lock.
+    """A runner the manifest asks for, installed, and agreed on by a lockfile.
 
     `package` names the registry package when it differs from the executable,
     which is how npm installs `tsc`: the tree, the manifest entry and the
-    lockfile all say `typescript`.
+    lockfile all say `typescript`. `lockfile` picks which package manager
+    wrote the workspace, since each one writes its pins in its own dialect.
     """
 
     package = package or name
@@ -43,8 +66,8 @@ def _pinned_runner_workspace(
         f'{{"name":"demo","dependencies":{{"{package}":"^4.22.4"}}}}\n',
         encoding="utf-8",
     )
-    (workspace / "bun.lock").write_text(
-        f'{{"packages": {{"{package}": ["{package}@{locked}", "", {{}}, ""]}}}}\n',
+    (workspace / lockfile).write_text(
+        _lockfile_body(lockfile, package, locked),
         encoding="utf-8",
     )
     installed = workspace / "node_modules" / package
@@ -178,3 +201,52 @@ def test_protect_reviews_a_tsc_the_lockfile_contradicts(
     )
 
     assert _protect(tmp_path, workspace, [manager, "tsc", "-p", "tsconfig.json"]) is not None
+
+
+@pytest.mark.parametrize("lockfile", ["pnpm-lock.yaml", "yarn.lock"])
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_protect_builds_no_package_request_for_a_pinned_runner_in_any_dialect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+    lockfile: str,
+) -> None:
+    """pnpm and yarn pin a runner as firmly as npm and bun do."""
+
+    workspace = _pinned_runner_workspace(
+        tmp_path, monkeypatch, "tsx", locked="4.22.4", lockfile=lockfile
+    )
+
+    assert _protect(tmp_path, workspace, [manager, "tsx", "scripts/generate-inventory.ts"]) is None
+
+
+@pytest.mark.parametrize("lockfile", ["pnpm-lock.yaml", "yarn.lock"])
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_protect_reviews_a_runner_another_dialect_contradicts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+    lockfile: str,
+) -> None:
+    workspace = _pinned_runner_workspace(
+        tmp_path, monkeypatch, "tsx", locked="4.9.0", lockfile=lockfile
+    )
+
+    assert (
+        _protect(tmp_path, workspace, [manager, "tsx", "scripts/generate-inventory.ts"]) is not None
+    )
+
+
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_protect_builds_no_package_request_for_pinned_lint_staged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    manager: str,
+) -> None:
+    """The commit hook a project pins is as routine as the linter it drives."""
+
+    workspace = _pinned_runner_workspace(
+        tmp_path, monkeypatch, "lint-staged", locked="4.22.4", lockfile="pnpm-lock.yaml"
+    )
+
+    assert _protect(tmp_path, workspace, [manager, "lint-staged"]) is None
