@@ -62,6 +62,24 @@ def _copy_fields(decision_v2: dict[str, object]) -> dict[str, str]:
     return {key: value for key in _COPY_FIELDS if isinstance(value := decision_v2.get(key), str)}
 
 
+# Each native request stays well under the runner's request bound, so a long
+# approval queue is routed in several calls instead of failing as one.
+_APPROVAL_COPY_BATCH_BYTES = 1024 * 1024
+
+
+def _copy_batches(fields: list[dict[str, str]]) -> list[list[dict[str, str]]]:
+    batches: list[list[dict[str, str]]] = [[]]
+    size = 0
+    for item in fields:
+        cost = sum(len(value.encode("utf-8")) for value in item.values()) + 64
+        if batches[-1] and size + cost > _APPROVAL_COPY_BATCH_BYTES:
+            batches.append([])
+            size = 0
+        batches[-1].append(item)
+        size += cost
+    return batches
+
+
 def _approval_copy(
     review_url: str,
     *,
@@ -75,16 +93,33 @@ def _approval_copy(
     """
     from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
-    args = {
-        "harness": _canonical_harness_name(harness),
-        "review_url": review_url,
-        "decisions": [_copy_fields(decision_v2) for decision_v2 in decisions or []],
-        "user_copy_message": user_copy_message,
-    }
-    try:
-        return native_runner_authority("approval_copy", args)
-    except NativeRunnerAuthorityError:
-        return None
+    result: dict[str, object] | None = None
+    patches: list[object] = []
+    batches = _copy_batches([_copy_fields(decision_v2) for decision_v2 in decisions or []])
+    for index, batch in enumerate(batches):
+        args = {
+            "harness": _canonical_harness_name(harness),
+            "review_url": review_url,
+            "decisions": batch,
+            "user_copy_message": user_copy_message if index == 0 else None,
+        }
+        try:
+            answer = native_runner_authority("approval_copy", args)
+        except NativeRunnerAuthorityError:
+            answer = None
+        if result is None:
+            if answer is None:
+                return None
+            result = answer
+        routed = answer.get("decisions") if answer is not None else None
+        if isinstance(routed, list) and len(routed) == len(batch):
+            patches.extend(routed)
+        else:
+            # A refused batch keeps its original copy; the others still route.
+            patches.extend([None] * len(batch))
+    if result is not None:
+        result["decisions"] = patches
+    return result
 
 def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
     review_url = _preferred_approval_review_url(response_payload, harness=harness)

@@ -120,8 +120,14 @@ fn case_folding_indexes_follow_python_slicing() {
     );
     assert_eq!(strip_review_evidence_tail("İ Review evidence:"), "İ");
     assert_eq!(strip_review_evidence_tail(" Hold. "), "Hold.");
-    assert_eq!(strip_review_evidence_tail("Hold. Review evidence: ."), "Hold.");
-    assert_eq!(strip_review_evidence_tail("Hold. review EVIDENCE:"), "Hold.");
+    assert_eq!(
+        strip_review_evidence_tail("Hold. Review evidence: ."),
+        "Hold."
+    );
+    assert_eq!(
+        strip_review_evidence_tail("Hold. review EVIDENCE:"),
+        "Hold."
+    );
 }
 
 #[test]

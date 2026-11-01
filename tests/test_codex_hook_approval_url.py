@@ -150,3 +150,42 @@ def test_unavailable_runtime_leaves_review_copy_unchanged(monkeypatch: pytest.Mo
     assert payload["supply_chain_evaluation"] == {
         "user_copy": {"harness_message": "Package held.", "dashboard_url": review_url}
     }
+
+
+def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
+
+    calls: list[dict[str, object]] = []
+
+    def route(kind: str, args: dict[str, object]) -> dict[str, object]:
+        assert kind == "approval_copy"
+        calls.append(args)
+        if len(calls) == 2:
+            raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_invalid")
+        batch = args["decisions"]
+        assert isinstance(batch, list)
+        return {
+            "review_context": "Open HOL Guard.",
+            "decisions": [{"harness_message": "Routed."} for _ in batch],
+            "user_copy_message": "Routed copy." if args["user_copy_message"] else None,
+        }
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", route)
+    # One decision per request.
+    monkeypatch.setattr(policy, "_APPROVAL_COPY_BATCH_BYTES", 1)
+    queued = [{"decision_v2_json": {"action": "allow", "harness_message": f"Held {index}."}} for index in range(2)]
+    payload: dict[str, object] = {
+        "primary_approval_url": "http://127.0.0.1:5474/requests/req-codex-4",
+        "decision_v2_json": {"action": "allow", "harness_message": "Held."},
+        "approval_requests": queued,
+        "supply_chain_evaluation": {"user_copy": {"harness_message": "Package held."}},
+    }
+    policy._localize_pending_approval_copy(payload, harness="codex")
+    assert [call["user_copy_message"] for call in calls] == ["Package held.", None, None]
+    assert payload["decision_v2_json"] == {"action": "allow", "harness_message": "Routed."}
+    # The refused batch keeps its original copy; the next one still routes.
+    assert [item["decision_v2_json"]["harness_message"] for item in queued] == ["Held 0.", "Routed."]
+    user_copy = payload["supply_chain_evaluation"]
+    assert isinstance(user_copy, dict)
+    assert user_copy["user_copy"]["harness_message"] == "Routed copy."
