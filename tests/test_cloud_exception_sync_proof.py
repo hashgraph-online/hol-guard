@@ -119,6 +119,7 @@ def test_hglp138_local_daemon_rejects_tampered_exception_bundle(tmp_path: Path) 
     assert reason == "bundle_hash_mismatch"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_hglp139_expired_cloud_exception_is_not_active_after_bundle_load() -> None:
     bundle = build_cloud_exception_policy_bundle(
         cloud_exceptions=[

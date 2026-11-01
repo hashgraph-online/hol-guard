@@ -72,6 +72,7 @@ def _sample_sync_exception(*, exception_id: str = "artifact:codex:demo") -> dict
     }
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_cloud_exception_dto_includes_required_fields() -> None:
     [payload] = runner_native_sync.cloud_exceptions({"cloudExceptions": [_sample_sync_exception()]}, device_id=None)
     for key in (
@@ -90,6 +91,7 @@ def test_cloud_exception_dto_includes_required_fields() -> None:
         assert key in payload
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_expired_cloud_exceptions_are_not_active() -> None:
     bundle: dict[str, object] = {
         "cloudExceptions": [
@@ -134,6 +136,7 @@ def test_signed_bundle_exception_is_hidden_after_key_revocation(tmp_path: Path) 
     assert store.list_cloud_exceptions() == []
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_signed_bundle_exception_the_runtime_cannot_read_is_not_listed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

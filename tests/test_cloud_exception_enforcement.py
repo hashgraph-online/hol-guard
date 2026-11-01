@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from codex_plugin_scanner.guard.consumer.native_decision_projection import (
@@ -29,6 +30,7 @@ PACKAGE_ARTIFACT_ID = "codex:project:package-request:left-pad"
 V2_WORKSPACE_ID = "workspace-alpha"
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_exception_without_a_harness_is_listed_for_every_harness() -> None:
     entry = build_cloud_exception_bundle_entry()
     del entry["harness"]
