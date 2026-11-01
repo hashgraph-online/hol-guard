@@ -1117,6 +1117,7 @@ fn evaluate_envelope(
                 Some(
                     "native_vitest_readonly_containment_required"
                         | "native_package_test_readonly_containment_required"
+                        | "native_node_test_readonly_containment_required"
                         | "native_node_tool_readonly_containment_required"
                         | "native_node_build_output_containment_required"
                 )
@@ -1131,6 +1132,7 @@ fn evaluate_envelope(
                     "native_node_tool_readonly_containment_required"
                         | "native_vitest_readonly_containment_required"
                         | "native_package_test_readonly_containment_required"
+                        | "native_node_test_readonly_containment_required"
                         | "native_node_build_output_containment_required"
                 )
             ) && result.reason_code == "native_package_review"))

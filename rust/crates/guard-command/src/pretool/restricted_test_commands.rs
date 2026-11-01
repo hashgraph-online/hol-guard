@@ -233,6 +233,7 @@ pub(super) fn package_permission_contained(
         Some(
             "native_vitest_readonly_containment_required"
             | "native_package_test_readonly_containment_required"
+            | "native_node_test_readonly_containment_required"
             | "native_node_tool_readonly_containment_required"
             | "native_node_build_output_containment_required",
         ) => true,
