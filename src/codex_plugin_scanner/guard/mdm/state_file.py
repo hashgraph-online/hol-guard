@@ -15,6 +15,7 @@ from .runtime_request import runtime_answer
 
 HEALTH_LEASE_STATE_FEATURE = "native-health-lease-state-v1"
 MACHINE_STATE_FILES_FEATURE = "native-machine-state-files-v1"
+DEVICE_KEY_METADATA_FEATURE = "native-device-key-metadata-v1"
 STATE_FILE_COMMAND = "health-lease-state"
 STATE_FILE_SCHEMA = "health-lease-state.v1"
 _COMMAND_TIMEOUT_SECONDS = 30.0
@@ -25,10 +26,11 @@ _UNAVAILABLE: dict[str, str] = {
     "continuity": "installation_identity_native_unavailable",
     "device_key": "device_key_native_unavailable",
 }
-_ERROR_TYPES: dict[str, type[OSError]] = {
+_ERROR_TYPES: dict[str, type[Exception]] = {
     "permission": PermissionError,
     "exists": FileExistsError,
     "os": OSError,
+    "value": ValueError,
 }
 StateKind = Literal["outbox", "ack", "continuity", "device_key"]
 
@@ -43,7 +45,12 @@ def native_state(op: str, kind: StateKind, state_root: Path, content: bytes | No
     """Ask the native runtime to read, write or remove one state file."""
 
     unavailable = _UNAVAILABLE[kind]
-    feature = HEALTH_LEASE_STATE_FEATURE if kind in {"outbox", "ack"} else MACHINE_STATE_FILES_FEATURE
+    if op == "read-metadata":
+        feature = DEVICE_KEY_METADATA_FEATURE
+    elif kind in {"outbox", "ack"}:
+        feature = HEALTH_LEASE_STATE_FEATURE
+    else:
+        feature = MACHINE_STATE_FILES_FEATURE
     request: dict[str, object] = {
         "schema": STATE_FILE_SCHEMA,
         "op": op,

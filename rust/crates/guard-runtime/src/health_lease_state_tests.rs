@@ -156,6 +156,49 @@ fn continuity_and_device_key_records_are_replaced_in_place() {
 }
 
 #[test]
+fn device_key_metadata_reads_back_checked() {
+    let (_directory, root) = state_root();
+    assert_eq!(
+        answer(&root, "read-metadata", "device_key"),
+        json!({"ok": true, "metadata": null})
+    );
+    let metadata = json!({
+        "schemaVersion": "hol-guard-device-key.v1",
+        "state": "revoked",
+        "active": null,
+        "pendingGeneration": null,
+        "previous": null,
+        "updatedAt": "2026-07-17T00:00:00+00:00",
+    });
+    write(
+        &root,
+        "replace",
+        "device_key",
+        &serde_json::to_vec(&metadata).unwrap(),
+    );
+    assert_eq!(
+        answer(&root, "read-metadata", "device_key"),
+        json!({"ok": true, "metadata": metadata})
+    );
+
+    write(&root, "replace", "device_key", b"{\"state\": \"active\"}");
+    assert_eq!(
+        answer(&root, "read-metadata", "device_key"),
+        refused("value", "device_key_metadata_invalid")
+    );
+    for rejected in [
+        request(&root, "read-metadata", "continuity"),
+        carrying(request(&root, "read-metadata", "device_key"), b"x"),
+    ] {
+        assert_eq!(
+            run(&rejected),
+            Err("health_lease_state_request_invalid".to_owned()),
+            "{rejected}"
+        );
+    }
+}
+
+#[test]
 fn a_retired_outbox_is_gone_and_retiring_it_again_succeeds() {
     let (_directory, root) = state_root();
     write(&root, "create", "outbox", b"pending");

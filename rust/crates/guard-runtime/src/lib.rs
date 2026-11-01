@@ -671,6 +671,7 @@ mod native_bash_review_scope;
 mod native_decision_receipt;
 mod native_exact_action_op;
 mod native_hook_receipt;
+mod native_install_verdict;
 mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
