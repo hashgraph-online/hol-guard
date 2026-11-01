@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Final, cast
 
-from .health_lease_contract import MAX_UINT64, canonical_json_bytes
+from .health_lease_contract import canonical_json_bytes
 
 HEALTH_LEASE_ACK_SCHEMA: Final = "hol-guard-health-lease-ack.v1"
 MAX_ACK_BYTES: Final = 4096
+_MAX_UINT64: Final = (1 << 64) - 1
 
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _HEX_32 = re.compile(r"[0-9a-f]{32}\Z")
@@ -101,7 +102,7 @@ class HealthLeaseAck:
         if not isinstance(status, str) or status not in {"accepted", "replayed"}:
             raise ValueError("health_lease_ack_invalid")
         sequence = raw.get("sequence")
-        if not isinstance(sequence, int) or isinstance(sequence, bool) or not 1 <= sequence <= MAX_UINT64:
+        if not isinstance(sequence, int) or isinstance(sequence, bool) or not 1 <= sequence <= _MAX_UINT64:
             raise ValueError("health_lease_ack_invalid")
         received_at = raw.get("receivedAt")
         if not isinstance(received_at, str) or _ACK_TIMESTAMP.fullmatch(received_at) is None:
