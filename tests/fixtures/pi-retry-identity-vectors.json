@@ -125,6 +125,36 @@
     "after": {"tool_name": "Bash", "session_id": "session-a", "generation_id": "gen-first", "tool_input": {"command": "ls -la", "generation_id": "b"}}
   },
   {
+    "name": "cursor retry bound by conversation id", "harness": "cursor", "same_identity": true,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry bound by camelCase conversation id", "harness": "cursor", "same_identity": true,
+    "before": {"tool_name": "Bash", "conversationId": "conv-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversationId": "conv-a", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry in another conversation", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-b", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "cursor retry with another command in the same conversation", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-a", "generation_id": "gen-retry", "tool_input": {"command": "rm -rf build"}}
+  },
+  {
+    "name": "cursor retry with an empty conversation id", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "", "generation_id": "gen-first", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "", "generation_id": "gen-retry", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "other harness ignores conversation id", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "conversation_id": "conv-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "conversation_id": "conv-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
     "name": "session-bound zcode retry", "harness": "zcode", "same_identity": true,
     "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "toolCallId": "first", "turnId": "turn-first", "tool_input": {"command": "ls -la"}},
     "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "toolCallId": "retry", "turnId": "turn-retry", "tool_input": {"command": "ls -la"}}

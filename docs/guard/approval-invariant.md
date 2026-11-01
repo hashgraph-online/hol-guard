@@ -19,6 +19,9 @@ approval the user has given.
    Cursor and ZCode, the `generation_id` Cursor mints for every attempt, and
    the `toolCallId` and `turnId` ZCode moves alongside it) while a session id
    is present, and keeps the command, working directory, session and policy.
+   A harness spells that session id in its own field: Cursor sends no
+   `session_id` and names its session `conversation_id`, so Cursor's binding
+   reads that field instead.
 3. Always allow is saved against the command's hash. Every part of Guard (the
    Rust resident, the Python daemon, the hook paths and the dashboard) honors
    it.
