@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if desktop_notification::is_command(command) && flag == "--stdin" => {
+            let response = desktop_notification::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
             let response = hook_removal_sweep::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -150,6 +154,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if user_health_state::is_command(command) && flag == "--stdin" => {
             let response = user_health_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hermes_file_inspect::is_command(command) && flag == "--stdin" => {
+            let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
@@ -224,6 +232,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if process_identity::is_command(command) && flag == "--stdin" => {
             let response = process_identity::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if storage_retention::is_command(command) && flag == "--stdin" => {
+            let response = storage_retention::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

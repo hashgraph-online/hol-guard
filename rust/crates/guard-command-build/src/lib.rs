@@ -339,6 +339,8 @@ pub mod shell_execution_context;
 mod shell_execution_context_support;
 #[path = "../../guard-command/src/shell_model_limits.rs"]
 mod shell_model_limits;
+#[path = "../../guard-command/src/shell_secret_read_glob.rs"]
+mod shell_secret_read_glob;
 #[path = "../../guard-command/src/shell_secret_read_support.rs"]
 mod shell_secret_read_support;
 #[path = "../../guard-command/src/shell_structure.rs"]

@@ -1,8 +1,8 @@
 //! Native preparation for contained Node/Vitest and direct inline evaluation.
 use super::*;
 use crate::contained_argv::{
-    bun_vitest_invocation, contained_runner_invocation, inline_eval, node_runtime_args,
-    node_script_index, python_runtime_args, tsx_test_invocation,
+    bun_runner_entry_launch, bun_vitest_invocation, contained_runner_invocation, inline_eval,
+    node_runtime_args, node_script_index, python_runtime_args, tsx_test_invocation,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -337,12 +337,15 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             .ok()
             .filter(|p| p.is_file() && path_is_within(p, &modules))
     });
+    // A call that spelled the entry point has to run the file it spelled, so
+    // the resolved installed entry is checked against it. Bun spells one the
+    // same way Node does.
     let node = matches!(
         Path::new(&input.command[0])
             .file_name()
             .and_then(OsStr::to_str),
         Some("node" | "nodejs")
-    );
+    ) || bun_runner_entry_launch(&argv);
     // Vitest's `bin` shim and the CLI module that shim imports name the same
     // installed runner, so either spelling resolves to the entry point Guard
     // runs; the plan below still executes the package's own `bin` entry.

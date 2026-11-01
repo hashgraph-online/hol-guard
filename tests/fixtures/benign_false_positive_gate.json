@@ -24941,6 +24941,54 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-npm-run-lint-passed-option",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run lint -- --max-warnings=0"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npm-run-typecheck-passed-option",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run typecheck -- --pretty"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-yarn-lint-passed-option",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn lint -- --max-warnings=0"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "named-test-script-npm-run-unit",
       "fix_area": "shell",
       "harnesses": [
@@ -35217,6 +35265,57 @@
       "tool": "shell",
       "tool_input": {
         "command": "git status --short --branch && rg --files -g 'src/**'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-recursive-glob-markdown",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g '**/*.md'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-recursive-alternation-glob",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"TODO\" -g '**/*.{md,yml}' ."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-recursive-include-markdown",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn 'TODO' --include='**/*.md' src"
       },
       "cwd": "worktree",
       "expect": "allow"

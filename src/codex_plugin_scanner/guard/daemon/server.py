@@ -108,7 +108,7 @@ from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime_artifact_reconciliation import (
     reconcile_runtime_artifacts,
 )
-from ..sqlite_recovery import quarantined_store_summary
+from ..storage_retention import quarantined_store_summary
 from ..store import GuardStore
 from ..store_evidence import (
     clear_evidence,
