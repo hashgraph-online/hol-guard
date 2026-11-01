@@ -94,9 +94,107 @@ def test_copilot_isolated_hook_requires_current_guard_paths(
     preserved = copilot_module._merge_hook_entries(
         [{"command": unrelated}],
         {"bash": managed, "powershell": managed},
-        guard_home=context.guard_home,
+        managed=copilot_module._managed_hook_commands([unrelated], guard_home=context.guard_home),
     )
     assert any(entry.get("command") == unrelated for entry in preserved if isinstance(entry, dict))
+
+
+class _StubClassifier:
+    """Answers `copilot-hook-commands` requests: commands starting `guard` are Guard's."""
+
+    def __init__(self, answer: object = None) -> None:
+        self.batches: list[list[str]] = []
+        self.answer = answer
+
+    def __call__(self, feature: str, command: str, request: dict[str, object], **_: object) -> object:
+        assert (feature, command) == ("native-copilot-hook-commands-v1", "copilot-hook-commands")
+        commands = request["commands"]
+        assert isinstance(commands, list)
+        self.batches.append([str(item) for item in commands])
+        if self.answer is not None:
+            return self.answer
+        return {"managed": [str(item).startswith("guard") for item in commands]}
+
+
+def _stub_classifier(monkeypatch: pytest.MonkeyPatch, answer: object = None) -> _StubClassifier:
+    stub = _StubClassifier(answer)
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", stub)
+    return stub
+
+
+def test_copilot_hook_ownership_is_read_once_per_distinct_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub = _stub_classifier(monkeypatch)
+
+    managed = copilot_module._managed_hook_commands(
+        ["user one", "guard old", "user one", "guard old", "user two"], guard_home=None
+    )
+
+    assert stub.batches == [["user one", "guard old", "user two"]]
+    assert managed == {"guard old"}
+
+
+def test_copilot_hook_ownership_splits_large_hook_lists(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub = _stub_classifier(monkeypatch)
+    commands = [f"user {index}" for index in range(2500)] + ["guard old"]
+    wide = ["guard " + "x" * 200_000 + str(index) for index in range(5)]
+    oversized = "guard " + "y" * (copilot_module._HOOK_COMMANDS_BATCH_BYTES + 1)
+
+    managed = copilot_module._managed_hook_commands([*commands, *wide, oversized], guard_home=None)
+
+    assert [len(batch) for batch in stub.batches[:2]] == [1024, 1024]
+    assert [item for batch in stub.batches for item in batch] == [*commands, *wide]
+    for batch in stub.batches:
+        assert len(batch) <= copilot_module._HOOK_COMMANDS_BATCH_COUNT
+        assert sum(len(json.dumps(item)) + 1 for item in batch) <= copilot_module._HOOK_COMMANDS_BATCH_BYTES
+    assert managed == {"guard old", *wide}
+
+
+@pytest.mark.parametrize("answer", [None, {"managed": [True]}, {"managed": "yes"}, {}])
+def test_copilot_hook_ownership_fails_closed_without_an_answer(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", lambda *_args, **_kwargs: answer
+    )
+
+    with pytest.raises(copilot_module.CopilotHookOwnershipError):
+        copilot_module._managed_hook_commands(["guard old", "user hook"], guard_home=None)
+
+
+def test_copilot_hook_ownership_skips_the_runtime_without_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub = _stub_classifier(monkeypatch)
+
+    assert copilot_module._managed_hook_commands([], guard_home=None) == set()
+    assert stub.batches == []
+
+
+def test_copilot_merge_and_remove_keep_only_user_entries() -> None:
+    current: dict[str, object] = {"bash": "guard bash", "powershell": "guard pwsh"}
+    entries: list[object] = [
+        {"command": "user hook"},
+        {"command": "guard legacy"},
+        {"bash": "guard bash", "powershell": "other"},
+        {"bash": "user bash", "powershell": "user pwsh"},
+        "not an entry",
+    ]
+    managed = {"guard legacy"}
+
+    merged = copilot_module._merge_hook_entries(entries, current, managed=managed)
+    removed = copilot_module._remove_hook_entries(entries, "guard bash", "guard pwsh", managed=managed)
+
+    kept = [{"command": "user hook"}, {"bash": "user bash", "powershell": "user pwsh"}]
+    assert merged == [*kept, current]
+    assert removed == kept
+    assert copilot_module._remove_hook_entries("not a list", "guard bash", "guard pwsh", managed=managed) == []
+
+
+def test_copilot_hooks_commands_reads_every_managed_event() -> None:
+    hooks: dict[str, object] = {
+        "preToolUse": [{"command": "a", "bash": "b"}, {"powershell": "c"}],
+        "postToolUse": [{"command": "a"}],
+        "notManaged": [{"command": "skipped"}],
+        "permissionRequest": "not a list",
+    }
+
+    assert copilot_module._hooks_commands(hooks) == ["a", "b", "c", "a"]
 
 
 def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path):
