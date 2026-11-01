@@ -287,6 +287,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-codex-hook-trust-v1",
     "native-local-authority-integrity-v1",
     "native-storage-retention-v1",
+    "native-sqlite-store-salvage-v1",
     "native-desktop-notification-v1",
     "native-grok-executable-v1",
     "native-process-identity-v1",

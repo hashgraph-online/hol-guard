@@ -34,7 +34,7 @@ from .sqlite_quarantine_forensics import (
 )
 from .sqlite_recovery import (
     restore_readable_sqlite_store,
-    salvage_local_cli_state,
+    salvage_quarantined_state,
     sqlite_store_probe_detail,
 )
 from .sqlite_tuning import sqlite_operation_deadline_monotonic
@@ -343,10 +343,7 @@ class StoreConnectionSchemaMixin:
                     )
                 else:
                     self._initialize_schema()
-                    from .sqlite_cloud_review_recovery import salvage_cloud_review_state
-
-                    cloud_restored = salvage_cloud_review_state(source=quarantined, destination=self.path)
-                    cli_restored = salvage_local_cli_state(source=quarantined, destination=self.path)
+                    cloud_restored, cli_restored = salvage_quarantined_state(source=quarantined, destination=self.path)
                     # These independent stores recover atomically within their own
                     # authority boundary; a CLI failure must not discard Review.
                     self._last_sqlite_recovery_details = {"cloud_review": cloud_restored, "local_cli": cli_restored}

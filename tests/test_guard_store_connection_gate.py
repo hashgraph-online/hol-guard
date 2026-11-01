@@ -459,7 +459,7 @@ def test_budgeted_bulk_write_preserves_sqlite_result_accounting(tmp_path: Path) 
         assert connection.execute("select count(*) from guard_events where event_name like 'bulk-%'").fetchone()[0] == 3
 
 
-@pytest.mark.parametrize("path_kind", ["probe", "write-probe", "local-salvage", "cloud-salvage"])
+@pytest.mark.parametrize("path_kind", ["probe", "write-probe", "salvage"])
 @pytest.mark.parametrize("expired", [False, True])
 def test_recovery_connections_obey_deadline_and_close_handles(
     tmp_path: Path,
@@ -467,7 +467,7 @@ def test_recovery_connections_obey_deadline_and_close_handles(
     path_kind: str,
     expired: bool,
 ) -> None:
-    from codex_plugin_scanner.guard import sqlite_cloud_review_recovery, sqlite_recovery
+    from codex_plugin_scanner.guard import sqlite_recovery
     from codex_plugin_scanner.guard.sqlite_deadline_connection import DeadlineConnection
 
     source = GuardStore(tmp_path / "source", prime_policy_integrity=False)
@@ -486,13 +486,12 @@ def test_recovery_connections_obey_deadline_and_close_handles(
             assert sqlite_recovery._probe_sqlite_store(source.path) == "healthy"
         elif path_kind == "write-probe":
             assert sqlite_recovery._guard_home_accepts_sqlite_write(source.guard_home)
-        elif path_kind == "local-salvage":
-            assert sqlite_recovery.salvage_local_cli_state(source=source.path, destination=destination.path)
         else:
-            assert not sqlite_cloud_review_recovery.salvage_cloud_review_state(
-                source=source.path,
-                destination=destination.path,
-            )  # Generated empty source has no cloud consent to recover.
+            # Generated empty source has no cloud consent to recover.
+            assert sqlite_recovery.salvage_quarantined_state(source=source.path, destination=destination.path) == (
+                False,
+                True,
+            )
 
     monkeypatch.setattr(sqlite3, "connect", observed_connect)
     with sqlite_operation_deadline(time.monotonic() + (-1 if expired else 2)):
@@ -501,7 +500,7 @@ def test_recovery_connections_obey_deadline_and_close_handles(
                 recover()
         else:
             recover()
-    assert len(opened) == (0 if expired else 2 if "salvage" in path_kind else 1)
+    assert len(opened) == (0 if expired else 1)
     for connection in opened:
         assert isinstance(connection, DeadlineConnection)
         with pytest.raises(sqlite3.ProgrammingError, match="closed"):

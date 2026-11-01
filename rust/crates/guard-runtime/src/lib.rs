@@ -876,6 +876,7 @@ mod skill_identity_inspect;
 mod skill_identity_platform;
 mod skill_identity_walk;
 mod skill_workflow_preflight_op;
+mod sqlite_store_salvage;
 #[cfg(unix)]
 mod state_directory_lock;
 mod storage_retention;
