@@ -136,8 +136,32 @@ fn open_no_follow(path: &Path) -> std::io::Result<File> {
 #[cfg(windows)]
 fn open_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::OpenOptionsExt;
-    // Share read only: no writer or deleter can change the file under the read.
-    OpenOptions::new().read(true).share_mode(1).open(path)
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    const OPEN_ATTEMPTS: u32 = 6;
+    let mut attempt = 1;
+    loop {
+        // Share read only: no writer or deleter can change the file under the
+        // read. A reparse point is opened as itself, so it reads as not
+        // regular instead of being followed.
+        let opened = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path);
+        match opened {
+            // A writer that is just closing the file holds it briefly.
+            Err(error)
+                if error.raw_os_error() == Some(ERROR_SHARING_VIOLATION)
+                    && attempt < OPEN_ATTEMPTS =>
+            {
+                attempt += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => return result,
+        }
+    }
 }
 
 /// Checks UTF-8 validity over a stream of chunks, carrying a split sequence.

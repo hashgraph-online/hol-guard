@@ -495,6 +495,7 @@ mod health_lease_state;
 mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
+mod hermes_file_inspect;
 mod hermes_inspect;
 mod hermes_printable;
 mod hermes_skills;
