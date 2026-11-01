@@ -2,11 +2,14 @@
 //! continuity record and decide what a verification of it reports
 //! (`mdm/continuity.py` before it moved here).
 //!
-//! Python keeps every privileged read: the bounded, owner-checked read of the
-//! record, the device-key lookup and the boot probe. It sends what it read and
-//! what each probe returned, or the exception a probe raised as
-//! `{"kind", "error"}` with `kind` one of `permission`, `value` or `os`. Only a
-//! malformed request fails the command.
+//! Python keeps the bounded, owner-checked read of the record and the
+//! device-key lookup. It sends what it read and what each probe returned, or
+//! the exception a probe raised as `{"kind", "error"}` with `kind` one of
+//! `permission`, `value` or `os`. Only a malformed request fails the command.
+//!
+//! `observe-boot` answers this boot's session identifier and uptime
+//! (`boot_observation`), or the `lease_continuity_*` code of the probe that
+//! failed.
 
 use std::io::Read;
 
@@ -15,6 +18,7 @@ use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
+use crate::boot_observation;
 use crate::policy_bundle_time::from_isoformat;
 
 const SCHEMA: &str = "installation-continuity.v1";
@@ -137,6 +141,12 @@ fn answer(bytes: &[u8]) -> Result<Value, String> {
                 serde_json::from_value(fields).map_err(|_| request_invalid())?;
             let content = decode(&request.content)?;
             Ok(verify(&content, &request.key, &request.boot).to_value())
+        }
+        Some("observe-boot") if fields.as_object().is_some_and(Map::is_empty) => {
+            Ok(match boot_observation::observe() {
+                Ok(observation) => json!({"ok": true, "boot": observation.to_value()}),
+                Err(code) => json!({"ok": false, "error": code}),
+            })
         }
         _ => Err(request_invalid()),
     }

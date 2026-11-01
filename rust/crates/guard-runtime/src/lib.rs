@@ -73,6 +73,7 @@ mod binding_capture_record;
 #[cfg(all(test, unix))]
 mod binding_capture_vectors_tests;
 mod blocked_request_mode;
+mod boot_observation;
 mod bounded_hook_bridge;
 mod bounded_hook_bridge_grok;
 mod bounded_hook_bridge_grok_render;

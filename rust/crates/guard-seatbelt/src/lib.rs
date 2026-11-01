@@ -11,6 +11,9 @@
 //! `sandbox_init` refuses to nest: inside an existing sandbox it fails with
 //! `EPERM`, so callers must invoke the worker unwrapped and let this profile
 //! be the only seatbelt application in the process.
+//!
+//! The crate also reads the boot session and continuous uptime, which need
+//! the same libSystem FFI.
 
 #[cfg(target_os = "macos")]
 mod imp {
@@ -54,3 +57,9 @@ mod imp {
 }
 
 pub use imp::apply;
+
+#[cfg(target_os = "macos")]
+mod boot_session;
+
+#[cfg(target_os = "macos")]
+pub use boot_session::{boot_session_uuid, continuous_uptime_ns};
