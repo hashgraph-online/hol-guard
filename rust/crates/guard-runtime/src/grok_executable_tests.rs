@@ -219,7 +219,12 @@ fn a_symlink_into_the_workspace_is_refused() {
     fs::create_dir_all(candidate.parent().expect("parent")).expect("dir");
     std::os::unix::fs::symlink(&target, &candidate).expect("symlink");
     let answer = fixture.resolve(json!({ "explicit": candidate }));
-    assert!(error(&answer).contains("symlink targets"), "{answer}");
+    // The workspace check already follows the link, as Python's lenient
+    // `resolve()` does, so the path check refuses the link before the target check runs.
+    assert_eq!(
+        error(&answer),
+        "Grok executable paths cannot come from the workspace or Guard cwd."
+    );
 }
 
 #[cfg(unix)]
