@@ -121,6 +121,17 @@ pub(super) fn proxy_selects_official_toolchain(context: super::PathContext<'_>) 
     if !context.rustup_override_absent {
         return false;
     }
+    // rustup reads its own settings before it looks for a toolchain file, and
+    // a `default_toolchain` or directory override there can name a toolchain
+    // `rustup toolchain link` pointed at any directory. A host with no rustup
+    // home has nothing to read, so the proxy is whatever `cargo` the session
+    // already found on `PATH`.
+    let Some(home) = context.home_dir.map(Path::new) else {
+        return false;
+    };
+    if !home.is_absolute() || rustup_settings(home) == RustupSettings::Unproven {
+        return false;
+    }
     let Some(cwd) = context.cwd.map(Path::new) else {
         return false;
     };
@@ -146,30 +157,52 @@ pub(super) fn rustfmt_proxy_is_official(context: super::PathContext<'_>) -> bool
             .is_some_and(rustup_settings_only_official)
 }
 
-fn rustup_settings_only_official(home: &Path) -> bool {
-    if !home.is_absolute() {
-        return false;
-    }
+/// What rustup's persistent settings select, as far as reading them can tell.
+#[derive(PartialEq)]
+enum RustupSettings {
+    /// There is no rustup home, or the home carries no settings file. Nothing
+    /// stored selects a toolchain, so the proxy runs whichever toolchain the
+    /// rest of this proof accounts for.
+    Absent,
+    /// A settings file whose default is an official channel and which carries
+    /// no directory override.
+    Official,
+    /// Anything else: a custom default, a directory override, or a file this
+    /// proof could not read or parse.
+    Unproven,
+}
+
+/// Read `<home>/.rustup/settings.toml`.
+///
+/// Only a file that is absent answers [`RustupSettings::Absent`]. A directory
+/// or file that exists but cannot be read, a symlink, and an oversized file
+/// are all [`RustupSettings::Unproven`], because what they select is exactly
+/// what this read failed to learn.
+fn rustup_settings(home: &Path) -> RustupSettings {
     let rustup = home.join(".rustup");
-    if !fs::symlink_metadata(&rustup).is_ok_and(|metadata| metadata.is_dir()) {
-        return false;
+    match fs::symlink_metadata(&rustup) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return RustupSettings::Absent,
+        _ => return RustupSettings::Unproven,
     }
     let path = rustup.join("settings.toml");
-    if !fs::symlink_metadata(&path)
-        .is_ok_and(|metadata| metadata.is_file() && metadata.len() <= 32 * 1024)
-    {
-        return false;
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_file() && metadata.len() <= 32 * 1024 => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return RustupSettings::Absent,
+        _ => return RustupSettings::Unproven,
     }
     let Ok(contents) = fs::read_to_string(&path) else {
-        return false;
+        return RustupSettings::Unproven;
     };
     let Ok(settings) = contents.parse::<toml::Table>() else {
-        return false;
+        return RustupSettings::Unproven;
     };
-    let default_is_official = settings
-        .get("default_toolchain")
-        .and_then(toml::Value::as_str)
-        .is_some_and(official_channel);
+    // A settings file with no default names no toolchain either: rustup stops
+    // with its own error rather than running one.
+    let default_is_official = match settings.get("default_toolchain") {
+        None => true,
+        Some(value) => value.as_str().is_some_and(official_channel),
+    };
     // Directory overrides live outside the repository. Until their exact
     // precedence and destination can be proven, any override keeps review.
     let no_directory_overrides = match settings.get("overrides") {
@@ -177,7 +210,23 @@ fn rustup_settings_only_official(home: &Path) -> bool {
         Some(toml::Value::Table(paths)) => paths.is_empty(),
         _ => false,
     };
-    default_is_official && no_directory_overrides
+    if default_is_official && no_directory_overrides {
+        RustupSettings::Official
+    } else {
+        RustupSettings::Unproven
+    }
+}
+
+/// Whether rustup carries a settings file that names an official default.
+///
+/// `rustfmt` writes the files it is given, so unlike a query it asks for the
+/// stronger answer: a rustup home that is there and names a channel, not a
+/// host where the file's absence leaves nothing to read.
+fn rustup_settings_only_official(home: &Path) -> bool {
+    home.is_absolute()
+        && fs::symlink_metadata(home.join(".rustup").join("settings.toml"))
+            .is_ok_and(|metadata| metadata.is_file())
+        && rustup_settings(home) == RustupSettings::Official
 }
 
 /// Whether the registry a query contacts is still crates.io, and whether
@@ -415,6 +464,7 @@ fn digits(value: &str, length: usize) -> bool {
 mod tests {
     use super::{
         cargo_config_inert, inert_toolchain, registry_query, rustup_settings_only_official,
+        safe_cargo_probe,
     };
     use std::path::Path;
 
@@ -583,6 +633,51 @@ mod tests {
         assert!(!rustup_settings_only_official(Path::new(&root)));
         std::fs::write(&settings, "default_toolchain = \"stable\"\n").unwrap();
         assert!(rustup_settings_only_official(Path::new(&root)));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn a_stored_rustup_default_decides_whether_the_search_is_read() {
+        let root = std::env::temp_dir().join(format!(
+            "guard-cargo-settings-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos(),
+        ));
+        let cwd = root.join("workspace");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let home = root.to_str().unwrap().to_owned();
+        let cwd = cwd.to_str().unwrap().to_owned();
+        let query = words("search serde");
+        let context = || super::super::PathContext {
+            home_dir: Some(&home),
+            cwd: Some(&cwd),
+            rustup_override_absent: true,
+            cargo_config_inert: true,
+            ..Default::default()
+        };
+
+        // No rustup home at all: nothing stored selects a toolchain, so the
+        // query is read on whichever `cargo` the session already found.
+        assert!(safe_cargo_probe(&query, context()));
+
+        let directory = root.join(".rustup");
+        std::fs::create_dir_all(&directory).unwrap();
+        let settings = directory.join("settings.toml");
+        assert!(safe_cargo_probe(&query, context()));
+
+        // A linked toolchain runs a Cargo from a directory rustup never
+        // downloaded or verified, and a directory override can name one for
+        // this workspace alone. Both keep the review.
+        std::fs::write(&settings, "default_toolchain = \"vendor-cargo\"\n").unwrap();
+        assert!(!safe_cargo_probe(&query, context()));
+        std::fs::write(
+            &settings,
+            "default_toolchain = \"stable\"\n[overrides]\n\"/tmp/project\" = \"vendor-cargo\"\n",
+        )
+        .unwrap();
+        assert!(!safe_cargo_probe(&query, context()));
+
+        std::fs::write(&settings, "default_toolchain = \"stable\"\n").unwrap();
+        assert!(safe_cargo_probe(&query, context()));
         std::fs::remove_dir_all(root).unwrap();
     }
 }
