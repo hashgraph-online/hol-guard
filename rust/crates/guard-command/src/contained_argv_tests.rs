@@ -363,6 +363,9 @@ fn a_relative_mocha_entry_names_the_same_runner_as_the_absolute_one() {
         "node_modules/mocha/bin/mocha.js",
         "./node_modules/mocha/bin/mocha.js",
         "/work/app/node_modules/mocha/bin/mocha.js",
+        // Mocha 8 and 9 publish the shim without the extension.
+        "node_modules/mocha/bin/mocha",
+        "./node_modules/mocha/bin/mocha",
     ] {
         let command = json!(["node", argument, "test/unit"]);
         let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
@@ -380,8 +383,9 @@ fn a_lookalike_entry_still_names_no_runner() {
         "vitest/vitest.mjs",
         "node_modules/vitest/dist/vitest.mjs",
         "node_modules/jest/bin/jest.js.bak",
-        "node_modules/mocha/bin/mocha",
+        "node_modules/mocha/bin/mocha.sh",
         "node_modules/mocha/bin/_mocha.js",
+        "node_modules/xmocha/bin/mocha",
         "node_modules/vite/dist/cli.js",
         "node_modules/xvitest/dist/cli.js",
         "node_modules/vitest/dist/cli.mjs",

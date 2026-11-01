@@ -53,6 +53,10 @@ fn a_relative_mocha_entry_reads_as_the_project_runner() {
         "node node_modules/mocha/bin/mocha.js",
         "node ./node_modules/mocha/bin/mocha.js test/unit",
         "node /work/app/node_modules/mocha/bin/mocha.js",
+        // Mocha 8 and 9 publish the same shim without the extension, and the
+        // sink runs whichever of the two the workspace holds.
+        "node node_modules/mocha/bin/mocha",
+        "node ./node_modules/mocha/bin/mocha test/unit",
     ] {
         assert_eq!(
             reason(command),
@@ -76,6 +80,7 @@ fn a_mocha_run_that_does_not_watch_is_contained() {
         "npx mocha --watch=false",
         "npx mocha --watch false",
         "npx mocha --watch-files src",
+        "npx mocha --w=false",
         "npx mocha -- --watch",
         "bunx mocha --require ./test/setup.js",
     ] {
@@ -103,6 +108,18 @@ fn a_mocha_run_that_watches_or_leaves_its_workspace_keeps_its_review() {
         "npx mocha --config /etc/mocharc.json",
         "npx mocha --require ../../outside/setup.js",
         "node node_modules/mocha/bin/mocha.js --watch",
+        // yargs-parser answers an option by its alias, so the long spelling
+        // of Mocha's `-w` turns the watch on under its own name.
+        "npx mocha --w",
+        "npx mocha --w=true",
+        // Mocha restores the dashes on a `--node-option` value and hands it
+        // to Node, which has a watch mode of its own and a debugger that
+        // holds the process until a client attaches.
+        "npx mocha -n watch",
+        "npx mocha --node-option watch",
+        "npx mocha --node-option=watch",
+        "npx mocha --node-option=--inspect-brk",
+        "npx mocha -n --inspect-brk",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }
@@ -119,6 +136,8 @@ fn a_lookalike_entry_reads_as_no_runner() {
         "node node_modules/vite/dist/cli.js run",
         "node node_modules/xvitest/dist/cli.js run",
         "node node_modules/vitest/dist/cli.mjs run",
+        "node node_modules/xmocha/bin/mocha",
+        "node node_modules/mocha/bin/mocha.sh",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

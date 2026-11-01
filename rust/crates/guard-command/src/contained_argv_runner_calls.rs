@@ -86,9 +86,16 @@ fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
 /// option that happens to hold a `w` is read as carrying it as well, which
 /// leaves that call at review rather than running it unwatched.
 fn short_options_carry_watch(argument: &str) -> bool {
+    short_options_carry(argument, 'w')
+}
+
+/// Whether a short option group carries a letter. Both parsers walk a group
+/// one letter at a time, so every letter in it names an option, and a value
+/// attached to the group is walked with it rather than told apart from it.
+fn short_options_carry(argument: &str, letter: char) -> bool {
     argument
         .strip_prefix('-')
-        .is_some_and(|letters| !letters.starts_with('-') && letters.contains('w'))
+        .is_some_and(|letters| !letters.starts_with('-') && letters.contains(letter))
 }
 
 /// True when a Jest call both finishes on its own and takes everything it
@@ -113,6 +120,8 @@ pub(crate) fn mocha_contained_call(arguments: &[String]) -> bool {
 /// `--watch`, unlike Jest's, where the letter names `--maxWorkers`.
 /// `--watch-files` and `--watch-ignore` name globs rather than the mode and
 /// read as `watchfiles` and `watchignore`, so they leave the call alone.
+/// yargs-parser also answers an option by its alias, so the long `--w` Mocha
+/// declares beside `--watch` turns the watch on under its own name.
 ///
 /// `init` scaffolds a configuration rather than running tests, and Mocha
 /// takes its command from the first operand. The reading cannot tell an
@@ -123,9 +132,24 @@ pub(crate) fn mocha_runs_once(arguments: &[String]) -> bool {
     !arguments.iter().any(|argument| argument == "init")
         && !arguments.iter().enumerate().any(|(index, argument)| {
             short_options_carry_watch(argument)
-                || (option_name(argument) == "watch"
+                || forwards_a_node_option(argument)
+                || (matches!(option_name(argument).as_str(), "watch" | "w")
                     && jest_boolean(argument, arguments.get(index + 1)) != Some(false))
         })
+}
+
+/// Whether a Mocha call hands Node an option of its own.
+///
+/// `--node-option` and its short `-n` are spelled without the leading dashes
+/// and restored by Mocha before it spawns Node, so `-n watch` starts Node's
+/// own watch mode and `--node-option=--inspect-brk` stops the process until a
+/// debugger attaches. Either leaves a run that never finishes, and the value
+/// names a Node option rather than a path, so the workspace screen does not
+/// answer for it. The reading does not model which values are safe: a call
+/// that forwards anything to Node keeps its review.
+fn forwards_a_node_option(argument: &str) -> bool {
+    short_options_carry(argument, 'n')
+        || matches!(option_name(argument).as_str(), "nodeoption" | "nodeoptions")
 }
 
 /// A watching Jest run never finishes inside the sink, so only a call that

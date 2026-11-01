@@ -21,13 +21,15 @@ pub(crate) fn local_vitest_entry(argument: &str) -> bool {
         || local_package_entry(argument, "vitest/dist/cli.js")
 }
 
-/// Mocha's installed entry point. `bin/mocha.js` is the package's declared
-/// `bin` shim from Mocha 10 on, which is the spelling this containment reads;
-/// the extensionless `bin/mocha` of Mocha 8 and 9 is left at review rather
-/// than guessed at, since a bare `bin/mocha` names nothing a resolver can
-/// check for a module.
+/// Mocha's installed entry points. `bin/mocha.js` is the package's declared
+/// `bin` shim from Mocha 10 on; Mocha 8 and 9 publish the same shim without
+/// the extension. Both name the installed package's own entry, and the sink
+/// runs whichever of them this workspace holds, so reading only the newer
+/// spelling would send a working `node node_modules/mocha/bin/mocha` to
+/// review while the `npx mocha` beside it runs.
 pub(crate) fn local_mocha_entry(argument: &str) -> bool {
     local_package_entry(argument, "mocha/bin/mocha.js")
+        || local_package_entry(argument, "mocha/bin/mocha")
 }
 
 /// The program a word names; on Windows without `.exe`, as the pre-tool parser
