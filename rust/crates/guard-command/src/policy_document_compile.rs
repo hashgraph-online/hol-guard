@@ -319,8 +319,27 @@ fn scope(
     .into()
 }
 
+/// The effects a compiled rule may carry.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Effects {
+    /// Local policy files and imports: a rule allows or blocks.
+    AllowBlock,
+    /// Signed Cloud bundles also carry review rules. A review rule compiles to
+    /// the same `review` row a v1 bundle materializes, so the hook holds the
+    /// action for a person to decide instead of the device refusing the bundle.
+    WithReview,
+}
+
 pub(super) fn compile(document: &Value, deadline: Instant) -> Result<Value, Error> {
-    compile_range(document, deadline, 0, 10_000).map(|(items, _)| json!(items))
+    compile_effects(document, deadline, Effects::AllowBlock)
+}
+
+pub(super) fn compile_effects(
+    document: &Value,
+    deadline: Instant,
+    effects: Effects,
+) -> Result<Value, Error> {
+    compile_range(document, deadline, 0, 10_000, effects).map(|(items, _)| json!(items))
 }
 
 pub(super) fn page(body: &Value, deadline: Instant) -> Result<Value, Error> {
@@ -334,7 +353,13 @@ pub(super) fn page(body: &Value, deadline: Instant) -> Result<Value, Error> {
         .filter(|value| (1..=32).contains(value))
         .ok_or_else(|| failure("ValueError", "policy_document_page_invalid", None))?
         as usize;
-    let (items, total) = compile_range(&body["document"], deadline, offset, limit)?;
+    let (items, total) = compile_range(
+        &body["document"],
+        deadline,
+        offset,
+        limit,
+        Effects::AllowBlock,
+    )?;
     if offset > total {
         return Err(failure("ValueError", "policy_document_page_invalid", None));
     }
@@ -346,6 +371,7 @@ fn compile_range(
     deadline: Instant,
     offset: usize,
     limit: usize,
+    effects: Effects,
 ) -> Result<(Vec<Value>, usize), Error> {
     let id = document["metadata"]["id"].as_str().unwrap_or("");
     let spec = document["spec"]
@@ -379,7 +405,12 @@ fn compile_range(
         if rule["enabled"] == false {
             continue;
         }
-        if !matches!(rule["effect"].as_str(), Some("allow" | "block")) {
+        let effect_supported = match rule["effect"].as_str() {
+            Some("allow" | "block") => true,
+            Some("review") => effects == Effects::WithReview,
+            _ => false,
+        };
+        if !effect_supported {
             return Err(error("unsupported_policy_effect", id));
         }
         if !matches!(
@@ -405,6 +436,11 @@ fn compile_range(
         let matcher = &rule["match"];
         let command_artifacts = command_artifact_selectors(matcher, id)?;
         let exact_command = command_artifacts.is_some();
+        // The hook applies only a block saved under an exact command, so a
+        // review there would let the command run without asking anyone.
+        if exact_command && rule["effect"] == "review" {
+            return Err(error("unsupported_policy_effect", id));
+        }
         let artifacts = match command_artifacts {
             Some(artifacts) => artifacts,
             None => artifact_selectors(matcher, id)?,

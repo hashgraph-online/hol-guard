@@ -175,3 +175,33 @@ fn a_bundle_without_defaults_is_refused_rather_than_read_as_enforced() {
         .remove("defaults");
     assert!(refusal(&input).is_object(), "{}", run(&input));
 }
+
+#[test]
+fn a_review_rule_reaches_the_device_as_a_review_decision() {
+    let mut review = rule("ask-a-person", json!({}));
+    review["effect"] = json!("review");
+    let output = run(&request(json!([review])));
+    assert_eq!(output["ok"][0]["rule_id"], "ask-a-person", "{output}");
+    assert_eq!(output["ok"][0]["decision"]["action"], "review");
+    assert_eq!(output["ok"][0]["decision"]["scope"], "global");
+}
+
+#[test]
+fn a_bundle_rule_outside_allow_block_and_review_is_still_refused() {
+    let mut warn = rule("warn-only", json!({}));
+    warn["effect"] = json!("warn");
+    assert_eq!(
+        refusal(&request(json!([warn])))["code"],
+        "unsupported_policy_effect"
+    );
+}
+
+#[test]
+fn a_review_rule_on_an_exact_command_is_refused_rather_than_left_unenforced() {
+    let mut ask = rule("ask-before-push", json!({"commands": ["git push"]}));
+    ask["effect"] = json!("review");
+    assert_eq!(
+        refusal(&request(json!([ask])))["code"],
+        "unsupported_policy_effect"
+    );
+}

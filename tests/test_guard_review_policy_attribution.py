@@ -265,3 +265,65 @@ def test_claim_names_the_rule_from_a_signed_bundle_through_the_native_lookup(tmp
 
     assert claim["policyRuleId"] == "mcp-review"
     assert claim["policyBundleVersion"] == "policy-2026-01-01.1"
+
+
+def _v2_bundle(*, issued_at: datetime, revision: int = 7) -> dict[str, object]:
+    return {
+        "contractVersion": "guard-policy-bundle.v2",
+        "bundleVersion": revision,
+        "issuedAt": issued_at.isoformat(),
+        "payload": {
+            "metadata": {"id": "policy-workspace", "revision": revision},
+            "spec": {"rules": [{"id": _RULE_ID, "effect": "review"}, {"id": "allow-docs", "effect": "allow"}]},
+        },
+    }
+
+
+def test_claim_names_the_v2_document_revision_for_a_canonical_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, row, _lookups = _setup(
+        tmp_path, monkeypatch, bundle=None, lookup=_decision(source="policy-bundle-canonical")
+    )
+    bundle = _v2_bundle(issued_at=_created(row) - timedelta(minutes=5))
+    monkeypatch.setattr(attribution_module, "validated_synced_policy_bundle", lambda _store: bundle)
+
+    claim = build_local_review_request_claim(request_row=row, oauth=_oauth_metadata(store), store=store)
+
+    assert claim["policyRuleId"] == _RULE_ID
+    assert claim["policyBundleVersion"] == "guard-policy-bundle.v2:7"
+
+
+@pytest.mark.parametrize(
+    ("source", "owner"),
+    [
+        # A v1 row cannot borrow a v2 bundle's identity, nor a local row.
+        ("policy-bundle", _RULE_ID),
+        ("local", _RULE_ID),
+        # A rule the delivered document never carried.
+        ("policy-bundle-canonical", "someone-else"),
+    ],
+)
+def test_v2_attribution_needs_a_canonical_row_for_a_delivered_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str, owner: str
+) -> None:
+    store, row, _lookups = _setup(tmp_path, monkeypatch, bundle=None, lookup=_decision(source=source, owner=owner))
+    bundle = _v2_bundle(issued_at=_created(row) - timedelta(minutes=5))
+    monkeypatch.setattr(attribution_module, "validated_synced_policy_bundle", lambda _store: bundle)
+
+    claim = build_local_review_request_claim(request_row=row, oauth=_oauth_metadata(store), store=store)
+
+    assert "policyRuleId" not in claim
+    assert "policyBundleVersion" not in claim
+
+
+def test_a_canonical_row_is_not_attributed_against_a_v1_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, row, _lookups = _setup(
+        tmp_path, monkeypatch, bundle=None, lookup=_decision(source="policy-bundle-canonical")
+    )
+    bundle = _bundle(issued_at=_created(row) - timedelta(minutes=5))
+    monkeypatch.setattr(attribution_module, "validated_synced_policy_bundle", lambda _store: bundle)
+
+    claim = build_local_review_request_claim(request_row=row, oauth=_oauth_metadata(store), store=store)
+
+    assert "policyRuleId" not in claim
