@@ -78,6 +78,13 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
     if execution.executable_name.as_deref() != Some(package_name) {
         return false;
     }
+    // The runner list names the executables a project runs, and one of them is
+    // published under another name: `tsc` ships inside `typescript`. The
+    // declared pin was already read under the dependency name, so the
+    // installed tree, the manifest key and every lockfile entry have to be
+    // read under it too, or the verdict looks for a `node_modules/tsc` that
+    // npm never creates.
+    let dependency_name = local_executable_package_alias(package_name);
     let Some(declared_version) = execution.declared_version.as_deref() else {
         return false;
     };
@@ -119,7 +126,7 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
     let Ok(node_modules) = std::fs::canonicalize(workspace.join("node_modules")) else {
         return false;
     };
-    let Ok(package_root) = std::fs::canonicalize(node_modules.join(package_name)) else {
+    let Ok(package_root) = std::fs::canonicalize(node_modules.join(dependency_name)) else {
         return false;
     };
     if package_root.strip_prefix(&node_modules).is_err()
@@ -131,7 +138,7 @@ pub(super) fn routine_local_runner(intent: &PackageIntent) -> bool {
     intent.execution_context_reason_codes.is_empty()
         && versions_match(
             &workspace,
-            package_name,
+            dependency_name,
             declared_version,
             &execution.lockfiles,
         )
@@ -187,7 +194,7 @@ fn registry_entry(entry: &Map<String, Value>) -> bool {
 /// must name one version, and that version must satisfy the pin.
 fn versions_match(
     workspace: &Path,
-    package_name: &str,
+    dependency_name: &str,
     declared_version: &str,
     lockfiles: &[PackageExecutionFileEvidence],
 ) -> bool {
@@ -196,7 +203,7 @@ fn versions_match(
         read_json_object(
             &workspace
                 .join("node_modules")
-                .join(package_name)
+                .join(dependency_name)
                 .join("package.json"),
         ),
     ) else {
@@ -207,11 +214,11 @@ fn versions_match(
         manifest
             .get(*group)
             .and_then(Value::as_object)
-            .and_then(|group| group.get(package_name))
+            .and_then(|group| group.get(dependency_name))
             .and_then(Value::as_str)
             == Some(declared_version)
     });
-    if !declared || installed.get("name").and_then(Value::as_str) != Some(package_name) {
+    if !declared || installed.get("name").and_then(Value::as_str) != Some(dependency_name) {
         return false;
     }
     let Some(installed_version) = installed.get("version").and_then(Value::as_str) else {
@@ -219,8 +226,8 @@ fn versions_match(
     };
 
     let mut locked_versions: BTreeSet<String> = BTreeSet::new();
-    let npm_key = format!("node_modules/{package_name}");
-    let bun_prefix = format!("{package_name}@");
+    let npm_key = format!("node_modules/{dependency_name}");
+    let bun_prefix = format!("{dependency_name}@");
     for evidence in lockfiles {
         let Some(resolved) = evidence.resolved_path.as_deref() else {
             continue;
@@ -255,7 +262,7 @@ fn versions_match(
             }
         }
         if let Some(version) = packages
-            .get(package_name)
+            .get(dependency_name)
             .and_then(Value::as_array)
             .and_then(|items| items.first())
             .and_then(Value::as_str)

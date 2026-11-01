@@ -77,9 +77,14 @@ Current Guard support in this repo:
   - records synthetic bridge canaries separately from live Cline runtime proofs and does not mark a transport ready from file presence alone
   - reports JetBrains protection as unverified until a live pre-tool proof exists; see [Cline local protection contract](cline-local-protection-contract.md)
 - `antigravity`
-  - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
-  - supports wrapper-mode management state
-  - uses the local approval center for blocked artifact changes today
+  - detects user settings in `~/.config/antigravity/user/settings.json` and `~/.config/Antigravity/User/settings.json`, macOS Application Support settings, and `%APPDATA%\Antigravity\User\settings.json`
+  - reads those two XDG paths once when the filesystem is case-insensitive; when both files exist, their MCP servers keep separate artifact ids
+  - detects extension manifests in `~/.antigravity/extensions/extensions.json` and MCP configuration in `.gemini/antigravity/mcp_config.json`
+  - discovers skill directories under `.gemini/antigravity/skills/` (`skills`), `.gemini/antigravity/builtin/skills/` (`builtin-skills`), and `.gemini/config/plugins/` (`plugin-skills`), plus workspace `.agents/skills/` (`agents-skills`). Home `.agents/skills/` stays with the harnesses that own it. Each prefix is one path segment, so a nested directory under the primary skills root cannot reuse another root's artifact id. See [Skill directory identity](./skill-directory-identity.md)
+  - uses Rust runner authority `antigravity_detect`
+  - supports wrapper-mode management state; install smoke is `hol-guard install antigravity --dry-run`
+  - uses the local approval center for blocked artifact changes
+  - shell commands are not observable through the Antigravity hook surface
 - `gemini`
   - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
   - supports wrapper-mode management state

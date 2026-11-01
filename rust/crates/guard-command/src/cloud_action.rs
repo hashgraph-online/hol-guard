@@ -27,6 +27,7 @@ use crate::cloud_action_policy::{
 };
 use crate::contributed_mcp_decision::{
     contributions, decide_active_contribution, matching_contribution, ContributedMcpInput,
+    Contribution,
 };
 use crate::effect_decision::GuardAction;
 use crate::native_command_program::{packaged_command_program, NativeCommandProgram};
@@ -186,7 +187,8 @@ impl CloudActionEvaluator {
         );
         let mut action = policy.action;
         let mut reason_codes = vec![policy.reason_code];
-        if let Some(tightened) = catalog_tightening(admitted, program, &activation, action) {
+        let catalog = contributions(program);
+        if let Some(tightened) = catalog_tightening(admitted, &catalog, &activation, action) {
             action = tightened;
             reason_codes.push("catalog_mcp_extension");
         }
@@ -319,9 +321,9 @@ fn resource_id(
 
 /// Catalog MCP contributions may only tighten a remote MCP action here: the
 /// one relaxing path in the shared decision requires a local package launcher.
-fn catalog_tightening(
+pub(crate) fn catalog_tightening(
     admitted: &AdmittedBinding,
-    program: &NativeCommandProgram,
+    catalog: &[Contribution<'_>],
     activation: &VerifiedActivation,
     current: GuardAction,
 ) -> Option<GuardAction> {
@@ -342,8 +344,7 @@ fn catalog_tightening(
         tool_name: Some(&tool_name),
         layers: &[],
     };
-    let all = contributions(program);
-    let contribution = matching_contribution(&all, &input)?;
+    let contribution = matching_contribution(catalog, &input)?;
     if contribution.trust_class == "external"
         && !activation.external_enabled(contribution.catalog_id)
     {

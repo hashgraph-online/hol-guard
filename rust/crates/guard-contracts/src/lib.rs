@@ -33,6 +33,8 @@ mod github_cli_classify;
 pub use github_cli_classify::*;
 mod github_workflow_prepare;
 pub use github_workflow_prepare::*;
+mod protect_advisory_merge;
+pub use protect_advisory_merge::*;
 mod protect_request;
 pub use protect_request::*;
 mod portable_project_identity;

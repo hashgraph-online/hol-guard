@@ -278,54 +278,8 @@ def _attach_primary_approval_link(
         approval_center_url=approval_center_url,
     )
 
-def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harness: str) -> dict[str, str | None]:
-    return {
-        "harness": harness,
-        "approval_center_url": _optional_string(response_payload.get("approval_center_url")),
-        "request_id": _optional_string(response_payload.get("primary_approval_request_id")),
-        "artifact_id": _optional_string(response_payload.get("artifact_id")),
-    }
-
 def _preferred_approval_review_url(response_payload: Mapping[str, object], *, harness: str) -> str | None:
-    approval_center_url = _optional_string(response_payload.get("approval_center_url"))
-    queued = response_payload.get("approval_requests")
-    lookup_kwargs = _primary_approval_lookup_kwargs(dict(response_payload), harness=harness)
-    artifact_id = lookup_kwargs.get("artifact_id")
-    queued_has_artifact_metadata = (
-        any(_optional_string(item.get("artifact_id")) is not None for item in queued if isinstance(item, Mapping))
-        if isinstance(queued, list)
-        else False
-    )
-    queued_url = (
-        first_approval_url(
-            queued,
-            **lookup_kwargs,
-        )
-        if isinstance(queued, list)
-        else None
-    )
-    if queued_url is None and isinstance(queued, list) and artifact_id is not None:
-        queued_url = first_approval_url(
-            queued,
-            harness=harness,
-            approval_center_url=approval_center_url,
-            artifact_id=artifact_id,
-        )
-    if queued_url is None and isinstance(queued, list) and (artifact_id is None or not queued_has_artifact_metadata):
-        queued_url = first_approval_url(
-            queued,
-            harness=harness,
-            approval_center_url=approval_center_url,
-        )
-    if queued_url is not None:
-        return queued_url
-    primary_url = _optional_string(response_payload.get("primary_approval_url"))
-    if primary_url is not None:
-        return canonical_local_approval_url(
-            primary_url,
-            approval_center_url=approval_center_url,
-        )
-    return approval_center_url
+    return preferred_approval_review_url(response_payload, harness=harness)
 
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link",
@@ -333,6 +287,6 @@ __all__ = [
     "_emit",
     "_guard_cloud_app_error_payload", "_guard_cloud_app_urls",
     "_open_guard_cloud_app", "_policy_write_needs_approval_gate", "_policy_write_requires_approval_gate",
-    "_preferred_approval_review_url", "_primary_approval_lookup_kwargs",
+    "_preferred_approval_review_url",
     "_resolve_cisco_scan_options", "_run_apps_command", "_run_consumer_scan_with_mode",
 ]

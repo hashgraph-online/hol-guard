@@ -61,8 +61,8 @@ from ..approvals import (
     approvals_queued_before,
     attach_primary_approval_link,
     build_approval_browser_url,
-    canonical_local_approval_url,
     first_approval_url,
+    preferred_approval_review_url,
     queue_blocked_approvals,
     wait_for_approval_requests,
 )

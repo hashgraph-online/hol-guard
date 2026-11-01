@@ -75,6 +75,7 @@ fn request_digest(request: &RunnerAuthorityRequestV1) -> Result<String, &'static
 pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
     match kind {
         "approval_wait_hint" => crate::blocked_request_mode::wait_hint_projection(args),
+        "approval_link" => crate::approval_link::dispatch(args),
         "developer_inspection_authority" => {
             crate::developer_inspection_authority_op::dispatch(args)
         }
@@ -92,6 +93,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         | "decision_build" => crate::decision_authority_op::dispatch(kind, args),
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
+        "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
