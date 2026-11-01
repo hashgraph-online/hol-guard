@@ -133,7 +133,11 @@ pub(super) fn lines(text: &[u8]) -> Vec<&[u8]> {
 
 /// One matcher stage over `text`. A matcher this host does not have exits
 /// as a shell's missing program does: the core has already run.
-fn matched(text: &[u8], program: &str, arguments: &[String]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
+pub(crate) fn matched(
+    text: &[u8],
+    program: &str,
+    arguments: &[String],
+) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
     let located = match program {
         "rg" => trusted_ripgrep().map(|binary| (binary, None)),
         "grep" => trusted_grep().map(|binary| (binary, None)),
@@ -216,7 +220,11 @@ fn run(mut command: Command, input: &[u8]) -> Outcome<(Vec<u8>, Vec<u8>, i32)> {
 
 /// The system grep: a root-owned regular file nobody else can rewrite.
 fn trusted_grep() -> Option<PathBuf> {
-    GREP_BINARIES.iter().map(PathBuf::from).find(|candidate| {
+    trusted_grep_in(&GREP_BINARIES.map(Path::new))
+}
+
+fn trusted_grep_in(candidates: &[&Path]) -> Option<PathBuf> {
+    candidates.iter().map(PathBuf::from).find(|candidate| {
         std::fs::metadata(candidate)
             .is_ok_and(|info| info.is_file() && info.uid() == 0 && info.mode() & 0o022 == 0)
     })
@@ -225,9 +233,15 @@ fn trusted_grep() -> Option<PathBuf> {
 /// The installed ripgrep: an executable regular file that only root or
 /// this user owns and nobody else can rewrite, searched for in turn.
 fn trusted_ripgrep() -> Option<PathBuf> {
+    trusted_ripgrep_in(&RG_DIRECTORIES.map(Path::new))
+}
+
+/// A name that cannot be executed is not the install, so the search goes
+/// on to the next directory rather than failing on it.
+fn trusted_ripgrep_in(directories: &[&Path]) -> Option<PathBuf> {
     let owners = [0, getuid().as_raw()];
-    RG_DIRECTORIES.iter().find_map(|directory| {
-        let resolved = std::fs::canonicalize(Path::new(directory).join("rg")).ok()?;
+    directories.iter().find_map(|directory| {
+        let resolved = std::fs::canonicalize(directory.join("rg")).ok()?;
         let info = std::fs::metadata(&resolved).ok()?;
         (info.is_file()
             && owners.contains(&info.uid())

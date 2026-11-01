@@ -103,3 +103,45 @@ fn a_missing_ripgrep_exits_as_a_missing_program() {
     assert_eq!(diagnostics, b"hol-guard: rg: not found\n");
     assert_eq!(status, 127);
 }
+
+#[test]
+fn a_ripgrep_others_could_rewrite_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().expect("tempdir");
+    let planted = directory.path().join("rg");
+    std::fs::write(&planted, "#!/bin/sh\n").expect("plant");
+    std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o777)).expect("chmod");
+    assert_eq!(trusted_ripgrep_in(&[directory.path()]), None);
+}
+
+#[test]
+fn a_ripgrep_that_cannot_run_leaves_the_search_to_the_next_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let first = tempfile::tempdir().expect("tempdir");
+    std::fs::write(first.path().join("rg"), "not the install\n").expect("plant");
+    let second = tempfile::tempdir().expect("tempdir");
+    let installed = second.path().join("rg");
+    std::fs::write(&installed, "#!/bin/sh\ncat\n").expect("install");
+    std::fs::set_permissions(&installed, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    assert_eq!(
+        trusted_ripgrep_in(&[first.path(), second.path()]),
+        Some(std::fs::canonicalize(&installed).expect("canonical"))
+    );
+}
+
+#[test]
+fn a_grep_root_does_not_own_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    if getuid().is_root() {
+        return;
+    }
+    let directory = tempfile::tempdir().expect("tempdir");
+    let planted = directory.path().join("grep");
+    std::fs::write(&planted, "#!/bin/sh\n").expect("plant");
+    std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let missing = directory.path().join("missing");
+    assert_eq!(
+        trusted_grep_in(&[planted.as_path(), missing.as_path()]),
+        None
+    );
+}
