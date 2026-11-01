@@ -1,10 +1,14 @@
-//! This boot's session identifier and an uptime that keeps counting while the
-//! machine sleeps, which the installation continuity record compares each
+//! This boot's session identifier and an uptime that never goes backwards
+//! within the boot, which the installation continuity record compares each
 //! lease against (`mdm/continuity.py` before it moved here).
 //!
-//! - macOS: `kern.bootsessionuuid` and `mach_continuous_time`.
-//! - Windows: the firmware boot identifier and `GetTickCount64`.
-//! - Linux: `/proc/sys/kernel/random/boot_id` and `CLOCK_MONOTONIC`.
+//! - macOS: `kern.bootsessionuuid` and `mach_continuous_time`, which keeps
+//!   counting while the machine sleeps.
+//! - Windows: the firmware boot identifier and `GetTickCount64`, which keeps
+//!   counting while the machine sleeps.
+//! - Linux: `/proc/sys/kernel/random/boot_id` and `CLOCK_MONOTONIC`, which
+//!   stops while the machine is suspended, so the uptime is not wall time
+//!   since boot there.
 
 use serde_json::{json, Value};
 

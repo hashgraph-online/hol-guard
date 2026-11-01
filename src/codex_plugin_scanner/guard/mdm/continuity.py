@@ -173,7 +173,11 @@ def _continuity_lock(paths: MachinePaths) -> Iterator[None]:
 
 
 def observe_boot(*, system_name: str | None = None) -> BootObservation:
-    """This boot's session identifier and an uptime that keeps counting through sleep."""
+    """This boot's session identifier and an uptime that never goes backwards within the boot.
+
+    The uptime keeps counting through sleep on macOS and Windows; on Linux it
+    is ``CLOCK_MONOTONIC``, which stops while the machine is suspended.
+    """
 
     if (system_name or platform.system()) not in ("Darwin", "Linux", "Windows"):
         raise OSError("lease_continuity_platform_unsupported")
