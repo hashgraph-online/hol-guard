@@ -34,6 +34,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use guard_contracts::write_canonical_json;
+use hmac::{Hmac, Mac};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256, Sha512};
 
@@ -50,10 +52,9 @@ use crate::package_manifest_diff::parse_manifest_dependencies;
 use crate::package_policy_override as ppo;
 use crate::package_protect_projection as ppp;
 use crate::workspace_inventory::{
-    inventory_from_sbom_payload, merge_inventory_item, package_manager_for_scan,
-    split_namespace_name, target_for_package_spec, target_from_inventory_item,
-    target_from_manifest_dependency, InventoryMap, ECOSYSTEM_BY_LOCKFILE, ECOSYSTEM_BY_MANIFEST,
-    SEVERITY_RANK,
+    dependency_name, inventory_from_sbom_payload, merge_inventory_item, package_manager_for_scan,
+    target_for_package_spec, target_from_inventory_item, target_from_manifest_dependency,
+    DirectDependencies, InventoryMap, ECOSYSTEM_BY_LOCKFILE, ECOSYSTEM_BY_MANIFEST, SEVERITY_RANK,
 };
 
 pub const WORKSPACE_AUDIT_DISCOVERY_MAX_DEPTH: usize = 3;
@@ -643,8 +644,8 @@ pub struct GuardConfig {
     /// `harness_risk_actions` (config.py :419).
     pub harness_risk_actions:
         Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
-    /// `harness_postures` (config.py :421), canonically keyed as
-    /// `coerce_loaded_harness_postures` leaves them.
+    /// `harness_postures` (config.py :421), canonically keyed with malformed
+    /// entries dropped.
     pub harness_postures: Option<std::collections::BTreeMap<String, String>>,
     /// `managed_policy_status` (config.py :426).
     pub managed_policy_status: String,
@@ -1086,11 +1087,28 @@ pub const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "package_custom_registry",
     "package_install",
     "low_trust_artifact",
+    "runtime_known_vulnerable",
 ];
 
 /// `DEFAULT_SECURITY_LEVEL` (config.py).
 pub const DEFAULT_SECURITY_LEVEL: &str = "balanced";
 
+/// Days in a Gregorian month, so an impossible calendar day is rejected
+/// rather than rolled into the next month.
+fn days_in_month(year: i64, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+/// Python's `datetime.fromisoformat` reads the whole string or raises, and it
+/// knows how long each month is. This mirror did neither, so a signed document
+/// carrying `2026-02-31` or an instant with text after it parsed here where it
+/// was refused before.
 pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
     let text = value.trim();
     let bytes = text.as_bytes();
@@ -1103,7 +1121,7 @@ pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
     }
     let month: u32 = text.get(5..7)?.parse().ok()?;
     let day: u32 = text.get(8..10)?.parse().ok()?;
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    if !(1..=12).contains(&month) || day < 1 || day > days_in_month(year, month) {
         return None;
     }
     let mut hour: u32 = 0;
@@ -1144,21 +1162,35 @@ pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
         } else {
             cursor += 5;
         }
+        if hour > 23 || minute > 59 || second > 59 {
+            return None;
+        }
         if let Some(&marker) = bytes.get(cursor) {
             match marker {
-                b'Z' | b'z' => offset_seconds = 0,
+                b'Z' | b'z' => {
+                    offset_seconds = 0;
+                    cursor += 1;
+                }
                 b'+' | b'-' => {
                     let sign: i64 = if marker == b'-' { -1 } else { 1 };
                     let off_h = two(text, cursor + 1)?;
-                    let off_m = if bytes.get(cursor + 3) == Some(&b':') {
+                    let separated = bytes.get(cursor + 3) == Some(&b':');
+                    let off_m = if separated {
                         two(text, cursor + 4)?
                     } else {
                         two(text, cursor + 3)?
                     };
+                    if off_h > 23 || off_m > 59 {
+                        return None;
+                    }
                     offset_seconds = sign * ((off_h as i64) * 3600 + (off_m as i64) * 60);
+                    cursor += if separated { 6 } else { 5 };
                 }
-                _ => {}
+                _ => return None,
             }
+        }
+        if cursor != bytes.len() {
+            return None;
         }
     }
     let days = days_from_civil(year, month as i64, day as i64);
@@ -1192,28 +1224,10 @@ pub fn stable_digest_hex(payload: &[u8]) -> String {
 
 /// `stable_digest_hex(payload, length=n)`.
 pub fn stable_digest_hex_len(payload: &[u8], length: Option<usize>) -> String {
-    const BLOCK: usize = 128; // sha512 block size
-    let mut key = [0u8; BLOCK];
-    if STABLE_DIGEST_KEY.len() > BLOCK {
-        let hashed = Sha512::digest(STABLE_DIGEST_KEY);
-        key[..64].copy_from_slice(&hashed);
-    } else {
-        key[..STABLE_DIGEST_KEY.len()].copy_from_slice(STABLE_DIGEST_KEY);
-    }
-    let mut ipad = [0x36u8; BLOCK];
-    let mut opad = [0x5cu8; BLOCK];
-    for i in 0..BLOCK {
-        ipad[i] ^= key[i];
-        opad[i] ^= key[i];
-    }
-    let mut inner = Sha512::new();
-    inner.update(ipad);
-    inner.update(payload);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha512::new();
-    outer.update(opad);
-    outer.update(inner_digest);
-    let hex_digest = hex::encode(outer.finalize());
+    let mut mac =
+        <Hmac<Sha512>>::new_from_slice(STABLE_DIGEST_KEY).expect("hmac accepts any key length");
+    mac.update(payload);
+    let hex_digest = hex::encode(mac.finalize().into_bytes());
     match length {
         Some(n) => hex_digest[..n.min(64)].to_string(),
         None => hex_digest[..64].to_string(),
@@ -1452,115 +1466,19 @@ pub fn write_package_firewall_refresh_state(guard_home: &Path, last_attempt: f64
 // Posture — `build_local_supply_chain_posture` + internals.
 // ---------------------------------------------------------------------------
 
-/// `.runtime.supply_chain_support._SUPPORT_LEVELS` — ported verbatim.
-/// TODO(deps): dedup once `supply_chain_support` lands in Rust.
-static SUPPORT_LEVELS: LazyLock<
-    BTreeMap<&'static str, (&'static str, &'static str, &'static str)>,
-> = LazyLock::new(|| {
-    [
-        ("npm", ("npm", "protected", "Protected")),
-        ("pypi", ("PyPI", "protected", "Protected")),
-        ("cargo", ("Cargo", "beta", "Beta")),
-        ("go", ("Go modules", "beta", "Beta")),
-        ("maven", ("Maven/Gradle", "beta", "Beta")),
-        ("packagist", ("Composer", "beta", "Beta")),
-        ("rubygems", ("RubyGems", "beta", "Beta")),
-        (
-            "homebrew",
-            ("Homebrew formulae", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "homebrew-cask",
-            ("Homebrew Casks", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "homebrew-tap",
-            ("Homebrew taps", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "docker",
-            ("Docker base images", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "github-actions",
-            ("GitHub Actions", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "system",
-            ("System packages", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "unsupported",
-            ("Unsupported managers", "monitor-only", "Monitor-only"),
-        ),
-    ]
-    .into_iter()
-    .collect()
-});
+/// `ecosystem_support_metadata` — the shared port in `supply_chain_support`.
+///
+/// This module carried its own copy of the table and of Python's
+/// `str.title()` fallback until that module landed. The copy split the
+/// fallback on spaces alone, so an unknown ecosystem written with any other
+/// separator kept its lower-case letters where `title()` capitalises them.
+pub use crate::supply_chain_support::ecosystem_support_metadata;
 
-static SUPPORT_ORDER: &[&str] = &[
-    "npm",
-    "pypi",
-    "cargo",
-    "go",
-    "maven",
-    "packagist",
-    "rubygems",
-    "homebrew",
-    "homebrew-cask",
-    "homebrew-tap",
-    "docker",
-    "github-actions",
-    "system",
-    "unsupported",
-];
-
-/// `ecosystem_support_metadata`.
-pub fn ecosystem_support_metadata(ecosystem: &str) -> Map<String, Value> {
-    let (display_name, support_level, support_label) =
-        SUPPORT_LEVELS.get(ecosystem).copied().unwrap_or({
-            (
-                "", // computed below
-                "monitor-only",
-                "Monitor-only",
-            )
-        });
-    let display_name = if display_name.is_empty() {
-        // `ecosystem.replace("-", " ").title()` — Python `str.title()` per word.
-        ecosystem
-            .replace('-', " ")
-            .split(' ')
-            .map(|word| {
-                let mut chars = word.chars();
-                match chars.next() {
-                    Some(first) => {
-                        first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
-                    }
-                    None => String::new(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    } else {
-        display_name.to_string()
-    };
-    let mut out = Map::new();
-    out.insert("display_name".into(), json!(display_name));
-    out.insert("support_level".into(), json!(support_level));
-    out.insert("support_label".into(), json!(support_label));
-    out
-}
-
-/// `ecosystem_support_matrix`.
+/// `ecosystem_support_matrix`, as the JSON values this module's callers read.
 pub fn ecosystem_support_matrix() -> Vec<Value> {
-    SUPPORT_ORDER
-        .iter()
-        .map(|ecosystem| {
-            let mut row = Map::new();
-            row.insert("ecosystem".into(), json!(ecosystem));
-            row.extend(ecosystem_support_metadata(ecosystem));
-            Value::Object(row)
-        })
+    crate::supply_chain_support::ecosystem_support_matrix()
+        .into_iter()
+        .map(Value::Object)
         .collect()
 }
 
@@ -1773,6 +1691,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_custom_registry", "allow"),
                 ("package_install", "allow"),
                 ("low_trust_artifact", "warn"),
+                ("runtime_known_vulnerable", "warn"),
             ],
         ),
         (
@@ -1798,6 +1717,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_custom_registry", "allow"),
                 ("package_install", "allow"),
                 ("low_trust_artifact", "warn"),
+                ("runtime_known_vulnerable", "warn"),
             ],
         ),
         (
@@ -1823,6 +1743,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_custom_registry", "allow"),
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
+                ("runtime_known_vulnerable", "require-reapproval"),
             ],
         ),
         (
@@ -1848,6 +1769,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_custom_registry", "allow"),
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
+                ("runtime_known_vulnerable", "block"),
             ],
         ),
         (
@@ -1873,6 +1795,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_custom_registry", "block"),
                 ("package_install", "block"),
                 ("low_trust_artifact", "block"),
+                ("runtime_known_vulnerable", "block"),
             ],
         ),
         (
@@ -1898,6 +1821,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_custom_registry", "allow"),
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
+                ("runtime_known_vulnerable", "require-reapproval"),
             ],
         ),
     ];
@@ -1950,6 +1874,7 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("package_custom_registry", "allow"),
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
+                ("runtime_known_vulnerable", "require-reapproval"),
             ],
         ),
         (
@@ -1975,6 +1900,7 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("package_custom_registry", "allow"),
                 ("package_install", "allow"),
                 ("low_trust_artifact", "require-reapproval"),
+                ("runtime_known_vulnerable", "require-reapproval"),
             ],
         ),
     ];
@@ -2935,7 +2861,7 @@ pub fn resolve_supply_chain_audit_workspace_dir(
     Ok(None)
 }
 
-/// `_audit_lockfile_warnings` — `parse_manifest_dependencies` is the shared
+/// `_audit_lockfile_warnings` — `try_parse_manifest_dependencies_ordered` is the shared
 /// `package_manifest_diff` port; `path` is the relative lockfile path.
 #[allow(dead_code)]
 fn audit_lockfile_warnings(
@@ -2970,13 +2896,14 @@ fn audit_lockfile_warnings(
             }));
             continue;
         };
-        let dependency_map = crate::package_manifest_diff::parse_manifest_dependencies(
+        // A lockfile that parses and lists no packages is complete, not a warning.
+        let dependency_map = crate::package_manifest_diff::try_parse_manifest_dependencies_ordered(
             lockfile_path,
             &lockfile_text,
             2_097_152,
             50,
         );
-        if dependency_map.is_empty() {
+        if dependency_map.is_none() {
             warnings.push(json!({
                 "code": "lockfile_parse_warning",
                 "message": format!("Guard could not parse {lockfile_name} for workspace audit."),
@@ -3559,6 +3486,7 @@ fn workspace_inventory_from_paths(
     manifest_parser: &dyn ManifestParserApi,
 ) -> Vec<Map<String, Value>> {
     let mut inventory_map = InventoryMap::new();
+    let mut direct_dependencies = DirectDependencies::default();
 
     for relative_path in manifest_paths {
         let text = match read_workspace_audit_text(paths, workspace_dir, relative_path) {
@@ -3576,23 +3504,10 @@ fn workspace_inventory_from_paths(
             DEFAULT_MANIFEST_PARSE_DEADLINE_MS,
         );
         for (package_name, version) in &dependency_map {
-            let mut item = Map::new();
-            item.insert("ecosystem".into(), json!(*ecosystem));
-            let (ns, name) = split_namespace_name(package_name);
-            item.insert("namespace".into(), ns.map_or(Value::Null, Value::String));
-            item.insert("name".into(), json!(name));
-            item.insert("direct".into(), json!(true));
-            let range = version.trim();
-            item.insert(
-                "range".into(),
-                if range.is_empty() {
-                    Value::Null
-                } else {
-                    Value::String(range.to_string())
-                },
-            );
-            item.insert("version".into(), Value::Null);
-            merge_inventory_item(&mut inventory_map, &item);
+            let range = Some(version.trim())
+                .filter(|range| !range.is_empty())
+                .map(str::to_string);
+            direct_dependencies.record(relative_path, ecosystem, package_name, range);
         }
     }
 
@@ -3614,11 +3529,15 @@ fn workspace_inventory_from_paths(
         for (package_name, version) in &dependency_map {
             let mut item = Map::new();
             item.insert("ecosystem".into(), json!(*ecosystem));
-            let (ns, name) = split_namespace_name(package_name);
+            let (ns, name) = dependency_name(ecosystem, package_name);
             item.insert("namespace".into(), ns.map_or(Value::Null, Value::String));
             item.insert("name".into(), json!(name));
-            item.insert("direct".into(), json!(false));
-            item.insert("range".into(), Value::Null);
+            let range = direct_dependencies.lockfile_range(relative_path, ecosystem, package_name);
+            item.insert("direct".into(), json!(range.is_some()));
+            item.insert(
+                "range".into(),
+                range.flatten().map_or(Value::Null, Value::String),
+            );
             let version = version.trim();
             item.insert(
                 "version".into(),
@@ -3631,6 +3550,19 @@ fn workspace_inventory_from_paths(
             merge_inventory_item(&mut inventory_map, &item);
         }
     }
+
+    for (ecosystem, package_name, range) in direct_dependencies.unresolved() {
+        let mut item = Map::new();
+        item.insert("ecosystem".into(), json!(ecosystem));
+        let (ns, name) = dependency_name(ecosystem, package_name);
+        item.insert("namespace".into(), ns.map_or(Value::Null, Value::String));
+        item.insert("name".into(), json!(name));
+        item.insert("direct".into(), json!(true));
+        item.insert("range".into(), range.map_or(Value::Null, Value::String));
+        item.insert("version".into(), Value::Null);
+        merge_inventory_item(&mut inventory_map, &item);
+    }
+    inventory_map.lead_with(direct_dependencies.listed_keys());
 
     inventory_map.into_values()
 }
@@ -3829,7 +3761,7 @@ fn workspace_diff_audit_inventory(
                 Some(v) => v,
                 None => continue,
             };
-            let (ns, name) = split_namespace_name(&change.package_name);
+            let (ns, name) = dependency_name(ecosystem, &change.package_name);
             changed_packages.push(change.package_name.clone());
             let mut item = Map::new();
             item.insert("ecosystem".into(), json!(*ecosystem));
@@ -5487,16 +5419,24 @@ pub fn package_request_runtime_workspace_scope(
         "scope": "package-request-workspace-exact",
         "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
     });
-    let canonical = serde_json::to_string(&material).unwrap_or_default();
-    let digest = stable_digest_hex(canonical.as_bytes());
+    let digest = package_scope_digest(&material)?;
     Some(format!(
         "package-request-workspace-exact:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
     ))
 }
 
+/// The key a saved package approval is already stored under: `json.dumps(
+/// material, sort_keys=True, separators=(",", ":"))` hashed with plain
+/// SHA-256. The crate's keyed `stable_digest_hex` would be a different string,
+/// and a different string is an approval the user has to grant a second time.
+fn package_scope_digest(material: &Value) -> Option<String> {
+    let mut encoded = Vec::new();
+    write_canonical_json(material, &mut encoded).ok()?;
+    Some(sha256_content_digest(&encoded))
+}
+
 /// `approval_scope_support.package_request_portable_workspace_scope`.
-#[allow(dead_code)]
-fn package_request_portable_workspace_scope(
+pub fn package_request_portable_workspace_scope(
     artifact_id: Option<&str>,
     artifact_hash: Option<&str>,
     artifact_type: Option<&str>,
@@ -5520,8 +5460,7 @@ fn package_request_portable_workspace_scope(
         "scope": "package-request-workspace",
         "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
     });
-    let canonical = serde_json::to_string(&material).unwrap_or_default();
-    let digest = stable_digest_hex(canonical.as_bytes());
+    let digest = package_scope_digest(&material)?;
     Some(format!(
         "package-request-workspace:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
     ))
@@ -5541,124 +5480,16 @@ fn is_package_request_artifact(artifact_id: Option<&str>, artifact_type: Option<
 // ---------------------------------------------------------------------------
 
 /// `runtime.package_protect_projection.resolve_local_supply_chain_harness`.
-#[allow(dead_code)]
+///
+/// The attribution itself lives in [`crate::harness_attribution`], which
+/// mirrors `runtime/harness_attribution.py`. The slug feeds request identity,
+/// receipts, and user-facing attribution only; policy scoping stays keyed on
+/// the synthetic guard-cli artifact harness, which the invoking process cannot
+/// influence.
 fn resolve_local_supply_chain_harness() -> String {
-    resolve_environment_harness()
-        .or_else(resolve_parent_process_harness)
+    crate::harness_attribution::resolve_environment_harness()
+        .or_else(crate::harness_attribution::resolve_parent_process_harness)
         .unwrap_or_else(|| LOCAL_SUPPLY_CHAIN_HARNESS.to_string())
-}
-
-/// `runtime.harness_attribution.resolve_environment_harness`.
-#[allow(dead_code)]
-fn resolve_environment_harness() -> Option<String> {
-    let env: std::collections::HashMap<String, String> = std::env::vars().collect();
-    resolve_environment_harness_from(&env)
-}
-
-#[allow(dead_code)]
-fn resolve_environment_harness_from(
-    env: &std::collections::HashMap<String, String>,
-) -> Option<String> {
-    // HOL_GUARD_ORIGIN_HARNESS takes precedence — an explicit override.
-    if let Some(v) = env.get("HOL_GUARD_ORIGIN_HARNESS") {
-        let v = v.trim().to_string();
-        if !v.is_empty() {
-            return Some(v);
-        }
-    }
-    // Presence-only markers — the harness runtime injects these into the
-    // environment of every command it spawns.
-    static MARKERS: &[(&[&str], &str)] = &[
-        (
-            &[
-                "CURSOR_VERSION",
-                "CURSOR_PROJECT_DIR",
-                "CURSOR_TRACE_ID",
-                "CURSOR_SESSION_ID",
-                "CURSOR_TRANSCRIPT_PATH",
-            ],
-            "cursor",
-        ),
-        (&["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"], "claude-code"),
-        (&["CODEX_SANDBOX", "CODEX_THREAD_ID"], "codex"),
-        (&["GROK_AGENT", "GROK_SESSION_ID"], "grok"),
-        (&["OPENCODE_CONFIG_CONTENT"], "opencode"),
-        (&["DEVIN_PROJECT_DIR"], "devin"),
-    ];
-    for (keys, slug) in MARKERS {
-        if keys.iter().any(|k| env.contains_key(*k)) {
-            return Some(slug.to_string());
-        }
-    }
-    None
-}
-
-/// `runtime.harness_attribution.resolve_parent_process_harness` — inspect the
-/// process tree for known harness executable names (best-effort, never used
-/// for authorization).
-#[allow(dead_code)]
-fn resolve_parent_process_harness() -> Option<String> {
-    let output = std::process::Command::new("/bin/ps")
-        .args(["-axo", "pid=,ppid=,comm="])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut parents: std::collections::HashMap<u32, (u32, String)> =
-        std::collections::HashMap::new();
-    let mut self_pid = std::process::id();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let mut parts = line.split_whitespace();
-        let pid: u32 = match parts.next()?.parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let ppid: u32 = match parts.next()?.parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let comm: String = parts.collect::<Vec<_>>().join(" ");
-        parents.insert(pid, (ppid, comm));
-    }
-    static PROCESS_HARNESSES: &[(&str, &str)] = &[
-        ("codex", "codex"),
-        ("claude", "claude-code"),
-        ("cursor", "cursor"),
-        ("cursor-agent", "cursor"),
-        ("zcode", "zcode"),
-        ("zcode-cli", "zcode"),
-        ("grok", "grok"),
-        ("pi", "pi"),
-        ("omp", "omp"),
-        ("opencode", "opencode"),
-        ("devin", "devin"),
-    ];
-    let mut visited = std::collections::HashSet::new();
-    loop {
-        let Some(&(ppid, ref comm)) = parents.get(&self_pid) else {
-            break;
-        };
-        if !visited.insert(self_pid) {
-            break;
-        }
-        if ppid == self_pid {
-            break;
-        }
-        self_pid = ppid;
-        let name = comm.rsplit('/').next().unwrap_or(comm);
-        for (proc_name, slug) in PROCESS_HARNESSES {
-            if name == *proc_name {
-                return Some(slug.to_string());
-            }
-        }
-    }
-    None
 }
 
 // ---------------------------------------------------------------------------
@@ -6060,6 +5891,24 @@ pub fn package_config_policy_context(
     artifact: &GuardArtifact,
     config: Option<&GuardConfig>,
 ) -> Map<String, Value> {
+    package_config_policy_context_for(
+        &artifact.artifact_id,
+        artifact.publisher.as_deref(),
+        &artifact.harness,
+        config,
+    )
+}
+
+/// The same context for a caller that holds the artifact's identity rather
+/// than the artifact itself: a request the resident answers carries the
+/// artifact as a payload, and these three fields are all of it the context
+/// reads.
+pub fn package_config_policy_context_for(
+    artifact_id: &str,
+    publisher: Option<&str>,
+    harness: &str,
+    config: Option<&GuardConfig>,
+) -> Map<String, Value> {
     let mut out = Map::new();
     let Some(config) = config else {
         out.insert("available".into(), json!(false));
@@ -6074,12 +5923,10 @@ pub fn package_config_policy_context(
             .and_then(Value::as_str)
             .map(str::to_owned)
     };
-    let artifact_override = map_lookup("artifact_actions", &artifact.artifact_id);
-    let publisher_override = artifact
-        .publisher
-        .as_deref()
-        .and_then(|publisher| map_lookup("publisher_actions", publisher));
-    let harness_override = map_lookup("harness_actions", &artifact.harness);
+    let artifact_override = map_lookup("artifact_actions", artifact_id);
+    let publisher_override =
+        publisher.and_then(|publisher| map_lookup("publisher_actions", publisher));
+    let harness_override = map_lookup("harness_actions", harness);
     out.insert("artifact_override".into(), option_json(artifact_override));
     out.insert("available".into(), json!(true));
     out.insert(
@@ -6087,19 +5934,19 @@ pub fn package_config_policy_context(
         option_json(resolve_risk_action(
             config,
             Some("package_script"),
-            Some(&artifact.harness),
+            Some(harness),
         )),
     );
     out.insert(
         "global_package_script_action".into(),
         option_json(resolve_risk_action(config, Some("package_script"), None)),
     );
-    out.insert("harness".into(), json!(artifact.harness));
+    out.insert("harness".into(), json!(harness));
     out.insert("harness_override".into(), option_json(harness_override));
     out.insert(
         "harness_package_script_action".into(),
         option_json(config.harness_risk_actions.as_ref().and_then(|map| {
-            map.get(&artifact.harness)
+            map.get(harness)
                 .and_then(|inner| inner.get("package_script"))
                 .cloned()
         })),
@@ -7552,3 +7399,7 @@ pub fn sync_supply_chain_cloud_state(
     }
     Ok(payload)
 }
+
+#[cfg(test)]
+#[path = "local_supply_chain_stable_digest_tests.rs"]
+mod stable_digest_tests;

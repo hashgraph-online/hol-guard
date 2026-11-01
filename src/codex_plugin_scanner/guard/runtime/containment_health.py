@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,16 +15,10 @@ from typing import Final, cast
 from .containment_contract import (
     CONTAINMENT_POLICY_VERSION,
     CONTAINMENT_SCHEMA_VERSION,
-    ContainmentAttestation,
     ContainmentBackend,
-    ContainmentRequest,
 )
-from .effect_contract import (
-    EFFECT_CONTRACT_SCHEMA_VERSION,
-    ProofRequirement,
-    UncertaintyKind,
-)
-from .effect_decision import EFFECT_DECISION_SCHEMA_VERSION, PositiveProof
+from .effect_contract import EFFECT_CONTRACT_SCHEMA_VERSION
+from .effect_decision import EFFECT_DECISION_SCHEMA_VERSION
 from .protection_health import ProtectionCheckStatus, ProtectionSignal
 
 CONTAINMENT_HEALTH_SCHEMA_VERSION: Final = "guard.containment-health.v1"
@@ -157,29 +151,6 @@ class ContainmentHealthEvidence:
         return hashlib.sha256(len(encoded).to_bytes(8, "big") + encoded).hexdigest()
 
 
-def contained_positive_proof(
-    attestation: ContainmentAttestation,
-    request: ContainmentRequest,
-    health: ContainmentHealthEvidence,
-    *,
-    requirements: Sequence[ProofRequirement],
-    now: datetime,
-    runtime_fingerprint: str,
-) -> PositiveProof:
-    """Construct contained proof only when execution and current runtime health agree."""
-
-    if _SHA256.fullmatch(runtime_fingerprint) is None:
-        raise ValueError("runtime fingerprint must be a lowercase SHA-256 digest")
-    errors = health.compatibility_errors(now=now, runtime_fingerprint=runtime_fingerprint)
-    if errors:
-        raise ValueError(f"containment health is incompatible: {errors[0]}")
-    if attestation.backend is not health.backend or attestation.backend_digest != health.backend_digest:
-        raise ValueError("containment backend identity drifted")
-    base = attestation.execution_bound_proof(request, requirements=requirements)
-    digest = hashlib.sha256(f"{base.binding_digest}:{health.binding_digest()}".encode()).hexdigest()
-    return PositiveProof(base.route, digest, base.satisfied_requirements, enforced=True)
-
-
 def probe_containment_health(
     *,
     daemon_fingerprint: str,
@@ -253,26 +224,6 @@ def containment_health_signals(
     return _failed_signals("policy_version_mismatch" if policy_error else reason)
 
 
-def containment_health_uncertainties(
-    value: object,
-    *,
-    now: datetime,
-) -> tuple[UncertaintyKind, ...]:
-    try:
-        evidence = ContainmentHealthEvidence.from_mapping(value)
-    except (TypeError, ValueError):
-        return (UncertaintyKind.DEGRADED_CONTAINMENT, UncertaintyKind.PROTECTION_HEALTH_DEGRADED)
-    errors = evidence.compatibility_errors(now=now)
-    result: set[UncertaintyKind] = set()
-    if errors:
-        result.add(UncertaintyKind.DEGRADED_CONTAINMENT)
-    if any("policy" in item or "schema" in item or "decision_plane" in item for item in errors):
-        result.add(UncertaintyKind.POLICY_VERSION_MISMATCH)
-    if "daemon_runtime_drift" in errors:
-        result.add(UncertaintyKind.PROTECTION_HEALTH_DEGRADED)
-    return tuple(sorted(result, key=lambda item: item.value))
-
-
 def _failed_signals(reason: str) -> dict[str, ProtectionSignal]:
     return {
         "policy_engine": ProtectionSignal(ProtectionCheckStatus.FAIL, reason),
@@ -314,8 +265,6 @@ __all__ = (
     "CONTAINMENT_HEALTH_SCHEMA_VERSION",
     "CONTAINMENT_POLICY_CONTRACT_DIGEST",
     "ContainmentHealthEvidence",
-    "contained_positive_proof",
     "containment_health_signals",
-    "containment_health_uncertainties",
     "probe_containment_health",
 )

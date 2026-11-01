@@ -16,11 +16,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use zeroize::Zeroizing;
 
 use crate::git_read::{run_git, run_git_os, GIT_TIMEOUT_SECONDS};
 use crate::secret_detection::{
-    detector_version, scan_secret_text, EmptyFingerprintKeyError, PublicFinding, SecretFinding,
+    candidate_digest, detector_version, scan_secret_text, CandidateDigest, FingerprintError,
+    PublicFinding, SecretFinding,
 };
+
+#[path = "repository_scanner_archive.rs"]
+mod archive;
+
+use archive::scan_archive_members;
+pub(crate) use archive::ByteBudget;
 
 /// `DEFAULT_MAX_FILES` from the Python module.
 pub const DEFAULT_MAX_FILES: usize = 5_000;
@@ -34,6 +42,18 @@ pub const DEFAULT_MAX_TOTAL_BYTES: usize = 128 * 1024 * 1024;
 pub const DEFAULT_MAX_FINDINGS: usize = 500;
 /// `DEFAULT_MAX_COMMITS` from the Python module.
 pub const DEFAULT_MAX_COMMITS: usize = 500;
+
+/// Most findings a caller may ask a bounded scan for.
+///
+/// The detector keeps one finding of headroom above this so a scan running at
+/// the ceiling can still probe one past its budget and notice a file that was
+/// cut. The assertion below holds that headroom open.
+pub const MAX_FINDINGS_CEILING: usize = 10_000;
+
+const _: () = assert!(
+    crate::secret_detection::MAX_FINDINGS_PER_TEXT > MAX_FINDINGS_CEILING,
+    "the detector must leave room for the one-past-budget probe the scan loops rely on"
+);
 
 /// Python `_TRUNCATION_REASON_ORDER`.
 const TRUNCATION_REASON_ORDER: [&str; 4] = [
@@ -161,9 +181,7 @@ impl RepositorySecretScanResult {
     /// Public, non-sensitive payload matching Python `to_public_dict`.
     /// Fingerprints are omitted exactly like `finding.to_public_dict()` called
     /// with no key.
-    pub fn to_public_dict(
-        &self,
-    ) -> Result<PublicRepositorySecretScanResult<'_>, EmptyFingerprintKeyError> {
+    pub fn to_public_dict(&self) -> Result<PublicRepositorySecretScanResult<'_>, FingerprintError> {
         let mut findings = Vec::with_capacity(self.findings.len());
         for finding in &self.findings {
             findings.push(finding.to_public_dict(None)?);
@@ -239,8 +257,9 @@ fn looks_binary(path: &str, data: &[u8]) -> bool {
     data[..data.len().min(8192)].contains(&0)
 }
 
-/// Python `_decode_text`.
-fn decode_text<'a>(path: &str, data: &'a [u8]) -> Option<&'a str> {
+/// Python `_decode_text`: the text of a file that is neither a known binary
+/// type nor invalid UTF-8.
+pub fn decode_text<'a>(path: &str, data: &'a [u8]) -> Option<&'a str> {
     if looks_binary(path, data) {
         return None;
     }
@@ -413,7 +432,12 @@ fn git_changed_paths(root: &Path, commit: &str) -> Option<Vec<ScanPath>> {
 /// `_git_blob`: size-check `git cat-file -s <commit>:<path>` against
 /// `max_file_bytes`, then `git cat-file blob <commit>:<path>` with the bound
 /// re-applied to the streamed payload.
-fn git_blob(root: &Path, commit: &str, path: &Path, max_file_bytes: usize) -> Option<Vec<u8>> {
+fn git_blob(
+    root: &Path,
+    commit: &str,
+    path: &Path,
+    max_file_bytes: usize,
+) -> Option<Zeroizing<Vec<u8>>> {
     let mut spec = OsString::from(format!("{commit}:"));
     spec.push(path.as_os_str());
     let blob_args = |op: &str| [OsString::from("cat-file"), OsString::from(op), spec.clone()];
@@ -426,10 +450,15 @@ fn git_blob(root: &Path, commit: &str, path: &Path, max_file_bytes: usize) -> Op
         return None;
     }
     let blob_result = run_git_os(root, &blob_args("blob"), GIT_TIMEOUT_SECONDS).ok()?;
-    if blob_result.stdout.len() > max_file_bytes {
+    // The blob is a file's whole contents and may be the secret itself. It
+    // arrives already wrapped and is moved rather than copied, so an oversized
+    // blob is wiped on the way out too rather than dropped intact for a crash
+    // dump to carry.
+    let blob = blob_result.stdout;
+    if blob.len() > max_file_bytes {
         return None;
     }
-    Some(blob_result.stdout)
+    Some(blob)
 }
 // ---------------------------------------------------------------------------
 
@@ -440,9 +469,15 @@ pub(crate) fn scan_blob(
     source: &str,
     commit: Option<&str>,
     finding_budget: usize,
+    byte_budget: ByteBudget,
 ) -> (Vec<SecretFinding>, usize) {
     let Some(text) = decode_text(path, data) else {
-        return (Vec::new(), 0);
+        // An archive is a container of files rather than a file of its own,
+        // so its members are read instead of being skipped with the images
+        // and the object code. The caller's remaining allowance goes with it:
+        // the length it weighed before this call was the compressed one.
+        return scan_archive_members(data, path, source, commit, finding_budget, byte_budget)
+            .unwrap_or_else(|| (Vec::new(), 0));
     };
     let summary = scan_secret_text(text, path, source, commit, finding_budget);
     (summary.findings, data.len())
@@ -455,7 +490,7 @@ fn read_working_file(
     canonical_root: &Path,
     relative_path: &Path,
     max_file_bytes: usize,
-) -> Option<Vec<u8>> {
+) -> Option<Zeroizing<Vec<u8>>> {
     let resolved = root.join(relative_path).canonicalize().ok()?;
     resolved.strip_prefix(canonical_root).ok()?;
     let metadata = resolved.metadata().ok()?;
@@ -467,7 +502,10 @@ fn read_working_file(
     if metadata.len() > max_file_bytes as u64 {
         return None;
     }
-    fs::read(&resolved).ok()
+    // Wiped on drop for the same reason as the blob above: a working-tree
+    // file read in full is as likely to hold the credential as any object in
+    // history.
+    fs::read(&resolved).map(Zeroizing::new).ok()
 }
 
 /// Minimal `Path.expanduser()` parity: expands a leading `~` or `~/` via
@@ -515,7 +553,11 @@ pub fn scan_repository_secrets(
         DEFAULT_MAX_TOTAL_BYTES,
         4 * 1024 * 1024 * 1024,
     );
-    let max_findings = bounded_positive(options.max_findings, DEFAULT_MAX_FINDINGS, 10_000);
+    let max_findings = bounded_positive(
+        options.max_findings,
+        DEFAULT_MAX_FINDINGS,
+        MAX_FINDINGS_CEILING,
+    );
 
     let (scan_root, git_repo, working_paths) = if root.is_file() {
         let scan_root = root
@@ -580,7 +622,16 @@ pub fn scan_repository_secrets(
             &normalized,
             "working_tree",
             None,
-            max_findings - findings.len(),
+            // One past what the caller allowed. The loop only notices a full
+            // budget when it starts another file, so a blob that fills it on
+            // the way through the last one would otherwise drop the rest of
+            // its findings and still report complete coverage. The extra
+            // finding is dropped by the cap below, which reports the cut.
+            max_findings - findings.len() + 1,
+            ByteBudget {
+                max_member_bytes: max_file_bytes,
+                remaining_total_bytes: max_total_bytes.saturating_sub(bytes_scanned),
+            },
         );
         files_scanned += 1;
         bytes_scanned += scanned_bytes;
@@ -664,7 +715,14 @@ pub fn scan_repository_secrets(
                         &normalized,
                         "git_history",
                         Some(&commit),
-                        max_findings - findings.len(),
+                        // One past the cap, so a blob that fills the budget is
+                        // visible to the cap below instead of ending the scan
+                        // quietly. See the working-tree call above.
+                        max_findings - findings.len() + 1,
+                        ByteBudget {
+                            max_member_bytes: max_file_bytes,
+                            remaining_total_bytes: max_total_bytes.saturating_sub(bytes_scanned),
+                        },
                     );
                     files_scanned += 1;
                     bytes_scanned += scanned_bytes;
@@ -680,13 +738,13 @@ pub fn scan_repository_secrets(
     // A provider rule can also be recognized by the contextual assignment
     // rule. Keep occurrences stable while preferring the stronger provider
     // format (higher confidence_score wins the dedup key).
-    let mut deduped: HashMap<(String, usize, String, Option<String>), SecretFinding> =
+    let mut deduped: HashMap<(String, usize, CandidateDigest, Option<String>), SecretFinding> =
         HashMap::new();
     for finding in findings {
         let key = (
             finding.path.clone(),
             finding.line,
-            finding.candidate.clone(),
+            candidate_digest(&finding.candidate),
             finding.commit.clone(),
         );
         match deduped.entry(key) {
@@ -804,6 +862,7 @@ mod tests {
             "git_history",
             Some("deadbeef"),
             200,
+            ByteBudget::unbounded(),
         );
         assert_eq!(scanned, blob.len());
         assert_eq!(findings.len(), 1);
@@ -815,7 +874,14 @@ mod tests {
         assert_eq!(finding.line, 2);
 
         // Binary blobs produce no findings and contribute zero scanned bytes.
-        let (none, scanned) = scan_blob(b"\0binary", "blob.bin", "working_tree", None, 200);
+        let (none, scanned) = scan_blob(
+            b"\0binary",
+            "blob.bin",
+            "working_tree",
+            None,
+            200,
+            ByteBudget::unbounded(),
+        );
         assert!(none.is_empty());
         assert_eq!(scanned, 0);
     }
@@ -947,6 +1013,67 @@ mod tests {
     }
 
     #[test]
+    fn max_findings_cap_inside_one_file_truncates_with_ordered_reason() {
+        // The cap used to be handed to the blob as the whole remaining
+        // budget, and the loop only noticed a full budget when it opened the
+        // next file. One file holding more secrets than the caller allowed
+        // therefore dropped the rest of them and still called the scan
+        // complete, which reads as "nothing else is in there".
+        let dir = temp_root("findingcap");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("only.env"), body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 2,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 2);
+        assert!(result.truncated);
+        assert_eq!(result.truncation_reasons, ["max_findings"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_within_the_findings_cap_is_not_reported_as_truncated() {
+        // The extra finding the scan now asks for is how it tells a cut from
+        // a complete read; a file that fits must still report coverage.
+        let dir = temp_root("findingfit");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("only.env"), body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 2,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 2);
+        assert!(!result.truncated);
+        assert!(result.truncation_reasons.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_overfills_the_budget_does_not_break_the_next_file_s_probe() {
+        // The probe is `max_findings - findings.len() + 1`, and the blob above
+        // may return one more finding than the budget allowed. Reaching that
+        // subtraction with a full tally would underflow, so the loop has to
+        // stop before opening another file. Two files and a budget of one is
+        // the smallest shape that walks into it.
+        let dir = temp_root("findingoverfill");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("first.env"), &body).unwrap();
+        fs::write(dir.join("second.env"), &body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 1,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 1);
+        assert!(result.truncated);
+        assert_eq!(result.truncation_reasons, ["max_findings"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn public_dict_omits_candidates_and_matches_python_schema() {
         let dir = temp_root("public");
         fs::write(dir.join("app.env"), SECRET_LINE).unwrap();
@@ -962,6 +1089,98 @@ mod tests {
         assert!(!json
             .to_string()
             .contains("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A zip written by hand, with one stored member. Stored is what a zip
+    /// writer leaves a short file as, and it keeps this fixture to the
+    /// container itself rather than a codec the member tests already cover.
+    fn one_member_zip(name: &str, body: &[u8]) -> Vec<u8> {
+        let mut checksum = flate2::Crc::new();
+        checksum.update(body);
+        let crc = checksum.sum();
+        let mut out: Vec<u8> = Vec::new();
+        out.extend_from_slice(&[0x50, 0x4b, 0x03, 0x04]);
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&[0u8; 8]); // flags, method, time, date
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(body);
+        let directory_at = out.len() as u32;
+        out.extend_from_slice(&[0x50, 0x4b, 0x01, 0x02]);
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&[0u8; 8]); // flags, method, time, date
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        out.extend_from_slice(&[0u8; 12]); // extra, comment, disk, attributes
+        out.extend_from_slice(&0u32.to_le_bytes()); // local header offset
+        out.extend_from_slice(name.as_bytes());
+        let directory_len = out.len() as u32 - directory_at;
+        out.extend_from_slice(&[0x50, 0x4b, 0x05, 0x06]);
+        out.extend_from_slice(&[0u8; 4]); // this disk, directory's first disk
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&directory_len.to_le_bytes());
+        out.extend_from_slice(&directory_at.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // comment length
+        out
+    }
+
+    /// The member walk reached through a whole repository scan rather than
+    /// through `scan_blob`: the working-tree walk finds the archive, declines
+    /// to decode it as text, and reports what is inside it under the archive
+    /// that held it. The plain file beside it is the control.
+    #[test]
+    fn a_credential_committed_inside_a_zip_is_reported_by_a_repository_scan() {
+        let dir = temp_root("zip");
+        fs::write(
+            dir.join("secrets.zip"),
+            one_member_zip("config/prod.env", SECRET_LINE.as_bytes()),
+        )
+        .unwrap();
+        fs::write(dir.join("app.env"), SECRET_LINE).unwrap();
+
+        let result = scan_repository_secrets(&dir, &RepositoryScanOptions::default()).unwrap();
+        assert!(result.errors.is_empty());
+        assert!(!result.truncated);
+        // Two files on disk; the archive is one of them however many members
+        // it carries.
+        assert_eq!(result.files_scanned, 2);
+        let paths: Vec<&str> = result.findings.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, ["app.env", "secrets.zip!/config/prod.env"]);
+        assert!(result.findings.iter().all(|f| f.source == "working_tree"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_file_readers_hand_back_buffers_that_wipe_themselves() {
+        // Both readers hold a whole file, and either may be holding the
+        // credential the scan is looking for. Dropping the wrapper from their
+        // signatures would leave those bytes in freed memory, where a core
+        // dump or a crash reporter picks them up long after the scan has
+        // finished, so the wrapper is pinned here by type.
+        fn wipes_itself<T: zeroize::ZeroizeOnDrop>(_value: &Option<T>) {}
+
+        let dir = temp_root("wipe");
+        fs::write(dir.join("app.env"), SECRET_LINE).unwrap();
+        let canonical = dir.canonicalize().unwrap();
+
+        let from_working_tree = read_working_file(&dir, &canonical, Path::new("app.env"), 1024);
+        assert!(from_working_tree.is_some());
+        wipes_itself(&from_working_tree);
+
+        // No repository here, so this one reads nothing; the type it would
+        // have handed back is what the test is holding to.
+        let from_history = git_blob(&dir, "HEAD", Path::new("app.env"), 1024);
+        wipes_itself(&from_history);
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

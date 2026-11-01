@@ -77,7 +77,7 @@ pub(super) fn repository_hooks_inert(
 }
 
 /// The mode of `path` in `commit`, or `None` where the tree has no such entry.
-fn tree_entry(
+pub(super) fn tree_entry(
     base: &Command,
     leading: &[String],
     commit: &str,

@@ -11,14 +11,12 @@ import {
 import { ActionButton, Badge, EmptyState, SectionLabel } from "./approval-center-primitives";
 import {
   buildRetryAfterApprovalCopy,
-  formatRelativeTime,
   harnessDisplayName,
   isWatchOnlyObservation,
   requestResolutionBlockReason,
 } from "./approval-center-utils";
 import {
   oneTimeRetryWindowMinutes,
-  receiptDescribesRequest,
   retryCannotReuseApproval,
   retryCannotReuseApprovalHint,
 } from "./approval-retry-guidance";
@@ -48,12 +46,14 @@ import {
   blockButtonLabel,
   ReviewScopeControls,
 } from "./review-scope-controls";
-import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
+import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
 import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 import { useReviewDecisionResolve } from "./use-review-decision-resolve";
-import { approvalLeftActionStopped } from "./evidence/approval-outcome";
+import { ContextReviewPanel } from "./context-assistance/review-panel";
+import { ReviewLastTimeCard } from "./review-last-time-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
@@ -358,6 +358,18 @@ export function ReviewDecisionCard(props: {
           />
         )}
 
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionCoverageCard
+            coverage={item.extension_coverage}
+            linkedPatterns={
+              item.extension_recommendation?.permissions.map((permission) => ({
+                extension_id: permission.extension_id,
+                rule_id: permission.rule_id,
+              })) ?? []
+            }
+          />
+        )}
+
         {resolutionBlockReason === null && resolved === null && (
           <ReviewScopeControls
             commonScopeOptions={commonScopeOptions}
@@ -461,37 +473,8 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      {detail.receipt && receiptDescribesRequest(item, detail.receipt) && (
-        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
-          <SectionLabel>Last time</SectionLabel>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {approvalLeftActionStopped(detail.receipt) ? (
-              <>
-                You approved a similar action once {formatRelativeTime(detail.receipt.timestamp)}, but it stayed
-                stopped.
-              </>
-            ) : (
-              <>
-                You previously {pastDecisionVerb(detail.receipt.policy_decision)} a similar action{" "}
-                {formatRelativeTime(detail.receipt.timestamp)}.
-              </>
-            )}
-          </p>
-          {detail.diff && detail.diff.changed_fields.length > 0 && (
-            <div className="mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4">
-              <p className="text-sm font-medium text-brand-dark">What changed since then:</p>
-              <ul className="mt-2 space-y-1">
-                {detail.diff.changed_fields.map((field) => (
-                  <li key={field} className="flex items-center gap-2 text-sm text-brand-dark">
-                    <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-blue" aria-hidden="true" />
-                    {field}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+      <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+      <ReviewLastTimeCard detail={detail} />
 
       {pendingAction !== null && approvalGate !== null && (
         <ApprovalPasswordModal

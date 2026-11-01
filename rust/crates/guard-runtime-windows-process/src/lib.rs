@@ -14,7 +14,11 @@ use std::io;
 use std::path::Path;
 
 #[cfg(windows)]
+mod boot_environment;
+#[cfg(windows)]
 mod drives;
+#[cfg(windows)]
+mod host_name;
 #[cfg(windows)]
 mod known_folders;
 #[cfg(windows)]
@@ -23,6 +27,8 @@ mod owner;
 mod registry;
 #[cfg(windows)]
 mod secure_storage;
+#[cfg(windows)]
+mod trusted_directories;
 #[cfg(all(test, windows))]
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
@@ -42,22 +48,41 @@ pub use windows::{
 pub use windows::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     create_private_file, delete_private_file_handle, directory_file_id, handle_file_id,
-    is_single_link_file, is_single_link_handle, open_bound_executable_file,
+    handle_final_path, is_single_link_file, is_single_link_handle, open_bound_executable_file,
     open_bound_regular_file, open_bound_replaceable_file, open_private_directory,
-    open_private_file, open_skill_directory, path_is_within, path_stat, process_liveness,
-    process_parent_ids, process_start_marker, regular_file_id, remove_file_if_same,
-    running_process_image_path, running_process_start_marker, terminate_process,
-    terminate_process_verified, wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding,
+    open_private_file, open_skill_directory, path_is_within, path_stat, process_ids,
+    process_liveness, process_parent_ids, process_start_marker, regular_file_id,
+    remove_file_if_same, running_process_image_path, running_process_start_marker,
+    terminate_process, terminate_process_verified, wait_for_process_exit, FileId, PathStat,
+    PrivateDirectoryBinding, ProcessQuery,
 };
+
+#[cfg(windows)]
+pub use boot_environment::{boot_identifier, tick_count_ms};
 
 #[cfg(windows)]
 pub use drives::local_drive_letters;
 
 #[cfg(windows)]
-pub use known_folders::{trusted_install_roots, user_profile_directory, windows_directory};
+pub use host_name::dns_host_name;
+
+#[cfg(windows)]
+pub use known_folders::{
+    roaming_appdata_directory, trusted_install_roots, user_profile_directory, windows_directory,
+};
+
+#[cfg(windows)]
+pub use trusted_directories::{
+    kernel_system_directory, kernel_windows_directory, real_directory, real_regular_file,
+};
 
 #[cfg(windows)]
 pub use owner::owned_by_current_user;
+
+#[cfg(windows)]
+pub use windows::{
+    command_line_to_argv, process_creation_time, process_owner_sid, terminate_if_creation_time,
+};
 
 #[cfg(windows)]
 pub use registry::{read_machine_registry_string, MachineRegistryString};
@@ -105,8 +130,93 @@ pub fn owned_by_current_user(_path: &Path) -> bool {
 }
 
 #[cfg(not(windows))]
+pub fn process_creation_time(_process_id: u32) -> Option<u64> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn process_owner_sid(_process_id: u32) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn terminate_if_creation_time(
+    _process_id: u32,
+    _expected_creation_time: u64,
+    _timeout: Option<std::time::Duration>,
+) -> bool {
+    false
+}
+
+/// Only Windows has known folders.
+#[cfg(not(windows))]
+pub fn user_profile_directory() -> Option<std::path::PathBuf> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn roaming_appdata_directory() -> Option<std::path::PathBuf> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn kernel_windows_directory() -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn kernel_system_directory() -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn real_directory(_path: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn real_regular_file(_path: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn command_line_to_argv(_command: &str) -> Option<Vec<String>> {
+    None
+}
+
+#[cfg(not(windows))]
 pub fn process_liveness(_process_id: u32) -> Option<bool> {
     None
+}
+
+#[cfg(not(windows))]
+pub fn process_ids() -> io::Result<Vec<u32>> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Windows process support is unavailable",
+    ))
+}
+
+/// Only Windows has this process table; nothing ever opens.
+#[cfg(not(windows))]
+pub struct ProcessQuery;
+
+#[cfg(not(windows))]
+impl ProcessQuery {
+    pub fn open(_process_id: u32) -> io::Result<Self> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Windows process support is unavailable",
+        ))
+    }
+
+    pub fn image_path(&self) -> Option<String> {
+        None
+    }
+
+    pub fn command_line(&self, _max_command_line_bytes: usize) -> Option<String> {
+        None
+    }
 }
 
 #[cfg(not(windows))]

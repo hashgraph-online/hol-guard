@@ -1,0 +1,45 @@
+"""Field names command activity storage must never carry."""
+
+from __future__ import annotations
+
+FORBIDDEN_ACTIVITY_FIELD_NAMES: frozenset[str] = frozenset(
+    {
+        "arguments",
+        "args",
+        "artifact_hash",
+        "clipboard",
+        "command",
+        "command_hash",
+        "command_security_identity",
+        "command_text",
+        "credential",
+        "credentials",
+        "cwd",
+        "environment",
+        "environment_names",
+        "environment_values",
+        "exception_message",
+        "hostname",
+        "installation_id",
+        "matcher_evidence",
+        "metadata",
+        "normalized_command",
+        "package_name",
+        "package_source",
+        "path",
+        "raw_arguments",
+        "raw_command",
+        "raw_request_id",
+        "raw_session_id",
+        "reason_text",
+        "repository_name",
+        "secret",
+        "secrets",
+        "security_identity",
+        "shell_fragment",
+        "token",
+        "tokens",
+        "url",
+        "workspace_name",
+    }
+)

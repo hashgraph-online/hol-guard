@@ -63,11 +63,21 @@ def _session_worktree(org: Path, home: Path) -> None:
     (portal / ".deploy-production.lock.d").mkdir()
     # Installed, gitignored test runner whose `.bin` shim agents list from another checkout.
     _node_package(portal, "vitest", _NODE_PACKAGES["vitest"])
+    # Vitest keeps its `bin` shim at the package root and the CLI module that
+    # shim imports under `dist`, and sessions name either one directly.
+    runner = portal / "node_modules" / "vitest"
+    _write(runner / "vitest.mjs", "#!/usr/bin/env node\nimport './dist/cli.js';\n")
+    (runner / "vitest.mjs").chmod(0o755)
+    _write(runner / "dist" / "cli.js", f"console.log('vitest {_NODE_PACKAGES['vitest']}');\n")
     worktree = org.parent / "app-portal-fix"
     _git(portal, "worktree", "add", "--quiet", "-b", "fix/report-lane", str(worktree), home=home)
     _git(home, "clone", "--quiet", str(portal), str(org.parent / "app-portal-clone"), home=home)
     _write(worktree / "scripts" / "report.ts", "console.log(process.env.REPORT_WINDOW ?? '7d');\n")
     _git(worktree, "commit", "--quiet", "-am", "widen report window", home=home)
+    # The lane this worktree left before it came back, so ``-`` names a
+    # branch the checkout still holds rather than a detached commit.
+    _git(worktree, "switch", "--quiet", "-c", "spike/report-window", home=home)
+    _git(worktree, "switch", "--quiet", "fix/report-lane", home=home)
     portal_manifest = {"name": "app-portal", "private": True, "devDependencies": {"vite": "^7.1.5"}}
     _write(worktree / "package.json", json.dumps(portal_manifest) + "\n")
     _bun_lockfile(worktree, {"vite": _NODE_PACKAGES["vite"]})
@@ -75,6 +85,8 @@ def _session_worktree(org: Path, home: Path) -> None:
     # before it runs either, so the probe has to find one of each.
     _write(worktree / "vite.config.ts", "export default { build: { outDir: 'dist' } };\n")
     _write(worktree / "vitest.config.ts", "export default { test: { environment: 'node' } };\n")
+    # The one test file a session names when it runs a single case from here.
+    _write(worktree / "src" / "index.test.ts", "import { test } from 'vitest';\ntest('report window', () => {});\n")
     # The worktree deliberately has no ``node_modules``. Cases link the main
     # checkout's tree in here and then list the worktree, which is what a
     # session does to skip a second install; if the directory were already
@@ -113,3 +125,64 @@ def _stopped_rebase(org: Path, home: Path, name: str, *options: str) -> None:
     _git(worktree, "rev-parse", "--verify", "--quiet", "REBASE_HEAD", home=home)
     _write(worktree / "README.md", "# resolved\n")
     _git(worktree, "add", "README.md", home=home)
+
+
+def signed_checkout_include(home: Path) -> str:
+    """The conditional include that makes the signed checkout's own signing settings a restatement.
+
+    A lane that rewrites the fixture's global config has to keep this line, or
+    the repository's `gpg.program` stops matching the user's own choice and
+    the checkout stands for a different shape than the one it was built for.
+    """
+    repository = home / "Code" / "signed" / "app-signed"
+    user_signing = home / ".config" / "git" / "signed-lane.cfg"
+    return f'[includeIf "gitdir:{repository}/"]\n\tpath = {user_signing}\n'
+
+
+def _signed_checkout(home: Path) -> None:
+    """A checkout whose own config file carries the signing and pager settings a team hook writes.
+
+    Repository-scoped `gpg.*`, `commit.gpgsign` and display pager keys are what
+    an identity or signing hook drops into every checkout it touches, so a
+    fast-forward pull and a `worktree add` have to stay quiet with them set.
+    """
+    repository = home / "Code" / "signed" / "app-signed"
+    _write(repository / "README.md", "# app-signed\n")
+    _write(repository / "src" / "index.ts", "export const name = 'app-signed';\n")
+    _git(repository, "init", "--quiet", "--initial-branch=main", home=home)
+    _git(repository, "add", "-A", home=home)
+    _git(repository, "commit", "--quiet", "-m", "app-signed base", home=home)
+    _git(repository, "remote", "add", "origin", "https://github.com/example-org/app-signed.git", home=home)
+    # `origin/main` is one commit ahead, so a `--ff-only` pull or merge has
+    # something to fast-forward to. With it equal to `HEAD` every such case
+    # would be already up to date and prove nothing.
+    base = _git(repository, "rev-parse", "HEAD", home=home).strip()
+    _write(repository / "src" / "report.ts", "export const report = 'signed';\n")
+    _git(repository, "add", "-A", home=home)
+    _git(repository, "commit", "--quiet", "-m", "app-signed upstream", home=home)
+    _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
+    _git(repository, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main", home=home)
+    _git(repository, "reset", "--quiet", "--hard", base, home=home)
+    _git(repository, "branch", "feat/signed-lane", home=home)
+    signing_program = home / ".git-hooks" / "sign-commit.sh"
+    _write(signing_program, '#!/bin/sh\nexec gpg "$@"\n')
+    signing_program.chmod(0o755)
+    # The user's own global copy of the signing settings, beside the
+    # repository's. An identity hook writes the same program into both, and a
+    # repository copy that only restates the user's own choice changes nothing
+    # Git would do. `includeIf` keeps it to this checkout so the other fixture
+    # repositories keep the configuration they were built with.
+    user_signing = home / ".config" / "git" / "signed-lane.cfg"
+    _write(user_signing, f"[gpg]\n\tformat = openpgp\n\tprogram = {signing_program}\n[commit]\n\tgpgsign = true\n")
+    with (home / ".gitconfig").open("a", encoding="utf-8") as handle:
+        handle.write(signed_checkout_include(home))
+    for key, value in (
+        ("commit.gpgsign", "true"),
+        ("tag.gpgsign", "true"),
+        ("gpg.format", "openpgp"),
+        ("gpg.program", str(signing_program)),
+        ("core.pager", "cat"),
+        ("pager.log", "false"),
+        ("pull.rebase", "false"),
+    ):
+        _git(repository, "config", "--local", key, value, home=home)

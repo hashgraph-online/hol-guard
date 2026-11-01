@@ -48,7 +48,7 @@ def test_real_native_git_preview_order_matches_effective_flags(
     assert (match is not None) is expected_match
     if command.startswith("git push"):
         reviewed = real_native_command_evaluation(command, cwd=tmp_path)
-        assert reviewed.native_minimum_action == "review"
+        assert reviewed.payload["minimum_action"] == "review"
         assert reviewed.evaluation.minimum_action == "review"
         assert reviewed.payload["explicitly_benign"] is False
         assert not reviewed.evaluation.decision_plane.proof_routes

@@ -123,6 +123,13 @@ SAFE_JSON_VALUES: list[Any] = [
     {"list": [["bearer abc"]]},
     {"present": "present", "redacted": "redacted"},
     {"a": {"b": {"c": "/etc/passwd"}}},
+    {"evidenceAuthority": "device_claim"},
+    {"EVIDENCEAUTHORITY": "device_claim"},
+    {"evidenceAuthorityToken": "abc"},
+    {"xevidenceAuthority": "abc"},
+    {"evidenceAuthor\u0131ty": "abc"},
+    {"description\napiKey": "abc"},
+    {"trust": {"evidenceAuthority": "device_claim", "authToken": "abc"}},
 ]
 
 ASSERT_PAYLOADS: list[Any] = [

@@ -12,6 +12,7 @@ use super::*;
 use crate::claude_hook_bridge_fixture::{
     read_request, write_private, write_response, GuardHome, Request,
 };
+use crate::codex_hook_bridge_direct_resident::DIRECT_MISS_HEADER;
 
 const TOKEN: &str = "pi-token-fixture";
 const PRE_TOOL: &str = r#"{"hook_event_name":"PreToolUse","tool_name":"bash"}"#;
@@ -138,7 +139,29 @@ fn a_hook_no_resident_answers_goes_to_the_daemon_as_the_extension_sent_it() {
         "/v1/hooks/omp?guard-home=%2Fsomewhere&workspace=%2Ftmp"
     );
     assert_eq!(request.header("X-Guard-Token"), Some(TOKEN));
+    assert!(request
+        .header(DIRECT_MISS_HEADER)
+        .is_some_and(|miss| !miss.is_empty()));
     assert_eq!(request.body, PRE_TOOL.as_bytes());
+}
+
+#[test]
+fn a_hook_without_an_event_name_tells_the_daemon_the_resident_was_not_asked() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let daemon = serve_once(listener, 200, "{}".to_owned());
+    let home = home_with_daemon("pi-bridge-no-event", port);
+
+    let unnamed = r#"{"tool_name":"bash"}"#;
+    assert_eq!(
+        reply(&home_config(&home, "pi"), unnamed, soon()),
+        Some((200, "{}".to_owned()))
+    );
+    let request = daemon.join().unwrap().unwrap();
+    assert_eq!(
+        request.header(DIRECT_MISS_HEADER),
+        Some(DirectMiss::Request.code())
+    );
 }
 
 #[test]
@@ -164,4 +187,81 @@ fn a_daemon_that_does_not_answer_in_time_is_no_reply() {
 
     assert_eq!(reply(&home_config(&home, "pi"), PRE_TOOL, deadline), None);
     drop(listener);
+}
+
+#[test]
+fn a_sandbox_requirement_the_runtime_sink_runs_is_marked_for_it() {
+    const QUERY: &str = "guard-home=%2Ftmp%2Fg&workspace=%2Ftmp%2Fwork+space&home=%2Ftmp%2Fh";
+    let required = json!({
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": "workspace-contained-v1",
+    })
+    .to_string();
+    let call =
+        r#"{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"pytest"}}"#;
+    let runs: NativeSink = |_, input, workspace, home| {
+        (input.get("command") == Some(&json!("pytest"))
+            && workspace == "/tmp/work space"
+            && home == "/tmp/h")
+            .then(|| "/opt/hol guard/runtime".to_owned())
+    };
+    let marked_answer: Value =
+        serde_json::from_str(&marked(QUERY, call, required.clone(), runs)).unwrap();
+    assert_eq!(marked_answer[NATIVE_SINK_FIELD], json!(true));
+    assert_eq!(marked_answer["policy_action"], json!("sandbox-required"));
+    // A shape the runtime's sink does not run, any other answer or call, and
+    // a query without the workspace are relayed as sent.
+    let declines: NativeSink = |_, _, _, _| None;
+    assert_eq!(marked(QUERY, call, required.clone(), declines), required);
+    let allow = json!({ "decision": "allow", "policy_action": "allow" }).to_string();
+    assert_eq!(marked(QUERY, call, allow.clone(), runs), allow);
+    let read =
+        r#"{"hook_event_name":"PreToolUse","tool_name":"read","tool_input":{"command":"pytest"}}"#;
+    assert_eq!(marked(QUERY, read, required.clone(), runs), required);
+    assert_eq!(
+        marked("guard-home=%2Ftmp%2Fg", call, required.clone(), runs),
+        required
+    );
+    assert_eq!(marked(QUERY, call, "not json".to_owned(), runs), "not json");
+}
+
+#[test]
+fn an_oh_my_pi_directory_argument_is_judged_as_its_cd_form() {
+    let root = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
+    let workspace = std::fs::canonicalize(root.path()).unwrap();
+    std::fs::create_dir(workspace.join("sub")).unwrap();
+    let query = format!(
+        "guard-home=%2Ftmp%2Fg&workspace={}&home=%2Ftmp",
+        workspace.display()
+    );
+    let required = json!({
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": "workspace-contained-v1",
+    })
+    .to_string();
+    let call = json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "bash",
+        "tool_input": { "command": "pytest", "cwd": "sub" },
+    })
+    .to_string();
+    // The sink is asked about the `cd` form, never the argument itself.
+    let cd_form: NativeSink = |_, input, workspace, _| {
+        let expected = format!("cd {workspace}/sub && pytest");
+        (!input.contains_key("cwd") && input.get("command") == Some(&json!(expected)))
+            .then(|| "/opt/hol guard/runtime".to_owned())
+    };
+    let marked_answer: Value =
+        serde_json::from_str(&marked(&query, &call, required.clone(), cd_form)).unwrap();
+    assert_eq!(marked_answer[NATIVE_SINK_FIELD], json!(true));
+    // A directory the sink refuses keeps Guard's own sink.
+    let missing = call.replace("\"sub\"", "\"missing\"");
+    assert_eq!(
+        marked(&query, &missing, required.clone(), cd_form),
+        required
+    );
 }

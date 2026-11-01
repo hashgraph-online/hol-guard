@@ -28,6 +28,7 @@ use super::gemini_detect;
 use super::grok_detect;
 use super::hermes_detect;
 use super::kimi_detect;
+use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
@@ -105,10 +106,14 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
         "sync_url" => sync_url::sync_url(args),
+        "cloud_http_error" => super::runner_cloud_http_error::cloud_http_error(args),
         "network_check" => crate::network_protection::check_op(args),
         "pain_signal_batch" => signals::pain_signal_batch(args),
         "value_metrics" => signals::value_metrics(args),
         "completed_event_ids" => signals::completed_event_ids(args),
+        "cloud_exceptions" => crate::runner_cloud_exceptions::cloud_exceptions(args),
+        "runtime_session_payload" => crate::runner_runtime_session::runtime_session_payload(args),
+        "stale_intel" => signals::stale_intel(args),
         "canonical_rollout" => policy::canonical_rollout(args),
         "downgrade_reference" => policy::downgrade_reference(args),
         "policy_simulation" => policy::policy_simulation(args),
@@ -137,6 +142,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_detect" => devin_detect::detect(args),
         "grok_detect" => grok_detect::detect(args),
         "kimi_detect" => kimi_detect::detect(args),
+        "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "opencode_detect" => opencode_detect::detect(args),

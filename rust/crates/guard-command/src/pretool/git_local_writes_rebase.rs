@@ -165,7 +165,7 @@ pub(super) fn proven(probe: &Probe, original: &CommandSegmentV1, effective: &Git
     idle(probe)
         && merge_backend(effective)
         && !worktree_configured(effective)
-        && super::start::replaces_nothing(probe, upstream)
+        && super::start::replaces_nothing(probe, &super::start::Target::revision(upstream))
 }
 
 /// Whether the configuration turns a plain start into one of the forms that

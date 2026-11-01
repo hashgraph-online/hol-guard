@@ -73,6 +73,11 @@ function isApprovalCredentialPromptCode(code: string | null): boolean {
   return APPROVAL_CREDENTIAL_PROMPT_MESSAGE.test(code);
 }
 
+/** True when the daemon is still running an earlier package protection change, such as a sync that outlived the dashboard's wait. */
+export function isPackageFirewallOperationInProgressError(error: unknown): boolean {
+  return readHarnessActionErrorCode(error) === "operation_in_progress";
+}
+
 export function isSupplyChainSyncConnectError(error: unknown): boolean {
   const code = readHarnessActionErrorCode(error);
   return code !== null && SUPPLY_CHAIN_CONNECT_ERROR_CODES.has(code);
@@ -97,6 +102,13 @@ export function readHarnessActionUserMessage(error: unknown, fallback: string): 
     return structuredMessage;
   }
   return fallback;
+}
+
+export function readPackageFirewallActionFailure(error: unknown): string {
+  if (error instanceof Error && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
+    return "Guard lost connection to the local daemon. Confirm it is still running, then try again.";
+  }
+  return error instanceof Error ? error.message : "Action failed.";
 }
 
 export function isApprovalGateRequiredError(error: unknown): boolean {

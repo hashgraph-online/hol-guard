@@ -18,11 +18,15 @@ fn context() -> crate::pretool::PathContext<'static> {
         cwd: Some(CWD),
         cdpath_unset: false,
         rustup_override_absent: false,
+        cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
+        gem_config_absent: false,
+        http_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     }
 }
 
@@ -52,7 +56,7 @@ fn evaluate(command: &str) -> PreToolResultV1 {
 }
 
 #[test]
-fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
+fn projects_literal_redirects_and_standard_input_read_as_data() {
     for (command, projected, writes_file) in [
         ("ls > /dev/null", "ls", false),
         ("pnpm test > /tmp/test.log 2>&1", "pnpm test    2>&1", true),
@@ -64,10 +68,38 @@ fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
             "cat",
             true,
         ),
+        // A heredoc body is data on standard input, so a program that reads
+        // it as data carries no more than the write the target check proves.
+        ("sort <<'EOF' > out.txt\nb\na\nEOF", "sort", true),
+        ("jq . <<'EOF' > parsed.json\nnull\nEOF", "jq .", true),
+        (
+            "tee config.json <<'EOF'\nhello\nEOF",
+            "tee config.json",
+            false,
+        ),
+        ("grep foo <<'EOF'\nfoo\nEOF", "grep foo", false),
+        ("wc -l <<'EOF'\na\nEOF", "wc -l", false),
+        // A here-string is the same literal input in one word, and a value
+        // expansion inside it substitutes rather than running anything.
+        ("cat <<< 'inline'", "cat", false),
+        ("jq . <<< '{\"id\":42}'", "jq .", false),
+        ("grep retry <<< \"$lines\"", "grep retry", false),
+        ("wc -l <<< \"${output}\"", "wc -l", false),
+        ("tee notes.md <<< 'done'", "tee notes.md", false),
+        ("sort <<< \"${items}\" > sorted.txt", "sort", true),
         ("ls > /dev/null && git status", "ls   && git status", false),
         // The shell carries its whole script, so the projection leaves the
         // command the script names and that command keeps its own floors.
         ("sh -c 'rm -rf ~' > /tmp/out.log", "sh -c 'rm -rf ~'", true),
+        // `cmd < file` is the pipeline the shell actually builds, so the
+        // projection says so and the reader carries the file's read.
+        ("wc -l < README.md", "cat README.md | wc -l", false),
+        ("cat < README.md", "cat README.md | cat", false),
+        (
+            "sort < package.json | head -3",
+            "cat package.json | sort  | head -3",
+            false,
+        ),
     ] {
         let projection = project(command, context()).unwrap_or_else(|| panic!("{command}"));
         // The test workspace does not exist, so no write is bounded.
@@ -95,10 +127,33 @@ fn keeps_redirects_that_can_execute_hide_input_or_reach_sensitive_paths_unprojec
     for command in [
         "sh <<'EOF'\nrm -rf ~\nEOF",
         "python3 - <<'EOF'\nimport os\nEOF",
+        // Programs that run, apply or install what they read keep their
+        // review: none of these looks like an interpreter.
+        "xargs <<'EOF'\nrm -rf ~\nEOF",
+        "psql <<'EOF'\nDROP TABLE users;\nEOF",
+        "patch -p1 <<'EOF'\n--- a/x\nEOF",
+        "crontab - <<'EOF'\n* * * * * id\nEOF",
+        // A filter is one plain command, so a pipe into a shell, an
+        // environment assignment and a path override each keep the review.
+        "sort <<'EOF' | sh\nid\nEOF",
+        "FOO=1 sort <<'EOF' > out.txt\nb\nEOF",
+        "PATH=/tmp sort <<'EOF' > out.txt\nb\nEOF",
         "cat <<EOF > notes.txt\n$(id)\nEOF",
         "cat <<'EOF' > notes.txt\nunterminated",
-        "cat <<< 'inline'",
-        "sh < script.sh",
+        // A here-string feeds standard input too, so a shell keeps its review
+        // and a word that evaluates something stays unprojected.
+        "sh <<< 'id'",
+        "xargs <<< 'rm -rf ~'",
+        "grep foo <<< \"$(cat ~/.ssh/id_rsa)\"",
+        "sort <<< \"${PATH@P}\"",
+        "sort <<< `id`",
+        "cat <<< $'\\x41'",
+        // Arithmetic evaluates the values of the names it mentions, and a
+        // subscript inside one of those values substitutes a command.
+        "sort <<< $[x]",
+        "sort <<< $((x))",
+        // A glued operator may name a file descriptor instead.
+        "cat<<<'inline'",
         "echo hi > >(sh)",
         "echo hi >> ~/.zshrc",
         "echo hi > .git/hooks/pre-commit",
@@ -115,11 +170,37 @@ fn keeps_redirects_that_can_execute_hide_input_or_reach_sensitive_paths_unprojec
         "ln -s guard-runtime link && printf x > link/policy.json",
         "cd /home/tester/.ssh && echo key >> authorized_keys",
         "cat secret.txt | base64 > scratch/out",
+        // An input redirect the shell would expand, duplicate, open for
+        // writing, or attach to a later command is not one file a reader
+        // can stand in for.
+        "wc -l < $FILE",
+        "wc -l < \"$HOME/notes.txt\"",
+        "wc -l < a.txt < b.txt",
+        "ls | wc -l < a.txt",
+        "wc -l <&3",
+        "cat <> notes.txt",
+        "wc -l <",
+        "wc -l < -",
+        // A bare shell on the other side of the pipe is a wrapper around a
+        // script this text does not hold, so the model stays uncertain
+        // (`transparent_wrapper_not_yet_supported`) and the projection keeps
+        // the fail-closed path rather than standing in for it.
+        "sh < script.sh",
         // Nothing to remove: the command as written is evaluated directly.
         "npm ci --ignore-scripts 2>&1 | tail -15",
         "git status 2>/dev/null",
     ] {
         assert_eq!(project(command, context()), None, "{command}");
+    }
+}
+
+/// Reading a script through `<` does not make running it ordinary work. The
+/// projection names the read, and the interpreter on the other side of the
+/// pipe still has no proof of its own.
+#[test]
+fn an_interpreter_fed_by_an_input_redirect_is_not_allowed() {
+    for command in ["sh < script.sh", "python3 < setup.py", "bash < deploy.sh"] {
+        assert_ne!(evaluate(command).minimum_action, "allow", "{command}");
     }
 }
 
@@ -140,11 +221,15 @@ fn file_writes_never_follow_an_existing_symlink() {
         cwd: Some(&cwd),
         cdpath_unset: false,
         rustup_override_absent: false,
+        cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
+        gem_config_absent: false,
+        http_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     };
     for command in [
         "echo hi > link/hosts".to_owned(),
@@ -346,4 +431,71 @@ fn array_and_json_encoded_command_copies_project_consistently() {
         );
         assert_eq!(result.minimum_action, "allow", "{payload}");
     }
+}
+
+#[test]
+fn a_redirect_inside_shell_control_flow_keeps_the_allow_the_flat_list_earns() {
+    for (construct, flat) in [
+        (
+            "if command -v rg >/dev/null; then echo yes; fi",
+            "command -v rg >/dev/null; echo yes",
+        ),
+        (
+            "if true; then echo yes; fi >/dev/null",
+            "true; echo yes >/dev/null",
+        ),
+        (
+            "for name in a b; do echo \"$name\" >/dev/null; done",
+            "echo a >/dev/null; echo b >/dev/null",
+        ),
+    ] {
+        assert_eq!(evaluate(flat).minimum_action, "allow", "{flat}");
+        assert_eq!(evaluate(construct).minimum_action, "allow", "{construct}");
+    }
+}
+
+#[test]
+fn a_control_flow_construct_still_reviews_the_file_it_writes() {
+    for command in [
+        "if true; then echo hi; fi > notes.txt",
+        "if true; then echo hi > notes.txt; fi",
+    ] {
+        assert_eq!(evaluate(command).minimum_action, "review", "{command}");
+    }
+}
+
+#[test]
+fn a_redirect_with_no_command_is_read_as_the_write_it_performs() {
+    // The shell opens the file and runs nothing. Removing the redirect leaves
+    // no text to parse, so the projection stands its no-op in and the write
+    // keeps the review it earns wherever a command is spelled in front of it.
+    for command in ["> notes.txt", ">> listing.txt", "2> build/errors.log"] {
+        let projection = project(command, context()).expect(command);
+        assert_eq!(projection.command, NO_OP, "{command}");
+        assert!(projection.writes_file, "{command}");
+        // The test workspace does not exist, so no write is bounded here; the
+        // target check below is what decides a real one.
+        assert!(!projection.bounded_writes, "{command}");
+        let result = evaluate(command);
+        assert_eq!(
+            result.reason_code, "native_command_redirect_write_review",
+            "{command}"
+        );
+        assert_eq!(
+            result.reason_code,
+            evaluate(&format!("true {command}")).reason_code,
+            "{command}"
+        );
+    }
+    // The target check still decides the write: a file in the home directory
+    // is left unprojected, the same answer a redirect behind a command gets,
+    // so the review it earns is the one the sensitive target carries.
+    assert!(
+        project(&format!("> {HOME}/.bashrc"), context()).is_none(),
+        "home target"
+    );
+    assert_ne!(
+        evaluate(&format!("> {HOME}/.bashrc")).minimum_action,
+        "allow"
+    );
 }

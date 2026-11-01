@@ -147,10 +147,6 @@ _OPERATION = ResidentOperation(
 # ask with no time left fails closed without reaching the resident.
 _MAX_CONCURRENT_ASKS = 8
 _ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_ASKS)
-# Exact-action asks can run longer than the millisecond route asks, so they
-# queue on their own slots instead of starving every other daemon request.
-_MAX_CONCURRENT_EXACT_ACTION_ASKS = 4
-EXACT_ACTION_ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_EXACT_ACTION_ASKS)
 
 
 def _decide(
@@ -162,6 +158,7 @@ def _decide(
     operation: ResidentOperation | None = None,
     max_request_bytes: int | None = None,
     slots: threading.BoundedSemaphore | None = None,
+    request_budget_after_preflight: bool = False,
 ) -> dict[str, Any]:
     """Ask the resident and return its payload once it is bound and strictly shaped.
 
@@ -170,6 +167,9 @@ def _decide(
     raises the envelope cap for an operation that carries larger requests.
     ``slots`` replaces the shared in-flight ask slots for an operation that
     must not contend with the short route asks.
+    ``request_budget_after_preflight`` lets optional control calls finish the
+    separately bounded native bootstrap before starting their RPC budget.
+    Hook and other callers retain their original total preparation budget.
     """
 
     operation = operation or _OPERATION
@@ -181,9 +181,12 @@ def _decide(
             validate(payload)
 
     ask_slots = slots or _ASK_SLOTS
-    deadline = time.monotonic() + operation.timeout_seconds
+    deadline = None if request_budget_after_preflight else time.monotonic() + operation.timeout_seconds
 
     def bounded_request(*, timeout_seconds: float, **kwargs: Any) -> dict[str, object] | None:
+        nonlocal deadline
+        if deadline is None:
+            deadline = time.monotonic() + operation.timeout_seconds
         if not ask_slots.acquire(timeout=max(0.0, deadline - time.monotonic())):
             return None
         try:

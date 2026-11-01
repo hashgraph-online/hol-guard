@@ -162,10 +162,6 @@ def reset_daemon_lifecycle_deadline(token: contextvars.Token[float | None]) -> N
     _DAEMON_LIFECYCLE_DEADLINE.reset(token)
 
 
-def daemon_lifecycle_deadline() -> float | None:
-    return _DAEMON_LIFECYCLE_DEADLINE.get()
-
-
 def _active_deadline(explicit: float | None) -> float | None:
     bound = _DAEMON_LIFECYCLE_DEADLINE.get()
     if explicit is None:
@@ -187,7 +183,7 @@ def _timeout_seconds(deadline: float | None, *, cold_start: bool = False) -> flo
     return min(budget, remaining)
 
 
-def _await_native_runtime(timeout_seconds: float) -> float:
+def await_native_runtime(timeout_seconds: float) -> float:
     """Wait out a transient capability-probe miss before asking the resident.
 
     A freshly installed runtime can fail its first ``capabilities`` probe on a cold host; that miss is
@@ -267,7 +263,7 @@ def _round_trip(
         raise _fail("native_daemon_lifecycle_request_invalid") from error
     if not ensure_resident_prerequisite(home):
         raise _fail(prerequisite_unavailable_code("native_daemon_lifecycle_prerequisite_unavailable", home))
-    timeout_seconds -= _await_native_runtime(timeout_seconds)
+    timeout_seconds -= await_native_runtime(timeout_seconds)
     if timeout_seconds <= 0:
         raise _fail("native_daemon_lifecycle_deadline")
     started = time.monotonic()

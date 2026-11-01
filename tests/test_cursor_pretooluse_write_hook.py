@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,12 +12,13 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import _MANAGED_HOOK_EVENTS, _MANAGED_HOOK_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
-    cursor_hook_script_source,
     cursor_native_hook_state,
     install_cursor_hooks,
 )
 
-_WRITE_MATCHER = "^(Write|Edit|StrReplace|MultiEdit|Delete)$"
+_FILE_MATCHER = "^(Write|Edit|StrReplace|MultiEdit|Delete)$"
+# Outside Windows Shell also reaches preToolUse, for the contained-route probe.
+_WRITE_MATCHER = _FILE_MATCHER if sys.platform == "win32" else "^(Write|Edit|StrReplace|MultiEdit|Delete|Shell)$"
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -31,10 +33,18 @@ def _context(tmp_path: Path) -> HarnessContext:
 
 
 def test_matcher_selects_only_file_mutation_tools() -> None:
-    pattern = re.compile(_WRITE_MATCHER)
+    pattern = re.compile(_FILE_MATCHER)
     for tool in ("Write", "Edit", "StrReplace", "MultiEdit", "Delete"):
         assert pattern.search(tool)
     for tool in ("Shell", "Read", "Grep", "WriteNotes", "MCP:Write"):
+        assert pattern.search(tool) is None
+
+
+def test_route_matcher_adds_only_shell() -> None:
+    pattern = re.compile("^(Write|Edit|StrReplace|MultiEdit|Delete|Shell)$")
+    for tool in ("Write", "Edit", "StrReplace", "MultiEdit", "Delete", "Shell"):
+        assert pattern.search(tool)
+    for tool in ("Read", "Grep", "WriteNotes", "MCP:Write", "ShellScript", "MCP:Shell"):
         assert pattern.search(tool) is None
 
 
@@ -128,19 +138,19 @@ def test_native_state_rejects_unsupported_event_after_install(tmp_path: Path) ->
     assert (state["protection_active"], state["reason"]) == (False, "guard_cursor_hook_unsupported_event")
 
 
-def test_generated_script_denies_pretooluse_review_and_keeps_shell_ask(tmp_path: Path) -> None:
-    source = cursor_hook_script_source(_context(tmp_path))
-    script_globals: dict[str, object] = {"__name__": "cursor_hook"}
-    exec(compile(source, "hol-guard-cursor-hook.py", "exec"), script_globals)
-    emit = script_globals["_emit_cursor_response"]
-    prepare = script_globals["_prepare_cursor_hook_payload"]
-    assert callable(emit) and callable(prepare)
-    response, exit_code = emit(hook_event_name="preToolUse", policy_action="review", guard_payload={})
-    assert (response["permission"], exit_code) == ("deny", 2)
-    response, exit_code = emit(hook_event_name="beforeShellExecution", policy_action="review", guard_payload={})
-    assert (response["permission"], exit_code) == ("ask", 0)
-    mapped = prepare(
-        {"hook_event_name": "preToolUse", "tool_name": "Write", "tool_input": {"file_path": "a.txt", "content": "x"}}
-    )
-    assert isinstance(mapped, dict)
-    assert (mapped["hook_event_name"], mapped["tool_name"]) == ("PreToolUse", "Write")
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows keeps the file-mutation matcher")
+def test_install_from_the_file_only_matcher_adds_shell(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    install_cursor_hooks(context)
+    hooks_path = tmp_path / "home" / ".cursor" / "hooks.json"
+    payload = json.loads(hooks_path.read_text(encoding="utf-8"))
+    [managed] = payload["hooks"]["preToolUse"]
+    assert managed["matcher"] == _WRITE_MATCHER
+    # An install from before the probe matched file mutations only.
+    managed["matcher"] = _FILE_MATCHER
+    hooks_path.write_text(json.dumps(payload), encoding="utf-8")
+    assert cursor_native_hook_state(context)["protection_active"] is False
+    install_cursor_hooks(context)
+    [reinstalled] = json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]["preToolUse"]
+    assert reinstalled["matcher"] == _WRITE_MATCHER
+    assert cursor_native_hook_state(context)["protection_active"] is True

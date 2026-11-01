@@ -21,6 +21,7 @@ from ..extension_builder.native_source_compiler import NativeSourceCompilerError
 from . import lifecycle
 from .authority import decode
 from .object_native import CONTAINER_STRUCTURE, addressed
+from .object_native import call as call_object
 
 MANIFEST = "command-pack-bundle.v1.json"
 PREFIX = "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle/"
@@ -42,12 +43,10 @@ def validate_compatibility(value, extensions, *, compiler=None):
     _native_metadata("compatibility", value=value, extensions=extensions, compiler=compiler)
 
 
-def asset_path(relative, *, source_sha):
+def asset_path(relative):
     if (
         re.fullmatch(
-            r"assets/extension-data-"
-            + re.escape(source_sha)
-            + r"-0\.0-[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
+            r"assets/[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
             relative,
         )
         is None
@@ -77,40 +76,6 @@ def _installation_root() -> Path:
 
 def _read_installed(path: Path, *, limit: int) -> bytes:
     return read_bytes(path, limit=limit, anchor=_installation_root())
-
-
-def compatibility_payloads(family: str) -> tuple[dict[str, Any], ...] | None:
-    """Explicit offline legacy API; never load the library on decision paths.
-
-    Only genuine legacy absence permits fallback. An advertised installed bundle
-    must authenticate through both release manifests before any metadata reads.
-    """
-    if family not in {"commands", "mcp"}:
-        raise ValueError("unknown compatibility metadata family")
-    if not advertised():
-        return None
-    bundle = load_installed_bundle()
-
-    # Offline traversals commonly read thousands of members; one session verifies
-    # and copies the runtime once for all of them.
-    with lifecycle.session():
-        try:
-            result = run_source_compiler(
-                "bundle-compatibility",
-                {
-                    "family": family,
-                    "source_sha": bundle.source_sha,
-                    "engine": bundle.engine,
-                    "data": bundle.data.decode("utf-8"),
-                    "max_bytes": MAX_BYTES,
-                },
-                fetch=lambda reference: bundle._fetch(
-                    cast(dict[str, Any], reference["location"]), cast(int, reference["length"])
-                ),
-            )
-        except NativeSourceCompilerError as error:
-            raise ValueError(f"installed compatibility metadata unavailable: {error}") from error
-    return tuple(cast(list[dict[str, Any]], result["payloads"])) if result["available"] else None
 
 
 _ANSWERS: dict[str, tuple[tuple[object, ...], object]] = {}
@@ -202,6 +167,29 @@ class VerifiedInstalledBundle:
         """Fetch for the current native preparation; each member is checked natively."""
         return lambda location, maximum: self._fetch(location, maximum)
 
+    def fetch_objects(self, references):
+        """Transport bounded native object batches; archive fetches stay separate."""
+        for start in range(0, len(references), 64):
+            batch = references[start : start + 64]
+            root = checked_path(_package() / ASSETS, anchor=_installation_root())
+            try:
+                reply = call_object(
+                    "installed-batch",
+                    root=str(root),
+                    source=self.source_sha,
+                    items=[{"target": location, "length": length} for location, length in batch],
+                )
+            except ValueError as error:
+                if str(error) == CONTAINER_STRUCTURE:
+                    raise ValueError("installed bundle container invalid") from error
+                raise
+            for (location, maximum), item in zip(batch, reply["items"], strict=True):
+                if "data" in item:
+                    yield base64.b64decode(item["data"], validate=True)
+                else:
+                    # Whole assets still use the existing checked read path.
+                    yield self.fetch(location, maximum)
+
     def _fetch(self, target_location: dict[str, Any], max_bytes: int) -> bytes:
         base = _package() / ASSETS
         root = checked_path(base, anchor=_installation_root())
@@ -210,7 +198,7 @@ class VerifiedInstalledBundle:
             # container member by its digest; a whole asset is only resolved.
             reply = addressed(
                 "installed",
-                sources=lambda _reply: [root / target_location["tag"] / target_location["asset"]],
+                sources=lambda reply: [root / reply["directory"] / target_location["asset"]],
                 root=str(root),
                 target=target_location,
                 source=self.source_sha,
@@ -223,7 +211,8 @@ class VerifiedInstalledBundle:
             raise
         if "data" in reply:
             return base64.b64decode(reply["data"], validate=True)
-        path = base / target_location["tag"] / target_location["asset"]
+        # Native validated the tag and names its directory.
+        path = base / reply["directory"] / target_location["asset"]
         if not path.exists() and not path.is_symlink() and reply["kind"] == "pack":
             # The fixed native factory checks the installed release/executable
             # binding and constructs the public URL. No selector, caller URL,

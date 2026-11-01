@@ -26,6 +26,23 @@ _MAX_STAMPED_PATH_BYTES = 32 * 1024
 # adds no execution surface beyond the default. Only flags that take no
 # argument are accepted; -o/-O/-k/-T and similar name files.
 _DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?")
+# `NODE_OPTIONS` flags that only size the heap or change diagnostics; none
+# loads code, reads a file or opens a port. The pattern has no backslash or
+# brace so generated hook sources can embed it unchanged. The rule itself is
+# owned by `guard_contracts::node_options_inert`; these senders run inside the
+# host before Guard's runtime is reached, so they carry a copy that
+# tests/test_hook_node_options_inert.py holds to the Rust test table.
+_INERT_NODE_OPTION = (
+    "--(?:(?:no[-_]warnings|no[-_]deprecation|enable[-_]source[-_]maps"
+    "|trace[-_]warnings|trace[-_]deprecation|trace[-_]uncaught)"
+    "|(?:max[-_]old[-_]space[-_]size|max[-_]semi[-_]space[-_]size|stack[-_]trace[-_]limit)=[0-9]+)"
+)
+INERT_NODE_OPTIONS_PATTERN = f" *{_INERT_NODE_OPTION}(?: +{_INERT_NODE_OPTION})* *"
+
+
+def node_options_inert(value: str | None) -> bool:
+    """Report a NODE_OPTIONS value that holds only heap and diagnostic flags."""
+    return value is not None and re.fullmatch(INERT_NODE_OPTIONS_PATTERN, value) is not None
 
 
 def git_config_no_system_enabled(value: str | None) -> bool:
@@ -53,6 +70,18 @@ def _loader_value_fits(value: str | None) -> bool:
         return False
 
 
+def cargo_home_default(home: str | None, cargo_home: str | None) -> bool:
+    """Report whether CARGO_HOME names the directory Cargo reads anyway.
+
+    The verdict is owned by `guard_contracts::cargo_home_default`; this sender
+    only mirrors it so a Python-stamped hook and a Rust-stamped one agree.
+    """
+    if not cargo_home or not home:
+        return False
+    home = home.rstrip("/")
+    return bool(home) and cargo_home.rstrip("/") == f"{home}/.cargo"
+
+
 def library_search_paths() -> dict[str, str]:
     """Return the exported loader search paths that fit the native path bound."""
     return {
@@ -69,7 +98,7 @@ def collect_hook_execution_environment() -> dict[str, object]:
     be recomputed by the receiver, and Unicode names are not silently dropped.
     """
     active = {key: value for key, value in os.environ.items() if value}
-    return {
+    stamp: dict[str, object] = {
         "path": os.environ.get("PATH", ""),
         "home": os.environ.get("HOME"),
         "git_pager_disabled": pager_default_equivalent(os.environ.get("GIT_PAGER")),
@@ -82,6 +111,12 @@ def collect_hook_execution_environment() -> dict[str, object]:
             json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
     }
+    # Present only when true, so stamps from hosts without it stay unchanged.
+    if node_options_inert(os.environ.get("NODE_OPTIONS")):
+        stamp["node_options_inert"] = True
+    if cargo_home_default(os.environ.get("HOME"), os.environ.get("CARGO_HOME")):
+        stamp["cargo_home_default"] = True
+    return stamp
 
 
 def stamp_hook_input_text(text: str) -> str:

@@ -190,6 +190,17 @@ fn from_dict(payload: &Map<String, Value>) -> Result<Typed, ()> {
     Ok(typed)
 }
 
+/// The action identity of a persisted envelope payload, or `None` when the
+/// payload is not one `GuardActionEnvelope.from_dict` would accept.
+///
+/// Two envelopes name the same action when this answers the same hash for
+/// both, so a caller comparing them never has to hash either side itself.
+pub(crate) fn envelope_action_hash(payload: &Map<String, Value>) -> Option<String> {
+    from_dict(payload)
+        .ok()
+        .map(|typed| stable_action_hash(&typed))
+}
+
 /// `stable_action_hash`: deterministic action identity without raw payload.
 fn stable_action_hash(typed: &Typed) -> String {
     let payload = json!({

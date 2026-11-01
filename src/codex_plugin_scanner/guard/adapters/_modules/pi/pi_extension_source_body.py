@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ....hook_execution_environment import INERT_NODE_OPTIONS_PATTERN
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
 from .pi_extension_bound_bash_source import with_bound_bash_host_observation
 from .pi_extension_native_hook import native_hook_reply_source
@@ -408,6 +409,14 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "          .filter(([, value]) => typeof value === 'string' && value.length > 0 &&\n"
         "            Buffer.byteLength(value, 'utf8') <= 32 * 1024),\n"
         "      ),\n"
+        "      ...(/^(?:__INERT_NODE_OPTIONS__)$/.test(process.env.NODE_OPTIONS ?? '')\n"
+        "        ? { node_options_inert: true } : {}),\n"
+        # `CARGO_HOME` at its default moves no configuration file; the value is never stamped.
+        "      ...((() => {\n"
+        "        const home = (process.env.HOME ?? '').replace(/\\/+$/, '');\n"
+        "        const cargoHome = (process.env.CARGO_HOME ?? '').replace(/\\/+$/, '');\n"
+        "        return home !== '' && cargoHome === `${home}/.cargo`;\n"
+        "      })() ? { cargo_home_default: true } : {}),\n"
         "    },\n"
         "  };\n"
         "  let serializedPayload = '';\n"
@@ -493,4 +502,5 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
     )
     # The host observation is authored beside its insertion point, so an
     # adapter variant that replaces this body replaces the stamp with it.
+    source = source.replace("__INERT_NODE_OPTIONS__", INERT_NODE_OPTIONS_PATTERN)
     return with_bound_bash_host_observation(source, harness=harness)

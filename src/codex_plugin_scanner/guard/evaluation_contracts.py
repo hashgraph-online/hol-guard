@@ -21,36 +21,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from jsonschema import Draft202012Validator
 
 EVALUATION_PROFILE_SCHEMA_VERSION = "guard.evaluation-profile.v1"
 EVALUATION_RESULT_SCHEMA_VERSION = "guard.evaluation-result.v1"
 
-EvaluationStatus = Literal["passed", "failed", "unsupported", "blocked_environment", "not_run"]
-EvidenceType = Literal[
-    "source_inspection",
-    "unit_test",
-    "property_test",
-    "synthetic_adapter_test",
-    "live_installed_host_test",
-    "independent_review",
-    "not_run",
-]
-
 EVALUATION_STATUSES: frozenset[str] = frozenset({"passed", "failed", "unsupported", "blocked_environment", "not_run"})
-EVIDENCE_TYPES: frozenset[str] = frozenset(
-    {
-        "source_inspection",
-        "unit_test",
-        "property_test",
-        "synthetic_adapter_test",
-        "live_installed_host_test",
-        "independent_review",
-        "not_run",
-    }
-)
 
 
 class EvaluationContractError(ValueError):
@@ -457,7 +435,6 @@ __all__ = [
     "EVALUATION_PROFILE_SCHEMA_VERSION",
     "EVALUATION_RESULT_SCHEMA_VERSION",
     "EVALUATION_STATUSES",
-    "EVIDENCE_TYPES",
     "EvaluationContractError",
     "EvaluationProfile",
     "EvaluationResult",

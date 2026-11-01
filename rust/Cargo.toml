@@ -1,10 +1,14 @@
 [workspace]
-exclude = ["crates/guard-command-build"]
+exclude = ["crates/guard-command-build", "fuzz"]
 members = [
     "crates/guard-alloc-probe",
     "crates/guard-adapter-detection",
     "crates/guard-archive",
     "crates/guard-contained-process",
+    "crates/guard-context-assistance",
+    "crates/guard-cigar-release",
+    "crates/guard-cigar-install",
+    "crates/guard-cigar-artifacts",
     "crates/guard-command",
     "crates/guard-command-catalog-data",
     "crates/guard-contracts",
@@ -16,7 +20,10 @@ members = [
     "crates/guard-hook-core",
     "crates/guard-hook-payload",
     "crates/guard-policy-snapshot",
+    "crates/guard-policy-bundle",
     "crates/guard-pack-compiler",
+    "crates/guard-plugin-kit",
+    "crates/guard-plugin-telemetry",
     "crates/guard-rule-contract",
     "crates/guard-runtime",
     "crates/guard-runtime-pyjson",
@@ -144,7 +151,7 @@ roxmltree = "0.21.1"
 saphyr-parser = "=0.1.0"
 winapi = "0.3.9"
 ruzstd = { version = "=0.9.1", default-features = false, features = ["std"] }
-zstd = "=0.14.0"
+zstd = "=0.14.3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

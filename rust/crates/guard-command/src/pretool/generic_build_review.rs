@@ -16,8 +16,28 @@ pub(crate) const BUILD_REVIEW_REASON: &str = "HOL Guard requires review before t
 /// can fetch dependencies and runs their `build.rs` scripts. `cargo fix` is
 /// left out: it also rewrites source files, which this reason does not name.
 const CARGO_BUILD_SUBCOMMANDS: &[&str] = &[
-    "b", "bench", "build", "c", "check", "clippy", "d", "doc", "miri", "nextest", "r", "run",
-    "rustc", "rustdoc", "t", "test",
+    "b",
+    "bench",
+    "build",
+    "c",
+    "check",
+    "clippy",
+    "d",
+    "doc",
+    "expand",
+    "insta",
+    "llvm-cov",
+    "machete",
+    "miri",
+    "nextest",
+    "r",
+    "run",
+    "rustc",
+    "rustdoc",
+    "t",
+    "tarpaulin",
+    "test",
+    "udeps",
 ];
 
 /// Global cargo options that take the next argument as their value.

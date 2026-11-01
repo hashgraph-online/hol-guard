@@ -10,10 +10,12 @@
 use std::path::{Path, PathBuf};
 
 /// `(proxy command, harness, default transport, elicitation-capable)`.
-const PROXIES: [(&str, &str, &str, bool); 4] = [
+const PROXIES: [(&str, &str, &str, bool); 6] = [
+    ("cline-mcp-proxy", "cline", "stdio", true),
     ("codex-mcp-proxy", "codex", "stdio", true),
     ("copilot-mcp-proxy", "copilot", "stdio", true),
     ("cursor-mcp-proxy", "cursor", "stdio", true),
+    ("hermes-mcp-proxy", "hermes", "stdio", true),
     ("opencode-mcp-proxy", "opencode", "local", false),
 ];
 

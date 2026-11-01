@@ -59,7 +59,7 @@ fn container_creation_access_and_disruption_stay_reviewed() {
             "docker create --privileged alpine",
             "docker exec web env",
             "docker inspect web",
-            "docker logs web",
+            "docker -H tcp://build.example.com:2376 logs web",
             "docker cp web:/etc/passwd .",
             "docker compose up -d",
             "docker -H tcp://build.example.com:2376 start web",

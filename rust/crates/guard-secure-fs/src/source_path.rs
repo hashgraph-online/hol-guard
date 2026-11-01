@@ -201,6 +201,17 @@ fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
             .is_some_and(source_extension)
 }
 
+/// Whether `path`'s own name ends in one of the extensions a project's
+/// documents carry. Data formats belong here: a plugin manifest, a workflow
+/// definition and a README are as much a repository's own content as its
+/// code. `is_source_code_extension` is the narrower list, for code syntax
+/// alone.
+pub fn source_document_extension(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(source_extension)
+}
+
 /// Whether a file name carries an extension this crate reads as source text.
 ///
 /// A name with no extension at all, or one this list does not hold, is bytes
@@ -561,6 +572,7 @@ const TOOL_LOGIN_WORDS: &[&str] = &[
     "docker",
     "dockercfg",
     "gcloud",
+    "gemini",
     "gnupg",
     "gpg",
     "hgrc",
@@ -578,8 +590,75 @@ const TOOL_LOGIN_WORDS: &[&str] = &[
     "pypirc",
     "ssh",
     "vault",
+    "vscode",
     "windsurf",
 ];
+
+/// The entries of [`TOOL_LOGIN_WORDS`] that are a login file's whole name
+/// rather than a vendor's. The rest of that list -- `docker`, `claude`,
+/// `aws`, `agent` -- names a tool, and a repository names its own documents
+/// after the tools it uses: `.github/workflows/docker.yml` and
+/// `.well-known/agent.json` are the checkout's content, not a login. A caller
+/// that already knows the name is a plain file inside the work tree reads it
+/// against this half.
+const TOOL_LOGIN_FILE_WORDS: &[&str] = &[
+    "dockercfg",
+    "hgrc",
+    "htpasswd",
+    "keychain",
+    "keyring",
+    "keystore",
+    "kubeconfig",
+    "mcp",
+    "netrc",
+    "npmrc",
+    "pgpass",
+    "pypirc",
+];
+
+/// Whether `name` is the whole name of a tool's login file: `.netrc`,
+/// `mcp.json`, `.npmrc`. This is [`tool_login_name`] narrowed to
+/// [`TOOL_LOGIN_FILE_WORDS`], for a caller holding a file rather than a path
+/// component that may be a tool's own directory.
+pub fn tool_login_file_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    let bare = name.trim_start_matches('.');
+    let stem = Path::new(bare)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    [bare, stem]
+        .iter()
+        .any(|part| TOOL_LOGIN_FILE_WORDS.contains(part))
+}
+
+/// Whether `name` is exactly the name a tool keeps its own tree or login
+/// under: `.cursor`, `.vscode`, `.mcp.json`, `.npmrc`.
+///
+/// This is the whole-name reading of [`TOOL_LOGIN_WORDS`], for a caller that
+/// walks a path and has to tell a tool's own directory from a project's.
+/// `.codex-plugin` and `.claude-plugin` hold a repository's published
+/// manifest, not a login, so only the exact spelling counts: splitting the
+/// name into words would read every such manifest as the tool's own.
+pub fn tool_login_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    let bare = name.trim_start_matches('.');
+    let stem = Path::new(bare)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    [bare, stem]
+        .iter()
+        .any(|part| TOOL_LOGIN_WORDS.contains(part))
+}
+
+/// Whether `name` is one of the ordinary project config files
+/// [`BENIGN_PROJECT_DOTFILES`] holds. A caller that walks a path uses it to
+/// keep the list's own rule: these names are benign as a file, so a directory
+/// spelled `.gitignore/` opens no hidden tree.
+pub fn project_config_file_name(name: &str) -> bool {
+    BENIGN_PROJECT_DOTFILES.contains(&name.to_ascii_lowercase().as_str())
+}
 
 /// A hidden file at the leaf of a git work tree that a project keeps its own
 /// configuration or prose in: `.tsconfig-lb-check.json`, `.release-notes.md`,

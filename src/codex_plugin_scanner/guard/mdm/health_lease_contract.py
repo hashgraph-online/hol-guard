@@ -1,4 +1,10 @@
-"""Strict, versioned contract for machine health leases."""
+"""Strict, versioned contract for machine health leases.
+
+The native runtime owns parsing: canonical bytes, exact keys, timestamps,
+signature encodings and the snapshot an outbox carries. This module frames
+the request, maps the answer onto the contract's errors and keeps the
+dataclasses that sign and serialize a lease.
+"""
 
 from __future__ import annotations
 
@@ -9,11 +15,11 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Final, Protocol, cast
+from typing import Any, Final, Protocol, cast
 
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
 
-from .contracts import LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION
+from .runtime_request import runtime_answer
 
 
 class LeaseClaims(Protocol):
@@ -56,41 +62,27 @@ class ProtectionLease(Protocol):
     def canonical_bytes(self) -> bytes: ...
 
     @classmethod
-    def parse(cls, payload: bytes) -> ProtectionLease: ...
+    def from_contract(cls, claims: dict[str, Any], signature: bytes) -> ProtectionLease: ...
 
 
 HEALTH_LEASE_SCHEMA: Final = "hol-guard-health-lease.v1"
 HEALTH_LEASE_OUTBOX_SCHEMA: Final = "hol-guard-health-lease-outbox.v1"
 HEALTH_LEASE_SIGNING_DOMAIN: Final = b"HOL-GUARD-HEALTH-LEASE-V1\x00"
+HEALTH_LEASE_CONTRACT_FEATURE: Final = "native-health-lease-contract-v1"
 SIGNATURE_ALGORITHM: Final = "ecdsa-p256-sha256"
 SIGNATURE_ENCODING: Final = "asn1-der"
 MAX_LEASE_BYTES: Final = 32 * 1024
 MAX_SNAPSHOT_BYTES: Final = 256 * 1024
 MAX_OUTBOX_BYTES: Final = 4 * ((MAX_SNAPSHOT_BYTES + 2) // 3) + MAX_LEASE_BYTES + 4096
-MAX_LEASE_SECONDS: Final = 3600
-MAX_UINT64: Final = (1 << 64) - 1
 P256_ORDER: Final = int("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", 16)
 
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
-_HEX_32 = re.compile(r"[0-9a-f]{32}\Z")
-_HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
-_KEY_ID = re.compile(r"[A-Za-z0-9_-]{43}\Z")
-_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
-_CLAIM_KEYS = {
-    "schemaVersion",
-    "workspaceId",
-    "deviceId",
-    "machineInstallationId",
-    "installationGeneration",
-    "sequence",
-    "issuedAt",
-    "leaseExpiresAt",
-    "snapshotSchemaVersion",
-    "snapshotDigest",
-    "previousLeaseDigest",
-    "previousLeaseKeyId",
-    "signingKeyId",
-}
+_CONTRACT_COMMAND = "health-lease-contract"
+_CONTRACT_SCHEMA = "health-lease-contract.v1"
+_CONTRACT_ERRORS = {"health_lease_invalid", "health_lease_challenge_invalid", "health_lease_outbox_invalid"}
+_NATIVE_UNAVAILABLE = "health_lease_contract_native_unavailable"
+_COMMAND_TIMEOUT_SECONDS = 30.0
+_OUTPUT_LIMIT_BYTES = 2 * MAX_OUTBOX_BYTES
 
 
 def canonical_json_bytes(payload: dict[str, object]) -> bytes:
@@ -114,62 +106,62 @@ def canonical_timestamp(value: datetime) -> str:
     return normalized.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _parse_timestamp(value: object) -> datetime:
-    if not isinstance(value, str) or _TIMESTAMP.fullmatch(value) is None:
-        raise ValueError("health_lease_invalid")
+def _native_answer(request: dict[str, object]) -> dict[str, Any] | None:
+    """The runtime's answer to one contract request, or ``None`` when it cannot answer."""
+
+    return runtime_answer(
+        HEALTH_LEASE_CONTRACT_FEATURE,
+        _CONTRACT_COMMAND,
+        {"schema": _CONTRACT_SCHEMA, **request},
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+    )
+
+
+def native_contract(op: str, request: dict[str, object]) -> dict[str, Any]:
+    """The native verdict on one value or payload; a refusal raises the contract's error."""
+
+    answer = _native_answer({"op": op, **request})
+    if answer is None or not isinstance(answer.get("ok"), bool):
+        # A lease nothing could check is never trusted.
+        raise ValueError(_NATIVE_UNAVAILABLE)
+    if answer["ok"] is not True:
+        reason = answer.get("reason_code")
+        raise ValueError(reason if reason in _CONTRACT_ERRORS else _NATIVE_UNAVAILABLE)
+    return answer
+
+
+def check_value(op: str, raw: object, reason: str = "health_lease_invalid") -> dict[str, Any]:
+    """``raw`` once the runtime accepts it as the value ``op`` names."""
+
+    if not isinstance(raw, dict):
+        raise ValueError(reason)
     try:
-        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except ValueError as exc:
-        raise ValueError("health_lease_invalid") from exc
+        json.dumps(raw, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(reason) from exc
+    native_contract(op, {"value": raw})
+    return cast(dict[str, Any], raw)
 
 
-def _strict_json(payload: bytes, *, maximum: int, reason: str) -> dict[str, object]:
+def parse_payload(
+    op: str, payload: bytes, *, maximum: int, reason: str
+) -> tuple[dict[str, Any], bytes, dict[str, Any]]:
+    """The claims and DER signature of the lease ``payload`` carries, and the whole answer."""
+
     if not payload or len(payload) > maximum:
         raise ValueError(reason)
-    try:
-        decoded = payload.decode("utf-8")
-        raw = json.loads(decoded, parse_constant=_reject_json_constant)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError(reason) from exc
-    if not isinstance(raw, dict) or canonical_json_bytes(raw) != payload:
-        raise ValueError(reason)
-    return raw
-
-
-def _reject_json_constant(_value: str) -> None:
-    raise ValueError("health_lease_json_invalid")
-
-
-def _exact_keys(raw: dict[str, object], expected: set[str], reason: str = "health_lease_invalid") -> None:
-    if set(raw) != expected:
-        raise ValueError(reason)
+    answer = native_contract(op, {"payload": base64.b64encode(payload).decode("ascii")})
+    claims = answer.get("claims")
+    signature = answer.get("signature")
+    if not isinstance(claims, dict) or not isinstance(signature, str):
+        raise ValueError(_NATIVE_UNAVAILABLE)
+    return cast(dict[str, Any], claims), base64.b64decode(signature, validate=True), answer
 
 
 def _safe_id(value: object) -> str:
     if not isinstance(value, str) or _SAFE_ID.fullmatch(value) is None:
         raise ValueError("health_lease_invalid")
-    return value
-
-
-def _match(value: object, pattern: re.Pattern[str]) -> str:
-    if not isinstance(value, str) or pattern.fullmatch(value) is None:
-        raise ValueError("health_lease_invalid")
-    return value
-
-
-def _bounded_string(value: object, *, maximum: int, nullable: bool = False) -> str | None:
-    if value is None and nullable:
-        return None
-    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > maximum:
-        raise ValueError("health_lease_outbox_invalid")
-    return value
-
-
-def _optional_uint64(value: object) -> int | None:
-    if value is None:
-        return None
-    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= MAX_UINT64:
-        raise ValueError("health_lease_outbox_invalid")
     return value
 
 
@@ -217,41 +209,25 @@ class HealthLeaseClaims:
 
     @classmethod
     def parse(cls, raw: object) -> HealthLeaseClaims:
-        if not isinstance(raw, dict):
-            raise ValueError("health_lease_invalid")
-        _exact_keys(raw, _CLAIM_KEYS)
-        if raw.get("schemaVersion") != HEALTH_LEASE_SCHEMA:
-            raise ValueError("health_lease_invalid")
-        sequence = raw.get("sequence")
-        if not isinstance(sequence, int) or isinstance(sequence, bool) or not 1 <= sequence <= MAX_UINT64:
-            raise ValueError("health_lease_invalid")
-        previous_digest = raw.get("previousLeaseDigest")
-        previous_key = raw.get("previousLeaseKeyId")
-        if sequence == 1:
-            if previous_digest is not None or previous_key is not None:
-                raise ValueError("health_lease_invalid")
-        elif previous_digest is None or previous_key is None:
-            raise ValueError("health_lease_invalid")
-        issued = _parse_timestamp(raw.get("issuedAt"))
-        expires = _parse_timestamp(raw.get("leaseExpiresAt"))
-        duration = (expires - issued).total_seconds()
-        if duration <= 0 or duration > MAX_LEASE_SECONDS:
-            raise ValueError("health_lease_invalid")
-        if raw.get("snapshotSchemaVersion") != LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION:
-            raise ValueError("health_lease_invalid")
+        return cls.from_contract(check_value("health-claims", raw))
+
+    @classmethod
+    def from_contract(cls, raw: dict[str, Any]) -> HealthLeaseClaims:
+        """Claims the runtime already accepted."""
+
         return cls(
-            _safe_id(raw.get("workspaceId")),
-            _safe_id(raw.get("deviceId")),
-            _match(raw.get("machineInstallationId"), _HEX_32),
-            _match(raw.get("installationGeneration"), _HEX_32),
-            sequence,
-            canonical_timestamp(issued),
-            canonical_timestamp(expires),
-            LOCAL_INTEGRITY_SNAPSHOT_SCHEMA_VERSION,
-            _match(raw.get("snapshotDigest"), _HEX_64),
-            None if previous_digest is None else _match(previous_digest, _HEX_64),
-            None if previous_key is None else _match(previous_key, _KEY_ID),
-            _match(raw.get("signingKeyId"), _KEY_ID),
+            raw["workspaceId"],
+            raw["deviceId"],
+            raw["machineInstallationId"],
+            raw["installationGeneration"],
+            raw["sequence"],
+            raw["issuedAt"],
+            raw["leaseExpiresAt"],
+            raw["snapshotSchemaVersion"],
+            raw["snapshotDigest"],
+            raw["previousLeaseDigest"],
+            raw["previousLeaseKeyId"],
+            raw["signingKeyId"],
         )
 
     def signing_payload(self) -> bytes:
@@ -298,25 +274,10 @@ class SignedHealthLease:
 
     @classmethod
     def parse(cls, payload: bytes) -> SignedHealthLease:
-        raw = _strict_json(payload, maximum=MAX_LEASE_BYTES, reason="health_lease_invalid")
-        _exact_keys(raw, {"claims", "signature"})
-        signature_raw = raw.get("signature")
-        if not isinstance(signature_raw, dict):
-            raise ValueError("health_lease_invalid")
-        _exact_keys(signature_raw, {"algorithm", "encoding", "value"})
-        if signature_raw.get("algorithm") != SIGNATURE_ALGORITHM or signature_raw.get("encoding") != SIGNATURE_ENCODING:
-            raise ValueError("health_lease_invalid")
-        value = signature_raw.get("value")
-        if not isinstance(value, str) or len(value) > 128:
-            raise ValueError("health_lease_invalid")
-        try:
-            signature = base64.b64decode(value, validate=True)
-            canonical_signature = _canonical_ecdsa_signature(signature)
-        except (ValueError, TypeError) as exc:
-            raise ValueError("health_lease_invalid") from exc
-        if canonical_signature != signature or base64.b64encode(signature).decode("ascii") != value:
-            raise ValueError("health_lease_invalid")
-        return cls(HealthLeaseClaims.parse(raw.get("claims")), signature)
+        claims, signature, _ = parse_payload(
+            "health-lease", payload, maximum=MAX_LEASE_BYTES, reason="health_lease_invalid"
+        )
+        return cls(HealthLeaseClaims.from_contract(claims), signature)
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,48 +294,26 @@ class HealthLeaseOutbox:
         }
 
     def canonical_bytes(self) -> bytes:
-        _validate_snapshot_binding(self.snapshot_bytes, self.lease.claims)
         payload = canonical_json_bytes(self.to_dict())
-        if len(payload) > MAX_OUTBOX_BYTES:
-            raise ValueError("health_lease_outbox_invalid")
+        # The runtime checks the outbox as a reader would, snapshot binding included.
+        parse_payload("outbox", payload, maximum=MAX_OUTBOX_BYTES, reason="health_lease_outbox_invalid")
         return payload
 
     @classmethod
     def parse(cls, payload: bytes) -> HealthLeaseOutbox:
-        raw = _strict_json(payload, maximum=MAX_OUTBOX_BYTES, reason="health_lease_outbox_invalid")
-        _exact_keys(raw, {"schemaVersion", "lease", "leaseDigest", "snapshot"}, "health_lease_outbox_invalid")
-        if raw.get("schemaVersion") != HEALTH_LEASE_OUTBOX_SCHEMA:
-            raise ValueError("health_lease_outbox_invalid")
-        lease_raw = raw.get("lease")
-        if not isinstance(lease_raw, dict):
-            raise ValueError("health_lease_outbox_invalid")
-        if lease_raw.get("schemaVersion") == "protection-lease.v1":
+        claims, signature, answer = parse_payload(
+            "outbox", payload, maximum=MAX_OUTBOX_BYTES, reason="health_lease_outbox_invalid"
+        )
+        snapshot = answer.get("snapshot")
+        if not isinstance(snapshot, str):
+            raise ValueError(_NATIVE_UNAVAILABLE)
+        if answer.get("kind") == "protection":
             module = importlib.import_module(".protection_lease_contract", __package__)
             lease_type = cast(type[ProtectionLease], module.SignedProtectionLease)
-            lease: SignedHealthLease | ProtectionLease = lease_type.parse(canonical_json_bytes(lease_raw))
+            lease: SignedHealthLease | ProtectionLease = lease_type.from_contract(claims, signature)
         else:
-            lease = SignedHealthLease.parse(canonical_json_bytes(lease_raw))
-        snapshot_raw = raw.get("snapshot")
-        if not isinstance(snapshot_raw, str):
-            raise ValueError("health_lease_outbox_invalid")
-        try:
-            snapshot = base64.b64decode(snapshot_raw, validate=True)
-        except ValueError as exc:
-            raise ValueError("health_lease_outbox_invalid") from exc
-        snapshot_digest = hashlib.sha256(snapshot).hexdigest()
-        if not snapshot or len(snapshot) > MAX_SNAPSHOT_BYTES or snapshot_digest != lease.claims.snapshot_digest:
-            raise ValueError("health_lease_outbox_invalid")
-        if raw.get("leaseDigest") != lease.digest:
-            raise ValueError("health_lease_outbox_invalid")
-        outbox = cls(lease, snapshot)
-        _validate_snapshot_binding(snapshot, lease.claims)
-        return outbox
-
-
-def _validate_snapshot_binding(snapshot: bytes, claims: LeaseClaims) -> None:
-    from .health_snapshot_validation import validate_health_snapshot_binding
-
-    validate_health_snapshot_binding(snapshot, claims)
+            lease = SignedHealthLease(HealthLeaseClaims.from_contract(claims), signature)
+        return cls(lease, base64.b64decode(snapshot, validate=True))
 
 
 __all__ = [

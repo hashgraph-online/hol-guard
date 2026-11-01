@@ -1,0 +1,54 @@
+name: CIGAR catalog contracts
+
+on:
+  pull_request:
+    paths:
+      - "integrations/cigar/**"
+      - "rust/crates/guard-cigar-release/**"
+      - "rust/crates/guard-cigar-install/**"
+      - "rust/Cargo.toml"
+      - "rust/Cargo.lock"
+      - "scripts/cigar_catalog_entry.py"
+      - "scripts/cigar_interpreter_entry.py"
+      - "tests/test_cigar_catalog_entry.py"
+      - "tests/test_cigar_interpreter_entry.py"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/actions/setup-rust/**"
+      - ".github/workflows/cigar-catalog-contracts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cigar-catalog-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Install cached Rust toolchain
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: cigar-catalog-contracts
+      - name: Validate native bundled catalog and release/installer contracts
+        run: cargo test --manifest-path rust/Cargo.toml --locked -p guard-cigar-release -p guard-cigar-install --lib
+      - uses: ./.github/actions/stage-command-projections
+      - name: Check maintainer drafts and synthetic next-bump identities
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: uv run --no-sync python -m pytest -q -p no:cacheprovider tests/test_cigar_catalog_entry.py tests/test_cigar_interpreter_entry.py

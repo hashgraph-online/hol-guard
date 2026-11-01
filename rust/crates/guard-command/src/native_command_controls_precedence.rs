@@ -40,11 +40,48 @@ impl CompiledNativeCommandControls {
         }
     }
 
+    /// Whether `rule_id` by itself asks for nothing beyond allow: a rule the
+    /// user explicitly allowed, or one whose packaged mode and permission
+    /// leave the command where it already stands. A proof that lifts one
+    /// rule's review uses this to tell the rules it is not lifting, so an
+    /// ordinary read beside the reviewed step does not hold the proof back.
+    pub(crate) fn rule_settles_at_allow(&self, rule_id: &str) -> bool {
+        let Some(index) = self.rule_indices.get(rule_id) else {
+            return false;
+        };
+        let rule = &self.program.rules[*index];
+        let extension = &self.program.extensions[rule.extension_index];
+        if self.blocked_extensions.contains(&extension.extension_id)
+            || self.blocked_permissions.contains(&rule.permission_id)
+        {
+            return false;
+        }
+        self.explicitly_enabled_permissions
+            .contains(&rule.permission_id)
+            || rule_floor(rule, extension.required) == "allow"
+    }
+
+    /// Whether a ruleless permission observation asks for nothing beyond
+    /// allow. Such an observation declares no floor of its own: it records
+    /// that a segment touched the permission so a disabled extension or
+    /// permission can still block the command, and nothing more. A proof
+    /// that lifts one rule's review uses this to tell the permissions it is
+    /// not lifting, so a Git plumbing read beside the reviewed step does not
+    /// hold the proof back.
+    pub(crate) fn permission_settles_at_allow(
+        &self,
+        extension_id: &str,
+        permission_id: &str,
+    ) -> bool {
+        !self.blocked_extensions.contains(extension_id)
+            && !self.blocked_permissions.contains(permission_id)
+    }
+
     /// Whether the user's authenticated Allow for every segment's extension
     /// permissions settles a command whose delegated floor is already allow.
     /// Guard self-protection, secret access and exfiltration, configured Git
-    /// programs, disabled permissions and evaluation failures are fixed
-    /// floors. Allowed uncertainty also needs every segment to stay inside
+    /// programs, Git checkouts into protected locations, disabled
+    /// permissions and evaluation failures are fixed floors. Allowed uncertainty also needs every segment to stay inside
     /// what its text proves ([`settles_enabled_uncertainty`]).
     pub(super) fn explicit_allow(
         &self,
@@ -52,6 +89,7 @@ impl CompiledNativeCommandControls {
         batch: &NativeCommandObservationBatchV1,
         command: Option<&CanonicalCommandV1>,
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
         enabled_uncertainty: bool,
     ) -> bool {
         batch.evaluation_error.is_none()
@@ -61,12 +99,19 @@ impl CompiledNativeCommandControls {
                 || OVERRIDABLE_NATIVE_REASONS.contains(&result.reason_code.as_str()))
             && command.is_some_and(|model| {
                 !crate::pretool::fixed_command_floor(model)
+                    && !crate::pretool::protected_checkout_destination(model, context)
                     && (!enabled_uncertainty
                         || model
                             .segments
                             .iter()
                             .all(|segment| settles_enabled_uncertainty(segment, context)))
-                    && self.explicit_permissions_cover_command(model, batch, context)
+                    && self.explicit_permissions_cover_command(
+                        model,
+                        &batch.observations,
+                        &batch.permission_observations,
+                        context,
+                        environment,
+                    )
             })
     }
 }

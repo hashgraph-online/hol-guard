@@ -16,10 +16,10 @@ from jsonschema.exceptions import ValidationError
 from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import load_guard_config, overlay_synced_guard_policy
 from codex_plugin_scanner.guard.mdm import policy as policy_module
-from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, MachinePaths
-from codex_plugin_scanner.guard.mdm.policy import apply_managed_policy, load_managed_policy
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import policy_bundle_key_fingerprint
-from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring
+from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION
+from codex_plugin_scanner.guard.mdm.managed_file_trust import machine_controlled_file_is_trusted
+from codex_plugin_scanner.guard.mdm.policy import load_managed_policy
+from tests.policy_bundle_signing_helpers import policy_bundle_key_fingerprint, policy_bundle_test_keyring
 
 
 def _policy(**overrides: object) -> dict[str, object]:
@@ -357,56 +357,6 @@ def test_policy_is_size_bounded(tmp_path: Path) -> None:
     assert load_managed_policy(policy_path=path).status == "invalid"
 
 
-def test_locked_values_override_local_and_actions_only_strengthen(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(json.dumps(_policy()))
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-
-    composed = apply_managed_policy(
-        {"mode": "monitor", "actions": {"shell": "allow", "read": "block", "write": "review"}},
-        state.policy,
-    )
-
-    assert composed == {
-        "mode": "enforce",
-        "actions": {"shell": "block", "read": "block", "write": "review"},
-    }
-
-
-def test_managed_value_replaces_invalid_local_type(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(json.dumps(_policy()))
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-
-    assert apply_managed_policy({"mode": True}, state.policy)["mode"] == "enforce"
-
-
-def test_partial_managed_nested_policy_preserves_local_strengthening(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(
-        json.dumps(
-            _policy(
-                settings={"risk_actions": {"network_egress": "block"}},
-                lockedSettings=["risk_actions.network_egress"],
-            )
-        )
-    )
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-
-    composed = apply_managed_policy(
-        {"risk_actions": {"network_egress": "review", "credential_access": "block"}},
-        state.policy,
-    )
-
-    assert composed["risk_actions"] == {
-        "network_egress": "block",
-        "credential_access": "block",
-    }
-
-
 def test_nested_managed_lock_rejects_persisted_weakening(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "policy.json"
     path.write_text(
@@ -445,6 +395,43 @@ def test_missing_policy_reports_absent(tmp_path: Path) -> None:
     assert state.reason_code == "managed_policy_absent"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="directory modes are POSIX")
+def test_memoized_machine_policy_is_reread_after_an_ancestor_directory_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    policy_dir = tmp_path / "etc" / "hol-guard"
+    policy_dir.mkdir(parents=True)
+    policy_path = policy_dir / "managed-policy.json"
+    policy_path.write_text("{}", encoding="utf-8")
+    paths = SimpleNamespace(policy_path=policy_path, state_root=tmp_path / "state")
+    loads: list[object] = []
+
+    def load_native(request: object, source: str) -> policy_module.ManagedPolicyState:
+        loads.append(request)
+        return policy_module.ManagedPolicyState("invalid", source, reason_code="managed_policy_invalid")
+
+    monkeypatch.setattr(policy_module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_: paths)
+    monkeypatch.setattr(policy_module, "_load_native", load_native)
+    monkeypatch.setattr(policy_module, "_MEMO", {})
+    # Files this test just wrote count as settled.
+    monkeypatch.setattr(policy_module, "_RACY_WINDOW_NS", -60_000_000_000)
+
+    load_managed_policy()
+    load_managed_policy()
+    assert len(loads) == 1
+
+    # Unrelated entries in an ancestor directory leave the memo alone.
+    (tmp_path / "health-lease-outbox.json").write_text("{}", encoding="utf-8")
+    load_managed_policy()
+    assert len(loads) == 1
+
+    # The native trust walk refuses a policy below a group-writable directory.
+    (tmp_path / "etc").chmod(0o775)
+    load_managed_policy()
+    assert len(loads) == 2
+
+
 def test_managed_policy_survives_local_and_cloud_weakening(tmp_path: Path) -> None:
     path = tmp_path / "policy.json"
     path.write_text(
@@ -477,14 +464,6 @@ def test_managed_policy_survives_local_and_cloud_weakening(tmp_path: Path) -> No
     assert overlaid.install_owner == "mdm"
 
 
-def test_local_policy_can_strengthen_locked_action(tmp_path: Path) -> None:
-    path = tmp_path / "policy.json"
-    path.write_text(json.dumps(_policy(settings={"default_action": "warn"}, lockedSettings=["default_action"])))
-    state = load_managed_policy(policy_path=path)
-    assert state.policy is not None
-    assert apply_managed_policy({"default_action": "block"}, state.policy)["default_action"] == "block"
-
-
 def test_invalid_machine_policy_fails_closed_in_runtime_config(tmp_path: Path) -> None:
     path = tmp_path / "policy.json"
     path.write_text("not-json")
@@ -501,6 +480,10 @@ def test_invalid_machine_policy_fails_closed_in_runtime_config(tmp_path: Path) -
     assert config.install_owner == "mdm"
 
 
+# The native machine-policy load applies this provenance rule in
+# `managed_policy_file_trust::component_is_restricted`, pinned by its own Rust
+# test; this keeps the shared Python predicate, which still guards the other
+# machine-controlled files, to the same cases.
 @pytest.mark.parametrize(
     ("file_mode", "file_uid", "parent_mode"),
     [
@@ -527,7 +510,7 @@ def test_native_machine_policy_source_rejects_insecure_provenance(
 
     monkeypatch.setattr(Path, "lstat", fake_lstat)
 
-    assert not policy_module._machine_policy_source_is_trusted(policy_path, "Linux")
+    assert not machine_controlled_file_is_trusted(policy_path, system_name="Linux")
 
 
 @pytest.mark.skipif(
@@ -545,126 +528,4 @@ def test_native_machine_policy_source_accepts_root_owned_nonwritable_path(
 
     monkeypatch.setattr(Path, "lstat", fake_lstat)
 
-    assert policy_module._machine_policy_source_is_trusted(policy_path, "Linux")
-
-
-def test_native_machine_policy_source_rejects_relative_path_before_stat(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def unexpected_lstat(_path: Path) -> SimpleNamespace:
-        raise AssertionError("relative paths must be rejected before filesystem traversal")
-
-    monkeypatch.setattr(Path, "lstat", unexpected_lstat)
-
-    assert not policy_module._machine_policy_source_is_trusted(
-        Path("etc/hol-guard/managed-policy.json"),
-        "Linux",
-    )
-
-
-def test_native_machine_policy_loader_reports_insecure_source_as_tampered(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    native_path = tmp_path / "managed-policy.json"
-    native_path.write_text(json.dumps(_policy()))
-    paths = MachinePaths(
-        tmp_path / "runtime",
-        tmp_path / "state",
-        native_path,
-        tmp_path / "logs",
-        tmp_path / "manifest",
-    )
-    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_kwargs: paths)
-
-    state = load_managed_policy(system_name="Linux")
-
-    assert state.status == "tampered"
-    assert state.reason_code == "managed_policy_source_tampered"
-
-
-def test_removed_profile_retains_last_valid_machine_floor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    native_path = tmp_path / "managed-policy.json"
-    paths = MachinePaths(
-        tmp_path / "runtime",
-        tmp_path / "state",
-        native_path,
-        tmp_path / "logs",
-        tmp_path / "manifest",
-    )
-    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_kwargs: paths)
-    monkeypatch.setattr(policy_module, "_administrator_context", lambda _system: True)
-    monkeypatch.setattr(policy_module, "_cache_owner_is_trusted", lambda _path, _system: True)
-    monkeypatch.setattr(policy_module, "_machine_policy_source_is_trusted", lambda _path, _system: True)
-    native_path.write_text(json.dumps(_policy()))
-
-    active = load_managed_policy(system_name="Linux")
-    native_path.unlink()
-    cached = load_managed_policy(system_name="Linux")
-
-    assert active.status == "active"
-    assert active.policy is not None
-    assert cached.status == "active"
-    assert cached.reason_code == "managed_policy_profile_removed_cached"
-    assert cached.policy is not None
-    assert cached.policy.content_hash == active.policy.content_hash
-
-
-def test_read_only_policy_load_does_not_refresh_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    native_path = tmp_path / "managed-policy.json"
-    paths = MachinePaths(
-        tmp_path / "runtime",
-        tmp_path / "state",
-        native_path,
-        tmp_path / "logs",
-        tmp_path / "manifest",
-    )
-    writes: list[tuple[dict[str, object], str]] = []
-    native_path.write_text(json.dumps(_policy()))
-    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_kwargs: paths)
-    monkeypatch.setattr(policy_module, "_machine_policy_source_is_trusted", lambda *_args: True)
-    monkeypatch.setattr(policy_module, "_write_policy_cache", lambda payload, system: writes.append((payload, system)))
-
-    state = load_managed_policy(system_name="Linux", write_cache=False)
-
-    assert state.status == "active"
-    assert writes == []
-
-
-def test_windows_cache_is_never_promoted_to_managed_signing_authority(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    state_root = tmp_path / "program-data" / "HOL Guard"
-    state_root.mkdir(parents=True)
-    cache_path = state_root / "managed-policy-cache.json"
-    cache_path.write_text(
-        json.dumps(
-            _policy(
-                policyBundleKeyring=policy_bundle_test_keyring(
-                    workspace_id="workspace-managed",
-                )
-            )
-        )
-    )
-    paths = MachinePaths(
-        tmp_path / "runtime",
-        state_root,
-        None,
-        tmp_path / "logs",
-        tmp_path / "manifest",
-    )
-    monkeypatch.setattr(policy_module, "default_machine_paths", lambda **_kwargs: paths)
-    monkeypatch.setattr(
-        policy_module,
-        "_read_windows_policy",
-        lambda: (None, r"HKLM\Software\Policies\HOL\Guard"),
-    )
-
-    state = load_managed_policy(system_name="Windows")
-
-    assert state.status == "tampered"
-    assert state.reason_code == "managed_policy_cache_tampered"
-    assert state.policy is None
-    assert not policy_module._machine_policy_source_is_trusted(cache_path, "Windows")
-    assert not policy_module._cache_owner_is_trusted(cache_path, "Windows")
+    assert machine_controlled_file_is_trusted(policy_path, system_name="Linux")

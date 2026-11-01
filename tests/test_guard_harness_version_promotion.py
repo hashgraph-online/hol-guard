@@ -26,7 +26,12 @@ FULL_EVENTS = ["PostToolUse", "PreToolUse", "UserPromptSubmit"]
 
 
 def _base() -> dict[str, object]:
-    return json.loads(bundled_manifest_path().read_text(encoding="utf-8"))
+    # The bundled manifest without the records a release promoted, so each test
+    # sees only what it promotes itself.
+    payload = json.loads(bundled_manifest_path().read_text(encoding="utf-8"))
+    for harness in payload["harnesses"]:
+        harness["records"] = []
+    return payload
 
 
 def _promote(payload: dict[str, object], **overrides: object) -> dict[str, object]:
@@ -186,7 +191,7 @@ def _command(path: Path, *extra: str) -> list[str]:
 
 def test_command_writes_a_record_bound_to_the_running_guard_version(tmp_path: Path) -> None:
     target = tmp_path / "manifest.json"
-    target.write_bytes(bundled_manifest_path().read_bytes())
+    target.write_bytes(render(_base()))
     assert main(_command(target)) == 0
     record = parse_manifest(json.loads(target.read_text(encoding="utf-8"))).harnesses["omp"].records[0]
     assert record.guard_version == promote_module.__version__
@@ -207,11 +212,6 @@ def test_command_leaves_the_manifest_untouched_when_it_refuses(
 def test_command_refuses_an_unreadable_manifest(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(_command(tmp_path / "missing.json")) == 1
     assert "refusing to promote" in capsys.readouterr().err
-
-
-def test_bundled_manifest_still_carries_no_records() -> None:
-    # Promotion happens on the release PR; this change ships the mechanism only.
-    assert _records(_base()) == []
 
 
 def test_publish_workflow_enforces_release_binding_on_stable_builds_only() -> None:

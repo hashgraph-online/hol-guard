@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
-from ..adapters import copilot, devin, hermes, kimi, openclaw_support, zcode
+from ..adapters import copilot, devin, hermes, kimi, muse, openclaw_support, zcode
 from ..adapters.base import HarnessContext
 from ..adapters.bounded_cli_hook_bridge import _render_bounded_hook_script, bounded_hook_script_path
 from ..store import GuardStore
@@ -15,13 +16,17 @@ from ..store import GuardStore
 # ``managed/bounded-hooks``. The command line never changes across releases, so
 # reinstall checks that compare commands miss a stale client body. Grok is
 # refreshed by its own repair path.
-_BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float], ...] = (
+# A timeout may be a constant or, where install derives it from the approval
+# wait, a callable that recomputes the same value for this context. Rendering a
+# constant for such a harness would shorten its approval wait on every update.
+_BOUNDED_HOOK_TIMEOUTS: tuple[tuple[str, str, float | Callable[[HarnessContext], float]], ...] = (
     ("zcode", "ZCode", zcode._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
     ("devin", "Devin", devin._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
     ("kimi", "Kimi", kimi._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
     ("copilot", "Copilot", copilot._GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS),
     ("openclaw", "OpenClaw", openclaw_support._GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS),
     ("hermes", "Hermes", hermes._GUARD_PRETOOL_INTERNAL_TIMEOUT_SECONDS),
+    ("muse", "Muse", muse.MuseHarnessAdapter._bridge_timeout_seconds),
 )
 
 
@@ -55,10 +60,15 @@ def refresh_bounded_hook_clients(
         script_path = bounded_hook_script_path(context.guard_home, harness)
         if script_path is None or _crosses_symlink(context.guard_home, script_path) or not script_path.is_file():
             continue
+        try:
+            resolved_timeout = timeout_seconds(context) if callable(timeout_seconds) else timeout_seconds
+        except (OSError, RuntimeError, ValueError) as error:
+            warnings.append(f"Could not refresh {display_name} hook client during update: {error}")
+            continue
         expected = _render_bounded_hook_script(
             guard_home=context.guard_home,
             harness=harness,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=resolved_timeout,
         )
         try:
             if script_path.read_text(encoding="utf-8") == expected:

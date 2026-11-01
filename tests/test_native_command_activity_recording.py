@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 
 
 def _writer(store: GuardStore) -> NativeHookEvidenceWriter:
@@ -52,22 +52,196 @@ def _valid_native_receipt() -> dict[str, object]:
     return receipt
 
 
-@pytest.mark.parametrize("writer_accepted", [True, False])
-def test_native_receipt_link_requires_validated_receipt(writer_accepted: bool) -> None:
+def test_native_receipt_link_records_the_edge_receipt() -> None:
     from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
 
-    host = SimpleNamespace(
-        activity_writer=SimpleNamespace(submit_native_decision_receipt=lambda **kwargs: writer_accepted),
-        _last_native_decision_receipt=None,
-    )
-    incomplete = {"decision_id": "native-receipt-example"}
-    assert HookWorkerNativeMixin._record_native_decision_receipt(host, incomplete) is None
+    host = SimpleNamespace(_last_native_decision_receipt=None)
+    # The edge checked the receipt before it answered; only a non-mapping is refused here.
+    assert HookWorkerNativeMixin._record_native_decision_receipt(host, ["not", "a", "receipt"]) is None
     assert host._last_native_decision_receipt is None
     receipt = _valid_native_receipt()
     result = HookWorkerNativeMixin._record_native_decision_receipt(host, receipt)
     assert result == receipt
     assert host._last_native_decision_receipt == receipt
     assert HookWorkerNativeMixin._record_native_decision_receipt(host, None) is None
+
+
+class _ReceiptWriter:
+    """Records receipt submissions; every other evidence call is accepted."""
+
+    def __init__(self) -> None:
+        self.receipts: list[object] = []
+
+    def submit_native_decision_receipt(self, *, receipt: object) -> bool:
+        self.receipts.append(receipt)
+        return True
+
+    def __getattr__(self, _name: str) -> object:
+        return lambda *_args, **_kwargs: True
+
+
+@pytest.mark.parametrize("recorded", [True, False, None])
+def test_the_daemon_submits_the_receipt_only_when_the_edge_did_not_queue_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: bool | None
+) -> None:
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('mode = "observe"\nprotection_posture = "watch"\n', encoding="utf-8")
+    receipt = _valid_native_receipt()
+    asked: dict[str, object] = {}
+
+    def edge(*_args: object, **kwargs: object) -> dict[str, object]:
+        asked.update(kwargs)
+        answer: dict[str, object] = {
+            "event_name": "PreToolUse",
+            "harness": "codex",
+            "result": {
+                "authority": "rust",
+                "decision": "deny",
+                "minimum_action": "block",
+                "policy_action": "block",
+                "reason_code": "native_destructive_command",
+                "reason": "HOL Guard blocked a destructive command before execution.",
+                "explicitly_benign": False,
+            },
+            "harness_response": {"decision": "allow", "policy_action": "warn"},
+            "receipt": receipt,
+        }
+        if recorded is not None:
+            answer["receipt_recorded"] = recorded
+        return answer
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", edge)
+    writer = _ReceiptWriter()
+    worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)  # pyright: ignore[reportArgumentType]
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
+    try:
+        worker.review_http_payload(
+            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "rm -rf /"}},
+            params={},
+            default_harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=guard_home,
+            workspace=tmp_path / "workspace",
+        )
+    finally:
+        worker.close()
+    # A daemon with a writer always asks the edge to queue the receipt.
+    assert asked["record_receipt"] is True
+    assert writer.receipts == ([] if recorded else [receipt])
+
+
+@pytest.mark.parametrize("recorded", [True, False, None])
+def test_the_daemon_records_a_post_tool_activity_only_when_the_edge_did_not_queue_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: bool | None
+) -> None:
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('mode = "observe"\nprotection_posture = "watch"\n', encoding="utf-8")
+
+    def edge(*_args: object, **_kwargs: object) -> dict[str, object]:
+        answer: dict[str, object] = {
+            "event_name": "PostToolUse",
+            "harness": "codex",
+            "result": {
+                "authority": "rust",
+                "decision": "allow",
+                "minimum_action": "allow",
+                "policy_action": "allow",
+                "reason_code": "native_post_tool_observed",
+                "reason": "HOL Guard recorded the completed tool call.",
+                "explicitly_benign": False,
+            },
+            "harness_response": {"decision": "allow", "policy_action": "allow"},
+            "receipt": _valid_native_receipt(),
+            "receipt_recorded": True,
+        }
+        if recorded is not None:
+            answer["activity_recorded"] = recorded
+        return answer
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", edge)
+    worker = HookWorker(store=GuardStore(guard_home), activity_writer=_ReceiptWriter())  # pyright: ignore[reportArgumentType]
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
+    activities: list[object] = []
+    monkeypatch.setattr(worker, "_record_post_tool_activity", lambda **kwargs: activities.append(kwargs["harness"]))
+    try:
+        worker.review_http_payload(
+            payload={"hook_event_name": "PostToolUse", "tool_input": {"command": "pwd"}},
+            params={},
+            default_harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=guard_home,
+            workspace=tmp_path / "workspace",
+        )
+    finally:
+        worker.close()
+    # An edge that queued the activity behind its receipt says so; the daemon
+    # records it otherwise, including for an older resident that never says.
+    assert activities == ([] if recorded else ["codex"])
+
+
+@pytest.mark.parametrize("recorded", [True, False, None])
+def test_the_daemon_records_a_pre_tool_activity_only_when_the_edge_did_not_queue_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded: bool | None
+) -> None:
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('mode = "observe"\nprotection_posture = "watch"\n', encoding="utf-8")
+
+    def edge(*_args: object, **_kwargs: object) -> dict[str, object]:
+        # Watch returns a recorded-only block as the edge rendered it.
+        answer: dict[str, object] = {
+            "event_name": "PreToolUse",
+            "harness": "codex",
+            "result": {
+                "authority": "rust",
+                "decision": "deny",
+                "minimum_action": "block",
+                "policy_action": "block",
+                "reason_code": "native_destructive_command",
+                "reason": "HOL Guard blocked a destructive command before execution.",
+                "explicitly_benign": False,
+            },
+            "harness_response": {"decision": "allow", "policy_action": "warn"},
+            "receipt": _valid_native_receipt(),
+            "receipt_recorded": True,
+        }
+        if recorded is not None:
+            answer["activity_recorded"] = recorded
+        return answer
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", edge)
+    # Evidence is submitted behind the answer; run it in line to observe it.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker_native.run_hook_evidence", lambda _host, act: act()
+    )
+    activities: list[object] = []
+    writer = _ReceiptWriter()
+    writer.submit_command_activity = lambda **kwargs: activities.append(kwargs["policy_action"]) or True  # pyright: ignore[reportAttributeAccessIssue]
+    worker = HookWorker(store=GuardStore(guard_home), activity_writer=writer)  # pyright: ignore[reportArgumentType]
+    monkeypatch.setattr(worker, "_native_policy_snapshot", lambda _workspace, **_kwargs: {"mode": "observe"})
+    try:
+        response = worker.review_http_payload(
+            payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "rm -rf /"}},
+            params={},
+            default_harness="codex",
+            home_dir=tmp_path / "home",
+            guard_home=guard_home,
+            workspace=tmp_path / "workspace",
+        )
+    finally:
+        worker.close()
+    assert response["policy_action"] == "warn"
+    # An edge that queued the activity behind its receipt says so; the daemon
+    # records it otherwise, including for an older resident that never says.
+    assert activities == ([] if recorded else ["warn"])
 
 
 @pytest.mark.parametrize(
@@ -223,11 +397,3 @@ def test_native_restrictive_decisions_keep_receipt_and_prompt(
         "accepted" if action == "allow" else "not-applicable",
     )
     assert writer.stats()["failures"] == 0
-
-
-def test_grok_failure_normalization_preserves_failure() -> None:
-    from codex_plugin_scanner.guard.adapters.grok_hooks import prepare_grok_hook_payload
-    from codex_plugin_scanner.guard.cli.commands_support_command_activity import hook_post_succeeded
-
-    payload = prepare_grok_hook_payload({"hookEventName": "post_tool_use_failure"})
-    assert not hook_post_succeeded(str(payload["hook_event_name"]), payload)

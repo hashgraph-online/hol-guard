@@ -86,6 +86,16 @@ def _positive_sequence(event: dict[str, object]) -> int:
     return value
 
 
+_MAX_RETRY_AFTER_MS = 3_600_000
+
+
+def _retry_after_ms(value: object) -> int | None:
+    """Return a server retry hint in milliseconds, or None when absent or invalid."""
+    if type(value) is not int or value <= 0:
+        return None
+    return min(value, _MAX_RETRY_AFTER_MS)
+
+
 def _normalize_response(
     response: dict[str, object],
     *,
@@ -111,6 +121,7 @@ def _normalize_response(
             "Guard Cloud Review returned an invalid protocol 2 acknowledgement. Update HOL Guard before retrying."
         )
     normalized: list[dict[str, object]] = []
+    retry_after_ms = _retry_after_ms(response.get("retryAfterMs")) or 0
     for index, item in enumerate(results):
         expected_event_id = events[index].get("eventId")
         if not isinstance(item, dict) or item.get("eventId") != expected_event_id:
@@ -134,6 +145,12 @@ def _normalize_response(
             "code": item.get("code"),
             "error": None if accepted else (item.get("code") or status),
         }
+        if not accepted:
+            normalized_item["status"] = status
+        item_retry_after = _retry_after_ms(item.get("retryAfterMs"))
+        if item_retry_after is not None and not accepted:
+            normalized_item["retryAfterMs"] = item_retry_after
+            retry_after_ms = max(retry_after_ms, item_retry_after)
         if status in {"accepted", "duplicate"} and item.get("nativeContextCommitted") is True:
             normalized_item["nativeContextCommitted"] = True
         if status == "rejected" and item.get("code") == "review_event_snapshot_sequence_collision":
@@ -152,6 +169,8 @@ def _normalize_response(
         "acknowledgedThrough": acknowledged_through,
         "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
     }
+    if retry_after_ms > 0:
+        normalized_response["retryAfterMs"] = retry_after_ms
     for field in ("maxBatchEvents", "maxBatchBytes"):
         value = response.get(field)
         if value is None:

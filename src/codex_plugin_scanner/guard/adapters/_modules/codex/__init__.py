@@ -1,1 +1,0 @@
-"""Internal codex adapter helpers."""

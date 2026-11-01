@@ -21,8 +21,6 @@ from codex_plugin_scanner.guard.hook_execution_environment import (
     stamp_hook_input_text,
 )
 
-FROZEN_ENTRYPOINT = Path(__file__).resolve().parents[1] / "scripts" / "mdm" / "hol-guard-entry.py"
-
 PAGER_CASES = [
     (None, False),
     ("", True),
@@ -75,16 +73,13 @@ def test_python_senders_agree_on_default_equivalent_pagers(
         encoding="utf-8",
     )
     generated = _load(script, "generated_zcode_pager_hook")
-    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_pager_test")
     _set_pagers(monkeypatch, pager)
 
     stamped = json.loads(generated._stamp_hook_input(json.dumps({"hook_event_name": "PreToolUse"})))
     context = stamped[HOOK_EXECUTION_ENVIRONMENT_KEY]
-    frozen = entry._codex_execution_environment()
 
     assert pager_default_equivalent(pager) is expected
     assert context["pager_disabled"] is context["git_pager_disabled"] is expected
-    assert frozen["pager_disabled"] is frozen["git_pager_disabled"] is expected
 
 
 def test_stamp_keeps_near_limit_input_forwardable(tmp_path: Path) -> None:
@@ -102,28 +97,6 @@ def test_stamp_keeps_near_limit_input_forwardable(tmp_path: Path) -> None:
     assert generated._stamp_hook_input(text) == text
 
 
-def test_frozen_bridge_drops_context_rather_than_exceed_request_limit() -> None:
-    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_size_test")
-    text = json.dumps({"hook_event_name": "PostToolUse", "tool_response": "x" * 999_800})
-
-    hinted = entry._codex_hint_hook_data(text, event_name="PostToolUse", deadline=1e12, rpc_deadline=1e12)
-
-    assert len(hinted) <= entry._CODEX_HOOK_MAX_INPUT_BYTES
-    assert HOOK_EXECUTION_ENVIRONMENT_KEY not in json.loads(hinted)
-    small = entry._codex_hint_hook_data("{}", event_name="PostToolUse", deadline=1e12, rpc_deadline=1e12)
-    assert HOOK_EXECUTION_ENVIRONMENT_KEY in json.loads(small)
-
-
-def test_frozen_bridge_forwards_original_input_when_hints_leave_no_room() -> None:
-    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_hint_room_test")
-    text = json.dumps({"hook_event_name": "PostToolUse", "tool_response": "x" * 999_930})
-
-    hinted = entry._codex_hint_hook_data(text, event_name="PostToolUse", deadline=1e12, rpc_deadline=1e12)
-
-    assert len(text) <= entry._CODEX_HOOK_MAX_INPUT_BYTES
-    assert hinted == text
-
-
 def test_all_senders_keep_present_but_empty_pager_names(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -136,14 +109,12 @@ def test_all_senders_keep_present_but_empty_pager_names(
         encoding="utf-8",
     )
     generated = _load(script, "generated_zcode_empty_pager_hook")
-    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_empty_pager_test")
     monkeypatch.setenv("GIT_PAGER", "")
     monkeypatch.setenv("PAGER", "delta")
 
     contexts = [
         json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
         json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
-        entry._codex_execution_environment(),
     ]
     for context in contexts:
         assert "GIT_PAGER" in context["environment_names"]
@@ -216,7 +187,6 @@ def test_all_senders_stamp_the_same_loader_search_paths(
         encoding="utf-8",
     )
     generated = _load(script, "generated_zcode_loader_path_hook")
-    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_loader_path_test")
     for name in LIBRARY_SEARCH_PATH_NAMES:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/usr/lib")
@@ -227,7 +197,6 @@ def test_all_senders_stamp_the_same_loader_search_paths(
     contexts = [
         json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
         json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
-        entry._codex_execution_environment(),
     ]
     if shutil.which("node") is not None:
         contexts.append(_pi_execution_environment(tmp_path, dict(os.environ)))

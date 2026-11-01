@@ -23,7 +23,7 @@ use crate::command_database_matchers::DatabaseMatcher;
 use crate::command_operand_matchers::OperandMatcher;
 use crate::command_option_parsing::{
     argument_semantics, flags_present_in_all_option_parses_with_deadline, known_option_advance,
-    matches_subcommands_conservatively_with_deadline,
+    matches_subcommands_conservatively_with_deadline, ArgumentSemantics,
 };
 use crate::command_specialized_matchers::SpecializedMatcher;
 use crate::command_structured_matchers::StructuredMatcher;
@@ -109,6 +109,8 @@ mod observations;
 pub mod source;
 #[path = "native_command_program_wire.rs"]
 mod wire;
+#[path = "native_command_program_work_stats.rs"]
+pub mod work_stats;
 use compile::{compile_node, validate_graph};
 use evaluation::Evaluation;
 use wire::*;
@@ -481,7 +483,7 @@ impl NativeCommandProgram {
     }
 }
 
-fn basename(value: &str) -> &str {
+pub(crate) fn basename(value: &str) -> &str {
     value.rsplit(['/', '\\']).next().unwrap_or(value)
 }
 

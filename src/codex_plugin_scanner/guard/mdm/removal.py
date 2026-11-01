@@ -1,43 +1,31 @@
-"""Generation-bound managed removal authorization and tombstone evidence."""
+"""Generation-bound managed removal authorization and tombstone evidence.
+
+The native runtime writes and parses the authorization and tombstone files.
+This module keeps the privileged checks: administrator context, the account
+that owns the home, the trusted state root, the authorization file's owner
+and the active installation binding.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
+import base64
 import os
 import platform
-import re
-import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
 
 from ..durable_io import fsync_directory as _fsync_directory
 from .acl import verify_protected_ownership_and_acl
 from .continuity import verify_installation_continuity
 from .contracts import MDM_STATUS_SCHEMA_VERSION, MachinePaths, default_machine_paths
+from .runtime_request import runtime_answer
 
-_AUTHORIZATION_KEYS = {
-    "actor",
-    "expiresAt",
-    "home",
-    "installationGeneration",
-    "issuedAt",
-    "machineInstallationId",
-    "nonce",
-    "operation",
-    "reason",
-    "user",
-}
-_IDENTIFIER = re.compile(r"^[0-9a-f]{32}$")
-_ACTOR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9@._:-]{0,127}$")
-_MAX_TOMBSTONES = 4096
-_TOMBSTONE_TRANSITIONS: dict[str | None, frozenset[str]] = {
-    None: frozenset({"issued", "started"}),
-    "issued": frozenset({"started"}),
-    "started": frozenset({"completed", "failed"}),
-}
+REMOVAL_EVIDENCE_FEATURE = "native-removal-evidence-v1"
+REMOVAL_EVIDENCE_COMMAND = "removal-evidence"
+REMOVAL_EVIDENCE_SCHEMA = "removal-evidence.v1"
+_MAX_AUTHORIZATION_BYTES = 16 * 1024
+_COMMAND_TIMEOUT_SECONDS = 30.0
+_OUTPUT_LIMIT_BYTES = 16 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,10 +37,6 @@ class RemovalAuthorizationEvidence:
     installation_generation: str
     issued_at: str
     expires_at: str
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _active_binding(paths: MachinePaths) -> tuple[str, str]:
@@ -79,18 +63,51 @@ def _authorization_root_is_trusted(paths: MachinePaths) -> bool:
     return verify_protected_ownership_and_acl(paths).healthy
 
 
-def _validate_actor_reason(actor: str, reason: str) -> None:
-    if _ACTOR.fullmatch(actor) is None:
-        raise ValueError("mdm_removal_authorization_actor_invalid")
-    if not 1 <= len(reason) <= 256 or any(ord(character) < 32 for character in reason):
-        raise ValueError("mdm_removal_authorization_reason_invalid")
+def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
+    """The runtime's answer to one removal-evidence request, or ``None`` when it cannot answer."""
+
+    return runtime_answer(
+        REMOVAL_EVIDENCE_FEATURE,
+        REMOVAL_EVIDENCE_COMMAND,
+        {"schema": REMOVAL_EVIDENCE_SCHEMA, **request},
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+    )
 
 
-def _required_string(payload: dict[str, object], key: str) -> str:
-    value = payload.get(key)
-    if not isinstance(value, str) or not value:
-        raise ValueError("mdm_removal_authorization_invalid")
+def _native_fields(request: dict[str, object], *, unavailable: Exception) -> dict[str, object]:
+    """Fields of a successful answer; a refusal raises its own error code."""
+
+    answer = _native_answer(request)
+    if answer is None or not isinstance(answer.get("ok"), bool):
+        # Evidence nothing could check never authorizes a removal.
+        raise unavailable
+    if answer["ok"] is True:
+        return answer
+    error = answer.get("error")
+    code = error if isinstance(error, str) else "mdm_removal_evidence_invalid"
+    if answer.get("kind") == "os":
+        raise OSError(code)
+    raise ValueError(code)
+
+
+def _native_string(fields: dict[str, object], key: str, *, unavailable: Exception | None = None) -> str:
+    value = fields.get(key)
+    if not isinstance(value, str):
+        raise unavailable or ValueError("mdm_removal_authorization_native_unavailable")
     return value
+
+
+def _evidence(fields: dict[str, object]) -> RemovalAuthorizationEvidence:
+    return RemovalAuthorizationEvidence(
+        _native_string(fields, "fingerprint"),
+        _native_string(fields, "actor"),
+        _native_string(fields, "reason"),
+        _native_string(fields, "machine_installation_id"),
+        _native_string(fields, "installation_generation"),
+        _native_string(fields, "issued_at"),
+        _native_string(fields, "expires_at"),
+    )
 
 
 def authorize_deactivation(
@@ -114,45 +131,28 @@ def authorize_deactivation(
             raise ValueError("mdm_user_not_found") from exc
         if home.resolve().stat().st_uid != account.pw_uid:
             raise ValueError("mdm_home_owner_mismatch")
-    _validate_actor_reason(actor, reason)
     paths = default_machine_paths()
     machine_installation_id, installation_generation = _active_binding(paths)
     if not _authorization_root_is_trusted(paths):
         raise ValueError("mdm_removal_authorization_untrusted_root")
     root = paths.state_root / "removal-authorizations"
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    root.chmod(0o700)
-    now = _now()
-    issued_at = now.isoformat()
-    expires_at = (now + timedelta(minutes=2)).isoformat()
-    resolved_name = token_name or f"{user}-{secrets.token_hex(8)}.json"
-    if re.fullmatch(r"[A-Za-z0-9_.-]{1,128}\.json", resolved_name) is None:
-        raise ValueError("mdm_removal_authorization_name_invalid")
-    target = root / resolved_name
-    descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        json.dump(
-            {
-                "actor": actor,
-                "expiresAt": expires_at,
-                "home": str(home.resolve()),
-                "installationGeneration": installation_generation,
-                "issuedAt": issued_at,
-                "machineInstallationId": machine_installation_id,
-                "nonce": secrets.token_urlsafe(24),
-                "operation": "deactivate",
-                "reason": reason,
-                "user": user,
-            },
-            stream,
-            sort_keys=True,
-        )
-        _ = stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    target.chmod(0o600)
-    _fsync_directory(root)
-    fingerprint = hashlib.sha256(target.read_bytes()).hexdigest()
+    issued = _native_fields(
+        {
+            "op": "issue",
+            "root": str(root),
+            "name": token_name or None,
+            "home": str(home.resolve()),
+            "user": user,
+            "actor": actor,
+            "reason": reason,
+            "machine_installation_id": machine_installation_id,
+            "installation_generation": installation_generation,
+        },
+        unavailable=ValueError("mdm_removal_authorization_native_unavailable"),
+    )
+    target = Path(_native_string(issued, "path"))
+    fingerprint = _native_string(issued, "fingerprint")
+    issued_at = _native_string(issued, "issued_at")
     evidence = RemovalAuthorizationEvidence(
         fingerprint,
         actor,
@@ -160,7 +160,7 @@ def authorize_deactivation(
         machine_installation_id,
         installation_generation,
         issued_at,
-        expires_at,
+        _native_string(issued, "expires_at"),
     )
     try:
         _ = record_removal_tombstone(evidence, status="issued", machine_paths=paths)
@@ -171,7 +171,7 @@ def authorize_deactivation(
     return {
         "schemaVersion": MDM_STATUS_SCHEMA_VERSION,
         "operation": "authorize-deactivation",
-        "generatedAt": now.isoformat(),
+        "generatedAt": issued_at,
         "scope": "user",
         "home": str(home.resolve()),
         "user": user,
@@ -203,62 +203,29 @@ def validate_removal_authorization(
         metadata = resolved.stat()
     except OSError as exc:
         raise ValueError("mdm_removal_authorization_invalid") from exc
-    if len(content_bytes) > 16 * 1024 or metadata.st_size != len(content_bytes):
+    if len(content_bytes) > _MAX_AUTHORIZATION_BYTES or metadata.st_size != len(content_bytes):
         raise ValueError("mdm_removal_authorization_invalid")
     if not _authorization_owner_is_trusted(metadata):
         raise ValueError("mdm_removal_authorization_untrusted_owner")
-    try:
-        raw_payload: object = json.loads(content_bytes.decode("utf-8"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError("mdm_removal_authorization_invalid") from exc
-    if not isinstance(raw_payload, dict):
-        raise ValueError("mdm_removal_authorization_invalid")
-    payload = cast(dict[str, object], raw_payload)
-    if set(payload) != _AUTHORIZATION_KEYS:
-        raise ValueError("mdm_removal_authorization_invalid")
-    if payload.get("operation") != "deactivate" or payload.get("user") != user:
-        raise ValueError("mdm_removal_authorization_wrong_scope")
-    if payload.get("home") != str(home):
-        raise ValueError("mdm_removal_authorization_wrong_scope")
-    actor = _required_string(payload, "actor")
-    reason = _required_string(payload, "reason")
-    machine_installation_id = _required_string(payload, "machineInstallationId")
-    installation_generation = _required_string(payload, "installationGeneration")
-    _ = _required_string(payload, "nonce")
-    issued_raw = _required_string(payload, "issuedAt")
-    expires_raw = _required_string(payload, "expiresAt")
-    if _IDENTIFIER.fullmatch(machine_installation_id) is None:
-        raise ValueError("mdm_removal_authorization_invalid")
-    if _IDENTIFIER.fullmatch(installation_generation) is None:
-        raise ValueError("mdm_removal_authorization_invalid")
-    _validate_actor_reason(actor, reason)
-    try:
-        issued = datetime.fromisoformat(issued_raw)
-        expires = datetime.fromisoformat(expires_raw)
-    except ValueError as exc:
-        raise ValueError("mdm_removal_authorization_invalid") from exc
-    now = _now()
-    if issued.tzinfo is None or expires.tzinfo is None or issued > now or expires <= now:
-        raise ValueError("mdm_removal_authorization_expired")
-    if (expires - issued).total_seconds() > 300 or (now - issued).total_seconds() > 300:
-        raise ValueError("mdm_removal_authorization_expired")
-    if (machine_installation_id, installation_generation) != _active_binding(paths):
+    evidence = _evidence(
+        _native_fields(
+            {
+                "op": "check",
+                "content": base64.b64encode(content_bytes).decode("ascii"),
+                "home": str(home),
+                "user": user,
+            },
+            unavailable=ValueError("mdm_removal_authorization_native_unavailable"),
+        )
+    )
+    if (evidence.machine_installation_id, evidence.installation_generation) != _active_binding(paths):
         raise ValueError("mdm_removal_authorization_wrong_generation")
-    fingerprint = hashlib.sha256(content_bytes).hexdigest()
     try:
         resolved.unlink()
         _fsync_directory(resolved.parent)
     except OSError as exc:
         raise PermissionError("mdm_removal_authorization_not_consumable") from exc
-    return RemovalAuthorizationEvidence(
-        fingerprint,
-        actor,
-        reason,
-        machine_installation_id,
-        installation_generation,
-        issued_raw,
-        expires_raw,
-    )
+    return evidence
 
 
 def record_removal_tombstone(
@@ -267,94 +234,25 @@ def record_removal_tombstone(
     status: str,
     machine_paths: MachinePaths | None = None,
 ) -> Path:
-    if status not in {"issued", "started", "completed", "failed"}:
-        raise ValueError("mdm_removal_tombstone_status_invalid")
     paths = machine_paths or default_machine_paths()
-    root = paths.state_root / "removal-tombstones"
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    root.chmod(0o700)
-    target = root / f"{evidence.fingerprint}.json"
-    if not target.exists():
-        with os.scandir(root) as entries:
-            file_count = sum(1 for entry in entries if entry.is_file(follow_symlinks=False))
-        if file_count >= _MAX_TOMBSTONES:
-            raise OSError("mdm_removal_tombstone_capacity_exceeded")
-    static_payload = {
-        "actor": evidence.actor,
-        "authorizationExpiresAt": evidence.expires_at,
-        "authorizationFingerprint": evidence.fingerprint,
-        "authorizationIssuedAt": evidence.issued_at,
-        "installationGeneration": evidence.installation_generation,
-        "machineInstallationId": evidence.machine_installation_id,
-        "operation": "deactivate",
-        "reason": evidence.reason,
-        "schemaVersion": "hol-guard-removal-tombstone.v1",
-    }
-    events: list[dict[str, str]] = []
-    previous_status: str | None = None
-    if target.exists():
-        try:
-            existing_raw: object = json.loads(target.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise ValueError("mdm_removal_tombstone_invalid") from exc
-        if not isinstance(existing_raw, dict):
-            raise ValueError("mdm_removal_tombstone_invalid")
-        existing = cast(dict[str, object], existing_raw)
-        if set(existing) != set(static_payload) | {"events", "status", "updatedAt"}:
-            raise ValueError("mdm_removal_tombstone_invalid")
-        if any(existing.get(key) != value for key, value in static_payload.items()):
-            raise ValueError("mdm_removal_tombstone_identity_mismatch")
-        existing_events_raw = existing.get("events")
-        if not isinstance(existing_events_raw, list):
-            raise ValueError("mdm_removal_tombstone_invalid")
-        existing_events = cast(list[object], existing_events_raw)
-        if not 1 <= len(existing_events) <= 3:
-            raise ValueError("mdm_removal_tombstone_invalid")
-        event_previous_status: str | None = None
-        event_previous_time: datetime | None = None
-        for event_raw in existing_events:
-            if not isinstance(event_raw, dict):
-                raise ValueError("mdm_removal_tombstone_invalid")
-            event = cast(dict[str, object], event_raw)
-            if set(event) != {"at", "status"}:
-                raise ValueError("mdm_removal_tombstone_invalid")
-            event_status = event.get("status")
-            event_at = event.get("at")
-            if not isinstance(event_status, str) or not isinstance(event_at, str):
-                raise ValueError("mdm_removal_tombstone_invalid")
-            try:
-                event_time = datetime.fromisoformat(event_at)
-            except ValueError as exc:
-                raise ValueError("mdm_removal_tombstone_invalid") from exc
-            if event_time.tzinfo is None or (event_previous_time is not None and event_time < event_previous_time):
-                raise ValueError("mdm_removal_tombstone_invalid")
-            if event_status not in _TOMBSTONE_TRANSITIONS.get(event_previous_status, frozenset()):
-                raise ValueError("mdm_removal_tombstone_invalid")
-            events.append({"at": event_at, "status": event_status})
-            event_previous_status = event_status
-            event_previous_time = event_time
-        previous_status = events[-1]["status"]
-        if existing.get("status") != previous_status or existing.get("updatedAt") != events[-1]["at"]:
-            raise ValueError("mdm_removal_tombstone_invalid")
-    if status not in _TOMBSTONE_TRANSITIONS.get(previous_status, frozenset()):
-        raise ValueError("mdm_removal_tombstone_transition_invalid")
-    updated_at = _now().isoformat()
-    events.append({"at": updated_at, "status": status})
-    payload = static_payload | {"events": events, "status": status, "updatedAt": updated_at}
-    temporary = root / f".{evidence.fingerprint}.{secrets.token_hex(8)}.tmp"
-    descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump(payload, stream, sort_keys=True)
-            _ = stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, target)
-        target.chmod(0o600)
-        _fsync_directory(root)
-    finally:
-        temporary.unlink(missing_ok=True)
-    return target
+    recorded = _native_fields(
+        {
+            "op": "tombstone",
+            "root": str(paths.state_root / "removal-tombstones"),
+            "status": status,
+            "evidence": {
+                "fingerprint": evidence.fingerprint,
+                "actor": evidence.actor,
+                "reason": evidence.reason,
+                "machine_installation_id": evidence.machine_installation_id,
+                "installation_generation": evidence.installation_generation,
+                "issued_at": evidence.issued_at,
+                "expires_at": evidence.expires_at,
+            },
+        },
+        unavailable=OSError("mdm_removal_native_unavailable"),
+    )
+    return Path(_native_string(recorded, "path", unavailable=OSError("mdm_removal_native_unavailable")))
 
 
 __all__ = [

@@ -1,0 +1,552 @@
+{
+  "extension": {
+    "action_classes": [
+      "Iterlay provider-quota use",
+      "Iterlay managed and exported file writes",
+      "Iterlay agent configuration changes",
+      "Iterlay workspace mutations and unknown invocations"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Iterlay CLI invocations that can spend provider quota, write managed or exported files, change workspace state, or install agent configuration. Explicit read-only paths narrow this rule; Guard independent floors remain in effect.",
+    "ecosystem_ids": [
+      "iterlay"
+    ],
+    "executables": [
+      "iterlay"
+    ],
+    "extension_id": "command.iterlay",
+    "homepage": "https://github.com/Davied-H/iterlay",
+    "icon": {
+      "background": "#0F172A",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "Iterlay command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Iterlay provider-quota use",
+          "Iterlay managed and exported file writes",
+          "Iterlay agent configuration changes",
+          "Iterlay workspace mutations and unknown invocations"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews Iterlay CLI invocations that can spend provider quota, write managed or exported files, change workspace state, or install agent configuration. Explicit read-only paths narrow this rule; Guard independent floors remain in effect.",
+        "example_command": "iterlay image generate --prompt \"Product photo\" --out ./product.png",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Iterlay state changes, quota use and unclassified calls",
+        "permission_id": "command.iterlay.permission.side-effects",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Inspect iterlay tools list and the requested operation before running it.",
+          "Confirm provider cost and reference-image disclosure before generation or editing.",
+          "Export to a new destination; --overwrite can replace existing files.",
+          "Review add/remove agent configuration changes. Ctrl+C stops waiting, not remote billing."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.iterlay",
+      "display_name": "Community",
+      "url": "https://github.com/Davied-H/iterlay"
+    },
+    "reference_urls": [
+      "https://github.com/Davied-H/iterlay/blob/main/cli/src/main.ts",
+      "https://github.com/Davied-H/iterlay/blob/main/electron/workspace-tools.ts"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "filesystem_write",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Iterlay provider-quota use",
+          "Iterlay managed and exported file writes",
+          "Iterlay agent configuration changes",
+          "Iterlay workspace mutations and unknown invocations"
+        ],
+        "default_mode": "review",
+        "description": "Reviews Iterlay CLI invocations that can spend provider quota, write managed or exported files, change workspace state, or install agent configuration. Explicit read-only paths narrow this rule; Guard independent floors remain in effect.",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "iterlay",
+              "iterlay.cmd",
+              "iterlay.exe"
+            ],
+            "subcommands": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--agent",
+              "--home",
+              "--kind",
+              "--provider",
+              "--model",
+              "--prompt",
+              "--input",
+              "--out",
+              "--path",
+              "--board",
+              "--name",
+              "--size",
+              "--quality",
+              "--style",
+              "--background",
+              "--n",
+              "--reference",
+              "--ratio",
+              "--duration",
+              "--resolution",
+              "--timeout",
+              "--request-id",
+              "--app-path",
+              "--user-data-path"
+            ],
+            "interspersed_options_with_values": [
+              "--agent",
+              "--home",
+              "--kind",
+              "--provider",
+              "--model",
+              "--prompt",
+              "--input",
+              "--out",
+              "--path",
+              "--board",
+              "--name",
+              "--size",
+              "--quality",
+              "--style",
+              "--background",
+              "--n",
+              "--reference",
+              "--ratio",
+              "--duration",
+              "--resolution",
+              "--timeout",
+              "--request-id",
+              "--app-path",
+              "--user-data-path"
+            ],
+            "interspersed_flags": [
+              "--json",
+              "--async",
+              "--no-launch",
+              "--overwrite",
+              "--help",
+              "--version"
+            ],
+            "options_with_values": [
+              "--agent",
+              "--home",
+              "--kind",
+              "--provider",
+              "--model",
+              "--prompt",
+              "--input",
+              "--out",
+              "--path",
+              "--board",
+              "--name",
+              "--size",
+              "--quality",
+              "--style",
+              "--background",
+              "--n",
+              "--reference",
+              "--ratio",
+              "--duration",
+              "--resolution",
+              "--timeout",
+              "--request-id",
+              "--app-path",
+              "--user-data-path"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": true,
+            "forbidden_flags": [],
+            "fail_secure_unknown_options": true
+          }
+        },
+        "native_capability": null,
+        "permission_id": "command.iterlay.permission.side-effects",
+        "risk_classes": [
+          "execution",
+          "filesystem_write",
+          "network_egress"
+        ],
+        "rule_id": "command.iterlay.side-effects",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "variant_id": "read-only",
+            "title": "Read-only metadata and task inspection without export or executable override",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable-path-set.v1",
+                  "config": {
+                    "executables": [
+                      "iterlay",
+                      "iterlay.cmd",
+                      "iterlay.exe"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "--agent",
+                      "--home",
+                      "--kind",
+                      "--provider",
+                      "--model",
+                      "--prompt",
+                      "--input",
+                      "--out",
+                      "--path",
+                      "--board",
+                      "--name",
+                      "--size",
+                      "--quality",
+                      "--style",
+                      "--background",
+                      "--n",
+                      "--reference",
+                      "--ratio",
+                      "--duration",
+                      "--resolution",
+                      "--timeout",
+                      "--request-id",
+                      "--app-path",
+                      "--user-data-path"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--agent",
+                      "--home",
+                      "--kind",
+                      "--provider",
+                      "--model",
+                      "--prompt",
+                      "--input",
+                      "--out",
+                      "--path",
+                      "--board",
+                      "--name",
+                      "--size",
+                      "--quality",
+                      "--style",
+                      "--background",
+                      "--n",
+                      "--reference",
+                      "--ratio",
+                      "--duration",
+                      "--resolution",
+                      "--timeout",
+                      "--request-id",
+                      "--app-path",
+                      "--user-data-path"
+                    ],
+                    "interspersed_flags": [
+                      "--json",
+                      "--async",
+                      "--no-launch",
+                      "--overwrite",
+                      "--help",
+                      "--version"
+                    ],
+                    "options_with_values": [
+                      "--agent",
+                      "--home",
+                      "--kind",
+                      "--provider",
+                      "--model",
+                      "--prompt",
+                      "--input",
+                      "--out",
+                      "--path",
+                      "--board",
+                      "--name",
+                      "--size",
+                      "--quality",
+                      "--style",
+                      "--background",
+                      "--n",
+                      "--reference",
+                      "--ratio",
+                      "--duration",
+                      "--resolution",
+                      "--timeout",
+                      "--request-id",
+                      "--app-path",
+                      "--user-data-path"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "forbidden_flags": [
+                      "--out",
+                      "--overwrite",
+                      "--app-path"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "paths": [
+                      [
+                        "status"
+                      ],
+                      [
+                        "doctor"
+                      ],
+                      [
+                        "providers",
+                        "list"
+                      ],
+                      [
+                        "models",
+                        "list"
+                      ],
+                      [
+                        "tools",
+                        "list"
+                      ],
+                      [
+                        "boards",
+                        "list"
+                      ],
+                      [
+                        "boards",
+                        "show"
+                      ],
+                      [
+                        "boards",
+                        "active"
+                      ],
+                      [
+                        "assets",
+                        "list"
+                      ],
+                      [
+                        "tasks",
+                        "list"
+                      ],
+                      [
+                        "help"
+                      ],
+                      [
+                        "version"
+                      ],
+                      [
+                        "guard",
+                        "descriptor"
+                      ],
+                      [
+                        "call",
+                        "status"
+                      ],
+                      [
+                        "call",
+                        "list_providers"
+                      ],
+                      [
+                        "call",
+                        "list_models"
+                      ],
+                      [
+                        "call",
+                        "list_tasks"
+                      ],
+                      [
+                        "call",
+                        "list_boards"
+                      ],
+                      [
+                        "call",
+                        "get_active_board"
+                      ],
+                      [
+                        "call",
+                        "get_board"
+                      ],
+                      [
+                        "call",
+                        "get_board_layout"
+                      ],
+                      [
+                        "call",
+                        "list_assets"
+                      ],
+                      [
+                        "call",
+                        "get_generation_status"
+                      ],
+                      [
+                        "call",
+                        "list_modification_requests"
+                      ],
+                      [
+                        "call",
+                        "get_modification_request"
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "op": "executable-path-set.v1",
+                  "config": {
+                    "executables": [
+                      "iterlay",
+                      "iterlay.cmd",
+                      "iterlay.exe"
+                    ],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": [
+                      "--agent",
+                      "--home",
+                      "--kind",
+                      "--provider",
+                      "--model",
+                      "--prompt",
+                      "--input",
+                      "--out",
+                      "--path",
+                      "--board",
+                      "--name",
+                      "--size",
+                      "--quality",
+                      "--style",
+                      "--background",
+                      "--n",
+                      "--reference",
+                      "--ratio",
+                      "--duration",
+                      "--resolution",
+                      "--timeout",
+                      "--request-id",
+                      "--app-path",
+                      "--user-data-path"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--agent",
+                      "--home",
+                      "--kind",
+                      "--provider",
+                      "--model",
+                      "--prompt",
+                      "--input",
+                      "--out",
+                      "--path",
+                      "--board",
+                      "--name",
+                      "--size",
+                      "--quality",
+                      "--style",
+                      "--background",
+                      "--n",
+                      "--reference",
+                      "--ratio",
+                      "--duration",
+                      "--resolution",
+                      "--timeout",
+                      "--request-id",
+                      "--app-path",
+                      "--user-data-path"
+                    ],
+                    "interspersed_flags": [
+                      "--json",
+                      "--async",
+                      "--no-launch",
+                      "--overwrite",
+                      "--help",
+                      "--version"
+                    ],
+                    "options_with_values": [
+                      "--agent",
+                      "--home",
+                      "--kind",
+                      "--provider",
+                      "--model",
+                      "--prompt",
+                      "--input",
+                      "--out",
+                      "--path",
+                      "--board",
+                      "--name",
+                      "--size",
+                      "--quality",
+                      "--style",
+                      "--background",
+                      "--n",
+                      "--reference",
+                      "--ratio",
+                      "--duration",
+                      "--resolution",
+                      "--timeout",
+                      "--request-id",
+                      "--app-path",
+                      "--user-data-path"
+                    ],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": true,
+                    "forbidden_flags": [
+                      "--out",
+                      "--overwrite",
+                      "--app-path",
+                      "--kind"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "paths": [
+                      [
+                        "tasks",
+                        "get"
+                      ],
+                      [
+                        "tasks",
+                        "wait"
+                      ]
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect iterlay tools list and the requested operation before running it.",
+          "Confirm provider cost and reference-image disclosure before generation or editing.",
+          "Export to a new destination; --overwrite can replace existing files.",
+          "Review add/remove agent configuration changes. Ctrl+C stops waiting, not remote billing."
+        ],
+        "severity": "high",
+        "title": "Iterlay state changes, quota use and unclassified calls"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect iterlay tools list and the requested operation before running it.",
+      "Confirm provider cost and reference-image disclosure before generation or editing.",
+      "Export to a new destination; --overwrite can replace existing files.",
+      "Review add/remove agent configuration changes. Ctrl+C stops waiting, not remote billing."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

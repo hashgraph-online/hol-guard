@@ -32,11 +32,10 @@ def _run_guard_hook_command(
     config: GuardConfig | None = None,
     input_text: str | None = None,
     output_stream: TextIO | None = None,
-    _claim_saved_approval: bool = True,
-    _claimed_saved_allow_hash: str | None = None,
-    _claimed_trusted_request_override: bool = False,
-    _claimed_approval_request_id: str | None = None,
 ) -> int:
+    # The router hands every command the loaded config; the hook review reads
+    # its own policy snapshot instead.
+    del config
     if guard_home is None:
         raise RuntimeError("Guard home is required")
     context = _require_guard_context(context)
@@ -54,16 +53,11 @@ def _run_guard_hook_command(
     )
     return route_native_hook(
         args,
-        config=config,
         context=context,
         payload=payload,
         runtime_workspace=workspace,
         store=store,
         output_stream=output_stream,
-        _claim_saved_approval=_claim_saved_approval,
-        _claimed_saved_allow_hash=_claimed_saved_allow_hash,
-        _claimed_trusted_request_override=_claimed_trusted_request_override,
-        _claimed_approval_request_id=_claimed_approval_request_id,
     )
 
 

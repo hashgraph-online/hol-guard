@@ -3,6 +3,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod adapter_state_integrity;
+pub use adapter_state_integrity::*;
+mod aibom_report_summaries;
+pub use aibom_report_summaries::*;
 mod approval_contracts;
 pub use approval_contracts::*;
 mod approval_extension_recommendation;
@@ -23,12 +27,16 @@ mod extension_control_prepared;
 pub use extension_control_prepared::*;
 mod extension_control_preview;
 pub use extension_control_preview::*;
+mod extension_control_terminal;
+pub use extension_control_terminal::*;
 mod github_cli_classify;
 pub use github_cli_classify::*;
 mod github_workflow_prepare;
 pub use github_workflow_prepare::*;
 mod protect_request;
 pub use protect_request::*;
+mod portable_project_identity;
+pub use portable_project_identity::*;
 mod git_execution_safety;
 pub use git_execution_safety::*;
 mod compound_git_inspection;
@@ -67,6 +75,8 @@ mod workspace_review_contracts;
 pub use workspace_review_contracts::*;
 mod archive_inspection;
 pub use archive_inspection::*;
+mod content_decode;
+pub use content_decode::*;
 
 mod archive_acquisition;
 pub use archive_acquisition::*;
@@ -74,18 +84,30 @@ mod execution_environment;
 pub use execution_environment::*;
 mod context_digest;
 pub use context_digest::*;
+mod python_text;
+pub use python_text::{is_python_space, python_strip};
 mod local_cli_identity;
 pub use local_cli_identity::*;
 mod approval_scope;
 pub use approval_scope::*;
 mod approval_resolution_eligibility;
 pub use approval_resolution_eligibility::*;
+mod command_capability;
+pub use command_capability::*;
+mod command_envelope;
+pub use command_envelope::*;
 mod approval_persist_select;
 pub use approval_persist_select::*;
 mod approval_scope_select;
 pub use approval_scope_select::*;
+mod contained_wrapper_plan;
+pub use contained_wrapper_plan::*;
 mod artifact_content_hash;
 pub use artifact_content_hash::*;
+mod codex_hook_file_identity;
+pub use codex_hook_file_identity::*;
+mod codex_hook_manifest_verify;
+pub use codex_hook_manifest_verify::*;
 mod hook_artifact_facts;
 pub use hook_artifact_facts::*;
 mod hook_render;
@@ -94,11 +116,13 @@ mod approval_proof;
 mod cursor_observer_proof;
 mod extension_control_authority;
 mod hook_authority_state;
+mod local_cli_help_parse;
 mod policy_integrity_rows;
 pub use approval_proof::*;
 pub use cursor_observer_proof::*;
 pub use extension_control_authority::*;
 pub use hook_authority_state::*;
+pub use local_cli_help_parse::*;
 pub use policy_integrity_rows::*;
 mod hook_adapter;
 pub use hook_adapter::*;
@@ -118,6 +142,8 @@ mod artifact_risk;
 pub use artifact_risk::*;
 mod local_tool_eligibility;
 pub use local_tool_eligibility::*;
+mod local_tool_grant;
+pub use local_tool_grant::*;
 mod contributed_mcp_decision;
 pub use contributed_mcp_decision::*;
 mod local_mcp_grant;
@@ -136,10 +162,16 @@ mod skill_directory_identity;
 pub use skill_directory_identity::*;
 mod browser_mcp_intent;
 pub use browser_mcp_intent::*;
+mod risk_action_config;
+pub use risk_action_config::*;
+mod harness_posture_config;
+pub use harness_posture_config::*;
 mod runtime_detector_run;
 pub use runtime_detector_run::*;
 mod runner_authority;
 pub use runner_authority::*;
+mod retry_lineage_capture;
+pub use retry_lineage_capture::*;
 mod mcp_runtime_evidence;
 pub use mcp_runtime_evidence::*;
 mod mcp_tool_evidence;
@@ -184,6 +216,8 @@ mod hook_pretool_floor;
 pub use hook_pretool_floor::*;
 mod hook_containment_route;
 pub use hook_containment_route::*;
+mod hook_review_response;
+pub use hook_review_response::*;
 mod claude_permission_verdict;
 pub use claude_permission_verdict::*;
 mod hook_decision_permission_persist;
@@ -229,6 +263,10 @@ mod package_audit_projection;
 pub use package_audit_projection::*;
 mod package_protect_finalize;
 pub use package_protect_finalize::*;
+mod package_evaluation_view;
+pub use package_evaluation_view::*;
+mod package_workspace_scope;
+pub use package_workspace_scope::*;
 mod supply_chain_egress;
 pub use supply_chain_egress::*;
 
@@ -254,8 +292,36 @@ mod tool_action_identity;
 pub use tool_action_identity::*;
 mod verified_read_decision;
 pub use verified_read_decision::*;
+mod verified_read_execute;
+pub use verified_read_execute::*;
+mod verified_read_plan;
+pub use verified_read_plan::*;
+mod inventory_item_classification;
+pub use inventory_item_classification::*;
 mod inventory_source_evidence;
 pub use inventory_source_evidence::*;
+mod codex_hook_identity;
+pub use codex_hook_identity::*;
+mod inventory_scan_targets;
+pub use inventory_scan_targets::*;
+mod inventory_snapshot_digest;
+pub use inventory_snapshot_digest::*;
+mod command_pack_record;
+pub use command_pack_record::*;
+mod inventory_url_redaction;
+pub use inventory_url_redaction::*;
+mod inventory_scan_findings;
+pub use inventory_scan_findings::*;
+mod network_protection_verify;
+pub use network_protection_verify::*;
+mod supply_chain_bundle_verify;
+pub use supply_chain_bundle_verify::*;
+mod trust_attestation_verify;
+pub use trust_attestation_verify::*;
+mod protection_health_report;
+pub use protection_health_report::*;
+mod resident_health;
+pub use resident_health::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
@@ -301,6 +367,91 @@ pub struct GuardHookEnvelopeV2 {
     /// envelope; it never changes the verdict, receipt, or request identity.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub recording_only: bool,
+    /// The daemon's custom extension rules, which settle a `PreToolUse` with
+    /// the answer they change. Only the daemon sends them; without them the
+    /// edge reads no rule. They never change the request identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rules: Option<GuardHookLocalCliRulesV1>,
+    /// The daemon asks the resident to record the CLI an answered
+    /// `PreToolUse` launches, off the answer path. It never changes the
+    /// verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub observe_local_cli: bool,
+    /// The daemon asks the edge to queue the answer's receipt with the hook
+    /// evidence writer already running for this Guard home, so it need not
+    /// submit the receipt in a second request. It never changes the verdict,
+    /// receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_receipt: bool,
+    /// With `record_receipt`, the daemon asks the edge to queue a
+    /// `PostToolUse` answer's command activity behind its receipt, after the
+    /// Composio discovery of a call that succeeded, so it need not submit
+    /// them in more requests. It never changes the verdict, receipt, or
+    /// request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_activity: bool,
+    /// With `record_receipt`, the daemon asks the edge to queue a
+    /// `PreToolUse` answer's command activity behind its receipt when the
+    /// daemon returns that answer as the edge rendered it. It never changes
+    /// the verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_pre_tool_activity: bool,
+    /// The managed-policy view the daemon holds for a Pi or Oh My Pi
+    /// `PostToolUse`: `managed_policy_status`, `managed_policy_hash`,
+    /// `managed_locked_settings` and `managed_policy`, the shape the
+    /// structured-output resolution reads. The edge answers the structured
+    /// content mediation from it. It never changes the verdict, receipt, or
+    /// request identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structured_output_config: Option<Value>,
+    /// The argv that starts Guard's CLI, so a `PreToolUse` the edge routes
+    /// into the contained sink comes back already rewritten
+    /// (`GuardHookEdgeResultV2::containment_rewrite`). Only the daemon sends
+    /// it; without it the edge rewrites nothing. It never changes the
+    /// verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_sink: Option<GuardHookContainmentSinkV1>,
+}
+
+/// What the edge's containment rewrite needs beyond the envelope: the
+/// workspace, home and Guard home are the envelope's `source`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookContainmentSinkV1 {
+    /// The argv prefix that starts Guard's CLI; the sink command follows it.
+    pub sink_command: Vec<String>,
+    /// The daemon admits the runtime's own sink command on Cursor's
+    /// `beforeShellExecution`, so the probe answer may route there.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub native_sink: bool,
+}
+
+/// Where the daemon's custom extension rules live and what a command's
+/// launch resolves against: the daemon's own home and environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookLocalCliRulesV1 {
+    /// Absolute path of `guard.db`; must sit directly under the guard home.
+    pub store_path: String,
+    /// The daemon's home, which the launch resolves `~` against.
+    pub user_home: String,
+    /// The daemon's environment, which the launch resolves `PATH` against.
+    pub env: std::collections::BTreeMap<String, String>,
+    /// The daemon's extension-control binding digest. When present, a
+    /// reviewed `PreToolUse` answer carries its review evidence
+    /// (`GuardHookEdgeResultV2::review_evidence`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_action_control_digest: Option<String>,
+}
+
+/// The custom extension rule for a reviewed `PreToolUse`: a block the
+/// daemon returns before any saved decision, or an allow it returns once no
+/// saved decision blocks the action. `harness_response` answers either.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookLocalCliRuleV1 {
+    pub blocked: bool,
+    pub harness_response: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -332,6 +483,39 @@ pub struct GuardHookEdgeResultV2 {
     /// second round trip.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub containment_route: Option<String>,
+    /// The edge's rewrite of a `sink` route, when the envelope carried
+    /// `containment_sink`: `routed` when `harness_response` is the allow that
+    /// runs the call in the sink, `kept` when the receipt stands. Absent when
+    /// the edge did not rewrite; a hook then asks `containment_rewrite`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_rewrite: Option<String>,
+    /// The daemon's custom extension rule for a reviewed `PreToolUse`, when
+    /// one applies. An allowed `PreToolUse` a rule blocks carries the block as
+    /// its `harness_response` instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rule: Option<GuardHookLocalCliRuleV1>,
+    /// Whether a saved artifact-scoped block may name the exact command of a
+    /// `PreToolUse` the daemon sent its rules for, outside Watch. `false` lets
+    /// the daemon skip its saved exact-command block lookup; `true`, or an
+    /// absent answer, leaves the lookup to decide.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_command_block: Option<bool>,
+    /// The edge queued `receipt` with the running hook evidence writer for
+    /// the request's Guard home, as the envelope's `record_receipt` asked, so
+    /// the daemon does not submit it again.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub receipt_recorded: bool,
+    /// The edge also queued the answer's command activity behind `receipt`,
+    /// as the envelope's `record_activity` (`PostToolUse`) or
+    /// `record_pre_tool_activity` (`PreToolUse`) asked, so the daemon does
+    /// not record it again.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub activity_recorded: bool,
+    /// The retry binding and exact-action token of a reviewed `PreToolUse`,
+    /// answered as a `HookReview` query would, when the daemon sent its
+    /// extension-control digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_evidence: Option<GuardHookReviewEvidenceV1>,
     /// Rust-owned decision evidence.  The Python edge may only transport it
     /// to a non-authoritative asynchronous consumer.
     pub receipt: NativeHookDecisionReceiptV1,

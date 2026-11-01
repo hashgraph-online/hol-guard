@@ -7,16 +7,16 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
+from .approval_scope_selection import resolve_request_scope_selection
 from .approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
     IneligibleApprovalScopeError,
     request_scope_contract,
-    resolve_request_scope_selection,
 )
 from .continuation_snapshot import canonical_continuation_correlation_id
 from .models import DECISION_SCOPE_VALUES
 from .native_approval_scope import ApprovalScopeUnavailableError
-from .project_identity import resolve_portable_project_identity
+from .project_identity import ProjectIdentityError, resolve_portable_project_identity
 from .review_claim_hashing import (
     compute_legacy_local_review_request_claim_hash,
     compute_local_review_request_claim_hash,
@@ -24,7 +24,6 @@ from .review_claim_hashing import (
 )
 from .review_exact_capability_advertisement import attach_exact_review_capability
 from .review_native_claim_bindings import (
-    NATIVE_BINDING_FIELDS,
     NATIVE_BINDING_VERSION,
     native_binding_commitment_matches,
 )
@@ -39,10 +38,9 @@ from .review_oauth_binding import (
     GuardReviewOAuthMetadata,
     guard_review_oauth_metadata,  # noqa: F401 - compatibility re-export
 )
+from .review_policy_attribution import review_policy_attribution
 from .review_signature_verification import (
     _anchored_review_verification_keys,  # noqa: F401 - compatibility re-export
-    _resolve_anchored_signing_key,  # noqa: F401 - compatibility re-export
-    _verification_keys_from_payload,  # noqa: F401 - compatibility re-export
     _verify_signed_payload,
     validated_review_verification_keys_from_sync,  # noqa: F401 - public compatibility re-export
 )
@@ -124,8 +122,22 @@ def _action_envelope_hash(request_row: dict[str, object]) -> str:
     return _sha256_hex(_stable_serialize(envelope))
 
 
-def _project_identity(request_row: dict[str, object]) -> str | None:
-    return resolve_portable_project_identity(_non_empty_string(request_row.get("workspace")))
+def _project_identity(request_row: dict[str, object], store) -> str | None:
+    """The claim's project identity, or no claim at all when nothing settles it.
+
+    Creation and validation hash the same claim, so an identity that is
+    present at one and missing at the other rejects a sound approval with
+    ``remote_approval_claim_hash_mismatch``. A workspace nothing could settle
+    therefore builds no claim: the projection publishes none and validation
+    refuses, which is the fail-closed half of that pair.
+    """
+    try:
+        return resolve_portable_project_identity(
+            _non_empty_string(request_row.get("workspace")),
+            guard_home=getattr(store, "guard_home", None),
+        )
+    except ProjectIdentityError as error:
+        raise GuardReviewContractError("project_identity_unresolved") from error
 
 
 def _capability_category(request_row: dict[str, object]) -> str:
@@ -227,32 +239,16 @@ def build_local_review_request_claim(
         "nonce": _non_empty_string(request_row.get("queue_group_id")) or local_request_id,
         "policyAction": policy_action,
         "policyVersion": _policy_version(request_row),
-        "projectIdentity": _project_identity(request_row),
+        "projectIdentity": _project_identity(request_row, store),
         "queueGroupId": _non_empty_string(request_row.get("queue_group_id")),
         "recommendedScope": recommended_scope,
         "riskCategory": _risk_category(request_row),
         "runtimeId": oauth.runtime_id,
         "workspaceId": oauth.workspace_id,
+        **review_policy_attribution(store, request_row),
     }
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
     return attach_exact_review_capability(claim, oauth, store)
-
-
-def validate_local_review_request_claim(claim: dict[str, object]) -> dict[str, object]:
-    if claim.get("contractVersion") != _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION:
-        raise GuardReviewContractError("unsupported_claim_contract_version")
-    has_native_bindings = any(isinstance(claim.get(key), str) for key in NATIVE_BINDING_FIELDS) or any(
-        key in claim for key in ("nativeBindingVersion", "nativeBindingDigest")
-    )
-    if has_native_bindings and not native_binding_commitment_matches(claim):
-        raise GuardReviewContractError("native_binding_digest_mismatch")
-    expected_hash = compute_local_review_request_claim_hash(claim)
-    claim_hash = _non_empty_string(claim.get("claimHash"))
-    if claim_hash != expected_hash and (
-        has_native_bindings or claim_hash != compute_legacy_local_review_request_claim_hash(claim)
-    ):
-        raise GuardReviewContractError("claim_hash_mismatch")
-    return claim
 
 
 def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> str:

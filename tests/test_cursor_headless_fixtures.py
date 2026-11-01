@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -13,6 +12,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hooks import install_cursor_hooks
 from tests.conftest import guard_commands_module
+from tests.cursor_bridge_support import live_cursor_daemon, run_cursor_hook
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "cursor-hooks"
 RED_TEAM_DIR = Path(__file__).parent / "fixtures" / "guard-red-team"
@@ -63,6 +63,7 @@ def _substitute_placeholders(payload: dict[str, object], *, workspace: Path, hom
 
 
 def _run_hook_script(
+    runtime: Path,
     hook_script: Path,
     payload: dict[str, object],
     *,
@@ -73,15 +74,7 @@ def _run_hook_script(
     env.pop("PYTHONPATH", None)
     env["HOME"] = str(home)
     env["CURSOR_PROJECT_DIR"] = str(workspace)
-    completed = subprocess.run(
-        [sys.executable, str(hook_script)],
-        input=json.dumps(payload),
-        text=True,
-        capture_output=True,
-        env=env,
-        timeout=60,
-        check=False,
-    )
+    completed = run_cursor_hook(runtime, hook_script, payload, env=env)
     assert completed.stdout.strip(), completed.stderr or "hook produced no stdout"
     response = json.loads(completed.stdout)
     assert isinstance(response, dict)
@@ -94,7 +87,7 @@ def _stub_guard_daemon(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(name="cursor_hook_env")
-def _cursor_hook_env(tmp_path: Path) -> tuple[HarnessContext, Path]:
+def _cursor_hook_env(tmp_path: Path) -> Iterator[tuple[HarnessContext, Path]]:
     context = _context(tmp_path)
     manifest = install_cursor_hooks(context)
     hook_script = Path(str(manifest["managed_hook_script_path"]))
@@ -105,7 +98,11 @@ def _cursor_hook_env(tmp_path: Path) -> tuple[HarnessContext, Path]:
     # must not embed the removed direct Python interpreter fallback.
     assert "GUARD_PYTHON = " not in source
     assert "GUARD_HOOK_LAUNCHER" not in source
-    return context, hook_script
+    assert context.guard_home is not None
+    # Cursor runs the client behind the native bridge, which answers from
+    # the daemon; the client itself never reviews a hook.
+    with live_cursor_daemon(context.guard_home):
+        yield context, hook_script
 
 
 class TestCursorHeadlessFixtureManifest:
@@ -134,9 +131,9 @@ class TestCursorHeadlessHookExecution:
         _load_expected_cases(),
         ids=[name for name, _ in _load_expected_cases()],
     )
-    @pytest.mark.usefixtures("native_hook_force")
     def test_cursor_hook_fixture_permission(
         self,
+        native_hook_force: Path,
         cursor_hook_env: tuple[HarnessContext, Path],
         fixture_name: str,
         meta: dict[str, object],
@@ -152,6 +149,7 @@ class TestCursorHeadlessHookExecution:
             home=context.home_dir,
         )
         exit_code, response = _run_hook_script(
+            native_hook_force,
             hook_script,
             payload,
             workspace=context.workspace_dir,
@@ -162,6 +160,13 @@ class TestCursorHeadlessHookExecution:
         if expected == "allow":
             assert permission == "allow", response
             assert exit_code == 0, response
+            return
+        if expected == "review":
+            # An inline interpreter the daemon cannot prove read-only is held
+            # for review: Cursor gets a deny that links the queued request.
+            assert permission == "deny", response
+            assert "/requests/" in str(response.get("agent_message") or ""), response
+            assert exit_code == 2, response
             return
         if expected == "blocked":
             assert permission in _BLOCKED_PERMISSIONS, response

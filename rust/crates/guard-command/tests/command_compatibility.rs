@@ -102,7 +102,7 @@ fn audited_inventory_is_exactly_the_null_matcher_catalog_subset() {
         .filter(|rule| rule["matcher"].is_null())
         .map(|rule| rule["rule_id"].as_str().unwrap())
         .collect();
-    assert_eq!(actual.len(), 43);
+    assert_eq!(actual.len(), 47);
     assert_eq!(actual, expected);
 }
 
@@ -116,6 +116,69 @@ fn github_reads_have_permission_attribution_without_fabricated_rules() {
         "command.github.permission.read-remote"
     );
     assert!(!observed.permission_matches[0].uncertainty);
+}
+
+#[test]
+fn a_trailing_help_reads_the_subcommands_help_not_the_subcommand() {
+    for command in [
+        "gh --help",
+        "gh -h",
+        "gh repo --help",
+        "gh repo view --help",
+        "gh repo delete --help",
+        "gh repo delete owner/name --help",
+        "gh repo clone --help",
+        "gh issue delete 1 --help",
+        "gh release delete v1 --help",
+        "gh pr merge --help",
+        "gh workflow run --help",
+        "gh auth switch --help",
+        "gh auth login --help",
+        "gh secret set --help",
+        "gh cache delete --help",
+        "gh ssh-key delete --help",
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert_eq!(observed.permission_matches.len(), 1, "{command}");
+        assert_eq!(
+            observed.permission_matches[0].permission_id, "command.github.permission.read-local",
+            "{command}"
+        );
+        assert!(!observed.permission_matches[0].uncertainty, "{command}");
+    }
+}
+
+#[test]
+fn a_help_that_is_an_options_value_still_runs_the_subcommand() {
+    // `--title --help` opens an issue titled `--help`; only a plain word before
+    // the flag makes it the subcommand's own help.
+    for (command, rule_id) in [
+        ("gh issue create --title --help", "command.github.content"),
+        (
+            "gh repo delete owner/name --help extra",
+            "command.github.delete",
+        ),
+        ("gh repo --help extra", "command.github.unknown"),
+        // After `--` the flag is a positional: this uploads a file named
+        // `--help` and publishes the release.
+        (
+            "gh release create v1.0.0 -- notes.txt --help",
+            "command.github.publish",
+        ),
+        // An alias or an installed extension runs with flag parsing disabled,
+        // so gh forwards `--help` to what it runs.
+        ("gh nuke --help", "command.github.unknown"),
+        ("gh my-ext purge --help", "command.github.unknown"),
+        (
+            "gh extension exec my-ext delete target --help",
+            "command.github.unknown",
+        ),
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert_eq!(observed.rule_matches.len(), 1, "{command}");
+        assert_eq!(observed.rule_matches[0].rule_id, rule_id, "{command}");
+    }
 }
 
 #[test]
@@ -339,6 +402,38 @@ fn a_port_variable_read_names_no_dotenv_file() {
         "node -e \"require('node:http').createServer((q,r)=>r.end(JSON.stringify(process.env))).listen(3000)\"",
         "node -e \"require('node:http').createServer((q,r)=>r.end(require('fs').readFileSync('.env'))).listen(process.env.PORT)\"",
         "node -e \"require('fs').promises.writeFile('.env',String(process.env.PORT)).then(()=>0)\"",
+    ] {
+        assert!(writes_sensitive(command), "{command}");
+    }
+}
+
+#[test]
+fn a_stderr_redirect_beside_a_project_file_names_no_credential() {
+    let writes_sensitive = |command: &str| {
+        compatibility_observations(&model(command), None)
+            .unwrap()
+            .rule_matches
+            .iter()
+            .any(|matched| matched.rule_id == "command.shell-mutations.sensitive-file-write")
+    };
+    // Running or reading a project file whose name reads like a credential is
+    // the work the agent was asked to do. A stderr redirect writes no file, so
+    // it must not turn that name into a credential read.
+    for command in [
+        "bunx vitest run __tests__/guard-delivery-token.test.ts 2>&1",
+        "npx jest src/auth/token-store.test.ts 2>&1",
+        "cat src/tokenizer.rs 2>/dev/null",
+        "pytest tests/test_password_reset.py 2>&1 | tail -5",
+    ] {
+        assert!(!writes_sensitive(command), "{command}");
+    }
+    // A credential location, a bare name that is no source file, and text the
+    // command prints keep the review whatever redirect follows.
+    for command in [
+        "cat ~/.aws/credentials 2>/dev/null",
+        "cat config/credentials.json 2>&1",
+        "cat secrets/api_token 2>&1",
+        "echo token 2>&1",
     ] {
         assert!(writes_sensitive(command), "{command}");
     }

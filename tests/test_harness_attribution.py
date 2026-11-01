@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -104,4 +105,7 @@ def test_guard_hook_records_cursor_harness_for_cursor_env(
 
     assert rc == 2  # canonical: detected cursor harness, _RC_BLOCK_IS_TWO
     assert isinstance(payload, dict)
-    assert payload["harness"] == "cursor"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        harnesses = [row[0] for row in connection.execute("select harness from native_hook_decision_receipts")]
+    assert harnesses == ["cursor"]

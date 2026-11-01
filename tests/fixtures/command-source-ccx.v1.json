@@ -1,0 +1,1660 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "command.ccx invocation"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "dependencies": [],
+          "description": "Conservative operation knowledge compiled from a contributor inventory.",
+          "ecosystem_ids": [],
+          "executables": [
+            "ccx"
+          ],
+          "extension_id": "command.ccx",
+          "homepage": "https://github.com/aaronwong1999/ccx",
+          "icon": {
+            "kind": "none"
+          },
+          "license": null,
+          "name": "ccx (claudecodex)",
+          "permissions": [
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": false,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx",
+              "fixed_reason": "Unknown operations retain review.",
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Unclassified invocation",
+              "permission_id": "command.ccx.permission.unclassified",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Root invocation",
+              "permission_id": "command.ccx.permission.op-75eb278d6a9fb4cf",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Name the session to hand over with ccx to-codex or ccx to-claude."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx autostart",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "autostart",
+              "permission_id": "command.ccx.permission.op-613137a1023655da",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run the read-only form first: ccx autostart status."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx doctor",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "doctor",
+              "permission_id": "command.ccx.permission.op-2e390f4b1131c34a",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run the read-only form first: ccx doctor --json."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx info",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "info",
+              "permission_id": "command.ccx.permission.op-b7f1ad4eeef622c2",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx ls",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "ls",
+              "permission_id": "command.ccx.permission.op-77582c42f0922e1e",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run the read-only form first: ccx ls --json."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx repair",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "repair",
+              "permission_id": "command.ccx.permission.op-a57c9b37dc13e103",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx setup",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "setup",
+              "permission_id": "command.ccx.permission.op-17df733ebd640133",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx to-claude",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "to-claude",
+              "permission_id": "command.ccx.permission.op-57cf1dfd75c9470d",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx to-codex",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "to-codex",
+              "permission_id": "command.ccx.permission.op-05be9e4406f4df13",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx uninstall",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "uninstall",
+              "permission_id": "command.ccx.permission.op-e2631c390232adb5",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx unlink",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "unlink",
+              "permission_id": "command.ccx.permission.op-594c7c3c9cc85586",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx update",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "update",
+              "permission_id": "command.ccx.permission.op-227d251131facfdb",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run the read-only form first: ccx update --check."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "example_command": "ccx usage",
+              "fixed_reason": null,
+              "implementation_version": "1.0.16038480478295261859",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "usage",
+              "permission_id": "command.ccx.permission.op-74e4a98322c6bf2b",
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run the read-only form first: ccx usage --json."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Aaron Wong",
+            "id": "io.github.aaronwong1999",
+            "url": "https://github.com/aaronwong1999/ccx"
+          },
+          "reference_urls": [
+            "https://github.com/aaronwong1999/ccx"
+          ],
+          "required": false,
+          "risk_classes": [
+            "execution"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": false,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": []
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.unclassified",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.unclassified",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "Unclassified invocation"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": false,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": []
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-75eb278d6a9fb4cf",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-75eb278d6a9fb4cf",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Name the session to hand over with ccx to-codex or ccx to-claude."
+              ],
+              "severity": "medium",
+              "title": "Root invocation"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "autostart"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-613137a1023655da",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-613137a1023655da",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "arguments": [
+                        "autostart",
+                        "status"
+                      ],
+                      "executable": "ccx"
+                    },
+                    "op": "reviewed-literal.v1"
+                  },
+                  "title": "Explicitly reviewed literal invocation",
+                  "variant_id": "literal-f2f585be99a15234"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "arguments": [
+                        "autostart",
+                        "status",
+                        "--json"
+                      ],
+                      "executable": "ccx"
+                    },
+                    "op": "reviewed-literal.v1"
+                  },
+                  "title": "Explicitly reviewed literal invocation",
+                  "variant_id": "literal-70184e4b3fccc58e"
+                }
+              ],
+              "safer_alternatives": [
+                "Run the read-only form first: ccx autostart status."
+              ],
+              "severity": "medium",
+              "title": "autostart"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "doctor"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-2e390f4b1131c34a",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-2e390f4b1131c34a",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "arguments": [
+                        "doctor",
+                        "--json"
+                      ],
+                      "executable": "ccx"
+                    },
+                    "op": "reviewed-literal.v1"
+                  },
+                  "title": "Explicitly reviewed literal invocation",
+                  "variant_id": "literal-bf0f997e05c34435"
+                }
+              ],
+              "safer_alternatives": [
+                "Run the read-only form first: ccx doctor --json."
+              ],
+              "severity": "medium",
+              "title": "doctor"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "info"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-b7f1ad4eeef622c2",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-b7f1ad4eeef622c2",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "info"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "ls"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-77582c42f0922e1e",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-77582c42f0922e1e",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "arguments": [
+                        "ls",
+                        "--json"
+                      ],
+                      "executable": "ccx"
+                    },
+                    "op": "reviewed-literal.v1"
+                  },
+                  "title": "Explicitly reviewed literal invocation",
+                  "variant_id": "literal-54c9647e900989f1"
+                }
+              ],
+              "safer_alternatives": [
+                "Run the read-only form first: ccx ls --json."
+              ],
+              "severity": "medium",
+              "title": "ls"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "repair"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-a57c9b37dc13e103",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-a57c9b37dc13e103",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "repair"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--dev",
+                    "--help",
+                    "--json",
+                    "--quiet",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "setup"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-17df733ebd640133",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-17df733ebd640133",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "setup"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--no-open",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "to-claude"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-57cf1dfd75c9470d",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-57cf1dfd75c9470d",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "to-claude"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--no-open",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "to-codex"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-05be9e4406f4df13",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-05be9e4406f4df13",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "to-codex"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "uninstall"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-e2631c390232adb5",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-e2631c390232adb5",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "uninstall"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "unlink"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-594c7c3c9cc85586",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-594c7c3c9cc85586",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the exact target and required permissions before running this operation."
+              ],
+              "severity": "medium",
+              "title": "unlink"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--check",
+                    "--help",
+                    "--json",
+                    "--quiet",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "update"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-227d251131facfdb",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-227d251131facfdb",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "arguments": [
+                        "update",
+                        "--check"
+                      ],
+                      "executable": "ccx"
+                    },
+                    "op": "reviewed-literal.v1"
+                  },
+                  "title": "Explicitly reviewed literal invocation",
+                  "variant_id": "literal-5d5aa8e3f121539a"
+                },
+                {
+                  "matcher": {
+                    "config": {
+                      "arguments": [
+                        "update",
+                        "--check",
+                        "--json"
+                      ],
+                      "executable": "ccx"
+                    },
+                    "op": "reviewed-literal.v1"
+                  },
+                  "title": "Explicitly reviewed literal invocation",
+                  "variant_id": "literal-73745a3c807f58a9"
+                }
+              ],
+              "safer_alternatives": [
+                "Run the read-only form first: ccx update --check."
+              ],
+              "severity": "medium",
+              "title": "update"
+            },
+            {
+              "action_classes": [
+                "command.ccx invocation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews inventoried operations; unknown invocations also require review.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "ccx"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--help",
+                    "--json",
+                    "--version"
+                  ],
+                  "interspersed_options_with_values": [
+                    "-C"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "-C"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "usage"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.ccx.permission.op-74e4a98322c6bf2b",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.ccx.op-74e4a98322c6bf2b",
+              "rule_version": "1.0.16038480478295261859",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "arguments": [
+                        "usage",
+                        "--json"
+                      ],
+                      "executable": "ccx"
+                    },
+                    "op": "reviewed-literal.v1"
+                  },
+                  "title": "Explicitly reviewed literal invocation",
+                  "variant_id": "literal-b16963de223132b8"
+                }
+              ],
+              "safer_alternatives": [
+                "Run the read-only form first: ccx usage --json."
+              ],
+              "severity": "medium",
+              "title": "usage"
+            }
+          ],
+          "safer_alternatives": [
+            "Inspect the exact target and required permissions before running this operation."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.aether-vault",
+          "command.agentbridge",
+          "command.agenticjobs",
+          "command.agentsocks",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.appimg",
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.blkcp",
+          "command.ccx",
+          "command.claude-tmux",
+          "command.cloudg",
+          "command.codesage",
+          "command.codex-migrate",
+          "command.cogext",
+          "command.crisp-tui",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.dearmour",
+          "command.digline",
+          "command.dispat",
+          "command.envseal",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.golive",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.hashdup",
+          "command.iterlay",
+          "command.keibidrop",
+          "command.kelados",
+          "command.kim",
+          "command.kindling",
+          "command.kintsua",
+          "command.kranz",
+          "command.librarybridge",
+          "command.llmrig",
+          "command.macscope",
+          "command.master-of",
+          "command.mcp-agent-wire",
+          "command.mcp-agenthub",
+          "command.mcp-architecture-intelligence-platform",
+          "command.mcp-asdecided",
+          "command.mcp-aseprite",
+          "command.mcp-askjev",
+          "command.mcp-authyouragent",
+          "command.mcp-authzloom",
+          "command.mcp-axpilot",
+          "command.mcp-azure-vm-pricing",
+          "command.mcp-brickproof-adb",
+          "command.mcp-ccm",
+          "command.mcp-cf-mail-mcp",
+          "command.mcp-ci-guard",
+          "command.mcp-clipugc",
+          "command.mcp-codex-claude-bridge",
+          "command.mcp-compose-bridge",
+          "command.mcp-contribos",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-figlens",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-g-krusch",
+          "command.mcp-garmin-coach-mcp",
+          "command.mcp-google-mcp-universal",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-halflife",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-jd-church-website-audit",
+          "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
+          "command.mcp-lattice-talk",
+          "command.mcp-leadline",
+          "command.mcp-loomdesk",
+          "command.mcp-mac-address-lookup",
+          "command.mcp-mail-server",
+          "command.mcp-melra",
+          "command.mcp-musiccontext",
+          "command.mcp-nuvui",
+          "command.mcp-obsidian-kanban",
+          "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
+          "command.mcp-p6-mcp",
+          "command.mcp-pc-control",
+          "command.mcp-pinpoint",
+          "command.mcp-plim",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-quidli-connect",
+          "command.mcp-raw-browser",
+          "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
+          "command.mcp-repo-notebook",
+          "command.mcp-run",
+          "command.mcp-seahorse",
+          "command.mcp-seminara",
+          "command.mcp-seq-mcp",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-thingery",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.mcp-xrpl-token-guard",
+          "command.mcp-xrpl-trading-lab",
+          "command.mcpguard",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.pyrig",
+          "command.redpen",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.rls-saboteur",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.seatbelt-guard",
+          "command.shellroute",
+          "command.showtime",
+          "command.simgit",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.skills-check-updates",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.digitalocean",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "ccx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-75eb278d6a9fb4cf",
+      "rule_id": "command.ccx.op-75eb278d6a9fb4cf"
+    },
+    {
+      "command": "ccx autostart",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-613137a1023655da",
+      "rule_id": "command.ccx.op-613137a1023655da"
+    },
+    {
+      "command": "ccx autostart status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "op-613137a1023655da-safe-0",
+      "rule_id": "command.ccx.op-613137a1023655da"
+    },
+    {
+      "command": "ccx autostart status --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "op-613137a1023655da-safe-1",
+      "rule_id": "command.ccx.op-613137a1023655da"
+    },
+    {
+      "command": "ccx doctor",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-2e390f4b1131c34a",
+      "rule_id": "command.ccx.op-2e390f4b1131c34a"
+    },
+    {
+      "command": "ccx doctor --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "op-2e390f4b1131c34a-safe-0",
+      "rule_id": "command.ccx.op-2e390f4b1131c34a"
+    },
+    {
+      "command": "ccx info",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-b7f1ad4eeef622c2",
+      "rule_id": "command.ccx.op-b7f1ad4eeef622c2"
+    },
+    {
+      "command": "ccx ls",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-77582c42f0922e1e",
+      "rule_id": "command.ccx.op-77582c42f0922e1e"
+    },
+    {
+      "command": "ccx ls --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "op-77582c42f0922e1e-safe-0",
+      "rule_id": "command.ccx.op-77582c42f0922e1e"
+    },
+    {
+      "command": "ccx repair",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-a57c9b37dc13e103",
+      "rule_id": "command.ccx.op-a57c9b37dc13e103"
+    },
+    {
+      "command": "ccx setup",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-17df733ebd640133",
+      "rule_id": "command.ccx.op-17df733ebd640133"
+    },
+    {
+      "command": "ccx to-claude",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-57cf1dfd75c9470d",
+      "rule_id": "command.ccx.op-57cf1dfd75c9470d"
+    },
+    {
+      "command": "ccx to-codex",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-05be9e4406f4df13",
+      "rule_id": "command.ccx.op-05be9e4406f4df13"
+    },
+    {
+      "command": "ccx uninstall",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-e2631c390232adb5",
+      "rule_id": "command.ccx.op-e2631c390232adb5"
+    },
+    {
+      "command": "ccx unlink",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-594c7c3c9cc85586",
+      "rule_id": "command.ccx.op-594c7c3c9cc85586"
+    },
+    {
+      "command": "ccx update",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-227d251131facfdb",
+      "rule_id": "command.ccx.op-227d251131facfdb"
+    },
+    {
+      "command": "ccx update --check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "op-227d251131facfdb-safe-0",
+      "rule_id": "command.ccx.op-227d251131facfdb"
+    },
+    {
+      "command": "ccx update --check --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "op-227d251131facfdb-safe-1",
+      "rule_id": "command.ccx.op-227d251131facfdb"
+    },
+    {
+      "command": "ccx usage",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "op-74e4a98322c6bf2b",
+      "rule_id": "command.ccx.op-74e4a98322c6bf2b"
+    },
+    {
+      "command": "ccx usage --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.ccx"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "op-74e4a98322c6bf2b-safe-0",
+      "rule_id": "command.ccx.op-74e4a98322c6bf2b"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

@@ -430,4 +430,79 @@ mod tests {
             assert!(!plain_printed_name(name), "{name}");
         }
     }
+
+    fn valued_segment(assignment: &str, command: &str) -> CommandSegmentV1 {
+        let model = crate::parse_command(
+            &serde_json::from_value(
+                serde_json::json!({"command": format!("{assignment} {command}")}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        model.segments.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn a_screened_build_setting_keeps_a_supported_context() {
+        // The name test above refuses `GOFLAGS`, `RUSTFLAGS` and
+        // `PYTEST_ADDOPTS` outright, and the rescue behind this error reads
+        // only an uncertain command, so `GOFLAGS=-count=1 go test ./...`
+        // blocked while the same run without the prefix passed.
+        for (assignment, command) in [
+            ("GOFLAGS=-count=1", "go test ./..."),
+            ("GOFLAGS=\"-count=1 -v\"", "go test ./..."),
+            ("GOFLAGS=-mod=readonly", "go test ./..."),
+            ("PYTEST_ADDOPTS=--maxfail=1", "pytest -q"),
+            ("RUSTFLAGS=-Dwarnings", "cargo test"),
+            ("RUSTDOCFLAGS=-Dwarnings", "cargo doc"),
+        ] {
+            assert!(
+                !super::super::assignment_prefix_is_unsupported(&valued_segment(
+                    assignment, command
+                )),
+                "{assignment} {command}"
+            );
+        }
+        // A value the closed list does not hold names a program, a plugin or
+        // a linker, so the prefix stays unsupported.
+        for (assignment, command) in [
+            ("GOFLAGS=-toolexec=./x", "go test ./..."),
+            ("GOFLAGS=-mod=mod", "go test ./..."),
+            ("PYTEST_ADDOPTS=-pevil", "pytest -q"),
+            ("RUSTFLAGS=-Clinker=./ld", "cargo test"),
+            ("GOFLAGS=1", "go test ./..."),
+        ] {
+            assert!(
+                super::super::assignment_prefix_is_unsupported(&valued_segment(
+                    assignment, command
+                )),
+                "{assignment} {command}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_the_prefix_the_run_receives_clears_a_build_setting() {
+        // The screen reads the assignments the shell applies to the run. A
+        // second assignment of the name is the value that reaches the
+        // program, and a word after the program is that program's argument,
+        // so neither can stand in for the setting in effect.
+        for (assignment, command) in [
+            ("GOFLAGS=-v GOFLAGS=-toolexec=./x", "go test ./..."),
+            ("GOFLAGS=-toolexec=./x GOFLAGS=-v", "go test ./..."),
+            ("GOFLAGS=-toolexec=./x", "go test ./... GOFLAGS=-v"),
+            ("RUSTFLAGS=-Dwarnings RUSTFLAGS=-Clinker=./ld", "cargo test"),
+        ] {
+            assert!(
+                super::super::assignment_prefix_is_unsupported(&valued_segment(
+                    assignment, command
+                )),
+                "{assignment} {command}"
+            );
+        }
+        // Repeating the same screened value is still only screened values.
+        assert!(!super::super::assignment_prefix_is_unsupported(
+            &valued_segment("GOFLAGS=-v GOFLAGS=-count=1", "go test ./...")
+        ));
+    }
 }

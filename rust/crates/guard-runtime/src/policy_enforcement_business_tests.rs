@@ -334,7 +334,6 @@ fn ordinary_hook_business_claims_and_google_cli_calls_require_native_context_eve
         for payload in [
             json!({"tool_name":"bash","tool_input":{"command":"gws gmail users messages send --json '{}'"}}),
             json!({"tool_name":"bash","tool_input":{"command":"env FIXTURE=1 gws gmail users messages send"}}),
-            json!({"tool_name":"bash","tool_input":{"command":"env FIXTURE=1 echo fixture"}}),
             json!({"tool_name":"bash","tool_input":{"command":"gog gmail send"}}),
             json!({"tool_name":"bash","tool_input":{"command":"echo fixture"},"business_action":facts()}),
             json!({"tool_call":{"tool_name":"bash","tool_input":{"command":"echo fixture"},"businessAction":null}}),
@@ -348,6 +347,18 @@ fn ordinary_hook_business_claims_and_google_cli_calls_require_native_context_eve
             assert_eq!(output.decision, "deny");
             assert!(!output.explicitly_benign);
             assert_eq!(output.reason_code, "native_business_context_unavailable");
+        }
+        // An `env` prefix names the same program the bare prefix names, so a
+        // command that runs no business CLI is not a business operation in
+        // either spelling and asks for no facts it has no reason to carry.
+        for command in ["env FIXTURE=1 echo fixture", "echo fixture"] {
+            let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+            let result = super::super::tests::generic_result("allow");
+            let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+            assert_ne!(
+                output.reason_code, "native_business_context_unavailable",
+                "mode={mode}, command={command}"
+            );
         }
     }
 }

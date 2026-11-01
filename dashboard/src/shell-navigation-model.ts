@@ -2,6 +2,7 @@ import type { IconType } from "react-icons";
 import {
   HiMiniAdjustmentsHorizontal,
   HiMiniClipboardDocumentList,
+  HiMiniCircleStack,
   HiMiniDocumentText,
   HiMiniHome,
   HiMiniInbox,
@@ -22,7 +23,7 @@ import type {
 } from "./guard-types";
 
 export type NavigationGroup = "primary" | "manage" | "support";
-export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health" | "protection-repair">;
+export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health" | "workspaces" | "protection-repair">;
 
 export type ShellNavigationItem = {
   href: string;
@@ -80,6 +81,15 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     view: "fleet",
     group: "primary",
     icon: HiMiniShieldCheck,
+  },
+  {
+    href: "/cigar",
+    label: "CIGAR",
+    shortLabel: "CIGAR",
+    description: "Local context, setup, sources, and AI app access",
+    view: "cigar",
+    group: "primary",
+    icon: HiMiniCircleStack,
   },
   {
     href: "/extensions",
@@ -146,7 +156,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
   },
 ] as const;
 
-const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "extensions"]);
+const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "cigar"]);
 
 export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: string }> = [
   { id: "primary", label: "Guard" },
@@ -156,7 +166,7 @@ export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: stri
 
 export function canonicalNavigationView(view: AppView): NavigationView {
   if (view === "app-detail") return "fleet";
-  if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "audit" || view === "feed-health" || view === "workspaces") return "supply-chain";
   if (view === "protection-repair") return "extensions";
   return view;
 }

@@ -4,9 +4,12 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
+from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
 from codex_plugin_scanner.guard.runtime import native_workspace_review as native
 from tests.test_native_workspace_review import _request, _status, _Store
 
@@ -95,14 +98,14 @@ def test_staging_maps_directory_and_atomic_write_failures_to_unavailable(
 
 
 def test_windows_directory_security_failure_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_ensure(_path: Path) -> None:
-        raise OSError("ACL unavailable")
+    def fail_write(**_kwargs: object) -> None:
+        raise NativePolicySnapshotError("native_resident_windows_access_denied")
 
     monkeypatch.setattr(native.os, "name", "nt")
     monkeypatch.setattr(
         native,
         "_native_policy_snapshot",
-        SimpleNamespace(_windows_ensure_private_directory=fail_ensure),
+        SimpleNamespace(_windows_write_private_file_atomic=fail_write),
     )
     with pytest.raises(native.NativeWorkspaceReviewError) as error:
         native.stage_workspace_review_request(_Store(_request()), tmp_path, "request-1")
@@ -213,6 +216,156 @@ def test_native_response_reports_transport_failure(tmp_path: Path, monkeypatch: 
             decision={},
             request_snapshot_digest="snapshot",
         )
+
+
+def _deadline_then(responses: list[bytes | None], failure_code: str):
+    calls: list[float | None] = []
+
+    def request(**kwargs: object) -> bytes | None:
+        calls.append(cast(float | None, kwargs.get("timeout_seconds")))
+        response = responses[len(calls) - 1]
+        if response is None:
+            record_native_resident_client_failure_code(failure_code)
+        return response
+
+    return request, calls
+
+
+_VERIFIED = json.dumps(
+    {
+        "decision": "allow",
+        "replayed": False,
+        "request_id": "request-1",
+        "request_snapshot_digest": "snapshot",
+        "status": "verified",
+    }
+).encode()
+
+
+def test_native_response_retries_a_decision_the_resident_ran_out_of_time_for(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A resident restarted with the daemon can start serving after the first
+    # request's budget lapsed. The queued Cloud Review decision must still apply.
+    request, calls = _deadline_then([None, _VERIFIED], "native_client_deadline_exceeded")
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "native_resident_client_request", request)
+
+    response = native._native_response(
+        guard_home=tmp_path,
+        request_id="request-1",
+        decision={"decision": "allow"},
+        request_snapshot_digest="snapshot",
+    )
+
+    assert response["status"] == "verified"
+    assert calls == [10.0, 10.0]
+
+
+def test_native_response_retries_a_deadline_the_client_answers_as_an_error_frame(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The persistent native client reports its own deadline as an error frame
+    # rather than as a missing response.
+    deadline_frame = json.dumps({"error": "native_client_deadline_exceeded", "retryable": False}).encode()
+    request, calls = _deadline_then([deadline_frame, _VERIFIED], "unused")
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "native_resident_client_request", request)
+
+    response = native._native_response(
+        guard_home=tmp_path,
+        request_id="request-1",
+        decision={"decision": "allow"},
+        request_snapshot_digest="snapshot",
+    )
+
+    assert response["status"] == "verified"
+    assert len(calls) == 2
+
+
+def test_native_response_does_not_retry_an_error_frame_that_is_not_a_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    refusal = json.dumps({"error": "native_workspace_review_decision_expired", "retryable": False}).encode()
+    request, calls = _deadline_then([refusal, _VERIFIED], "unused")
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "native_resident_client_request", request)
+
+    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_decision_expired"):
+        native._native_response(
+            guard_home=tmp_path,
+            request_id="request-1",
+            decision={},
+            request_snapshot_digest="snapshot",
+        )
+    assert len(calls) == 1
+
+
+def test_native_response_asks_the_client_for_its_full_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Without a budget the native client allows 750 ms, which a resident that
+    # is still starting after a daemon restart cannot meet.
+    payloads: list[bytes] = []
+
+    def request(**kwargs: object) -> bytes:
+        payloads.append(cast(bytes, kwargs["payload"]))
+        return _VERIFIED
+
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "native_resident_client_request", request)
+
+    native._native_response(
+        guard_home=tmp_path,
+        request_id="request-1",
+        decision={"decision": "allow"},
+        request_snapshot_digest="snapshot",
+    )
+
+    envelope = json.loads(payloads[0])
+    assert envelope["operation"] == "workspace_review_decision"
+    assert envelope["deadline_budget_ms"] == 9_000
+    assert payloads[0] == json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode()
+
+
+def test_native_response_retries_a_deadline_only_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request, calls = _deadline_then([None, None, _VERIFIED], "native_client_deadline_exceeded")
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "native_resident_client_request", request)
+
+    with pytest.raises(native.NativeWorkspaceReviewError, match="native_client_deadline_exceeded"):
+        native._native_response(
+            guard_home=tmp_path,
+            request_id="request-1",
+            decision={},
+            request_snapshot_digest="snapshot",
+        )
+    assert len(calls) == 2
+
+
+def test_native_response_does_not_retry_a_resident_that_is_gone(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request, calls = _deadline_then([None, _VERIFIED], "native_resident_unavailable")
+    monkeypatch.setattr(native, "native_runtime_status", _status)
+    monkeypatch.setattr(native, "native_resident_client_request", request)
+
+    with pytest.raises(native.NativeWorkspaceReviewError, match="native_resident_unavailable"):
+        native._native_response(
+            guard_home=tmp_path,
+            request_id="request-1",
+            decision={},
+            request_snapshot_digest="snapshot",
+        )
+    assert len(calls) == 1
 
 
 def test_apply_handles_resolved_invalid_and_failed_local_transactions(

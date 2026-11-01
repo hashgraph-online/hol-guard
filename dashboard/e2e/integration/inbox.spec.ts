@@ -206,13 +206,16 @@ test("bulk approval offers file reads but never a credential-exfiltration review
   await page.goto("/inbox");
   await searchQueue(page, SEED_SEARCH);
 
-  await expect(page.getByRole("checkbox", { name: /^Not eligible for bulk approval/ })).toBeDisabled();
-  await expect(queueRow(page, exfil.preview)).toBeVisible();
+  await page.getByRole("checkbox", { name: `Select ${readA.preview}` }).check();
+  await page.getByRole("checkbox", { name: `Select ${readB.preview}` }).check();
+  const bar = page.getByRole("region", { name: "Bulk selection" });
+  await expect(bar.getByText("2 requests selected · approve once")).toBeVisible();
 
-  await page.getByRole("checkbox", { name: `Select ${readA.preview} for bulk approval` }).check();
-  await page.getByRole("checkbox", { name: `Select ${readB.preview} for bulk approval` }).check();
-  const bar = page.getByRole("region", { name: "Bulk approval selection" });
-  await expect(bar.getByText("2 actions selected · approve once")).toBeVisible();
+  // The exfiltration review can be selected to block it, never to approve it.
+  await expect(queueRow(page, exfil.preview)).toBeVisible();
+  await page.getByRole("checkbox", { name: `Select ${exfil.preview}` }).check();
+  await expect(bar.getByText("3 requests selected · 2 can be approved at once")).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Block selected" })).toBeVisible();
 
   await bar.getByRole("button", { name: "Clear" }).click();
   await expect(bar).toHaveCount(0);

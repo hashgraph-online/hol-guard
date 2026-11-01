@@ -66,6 +66,9 @@ class CursorHarnessAdapter(HarnessAdapter):
     fallback_hint = "Resolve package-level trust in Guard and let Cursor keep its built-in tool approval flow."
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
+    # The editor runs Guard's hooks on its own, so a missing `cursor-agent` says
+    # nothing about whether Cursor is installed.
+    command_absence_proves_uninstalled = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path) -> str:
@@ -533,6 +536,8 @@ class CursorHarnessAdapter(HarnessAdapter):
             notes.append("Prepended the Guard launcher shim directory to your shell profile.")
         elif profile.get("restart_shell_required"):
             notes.append("Restart your shell or open a new terminal so guard-cursor shims are on PATH.")
+        elif profile.get("manual_path_required"):
+            notes.append(f"Put {context.guard_home / 'bin'} first on your PATH so guard-cursor shims run.")
         return {
             "harness": self.harness,
             "active": True,

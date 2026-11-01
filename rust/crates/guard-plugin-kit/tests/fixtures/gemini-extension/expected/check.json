@@ -1,0 +1,112 @@
+{
+  "diagnostics": [
+    {
+      "code": "license_missing",
+      "level": "warning",
+      "message": "Add a license; most marketplaces will not list a plugin without one.",
+      "path": "gemini-extension.json"
+    }
+  ],
+  "passed": true,
+  "plugin": {
+    "agents": [],
+    "author": null,
+    "base": "",
+    "commands": [],
+    "context_file": "GEMINI.md",
+    "description": "Forecasts and alerts for Gemini CLI.",
+    "homepage": null,
+    "hooks": null,
+    "keywords": [],
+    "license": null,
+    "marketplaces": [],
+    "mcp_servers": {
+      "weather": {
+        "transport": "http",
+        "url": "https://weather.example/mcp"
+      }
+    },
+    "name": "weather-tools",
+    "repository": "https://github.com/acme/weather-tools",
+    "skills": [],
+    "version": "0.3.0"
+  },
+  "runtimes": [
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "claude-code",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "codex",
+      "supported": true
+    },
+    {
+      "dropped": [],
+      "runtime": "gemini-cli",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "cursor",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "vscode",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "opencode",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "mcp-registry",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "mcp_servers",
+        "context_file"
+      ],
+      "runtime": "agent-skills",
+      "supported": false
+    },
+    {
+      "dropped": [
+        "context_file"
+      ],
+      "runtime": "agent-plugins",
+      "supported": true
+    }
+  ],
+  "sources": [
+    {
+      "kind": "gemini-extension",
+      "path": "gemini-extension.json"
+    }
+  ],
+  "summary": {
+    "agents": 0,
+    "commands": 0,
+    "errors": 0,
+    "mcp_servers": 1,
+    "skills": 0,
+    "warnings": 1
+  }
+}

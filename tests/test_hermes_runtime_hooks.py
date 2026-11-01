@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -21,8 +22,7 @@ from codex_plugin_scanner.guard.adapters.hermes_runtime_hooks import (
     guard_pretool_hook_registered,
     hermes_bridge_response,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_hermes_payload
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 
@@ -140,7 +140,9 @@ def test_doctor_protection_label_is_launch_review_only_without_hook() -> None:
 
 
 def test_pretool_call_payload_classifies_recursive_delete(tmp_path: Path) -> None:
-    envelope = normalize_hermes_payload(
+    envelope = normalize_harness_payload(
+        "hermes",
+        "",
         {
             "hook_event_name": "pre_tool_call",
             "tool_name": "terminal",
@@ -158,7 +160,9 @@ def test_pretool_call_payload_classifies_recursive_delete(tmp_path: Path) -> Non
 
 
 def test_pretool_call_args_payload_is_normalized(tmp_path: Path) -> None:
-    envelope = normalize_hermes_payload(
+    envelope = normalize_harness_payload(
+        "hermes",
+        "",
         {
             "hook_event_name": "pre_tool_call",
             "tool_name": "terminal",
@@ -300,10 +304,10 @@ def test_pretool_call_records_runtime_receipt(
         ]
     )
     captured = capsys.readouterr()
-    receipts = GuardStore(home_dir).list_receipts()
-    assert returncode == 2
-    assert receipts
-    assert receipts[0]["harness"] == "hermes"
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        receipts = list(connection.execute("select harness, decision from native_hook_decision_receipts"))
+    assert returncode == 2, captured.out
+    assert receipts == [("hermes", "deny")]
     native = json.loads(captured.out.strip().splitlines()[-1])
     assert native["decision"] == "block"
     assert "hookSpecificOutput" not in native

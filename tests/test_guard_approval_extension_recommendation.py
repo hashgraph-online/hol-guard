@@ -14,11 +14,12 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import EXTENSION_ALLOW_HINT_SCHEMA
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
+from tests.native_approval_writes import (
+    add_approval_request,
     get_approval_request,
     list_approval_requests,
+    native_approval_connection,
 )
-from tests.native_approval_writes import add_approval_request, native_approval_connection
 
 REGISTRY = BUILT_IN_COMMAND_EXTENSION_REGISTRY
 GIT_ADD = "command.git.permission.add"
@@ -198,10 +199,17 @@ def test_daemon_request_detail_computes_live_recommendation_for_legacy_pending_r
     _resident_recommends(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-legacy", hint=None), "2026-10-09T10:00:00+00:00")
+
+    recoveries = []
+
+    def live_hint(approval, **kwargs):
+        recoveries.append((approval.get("request_id"), kwargs["guard_home"]))
+        return _hint(GIT_ADD) if approval.get("request_id") == "req-legacy" else None
+
     monkeypatch.setattr(
         native_review_allow_hint,
-        "live_approval_extension_allow_hint",
-        lambda approval, **_kwargs: _hint(GIT_ADD) if approval.get("request_id") == "req-legacy" else None,
+        "live_approval_extension_hint",
+        live_hint,
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -210,6 +218,7 @@ def test_daemon_request_detail_computes_live_recommendation_for_legacy_pending_r
     finally:
         daemon.stop()
 
+    assert recoveries == [("req-legacy", store.guard_home)]
     assert "extension_allow_hint" not in detail
     recommendation = detail["extension_recommendation"]
     assert recommendation["schema"] == RECOMMENDATION_SCHEMA

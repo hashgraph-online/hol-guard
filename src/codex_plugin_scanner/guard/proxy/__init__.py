@@ -9,7 +9,6 @@ from .runtime_mcp import (
     OpenCodeMcpGuardProxy,
     RuntimeMcpGuardProxy,
 )
-from .stdio import StdioGuardProxy
 
 __all__ = [
     "CodexMcpGuardProxy",
@@ -19,5 +18,4 @@ __all__ = [
     "OpenCodeMcpGuardProxy",
     "RemoteGuardProxy",
     "RuntimeMcpGuardProxy",
-    "StdioGuardProxy",
 ]

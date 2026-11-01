@@ -58,14 +58,14 @@ def core_trust(root, read_object):
     return {
         "schemaVersion": "guard.extension-trust-class-map.v1",
         "publishers": {
-            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+            "hol": {"id": "hol", "displayName": "HOL"},
             "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
         },
         "classes": {name: sorted(ids) for name, ids in classes.items()},
     }
 
 
-def pack_descriptors(root, compiler: Path | None, read_object) -> list[dict]:
+def pack_descriptors(root, compiler: Path | None, read_object, *, inventory=None) -> list[dict]:
     """Public descriptors come from the complete pack stream, never an aggregate program."""
     if compiler is None:
         metadata = subprocess.run(
@@ -100,16 +100,22 @@ def pack_descriptors(root, compiler: Path | None, read_object) -> list[dict]:
         # Leaving scripts/ first lets scripts/ci shadow the ci namespace package.
         sys.path.remove(str(root / "scripts"))
 
+    def descriptors(directory):
+        release = read_object(directory / "release.json", root=directory)
+        reader = PackReader(directory / "objects")
+        result = []
+        for _, reference in entries(reader, release["index"], release["extensions"]):
+            manifest = reader.json(reference)
+            result.extend(reader.json(manifest["descriptors"]))
+        return result
+
+    if inventory is not None:
+        with inventory.open(compiler, root=root) as (directory, _, _):
+            return descriptors(directory)
     with tempfile.TemporaryDirectory(prefix="hol-guard-descriptors-") as scratch:
         directory = Path(scratch).resolve(strict=True)
         stage(compiler.resolve(strict=True), directory, source_root=root)
-        release = read_object(directory / "release.json", root=directory)
-        reader = PackReader(directory / "objects")
-        descriptors = []
-        for _, reference in entries(reader, release["index"], release["extensions"]):
-            manifest = reader.json(reference)
-            descriptors.extend(reader.json(manifest["descriptors"]))
-        return descriptors
+        return descriptors(directory)
 
 
 def _implementation_files(directory: Path) -> set[Path]:

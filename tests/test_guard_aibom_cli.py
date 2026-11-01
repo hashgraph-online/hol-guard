@@ -1313,3 +1313,51 @@ def test_aibom_export_json_includes_redaction_report(tmp_path: Path, capsys, mon
     assert "trust_summary" in output
     assert output["redaction_report"]["rawValuesIncluded"] is False
     assert "snapshots" in output
+
+
+def test_sync_reports_rejected_snapshots_instead_of_synced(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
+
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    _write_text(home / ".hermes" / "skills" / "dev" / "deploy" / "SKILL.md", "---\nname: deploy\n---\n# Deploy\n")
+    context = HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=tmp_path / "guard")
+    store = GuardStore(context.guard_home)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    monkeypatch.setenv("GUARD_AIBOM_TRUST_ATTESTATION_V2", "0")
+    monkeypatch.setattr(aibom_cli, "detect_all", lambda _context: (HermesHarnessAdapter().detect(context),))
+    requests: list[SimpleNamespace] = []
+
+    def guard_sync_request(_auth_context, *, request_url, method, data, extra_headers):
+        request = SimpleNamespace(data=data, full_url=request_url, method=method)
+        requests.append(request)
+        return request
+
+    def respond(*, request, **_kwargs):
+        assert request.full_url.endswith("/api/v1/guard/events")
+        return {
+            "accepted": 0,
+            "rejected": 1,
+            "statuses": [{"eventId": "inventory-event", "status": "rejected", "message": "Invalid inventory payload."}],
+        }
+
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner, "_guard_sync_request", guard_sync_request)
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", respond)
+
+    summary = aibom_cli.sync_aibom_snapshots(
+        store,
+        context,
+        generated_at="2026-07-10T00:00:00+00:00",
+        auth_context={"sync_url": "https://hol.test/api/v1/guard/events"},
+    )
+
+    assert summary["synced"] is False
+    assert summary["partial"] is False
+    assert summary["reason"] == "snapshots_rejected"
+    assert summary["message"] == "Guard Cloud rejected 1 of 1 inventory snapshots."
+    assert not [request for request in requests if request.full_url.endswith("/content-upload")]

@@ -223,35 +223,6 @@ def test_unverified_degradation_never_grants_tool_permission(reason: str, event:
         assert reason in output["decision"]["message"]
 
 
-@pytest.mark.parametrize(
-    "output",
-    [
-        {},
-        {"hookSpecificOutput": {}},
-        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "unknown"}},
-        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": ["allow"]}},
-        {"hookSpecificOutput": {"hookEventName": "Stop", "permissionDecision": "allow"}},
-    ],
-)
-def test_incomplete_or_wrong_event_tool_response_requires_native_approval(output):
-    response = bridge._valid_hook_json_or_degraded(
-        json.dumps(output),
-        reason="invalid tool response",
-        data=json.dumps({"hook_event_name": "PreToolUse"}),
-    )
-    assert json.loads(response)["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-@pytest.mark.parametrize("event", ["PermissionRequest", "PermissionRequestV2"])
-def test_empty_permission_response_is_denied(event):
-    response = bridge._valid_hook_json_or_degraded(
-        "{}",
-        reason="invalid permission response",
-        data=json.dumps({"hook_event_name": event}),
-    )
-    assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-
-
 def test_degraded_pretool_requires_review_even_for_read() -> None:
     response = bridge._degraded(
         "daemon unavailable",
@@ -265,18 +236,6 @@ def test_degraded_pretool_requires_review_even_for_read() -> None:
     )
 
     payload = json.loads(response)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_valid_hook_json_degrades_empty_daemon_body() -> None:
-    response = bridge._valid_hook_json_or_degraded(
-        "",
-        reason="daemon returned empty hook JSON",
-        data=json.dumps({"hook_event_name": "PreToolUse"}),
-    )
-
-    payload = json.loads(response)
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
@@ -310,47 +269,8 @@ def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -
     assert str(home_dir) in command[3]
 
 
-@pytest.mark.parametrize("event", ["PermissionRequest", "PermissionRequestV2"])
-def test_explicit_permission_passthrough_defers_to_claude_dialog(event):
-    output = json.dumps(
-        {
-            "guard_permission_passthrough": True,
-            "systemMessage": "HOL Guard context",
-            "hookSpecificOutput": {"hookEventName": event, "additionalContext": "context"},
-        }
-    )
-    response = bridge._valid_hook_json_or_degraded(
-        output,
-        reason="invalid permission response",
-        data=json.dumps({"hook_event_name": event}),
-    )
-    assert response == output
-    assert "decision" not in json.loads(response)["hookSpecificOutput"]
-
-
-@pytest.mark.parametrize(
-    "output",
-    [
-        {"guard_permission_passthrough": "true", "hookSpecificOutput": {"hookEventName": "PermissionRequest"}},
-        {"guard_permission_passthrough": True, "hookSpecificOutput": {"hookEventName": "PreToolUse"}},
-        {"guard_permission_passthrough": True},
-        {
-            "guard_permission_passthrough": True,
-            "hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "maybe"}},
-        },
-    ],
-)
-def test_malformed_permission_passthrough_is_denied(output):
-    response = bridge._valid_hook_json_or_degraded(
-        json.dumps(output),
-        reason="invalid permission response",
-        data=json.dumps({"hook_event_name": "PermissionRequest"}),
-    )
-    assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-
-
 def test_remaining_hint_preserves_unicode_and_omits_itself_when_it_will_not_fit() -> None:
-    from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_transport import (
+    from scripts.daemon_hook_client import (
         _MAX_HOOK_REQUEST_BYTES,
         _with_remaining_hint,
     )

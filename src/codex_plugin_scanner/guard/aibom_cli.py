@@ -43,9 +43,7 @@ from .aibom_reporting import _redact_inventory_store_item as _redact_inventory_s
 from .aibom_reporting import _render_aibom_markdown as _render_aibom_markdown
 from .aibom_reporting import _store_only_artifact_metadata_extensions as _store_only_artifact_metadata_extensions
 from .aibom_reporting import _store_row_config_path as _store_row_config_path
-from .aibom_reporting import summarize_aibom_drift as summarize_aibom_drift
 from .aibom_reporting import summarize_aibom_layers as summarize_aibom_layers
-from .aibom_reporting import summarize_aibom_trust as summarize_aibom_trust
 from .aibom_sync import _accepted_snapshot_ids as _accepted_snapshot_ids
 from .aibom_sync import _batch_inventory_events as _batch_inventory_events
 from .aibom_sync import _inventory_events_request_body as _inventory_events_request_body
@@ -372,8 +370,12 @@ def sync_aibom_snapshots(
     content_eligible = content_eligible_value if isinstance(content_eligible_value, int) else 0
     content_stored = content_stored_value if isinstance(content_stored_value, int) else 0
     content_upload_complete = content_stored == content_eligible
+    # A snapshot Cloud rejects never has its skill content uploaded, so the sync
+    # is not complete even when every accepted snapshot's content was stored.
+    # Oversized snapshots are skipped locally and reported as partial instead.
+    cloud_rejected = total_rejected - len(oversized_events)
     summary: dict[str, object] = {
-        "synced": content_upload_complete,
+        "synced": content_upload_complete and cloud_rejected == 0,
         "synced_at": synced_at,
         "snapshots": len(snapshots),
         "accepted": total_accepted,
@@ -388,5 +390,9 @@ def sync_aibom_snapshots(
     if not content_upload_complete:
         summary["partial"] = True
         summary["reason"] = "content_upload_incomplete"
+    if cloud_rejected > 0:
+        summary["partial"] = bool(summary.get("partial")) or total_accepted > 0
+        summary["reason"] = "snapshots_rejected"
+        summary["message"] = f"Guard Cloud rejected {cloud_rejected} of {len(snapshots)} inventory snapshots."
     store.set_sync_payload("aibom_sync_summary", summary, synced_at)
     return summary

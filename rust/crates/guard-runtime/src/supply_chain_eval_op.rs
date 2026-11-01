@@ -120,7 +120,7 @@ pub(crate) fn evaluate_supply_chain_eval_with_seams(
             request_sha256,
             status: "ok".to_owned(),
             code: "ok".to_owned(),
-            payload: Some(eval.to_dict()),
+            payload: Some(settled_payload(&eval)),
         },
         Err(EvalError::SavedPolicyProbeRequired(cached)) => SupplyChainEvalResultV1 {
             schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
@@ -143,4 +143,15 @@ pub(crate) fn evaluate_supply_chain_eval_with_seams(
         },
     };
     crate::encode_response(&result)
+}
+
+/// The evaluation view plus how its verdict settles a pending package review.
+/// The settlement rides outside the view, which stays the stored evaluation's
+/// exact shape.
+fn settled_payload(eval: &PackageEvalResult) -> Value {
+    let mut payload = eval.to_dict();
+    if let Value::Object(fields) = &mut payload {
+        fields.insert(REVIEW_SETTLEMENT_KEY.to_owned(), eval.review_settlement());
+    }
+    payload
 }

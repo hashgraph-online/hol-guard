@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
+import type { ChangeEvent, KeyboardEvent, ReactNode, RefObject } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import { shouldSubmitApprovalProof } from "./approval-keyboard";
@@ -192,7 +192,7 @@ type ApprovalProofInlineProps = {
   approvalGate: GuardApprovalGatePublicConfig | null;
   approvalPassword: string;
   approvalTotpCode: string;
-  error: string | null;
+  error: ReactNode;
   submitLabel: string;
   submitBusy: boolean;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -264,11 +264,7 @@ export function ApprovalProofInline(props: ApprovalProofInlineProps) {
         onApprovalTotpCodeChange={props.onApprovalTotpCodeChange}
       />
 
-      {props.error !== null ? (
-        <p className="text-sm text-brand-attention" role="alert">
-          {props.error}
-        </p>
-      ) : null}
+      {props.error ?? null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <ActionButton variant="primary" onClick={props.onSubmit} disabled={submitDisabled}>

@@ -5,7 +5,7 @@ use guard_contracts::{
     EXTENSION_ALLOW_HINT_QUERY_KIND, EXTENSION_ALLOW_HINT_REQUEST_SCHEMA,
 };
 
-const DOCKER_CONTEXT: &str = "docker context ls";
+const DOCKER_CONTEXT: &str = "docker context use staging";
 const DOCKER_RULE: &str = "command.container-runtime.docker-sensitive";
 const DOCKER_PERMISSION: &str = "command.container-runtime.permission.docker-sensitive";
 

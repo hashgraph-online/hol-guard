@@ -22,6 +22,7 @@ _DAEMON_LOG_DIRECTORY: Final = "logs"
 _DAEMON_LOG_FILENAME: Final = "daemon.log"
 _DAEMON_LOG_RETENTION_SECONDS: Final = 7 * 24 * 60 * 60
 _DEFAULT_QUEUE_CAPACITY: Final = 256
+_MAX_RECORDED_EXCEPTION_NAMES: Final = 3
 _OWNER_ONLY_DIRECTORY_MODE: Final = 0o700
 
 
@@ -38,8 +39,37 @@ class _DaemonLogFormatter(logging.Formatter):
         if isinstance(detail, str) and detail:
             payload["detail"] = detail
         if record.exc_info is not None:
-            payload["exception"] = self.formatException(record.exc_info)
+            names = _exception_names(record.exc_info)
+            if names:
+                payload["exception"] = names
         return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+
+
+def _exception_names(
+    exc_info: tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None],
+) -> str:
+    """Reduce a failure to a bounded chain of exception class names.
+
+    `daemon.log` is the artifact an operator hands over, so no record may carry
+    an absolute path, a username or anything a caller was holding. A formatted
+    traceback carries all three: every frame names a file under the install,
+    the source line is printed verbatim, and an exception message repeats what
+    it was given - the path an `OSError` could not open, or the URL a client
+    was told to reach. The class names answer the question the log is read for,
+    which is what failed and what it failed under, and nothing else about the
+    machine is recoverable from them. A caller with more to say passes a
+    bounded, path-free `detail`.
+    """
+
+    names: list[str] = []
+    exception: BaseException | None = exc_info[1]
+    while exception is not None and len(names) < _MAX_RECORDED_EXCEPTION_NAMES:
+        names.append(type(exception).__name__)
+        following = exception.__cause__
+        if following is None and not exception.__suppress_context__:
+            following = exception.__context__
+        exception = following
+    return " <- ".join(names)
 
 
 def _secure_directory(path: Path) -> None:
@@ -127,11 +157,16 @@ class DaemonDiagnostics:
         """Positional error adapter for background workers with no daemon handle.
 
         The caller passes an already-bounded, path-free detail line, so this
-        records no ``exc_info``: a traceback would carry the absolute paths of
-        the install, which these records must not disclose.
+        records no ``exc_info`` at all: the detail is the whole of what these
+        records disclose.
         """
 
         return self._enqueue(self._record(logging.ERROR, event, detail=detail))
+
+    def record_background_notice(self, event: str, detail: str) -> bool:
+        """Positional info adapter for an expected background state."""
+
+        return self.record(event, detail=detail)
 
     def record_exception(
         self,
@@ -140,11 +175,11 @@ class DaemonDiagnostics:
         detail: str | None = None,
         exc_info: tuple[type[BaseException], BaseException, TracebackType | None] | Literal[False] | None = None,
     ) -> bool:
-        # As in `logging`, False asks for no traceback. The caller has already
-        # reduced the failure to a bounded, path-free line, and a traceback
-        # would put the absolute path it was reading back into daemon.log - the
-        # artifact an operator hands over. True is not accepted: a caller that
-        # wants the live exception passes nothing.
+        # As in `logging`, False asks for no exception at all. The caller has
+        # already reduced the failure to a bounded, path-free line and has
+        # nothing to add. True is not accepted: a caller that wants the live
+        # exception passes nothing, and what reaches the log is its class name
+        # chain, never its message or traceback - see `_exception_names`.
         recorded: tuple[type[BaseException], BaseException, TracebackType | None] | None = exc_info or None
         if exc_info is None:
             exception_type, exception, traceback = sys.exc_info()

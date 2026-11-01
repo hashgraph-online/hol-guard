@@ -353,6 +353,13 @@ fn code_loading_settings_are_named_for_the_block_reason() {
         ("REPORT_DIR=out CC=./x npm run build", Some("CC")),
         ("cd app && PYTHONPATH=. python x.py", Some("PYTHONPATH")),
         ("REPORT_DIR=out node x.mjs", None),
+        // A setting the projection removes stopped nothing, so the reason
+        // skips it and names the one that did.
+        ("NODE_OPTIONS=--max-old-space-size=4096 npm test", None),
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 NODE_PATH=/ws node x.mjs",
+            Some("NODE_PATH"),
+        ),
         ("echo NODE_PATH=/ws | cat", None),
         ("node x.mjs NODE_PATH=/ws", None),
         ("NODE-PATH=/ws node x.mjs", None),
@@ -410,4 +417,124 @@ fn a_one_time_approval_binds_only_plain_reviewable_settings() {
         assert!(!bindable_setting(name, value), "{name}={value}");
     }
     assert!(!bindable_setting("DEPLOY_TARGET", &"x".repeat(129)));
+}
+
+#[test]
+fn a_bare_exec_in_front_of_a_setting_is_read_past() {
+    // `exec` hands the shell's process to the command behind it, so these run
+    // what the bare spelling runs. Before this the projection stopped at the
+    // first word, so a setting the compatibility layer refuses, `NODE_OPTIONS`
+    // among them, left the command on its own floor instead of the one its
+    // bare spelling earns.
+    for (command, expected) in [
+        ("exec env -u NODE_OPTIONS npm test", "npm test"),
+        (
+            "exec env -u GH_TOKEN git -C repo status",
+            "git -C repo status",
+        ),
+        (
+            "git status && exec env -u GH_TOKEN gh repo view o/r",
+            "git status && gh repo view o/r",
+        ),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+#[test]
+fn an_exec_the_projection_cannot_read_past_leaves_the_command_alone() {
+    // `-c` runs with an empty environment and `-a` renames the program, so
+    // neither spelling runs what the bare one runs. `exec` with nothing behind
+    // it sets up redirections for the shell itself. And an `exec` that removes
+    // no setting is the command the caller wrote, not a prefix of one.
+    for command in [
+        "exec -c env -u NODE_OPTIONS npm test",
+        "exec -a sh env -u NODE_OPTIONS npm test",
+        "exec > /tmp/log",
+        "exec npm test",
+        // `exec` is the command word, so the shell hands `LC_ALL=C` to it as
+        // the program to run rather than recognizing it as an assignment.
+        "exec LC_ALL=C ls src",
+        // `-u PATH` is refused by `strip_env_options` whether or not a
+        // launcher stands in front of it, so reading past `exec` reaches the
+        // same refusal the bare spelling reaches.
+        "exec env -u PATH npm test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_heap_or_diagnostic_node_options_prefix_is_projected_away() {
+    // The runtime already reads an inherited `NODE_OPTIONS` holding only
+    // these flags as inert. Written in front of the command it is the same
+    // setting and loads the same nothing, so the projection removes it and
+    // the ordinary proofs judge the test run itself.
+    for (command, expected) in [
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 npm test",
+            "npm test",
+        ),
+        (
+            "NODE_OPTIONS=--no-warnings npx vitest run",
+            "npx vitest run",
+        ),
+        (
+            "NODE_OPTIONS=--stack-trace-limit=50 node scripts/report.mjs",
+            "node scripts/report.mjs",
+        ),
+        (
+            "env NODE_OPTIONS=--max-semi-space-size=64 npm test",
+            "npm test",
+        ),
+        (
+            "NODE_OPTIONS=--max-old-space-size=4096 LC_ALL=C npm test",
+            "npm test",
+        ),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+    // Anything that can load code, open a port or name a file keeps the
+    // command unprojected, so it still fails closed.
+    for command in [
+        "NODE_OPTIONS=--require=./hook.js npm test",
+        "NODE_OPTIONS=--import=./hook.mjs npm test",
+        "NODE_OPTIONS=--inspect npm test",
+        "NODE_OPTIONS=--experimental-loader npm test",
+        "NODE_OPTIONS= npm test",
+        "NODE_OPTIONS=--max-old-space-size=4096:--require=./hook.js npm test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_screened_build_or_test_setting_is_removed_in_place() {
+    // These names are spelled like loader settings, so every name test
+    // refuses them and `GOFLAGS=-count=1 go test ./...` kept no reviewable
+    // form at all. A value the closed list holds only chooses how the run
+    // reports, how often it repeats or which lint it refuses, so the command
+    // runs what its bare spelling runs.
+    for (command, expected) in [
+        ("GOFLAGS=-count=1 go test ./...", "go test ./..."),
+        (r#"GOFLAGS="-count=1 -v" go test ./..."#, "go test ./..."),
+        ("GOFLAGS=-mod=readonly go test ./...", "go test ./..."),
+        (
+            "PYTEST_ADDOPTS=--maxfail=1 .venv/bin/pytest -q",
+            ".venv/bin/pytest -q",
+        ),
+        ("RUSTFLAGS=-Dwarnings cargo test", "cargo test"),
+        ("RUSTDOCFLAGS=-Dwarnings cargo doc", "cargo doc"),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+    // A value the list does not hold names a program, a plugin or a linker.
+    for command in [
+        "GOFLAGS=-toolexec=./x go test ./...",
+        "GOFLAGS=-mod=mod go test ./...",
+        "PYTEST_ADDOPTS=-pevil .venv/bin/pytest -q",
+        "RUSTFLAGS=-Clinker=./ld cargo test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
 }

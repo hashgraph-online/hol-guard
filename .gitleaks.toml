@@ -44,6 +44,22 @@ regexes = [
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "CIGAR verification manifests record SHA-256 source digests, not credentials"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)docs/guard/cigar\-integration/evidence/[^/]+\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"(?:agent-access\.md|rust/crates/guard\-runtime/src/context_assistance_installation_key\.rs|rust/crates/guard\-scanner/src/secret_detection\.rs|dashboard/src/guard\-api\.ts|dashboard/src/context\-assistance/(?:versions\-api(?:\.test)?|workspaces\-api(?:\.test)?|history\-api|api\.test|action\-api|proposals\-api)\.ts)": "[0-9a-f]{64}",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Historical synthetic packaged-binary scanner fixture, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_security_binaries\.py$''']
+regexes = ['''^[\t\r\n ]*SECRET_LINE = 'const token = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789";\\n'[\t\r\n ]*$''']
+
+[[rules.allowlists]]
 description = "Pinned public token-fixture SHA-256, not a credential"
 condition = "AND"
 regexTarget = "line"
@@ -56,6 +72,15 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Recorded replay key of the synthetic end-to-end trust attestation, a SHA-256 digest rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/guard\-trust\-attestation\-verify\.v1\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"replay_key": "4dc4ac25a65316869993be1c719cb6e479bfb71c6e79e7eae822f786cc1082d0",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "Synthetic capture keys recorded in the binding-capture parity vectors, not credentials"
 condition = "AND"
 regexTarget = "line"
@@ -63,6 +88,13 @@ paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/binding_capture/vectors\.
 regexes = [
   '''^[\t\r\n ]*"capture_key_b64": "(?:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=?|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tr|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2traw==|\-_v7(?:\-_v7){9}\-_s=|\+/v7(?:\+/v7){9}\+/s=)",?[\t\r\n ]*$''',
 ]
+
+[[rules.allowlists]]
+description = "Synthetic masked-value vector in the command-token redaction tests, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)rust/crates/guard\-command/src/redacted_command_tokens\.rs$''']
+regexes = ['''^abcdefgh12345678$''']
 
 [[rules.allowlists]]
 description = "Synthetic API key in the approval-queue redaction parity vectors, not a credential"
@@ -110,6 +142,15 @@ paths = ['''(?:^|/)contributions/command\-sources/migration\-manifest\.json$''']
 regexes = [
   '''^[\t\r\n ]*"command\.api\-gateway\.json": "c435d78e882f941c989aa097e875b0c61dafbd13523f515b03f1d967636031aa",[\t\r\n ]*$''',
   '''^[\t\r\n ]*"command\.kubernetes\-secrets\.json": "cfd8b77be9464f35df79497d0db382b55288620d1c5decfadb9b83e45da0d92f",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Recorded provider-catalog fingerprint in the MCP provider read parity vectors, a SHA-256 of the catalog rows rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/mcp_provider_read_vectors\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",?[\t\r\n ]*$''',
 ]
 
 [[rules.allowlists]]
@@ -291,6 +332,38 @@ paths = [
 ]
 regexes = [
   '''^sk\-live\-0123456789abcdef0123456789abcdef$''',
+]
+
+[[rules.allowlists]]
+description = "SHA-256 digests of public contribution files recorded in authoring record.json, not credentials"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)contributions/authoring/[^/]+/record\.json$''']
+regexes = [
+  '''^[\t ]*"(?:contributions|tests)/[A-Za-z0-9._/\-]+": "[0-9a-f]{64}",?[\t\r ]*$''',
+  '''^[\t ]*"revisionDigest": "[0-9a-f]{64}",?[\t\r ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Recorded trust-attestation replay key, a SHA-256 digest of the claim rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(?:^|/)tests/fixtures/guard\-trust\-claim\.v1\.json$''',
+  '''(?:^|/)tests/fixtures/guard\-attestation\-verification\.v1\.json$''',
+]
+regexes = [
+  '''^[\t\r\n ]*"(?:replayKey|replay_key)": "[0-9a-f]{64}",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic provider-shaped samples the new secret rules are tested against, each held in two pieces so no whole token appears in source"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/secret_detection\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*\("vault\-token", "hvs\.CAESIJq2VL8nP4wR7t", "Y1uI6oP3aS5dFgHj"\),[\t\r\n ]*$''',
+  '''^[\t\r\n ]*\("square\-access\-token", "sq0atp\-Qq2VL8nP4w", "R7tY1uI6oP3a"\),[\t\r\n ]*$''',
 ]
 
 [[rules]]

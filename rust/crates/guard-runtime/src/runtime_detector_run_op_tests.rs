@@ -38,6 +38,40 @@ fn entries(request: &RuntimeDetectorRunRequestV1) -> Vec<Value> {
         .clone()
 }
 
+/// Secret families the corpus gained after these vectors were recorded.
+///
+/// Python read only the key names it knew inside `.ssh`, so a public key
+/// beside a private one read as nothing, and it did not know `gh/hosts.yml`
+/// carries a GitHub token at all. Both vectors therefore recorded an empty
+/// signal list. A recorded-silent `secret.path` entry may gain signals from
+/// these families and from nothing else, the rest of the entry has to be
+/// unchanged, and only [`EXPANDED_SECRET_VECTORS`] vectors may move.
+const EXPANDED_SECRET_TITLES: &[&str] = &[
+    "Direct access to SSH key material",
+    "Direct access to GitHub CLI credentials",
+];
+
+const EXPANDED_SECRET_VECTORS: usize = 2;
+
+fn is_corpus_expansion(got: &Value, want: &Value) -> bool {
+    if want["detector_id"] != json!("secret.path") || want["signals"] != json!([]) {
+        return false;
+    }
+    let Some(signals) = got["signals"].as_array() else {
+        return false;
+    };
+    if signals.is_empty()
+        || !signals
+            .iter()
+            .all(|signal| EXPANDED_SECRET_TITLES.contains(&signal["title"].as_str().unwrap_or("")))
+    {
+        return false;
+    }
+    let mut silent = got.clone();
+    silent["signals"] = json!([]);
+    silent == *want
+}
+
 fn without_elapsed(mut entry: Value) -> Value {
     let elapsed = entry
         .as_object_mut()
@@ -137,9 +171,11 @@ fn unknown_and_missing_fields_are_rejected() {
 
 const PARITY_ATTEMPTS: u32 = 5;
 
-/// Whether every difference is `safe-decode.content` reporting no signals
-/// where the recorded run found some, with the rest of its result unchanged:
-/// the result of a run that ran out of decode time.
+/// Whether every difference is `safe-decode.content` stopping its decode
+/// early, with the rest of its result unchanged: the result of a run that ran
+/// out of decode time. A run that stops before the first layer reports no
+/// signals; one that stops after a layer but before the layer that held the
+/// payload reports only the obfuscated content it had decoded so far.
 fn only_decode_budget_stalls(actual: &[Value], expected: &[Value]) -> bool {
     actual.len() == expected.len()
         && actual != expected
@@ -150,7 +186,15 @@ fn only_decode_budget_stalls(actual: &[Value], expected: &[Value]) -> bool {
             let mut refilled = got.clone();
             refilled["signals"] = want["signals"].clone();
             want["detector_id"] == "safe-decode.content"
-                && got["signals"].as_array().is_some_and(Vec::is_empty)
+                && want["signals"]
+                    .as_array()
+                    .is_some_and(|signals| !signals.is_empty())
+                && got["signals"].as_array().is_some_and(|signals| {
+                    signals.len() <= 1
+                        && signals
+                            .iter()
+                            .all(|signal| signal["signal_id"] == "encoded.obfuscated-content")
+                })
                 && refilled == *want
         })
 }
@@ -163,6 +207,7 @@ fn parity_vectors_match_the_recorded_python_outputs() {
     let vectors = fixture.as_array().unwrap();
     assert!(vectors.len() > 700);
     let mut mismatches = Vec::new();
+    let mut expanded = 0usize;
     for vector in vectors {
         let wire = &vector["request"];
         let request = RuntimeDetectorRunRequestV1 {
@@ -178,9 +223,11 @@ fn parity_vectors_match_the_recorded_python_outputs() {
         };
         let expected = vector["expected"].as_array().unwrap();
         // `safe-decode.content` keeps Python's 50 ms decode budget, and a run
-        // that overshoots it decodes nothing and reports no signals. A loaded
-        // runner can stall one run past it, so that one shape, and only that
-        // one, is tried again. Any other difference fails on the first run.
+        // that overshoots it stops decoding where it is: before any layer it
+        // reports no signals, part-way through it reports only obfuscated
+        // content. A loaded runner can stall one run past it, so those shapes,
+        // and only those, are tried again. Any other difference fails on the
+        // first run, and a stall that persists fails after the last attempt.
         let mut attempts = 0;
         let (code, actual) = loop {
             attempts += 1;
@@ -206,6 +253,10 @@ fn parity_vectors_match_the_recorded_python_outputs() {
             Some(actual) if actual.len() == expected.len() => {
                 for (got, want) in actual.iter().zip(expected) {
                     if got != want {
+                        if is_corpus_expansion(got, want) {
+                            expanded += 1;
+                            continue;
+                        }
                         mismatches.push(format!(
                             "{} {}:\n  expected {want}\n  got      {got}",
                             vector["name"], want["detector_id"]
@@ -227,5 +278,9 @@ fn parity_vectors_match_the_recorded_python_outputs() {
         "{} mismatches:\n{}",
         mismatches.len(),
         mismatches.join("\n")
+    );
+    assert_eq!(
+        expanded, EXPANDED_SECRET_VECTORS,
+        "{expanded} recorded-silent vectors now name an expanded secret family, against {EXPANDED_SECRET_VECTORS} recorded"
     );
 }

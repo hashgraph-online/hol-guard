@@ -154,20 +154,60 @@ export function isRetryableProtectionChangeError(error: unknown): boolean {
   );
 }
 
+function recoveryFor(recoveryCommand: string | undefined, recoveryShell: "powershell" | undefined, reloaded: boolean): Recovery {
+  return {
+    command: recoveryCommand ?? "hol-guard command controls recover-authority",
+    terminal: recoveryShell === "powershell" ? "PowerShell" : "your terminal",
+    reloaded,
+  };
+}
+
+function knownSentence(error: ExtensionControlApiError, recovery: Recovery): string | undefined {
+  if (error.code === "pack_preparation_unavailable") return preparationSentence(error.cause, recovery);
+  return error.code ? codeSentence(error.code, recovery) : undefined;
+}
+
+const AUTHORITY_UNREADABLE_CODES = new Set(["authority_unavailable", "authority_unread", "authority_history_unavailable"]);
+
+/**
+ * The sentence for a refusal the daemon gave before anything could be
+ * committed, such as a preview. Only codes with a known meaning get one: an
+ * unknown code or a malformed response has no outcome to describe, and the
+ * uncertain-commit wording would claim a save that a read never attempts.
+ */
+export function knownProtectionChangeMessage(
+  error: unknown,
+  recoveryCommand?: string,
+  recoveryShell?: "powershell",
+): string | undefined {
+  if (!(error instanceof ExtensionControlApiError)) return undefined;
+  return knownSentence(error, recoveryFor(recoveryCommand, recoveryShell, false));
+}
+
+/**
+ * Recovery guidance for a read that failed because the local protection
+ * authority could not be opened. It names the repair without saying anything
+ * about a save, since a read attempts none.
+ */
+export function authorityRecoverySentence(
+  error: unknown,
+  recoveryCommand?: string,
+  recoveryShell?: "powershell",
+): string | undefined {
+  if (!(error instanceof ExtensionControlApiError) || !AUTHORITY_UNREADABLE_CODES.has(error.code ?? "")) return undefined;
+  const recovery = recoveryFor(recoveryCommand, recoveryShell, false);
+  return `Guard could not open its local protection authority. Run \`${recovery.command}\` in ${recovery.terminal}, then try again.`;
+}
+
 export function protectionChangeErrorMessage(
   error: unknown,
   recoveryCommand?: string,
   recoveryShell?: "powershell",
   options: { reloaded?: boolean } = {},
 ): string {
-  const recovery: Recovery = {
-    command: recoveryCommand ?? "hol-guard command controls recover-authority",
-    terminal: recoveryShell === "powershell" ? "PowerShell" : "your terminal",
-    reloaded: options.reloaded === true,
-  };
+  const recovery = recoveryFor(recoveryCommand, recoveryShell, options.reloaded === true);
   if (error instanceof ExtensionControlApiError) {
-    if (error.code === "pack_preparation_unavailable") return preparationSentence(error.cause, recovery);
-    const sentence = error.code ? codeSentence(error.code, recovery) : undefined;
+    const sentence = knownSentence(error, recovery);
     if (sentence) return sentence;
     // An unmapped code says nothing about whether the daemon committed first,
     // so the outcome is described as unknown rather than as a dropped change.

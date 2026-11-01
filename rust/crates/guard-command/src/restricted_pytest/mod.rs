@@ -1,6 +1,5 @@
 //! Restricted execution admission, environment filtering and runtime read grants.
 
-use std::collections::HashSet;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -10,6 +9,10 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use regex::Regex;
+
+use crate::workspace_roots::{
+    host_home_directory, workspace_admissible, workspace_is_broad_or_sensitive_for_home,
+};
 
 // ---------------------------------------------------------------------------
 // `restricted_pytest_model.py` literals consumed by this module (:31-89).
@@ -23,11 +26,9 @@ pub const PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE: &str = "pytest_restricted_exte
 /// `RestrictedPytestBackend` (:37).
 pub type RestrictedPytestBackend = &'static str;
 
-static PYTEST_EXECUTABLE_NAMES: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| HashSet::from(["pytest", "py.test", "pytest.exe", "py.test.exe"]));
-
-static PYTHON_EXECUTABLE_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)^(?:python|pythonw)(?:\d+(?:\.\d+)*)?(?:\.exe)?$").unwrap());
+// The launcher names this module admits are the ones `pytest_argv` reads a
+// whole command with, so both answer the same question from one declaration.
+pub(crate) use crate::pytest_argv::{PYTEST_EXECUTABLE_NAMES, PYTHON_EXECUTABLE_PATTERN};
 
 const PROJECT_WORKSPACE_MARKERS: &[&str] = &[
     ".git",
@@ -38,12 +39,6 @@ const PROJECT_WORKSPACE_MARKERS: &[&str] = &[
     "tox.ini",
     "package.json",
 ];
-
-static SENSITIVE_HOME_ROOT_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
-    HashSet::from([
-        ".aws", ".azure", ".config", ".docker", ".gnupg", ".kube", ".ssh", "Library",
-    ])
-});
 
 static TRUSTED_EXECUTABLE_ROOTS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
     vec![
@@ -214,6 +209,7 @@ mod developer_shim;
 mod environment;
 mod executables;
 mod framework_grants;
+mod git_plan;
 mod launch_roots;
 mod launch_shebang;
 mod mapping;
@@ -221,6 +217,7 @@ mod mapping_elf;
 mod mapping_snapshot;
 #[cfg(test)]
 mod mapping_tests;
+mod node_tool_plan;
 mod paths;
 mod profiles;
 mod toolchains;
@@ -241,15 +238,19 @@ pub fn evaluate_with_deadline(
     mapping::evaluate(operation, input, deadline).unwrap_or_else(|| evaluate(operation, input))
 }
 pub use authority::evaluate;
-pub(crate) use environment::forwarded_setting;
+/// The runtime proves the Git executable, so it hands its own trust check in.
+pub use git_plan::{prepare_git, GitBinaryTrust};
 pub(crate) use launch_roots::launches_outside_exec_roots;
 pub use mapping::evidence as mapping_evidence;
 /// The Windows planner in `guard-runtime` decides the same question about the
 /// same argv, so it reads it here rather than keeping a second copy.
 pub use validation::python_args_target_pytest;
 pub use workspace::workspace_script_reads;
-pub(crate) use workspace::{exact_shape as workspace_exact_shape, workspace_admissible};
 pub(crate) use workspace_linux::available as linux_workspace_sandbox_available;
+/// The runtime's own contained sink makes an overlay's layers and removes
+/// them, so it removes them the way the Linux backend's own probe does
+/// rather than keeping a second copy of the kernel's work-directory rule.
+pub use workspace_linux::remove_overlay_root as remove_workspace_overlay_root;
 #[cfg(test)]
 mod parity_tests;
 use executables::*;

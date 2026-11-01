@@ -77,6 +77,11 @@ def test_daemon_start_composes_all_background_workers(
         lambda _self: started.append("headless"),
     )
     monkeypatch.setattr(
+        guard_daemon_module.GuardDaemonServer,
+        "_start_plugin_telemetry",
+        lambda _self: started.append("plugin-telemetry"),
+    )
+    monkeypatch.setattr(
         guard_daemon_module,
         "start_command_queue_worker",
         _start_command_queue,
@@ -95,7 +100,7 @@ def test_daemon_start_composes_all_background_workers(
 
     daemon.start()
     try:
-        assert started == ["headless", "bundle", "aibom", "command-queue", "cloud-review-sync"]
+        assert started == ["headless", "bundle", "aibom", "plugin-telemetry", "command-queue", "cloud-review-sync"]
     finally:
         daemon.stop()
 
@@ -113,6 +118,7 @@ def test_unmarked_daemon_does_not_start_background_workers(tmp_path: Path) -> No
         assert daemon._headless_cloud_sync_thread is None
         assert daemon._bundle_refresh_thread is None
         assert daemon._aibom_refresh_thread is None
+        assert daemon._plugin_telemetry_thread is None
         assert daemon._command_queue_worker is None
         assert daemon._cloud_review_sync_worker is None
     finally:

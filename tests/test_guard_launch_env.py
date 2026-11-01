@@ -1225,7 +1225,7 @@ def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, capsys):
+def test_opencode_prompt_hook_blocks_sensitive_prompt_without_queueing(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
@@ -1262,12 +1262,15 @@ def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, caps
         ]
     )
     output = json.loads(capsys.readouterr().out)
-    prompt_request = output["approval_requests"][0]
 
+    # The daemon stops a prompt that asks for local secrets outright; there is
+    # nothing to approve, so the user rephrases it.
     assert rc == 1
-    assert output["artifact_type"] == "prompt_request"
-    assert prompt_request["artifact_type"] == "prompt_request"
-    assert prompt_request["approval_url"].startswith("http://127.0.0.1:4455/requests/")
+    assert output["decision"] == "block"
+    assert output["reason_code"] == "native_sensitive_prompt"
+    assert "Nothing is waiting for approval" in output["reason"]
+    assert "approval_requests" not in output
+    assert GuardStore(home_dir).list_approval_requests(limit=5) == []
 
 
 def test_guard_run_allows_debug_prompt_with_quoted_publish_error(monkeypatch, tmp_path, capsys):

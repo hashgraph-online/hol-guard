@@ -52,12 +52,13 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, TryLockError};
 
 use guard_command::hook_evidence_writer::{
     ComposioApi, EvidenceWriterDeps, NativeEvidenceJournal, NativeReceiptValidation,
     ReceiptValidationApi, RuntimeHookEvidenceWriter,
 };
+use guard_contracts::NativeHookDecisionReceiptV1;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
@@ -319,6 +320,83 @@ fn with_running<T>(guard_home: &Path, act: impl FnOnce(&ResidentWriter) -> T) ->
     let slot = slot(guard_home);
     let held = slot.writer.lock().unwrap_or_else(|e| e.into_inner());
     held.as_ref().map(act)
+}
+
+/// Run `act` with the live writer for `guard_home` while its slot is held,
+/// so the writer cannot exit or start draining in the meantime.
+///
+/// `None` means `act` did not run: no live writer runs for the home, or its
+/// slot is busy starting one (a journal replay) or draining one. This never
+/// waits on the slot and never starts a writer.
+fn with_live<T>(guard_home: &Path, act: impl FnOnce(&ResidentWriter) -> T) -> Option<T> {
+    let slot = slot(&canonical_home(guard_home));
+    let held = match slot.writer.try_lock() {
+        Ok(held) => held,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return None,
+    };
+    let resident = held.as_ref()?;
+    if resident.writer.has_exited() || resident.writer.is_stopping() {
+        return None;
+    }
+    Some(act(resident))
+}
+
+/// Encode an edge answer that says its receipt was recorded, then queue
+/// `receipt` with the live writer for `guard_home` and hand that writer to
+/// `then` for the evidence that follows the receipt, holding the writer the
+/// whole time so it cannot exit or start draining in between.
+///
+/// `None` means nothing was queued and the answer must say so: no live writer
+/// runs for the home, its slot is busy starting one (a journal replay) or
+/// draining one, or the writer refused the receipt. The edge never waits on
+/// that slot and never starts a writer. An answer that fails to encode is
+/// returned as is and queues nothing.
+pub(crate) fn record_edge_receipt<E>(
+    guard_home: &Path,
+    receipt: &NativeHookDecisionReceiptV1,
+    encode: impl FnOnce() -> Result<Vec<u8>, E>,
+    then: impl FnOnce(&RuntimeHookEvidenceWriter),
+) -> Option<Result<Vec<u8>, E>> {
+    let Ok(Value::Object(receipt)) = serde_json::to_value(receipt) else {
+        return None;
+    };
+    with_live(guard_home, |resident| {
+        let encoded = match encode() {
+            Ok(encoded) => encoded,
+            Err(error) => return Some(Err(error)),
+        };
+        if !resident.writer.submit_native_decision_receipt(&receipt) {
+            return None;
+        }
+        then(resident.writer.as_ref());
+        Some(Ok(encoded))
+    })
+    .flatten()
+}
+
+/// Queue a direct answer's evidence with `queue`, which may first record its
+/// receipt and command activity with the live writer for `guard_home` it is
+/// handed, holding that writer the whole time.
+///
+/// The drain submits whatever a record leaves to this writer through the
+/// same slot, so the activity cannot reach the writer before the receipt it
+/// cites. `None` means `queue` did not run, because no live writer is free to
+/// take the evidence, which then stays with the drain.
+pub(crate) fn record_direct<T>(
+    guard_home: &Path,
+    queue: impl FnOnce(&RuntimeHookEvidenceWriter) -> T,
+) -> Option<T> {
+    with_live(guard_home, |resident| queue(resident.writer.as_ref()))
+}
+
+/// Run `act` while this Guard home's writer slot is held, as starting a
+/// writer or draining one holds it.
+#[cfg(test)]
+pub(crate) fn while_slot_busy<T>(guard_home: &Path, act: impl FnOnce() -> T) -> T {
+    let slot = slot(&canonical_home(guard_home));
+    let _held = slot.writer.lock().unwrap_or_else(|e| e.into_inner());
+    act()
 }
 
 /// The widest drain a caller may ask for. `timeout_seconds` arrives as an

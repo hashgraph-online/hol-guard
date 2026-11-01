@@ -12,7 +12,6 @@ from typing import Literal
 from .local_mcp_probe_env import (
     is_package_shim_executable as is_package_shim_executable,
 )
-from .local_mcp_probe_env import probe_env as probe_env
 from .local_mcp_probe_env import probe_search_path as probe_search_path
 
 MCP_PROBE_TIMEOUT_SECONDS = 6.0

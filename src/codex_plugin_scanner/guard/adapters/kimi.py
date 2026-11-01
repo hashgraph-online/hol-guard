@@ -71,7 +71,10 @@ class KimiHarnessAdapter(HarnessAdapter):
     def detect(self, context: HarnessContext) -> HarnessDetection:
         request = {**detection_request(self.harness, context), "home": str(self._kimi_home_dir(context))}
         artifacts, found_paths, warnings = native_adapter_detection_with_warnings("kimi_detect", request)
-        command_available = _command_available(self.executable)
+        # Kimi Code's installer puts the CLI in ~/.kimi-code/bin, outside the Kimi config home.
+        command_available = _command_available(
+            self.executable, context.home_dir, (context.home_dir / ".kimi-code" / "bin",)
+        )
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or command_available,

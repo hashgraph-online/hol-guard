@@ -4,6 +4,8 @@
 //! the hook identity digests are computed over (`json.dumps(sort_keys=True,
 //! separators=(",", ":"), ensure_ascii=False)`).
 
+use std::collections::BTreeMap;
+
 use serde_json::Value;
 
 use super::pyjson::{float_repr, PyVal};
@@ -180,15 +182,16 @@ enum Num {
     Float(f64),
 }
 
-fn numeric_pair(left: &HookVal, right: &Value) -> Option<(Num, Num)> {
-    fn left_num(value: &HookVal) -> Option<Num> {
-        match value {
-            HookVal::Bool(flag) => Some(Num::Int(u8::from(*flag).to_string())),
-            HookVal::Int(digits) => Some(Num::Int(digits.clone())),
-            HookVal::Float(number) => Some(Num::Float(*number)),
-            _ => None,
-        }
+fn hook_num(value: &HookVal) -> Option<Num> {
+    match value {
+        HookVal::Bool(flag) => Some(Num::Int(u8::from(*flag).to_string())),
+        HookVal::Int(digits) => Some(Num::Int(digits.clone())),
+        HookVal::Float(number) => Some(Num::Float(*number)),
+        _ => None,
     }
+}
+
+fn numeric_pair(left: &HookVal, right: &Value) -> Option<(Num, Num)> {
     fn right_num(value: &Value) -> Option<Num> {
         match value {
             Value::Bool(flag) => Some(Num::Int(u8::from(*flag).to_string())),
@@ -204,7 +207,7 @@ fn numeric_pair(left: &HookVal, right: &Value) -> Option<(Num, Num)> {
             _ => None,
         }
     }
-    Some((left_num(left)?, right_num(right)?))
+    Some((hook_num(left)?, right_num(right)?))
 }
 
 fn numbers_equal(left: &Num, right: &Num) -> bool {
@@ -218,23 +221,71 @@ fn numbers_equal(left: &Num, right: &Num) -> bool {
 }
 
 /// Python `==` between a parsed source value and a JSON binding value:
-/// `True == 1 == 1.0`, dictionaries compare without order.
-pub(crate) fn equals_json(value: &HookVal, other: Option<&Value>) -> bool {
+/// `True == 1 == 1.0`, dictionaries compare without order. A binding string
+/// the request lists in `tokens` is the scalar it stands for.
+pub(crate) fn equals_json(
+    value: &HookVal,
+    other: Option<&Value>,
+    tokens: &BTreeMap<String, Value>,
+) -> bool {
     let other = other.unwrap_or(&Value::Null);
+    if let Some(meaning) = other.as_str().and_then(|text| tokens.get(text)) {
+        return token_value(meaning).is_some_and(|scalar| {
+            match (hook_num(value), hook_num(&scalar)) {
+                (Some(left), Some(right)) => numbers_equal(&left, &right),
+                _ => *value == scalar,
+            }
+        });
+    }
     match (value, other) {
         (HookVal::Null, Value::Null) => true,
         (HookVal::Str(left), Value::String(right)) => left == right,
         (HookVal::List(left), Value::Array(right)) => {
             left.len() == right.len()
-                && left.iter().zip(right).all(|(a, b)| equals_json(a, Some(b)))
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(a, b)| equals_json(a, Some(b), tokens))
         }
         (HookVal::Dict(left), Value::Object(right)) => {
             left.len() == right.len()
-                && left
-                    .iter()
-                    .all(|(key, item)| right.get(key).is_some_and(|b| equals_json(item, Some(b))))
+                && left.iter().all(|(key, item)| {
+                    right
+                        .get(key)
+                        .is_some_and(|b| equals_json(item, Some(b), tokens))
+                })
         }
         _ => numeric_pair(value, other).is_some_and(|(left, right)| numbers_equal(&left, &right)),
+    }
+}
+
+/// What one request token stands for: a wide integer, a non-finite float, or
+/// a TOML date, time or datetime. A meaning no Codex source can hold is none.
+pub(crate) fn token_value(meaning: &Value) -> Option<HookVal> {
+    let fields = meaning.as_object()?;
+    if let Some(digits) = fields.get("__int__") {
+        let digits = digits.as_str().filter(|_| fields.len() == 1)?;
+        let magnitude = digits.strip_prefix('-').unwrap_or(digits);
+        let canonical = !magnitude.is_empty()
+            && magnitude.bytes().all(|byte| byte.is_ascii_digit())
+            && (magnitude == "0" || !magnitude.starts_with('0'));
+        return canonical.then(|| HookVal::Int(digits.to_owned()));
+    }
+    if fields.len() != 2 {
+        return None;
+    }
+    let value = fields.get("value")?.as_str()?;
+    match fields.get("type")?.as_str()? {
+        "float" => match value {
+            "inf" => Some(HookVal::Float(f64::INFINITY)),
+            "-inf" => Some(HookVal::Float(f64::NEG_INFINITY)),
+            "nan" => Some(HookVal::Float(f64::NAN)),
+            _ => None,
+        },
+        "datetime" => Some(HookVal::Temporal("datetime", value.to_owned())),
+        "date" => Some(HookVal::Temporal("date", value.to_owned())),
+        "time" => Some(HookVal::Temporal("time", value.to_owned())),
+        _ => None,
     }
 }
 

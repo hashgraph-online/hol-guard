@@ -8,25 +8,29 @@ pub(super) use allowances::{
 pub(super) mod feature_directories;
 #[path = "read_path_harness_notes.rs"]
 pub(super) mod harness_notes;
+#[path = "read_path_missing.rs"]
+mod missing;
+use missing::missing_absolute_read_allowed;
 #[path = "hidden_listing.rs"]
-mod hidden_listing;
+pub(super) mod hidden_listing;
 #[path = "omp_json_query.rs"]
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]
 pub(super) mod omp_targets;
-use hidden_listing::resolved_home_hidden_content_read;
 pub(super) use hidden_listing::{
     home_hidden_content_read, home_hidden_directory, home_hidden_tool_directory,
-    repository_hidden_directory,
+    home_hidden_walk_clears_stores, repository_hidden_directory,
 };
+use hidden_listing::{resolved_home_hidden_content_read, resolved_home_hidden_listing};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
+pub(super) use private_temporary::inside_private_temporary_directory;
 #[path = "workspace_scratch_reads.rs"]
 mod scratch;
 use allowances::{
-    agent_home_state, agent_skill_document, codex_notes_document, execution_output_log,
-    git_config_document, git_ref_document, guard_safety_doc, project_skill_document,
-    worktree_gitfile,
+    agent_home_state, agent_skill_document, agent_skill_script, codex_notes_document,
+    execution_output_log, git_config_document, git_ref_document, guard_safety_doc,
+    project_skill_document, worktree_gitfile,
 };
 pub(super) use omp_targets::{
     bounded_omp_directory_read_target, bounded_omp_file_read_target,
@@ -88,7 +92,7 @@ pub(super) fn bounded_file_read_target(
 ) -> bool {
     // A missing harness note is a shell-read exception. Structured tools come
     // through this helper, and a missing note there stays unproved.
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, false, false)
+    bounded_read_target_with_brackets(value, home_dir, cwd, ReadScreen::default())
 }
 
 pub(super) fn existing_regular_read_target(
@@ -118,7 +122,42 @@ pub(super) fn bounded_read_target(
     cwd: Option<&str>,
     allow_directory: bool,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false, true)
+    bounded_read_target_with_brackets(
+        value,
+        home_dir,
+        cwd,
+        ReadScreen {
+            allow_directory,
+            missing_notes: true,
+            ..ReadScreen::default()
+        },
+    )
+}
+
+/// A shell read of an absolute path with nothing at it, for a command no
+/// step of which creates a filesystem entry.
+///
+/// The open fails with `ENOENT`, so the read returns nobody's bytes, and the
+/// workspace-relative spelling of the same unresolvable path already passes
+/// its own lexical floor. The caller proves that no peer step can plant a
+/// file or a link where the kernel would walk, so what is missing now is
+/// still missing when the read runs; `bounded_read_target` carries no such
+/// proof and keeps the review.
+pub(super) fn bounded_missing_absolute_read_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    value == value.trim()
+        && bounded_read_target_with_brackets(
+            value,
+            home_dir,
+            cwd,
+            ReadScreen {
+                missing_absolute: true,
+                ..ReadScreen::default()
+            },
+        )
 }
 
 /// A structured read tool opens its path literally, so `[slug]` in a Next.js
@@ -130,7 +169,16 @@ pub(super) fn bounded_structured_file_read_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false)
+    bounded_read_target_with_brackets(
+        value,
+        home_dir,
+        cwd,
+        ReadScreen {
+            literal_brackets: true,
+            directory_listing: true,
+            ..ReadScreen::default()
+        },
+    )
 }
 
 /// A shell word whose bracket class matches nothing reaches the program
@@ -151,16 +199,35 @@ pub(super) fn bounded_literal_bracket_target(
     // already its own trimmed form keeps its review rather than borrowing
     // a neighbour's proof.
     value == value.trim()
-        && bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, true, true)
+        && bounded_read_target_with_brackets(
+            value,
+            home_dir,
+            cwd,
+            ReadScreen {
+                allow_directory,
+                literal_brackets: true,
+                missing_notes: true,
+                ..ReadScreen::default()
+            },
+        )
+}
+
+/// What a read screen admits besides a resolved regular file. Every flag is
+/// a proof the caller already holds, so the default screen admits nothing.
+#[derive(Clone, Copy, Default)]
+struct ReadScreen {
+    allow_directory: bool,
+    literal_brackets: bool,
+    missing_notes: bool,
+    directory_listing: bool,
+    missing_absolute: bool,
 }
 
 fn bounded_read_target_with_brackets(
     value: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
-    allow_directory: bool,
-    literal_brackets: bool,
-    missing_notes: bool,
+    screen: ReadScreen,
 ) -> bool {
     let path = value.trim();
     let path = path.strip_prefix(r"\\?\").unwrap_or(path);
@@ -170,7 +237,7 @@ fn bounded_read_target_with_brackets(
     let has_brackets = path.contains(['[', ']']);
     if path.contains([
         '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '{', '}',
-    ]) || (has_brackets && !literal_brackets)
+    ]) || (has_brackets && !screen.literal_brackets)
     {
         return false;
     }
@@ -200,8 +267,19 @@ fn bounded_read_target_with_brackets(
         return !parent_component && safe_read_target(path);
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-        return (canonical.is_file() || (allow_directory && canonical.is_dir()))
-            && (resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
+        // A structured read tool handed a directory lists its entries, or
+        // says it is a directory; either way it returns no file's bytes, so
+        // the question is the listing one. A shell walk keeps its own root
+        // rules, so the listing screen answers only for that tool.
+        let listing = screen.directory_listing
+            && canonical.is_dir()
+            && !guard_secure_fs::contains_symlink_component(&candidate)
+            && resolved_location_allowed(&canonical, home_dir, cwd, false)
+            && resolved_home_hidden_listing(&canonical, home_dir);
+        return (canonical.is_file()
+            || ((screen.allow_directory || listing) && canonical.is_dir()))
+            && (listing
+                || resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
                 || package_source::installed_package_source(
                     &candidate, &canonical, home_dir, cwd,
                 ));
@@ -215,11 +293,13 @@ fn bounded_read_target_with_brackets(
     // answer instead. A workspace-relative spelling keeps the pre-existing
     // lexical floor.
     if expanded_path.is_absolute() {
-        return missing_notes
+        return (screen.missing_notes
             && harness_notes::missing_document(expanded_path).is_some_and(|resolved| {
                 resolved_location_allowed(&resolved, home_dir, cwd, false)
                     && harness_notes::harness_home_document(&resolved, home_dir)
-            });
+            }))
+            || (screen.missing_absolute
+                && missing_absolute_read_allowed(expanded_path, home_dir, cwd));
     }
     safe_read_target(path)
 }
@@ -277,6 +357,21 @@ pub(super) fn resolved_path_allowed_in_scope(
     resolved_path_allowed_for_operation(canonical, home_dir, cwd, verified_temporary, false)
 }
 
+/// Whether `canonical`, a resolved file, is a document the repository the
+/// session works in keeps below a hidden directory, such as
+/// `.claude-plugin/plugin.json`, read from that checkout or from a linked
+/// worktree of it. PreToolUse admits the read with this proof; the output
+/// review repeats it, or the file is read and its content withheld.
+pub fn proven_repository_hidden_document(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let temporary = private_temporary::inside_private_temporary_directory(canonical, home_dir);
+    location_allowed(canonical, home_dir, cwd, temporary, true)
+        && hidden_listing::repository_hidden_source_document(canonical, home_dir, cwd)
+}
+
 pub(super) fn resolved_path_allowed_for_operation(
     canonical: &std::path::Path,
     home_dir: Option<&str>,
@@ -311,6 +406,7 @@ fn path_gate(
             || guard_safety_doc(canonical, home_dir)
             || (read_only
                 && (agent_skill_document(canonical, home_dir)
+                    || agent_skill_script(canonical, home_dir)
                     || agent_home_state(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
                     || codex_notes_document(canonical, home_dir)
@@ -320,7 +416,10 @@ fn path_gate(
                     || worktree_gitfile(canonical)
                     || scratch::workspace_scratch_read(canonical, home_dir, cwd)
                     || scratch::private_temporary_scratch_read(canonical, home_dir)
-                    || virtualenv_activation_script(canonical)))
+                    || virtualenv_activation_script(canonical)
+                    || hidden_listing::repository_hidden_source_document(
+                        canonical, home_dir, cwd,
+                    )))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
@@ -435,7 +534,7 @@ fn location_allowed(
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || (credential_names && guard_secure_fs::credential_named_path(canonical)))
+        || (credential_names && super::search_scope_tracked::names::unproven(canonical, cwd)))
 }
 
 pub(super) fn foreign_user_home(

@@ -109,12 +109,15 @@ def installed_client():
 
 
 def provision(store: GuardStore) -> None:
+    """Enroll a new home, or keep the empty revision 0 a daemon start enrolled in it."""
     store._extension_control_authority_secret_store = EncryptedFileSecretStore(store.guard_home)
     catalog = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     with store._extension_control_authority_lock():
         before = store._read_extension_control_authority_locked(catalog)
-        require(before.health is AuthorityHealth.UNENROLLED, "fixture_not_new")
-        store._bootstrap_extension_control_authority(catalog, key=None)
+        if before.health is AuthorityHealth.UNENROLLED:
+            store._bootstrap_extension_control_authority(catalog, key=None)
+        else:
+            require(before.health is AuthorityHealth.PROTECTED and not before.revision, "fixture_not_new")
         after = store._read_extension_control_authority_locked(catalog)
         require(after.health is AuthorityHealth.PROTECTED and after.revision == 0 and not after.layers, "bootstrap")
 
@@ -198,22 +201,20 @@ def exercise(root: Path) -> dict[str, object]:
     home, workspace = root / "home", root / "work"
     home.mkdir(mode=0o700)
     workspace.mkdir(mode=0o700)
-    bind_windows_state = None
     if os.name == "nt":
-        from codex_plugin_scanner.guard.native_policy_snapshot_windows_state import (
+        from codex_plugin_scanner.guard.native_policy_snapshot_windows_atomic import (
             _windows_ensure_private_directory,
-            _windows_private_state_binding,
         )
 
-        bind_windows_state = _windows_private_state_binding
         _windows_ensure_private_directory(home)
         _windows_ensure_private_directory(workspace)
     store = GuardStore(home)
-    if bind_windows_state is not None:
+    if os.name == "nt":
+        from codex_plugin_scanner.guard.native_policy_snapshot_windows_support import _runtime_state_directory
+
         # Settings writes start a resident. Create the runtime directory first so
         # that client pins the directory publication opens, not a missing path.
-        with bind_windows_state(home):
-            pass
+        _runtime_state_directory(home)
     password = secrets.token_urlsafe(32)
     update_guard_settings(home, {"mode": "enforce"})
     update_settings(

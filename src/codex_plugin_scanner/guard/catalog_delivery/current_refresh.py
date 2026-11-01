@@ -6,6 +6,7 @@ the brief protected-cursor CAS lease. Failed preparation retains the old view.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import time
@@ -25,6 +26,30 @@ PREFIX = "guard-command-discovery-current"
 STAMP = "guard-command-discovery-current-enrolled"
 COMPLETE = "guard-command-discovery-complete"
 ENROLLED = "guard.discovery-current-enrolled.v1"
+ENGINE_INCOMPATIBLE = "discovery_current_engine_incompatible"
+
+
+class PublicationEngineMismatchError(ValueError):
+    """The current publication was built for another catalog engine.
+
+    A released core meets this as soon as `main` publishes with a changed
+    compiler: the publication is authentic, just not for this core. It names
+    the publication so the caller can report it once per publication.
+    """
+
+    def __init__(self, data: bytes) -> None:
+        try:
+            root = json.loads(data)
+        except ValueError:
+            root = None
+        root = root if isinstance(root, dict) else {}
+        self.publication_id = str(root.get("publication_id") or "unknown")[:40]
+        self.source_sha = str(root.get("source_sha") or "")[:12]
+        self.engine = str(root.get("engine") or "")[:12]
+        super().__init__(ENGINE_INCOMPATIBLE)
+
+    def describe(self) -> str:
+        return f"publication={self.publication_id} source={self.source_sha} engine={self.engine}"
 
 
 def _cache(store, name):
@@ -125,7 +150,12 @@ def refresh(store):
     captured = _capture(store)
     fields: dict[str, Any] = dict(publication=authority.data.decode(), now=time.time())
     while True:
-        result = _invoke(store, captured, **fields)
+        try:
+            result = _invoke(store, captured, **fields)
+        except ValueError as error:
+            if ENGINE_INCOMPATIBLE in str(error):
+                raise PublicationEngineMismatchError(authority.data) from error
+            raise
         if "lineage_kind" not in result:
             break
         floor = lifecycle.invoke("read", key=_key(store).hex(), floor=result["lineage_floor"])

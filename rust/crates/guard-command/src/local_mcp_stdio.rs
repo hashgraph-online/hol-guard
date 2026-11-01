@@ -1088,7 +1088,7 @@ fn exchange_tools_list(
 }
 
 // ---------------------------------------------------------------------------
-// Skills extension (`mcp_skills.py`, bounded subset used by the probe).
+// Skills extension (bounded subset used by the probe).
 // ---------------------------------------------------------------------------
 
 fn iso_now() -> String {

@@ -4,6 +4,7 @@ version = "3.16.3"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [[bin]]
 name = "hol-guard-runtime"
@@ -12,10 +13,16 @@ path = "src/main.rs"
 [dependencies]
 guard-command = { path = "../guard-command" }
 guard-contained-process = { path = "../guard-contained-process" }
+guard-context-assistance = { path = "../guard-context-assistance" }
+guard-cigar-release = { path = "../guard-cigar-release" }
+guard-cigar-install = { path = "../guard-cigar-install" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
+guard-policy-bundle = { path = "../guard-policy-bundle" }
+guard-plugin-kit = { path = "../guard-plugin-kit" }
+guard-plugin-telemetry = { path = "../guard-plugin-telemetry" }
 guard-rule-contract = { path = "../guard-rule-contract" }
 guard-adapter-detection = { path = "../guard-adapter-detection" }
 guard-runtime-pyjson = { path = "../guard-runtime-pyjson" }
@@ -30,7 +37,8 @@ libc.workspace = true
 ring.workspace = true
 roxmltree.workspace = true
 rsa.workspace = true
-rusqlite.workspace = true
+rusqlite = { workspace = true, features = ["backup"] }
+tempfile = "3.10"
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
@@ -39,6 +47,7 @@ toml_edit = "0.22.27"
 saphyr-parser.workspace = true
 unicode-normalization = "0.1.25"
 zeroize = "1.9.0"
+zip = { version = "=9.1.2", default-features = false, features = ["deflate-flate2"] }
 aes.workspace = true
 base64.workspace = true
 base64ct.workspace = true
@@ -55,7 +64,8 @@ sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount"] }
+rustix = { workspace = true, features = ["time"] }
+nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount", "hostname"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 guard-seatbelt = { path = "../guard-seatbelt" }
@@ -70,8 +80,9 @@ seccompiler = "0.5.0"
 landlock = "=0.4.7"
 capctl = "=0.2.4"
 
-[dev-dependencies]
-tempfile = "3.10"
+[features]
+# Exposes the parser entry points in `src/fuzz_entry.rs` to `rust/fuzz`.
+fuzzing = []
 
 [lints]
 workspace = true

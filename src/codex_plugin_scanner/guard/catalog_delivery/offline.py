@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from ..extension_builder.io import checked_path, read_bytes
 from . import lifecycle, preparation_authority
@@ -11,6 +12,9 @@ from .authority import VerifiedDistribution
 from .cache_io import Lease, write_once
 from .pack_store import publish_object
 from .transport import cached_fetcher
+
+if TYPE_CHECKING:
+    from .installed_bundle import VerifiedInstalledBundle
 
 
 def _request(authority, directory, operation, *, destination=None):
@@ -55,13 +59,21 @@ def _prefetch(authority, directory: Path, *, fetch=None):
             plan = _request(authority, directory, "plan")
             if plan.get("complete"):
                 return plan
+            installed = type(authority) is preparation_authority.installed_bundle_type()
+            if installed:
+                needs = [need for need in plan["needs"] if need["kind"] != "archive"]
+                references = [(need["reference"]["location"], need["reference"]["length"]) for need in needs]
+                for need, data in zip(
+                    needs, cast("VerifiedInstalledBundle", authority).fetch_objects(references), strict=True
+                ):
+                    publish_object(objects, need["reference"]["sha256"], data)
             for need in plan["needs"]:
                 ref = need["reference"]
                 if need["kind"] == "archive":
                     write_once(
                         directory / "archives" / (ref["sha256"] + ".zip"), transfer(ref["location"], ref["length"])
                     )
-                else:
+                elif not installed:
                     publish_object(objects, ref["sha256"], transfer(ref["location"], ref["length"]))
             for archive in plan.get("ingests", ()):
                 data = read_bytes(directory / "archives" / (archive["sha256"] + ".zip"), limit=32 * 1024 * 1024)
@@ -75,11 +87,10 @@ def _prefetch(authority, directory: Path, *, fetch=None):
 def export_release(authority, directory: Path, destination: Path):
     """Export a portable directory containing only native-proved public assets."""
     destination = checked_path(destination)
-    destination.mkdir(mode=0o700)  # Never merge with an existing private directory.
     lease = Lease(directory)
     try:
         prefetch(authority, directory)
-        _copy(authority, directory, destination, "export-copy")
+        _copy(authority, directory, destination, "export-fresh-copy")
         return _request(authority, destination, "import")
     finally:
         lease.close()

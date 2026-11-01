@@ -23,6 +23,9 @@ from ..runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
 
+# Guard Cloud could not give a package verdict; a review carrying one of these is not about the package.
+_CLOUD_FAILURE_REASON_CODES = ("cloud_auth_error", "cloud_validation_error", "cloud_http_error", "cloud_timeout")
+
 
 def _queue_local_protect_approvals(
     response_payload: dict[str, object],
@@ -77,7 +80,7 @@ def _queue_local_protect_approvals(
             request_id = str(queued[0]["request_id"])
             guidance = safe_alternative_reason(
                 str(reason or "HOL Guard blocked this package request."),
-                reason_code="native_package_review",
+                reason_code=_protect_review_reason_code(response_payload),
                 approval_queued=True,
             )
             guidance = f"{guidance} {approval_wait_hint(request_id, guard_home=guard_home)}".strip()
@@ -254,7 +257,7 @@ def _protect_approval_item(
     reasons = supply_chain_evaluation.get("reasons")
     reason_items = reasons if isinstance(reasons, list) else []
     reason_codes = {str(reason.get("code") or "") for reason in reason_items if isinstance(reason, dict)}
-    for reason_code in ("cloud_auth_error", "cloud_validation_error", "cloud_http_error", "cloud_timeout"):
+    for reason_code in _CLOUD_FAILURE_REASON_CODES:
         if reason_code in reason_codes:
             decision_v2_payload["package_review_cloud_reason_code"] = reason_code
             break
@@ -415,6 +418,12 @@ def _protect_policy_actions_disagree(response_payload: dict[str, object]) -> boo
 def _normalize_protect_policy_action(value: object) -> GuardAction | None:
     action = _optional_string(value)
     return action if is_guard_action(action) else None
+
+
+def _protect_review_reason_code(response_payload: dict[str, object]) -> str:
+    if any(_protect_has_reason_code(response_payload, code) for code in _CLOUD_FAILURE_REASON_CODES):
+        return "native_package_cloud_unavailable"
+    return "native_package_review"
 
 
 def _protect_has_reason_code(response_payload: dict[str, object], reason_code: str) -> bool:

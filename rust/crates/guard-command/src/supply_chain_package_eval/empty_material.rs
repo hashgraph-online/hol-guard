@@ -1,6 +1,9 @@
 use super::contracts::optional_string;
 use super::evaluation::{decision_rank, decision_to_guard_action_variant};
-use super::{GuardArtifact, Map, PackageEvalResult, SupplyChainUserCopy, Value};
+use super::package_copy::{evidence_id, should_record_package};
+use super::{
+    GuardArtifact, Map, PackageEvalResult, PackageIdentityApi, SupplyChainUserCopy, Value,
+};
 
 use crate::package_intent_common::PACKAGE_CWD_UNRESOLVED_NOTE;
 
@@ -99,6 +102,7 @@ pub(crate) fn empty_package_material_result(
 /// An unresolved `--cwd` stays in review even when the command also names a
 /// package or another segment still has a lockfile.
 pub(crate) fn hold_unresolved_package_cwd(
+    identity_api: &dyn PackageIdentityApi,
     artifact: &GuardArtifact,
     mut result: PackageEvalResult,
 ) -> PackageEvalResult {
@@ -135,6 +139,22 @@ pub(crate) fn hold_unresolved_package_cwd(
             package.insert("decision".to_string(), Value::String("ask".into()));
         }
     }
+    // Finalization derived the ids before this hold raised the packages, and
+    // an id carries the package's decision, so every id it sent is now stale
+    // and the set of packages worth recording has grown. The recorder reads
+    // these ids rather than deriving its own, so they are rebuilt here against
+    // the decision the hold leaves behind.
+    let held_decision = if decision_rank(&result.decision) >= decision_rank("ask") {
+        result.decision.clone()
+    } else {
+        "ask".to_string()
+    };
+    result.evidence_ids = result
+        .packages
+        .iter()
+        .filter(|package| should_record_package(package, &held_decision))
+        .map(|package| evidence_id(identity_api, &result.package_intent_hash, package))
+        .collect();
     if decision_rank(&result.decision) >= decision_rank("ask") {
         return result;
     }

@@ -117,9 +117,67 @@ def test_antigravity_detect_xdg_lowercase_settings(tmp_path: Path) -> None:
     settings_path = context.home_dir / ".config" / "antigravity" / "user" / "settings.json"
     _write_text(settings_path, '{"mcpServers": {"demo_server": {"command": "demo"}}}\n')
 
+    upper = context.home_dir / ".config" / "Antigravity" / "User" / "settings.json"
     detection = AntigravityHarnessAdapter().detect(context)
-    assert any(item.artifact_type == "mcp_server" and item.name == "demo_server" for item in detection.artifacts)
+    same_file = upper.exists() and upper.stat().st_ino == settings_path.stat().st_ino
+    expected = (
+        "antigravity:global:mcp:settings:xdg-user:demo_server"
+        if same_file
+        else "antigravity:global:mcp:settings:xdg-user-lower:demo_server"
+    )
+    assert any(item.artifact_id == expected for item in detection.artifacts)
     assert any("antigravity" in path.lower() and "settings.json" in path for path in detection.config_paths)
+
+
+def test_xdg_case_variants_keep_distinct_mcp_ids_when_both_files_exist(tmp_path: Path) -> None:
+    context = _context(tmp_path, workspace=False)
+    upper = context.home_dir / ".config" / "Antigravity" / "User" / "settings.json"
+    lower = context.home_dir / ".config" / "antigravity" / "user" / "settings.json"
+    _write_text(upper, '{"mcpServers": {"shared": {"command": "upper"}}}\n')
+    upper_inode = upper.stat().st_ino
+    _write_text(lower, '{"mcpServers": {"shared": {"command": "lower"}}}\n')
+    same_file = lower.stat().st_ino == upper_inode
+
+    detection = AntigravityHarnessAdapter().detect(context)
+    shared = [item for item in detection.artifacts if item.artifact_type == "mcp_server" and item.name == "shared"]
+    if same_file:
+        assert [item.artifact_id for item in shared] == ["antigravity:global:mcp:settings:xdg-user:shared"]
+    else:
+        assert {item.artifact_id for item in shared} == {
+            "antigravity:global:mcp:settings:xdg-user:shared",
+            "antigravity:global:mcp:settings:xdg-user-lower:shared",
+        }
+
+
+def test_same_skill_name_in_two_roots_keeps_distinct_ids(tmp_path: Path) -> None:
+    context = _context(tmp_path, workspace=False)
+    home = context.home_dir
+    _write_text(home / ".gemini" / "antigravity" / "skills" / "custom" / "SKILL.md", "---\nname: custom\n---\nOwned.\n")
+    _write_text(
+        home / ".gemini" / "antigravity" / "builtin" / "skills" / "custom" / "SKILL.md",
+        "---\nname: custom\n---\nBuiltin.\n",
+    )
+
+    detection = AntigravityHarnessAdapter().detect(context)
+    skill_ids = {item.artifact_id for item in detection.artifacts if item.artifact_type == "skill"}
+    assert "antigravity:global:skill:skills/custom" in skill_ids
+    assert "antigravity:global:skill:skills/builtin/custom" in skill_ids
+
+
+def test_home_agents_skills_are_not_antigravity(tmp_path: Path) -> None:
+    context = _context(tmp_path, workspace=True)
+    assert context.workspace_dir is not None
+    _write_text(
+        context.home_dir / ".agents" / "skills" / "other-tool" / "SKILL.md",
+        "---\nname: other-tool\n---\nShared.\n",
+    )
+    _write_text(
+        context.workspace_dir / ".vscode" / "settings.json",
+        '{"mcpServers": {"editor": {"command": "code"}}}\n',
+    )
+
+    detection = AntigravityHarnessAdapter().detect(context)
+    assert all("other-tool" not in item.artifact_id and item.name != "editor" for item in detection.artifacts)
 
 
 def test_antigravity_detect_plugin_skills(tmp_path: Path) -> None:
@@ -153,6 +211,7 @@ def test_antigravity_detect_workspace_agent_skills(tmp_path: Path) -> None:
         None,
     )
     assert skill_artifact is not None
+    assert skill_artifact.artifact_id == "antigravity:project:skill:skills/agents/team-helper"
     assert skill_artifact.source_scope == "project"
     identity_metadata = skill_artifact.metadata.get("skillDirectoryIdentity")
     assert isinstance(identity_metadata, dict)

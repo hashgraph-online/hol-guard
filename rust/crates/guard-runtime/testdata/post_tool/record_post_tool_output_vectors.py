@@ -27,15 +27,39 @@ import tempfile
 from itertools import product
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cli import commands as _commands  # noqa: F401 - binds the helper modules
-from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
 from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
     _codex_post_tool_command_is_read_only_source_inspection as read_only_inspection,
 )
-from codex_plugin_scanner.guard.cli.commands_support_codex_commands import _codex_post_tool_command_texts
-from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _collect_codex_tool_response_text
+
+from codex_plugin_scanner.guard.cli import commands as _commands  # noqa: F401 - binds the helper modules
+from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _coalesce_string
 from codex_plugin_scanner.guard.native_context import bound_context_digest_home
+
+_CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
+_CODEX_TOOL_RESPONSE_TEXT_LIMIT = 5 * 1024 * 1024
+
+
+def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
+    if depth > _CODEX_TOOL_RESPONSE_MAX_DEPTH:
+        return ""
+    if isinstance(value, str):
+        return value[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, child in value.items():
+            key_text = str(key).lower()
+            if key_text in {"stdout", "stderr", "output", "text", "content", "result", "message"} or depth > 0:
+                text = _collect_codex_tool_response_text(child, depth=depth + 1)
+                if text:
+                    parts.append(text)
+        return "\n".join(parts)[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
+    if isinstance(value, list):
+        return "\n".join(_collect_codex_tool_response_text(item, depth=depth + 1) for item in value)[
+            :_CODEX_TOOL_RESPONSE_TEXT_LIMIT
+        ]
+    return ""
+
 
 # Secret-shaped fixture text is assembled at run time and stored in the vector
 # file as placeholders, so no literal key material lands in the repository.
@@ -212,7 +236,12 @@ def substitute(value: object, old: str, new: str) -> object:
 
 
 def request_body(harness: str, payload: dict[str, object]) -> dict[str, object]:
-    """The payload projection the native wrapper sends, from the unchanged Python helpers."""
+    """The payload projection the native wrapper sends, from the unchanged Python helpers.
+
+    The recorded vectors also carry the ``command_texts`` the retired Python
+    derived; the resident now derives them from ``tool_name`` and
+    ``tool_input``, and the replay checks both forms agree.
+    """
 
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
     stdout_text = artifacts._optional_string(payload.get("stdout"))
@@ -225,7 +254,6 @@ def request_body(harness: str, payload: dict[str, object]) -> dict[str, object]:
         "tool_input": payload.get("tool_input"),
         "arguments": payload.get("arguments"),
         "tool_input_present": "tool_input" in payload,
-        "command_texts": list(_codex_post_tool_command_texts(payload)),
         "response_text": response_text,
     }
 

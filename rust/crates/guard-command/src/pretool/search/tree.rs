@@ -71,10 +71,32 @@ pub(in crate::pretool) const SECRET_EXTENSIONS: &[&str] = &[
     "pem", "p12", "pfx", "jks", "keystore", "asc", "gpg", "kdbx", "ppk",
 ];
 
-/// Names-only recursive listing (`ls -R`).
+/// Names-only recursive listing (`ls -R`). `lists_hidden` is the `-a`/`-A`
+/// flag. Without it the lister prints no hidden name and descends into no
+/// hidden directory, so a hidden entry below the root is not part of what the
+/// command can emit. Screening one anyway refused every `ls -R` run inside a
+/// repository, because `.git` is hidden and carries no benign-name exemption.
+pub(in crate::pretool) fn safe_recursive_listing_target(
+    value: &str,
+    context: ReadContext<'_>,
+    lists_hidden: bool,
+) -> bool {
+    safe_walk_target(
+        value,
+        context,
+        &[],
+        &[],
+        WalkReach {
+            skip_hidden: !lists_hidden,
+            ..WalkReach::default()
+        },
+        None,
+    ) || super::agent_root::agent_root_listing(value, context, true)
+}
+
+/// Names-only recursive listing that reaches every entry, as `du` does.
 pub(in crate::pretool) fn safe_recursive_target(value: &str, context: ReadContext<'_>) -> bool {
-    safe_walk_target(value, context, &[], &[], false, false, None)
-        || super::agent_root::agent_root_listing(value, context, true)
+    safe_recursive_listing_target(value, context, true)
 }
 
 /// Recursive content search (`grep -r`, `rg`). Oh My Pi agent-state trees are
@@ -120,8 +142,11 @@ pub(super) fn safe_recursive_target_excluding(
         context,
         excluded_files,
         excluded_directories,
-        git_metadata,
-        follow_links,
+        WalkReach {
+            git_metadata,
+            follow_links,
+            skip_hidden: false,
+        },
         None,
     )
 }
@@ -142,8 +167,11 @@ pub(super) fn safe_recursive_target_cleared(
             context,
             excluded_files,
             excluded_directories,
-            true,
-            follow_links,
+            WalkReach {
+                git_metadata: true,
+                follow_links,
+                skip_hidden: false,
+            },
             Some(clearance),
         )
 }
@@ -156,15 +184,28 @@ pub(super) fn inside_agent_state(path: &std::path::Path, context: ReadContext<'_
     })
 }
 
+/// What a walk is allowed to cross: git metadata, symbolic links, and
+/// whether a hidden entry is part of what the command can emit at all.
+#[derive(Clone, Copy, Default)]
+struct WalkReach {
+    git_metadata: bool,
+    follow_links: bool,
+    skip_hidden: bool,
+}
+
 fn safe_walk_target(
     value: &str,
     context: ReadContext<'_>,
     excluded_files: &[&str],
     excluded_directories: &[&str],
-    git_metadata: bool,
-    follow_links: bool,
+    reach: WalkReach,
     clearance: Option<&PatternClearance>,
 ) -> bool {
+    let WalkReach {
+        git_metadata,
+        follow_links,
+        skip_hidden,
+    } = reach;
     // A recursive walk through `..` reaches a sibling tree whose ignore rules
     // were never inspected; only the sibling-repository proof admits that.
     if parent_component(value) {
@@ -177,17 +218,24 @@ fn safe_walk_target(
         return false;
     };
     // A clearance depends on the pattern, so its walk is never memoized.
-    match clearance {
-        Some(clearance) => walk_uncached(
+    match (clearance, skip_hidden) {
+        (Some(clearance), _) => walk_uncached(
             root,
             excluded_files,
             excluded_directories,
             git_metadata,
             follow_links,
             Some(clearance),
-            false,
+            skip_hidden,
         ),
-        None => walk(
+        (None, true) => walk_skipping_hidden(
+            root,
+            excluded_files,
+            excluded_directories,
+            git_metadata,
+            follow_links,
+        ),
+        (None, false) => walk(
             root,
             excluded_files,
             excluded_directories,
@@ -254,6 +302,13 @@ pub(in crate::pretool) fn safe_unmatched_glob_operand(
                 .is_some_and(|matches| matches.is_empty());
     }
     inert_bracket_class(value, context) && safe_literal_bracket_tree(value, context, recursive)
+}
+
+/// No shell option can make `value` match anything, so a program handed the
+/// word receives only the literal text or, under `nullglob`, nothing at all.
+pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext<'_>) -> bool {
+    glob_expand::expand_glob_matches_strict(value, context)
+        .is_some_and(|matches| matches.is_empty())
 }
 
 /// Content-search glob operand: every match is walked, and matches inside an
@@ -351,9 +406,8 @@ pub(super) fn descendant_allowed(path: &Path, root: &Path, is_file: bool) -> boo
         .to_ascii_lowercase();
     !SECRET_EXTENSIONS.contains(&extension.as_str())
         && (!guard_secure_fs::credential_named_path(relative)
-            || path
-                .strip_prefix(root)
-                .is_ok_and(|relative| synthetic_fixture(root, relative)))
+            || synthetic_fixture(root, relative)
+            || crate::pretool::search_scope_tracked::names::committed_document(path))
 }
 
 /// Directories that hold a project's test data.
@@ -426,6 +480,35 @@ pub(super) fn walk(
     )
 }
 
+/// [`walk`] for a lister that never descends into a hidden entry.
+fn walk_skipping_hidden(
+    root: PathBuf,
+    excluded_files: &[&str],
+    excluded_directories: &[&str],
+    git_metadata: bool,
+    follow_links: bool,
+) -> bool {
+    super::walk_memo::memoized(
+        &root,
+        excluded_files,
+        excluded_directories,
+        git_metadata,
+        follow_links,
+        true,
+        || {
+            walk_uncached(
+                root.clone(),
+                excluded_files,
+                excluded_directories,
+                git_metadata,
+                follow_links,
+                None,
+                true,
+            )
+        },
+    )
+}
+
 /// `skip_hidden` is for a lister that never descends into a hidden entry, so
 /// no hidden name below the root reaches its output and none of them holds
 /// the proof. Every visible entry is screened as it is for a walk that reads.
@@ -444,6 +527,7 @@ pub(super) fn walk_uncached(
     // directory listing already reported for the entry.
     let mut pending = vec![(root.clone(), 0_usize, false, None::<std::fs::FileType>)];
     let mut inspected = 0_usize;
+    let _documents = crate::pretool::search_scope_tracked::names::document_walk();
     // Inspect metadata only. Never follow links or read a secret to classify it.
     while let Some((path, depth, admitted_below, listed)) = pending.pop() {
         let mut below = admitted_below;

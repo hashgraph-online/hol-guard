@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 
-from codex_plugin_scanner.guard.policy_bundle_parser import (
+from tests.policy_bundle_parser_support import (
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,
     validated_policy_bundle_payload,
@@ -17,6 +17,7 @@ from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 
 def _valid_base_rule() -> dict[str, object]:
@@ -302,9 +303,9 @@ class TestBrowserScopeDecisionNarrowing:
             "2026-01-01T00:00:00Z",
         )
         store.set_sync_payload("policy_bundle", bundle, "2026-01-01T00:00:00Z")
-        store.replace_remote_policies(decisions, "2026-01-01T00:00:00Z", remote_write_authorized=True)
+        replace_remote_policies(store, decisions, "2026-01-01T00:00:00Z", remote_write_authorized=True)
 
-        assert store.resolve_policy("codex", "codex:project:package-request:pypi-evil", "sha256:evil") is None
+        assert resolve_policy(store, "codex", "codex:project:package-request:pypi-evil", "sha256:evil") is None
 
     def test_explicit_unconstrained_package_artifact_type_can_create_family_rule(self) -> None:
         """An explicitly package-wide rule remains representable at family scope."""

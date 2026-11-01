@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 import time
-from collections.abc import Callable, Container, Sequence
+from collections.abc import Callable, Container, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -38,6 +38,7 @@ from .case_worker import SubprocessCaseWorker
 from .catalog import CATALOG, WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
 from .contained_core import request_proofs
+from .decision_coverage import profile_coverage
 from .evidence import assess_case, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
 from .fixtures import (
@@ -50,6 +51,7 @@ from .fixtures import (
     scratch_checkout,
     stage_directory,
 )
+from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import (
     public_native_extension_evidence,
@@ -62,12 +64,14 @@ from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_priv
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
-from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
+from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
+from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
 from .session_folder import seed_session_folder, session_cwd
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
 from .supply_chain import stage_supply_chain
+from .workspace_runner_fixtures import WORKSPACE_RUNNER_CASES, workspace_node_bin
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -111,6 +115,24 @@ def case_coverage(
     }
 
 
+def run_coverage(
+    selected: Sequence[Scenario], catalog: Sequence[Scenario], completed: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The catalog this run executed and the declared decisions it reached.
+
+    Built in one place because the progress report and the final report both
+    publish it: a final report that rebuilt only the catalog half would drop
+    the decision coverage every intermediate write had already stated, and the
+    summary renders from the final report alone.
+    """
+    return {
+        **case_coverage(selected, catalog, completed),
+        # Which cases reached the decisions they were written for, so a profile
+        # states the coverage it actually drove rather than the coverage it selected.
+        "decision_paths": profile_coverage(selected, completed),
+    }
+
+
 def run_case(
     scenario: Scenario,
     *,
@@ -133,12 +155,13 @@ def run_case(
     first_contact = scenario.oracle == "native-tools"
     fixture = create_fixture(
         root / case_fixture_name(scenario.id, attempt),
-        realistic=first_contact and scenario.id != WORKTREE_CASE,
-        linked_worktree=scenario.id == WORKTREE_CASE,
+        realistic=first_contact and scenario.id not in WORKTREE_CASES,
+        linked_worktree=scenario.id in WORKTREE_CASES,
         scenario_id=scenario.id,
     )
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
+    stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     session = session_cwd(fixture.home, fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"
@@ -197,7 +220,7 @@ def run_case(
                 agent_dir,
                 relay,
                 wait_for_tasks=scenario.id
-            in {"omp-native-task-readonly-lookup", TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE},
+                in {"omp-native-task-readonly-lookup", TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE},
                 memory_bank="learn" in scenario.required_tools,
                 github_tool="github" in scenario.required_tools,
                 structured_tasks=scenario.id == TASK_SCHEMA_CASE,
@@ -219,8 +242,10 @@ def run_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
                 )
-            if scenario.id == GITHUB_REVIEW_CASE:
+            if scenario.id in GITHUB_ENABLED_CASES:
                 case["extension_control"] = configure_github_review_controls(daemon, fixture.root / "guard-home")
+            if scenario.id in GIT_ALLOW_CASES:
+                case["extension_control"] = configure_git_allow_controls(daemon, fixture.root / "guard-home")
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.
@@ -282,6 +307,10 @@ def run_case(
                 environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
             if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
+            # The contained runner resolves Node from the request's own PATH, and
+            # trusts the one this fixture's home owns rather than the host's.
+            if node_bin := workspace_node_bin(fixture.home):
+                environment["PATH"] = str(node_bin) + os.pathsep + environment["PATH"]
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
                 GUARD_GAUNTLET_DAEMON_PORT=str(daemon._server.server_address[1]),
@@ -489,6 +518,10 @@ def run_suite(
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
+    # Only the workspace runner cases need Node, so a selection without them
+    # runs on a host that has none.
+    if any(scenario.id in WORKSPACE_RUNNER_CASES for scenario in selected) and shutil.which("node") is None:
+        raise RuntimeError("Gauntlet prerequisite is missing: node")
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)
     root = create_run_root(parent)
@@ -562,7 +595,7 @@ def run_suite(
             [scenario.id for scenario in selected if scenario.id in completed],
             superseded=output / "superseded",
         )
-        report["case_coverage"] = case_coverage(selected, catalog, completed)
+        report["case_coverage"] = run_coverage(selected, catalog, completed)
         report["case_retries"] = retries.history
         print(json.dumps({"scenario": scenario.id, **case["assessment"]}), flush=True)
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -640,7 +673,7 @@ def run_suite(
     route_failed()
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
     report.setdefault("inference_usage", inference_usage(output / "cases", (), superseded=output / "superseded"))
-    report["case_coverage"] = case_coverage(selected, catalog, completed)
+    report["case_coverage"] = run_coverage(selected, catalog, completed)
     report["stopped_early"] = len(report["cases"]) < len(selected)
     report.update(report_sections(report["cases"]))
     report["pass"] = (

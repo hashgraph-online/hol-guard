@@ -23,8 +23,8 @@ interface ReadyEvidence {
   prompt_free_hook_count: 2;
   version: string;
   workflow_authorization: {
-    activity_proof: "drift-rejected-unenrolled-retry-unclaimed";
-    capability_claimed: 0;
+    activity_proof: "drift-rejected-restored-one-shot-reuse";
+    capability_claimed: 1;
     capability_issued: 1;
     drift_claimed: 0;
     request_flow: "authenticated-daemon-api";
@@ -387,7 +387,7 @@ async function verifyApi(
   const activityIds = new Set(rows.map((row) => String(row.activity_id)));
   const harnesses = [...new Set(rows.map((row) => String(row.harness)))].sort();
   const statuses = [...new Set(rows.map((row) => String(row.execution_status)))].sort();
-  if (rows.length !== 6 || Number(analytics.commands_checked) !== rows.length) {
+  if (rows.length !== 7 || Number(analytics.commands_checked) !== rows.length) {
     throw new Error("authenticated list and analytics totals did not reconcile");
   }
   if (!harnesses.includes("codex") || !harnesses.includes("claude-code") || !harnesses.includes("cursor")) {
@@ -397,11 +397,10 @@ async function verifyApi(
     throw new Error(`execution proof coverage missing: ${statuses.join(",")}`);
   }
   if (cursorRows.length !== 1 || cursorRows[0]?.harness !== "cursor") throw new Error("cursor filter did not reconcile");
-  // The drifted workflow command is the one activity the capability path
-  // records: the unenrolled retry gets the outage response, which saves none.
-  const workflowRejected = rows.some((row) => (
-    row.harness === "codex" && row.approval_reuse_status === "rejected"
-    && row.policy_action === "require-reapproval" && row.execution_status === "prevented"
+  const workflowAuthorized = rows.some((row) => (
+    row.policy_action === "allow" && row.approval_reuse_status === "accepted" && row.prompted === false
+    && row.decision_reason_code === "capability" && row.match_count === 0
+    && row.execution_status === "allowed_unconfirmed"
   ));
   const categories = [
     promptFreeHookCount === 2 ? "prompt-free" : null,
@@ -412,7 +411,7 @@ async function verifyApi(
     containment.enforced && containment.output_written && containment.protected_value_unchanged
       ? "contained"
       : null,
-    workflowRejected ? "workflow" : null,
+    workflowAuthorized ? "workflow" : null,
   ].filter((value): value is string => value !== null);
   if (categories.length !== 5) throw new Error(`decision category coverage missing: ${categories.join(",")}`);
   const health = analytics.health as Record<string, unknown>;
@@ -494,8 +493,8 @@ export async function runLab(runner: CommandRunner = runCommand): Promise<LabEvi
     await approveWorkflowAuthorization(origin, pending, session);
     const first = await waitForReadyEvidence(project, environment, runner);
     if (JSON.stringify(first.workflow_authorization) !== JSON.stringify({
-      activity_proof: "drift-rejected-unenrolled-retry-unclaimed",
-      capability_claimed: 0,
+      activity_proof: "drift-rejected-restored-one-shot-reuse",
+      capability_claimed: 1,
       capability_issued: 1,
       drift_claimed: 0,
       request_flow: "authenticated-daemon-api",

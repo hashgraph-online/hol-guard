@@ -6,11 +6,7 @@ factories or a previously authenticated protected native observation.
 
 from __future__ import annotations
 
-import hashlib
-import json
-import threading
 import time
-from collections import OrderedDict
 
 from ..native_command_control_authority_io import (
     hold_command_control_authority_lock,
@@ -29,41 +25,19 @@ MAX_BYTES = 262144
 
 
 # Native answers these from the request alone: no files, clock or randomness
-# (see the matching note in active_pack_security.rs). The request names the key,
-# the authenticated record and every other input, so the same runtime always
-# gives an identical request the identical verdict.
-_PURE = frozenset({"scope", "check", "read", "change", "marker", "binding", "resume"})
-_ANSWERS: OrderedDict[bytes, str] = OrderedDict()
-_ANSWERS_LOCK = threading.Lock()
-_ANSWERS_LIMIT = 32
+# (see the matching note in active_pack_security.rs). The resident answers them
+# in process for the store it serves, so daemon polling, which repeats the same
+# few requests every second, starts no runtime for them.
+_RESIDENT_OPERATIONS = frozenset({"scope", "check", "read", "change", "marker", "binding", "resume"})
 
 
 def invoke(operation, store, **fields):
     request = {"operation": operation, "key": _key(store).hex(), **fields}
-    if operation not in _PURE:
-        return lifecycle.invoke("active-security", **request)
-    try:
-        runtime = lifecycle.runtime_fingerprint()
-    except OSError:
-        # A missing runtime must fail in native verification, not answer from memory.
-        return lifecycle.invoke("active-security", **request)
-    # Daemon polling repeats the same few requests every second. Answering
-    # them from memory avoids a verified native spawn per poll. A replaced or
-    # modified runtime starts over with fresh native answers.
-    material = {"request": request, "runtime": runtime}
-    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode()).digest()
-    with _ANSWERS_LOCK:
-        answer = _ANSWERS.get(digest)
-        if answer is not None:
-            _ANSWERS.move_to_end(digest)
-    if answer is not None:
-        return json.loads(answer)
-    result = lifecycle.invoke("active-security", **request)
-    with _ANSWERS_LOCK:
-        _ANSWERS[digest] = json.dumps(result)
-        while len(_ANSWERS) > _ANSWERS_LIMIT:
-            _ANSWERS.popitem(last=False)
-    return result
+    if operation in _RESIDENT_OPERATIONS:
+        result = lifecycle.resident_answer(store, {"kind": "active-security", **request})
+        if result is not None:
+            return result
+    return lifecycle.invoke("active-security", **request)
 
 
 def read(store):

@@ -1,35 +1,22 @@
-"""Privacy and egress contracts for command activity evidence."""
+"""Local correlation handles for command activity evidence."""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
 import re
-from dataclasses import dataclass
-from datetime import date
-from enum import Enum
 from typing import Final, cast, final
 
 from typing_extensions import override
 
-from codex_plugin_scanner.guard.action_lattice import GUARD_ACTION_LATTICE
-
 from .command_activity_contract import (
-    COMMAND_ACTIVITY_FIELDS,
     COMMAND_ACTIVITY_HARNESSES,
-    COMMAND_ACTIVITY_MATCH_FIELDS,
     COMMAND_ACTIVITY_SCHEMA_VERSION,
-    ActivityLatencyBucket,
-    CommandExecutionStatus,
-    CommandProofLevel,
     CorrelationHandle,
     CorrelationKind,
 )
-from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
 COMMAND_ACTIVITY_CORRELATION_VERSION: Final = "guard.command-activity-correlation.v1"
-COMMAND_ACTIVITY_CLOUD_SCHEMA_VERSION: Final = "guard.command-activity-aggregate.v1"
-MIN_CLOUD_AGGREGATE_COUNT: Final = 10
 _STABLE_ID: Final[re.Pattern[str]] = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
 _WEAK_IDENTIFIER: Final[re.Pattern[str]] = re.compile(
     r"(?:[0-9]+|(?:request|req|session|sess|run|event)[._:-]?[0-9]+)",
@@ -39,83 +26,6 @@ _OPAQUE_STRONG_IDENTIFIER: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Z
 _ISO_TIMESTAMP: Final[re.Pattern[str]] = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})"
 )
-_CLOUD_EXTENSION_IDS: Final = frozenset(
-    extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
-)
-_CLOUD_RULE_IDS: Final = frozenset(
-    rule.rule_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions for rule in extension.rules
-)
-
-FORBIDDEN_ACTIVITY_FIELD_NAMES: Final[frozenset[str]] = frozenset(
-    {
-        "arguments",
-        "args",
-        "artifact_hash",
-        "clipboard",
-        "command",
-        "command_hash",
-        "command_security_identity",
-        "command_text",
-        "credential",
-        "credentials",
-        "cwd",
-        "environment",
-        "environment_names",
-        "environment_values",
-        "exception_message",
-        "hostname",
-        "installation_id",
-        "matcher_evidence",
-        "metadata",
-        "normalized_command",
-        "package_name",
-        "package_source",
-        "path",
-        "raw_arguments",
-        "raw_command",
-        "raw_request_id",
-        "raw_session_id",
-        "reason_text",
-        "repository_name",
-        "secret",
-        "secrets",
-        "security_identity",
-        "shell_fragment",
-        "token",
-        "tokens",
-        "url",
-        "workspace_name",
-    }
-)
-
-
-class ActivityEgressMode(str, Enum):
-    LOCAL_ONLY = "local_only"
-    AGGREGATE_ONLY = "aggregate_only"
-
-
-class CloudAggregateDimension(str, Enum):
-    TOTAL = "total"
-    HARNESS = "harness"
-    EXTENSION = "extension"
-    RULE = "rule"
-    DISPOSITION = "disposition"
-    EXECUTION_STATUS = "execution_status"
-    PROMPT_STATUS = "prompt_status"
-    PROOF_LEVEL = "proof_level"
-    LATENCY = "latency"
-
-
-@dataclass(frozen=True, slots=True)
-class CommandActivityPrivacyPolicy:
-    egress_mode: ActivityEgressMode = ActivityEgressMode.LOCAL_ONLY
-
-    def __post_init__(self) -> None:
-        if not isinstance(cast(object, self.egress_mode), ActivityEgressMode):
-            raise ValueError("egress_mode must be an exact ActivityEgressMode value")
-
-
-DEFAULT_COMMAND_ACTIVITY_PRIVACY_POLICY: Final = CommandActivityPrivacyPolicy()
 
 
 @final
@@ -186,42 +96,6 @@ class StrongHarnessIdentifier:
         return CorrelationHandle(self.kind, self.harness, key.key_id, key.derive(framed))
 
 
-@dataclass(frozen=True, slots=True)
-class CloudCommandActivityAggregate:
-    """One rare-cell-suppressed daily count with exactly one bounded dimension."""
-
-    day: date
-    dimension: CloudAggregateDimension
-    dimension_value: str
-    count: int
-    schema_version: str = COMMAND_ACTIVITY_CLOUD_SCHEMA_VERSION
-
-    def __post_init__(self) -> None:
-        if type(cast(object, self.day)) is not date:
-            raise ValueError("day must be a UTC calendar date")
-        if not isinstance(cast(object, self.dimension), CloudAggregateDimension):
-            raise ValueError("dimension must be an exact CloudAggregateDimension value")
-        _require_stable_id(self.dimension_value, "dimension_value")
-        _require_cloud_dimension_value(self.dimension, self.dimension_value)
-        if type(self.count) is not int or self.count < MIN_CLOUD_AGGREGATE_COUNT:
-            raise ValueError("rare cloud aggregate cells must be suppressed")
-        if self.schema_version != COMMAND_ACTIVITY_CLOUD_SCHEMA_VERSION:
-            raise ValueError("unsupported cloud command activity aggregate schema version")
-
-    def to_cloud_payload(self, policy: CommandActivityPrivacyPolicy) -> dict[str, object]:
-        if not isinstance(cast(object, policy), CommandActivityPrivacyPolicy):
-            raise ValueError("policy must be a CommandActivityPrivacyPolicy")
-        if policy.egress_mode is not ActivityEgressMode.AGGREGATE_ONLY:
-            raise ValueError("command activity egress is local-only unless aggregate mode is explicitly enabled")
-        return {
-            "day": self.day.isoformat(),
-            "dimension": self.dimension.value,
-            "dimension_value": self.dimension_value,
-            "count": self.count,
-            "schema_version": self.schema_version,
-        }
-
-
 def derive_correlation_handle(
     identifier: StrongHarnessIdentifier,
     key: InstallationCorrelationKey,
@@ -233,17 +107,6 @@ def derive_correlation_handle(
     if not isinstance(cast(object, key), InstallationCorrelationKey):
         raise ValueError("key must be an exact InstallationCorrelationKey")
     return identifier.derive(key)
-
-
-def validate_activity_schema_privacy() -> None:
-    """Prove the frozen activity schemas contain no forbidden storage fields."""
-
-    names = frozenset((*COMMAND_ACTIVITY_FIELDS, *COMMAND_ACTIVITY_MATCH_FIELDS))
-    overlap = names & FORBIDDEN_ACTIVITY_FIELD_NAMES
-    if overlap:
-        raise ValueError(f"command activity schema contains forbidden fields: {sorted(overlap)!r}")
-    if any(name in names for name in ("raw_request_id", "raw_session_id", "installation_id")):
-        raise ValueError("raw or installation identifiers cannot enter command activity schemas")
 
 
 def _frame(value: bytes) -> bytes:
@@ -258,24 +121,3 @@ def _require_stable_id(value: object, label: str) -> None:
 def _require_harness(value: object) -> None:
     if not isinstance(value, str) or value not in COMMAND_ACTIVITY_HARNESSES:
         raise ValueError("harness must identify a supported Guard harness")
-
-
-def _require_cloud_dimension_value(dimension: CloudAggregateDimension, value: str) -> None:
-    allowed: dict[CloudAggregateDimension, frozenset[str]] = {
-        CloudAggregateDimension.TOTAL: frozenset({"all"}),
-        CloudAggregateDimension.HARNESS: COMMAND_ACTIVITY_HARNESSES,
-        CloudAggregateDimension.EXTENSION: _CLOUD_EXTENSION_IDS,
-        CloudAggregateDimension.RULE: _CLOUD_RULE_IDS,
-        CloudAggregateDimension.DISPOSITION: frozenset(GUARD_ACTION_LATTICE),
-        CloudAggregateDimension.EXECUTION_STATUS: frozenset(item.value for item in CommandExecutionStatus),
-        CloudAggregateDimension.PROMPT_STATUS: frozenset({"prompted", "not_prompted"}),
-        CloudAggregateDimension.PROOF_LEVEL: frozenset(item.value for item in CommandProofLevel),
-        CloudAggregateDimension.LATENCY: frozenset(
-            f"{kind}.{bucket.value}" for kind in ("evaluation", "persistence") for bucket in ActivityLatencyBucket
-        ),
-    }
-    if value not in allowed[dimension]:
-        raise ValueError("dimension_value must belong to the selected bounded aggregate dimension")
-
-
-validate_activity_schema_privacy()

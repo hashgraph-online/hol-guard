@@ -1,0 +1,32 @@
+{
+  "checklist": [
+    {
+      "done": false,
+      "id": "github_repository",
+      "message": "Publish the source on GitHub and set repository in the manifest."
+    },
+    {
+      "done": false,
+      "id": "claude_marketplace",
+      "message": "List the plugin in .claude-plugin/marketplace.json so Claude Code can install it from the repository."
+    },
+    {
+      "done": false,
+      "id": "codex_marketplace",
+      "message": "List the plugin in .agents/plugins/marketplace.json so Codex can install it from the repository."
+    },
+    {
+      "done": false,
+      "id": "mcp_registry",
+      "message": "Publish MCP servers to the MCP Registry with server.json (https://github.com/modelcontextprotocol/registry)."
+    },
+    {
+      "done": false,
+      "id": "hol_listing",
+      "message": "Connect the repository on HOL to verify ownership and claim the listing."
+    }
+  ],
+  "hol": null,
+  "install": [],
+  "repository": null
+}

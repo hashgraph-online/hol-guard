@@ -56,7 +56,7 @@ jobs:
       attestations: write
       artifact-metadata: write
       security-events: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       score: ${{ steps.guard.outputs.score }}

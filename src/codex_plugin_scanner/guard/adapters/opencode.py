@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -159,8 +160,8 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         artifacts, found_paths = native_artifacts(context, configs)
         detection = HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or _command_available(self.executable, context.home_dir),
+            command_available=_command_available(self.executable, context.home_dir),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
@@ -199,7 +200,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         try:
             snapshot = load_opencode_install_snapshot(
                 context,
-                command_available=_command_available(self.executable),
+                command_available=_command_available(self.executable, context.home_dir),
                 config_contents=contents,
             )
         except OpenCodeInstallSnapshotError as error:
@@ -433,7 +434,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         return [*self._interactive_command(context), *self._interactive_args(passthrough_args)]
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        if not _command_available(self.executable):
+        if shutil.which(self.executable) is None:
             return None
         return {
             "paths": _run_command_probe([self.executable, "debug", "paths"]),

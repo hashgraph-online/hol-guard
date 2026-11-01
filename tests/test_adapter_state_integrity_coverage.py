@@ -12,12 +12,15 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard import native_adapter_state_integrity as native_integrity
 from codex_plugin_scanner.guard.adapters import adapter_state_integrity as integrity
 from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
+    AdapterStateIntegrityUnavailableError,
     adapter_state_is_authenticated,
     authenticate_adapter_state,
     authenticated_adapter_path,
 )
+from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 
 
 def _key_payload(*, key_id: str = "race-key") -> dict[str, object]:
@@ -36,7 +39,11 @@ def _authentication(payload: dict[str, object]) -> dict[str, object]:
     return cast(dict[str, object], payload["state_authentication"])
 
 
-def test_authentication_rejects_malformed_metadata_and_paths(tmp_path: Path) -> None:
+def test_authentication_rejects_malformed_metadata_and_paths(
+    tmp_path: Path,
+    native_adapter_state_integrity_runtime: Path,
+) -> None:
+    del native_adapter_state_integrity_runtime
     guard_home = tmp_path / "guard-home"
     payload: dict[str, object] = {"path": str(tmp_path / "target.txt"), "scope": "workspace"}
     authenticated = authenticate_adapter_state(guard_home, harness="copilot", payload=payload)
@@ -61,7 +68,7 @@ def test_authentication_rejects_malformed_metadata_and_paths(tmp_path: Path) -> 
     malformed_mac = dict(authenticated)
     malformed_mac["state_authentication"] = {
         **_authentication(authenticated),
-        "mac": b"not-text",
+        "mac": 17,
     }
     assert not adapter_state_is_authenticated(guard_home, harness="copilot", payload=malformed_mac)
 
@@ -96,7 +103,7 @@ def test_authentication_rejects_malformed_metadata_and_paths(tmp_path: Path) -> 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key handling")
 def test_posix_key_creation_reuses_racing_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     guard_home = tmp_path / "guard-home"
-    first = authenticate_adapter_state(guard_home, harness="copilot", payload={"generation": 1})
+    first_key_id, _ = integrity._load_or_create_key(guard_home)
     real_open = integrity.os.open
     raced = False
 
@@ -112,10 +119,10 @@ def test_posix_key_creation_reuses_racing_key(tmp_path: Path, monkeypatch: pytes
         return real_open(path, flags, mode, dir_fd=dir_fd)
 
     monkeypatch.setattr(integrity.os, "open", raise_file_exists)
-    second = authenticate_adapter_state(guard_home, harness="copilot", payload={"generation": 2})
+    second_key_id, _ = integrity._load_or_create_key(guard_home)
 
     assert raced
-    assert _authentication(first)["key_id"] == _authentication(second)["key_id"]
+    assert first_key_id == second_key_id
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX descriptor-backed key handling")
@@ -127,7 +134,7 @@ def test_posix_key_write_failure_removes_partial_key(tmp_path: Path, monkeypatch
 
     monkeypatch.setattr(integrity.os, "fsync", fail_fsync)
     with pytest.raises(OSError, match="fsync"):
-        authenticate_adapter_state(guard_home, harness="copilot", payload={"generation": 1})
+        integrity._load_or_create_key(guard_home)
 
     assert not _key_path(guard_home).exists()
 
@@ -261,10 +268,10 @@ def test_non_posix_key_creation_and_existing_key_loading(
 ) -> None:
     monkeypatch.setattr(integrity.os, "name", platform_name)
     guard_home = tmp_path / f"guard-{platform_name}"
-    first = authenticate_adapter_state(guard_home, harness="copilot", payload={"generation": 1})
-    second = authenticate_adapter_state(guard_home, harness="copilot", payload={"generation": 2})
+    first_key_id, _ = integrity._load_or_create_key(guard_home)
+    second_key_id, _ = integrity._load_or_create_key(guard_home)
 
-    assert _authentication(first)["key_id"] == _authentication(second)["key_id"]
+    assert first_key_id == second_key_id
     assert _key_path(guard_home).is_file()
     if platform_name == "darwin":
         assert stat.S_IMODE(_key_path(guard_home).parent.stat().st_mode) == 0o700
@@ -291,9 +298,9 @@ def test_non_posix_key_creation_race_and_write_failure_cleanup(
         return real_open(path, flags, mode)
 
     monkeypatch.setattr(integrity.os, "open", create_then_report_exists)
-    authenticated = authenticate_adapter_state(guard_home, harness="copilot", payload={"generation": 1})
+    key_id, _ = integrity._load_or_create_key(guard_home)
     assert raced
-    assert _authentication(authenticated)["key_id"] == "race-key"
+    assert key_id == "race-key"
 
     failing_home = tmp_path / "failing-home"
 
@@ -302,7 +309,7 @@ def test_non_posix_key_creation_race_and_write_failure_cleanup(
 
     monkeypatch.setattr(integrity.os, "fsync", fail_fsync)
     with pytest.raises(OSError, match="fsync"):
-        authenticate_adapter_state(failing_home, harness="copilot", payload={"generation": 2})
+        integrity._load_or_create_key(failing_home)
     assert not _key_path(failing_home).exists()
 
 
@@ -345,3 +352,156 @@ def test_non_posix_key_loader_rejects_directory_permissions_and_bad_json(
         harness="copilot",
         payload={"state_authentication": {}},
     )
+
+
+def _stamped_payload() -> dict[str, object]:
+    return {
+        "path": "/tmp/target.txt",
+        "state_authentication": {
+            "algorithm": "hmac-sha256",
+            "key_id": "id",
+            "mac": "0" * 64,
+            "schema_version": 1,
+        },
+    }
+
+
+def _provision_verifier_key(guard_home: Path) -> None:
+    """Write the on-disk prerequisite the resident refuses every request without."""
+
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+        NATIVE_POLICY_VERIFIER_KEY_NAME,
+        NATIVE_RUNTIME_STATE_DIRECTORY,
+    )
+
+    key = guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME
+    key.parent.mkdir(parents=True, exist_ok=True)
+    key.write_bytes(base64.urlsafe_b64encode(b"\x00" * 32))
+
+
+def _silence_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make every adapter-state request fail the way a dead socket does."""
+
+    def refuse(**_kwargs: object) -> dict[str, object]:
+        raise OSError("resident is gone")
+
+    monkeypatch.setattr(native_integrity, "_resident_request", refuse)
+
+
+def test_a_silent_runtime_is_not_read_as_an_unauthenticated_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable resident must not answer "not Guard's own" for a stamped manifest.
+
+    Uninstall reads that answer as "there is no authenticated state" and runs
+    legacy cleanup, which deletes Hermes' saved previous guard section and
+    skips the Copilot backup restore.
+    """
+
+    guard_home = tmp_path / "guard-home"
+    integrity._load_or_create_key(guard_home)
+
+    def unavailable(**_kwargs: object) -> dict[str, object]:
+        raise AdapterStateIntegrityUnavailableError
+
+    monkeypatch.setattr(integrity, "native_adapter_state_integrity", unavailable)
+
+    with pytest.raises(AdapterStateIntegrityUnavailableError):
+        adapter_state_is_authenticated(guard_home, harness="copilot", payload=_stamped_payload())
+    with pytest.raises(AdapterStateIntegrityUnavailableError):
+        authenticated_adapter_path(guard_home, harness="copilot", payload=_stamped_payload(), field="path")
+
+
+def test_a_missing_key_still_reads_as_an_unauthenticated_manifest(tmp_path: Path) -> None:
+    """A key file that is absent or unusable stays a verdict, not an outage."""
+
+    guard_home = tmp_path / "guard-home"
+
+    assert not adapter_state_is_authenticated(guard_home, harness="copilot", payload=_stamped_payload())
+    assert authenticated_adapter_path(guard_home, harness="copilot", payload=_stamped_payload(), field="path") is None
+
+
+def test_a_lifecycle_change_is_refused_before_its_first_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hermes asks for the resident before it rewrites ``config.yaml``."""
+
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    home_dir.mkdir()
+    workspace_dir.mkdir()
+    config_yaml = home_dir / ".hermes" / "config.yaml"
+    config_yaml.parent.mkdir(parents=True)
+    config_yaml.write_text("mcp_servers: {}\n", encoding="utf-8")
+    guard_home = tmp_path / "guard-home"
+    context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+
+    _provision_verifier_key(guard_home)
+    _silence_the_resident(monkeypatch)
+
+    with pytest.raises(AdapterStateIntegrityUnavailableError):
+        HermesHarnessAdapter().install(context)
+
+    assert config_yaml.read_text(encoding="utf-8") == "mcp_servers: {}\n"
+    assert not _key_path(guard_home).exists()
+
+
+def test_a_provisioned_home_without_a_resident_is_still_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The verifier key on disk is not an answer from the resident.
+
+    That file survives a restart, a crash and a binary this feature was never
+    compiled into, so reading it as "reachable" would admit exactly the
+    install this gate exists to refuse.
+    """
+
+    guard_home = tmp_path / "guard-home"
+    _provision_verifier_key(guard_home)
+    assert ensure_resident_prerequisite(guard_home)
+
+    _silence_the_resident(monkeypatch)
+
+    assert not native_integrity.adapter_state_runtime_available(guard_home)
+    with pytest.raises(AdapterStateIntegrityUnavailableError):
+        integrity.require_adapter_state_runtime(guard_home)
+
+
+def test_a_reachable_runtime_admits_the_lifecycle_change(
+    tmp_path: Path,
+    native_adapter_state_integrity_runtime: Path,
+) -> None:
+    """A resident that answers ``verify`` is what admits the first write."""
+
+    del native_adapter_state_integrity_runtime
+    guard_home = tmp_path / "guard-home"
+
+    assert native_integrity.adapter_state_runtime_available(guard_home)
+    integrity.require_adapter_state_runtime(guard_home)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="a Windows spelling is only foreign off Windows")
+def test_a_foreign_absolute_path_never_resolves_against_the_working_directory(
+    tmp_path: Path,
+    native_adapter_state_integrity_runtime: Path,
+) -> None:
+    """The runtime accepts both families; this host only resolves its own.
+
+    A Guard home carried from Windows holds manifests whose paths the runtime
+    still authenticates, and ``C:\\Users\\dev\\config.json`` is a relative path
+    here, so resolving it would name a file under the working directory.
+    """
+
+    del native_adapter_state_integrity_runtime
+    guard_home = tmp_path / "guard-home"
+
+    for foreign in ("C:\\Users\\dev\\config.json", "\\\\server\\share\\config.json"):
+        stamped = authenticate_adapter_state(guard_home, harness="copilot", payload={"path": foreign})
+        assert adapter_state_is_authenticated(guard_home, harness="copilot", payload=stamped)
+        assert authenticated_adapter_path(guard_home, harness="copilot", payload=stamped, field="path") is None

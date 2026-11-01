@@ -51,54 +51,10 @@ def hook_event_pauses_when_unavailable(event_name: str) -> bool:
 
 
 _PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"})
-_REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
-    {
-        "native_policy_not_ready",
-        "native_policy_update_in_progress",
-        "native_hook_event_unavailable",
-        "native_pre_tool_unavailable",
-        "native_post_tool_unavailable",
-        "native_overloaded",
-        "native_hook_worker_unavailable",
-        "native_hook_worker_unavailable_before_compatibility",
-        "native_hook_worker_unsupported",
-        "native_hook_worker_exception",
-        "native_hook_compatibility_disabled",
-        "native_hook_edge_invalid_response",
-        "native_hook_edge_unavailable",
-        "python_hook_oracle_unavailable",
-        "python_oracle_exception",
-        "watch_recording_only",
-        "daemon_hook_queue_capacity",
-        "daemon_hook_deadline_exhausted",
-        "daemon_hook_process_deadline_exhausted",
-        "daemon_hook_process_not_ready",
-        "daemon_hook_process_failed",
-        "daemon_hook_process_invalid_request",
-        "daemon_hook_process_guard_home_mismatch",
-        "daemon_worker_exception",
-        "harness_not_managed",
-    }
-)
-_INTEGRITY_FAIL_CLOSED_REASON_CODES = frozenset(
-    {
-        "invalid_hook_payload_reference",
-        "daemon_hook_queue_bytes",
-    }
-)
 
 
 def hook_event_is_permission_request(event_name: str) -> bool:
     return _compact_hook_event_name(event_name) in _PERMISSION_REQUEST_EVENTS
-
-
-def hook_reason_continues_session(reason_code: str) -> bool:
-    """True when this availability reason must not stop the harness."""
-
-    code = reason_code.strip()
-    if code in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
-        return False
-    return code in _REVIEW_CANNOT_FINISH_REASON_CODES
 
 
 def availability_harness_response(
@@ -159,5 +115,4 @@ __all__ = [
     "cursor_unparseable_input_permission",
     "hook_event_is_permission_request",
     "hook_event_pauses_when_unavailable",
-    "hook_reason_continues_session",
 ]

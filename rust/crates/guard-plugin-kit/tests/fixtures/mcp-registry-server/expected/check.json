@@ -1,0 +1,105 @@
+{
+  "diagnostics": [
+    {
+      "code": "license_missing",
+      "level": "warning",
+      "message": "Add a license; most marketplaces will not list a plugin without one.",
+      "path": "server.json"
+    }
+  ],
+  "passed": true,
+  "plugin": {
+    "agents": [],
+    "author": null,
+    "base": "",
+    "commands": [],
+    "context_file": null,
+    "description": "Search and edit notes.",
+    "homepage": null,
+    "hooks": null,
+    "keywords": [],
+    "license": null,
+    "marketplaces": [],
+    "mcp_servers": {
+      "notes": {
+        "args": [
+          "-y",
+          "@acme/notes-mcp@2.0.1"
+        ],
+        "command": "npx",
+        "env": {
+          "NOTES_TOKEN": "NOTES_TOKEN"
+        }
+      }
+    },
+    "name": "notes",
+    "repository": "https://github.com/acme/notes",
+    "skills": [],
+    "version": "2.0.1"
+  },
+  "runtimes": [
+    {
+      "dropped": [],
+      "runtime": "claude-code",
+      "supported": true
+    },
+    {
+      "dropped": [],
+      "runtime": "codex",
+      "supported": true
+    },
+    {
+      "dropped": [],
+      "runtime": "gemini-cli",
+      "supported": true
+    },
+    {
+      "dropped": [],
+      "runtime": "cursor",
+      "supported": true
+    },
+    {
+      "dropped": [],
+      "runtime": "vscode",
+      "supported": true
+    },
+    {
+      "dropped": [],
+      "runtime": "opencode",
+      "supported": true
+    },
+    {
+      "dropped": [],
+      "runtime": "mcp-registry",
+      "supported": true
+    },
+    {
+      "dropped": [
+        "mcp_servers"
+      ],
+      "runtime": "agent-skills",
+      "supported": false
+    },
+    {
+      "dropped": [
+        "mcp_env"
+      ],
+      "runtime": "agent-plugins",
+      "supported": true
+    }
+  ],
+  "sources": [
+    {
+      "kind": "mcp-server",
+      "path": "server.json"
+    }
+  ],
+  "summary": {
+    "agents": 0,
+    "commands": 0,
+    "errors": 0,
+    "mcp_servers": 1,
+    "skills": 0,
+    "warnings": 1
+  }
+}

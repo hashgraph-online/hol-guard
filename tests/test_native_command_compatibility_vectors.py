@@ -6,9 +6,8 @@ import json
 import shlex
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.github_capability_contract import github_capability_contract
 from tests.native_command_test_support import real_native_command_evaluation
-from tests.native_github_capability_support import github_cli_assessment
+from tests.native_github_capability_support import capability_owner, github_cli_assessment
 
 _ROOT = Path(__file__).resolve().parents[1]
 _FIXTURE = _ROOT / "rust/crates/guard-command/tests/fixtures/native-command-compatibility-v1.json"
@@ -25,7 +24,7 @@ def test_frozen_github_capabilities_and_owners_match_independent_python_oracle()
         assert arguments[0] == "gh"
         assessment = github_cli_assessment(arguments[1:])
         assert sorted(assessment.capabilities) == expected, case["case_id"]
-        owners = tuple(github_capability_contract(capability) for capability in assessment.capabilities)
+        owners = tuple(capability_owner(capability) for capability in assessment.capabilities)
         assert sorted(owner.rule_id for owner in owners if owner.rule_id) == case["expected_rules"]
         permissions = sorted(owner.permission_id for owner in owners if not owner.rule_id)
         if arguments == ["gh", "auth", "status"]:

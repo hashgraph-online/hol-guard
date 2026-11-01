@@ -78,6 +78,10 @@ pub(crate) struct DirectLaneBinding {
     pub(crate) structured_output_config: Option<serde_json::Value>,
     /// The tool-call view the daemon decides a relayed MCP tool call with.
     pub(crate) mcp_relay: Option<serde_json::Value>,
+    /// Whether the daemon's drain raises a queued connector review's notice.
+    pub(crate) connector_setup_notice: Option<bool>,
+    /// Whether the drain skips a direct answer's activity the resident queued.
+    pub(crate) resident_activity: Option<bool>,
 }
 
 /// The daemon's policy-integrity key, held only in memory.
@@ -124,6 +128,8 @@ impl DirectLaneBinding {
             review: DirectLaneReviewFacts::default(),
             structured_output_config: None,
             mcp_relay: None,
+            connector_setup_notice: None,
+            resident_activity: None,
         }
     }
 }
@@ -197,6 +203,8 @@ impl PolicySnapshotStore {
                 ),
                 structured_output_config: binding.structured_output_config,
                 mcp_relay: binding.mcp_relay,
+                connector_setup_notice: binding.connector_setup_notice,
+                resident_activity: binding.resident_activity,
             })
         });
         match self.direct_lane.lock() {
@@ -224,6 +232,18 @@ impl PolicySnapshotStore {
             binding
                 .as_ref()
                 .and_then(|binding| binding.home_dir.clone())
+        })
+    }
+
+    /// Whether the bound daemon drains the direct lane's evidence queue.
+    /// A lane that was never published, or one whose daemon does not drain
+    /// it, leaves anything queued unrecorded.
+    pub(crate) fn direct_lane_evidence_drain(&self) -> bool {
+        self.direct_lane.lock().is_ok_and(|binding| {
+            binding
+                .as_ref()
+                .and_then(|binding| binding.evidence_drain)
+                .unwrap_or(false)
         })
     }
 

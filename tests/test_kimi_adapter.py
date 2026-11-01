@@ -313,20 +313,6 @@ class TestKimiNativeHookBlocking:
         assert blocked["exit_code"] == 2
         assert blocked["exit_block_stderr"] is True  # kimi shows stderr as the blocking explanation
 
-    def test_normalize_hook_payload_flattens_kimi_content_parts(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
-            _normalize_hook_payload,
-        )
-
-        payload = {
-            "prompt": [
-                {"role": "user", "text": "Hello"},
-                {"role": "user", "text": "World"},
-            ],
-        }
-        normalized = _normalize_hook_payload(payload, harness="kimi")
-        assert normalized["prompt"] == "Hello\nWorld"
-
     def test_kimi_hook_payload_creates_action_envelope(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _hook_action_envelope
 
@@ -340,20 +326,3 @@ class TestKimiNativeHookBlocking:
         assert envelope is not None
         assert envelope.harness == "kimi"
         assert envelope.action_type == "shell_command"
-
-    def test_normalize_hook_payload_leaves_other_harnesses_untouched(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
-            _normalize_hook_payload,
-        )
-
-        payload = {"prompt": [{"text": "Hello"}]}
-        normalized = _normalize_hook_payload(payload, harness="codex")
-        assert normalized["prompt"] == [{"text": "Hello"}]
-
-    def test_normalize_kimi_prompt_preserves_non_text_payloads(self) -> None:
-        from codex_plugin_scanner.guard.adapters.kimi_hooks import normalize_kimi_prompt
-
-        image_only = [{"image_url": "https://example.com/img.png"}]
-        assert normalize_kimi_prompt(image_only) is image_only
-        assert normalize_kimi_prompt("plain text") == "plain text"
-        assert normalize_kimi_prompt(None) is None

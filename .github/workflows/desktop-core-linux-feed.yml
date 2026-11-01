@@ -149,6 +149,7 @@ jobs:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
           RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id || '' }}
           PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || '' }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -312,6 +313,7 @@ jobs:
             uv run --no-sync pyinstaller \
               --clean --noconfirm --onefile --name hol-guard \
               --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+              --hidden-import sigstore._store --collect-data sigstore \
               --add-data "$NATIVE_RUNTIME:codex_plugin_scanner/_native" \
               --add-data "$NATIVE_MANIFEST:codex_plugin_scanner/_native" \
               --add-data "$SOURCE/src/codex_plugin_scanner/version.py:." \

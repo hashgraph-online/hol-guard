@@ -11,7 +11,7 @@
 
 #[path = "chain_directory_copies.rs"]
 mod directory_copies;
-pub(super) use directory_copies::mkdir_chain;
+pub(super) use directory_copies::{creation_chain, mkdir_chain};
 
 use crate::CanonicalCommandV1;
 use std::path::{Component, Path, PathBuf};
@@ -19,8 +19,8 @@ use std::path::{Component, Path, PathBuf};
 /// Segments that print, filter or copy a file. None changes directory,
 /// renames a file or creates a link.
 const CHAIN_PEERS: &[&str] = &[
-    "cat", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg", "sort",
-    "tail", "tr", "true", "uniq", "wc",
+    "cat", "cmp", "cp", "cut", "diff", "echo", "grep", "head", "jq", "ls", "nl", "printf", "rg",
+    "sort", "tail", "tr", "true", "uniq", "wc",
 ];
 
 /// Scratch editors that may also share a chain. Each segment is still proven

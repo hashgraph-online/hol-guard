@@ -20,9 +20,9 @@ from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMA
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
-    authenticated_record,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.extension_control_records import authenticated_record
 
 _ROOT = Path(__file__).resolve().parents[1]
 _VECTOR = json.loads(

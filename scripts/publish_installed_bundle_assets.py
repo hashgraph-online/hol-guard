@@ -20,6 +20,7 @@ from extension_delivery_containers import member, target, verify_inventory
 from extension_delivery_inventory_store import InventoryStore
 from extension_delivery_objects import entries
 from extension_delivery_policy_lookup import read_transport_page, validate_record
+from installed_bundle_assets import tag_directory
 
 from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import ROOT, asset_path, validate
 from codex_plugin_scanner.guard.extension_builder.io import checked_path, read_bytes
@@ -69,7 +70,7 @@ def inventory(directory, wheel, source):
         if not isinstance(location, dict) or set(location) != {"tag", "asset"}:
             raise ValueError("installed publication location invalid")
         tag, name = location["tag"], location["asset"]
-        asset_path("assets/" + tag + "/" + name, source_sha=source)
+        asset_path("assets/" + tag_directory(tag, source_sha=source) + "/" + name)
         if (tag, name) in seen or len(groups[tag]) >= 256:
             raise ValueError("installed publication duplicate or oversized release")
         seen.add((tag, name))

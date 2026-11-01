@@ -297,12 +297,11 @@ fn a_script_is_read_where_the_run_will_stand() {
 fn the_project_is_read_from_the_directory_the_run_enters() {
     let ws = project("uv-project-order");
     // uv enters `--directory` first and reads `--project` from there, however
-    // the two stand, and only the last of each counts. A project below the
-    // starting directory does not make the one uv would read materialized.
+    // the two stand. A project below the starting directory does not make the
+    // one uv would read materialized.
     for command in [
         "uv --project api --directory sub run pytest",
         "uv --directory sub --project api run pytest",
-        "uv --directory api --directory sub run pytest",
     ] {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, _) = outcome(harness, command, &ws);
@@ -318,6 +317,69 @@ fn the_project_is_read_from_the_directory_the_run_enters() {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, _) = outcome(harness, command, &ws);
             assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+        }
+    }
+    // Only the last `--directory` counts, which the lookup still shows: it
+    // stops at the first project above the directory uv enters, and `api` is
+    // a project of its own that holds no environment, while `sub` is a plain
+    // directory whose lookup reaches the root's.
+    std::fs::create_dir_all(ws.join("api")).unwrap();
+    std::fs::write(ws.join("api/pyproject.toml"), PROJECT).unwrap();
+    for (command, reaches) in [
+        ("uv --directory api --directory sub run pytest", true),
+        ("uv --directory sub --directory api run pytest", false),
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_eq!(
+                reason == CONTAINED,
+                reaches && host(),
+                "{reason} {harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_lock_assertion_reads_the_lockfile_the_project_already_holds() {
+    let ws = project("uv-lock-check");
+    for command in [
+        "uv lock --check",
+        "uv lock --locked",
+        "uv lock --check --offline",
+        "uv --project api lock --check",
+    ] {
+        std::fs::create_dir_all(ws.join("api/.venv/bin")).unwrap();
+        std::fs::write(ws.join("api/pyproject.toml"), PROJECT).unwrap();
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    for command in [
+        // Each of these resolves afresh, and writes the lockfile or the
+        // environment once it has.
+        "uv lock",
+        "uv lock --upgrade",
+        "uv lock --dry-run",
+        "uv sync --frozen",
+        // The assertion has to be the lock's own, not a word uv reads for
+        // something else.
+        "uv lock --check-url https://example.test/simple",
+        "uv add --check requests",
+        // `--env-file` takes the next word as the file's name, so the lock
+        // carries no assertion and uv resolves and rewrites it.
+        "uv lock --env-file --check",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
         }
     }
 }

@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+#[path = "context_assistance_registry.rs"]
+pub(crate) mod context_assistance_registry;
 #[path = "policy_store_services.rs"]
 mod services;
 
@@ -30,6 +32,8 @@ pub(crate) mod approval_v4_enrollment;
 pub(crate) mod approval_v4_secure_state;
 #[path = "native_review_origin.rs"]
 pub(crate) mod native_review_origin;
+#[path = "policy_snapshot_materialize.rs"]
+pub(crate) mod policy_snapshot_materialize;
 #[path = "policy_store_approval.rs"]
 pub(crate) mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
@@ -50,6 +54,8 @@ pub(crate) mod policy_store_direct_lane;
 mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
 mod policy_store_persistence;
+#[path = "policy_store_publisher_binding.rs"]
+mod policy_store_publisher_binding;
 #[path = "policy_store_push.rs"]
 mod policy_store_push;
 #[path = "policy_store_request.rs"]
@@ -89,7 +95,7 @@ use policy_store_validation::validate_private_directory;
 mod scope_tests;
 #[cfg(test)]
 #[path = "policy_store_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 const SNAPSHOT_FILE_NAME: &str = "policy-snapshot-v3.json";
 const GENERATION_FLOOR_FILE_NAME: &str = "policy-snapshot-generation-floor.json";
@@ -194,6 +200,7 @@ struct LoadedAuthority {
 }
 
 pub(crate) struct PolicySnapshotStore {
+    context_assistance: crate::context_assistance_service::Service,
     state_base: PathBuf,
     authority_path: PathBuf,
     expected_runtime_identity: String,
@@ -296,7 +303,16 @@ impl PolicySnapshotStore {
             },
             None => (None, false),
         };
+        let context_assistance = crate::context_assistance_service::Service::default();
+        // Scope identity normalizes macOS aliases; it is not an I/O locator.
+        if let Some(home) = crate::resident_state::private_root_for_state_base(state_base)
+            .ok()
+            .and_then(|root| root.canonicalize().ok())
+        {
+            context_assistance.startup_housekeeping(&home);
+        }
         Ok(Self {
+            context_assistance,
             state_base: state_base.to_owned(),
             authority_path,
             expected_runtime_identity: runtime_identity.to_owned(),

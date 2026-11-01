@@ -28,7 +28,7 @@ const FAST_FORWARD_HOOKS: &[&str] = &["post-merge", "post-index-change"];
 
 /// The shape of a proven pull, or of a fast-forward merge of what a fetch
 /// from `origin` brought in.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) struct Pull {
     /// Git picks the upstream: no remote is named.
     pub(super) upstream: bool,
@@ -37,6 +37,26 @@ pub(super) struct Pull {
     /// A pull fetches first; `git merge --ff-only origin/<branch>` reaches no
     /// remote, so it needs only the work tree half of the proof.
     pub(super) fetches: bool,
+}
+
+/// What the proof must cover for one remote segment: the pull or merge shape
+/// when the segment is one, and whether the refresh reaches every remote the
+/// repository configures rather than the `origin` it names.
+#[derive(Clone, Copy)]
+pub(super) struct Operation {
+    pub(super) upstream: Option<Pull>,
+    pub(super) every_remote: bool,
+}
+
+impl Operation {
+    /// A pull or merge. Both name what they reach, so neither walks the
+    /// repository's other remotes.
+    pub(super) fn upstream(shape: Pull) -> Self {
+        Self {
+            upstream: Some(shape),
+            every_remote: false,
+        }
+    }
 }
 
 /// The shape of the arguments after `pull`: `--ff-only` or a merge, either
@@ -121,24 +141,24 @@ fn origin_branch(word: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-'))
 }
 
-/// Whether nothing the fast-forward or merge runs after the fetch can start
-/// a program or write outside the checkout.
-pub(super) fn pull_inert(
-    effective: &GitConfig,
-    repository: &GitConfig,
-    pull: Pull,
-    probe: &Probe,
-) -> bool {
+/// Whether the configuration alone, before any probe of the checkout, names
+/// something the fast-forward or merge would start.
+fn configuration_routed(effective: &GitConfig, repository: &GitConfig, pull: Pull) -> bool {
     let merge_driver = effective
         .keys()
         .any(|key| key.starts_with("merge.") && key.ends_with(".driver"));
-    let routed = effective.iter().any(|(key, values)| {
+    effective.iter().any(|(key, values)| {
         let enabled = values.iter().any(|value| !disabled(value));
         (key.starts_with("filter.") && (!standard_lfs(key, values) || repository.contains_key(key)))
-            // The user's own `gpg.*` names a program that only a signature
-            // check (`*.verifysignatures` below) or commit signing (refused by
-            // `merge_inert`) starts. A repository's choice stays routed.
-            || (key.starts_with("gpg.") && repository.contains_key(key))
+            // `gpg.*` names a program that a signature check
+            // (`*.verifysignatures` below), commit signing, or the merge
+            // message starts: Git builds that message before it decides to
+            // fast-forward, and verifies a signed tag there with
+            // `gpg.program`. A repository's own copy of the key is refused
+            // unless it only restates what the user already set.
+            || (key.starts_with("gpg.")
+                && repository.contains_key(key)
+                && !repository_restates_user(effective, repository, key))
             || key.starts_with("hook.")
             || key == "core.worktree"
             || (key == "core.fsmonitor" && enabled)
@@ -158,7 +178,43 @@ pub(super) fn pull_inert(
                 && key.starts_with("branch.")
                 && key.ends_with(".remote")
                 && values.iter().any(|value| value.trim() != "origin"))
-    });
+    })
+}
+
+/// Whether the user's own configuration already decides this key, so the
+/// repository's copy changes nothing Git would do. `git config --show-scope
+/// --list` reports every scope's entry in Git's own order and the last one
+/// wins, so the repository changes nothing when the entry an outer scope
+/// already set carries the value Git ends up using. The repository's scopes
+/// are read after the user's, so its entries stand at the end of the
+/// effective list; a trailing run that is not the repository's own is a
+/// shape this reader does not decide.
+fn repository_restates_user(effective: &GitConfig, repository: &GitConfig, key: &str) -> bool {
+    let Some(local) = repository.get(key) else {
+        return false;
+    };
+    let Some(all) = effective.get(key) else {
+        return false;
+    };
+    let Some((outer, tail)) = all
+        .len()
+        .checked_sub(local.len())
+        .map(|at| all.split_at(at))
+    else {
+        return false;
+    };
+    tail == local.as_slice() && outer.last().is_some() && outer.last() == all.last()
+}
+
+/// Whether nothing the fast-forward or merge runs after the fetch can start
+/// a program or write outside the checkout.
+pub(super) fn pull_inert(
+    effective: &GitConfig,
+    repository: &GitConfig,
+    pull: Pull,
+    probe: &Probe,
+) -> bool {
+    let routed = configuration_routed(effective, repository, pull);
     let hooks = if pull.merge {
         MERGE_HOOKS
     } else {
@@ -250,7 +306,166 @@ pub(in crate::pretool) fn disabled(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::fast_forward_merge;
+    use super::{configuration_routed, fast_forward_merge, merge_inert, GitConfig, Pull};
+
+    fn config(entries: &[(&str, &str)]) -> GitConfig {
+        entries
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), vec![(*value).to_owned()]))
+            .collect()
+    }
+
+    /// The signing settings an identity hook writes into every checkout it
+    /// touches, beside the user's own global copy of them. `--show-scope`
+    /// reports both, so the effective entry for each key holds two values.
+    fn signed() -> (GitConfig, GitConfig) {
+        let repository = config(&[
+            ("gpg.format", "openpgp"),
+            ("gpg.program", "/home/dev/.git-hooks/sign-commit.sh"),
+            ("commit.gpgsign", "true"),
+            ("core.pager", "cat"),
+            ("pager.log", "false"),
+            ("pull.rebase", "false"),
+        ]);
+        let effective = repository
+            .iter()
+            .map(|(key, values)| (key.clone(), [values.clone(), values.clone()].concat()))
+            .collect();
+        (effective, repository)
+    }
+
+    #[test]
+    fn a_repository_signing_program_leaves_a_fast_forward_alone() {
+        let (effective, repository) = signed();
+        for pull in [
+            Pull {
+                upstream: false,
+                merge: false,
+                fetches: true,
+            },
+            Pull {
+                upstream: true,
+                merge: false,
+                fetches: true,
+            },
+            Pull {
+                upstream: false,
+                merge: false,
+                fetches: false,
+            },
+        ] {
+            assert!(
+                !configuration_routed(&effective, &repository, pull),
+                "{pull:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_repository_signing_program_still_refuses_a_merge() {
+        let (effective, repository) = signed();
+        let pull = Pull {
+            upstream: false,
+            merge: true,
+            fetches: true,
+        };
+        // The commit a merge writes is signed with it, which `merge_inert`
+        // refuses whichever scope holds the program.
+        assert!(!configuration_routed(&effective, &repository, pull));
+        assert!(!merge_inert(&effective, &repository));
+    }
+
+    /// Git builds the merge message before it decides to fast-forward, and
+    /// verifies a signed tag there with `gpg.program`. A repository that names
+    /// its own program keeps the review even for a fast-forward.
+    #[test]
+    fn a_repository_program_the_user_never_set_routes_a_fast_forward() {
+        let (mut effective, mut repository) = signed();
+        let planted = vec!["/src/.git/hooks/sign.sh".to_owned()];
+        effective.insert("gpg.program".to_owned(), planted.clone());
+        repository.insert("gpg.program".to_owned(), planted);
+        let pull = Pull {
+            upstream: false,
+            merge: false,
+            fetches: true,
+        };
+        assert!(configuration_routed(&effective, &repository, pull));
+    }
+
+    /// A repository that overrides the user's own program with a different
+    /// one keeps the review too: the effective entries disagree.
+    #[test]
+    fn a_repository_program_that_differs_routes_a_fast_forward() {
+        let (mut effective, mut repository) = signed();
+        let planted = "/src/.git/hooks/sign.sh".to_owned();
+        effective
+            .get_mut("gpg.program")
+            .expect("signed")
+            .push(planted.clone());
+        repository.insert("gpg.program".to_owned(), vec![planted]);
+        let pull = Pull {
+            upstream: false,
+            merge: false,
+            fetches: true,
+        };
+        assert!(configuration_routed(&effective, &repository, pull));
+    }
+
+    /// The user's global configuration sets `gpg.program` once for every
+    /// checkout and again, to the signing wrapper, behind the conditional
+    /// include that covers this one. Git uses the last entry, which the
+    /// repository's copy restates, so the fast-forward stays where it was.
+    #[test]
+    fn an_outer_scope_the_include_overrides_leaves_a_fast_forward_alone() {
+        let (mut effective, repository) = signed();
+        effective
+            .get_mut("gpg.program")
+            .expect("signed")
+            .insert(0, "gpg".to_owned());
+        let pull = Pull {
+            upstream: false,
+            merge: false,
+            fetches: true,
+        };
+        assert!(!configuration_routed(&effective, &repository, pull));
+    }
+
+    /// `git -c gpg.program=...` is read after the repository's own scopes, so
+    /// the entries at the end of the effective list are not the repository's
+    /// and the reader does not decide the key.
+    #[test]
+    fn a_scope_after_the_repository_routes_a_fast_forward() {
+        let (mut effective, repository) = signed();
+        effective
+            .get_mut("gpg.program")
+            .expect("signed")
+            .push("/src/.git/hooks/sign.sh".to_owned());
+        let pull = Pull {
+            upstream: false,
+            merge: false,
+            fetches: true,
+        };
+        assert!(configuration_routed(&effective, &repository, pull));
+    }
+
+    #[test]
+    fn the_users_own_signing_program_routes_neither() {
+        let (effective, _) = signed();
+        let repository = GitConfig::new();
+        for merge in [false, true] {
+            let pull = Pull {
+                upstream: false,
+                merge,
+                fetches: true,
+            };
+            // `commit.gpgsign` still refuses the commit a merge writes.
+            assert!(
+                !configuration_routed(&effective, &repository, pull),
+                "{merge}"
+            );
+        }
+        assert!(!merge_inert(&effective, &repository));
+    }
 
     fn shape(words: &[&str]) -> Option<(bool, bool, bool)> {
         let words: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();

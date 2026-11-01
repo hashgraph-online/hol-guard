@@ -53,6 +53,7 @@ pub(crate) fn evaluate(input: &Value) -> Result<Value, String> {
         Some("asset") => location::asset(input),
         Some("member") => container::member(input),
         Some("installed") => installed::fetch(input),
+        Some("installed-batch") => installed::batch(input),
         Some("expand") => expand::run(input),
         Some("verify") => verify(input),
         _ => return Err(request()),

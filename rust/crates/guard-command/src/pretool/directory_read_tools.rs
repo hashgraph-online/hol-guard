@@ -6,8 +6,8 @@ use super::{
 
 /// Whether `harness`'s `tool` reading `value` lists a directory the
 /// names-only proof covers. OMP's `read` takes line selectors; Claude Code's
-/// `Read` opens its path literally and answers a directory with no file
-/// content.
+/// and Grok's `Read` open their path literally and answer a directory with no
+/// file content.
 pub(in crate::pretool) fn bounded_directory_read_tool_target(
     harness: &str,
     tool: Option<&str>,
@@ -17,7 +17,7 @@ pub(in crate::pretool) fn bounded_directory_read_tool_target(
 ) -> bool {
     match (harness, tool) {
         ("omp", Some("read")) => bounded_omp_directory_read_target(value, home_dir, cwd),
-        ("claude-code", Some("Read")) => {
+        ("claude-code" | "grok", Some("Read")) => {
             literal_path(value)
                 && bounded_omp_directory_read_target_without_selector(value, home_dir, cwd)
         }
@@ -35,3 +35,7 @@ fn literal_path(value: &str) -> bool {
 #[cfg(test)]
 #[path = "literal_directory_read_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "grok_read_tools_tests.rs"]
+mod grok_tests;

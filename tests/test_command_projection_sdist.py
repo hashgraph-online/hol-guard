@@ -32,7 +32,7 @@ def archive(tmp_path):
         "contracts/extensions/trust-class-map.v1.json": {
             "schemaVersion": "guard.extension-trust-class-map.v1",
             "publishers": {
-                "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                "hol": {"id": "hol", "displayName": "HOL"},
                 "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
             },
             "classes": {"first-party": [], "trusted-library": [], "external": ["command.example"]},

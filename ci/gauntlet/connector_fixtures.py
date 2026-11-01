@@ -19,6 +19,7 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 LANECTL = "lanectl"
 LANECTL_STATE = ".lanectl"
@@ -40,6 +41,18 @@ RUN_QUEUED_SCRIPT = """#!/bin/sh
 [ "$1" = "--" ] && shift
 exec "$@"
 """
+
+APPROVE_SCRIPT = "approve-merge.sh"
+# A user's own shell script, kept in ~/tools rather than on PATH or in the workspace: the
+# shape of the review and release helpers people add as custom extensions. ``env`` finds
+# ``bash``, so the launch resolves only against an environment that has a PATH.
+APPROVE_SCRIPT_TEXT = """#!/usr/bin/env bash
+# approve-merge.sh: synthetic review helper for Guard Gauntlet fixtures. Changes nothing.
+set -eu
+echo "approve-merge: would approve and merge #${1:?pull request number}"
+"""
+# Connector cases whose script the fixture allows as a custom extension before the agent starts.
+GRANTED_SCRIPT_CASES = frozenset({"connector-granted-env-script"})
 
 LANECTL_SCRIPT = '''#!/usr/bin/env python3
 """lanectl: synthetic loopback-only control CLI for Guard Gauntlet fixtures."""
@@ -196,6 +209,7 @@ class ConnectorFixture:
     """Where the synthetic connector pieces landed inside one fixture HOME."""
 
     lanectl: Path
+    approve_script: Path
     state_dir: Path
     echo_server: Path
     remote_stub: Path
@@ -223,6 +237,42 @@ def write_lanectl(home: Path, port: int = LANECTL_PORT) -> tuple[Path, Path]:
 def write_run_queued(home: Path) -> Path:
     """Install the ``~/.local/bin/run-queued`` wrapper."""
     return _write(home / ".local" / "bin" / RUN_QUEUED, RUN_QUEUED_SCRIPT, executable=True)
+
+
+def write_approve_script(home: Path) -> Path:
+    """Install the ``~/tools/approve-merge.sh`` script, outside PATH and the workspace."""
+    return _write(home / "tools" / APPROVE_SCRIPT, APPROVE_SCRIPT_TEXT, executable=True)
+
+
+def allow_custom_script(store: Any, script: Path, home: Path) -> dict[str, str]:
+    """Allow the script as a custom extension, through the write Add custom extension makes.
+
+    The identity comes from the same recognition the dashboard runs on a pasted path, so the
+    grant is the one a user's Allow saves, and the native policy is told before and after.
+    """
+    from codex_plugin_scanner.guard.local_cli_trust import utc_now
+    from codex_plugin_scanner.guard.native_policy_snapshot import notify_native_policy_mutation
+    from codex_plugin_scanner.guard.runtime.custom_extension_continuity import record_local_custom_extension_mutation
+    from codex_plugin_scanner.guard.runtime.local_cli_identity import recognize_operator_cli
+
+    identity, code, _ = recognize_operator_cli(str(script), cwd=home, home_dir=home)
+    if identity is None:
+        raise RuntimeError(f"the custom script was not recognised ({code})")
+    now = utc_now()
+    store.record_local_cli_observation(identity, seen_at=now, surface="cli")
+    notify_native_policy_mutation(store.guard_home)
+    try:
+        record_local_custom_extension_mutation(
+            store,
+            identity=identity,
+            state="allowed",
+            expected_revision=store.read_local_cli_revision(),
+            command_states={},
+            now=now,
+        )
+    finally:
+        notify_native_policy_mutation(store.guard_home)
+    return {"cli_id": identity.cli_id, "state": "allowed"}
 
 
 def write_echo_mcp(home: Path) -> Path:
@@ -295,6 +345,7 @@ def stage_connector_fixture(root: Path, home: Path, harness: str) -> ConnectorFi
     echo_server = write_echo_mcp(home)
     return ConnectorFixture(
         lanectl=lanectl,
+        approve_script=write_approve_script(home),
         state_dir=state,
         echo_server=echo_server,
         remote_stub=write_remote_stub(root),

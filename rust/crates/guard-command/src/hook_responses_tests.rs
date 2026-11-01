@@ -182,7 +182,7 @@ fn every_watched_ecosystems_package_permission_keeps_the_containment_receipt() {
     // The firewall marks which ecosystem's manager ran, not a risk the run
     // carries, so a local verb below any of them reaches the sandbox.
     for extension in ["command.package.node", "command.package.python"] {
-        for harness in ["zcode", "omp", "codex"] {
+        for harness in ["zcode", "omp", "codex", "cursor"] {
             let rendered = pre_tool(harness, &response(extension));
             assert_eq!(
                 rendered.get("required_execution_profile"),
@@ -201,6 +201,51 @@ fn every_watched_ecosystems_package_permission_keeps_the_containment_receipt() {
     let rendered = pre_tool("zcode", &response("command.network.egress"));
     assert_eq!(rendered.get("required_execution_profile"), None);
     assert_eq!(rendered.get("policy_action"), Some(&json!("block")));
+}
+
+#[test]
+fn cursor_sink_reauthorization_reads_the_containment_receipt() {
+    // `execute-contained-test --harness cursor` asks again under the Cursor
+    // harness and runs only on a receipt carrying these fields; an ordinary
+    // block here failed every Cursor sink run closed.
+    let verdict = obj(&json!({
+        "schema": "guard-pre-tool-result.v1",
+        "authority": "rust",
+        "decision": "deny",
+        "minimum_action": "sandbox-required",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "reason": "protected",
+        "command_extensions": {
+            "binding": {"uncertainty_count": 0, "observations_digest": "sha256:fixture"},
+            "evaluation_error": null,
+            "observations": [],
+            "permission_observations": [{
+                "extension_id": "command.package.node",
+                "permission_id": "command.package.node.permission.package-protection",
+                "uncertainty_reasons": [],
+            }],
+        },
+    }));
+    let rendered = pre_tool("cursor", &verdict);
+    assert_eq!(rendered.get("decision"), Some(&json!("deny")));
+    assert_eq!(
+        rendered.get("policy_action"),
+        Some(&json!("sandbox-required"))
+    );
+    assert_eq!(
+        rendered.get("required_execution_profile"),
+        Some(&json!("workspace-contained-v1"))
+    );
+    assert_eq!(
+        rendered.get("command_binding_digest"),
+        Some(&json!("sha256:fixture"))
+    );
+    // Cursor's bridge still reads a denial from the same answer.
+    assert_eq!(
+        rendered["hookSpecificOutput"]["permissionDecision"],
+        json!("deny")
+    );
 }
 
 #[test]
@@ -253,4 +298,54 @@ fn bun_eval_package_permission_keeps_the_node_eval_receipt() {
             "{reason}"
         );
     }
+}
+
+#[test]
+fn bun_test_package_permission_keeps_the_node_test_receipt() {
+    // `bun test` runs Bun's own runner, so the package firewall records the
+    // image the way it does for `bun -e`. The receipt has to survive that
+    // permission, or every harness falls back to a bare deny and the
+    // contained route is never offered.
+    let response = |permissions: Value| {
+        obj(&json!({
+            "schema": "guard-pre-tool-result.v1",
+            "authority": "rust",
+            "decision": "deny",
+            "minimum_action": "sandbox-required",
+            "policy_action": "sandbox-required",
+            "reason_code": "native_node_test_readonly_containment_required",
+            "reason": "protected",
+            "command_extensions": {
+                "binding": {"uncertainty_count": 0},
+                "evaluation_error": null,
+                "observations": [],
+                "permission_observations": permissions,
+            },
+        }))
+    };
+    let permission = json!([{
+        "extension_id": "command.package.node",
+        "permission_id": "command.package.node.permission.package-protection",
+        "uncertainty_reasons": [],
+    }]);
+    for harness in ["zcode", "claude-code", "omp"] {
+        let rendered = pre_tool(harness, &response(permission.clone()));
+        assert_eq!(
+            rendered.get("required_execution_profile"),
+            Some(&json!("node-test-readonly-v1")),
+            "{harness}"
+        );
+        assert_eq!(
+            rendered.get("policy_action"),
+            Some(&json!("sandbox-required")),
+            "{harness}"
+        );
+    }
+    // `node --test` reaches the same profile with no permission list, which
+    // the empty-list path already carried.
+    let rendered = pre_tool("zcode", &response(json!([])));
+    assert_eq!(
+        rendered.get("required_execution_profile"),
+        Some(&json!("node-test-readonly-v1"))
+    );
 }

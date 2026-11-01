@@ -34,7 +34,6 @@ from .native_resident_client import (
     native_resident_client_failure_code,
     native_resident_client_ready,
     native_resident_client_request,
-    native_resident_client_transport,
 )
 from .native_resident_prerequisite_reason import (
     clear_prerequisite_failure,
@@ -68,6 +67,7 @@ _RESULT_OPTIONAL_KEYS = {
     "mcp_launch_environment",
     "mcp_redacted_value",
     "native_bash_reply_valid",
+    "native_decision_receipt_valid",
     "runtime_identity",
     "runtime_identity_match",
     "runtime_identity_reusable",
@@ -83,6 +83,7 @@ _RESULT_OPTIONAL_KEYS = {
     "claude_guard_question",
     "memory_pattern",
     "guard_run_launch",
+    "package_runner_target",
 }
 _RESULT_CODES = {
     "ok",
@@ -286,7 +287,7 @@ def _resolve_existing_digest_home(guard_home: Path | None) -> Path:
     return _resolve_digest_home(None)
 
 
-def ensure_resident_prerequisite(guard_home: Path) -> bool:
+def ensure_resident_prerequisite(guard_home: Path, *, store: Any | None = None) -> bool:
     """Establish the resident's on-disk prerequisite for ``guard_home``.
 
     The resident refuses every request until the owner-private verifier key
@@ -303,6 +304,13 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
     secret-store master that their guard home was never given.  Returns
     ``False`` when a missing prerequisite cannot be created, which callers
     report as an unavailable runtime rather than a crash.
+
+    ``store`` is the already-open store the caller is about to use.  The
+    verifier key is derived from the policy-integrity master, so it has to come
+    from the same secret store that signs the home's rows: opening a second
+    store here would read whatever secret store that new instance resolves,
+    which is not necessarily the caller's.  Callers that hold a store pass it;
+    the rest still get one opened for them.
     """
 
     try:
@@ -328,9 +336,9 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
 
         # Provisioning the resident key must not prime policy decisions or
         # refresh signed store state on the evaluation hot path.
-        store = GuardStore(guard_home, prime_policy_integrity=False)
+        owner = GuardStore(guard_home, prime_policy_integrity=False) if store is None else store
         phase = "provision_key"
-        provision_native_verifier_key_for_store(store)
+        provision_native_verifier_key_for_store(owner)
     except Exception as error:
         # Nothing to fall back to: the resident is the only authority for these
         # digests, so an unprovisionable home is an unavailable runtime. The
@@ -438,14 +446,23 @@ def _decode_result(
     return payload
 
 
+def _capped_deadline(budget_seconds: float, hard_deadline_monotonic: float | None) -> float:
+    deadline = time.monotonic() + budget_seconds
+    return deadline if hard_deadline_monotonic is None else min(deadline, hard_deadline_monotonic)
+
+
 def native_context_digest(
     kind: str,
     kind_fields: dict[str, Any],
     *,
     guard_home: Path,
     timeout_seconds: float = _TIMEOUT_SECONDS,
+    hard_deadline_monotonic: float | None = None,
 ) -> dict[str, Any] | None:
     """Run one ``context_digest`` sub-operation and return its typed result.
+
+    ``hard_deadline_monotonic`` caps every attempt, cold-start allowance and
+    retry included, for a caller that must answer by an absolute deadline.
 
     Returns ``None`` when the native runtime is unavailable, incompatible,
     overloaded, or the result fails strict binding checks.  A returned result
@@ -494,8 +511,10 @@ def native_context_digest(
     # answer exactly that again.  The client's deadline is what keeps the steady
     # state cheap.
     retry_budget_seconds = timeout_seconds + _RETRY_ALLOWANCE_MULTIPLIER * _COLD_START_ALLOWANCE_SECONDS
+    if hard_deadline_monotonic is not None:
+        retry_budget_seconds = min(retry_budget_seconds, hard_deadline_monotonic - time.monotonic())
     resident_budget_ms = max(1, min(9_000, int(retry_budget_seconds * 1_000)))
-    deadline_monotonic = time.monotonic() + budget_seconds
+    deadline_monotonic = _capped_deadline(budget_seconds, hard_deadline_monotonic)
     request_id = uuid.uuid4().hex
     request: dict[str, Any] = {
         "schema": _REQUEST_SCHEMA,
@@ -557,7 +576,7 @@ def native_context_digest(
         return _digest_failed("native_context_digest_request_too_large")
     output = None
     attempts = 0
-    while attempts < _DIGEST_ATTEMPTS:
+    while attempts < _DIGEST_ATTEMPTS and time.monotonic() < deadline_monotonic:
         attempts += 1
         output = native_resident_client_request(
             executable=status.identity.path,
@@ -575,13 +594,18 @@ def native_context_digest(
         # not help" is true only of a resident that is gone, which the failure
         # code distinguishes after the retry.
         budget_seconds = retry_budget_seconds
-        deadline_monotonic = time.monotonic() + budget_seconds
+        deadline_monotonic = _capped_deadline(budget_seconds, hard_deadline_monotonic)
+    if output is None and attempts == 0:
+        # The caller's hard deadline ran out before the resident was asked: no
+        # client call happened, so neither its failure code nor a resident
+        # failure record describes this.
+        return _digest_failed("native_context_digest_deadline_spent")
     if output is None:
         # The client's own code ("native_client_timed_out",
         # "native_client_pool_exhausted", ...) is the actionable half of this.
         _digest_failed(
             f"{native_resident_client_failure_code() or 'native_context_digest_resident_unavailable'}"
-            f"[{native_resident_client_transport()},{attempts} attempt(s),"
+            f"[{attempts} attempt(s),"
             f"allowance={'granted' if cold_start else 'none'},budget={budget_seconds:.2f}s]"
         )
         native_record_resident_failure(
@@ -633,25 +657,6 @@ def native_context_digest(
 _UNBOUND_PREFIX = "guard-context-unbound:"
 
 
-def is_unbound_context_digest(value: object) -> bool:
-    """``True`` for a digest that names material nothing has bound.
-
-    The runtime emits these for a component it could not digest, and a few
-    Python paths emit one deliberately for material there is no resident
-    question for: the unbound approval-context sentinel, a configured
-    environment with nothing configured, and a shell context the caller
-    could not observe. A sentinel never parses as a token and never
-    authorizes reuse, so recognizing one is how a caller tells an unbound
-    component from a bound digest.
-
-    What no Python path does is hand back a *bound*-looking digest when the
-    resident is unreachable: `native_context_digest` either answers from the
-    resident or raises.
-    """
-
-    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
-
-
 def context_mcp_launch_environment(
     inherited: Mapping[str, str],
     configured: Mapping[str, str],
@@ -693,7 +698,7 @@ def context_runtime_executable_identity(
     require_executable: bool = True,
     guard_home: Path | None = None,
 ) -> dict[str, Any]:
-    """Transport `build_runtime_executable_identity` inputs to native authority; no fallback."""
+    """Resolve and content-bind an executable through native authority; no fallback."""
     result = native_context_digest(
         "runtime_executable_identity",
         {
@@ -987,19 +992,6 @@ _MCP_RISK_CATEGORIES = frozenset(
 )
 
 
-def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
-    """Project native browser semantics; native absence is not a negative match."""
-    result = native_context_digest(
-        "browser_mcp",
-        {"request": request},
-        guard_home=_resolve_digest_home(None),
-    )
-    browser = result.get("browser_mcp") if isinstance(result, dict) and result.get("status") == "ok" else None
-    if not isinstance(browser, dict) or browser.get("operation") != request.get("operation"):
-        raise _unavailable("native_browser_mcp_intent_unavailable")
-    return browser
-
-
 def context_mcp_redact_json(value: object) -> object:
     """stdio `_redact_json` parity for recorded MCP traffic; terminal on failure."""
     fields = json.loads(json.dumps({"material": value}))
@@ -1017,7 +1009,6 @@ __all__ = [
     "bind_context_digest_home",
     "bind_context_digest_lifecycle_budget",
     "bound_context_digest_home",
-    "context_browser_mcp",
     "context_digest_guard_home",
     "context_mcp_identity",
     "context_mcp_redact_json",
@@ -1027,7 +1018,6 @@ __all__ = [
     "context_runtime_launch_identity",
     "context_runtime_launch_identity_matches",
     "context_runtime_launch_identity_projection",
-    "is_unbound_context_digest",
     "native_context_digest",
     "reset_context_digest_budget",
     "reset_context_digest_home",

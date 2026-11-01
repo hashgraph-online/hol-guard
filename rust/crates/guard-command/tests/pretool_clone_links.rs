@@ -149,6 +149,9 @@ fn dependency_link_into_a_clone_keeps_every_other_boundary() {
     let session = session("clone-link-bounds");
     let clone = local_clone(&session);
     std::fs::write(clone.join("tracked-file.txt"), "x\n").unwrap();
+    // A credential directory the link could name, so the screen below is
+    // answering about a path that is really there.
+    std::fs::create_dir_all(session.home.join(".ssh")).unwrap();
     let home = session.home.display();
     let primary = session.primary.display();
     let clone_text = clone.display();
@@ -163,8 +166,10 @@ fn dependency_link_into_a_clone_keeps_every_other_boundary() {
         format!("ln -s {primary}/node_modules {clone_text}/.deps"),
         format!("ln -sf {primary}/node_modules {clone_text}/deps"),
         format!("ln -s {primary}/node_modules {clone_text}/node_modules/pkg/deps"),
-        // Relative targets resolve against the link's directory.
-        format!("ln -s ../app-portal/node_modules {clone_text}/deps"),
+        // A relative target still resolves to a screened path: one that
+        // leaves the repositories the proof knows is refused like any other.
+        format!("ln -s ../../.ssh {clone_text}/deps"),
+        format!("ln -s ../app-portal/.git {clone_text}/deps"),
     ] {
         assert_ne!(
             action(&session, &command, &session.primary),
@@ -175,6 +180,15 @@ fn dependency_link_into_a_clone_keeps_every_other_boundary() {
     // A name that is already a directory is where `ln` writes the link, under
     // the target's own base name, and that name is free there.
     let command = format!("ln -s {primary}/node_modules {clone_text}/node_modules");
+    assert_eq!(
+        action(&session, &command, &session.primary),
+        "allow",
+        "{command}"
+    );
+    // A relative target resolves against the directory holding the new link,
+    // so this names the same directory as the absolute spelling above and is
+    // screened identically.
+    let command = format!("ln -s ../app-portal/node_modules {clone_text}/deps");
     assert_eq!(
         action(&session, &command, &session.primary),
         "allow",

@@ -23,9 +23,7 @@ Each vector holds the resident's inputs (``inputs``), the entry point that
 produced it, the store operations the old code performed in order (``ops``),
 the plan those operations amount to (``plan``) and the old return value
 (``returns``). The Rust ``hook_decision_native_permission_persist_tests``
-replays ``inputs`` and compares ``plan``; ``tests/
-test_native_permission_persist_parity.py`` feeds ``plan`` to the new Python
-executor and compares ``ops`` and ``returns``.
+replays ``inputs`` and compares ``plan``.
 
 The stored hash is what a saved approval is looked up by, so it must not
 change across an upgrade: the vectors pin it for well-formed tokens, for the

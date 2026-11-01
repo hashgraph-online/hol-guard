@@ -5,10 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
+from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand, slug_local_cli_command_id
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_store_support import upsert_local_cli_command_states
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
@@ -17,10 +18,19 @@ _SECOND = "2026-09-27T12:01:00Z"
 
 
 def _tool_authority(store: GuardStore, identity: UnlistedCliIdentity, tool_name: str) -> dict[str, object] | None:
-    from codex_plugin_scanner.guard.store_mcp_catalog import read_mcp_tool_authority
-
     with store._connect() as connection:
-        return read_mcp_tool_authority(connection, identity.cli_id, identity.identity_hash, tool_name)
+        catalog = connection.execute(
+            "select revision from local_mcp_catalog where cli_id = ? and identity_hash = ?",
+            (identity.cli_id, identity.identity_hash),
+        ).fetchone()
+        if catalog is None:
+            return None
+        rows = connection.execute(
+            """select tool_name, authority_hash from local_mcp_tool_authority
+               where cli_id = ? and identity_hash = ? and catalog_revision = ? and tool_name = ?""",
+            (identity.cli_id, identity.identity_hash, catalog[0], tool_name),
+        ).fetchall()
+    return {"authority_hashes": dict(rows)}
 
 
 def _grant_and_authority(store: GuardStore, identity: UnlistedCliIdentity) -> tuple[object, ...]:
@@ -174,7 +184,7 @@ def test_partial_refresh_preserves_known_tools_and_choices(tmp_path: Path) -> No
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow", "delete": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow", "delete": "block"})
     before = store.list_local_cli_items()[0]
     store.merge_local_cli_commands(
         identity.cli_id,
@@ -241,7 +251,7 @@ def test_removed_tools_revoke_allow_and_preserve_deny_when_they_return(tmp_path:
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow", "delete": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow", "delete": "block"})
     revision = store.read_local_cli_revision()
     _publish(store, identity)
     assert store.read_local_cli_command_catalog(identity.cli_id) == []
@@ -290,11 +300,128 @@ def test_saving_current_choices_preserves_retired_mcp_denies(tmp_path: Path) -> 
     assert store.read_local_cli_command_states(identity.cli_id)["delete"] == "block"
 
 
+def _catalog_view(store: GuardStore) -> dict[str, object]:
+    return store.list_local_cli_items()[0]["mcp_catalog"]
+
+
+def test_saving_choices_reviews_the_new_tools_they_cover(tmp_path: Path) -> None:
+    store, identity = _store(tmp_path)
+    _publish(store, identity, "read", "delete")
+    assert _catalog_view(store)["changes"]["added"] == ["delete", "read"]
+    revision = _catalog_view(store)["revision"]
+    authority = _tool_authority(store, identity, "read")
+
+    # A save that names no catalog revision reviews nothing.
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow"},
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["delete", "read"]
+    # A tool whose choice was saved is reviewed; one left out still needs a look.
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow"},
+        reviewed_catalog_revision=revision,
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["delete"]
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow", "delete": "review"},
+        reviewed_catalog_revision=revision,
+    )
+    view = _catalog_view(store)
+    assert view["changes"] == {"added": [], "changed": [], "removed": [], "stale": []}
+    # Reviewing changes nothing the catalog proves about the tools.
+    assert view["revision"] == revision
+    assert _tool_authority(store, identity, "read") == authority
+
+    # A later listing still flags a tool that is new since then, and a save
+    # made against the older catalog cannot clear it.
+    _publish(store, identity, "read", "delete", "write")
+    assert _catalog_view(store)["changes"]["added"] == ["write"]
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow", "delete": "review", "write": "review"},
+        reviewed_catalog_revision=revision,
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["write"]
+
+
+def test_the_other_tools_choice_reviews_only_the_tools_folded_into_it(tmp_path: Path) -> None:
+    store, identity = _store(tmp_path)
+    # "Résumé" has no valid id, so it is folded into the Other-tools choice; a
+    # real tool named "other" has its own id and is not.
+    store.replace_local_cli_commands(
+        identity.cli_id,
+        (
+            *_commands("read", "other"),
+            LocalCliCommand(slug_local_cli_command_id("other"), "other", "other", "Fixture tool"),
+        ),
+        mcp_catalog=_catalog("read", "Résumé", "other"),
+        identity_hash=identity.identity_hash,
+        seen_at=_FIRST,
+    )
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"other": "review", "read": "allow"},
+        reviewed_catalog_revision=_catalog_view(store)["revision"],
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["other"]
+
+
+def test_saving_choices_reviews_a_changed_tool(tmp_path: Path) -> None:
+    store, identity = _store(tmp_path)
+    _publish(store, identity, "read")
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_FIRST,
+        command_states={"read": "allow"},
+    )
+    changed = replace(
+        _catalog("read"),
+        tools=({"name": "read", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}},),
+    )
+    store.replace_local_cli_commands(
+        identity.cli_id,
+        _commands("read"),
+        mcp_catalog=changed,
+        identity_hash=identity.identity_hash,
+        seen_at=_SECOND,
+    )
+    assert _catalog_view(store)["changes"]["changed"] == ["read"]
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow"},
+        reviewed_catalog_revision=_catalog_view(store)["revision"],
+    )
+    assert _catalog_view(store)["changes"]["changed"] == []
+
+
 def test_schema_changes_require_review_and_preserve_deny(tmp_path: Path) -> None:
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow", "delete": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow", "delete": "block"})
     revision = store.read_local_cli_revision()
     changed = replace(
         _catalog("read", "delete"),
@@ -318,7 +445,7 @@ def test_cosmetic_description_does_not_reset_choices(tmp_path: Path) -> None:
     store, identity = _store(tmp_path)
     _publish(store, identity, "read")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow"})
     revision = store.read_local_cli_revision()
     changed = replace(
         _catalog("read"),
@@ -416,3 +543,44 @@ def test_v10_migration_rebuilds_tool_hashes_without_changing_grants(tmp_path: Pa
         connection.execute("update local_cli_schema_migration set version = 10, checksum = ?", (_V10_CHECKSUM,))
         ensure_local_cli_schema(connection)
     assert _grant_and_authority(store, identity) == before
+
+
+def test_a_save_names_its_catalog_revision_as_a_plain_count() -> None:
+    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.daemon.local_cli_api_contract import LocalCliApiError
+
+    service = object.__new__(LocalCliApiService)
+    assert service._optional_revision({}, "mcp_catalog_revision") is None
+    assert service._optional_revision({"mcp_catalog_revision": 3}, "mcp_catalog_revision") == 3
+    for invalid in (-1, True, "3", 3.0):
+        with pytest.raises(LocalCliApiError) as raised:
+            service._optional_revision({"mcp_catalog_revision": invalid}, "mcp_catalog_revision")
+        assert raised.value.code == "invalid_mcp_catalog_revision"
+
+
+def test_a_paged_mcp_read_migrates_an_older_store_before_the_native_read(tmp_path: Path):
+    """The resident reads only the current schema; it never migrates one.
+
+    Every paged read used to run the migration itself before touching these
+    tables. An install that has not opened Guard since the provider tables
+    landed still carries an older marker, so the migration has to happen on
+    this side of the round trip or each page fails as an unreadable store.
+    """
+
+    import sqlite3
+
+    from codex_plugin_scanner.guard.store_local_cli_schema import _V10_CHECKSUM, LOCAL_CLI_SCHEMA_VERSION
+
+    store, identity = _store(tmp_path)
+    _publish(store, identity, "read")
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("update local_cli_schema_migration set version = 10, checksum = ?", (_V10_CHECKSUM,))
+
+    skills = store.read_local_mcp_skills(identity.cli_id, offset=0, search="", expected_revision=None)
+    assert skills["entries"] == []
+    workflows = store.read_local_mcp_workflows(identity.cli_id)
+    assert isinstance(workflows, dict)
+
+    with store._connect() as connection:
+        version = connection.execute("select version from local_cli_schema_migration").fetchone()[0]
+    assert version == LOCAL_CLI_SCHEMA_VERSION

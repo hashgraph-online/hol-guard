@@ -235,3 +235,145 @@ fn recorded_download_parity() {
     std::fs::remove_dir(&directory).unwrap();
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
+
+fn response(status: u16, headers: &[(&str, &str)], body: &[u8]) -> Response {
+    Response {
+        status,
+        body: Cursor::new(body.to_vec()),
+        headers: headers
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect(),
+    }
+}
+
+fn transport(responses: Vec<Response>) -> Transport {
+    Transport {
+        responses: Mutex::new(responses.into()),
+        opened: Mutex::new(Vec::new()),
+    }
+}
+
+fn only_brotli(values: &[String]) -> Result<(), RestrictedDownloadError> {
+    if values.iter().all(|value| value == "br") {
+        Ok(())
+    } else {
+        Err(RestrictedDownloadError::new(
+            "content_coding_unsupported",
+            "unsupported",
+        ))
+    }
+}
+
+#[test]
+fn managed_content_keeps_the_raw_body_and_every_coding_value() {
+    let _test_lock = crate::restricted_archive::ARCHIVE_TEST_LOCK.lock().unwrap();
+    let directory =
+        std::env::temp_dir().join(format!("guard-content-raw-{}", hex::encode(rand_nonce())));
+    std::fs::create_dir(&directory).unwrap();
+    let raw = b"\x8b\x02\x80raw-brotli-bytes\x03";
+    let transport = transport(vec![
+        response(
+            302,
+            &[("Location", "/next"), ("Content-Encoding", "br")],
+            b"",
+        ),
+        response(
+            200,
+            &[("Content-Encoding", "br"), ("content-encoding", "br")],
+            raw,
+        ),
+    ]);
+    let (result, codings) = download_restricted_content(
+        "https://packages.example.com/start",
+        64,
+        2,
+        1.0,
+        Some(&directory),
+        &Resolver(vec!["8.8.8.8".into()]),
+        &transport,
+        &only_brotli,
+    );
+    let RestrictedArchiveDownloadResult::Success(download) = result else {
+        panic!("managed content fetch failed");
+    };
+    assert_eq!(std::fs::read(&download.path).unwrap(), raw);
+    assert_eq!(codings, ["br", "br"]);
+    assert_eq!(download.final_url, "https://packages.example.com/next");
+    download.cleanup();
+    std::fs::remove_dir(&directory).unwrap();
+}
+
+#[test]
+fn managed_content_refuses_a_bad_coding_on_any_hop_before_its_body() {
+    let _test_lock = crate::restricted_archive::ARCHIVE_TEST_LOCK.lock().unwrap();
+    // A redirect hop with an unsupported coding stops the fetch; the target
+    // is never opened.
+    let transport_a = transport(vec![
+        response(
+            302,
+            &[("Location", "/next"), ("Content-Encoding", "zstd")],
+            b"",
+        ),
+        response(200, &[], b"never"),
+    ]);
+    let (result, codings) = download_restricted_content(
+        "https://packages.example.com/start",
+        64,
+        2,
+        1.0,
+        None,
+        &Resolver(vec!["8.8.8.8".into()]),
+        &transport_a,
+        &only_brotli,
+    );
+    let RestrictedArchiveDownloadResult::Failure(failure) = result else {
+        panic!("unsupported redirect coding was followed");
+    };
+    assert_eq!(failure.code, "content_coding_unsupported");
+    assert!(codings.is_empty());
+    assert_eq!(transport_a.opened.lock().unwrap().len(), 1);
+    // A refused coding on the final hop fails the fetch before its body.
+    let transport_b = transport(vec![response(
+        200,
+        &[("Content-Encoding", "br"), ("Content-Encoding", "gzip")],
+        b"unread",
+    )]);
+    let (result, _) = download_restricted_content(
+        "https://packages.example.com/start",
+        64,
+        2,
+        1.0,
+        None,
+        &Resolver(vec!["8.8.8.8".into()]),
+        &transport_b,
+        &only_brotli,
+    );
+    assert!(
+        matches!(result, RestrictedArchiveDownloadResult::Failure(f) if f.code == "content_coding_unsupported")
+    );
+    assert_eq!(transport_b.opened.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn archive_downloads_still_refuse_any_content_coding() {
+    let _test_lock = crate::restricted_archive::ARCHIVE_TEST_LOCK.lock().unwrap();
+    let transport = transport(vec![response(200, &[("Content-Encoding", "br")], b"x")]);
+    let result = download_restricted_archive(
+        "https://packages.example.com/a.tgz",
+        64,
+        2,
+        1.0,
+        None,
+        &Resolver(vec!["8.8.8.8".into()]),
+        &transport,
+    );
+    assert!(matches!(result, RestrictedArchiveDownloadResult::Failure(f)
+        if f.code == "external_archive_content_encoding_rejected"));
+}
+
+fn rand_nonce() -> [u8; 16] {
+    let mut nonce = [0; 16];
+    getrandom::fill(&mut nonce).unwrap();
+    nonce
+}

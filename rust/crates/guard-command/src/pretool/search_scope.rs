@@ -5,46 +5,21 @@
 //! shows that no sensitive file is reachable. Contents are read only for a
 //! tracked, sensitive-named file (see `search_scope_tracked`); otherwise only
 //! ignore files are parsed. Any ambiguity falls back to normal review.
+//!
+//! This file resolves each host's search root and the ignore rules that apply
+//! to it; `search_scope_walk` owns the walk itself.
 
 use super::search_pattern_clearance::PatternClearance;
-use super::search_scope_filter::{Override, SearchFilter};
-use super::search_scope_ignore::{
-    holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
-    slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
+use super::search_scope_filter::SearchFilter;
+use super::search_scope_walk::{
+    include_scope_proven, walk_scope, walk_scope_cleared, walk_scope_with, Ignores,
 };
-use super::search_scope_tracked::TrackedFiles;
 use serde_json::{Map, Value};
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
-const MAX_SCOPE_ENTRIES: usize = 20_000;
-/// A names-only walk checks only entry metadata and links, never contents,
-/// so it may cover an ordinary mid-size repository in full.
-const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
 /// Links into the main checkout one names-only walk may follow and prove.
 const MAX_CHECKOUT_LINK_WALKS: usize = 8;
-
-/// Which ignore files a walk honors, matching the host that searches.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Ignores {
-    /// Every reachable entry counts.
-    None,
-    /// ripgrep: repository excludes, `.gitignore`, `.ignore` and `.rgignore`,
-    /// and `.git` itself is skipped.
-    Ripgrep,
-    /// Only `.gitignore` files at or below the search root, inside a
-    /// repository. Ancestor files, repository excludes and a global file rank
-    /// below them and can only hide more, so leaving them out keeps the
-    /// modeled scope at least as wide as the host's. A higher-ranked
-    /// `.ignore` or `.rgignore` could re-include a gitignored file, so any
-    /// such file in reach fails the proof.
-    Gitignore,
-}
-const MAX_SCOPE_DEPTH: usize = 64;
-const MAX_ANCESTORS: usize = 64;
-/// Nested repositories (such as linked worktrees) one walk may enter.
-const MAX_NESTED_REPOSITORIES: usize = 8;
 
 /// Keys Claude Code documents for `Grep`. Unknown keys could change scope.
 const CLAUDE_GREP_KEYS: &[&str] = &[
@@ -89,6 +64,44 @@ pub(super) fn claude_grep_directory_scope_proven(
         && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None).is_ok()
 }
 
+/// True when a Grok `Grep` directory search cannot reach a sensitive file.
+/// Grok's search includes hidden files and searches a gitignored file its
+/// `glob` matches, so neither the glob nor any ignore file narrows the walk:
+/// any sensitive file below the directory fails the proof unless the search
+/// pattern provably cannot match it. A single-file target returns false so
+/// the file-read proof decides.
+pub(super) fn grok_grep_directory_scope_proven(
+    payload: &Value,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some(input) = grep_input(payload, true) else {
+        return false;
+    };
+    let target = match input.get("path") {
+        None => ".",
+        Some(Value::String(path)) if !path.is_empty() => path.as_str(),
+        Some(_) => return false,
+    };
+    // A glob is matched below the searched folder; one spelled as an
+    // absolute path or climbing out of it is not modeled.
+    let contained = |glob: &str| {
+        !glob.starts_with(['/', '~', '\\'])
+            && glob.as_bytes().get(1) != Some(&b':')
+            && !glob.split(['/', '\\']).any(|part| part == "..")
+    };
+    // A plain pattern that no reachable sensitive file contains cannot print
+    // a line from one, so those files need not hold the search.
+    let clearance = input
+        .get("pattern")
+        .and_then(Value::as_str)
+        .and_then(PatternClearance::new);
+    input
+        .get("glob")
+        .is_none_or(|glob| glob.as_str().is_some_and(contained))
+        && content_search_scope_proven(target, home_dir, cwd, clearance.as_ref())
+}
+
 /// Shell `rg` with `-g` inclusions the name screen cannot clear, such as
 /// `*.md` or `README*`: true when below each directory root no sensitive
 /// file matches one of them. ripgrep searches such a file even when it is
@@ -108,7 +121,13 @@ pub(super) fn rg_glob_scope_proven(
     roots.iter().all(
         |target| match verified_directory_root(target, home_dir, cwd) {
             Some(root) => {
-                !super::read_paths::inside_agent_state_tree(&root, home_dir)
+                // ripgrep matches a path-shaped glob against the path from
+                // its match base, the working directory. Only a walk that
+                // starts there renders the same path, so a search target of
+                // its own leaves such a glob unmodeled.
+                (!filter.is_path_shaped()
+                    || working_directory_root(home_dir, cwd).as_deref() == Some(root.as_path()))
+                    && !super::read_paths::inside_agent_state_tree(&root, home_dir)
                     && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None)
                         .is_ok()
             }
@@ -118,6 +137,136 @@ pub(super) fn rg_glob_scope_proven(
             }),
         },
     )
+}
+
+/// Shell `grep` with `--include` globs the name screen cannot clear, such as
+/// `*.md` or `*.rs`: true when below each directory root no sensitive file
+/// matches one of them.
+///
+/// An include narrows what `grep` opens and can never widen it: `grep` reads
+/// no ignore file and walks hidden entries already, so there is nothing for a
+/// glob to re-include. The walk therefore counts every reachable entry.
+///
+/// A glob holding a separator is left unproven. `grep` matches such a glob
+/// against the whole name it reached the file by, which depends on how the
+/// operand was spelled, and this walk renders no such path.
+pub(super) fn grep_include_scope_proven(
+    roots: &[&str],
+    globs: &[&str],
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    roots.iter().all(
+        |target| match verified_directory_root(target, home_dir, cwd) {
+            Some(root) => include_filter(globs, target)
+                .is_some_and(|filter| directory_include_proven(&root, &filter, home_dir)),
+            // A root that is a regular file was screened as a path already,
+            // and an include can only keep `grep` from opening it.
+            None => cwd.is_some_and(|cwd| {
+                std::fs::symlink_metadata(Path::new(cwd).join(target))
+                    .is_ok_and(|metadata| metadata.is_file())
+            }),
+        },
+    )
+}
+
+/// True when the files `globs` select below `root` hold nothing sensitive.
+///
+/// The recursive walk reads whatever it reaches, so a secret anywhere below
+/// the root refuses it. With an include the search opens only the files the
+/// globs name, and this proof walks the tree under exactly that filter: a
+/// directory is still descended, but a file no glob selects is not read and
+/// so cannot be printed. The root must be a directory, because the caller
+/// asks this only for a recursive operand.
+///
+/// Every other reading of the same search answers first and walks the tree to
+/// do it, so this one walks under the smaller include budget: a tree too
+/// large for it stays unproven and the search keeps the answer those readings
+/// reached.
+pub(super) fn grep_include_walk_proven(
+    root: &str,
+    globs: &[&str],
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some(filter) = include_filter(globs, root) else {
+        return false;
+    };
+    verified_directory_root(root, home_dir, cwd).is_some_and(|directory| {
+        !super::read_paths::inside_agent_state_tree(&directory, home_dir)
+            && include_scope_proven(&directory, globs, &filter, home_dir)
+    })
+}
+
+/// The walk filter for a grep include, or nothing when the globs reach past
+/// what it models. A separator makes the glob match against a base this walk
+/// does not model, and the implementations differ on what it is.
+///
+/// Braces are refused because the filter below expands them the way ripgrep
+/// does, while both greps match the glob through `fnmatch`, which carries no
+/// brace expansion and reads `{` and `}` as the bytes they are. The expansion
+/// would stand for a set of names the search never selects, and miss the one
+/// name -- the literal spelling -- that it does.
+fn include_filter(globs: &[&str], operand: &str) -> Option<SearchFilter> {
+    if globs.iter().any(|glob| {
+        glob.contains(['/', '\\', '{', '}'])
+            || !(matches_only_a_name(glob) || misses_every_rendered_path(glob, operand))
+    }) {
+        return None;
+    }
+    SearchFilter::from_rg_inclusions(globs)
+}
+
+/// Whether a `--include` glob selects the same files under both `grep`
+/// implementations this walk has to answer for.
+///
+/// GNU grep matches the glob against an entry's name. BSD grep, which is the
+/// `grep` macOS ships, matches the name and the whole path it reached the
+/// file by, through an `fnmatch` without `FNM_PATHNAME`: a wildcard crosses a
+/// separator there, so `--include 'deploy*'` over a `deploy` directory
+/// selects `deploy/secrets/id_rsa`, which no name match selects. This walk
+/// renders names, not the path the operand spelled.
+///
+/// Two shapes answer alike under both. A literal name matches no path that
+/// holds a separator, and `*` followed by a literal matches a path only when
+/// its last component matches too, because the literal carries no separator
+/// of its own. Every other wildcard placement needs
+/// [`misses_every_rendered_path`] to rule the path match out.
+fn matches_only_a_name(glob: &str) -> bool {
+    !glob.strip_prefix('*').unwrap_or(glob).contains('*')
+}
+
+/// Whether `glob` can match none of the paths `grep` renders below `operand`.
+///
+/// Every such path starts with the operand as the command spelled it and a
+/// separator. A glob that carries no separator of its own and whose literal
+/// head disagrees with that prefix matches no path, however its wildcards
+/// fall, so only the name match is left and both greps answer alike. This is
+/// what keeps `--include 'README*' docs` and `--include '.env.*' tests`
+/// readable while `--include 'deploy*' deploy`, where the head does agree,
+/// stays unmodeled.
+fn misses_every_rendered_path(glob: &str, operand: &str) -> bool {
+    let prefix = format!("{}/", operand.trim_end_matches('/'));
+    let mut rendered = prefix.chars();
+    for character in glob.chars() {
+        if matches!(character, '*' | '?' | '[') {
+            return false;
+        }
+        match rendered.next() {
+            Some(expected) if expected == character => {}
+            // The literal head leaves the prefix behind, so no path below
+            // this operand begins the way the glob demands.
+            _ => return true,
+        }
+    }
+    // The glob ran out inside the prefix: every rendered path is longer than
+    // what it can match.
+    true
+}
+
+fn directory_include_proven(root: &Path, filter: &SearchFilter, home_dir: Option<&str>) -> bool {
+    !super::read_paths::inside_agent_state_tree(root, home_dir)
+        && walk_scope(root, filter, Ignores::None, false, home_dir, &mut None).is_ok()
 }
 
 /// True when a Claude `Glob` returns only names under a verified directory
@@ -171,15 +320,20 @@ pub(super) fn claude_glob_scope_proven(
 /// trees (`~/.agent/skills`, `~/.agent/artifacts`) the per-file rules that
 /// deny direct reads do not apply to a directory walk, so the walk must reach
 /// only documents a direct read would allow.
+///
+/// A plain-text `clearance` pattern lets the search through when every
+/// sensitive file in reach is one the pattern cannot match: the host prints
+/// only matching lines, so such a file adds nothing to its output.
 pub(super) fn content_search_scope_proven(
     target: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
+    clearance: Option<&PatternClearance>,
 ) -> bool {
     unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
         (!super::read_paths::inside_agent_state_tree(&root, home_dir)
             || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
-            && unfiltered_walk_proven(&root, home_dir)
+            && unfiltered_walk_cleared(&root, clearance, home_dir)
     })
 }
 
@@ -376,19 +530,51 @@ fn unfiltered_directory_root(
         .filter(|root| root.is_dir())
 }
 
+/// Whether Grok's camel-case copies of the tool name and input, where both
+/// spellings are sent, repeat the snake-case values, and the host did not cut
+/// the input short. A copy that differs from the value a proof reads could be
+/// the one the host acts on.
+pub(super) fn mirrored_input_matches(root: &Map<String, Value>) -> bool {
+    let differs = |copy: &str, original: &str| {
+        root.get(copy)
+            .zip(root.get(original))
+            .is_some_and(|(copy, original)| copy != original)
+    };
+    !differs("toolInput", "tool_input")
+        && !differs("toolName", "tool_name")
+        && root
+            .get("toolInputTruncated")
+            .is_none_or(|truncated| truncated == &Value::Bool(false))
+}
+
 fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
+    grep_input(payload, false)
+}
+
+/// The `Grep` input, with Claude's keys. Grok also sends camel-case copies of
+/// the tool name and input; `mirrored` accepts those only when they repeat
+/// the snake-case values and the input was not truncated.
+fn grep_input(payload: &Value, mirrored: bool) -> Option<&Map<String, Value>> {
     let root = payload.as_object()?;
     if root.get("tool_name").and_then(Value::as_str) != Some("Grep") {
         return None;
     }
+    let input = root.get("tool_input")?.as_object()?;
+    let unmatched_copy = if mirrored {
+        !mirrored_input_matches(root)
+    } else {
+        root.contains_key("toolInput")
+    };
+    if unmatched_copy {
+        return None;
+    }
     // Alternate spellings could carry a second, conflicting input.
-    if ["toolInput", "tool_args", "arguments", "input", "parameters"]
+    if ["tool_args", "arguments", "input", "parameters"]
         .iter()
         .any(|key| root.contains_key(*key))
     {
         return None;
     }
-    let input = root.get("tool_input")?.as_object()?;
     if input
         .keys()
         .any(|key| !CLAUDE_GREP_KEYS.contains(&key.as_str()))
@@ -437,307 +623,9 @@ fn verified_directory_root(
     canonical.is_dir().then_some(canonical)
 }
 
-/// Locate the enclosing repository so its `.gitignore` files apply, as
-/// ripgrep honors them only inside a Git repository.
-fn repository_root(root: &Path) -> Option<PathBuf> {
-    root.ancestors()
-        .take(MAX_ANCESTORS)
-        .find(|directory| std::fs::symlink_metadata(directory.join(".git")).is_ok())
-        .map(Path::to_path_buf)
-}
-
-/// `.ignore` and `.rgignore` rules from every ancestor above the search
-/// root, outermost first. ripgrep reads these with or without a repository.
-fn ancestor_custom_rules(root: &Path, tiers: &mut IgnoreTiers) -> Result<(), ScopeUnproven> {
-    let ancestors: Vec<&Path> = root.ancestors().skip(1).take(MAX_ANCESTORS).collect();
-    if root.ancestors().skip(1).nth(MAX_ANCESTORS).is_some() {
-        return Err(ScopeUnproven);
-    }
-    for directory in ancestors.into_iter().rev() {
-        load_custom_rules(directory, tiers)?;
-    }
-    Ok(())
-}
-
-/// Repository exclude rules and `.gitignore` files from the repository root
-/// down to the search root's parent.
-fn ancestor_git_rules(root: &Path, repository: &Path) -> Result<Vec<IgnoreRule>, ScopeUnproven> {
-    let mut rules = Vec::new();
-    let git_directory = repository.join(".git");
-    if std::fs::symlink_metadata(&git_directory).is_ok_and(|metadata| metadata.is_dir()) {
-        let base = slash_path(repository).ok_or(ScopeUnproven)?;
-        load_ignore_file(
-            &git_directory.join("info").join("exclude"),
-            &base,
-            &mut rules,
-        )?;
-    }
-    let mut chain: Vec<&Path> = root
-        .ancestors()
-        .skip(1)
-        .take_while(|directory| directory.starts_with(repository))
-        .collect();
-    chain.reverse();
-    for directory in chain {
-        let base = slash_path(directory).ok_or(ScopeUnproven)?;
-        load_ignore_file(&directory.join(".gitignore"), &base, &mut rules)?;
-    }
-    Ok(rules)
-}
-
-/// Whether a name the walk reaches marks credential material.
-///
-/// A repository keeps its sign-in and token code in `src/lib/auth`,
-/// `app/api/auth` or `packages/token`, which the credential-path screen reads
-/// as a store. A direct read of a document in one is already admitted as the
-/// feature code it is, so a search that reaches the same file is held for
-/// nothing: every checkout with a sign-in feature loses `grep` over its own
-/// tree. The exemption is the read path's own, with its repository root and
-/// its refusal to exempt anything below a home directory that is itself a
-/// work tree, so the walk admits exactly what a read of that file would. It
-/// relaxes the credential-name screen alone; the sensitive-family screen
-/// still runs on every name.
-fn sensitive_scope_file(path: &Path, home: Option<&str>) -> bool {
-    guard_secure_fs::sensitive_path_family(path).is_some()
-        || (guard_secure_fs::credential_named_path(path)
-            && !super::read_paths::feature_directories::feature_only_credential_name(path, home))
-}
-
-/// Whether a link out of the walked root can only ever contribute its own
-/// name to a names-only listing.
-///
-/// A listing names paths it reaches, so a link to a directory is what lets one
-/// out: walking it would spell out entries that live outside the root. A link
-/// whose target is a regular file reaches no entries at all, so the only name
-/// it can produce is the link's own, which is inside the root already. Every
-/// Python project has one: `.venv/bin/python` points at the base interpreter,
-/// and refusing it would review a recursive listing in any such checkout.
-///
-/// The target's own name is still held to the sensitive screens, so a link
-/// that stands in for a credential file keeps the review.
-fn single_outside_name(path: &Path, target: Option<&Path>, home: Option<&str>) -> bool {
-    target.is_some_and(|target| {
-        target.is_file() && !sensitive_scope_file(path, home) && !sensitive_scope_file(target, home)
-    })
-}
-
-struct PendingDirectory {
-    path: PathBuf,
-    depth: usize,
-    tiers: Rc<IgnoreTiers>,
-}
-
-/// Walks the modeled search scope. With `names`, the walk models a names-only
-/// listing: sensitive names are fine, but every link it walks must resolve
-/// inside `root`. When a sensitive file fails the proof, `blocker` names it.
-fn walk_scope(
-    root: &Path,
-    filter: &SearchFilter,
-    ignores: Ignores,
-    names: bool,
-    home: Option<&str>,
-    blocker: &mut Option<PathBuf>,
-) -> Result<(), ScopeUnproven> {
-    walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
-}
-
-/// A content walk where a sensitive file `clearance` proves the pattern
-/// cannot match is not a blocker.
-fn walk_scope_cleared(
-    root: &Path,
-    filter: &SearchFilter,
-    ignores: Ignores,
-    clearance: Option<&PatternClearance>,
-    home: Option<&str>,
-    blocker: &mut Option<PathBuf>,
-) -> Result<(), ScopeUnproven> {
-    walk_scope_inner(
-        root,
-        filter,
-        ignores,
-        false,
-        &|_| false,
-        clearance,
-        home,
-        blocker,
-    )
-}
-
-/// [`walk_scope`], where a names-only walk also accepts a link out of `root`
-/// whose canonical target `outside_link` proves.
-fn walk_scope_with(
-    root: &Path,
-    filter: &SearchFilter,
-    ignores: Ignores,
-    names: bool,
-    outside_link: &dyn Fn(&Path) -> bool,
-    home: Option<&str>,
-    blocker: &mut Option<PathBuf>,
-) -> Result<(), ScopeUnproven> {
-    walk_scope_inner(
-        root,
-        filter,
-        ignores,
-        names,
-        outside_link,
-        None,
-        home,
-        blocker,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn walk_scope_inner(
-    root: &Path,
-    filter: &SearchFilter,
-    ignores: Ignores,
-    names: bool,
-    outside_link: &dyn Fn(&Path) -> bool,
-    clearance: Option<&PatternClearance>,
-    home: Option<&str>,
-    blocker: &mut Option<PathBuf>,
-) -> Result<(), ScopeUnproven> {
-    let repository = repository_root(root).filter(|_| ignores != Ignores::None);
-    let mut tiers = IgnoreTiers::default();
-    if ignores == Ignores::Ripgrep {
-        if let Some(repository) = &repository {
-            tiers.git = ancestor_git_rules(root, repository)?;
-        }
-        ancestor_custom_rules(root, &mut tiers)?;
-    }
-    if ignores == Ignores::Gitignore
-        && root
-            .ancestors()
-            .take(MAX_ANCESTORS)
-            .any(holds_custom_ignore_file)
-    {
-        return Err(ScopeUnproven);
-    }
-    let mut pending = vec![PendingDirectory {
-        path: root.to_path_buf(),
-        depth: 0,
-        tiers: Rc::new(tiers),
-    }];
-    let mut inspected = 0_usize;
-    let mut tracked = TrackedFiles::default();
-    let mut nested_repositories = 0_usize;
-    let mut entry_limit = if names {
-        MAX_NAME_SCOPE_ENTRIES
-    } else {
-        MAX_SCOPE_ENTRIES
-    };
-    while let Some(directory) = pending.pop() {
-        if directory.depth > MAX_SCOPE_DEPTH {
-            return Err(ScopeUnproven);
-        }
-        let base = slash_path(&directory.path).ok_or(ScopeUnproven)?;
-        let mut tiers = (*directory.tiers).clone();
-        if repository.is_some() {
-            // A nested repository may not inherit outer git rules. Dropping
-            // them can only widen the modeled scope.
-            if directory.depth > 0 && std::fs::symlink_metadata(directory.path.join(".git")).is_ok()
-            {
-                tiers.git.clear();
-                // The host walks a nested checkout too, so it stays in the
-                // proof; each one brings its own entry budget, a few at most.
-                nested_repositories += 1;
-                if nested_repositories > MAX_NESTED_REPOSITORIES {
-                    return Err(ScopeUnproven);
-                }
-                entry_limit += if names {
-                    MAX_NAME_SCOPE_ENTRIES
-                } else {
-                    MAX_SCOPE_ENTRIES
-                };
-            }
-            load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
-        }
-        if ignores == Ignores::Gitignore && holds_custom_ignore_file(&directory.path) {
-            return Err(ScopeUnproven);
-        }
-        if ignores == Ignores::Ripgrep {
-            load_custom_rules(&directory.path, &mut tiers)?;
-        }
-        let tiers = Rc::new(tiers);
-        let entries = std::fs::read_dir(&directory.path).map_err(|_| ScopeUnproven)?;
-        for entry in entries {
-            let entry = entry.map_err(|_| ScopeUnproven)?;
-            inspected += 1;
-            if inspected > entry_limit {
-                return Err(ScopeUnproven);
-            }
-            let path = entry.path();
-            let name = entry.file_name();
-            let name = name.to_str().ok_or(ScopeUnproven)?;
-            // Metadata only: never follow links or open a candidate secret.
-            let metadata = std::fs::symlink_metadata(&path).map_err(|_| ScopeUnproven)?;
-            // Ripgrep's walk skips .git, a names walk all but a link; a content walk inspects it.
-            if name == ".git" && (ignores == Ignores::Ripgrep || (names && !metadata.is_symlink()))
-            {
-                continue;
-            }
-            if metadata.file_type().is_symlink() {
-                // Claude's Grep does not follow links. Still refuse a link
-                // whose name or file target is sensitive, in case it would.
-                let target = std::fs::canonicalize(&path).ok();
-                let escapes = !target.as_deref().is_some_and(|t| t.starts_with(root));
-                if names {
-                    // A link the ignore rules skip is never walked.
-                    let skipped =
-                        ignores != Ignores::None && link_ignored(&tiers, &path, target.as_deref())?;
-                    if escapes
-                        && !skipped
-                        && !single_outside_name(&path, target.as_deref(), home)
-                        && !target.as_deref().is_some_and(outside_link)
-                    {
-                        return Err(ScopeUnproven);
-                    }
-                } else if sensitive_scope_file(&path, home)
-                    || target.as_deref().is_some_and(|target| {
-                        target.is_file() && sensitive_scope_file(target, home)
-                    })
-                {
-                    return Err(ScopeUnproven);
-                }
-                continue;
-            }
-            let is_directory = metadata.is_dir();
-            if !is_directory && !metadata.is_file() {
-                // A socket or pipe has no names to list and no text to search.
-                if names {
-                    continue;
-                }
-                return Err(ScopeUnproven);
-            }
-            let searched = match filter.override_for(name, is_directory) {
-                Override::Skipped => continue,
-                Override::Searched => true,
-                Override::Undecided => {
-                    let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
-                    if ignores != Ignores::None && is_ignored(&tiers, &rendered, is_directory)? {
-                        continue;
-                    }
-                    is_directory || filter.type_allows(name)
-                }
-            };
-            if is_directory {
-                pending.push(PendingDirectory {
-                    path,
-                    depth: directory.depth + 1,
-                    tiers: Rc::clone(&tiers),
-                });
-            } else if searched
-                && !names
-                && sensitive_scope_file(&path, home)
-                && !tracked.non_secret(&path)
-                && !clearance.is_some_and(|clearance| clearance.clears(&path))
-            {
-                *blocker = Some(path);
-                return Err(ScopeUnproven);
-            }
-        }
-    }
-    Ok(())
+/// The directory ripgrep matches a path-shaped glob against.
+fn working_directory_root(home_dir: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
+    verified_directory_root(".", home_dir, cwd)
 }
 
 #[cfg(test)]

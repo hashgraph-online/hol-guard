@@ -18,6 +18,16 @@ fn parsed(text: &str) -> PyVal {
     parse_mapping_lone_surrogates(text).unwrap().value
 }
 
+/// A host whose runtime runs no sink itself.
+fn no_native(
+    _: &serde_json::Value,
+    _: &serde_json::Map<String, serde_json::Value>,
+    _: &str,
+    _: &str,
+) -> Option<String> {
+    None
+}
+
 fn fallback() -> Vec<String> {
     [
         PYTHON,
@@ -206,6 +216,7 @@ fn a_contained_call_is_rewritten_to_run_the_sink() {
         prefix: &installed,
         guard_home: "/g",
         home: "/h",
+        native: no_native,
     };
     let routed = routed(&parsed(WORKSPACE_DENY), &payload, false, &target).unwrap();
     assert_eq!(text(&routed, "policy_action"), Some("allow"));
@@ -239,6 +250,71 @@ fn a_contained_call_is_rewritten_to_run_the_sink() {
     );
 }
 
+/// A runtime that runs the sink for a workspace sandbox answered for a
+/// call carrying its own tool input.
+fn runtime_sink(
+    answer: &serde_json::Value,
+    original: &serde_json::Map<String, serde_json::Value>,
+    workspace: &str,
+    _home: &str,
+) -> Option<String> {
+    (answer["reason_code"] == "native_workspace_containment_required"
+        && answer["required_execution_profile"] == "workspace-contained-v1"
+        && original.contains_key("timeout")
+        && Path::new(workspace).is_absolute())
+    .then(|| "/opt/hol guard/runtime".to_owned())
+}
+
+#[test]
+fn a_call_the_runtime_reproduces_runs_its_own_sink() {
+    let workspace = tempfile::tempdir().unwrap();
+    let resolved = std::fs::canonicalize(workspace.path()).unwrap();
+    let resolved = resolved.to_str().unwrap();
+    let installed = fallback();
+    let target = Target {
+        prefix: &installed,
+        guard_home: "/g",
+        home: "/h",
+        native: runtime_sink,
+    };
+    let call = |command: &str| {
+        let payload = parsed(&format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"{command}","timeout":5}},"cwd":"{}","session_id":"s1","tool_use_id":"t1"}}"#,
+            workspace.path().display()
+        ));
+        let routed = routed(&parsed(WORKSPACE_DENY), &payload, false, &target).unwrap();
+        let output = routed.get("hookSpecificOutput").unwrap();
+        let updated = output.get("updatedInput").unwrap();
+        text(updated, "command").unwrap().to_owned()
+    };
+    let command = call("make test");
+    let (request, _) = take_request(&command);
+    let digest = hex::encode(Sha256::digest(&request));
+    let snapshot: serde_json::Value = serde_json::from_slice(&request).unwrap();
+    assert_eq!(snapshot["payload"]["tool_input"]["command"], "make test");
+    assert!(
+        command.starts_with(&format!(
+            "'/opt/hol guard/runtime' contained-workspace-sink --harness codex --guard-home /g --workspace {resolved} --request-file "
+        )),
+        "{command}"
+    );
+    assert!(
+        command.ends_with(&format!("--request-sha256 {digest} --home /h")),
+        "{command}"
+    );
+    // The verdict for a group was answered for the list inside it. The
+    // snapshot keeps the text Codex sent and the native sink projects it
+    // again before it plans the call.
+    let command = call("(make test)");
+    let (request, _) = take_request(&command);
+    let snapshot: serde_json::Value = serde_json::from_slice(&request).unwrap();
+    assert_eq!(snapshot["payload"]["tool_input"]["command"], "(make test)");
+    assert!(
+        command.starts_with("'/opt/hol guard/runtime' contained-workspace-sink --harness codex "),
+        "{command}"
+    );
+}
+
 #[test]
 fn calls_the_sink_cannot_run_keep_the_denial() {
     let workspace = tempfile::tempdir().unwrap();
@@ -248,6 +324,7 @@ fn calls_the_sink_cannot_run_keep_the_denial() {
         prefix: &installed,
         guard_home: "/g",
         home: "/h",
+        native: no_native,
     };
     let deny = parsed(WORKSPACE_DENY);
     for payload in [
@@ -289,10 +366,29 @@ fn calls_the_sink_cannot_run_keep_the_denial() {
             "{response}"
         );
     }
+    // The sink reads strict JSON, so a lone surrogate or a non-finite
+    // number in the call keeps the denial.
+    for payload in [
+        format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"x\udc80"}},"cwd":"{cwd}"}}"#
+        ),
+        format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"x","timeout":NaN}},"cwd":"{cwd}"}}"#
+        ),
+    ] {
+        let read = parse_mapping_lone_surrogates(&payload).unwrap();
+        assert!(read.mapped || !payload.contains("udc80"), "{payload}");
+        assert_eq!(
+            routed(&deny, &read.value, read.mapped, &target),
+            None,
+            "{payload}"
+        );
+    }
     let bare = Target {
         prefix: &installed[..4],
         guard_home: "/g",
         home: "/h",
+        native: no_native,
     };
     assert_eq!(routed(&deny, &payload, false, &bare), None);
 }

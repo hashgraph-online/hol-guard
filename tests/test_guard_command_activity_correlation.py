@@ -1,25 +1,19 @@
-# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
-import json
 import os
 import stat
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
-    COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION,
     derive_proven_request_correlation,
     load_existing_installation_correlation_key,
-    load_or_create_installation_correlation_key,
-    rotate_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime.command_activity_privacy import InstallationCorrelationKey
+from tests.command_activity_correlation_key_support import write_correlation_key
+from tests.cursor_hook_payload_support import prepare_cursor_hook_payload
 
 _STRONG_ID = "01J3ABCD9XYZ7NATIVEID"
 
@@ -28,7 +22,7 @@ def test_existing_key_read_is_private_bounded_and_does_not_create_or_repair(tmp_
     guard = tmp_path / "guard"
     assert load_existing_installation_correlation_key(guard) is None
     assert not guard.exists()
-    key = load_or_create_installation_correlation_key(guard)
+    key = write_correlation_key(guard)
     path = guard / COMMAND_ACTIVITY_CORRELATION_KEY_FILE
     before = path.stat()
     loaded = load_existing_installation_correlation_key(guard)
@@ -46,64 +40,6 @@ def test_existing_key_read_is_private_bounded_and_does_not_create_or_repair(tmp_
 
 def _fixed_key() -> InstallationCorrelationKey:
     return InstallationCorrelationKey(key_id="correlation.v1.test", material=b"k" * 32)
-
-
-def test_key_is_private_versioned_and_reused_deterministically(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard"
-    first = load_or_create_installation_correlation_key(guard_home)
-    second = load_or_create_installation_correlation_key(guard_home)
-    key_path = guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE
-    raw_payload = cast(object, json.loads(key_path.read_text(encoding="ascii")))
-    assert isinstance(raw_payload, dict)
-    payload = cast(dict[object, object], raw_payload)
-
-    assert first.key_id == second.key_id
-    assert first.derive(b"probe") == second.derive(b"probe")
-    assert first.key_id.startswith("correlation.v1.")
-    assert payload["schema_version"] == COMMAND_ACTIVITY_CORRELATION_KEY_SCHEMA_VERSION
-    assert payload["key_id"] == first.key_id
-    if os.name != "nt":
-        assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
-
-
-def test_existing_key_permissions_are_repaired(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard"
-    original = load_or_create_installation_correlation_key(guard_home)
-    key_path = guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE
-    if os.name == "nt":
-        pytest.skip("POSIX permission modes are not available")
-    key_path.chmod(0o644)
-
-    loaded = load_or_create_installation_correlation_key(guard_home)
-
-    assert loaded.key_id == original.key_id
-    assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
-
-
-def test_rotation_atomically_changes_key_identity(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard"
-    original = load_or_create_installation_correlation_key(guard_home)
-
-    rotated = rotate_installation_correlation_key(guard_home)
-    loaded = load_or_create_installation_correlation_key(guard_home)
-
-    assert rotated.key_id == loaded.key_id
-    assert rotated.key_id != original.key_id
-    assert rotated.derive(b"probe") != original.derive(b"probe")
-
-
-def test_concurrent_creation_converges_on_one_key(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard"
-
-    def load_key(_: int) -> InstallationCorrelationKey:
-        return load_or_create_installation_correlation_key(guard_home)
-
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        keys = list(executor.map(load_key, range(48)))
-
-    assert len({key.key_id for key in keys}) == 1
-    assert len({key.derive(b"probe") for key in keys}) == 1
-    assert not list(guard_home.glob(f".{COMMAND_ACTIVITY_CORRELATION_KEY_FILE}.*"))
 
 
 @pytest.mark.parametrize(
@@ -265,8 +201,11 @@ def test_invalid_key_file_is_not_silently_replaced(tmp_path: Path) -> None:
     key_path = guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE
     _ = key_path.write_text("{}", encoding="ascii")
 
+    if os.name != "nt":
+        guard_home.chmod(0o700)
+        key_path.chmod(0o600)
     with pytest.raises(ValueError, match="key file shape"):
-        _ = load_or_create_installation_correlation_key(guard_home)
+        _ = load_existing_installation_correlation_key(guard_home)
 
 
 def test_key_file_symlink_is_rejected(tmp_path: Path) -> None:
@@ -278,5 +217,4 @@ def test_key_file_symlink_is_rejected(tmp_path: Path) -> None:
     _ = target.write_text("secret", encoding="ascii")
     (guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE).symlink_to(target)
 
-    with pytest.raises(ValueError, match="regular file"):
-        _ = load_or_create_installation_correlation_key(guard_home)
+    assert load_existing_installation_correlation_key(guard_home) is None

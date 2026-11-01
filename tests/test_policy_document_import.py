@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.policy_document_io import (
     compile_policy_document,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_store_support import replace_remote_policies
 
 
 def _document(*, document_id: str = "policy-doc", rule_ids: tuple[str, ...] = ("rule-1",)) -> GuardPolicyDocument:
@@ -278,7 +279,8 @@ def test_replace_removes_only_prior_yaml_imports(tmp_path: Path) -> None:
 
 def test_merge_preserves_cloud_policy_with_the_same_selector(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard")
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",

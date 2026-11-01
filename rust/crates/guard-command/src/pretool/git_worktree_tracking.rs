@@ -6,7 +6,6 @@
 //! checks out a branch it has fetched but never checked out, so the proof
 //! follows Git to that ref instead of reviewing the command.
 
-use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
@@ -38,7 +37,9 @@ pub(super) fn resolve(
     common_dir: &Path,
     deadline: Instant,
 ) -> Option<Tracking> {
-    if !super::super::worktree_add::valid_branch_name(name) || !legacy_remotes_absent(common_dir)? {
+    if !super::super::worktree_add::valid_branch_name(name)
+        || !super::super::git_remote_config::legacy_remotes_absent(common_dir)?
+    {
         return Some(Tracking::Unproven);
     }
     let mut remotes: Vec<&str> = Vec::new();
@@ -78,23 +79,6 @@ fn standard_refspec(remote: &str, refspec: &str) -> bool {
         && super::super::worktree_add::valid_branch_name(remote)
         && refspec.strip_prefix('+').unwrap_or(refspec)
             == format!("refs/heads/*:refs/remotes/{remote}/*")
-}
-
-/// Remotes can also be files under `remotes/` or `branches/` in the common
-/// directory, which the config listing does not show.
-fn legacy_remotes_absent(common_dir: &Path) -> Option<bool> {
-    for directory in ["remotes", "branches"] {
-        match fs::read_dir(common_dir.join(directory)) {
-            Ok(mut entries) => {
-                if entries.next().is_some() {
-                    return Some(false);
-                }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return None,
-        }
-    }
-    Some(true)
 }
 
 #[cfg(test)]

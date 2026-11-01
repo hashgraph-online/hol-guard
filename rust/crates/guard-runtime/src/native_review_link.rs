@@ -1,11 +1,13 @@
 //! The approval link a reviewed `PreToolUse` answer carries.
 //!
-//! Mirrors `native_review_reason` (`approval_link_output.py`) and the signed
-//! dashboard session it attaches (`local_dashboard_session.py`): a loopback
-//! approval link gets a `#guard-token=` fragment holding an HMAC-SHA256
-//! session token keyed by the daemon auth token, so the browser opens signed
-//! in. Every function answers `None` for a link shape it does not reproduce
-//! byte for byte; the caller then leaves the answer to the daemon.
+//! Owns the review reason's approval link, signed with the dashboard session
+//! `local_dashboard_session.py` also issues: a loopback approval link gets a
+//! `#guard-token=` fragment holding an HMAC-SHA256 session token keyed by the
+//! daemon auth token, so the browser opens signed in. The vectors under
+//! `testdata/native_review_link` were recorded from the daemon's retired
+//! implementation and stay frozen. Every function answers `None` for a link
+//! shape it does not reproduce byte for byte; the caller then leaves the
+//! reason unlinked.
 
 use base64ct::{Base64UrlUnpadded, Encoding};
 use hmac::{Hmac, Mac};
@@ -25,8 +27,20 @@ pub(crate) const OPEN_GUARD: &str = "Open HOL Guard to approve or keep this bloc
 pub(crate) const SIGNED_LINK_UNAVAILABLE: &str =
     "HOL Guard could not create a signed approval link; open Inbox from Guard on this device, then retry.";
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
-/// `auth_token_path(guard_home)` (`daemon/auth_token.py`).
-const AUTH_TOKEN_FILE: &str = "daemon-auth-token";
+
+/// `canonical_harness` (`hook_fail_closed.py`).
+pub(crate) fn canonical_harness(harness: &str) -> String {
+    py_strip(harness).to_lowercase().replace('_', "-")
+}
+
+/// UTC microseconds since the epoch, the clock a session token is signed at.
+pub(crate) fn now_micros() -> Option<i64> {
+    let micros = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_micros();
+    i64::try_from(micros).ok()
+}
 
 /// `build_local_dashboard_session_token(auth_token=..., surface=...)` at
 /// `now_micros` (UTC microseconds since the epoch).
@@ -143,8 +157,8 @@ fn colon_before_period(text: &str) -> String {
     out
 }
 
-/// `_without_raw_approval_url(message, review_url)`.
-fn without_raw_url(message: &str, review_url: &str) -> String {
+/// The message with the raw review URL and its dangling separators removed.
+pub(crate) fn without_raw_url(message: &str, review_url: &str) -> String {
     let removed = message.replace(review_url, "");
     let joined = colon_before_period(py_strip(&removed));
     let mut trimmed = joined.trim_end_matches(py_space).to_owned();
@@ -155,14 +169,18 @@ fn without_raw_url(message: &str, review_url: &str) -> String {
     trimmed.trim_end_matches([' ', ':', ';', ',']).to_owned()
 }
 
-/// `with_approval_review_url(reason, {"approval_url": url}, guard_home=...)`
-/// where `auth_token` is what `load_guard_daemon_auth_token` read.
+/// The reason with the review URL linked, signed for a loopback link when
+/// `auth_token` holds the daemon auth token.
 fn with_review_url(
     stripped: &str,
     link: &ApprovalLink<'_>,
     auth_token: Option<&str>,
     now_micros: i64,
 ) -> Option<String> {
+    // A default-mode connector setup reason never carries a link.
+    if crate::blocked_request_mode::is_unlinked_connector_setup_reason(stripped) {
+        return Some(stripped.to_owned());
+    }
     let review_url = link.url;
     let live_url = match auth_token {
         Some(token) if link.loopback => {
@@ -177,22 +195,6 @@ fn with_review_url(
         return Some(stripped.to_owned());
     }
     Some(format!("{stripped} {OPEN_GUARD} {live_url}."))
-}
-
-/// Whether `live_approval_review_url(url, guard_home=...)`
-/// (`approval_hook_copy.py`) hands `url` back unchanged, whether or not the
-/// caller can import Guard: `guard_home` holds no daemon auth token file, so
-/// none is ever loaded, or `url` is a link this module reproduces whose host
-/// `is_loopback_approval_url` rejects. A token file that exists counts as a
-/// token, however it reads.
-pub(crate) fn review_url_stays_unsigned(url: &str, guard_home: &std::path::Path) -> bool {
-    if approval_link(url).is_some_and(|link| !link.loopback) {
-        return true;
-    }
-    matches!(
-        guard_home.join(AUTH_TOKEN_FILE).symlink_metadata(),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound
-    )
 }
 
 /// Whether `is_loopback_approval_url` may accept `url`: `urlparse`'s

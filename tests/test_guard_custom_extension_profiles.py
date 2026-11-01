@@ -27,7 +27,6 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
     default_local_cli_commands,
     is_local_cli_command_id,
-    match_command_id,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     UnlistedCliIdentity,
@@ -35,6 +34,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     is_local_cli_id,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_command_id_client import match_command_id
 
 
 @pytest.mark.parametrize("profile", KNOWN_CLI_PROFILES, ids=lambda profile: profile.profile_id)
@@ -300,6 +300,7 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
         ("npx wrangler", True),
         ("npx -y wrangler@4 deploy", True),
         ("bunx wrangler", True),
+        ("pnpx wrangler", True),
         ("npx --package wrangler some-mcp", False),
         ("npx @other/wrangler", False),
         ("npx wrangler@npm:other-mcp", False),
@@ -309,4 +310,28 @@ def test_recognize_profiled_cli_runner_skips_mcp_probe(tmp_path: Path, monkeypat
     ],
 )
 def test_profiled_cli_package_launch_needs_direct_unscoped_target(command: str, expected: bool) -> None:
+    assert profiled_cli_package_launch(command.split()) is expected
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("npx wrangler", True),
+        ("pnpx wrangler", True),
+        ("npx.cmd wrangler", True),
+        ("demo-mcp-server", False),
+        ("./server.js", False),
+    ],
+)
+def test_an_unreadable_runner_answer_only_covers_a_runner_paste(monkeypatch, command: str, expected: bool) -> None:
+    """A missing native answer spawns nothing a runner could have launched.
+
+    The native grammar reads a launched bin only through a package runner, so a
+    paste that names no runner has no answer to miss and keeps MCP discovery.
+    """
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_profiles_api.native_context_digest",
+        lambda *args, **kwargs: {"status": "unavailable"},
+    )
     assert profiled_cli_package_launch(command.split()) is expected

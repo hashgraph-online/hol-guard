@@ -2511,6 +2511,300 @@
       }
     },
     {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": null
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": 42
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": ""
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "node"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "NODE.EXE"
+      }
+    },
+    {
+      "expected": "my-server",
+      "operation": "direct_command_name",
+      "params": {
+        "value": "C:\\tools\\my-server.cmd"
+      }
+    },
+    {
+      "expected": "my-server",
+      "operation": "direct_command_name",
+      "params": {
+        "value": "/usr/local/bin/my-server"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "bunx"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "python3.12"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "node22"
+      }
+    },
+    {
+      "expected": "my.server.v2",
+      "operation": "direct_command_name",
+      "params": {
+        "value": "my.server.v2"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "-leading"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "https://example.com/mcp"
+      }
+    },
+    {
+      "expected": "run",
+      "operation": "direct_command_name",
+      "params": {
+        "value": "./scripts/run.bat"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "direct_command_name",
+      "params": {
+        "value": "Weird Name"
+      }
+    },
+    {
+      "expected": "ok_name-1",
+      "operation": "direct_command_name",
+      "params": {
+        "value": "ok_name-1"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": null
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": ""
+      }
+    },
+    {
+      "expected": "https://example.com/mcp",
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com/mcp"
+      }
+    },
+    {
+      "expected": "https://example.com/mcp",
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com/mcp?a=1&b=2"
+      }
+    },
+    {
+      "expected": "https://example.com/b",
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com:443/a/../b"
+      }
+    },
+    {
+      "expected": "https://example.com/mcp",
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com./mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://user:pw@example.com/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "http://example.com/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://localhost/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://127.0.0.1/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://[::1]/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com/mcp#frag"
+      }
+    },
+    {
+      "expected": "https://example.com/~user",
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com/%7euser"
+      }
+    },
+    {
+      "expected": "https://example.com/a%2Fb",
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com/a%2Fb?q=%20"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com:8443/mcp"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com/mcp?q=<x>"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_endpoint_identity",
+      "params": {
+        "value": "https://example.com/mcp?q=%zz"
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_server_name",
+      "params": {
+        "value": null
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_server_name",
+      "params": {
+        "value": 42
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_server_name",
+      "params": {
+        "value": ""
+      }
+    },
+    {
+      "expected": null,
+      "operation": "remote_server_name",
+      "params": {
+        "value": "  "
+      }
+    },
+    {
+      "expected": "my server",
+      "operation": "remote_server_name",
+      "params": {
+        "value": "My Server"
+      }
+    },
+    {
+      "expected": "multi word name",
+      "operation": "remote_server_name",
+      "params": {
+        "value": "  MULTI   word  Name "
+      }
+    },
+    {
+      "expected": "strasse",
+      "operation": "remote_server_name",
+      "params": {
+        "value": "Stra\u00dfe"
+      }
+    },
+    {
+      "expected": "already-normal",
+      "operation": "remote_server_name",
+      "params": {
+        "value": "already-normal"
+      }
+    },
+    {
       "expected": {
         "server": {
           "config_path": "<root>/workspace/.vscode/mcp.json",
@@ -2760,6 +3054,302 @@
       "params": {
         "preferred": "ide",
         "tool_name": "mcp_"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-x"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-X"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--exec"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--exec-batch"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--exec=rm"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--exec-batch=rm"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-xrm"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-Xsed"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-tfx"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-e"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--extension"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-tf"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-j4"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-oroot"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-Sx"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--max-depth"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "rg"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-H"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-hx"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--hidden"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "--"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-xj"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "fd_exec_request",
+      "params": {
+        "value": "-jx"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~/.claude/skills/demo/SKILL.md"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "skill://demo"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "skill://"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "skill://../../etc/passwd"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "skill://."
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "skill://.."
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "skill:///absolute"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "$HOME/.claude/skills/demo"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~/.codex/skills/`whoami`"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~/.ssh/id_rsa"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "/etc/passwd"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~/.codex/docs/harness-engineering.md"
+      }
+    },
+    {
+      "expected": true,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~/.agents/skills"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~\\.claude/skills/demo/SKILL.md"
+      }
+    },
+    {
+      "expected": false,
+      "operation": "skill_doc_path",
+      "params": {
+        "home_dir": "/nonexistent-guard-home-7f3a",
+        "value": "~nosuchaccount7f3a/.claude/skills/demo/SKILL.md"
       }
     }
   ],
@@ -2767,6 +3357,7 @@
   "source": "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py",
   "source_hashes": {
     "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py": "8336a2fff0dfde8c6666251bf7754d6e4ea3799272d1ffdcc2ad41073f95a944",
+    "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py": "a4808529aa11428f320b9e37423f566a32700880de3fa815a08827c60fc204bb",
     "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py": "545d2a53a975c58a54268403e454bb5905ed95e8d626c2d6eeb57a0095b03440"
   },
   "source_identifiers": {
@@ -2982,6 +3573,49 @@
       "value_end",
       "value_start",
       "workspace"
+    ],
+    "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py": [
+      "FD_OPTION_VALUE_FLAGS",
+      "KNOWN_AGENT_DOC_SUFFIXES",
+      "KNOWN_SKILL_DOC_ROOT_SUFFIXES",
+      "OSError",
+      "Path",
+      "RuntimeError",
+      "SOURCE_INSPECTION_BENIGN_DOTFILES",
+      "SOURCE_INSPECTION_EXTENSIONS",
+      "SOURCE_INSPECTION_PARTS",
+      "SOURCE_INSPECTION_SENSITIVE_PARTS",
+      "_path_has_symlink_component",
+      "any",
+      "arg",
+      "bool",
+      "candidate_dir",
+      "candidate_file",
+      "cluster",
+      "current",
+      "expanded",
+      "expected",
+      "fd_arg_requests_exec",
+      "flag",
+      "frozenset",
+      "home",
+      "home_dir",
+      "len",
+      "marker",
+      "normalized",
+      "normalized_target",
+      "os",
+      "part",
+      "real_candidate",
+      "real_file",
+      "relative",
+      "relative_parts",
+      "root",
+      "skill_name",
+      "str",
+      "suffix",
+      "target",
+      "target_is_known_skill_doc_path"
     ],
     "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py": [
       "AttributeError",

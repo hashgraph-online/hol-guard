@@ -43,7 +43,12 @@ pub const EXTENSION_CONTROL_AUTHORITY_RESULT_SCHEMA: &str =
 pub const EXTENSION_CONTROL_AUTHORITY_FEATURE: &str = "extension-control-authority-v1";
 /// Largest canonical request the resident accepts. A request carries at most
 /// two catalog manifests, one fingerprint per catalog target.
-pub const EXTENSION_CONTROL_AUTHORITY_MAX_BYTES: usize = 16 * 1024 * 1024;
+///
+/// Held under [`MAX_NATIVE_REQUEST_BYTES`](crate::MAX_NATIVE_REQUEST_BYTES),
+/// which the transport enforces on the frame before this op ever sees it. A
+/// bound above that would be unreachable: a request between the two would be
+/// refused as a malformed frame instead of being told its own size is why.
+pub const EXTENSION_CONTROL_AUTHORITY_MAX_BYTES: usize = 6 * 1024 * 1024 - 64 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -114,6 +119,12 @@ pub struct ExtensionControlAuthorityRequestV1 {
     pub revision: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_digest: Option<String>,
+    /// `rollback_plan`: the transition digest of the prepared row the caller
+    /// wrote itself and then failed to anchor. That row has no retry window to
+    /// wait out: the request that would retry it is the caller, and it has
+    /// already given up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own_transition_digest: Option<String>,
     /// `seal_anchor`: `prepared`, `anchored` or `committed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase: Option<String>,

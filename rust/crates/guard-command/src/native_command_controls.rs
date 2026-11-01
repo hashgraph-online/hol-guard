@@ -5,9 +5,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use guard_contracts::{
-    NativeCommandControlBindingV1, NativeCommandObservationBatchV1, NativeCommandObservationsV1,
-    NativeCommandReceiptBindingV1, PreToolResultV1, NATIVE_COMMAND_OBSERVATIONS_SCHEMA,
-    NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
+    NativeCommandControlBindingV1, NativeCommandObservationBatchV1, NativeCommandObservationV1,
+    NativeCommandObservationsV1, NativeCommandPermissionObservationV1,
+    NativeCommandReceiptBindingV1, PreToolActionTypeV1, PreToolResultV1,
+    NATIVE_COMMAND_OBSERVATIONS_SCHEMA, NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
 };
 
 use crate::native_command_program::{
@@ -218,6 +219,10 @@ impl CompiledNativeCommandControls {
         context: crate::pretool::PathContext<'_>,
         environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> PreToolResultV1 {
+        // Record the active set the decision is actually made with. Compiling
+        // a later snapshot on another thread must not change what this
+        // request reports.
+        crate::native_command_program::work_stats::record_active(self.active_extensions.len());
         let observed = match command {
             Some(command) => self.observe_command(command, deadline, context, environment),
             None => Ok((NativeCommandObservationBatchV1::default(), None)),
@@ -370,7 +375,14 @@ impl CompiledNativeCommandControls {
                 + usize::from(batch.evaluation_error.is_some()),
         };
         let explicit_allow = floor == "allow"
-            && self.explicit_allow(&result, &batch, command, context, enabled_uncertainty);
+            && self.explicit_allow(
+                &result,
+                &batch,
+                command,
+                context,
+                environment,
+                enabled_uncertainty,
+            );
         if enabled_uncertainty && !explicit_allow && rank(floor) < rank("review") {
             floor = "review";
             reason = "native_command_extension_uncertain";
@@ -392,6 +404,10 @@ impl CompiledNativeCommandControls {
         }
         strengthen(&mut result, floor, reason);
         self.enforce_quarantine(command, tool, &mut result);
+        floor::explain_home_redirect(&mut result, command, |probe| {
+            self.observe_command(probe, deadline, context, environment)
+                .is_ok_and(|(batch, _)| batch.evaluation_error.is_none())
+        });
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
@@ -402,11 +418,17 @@ impl CompiledNativeCommandControls {
         result
     }
 
+    /// Whether the user's authenticated extension permissions already cover
+    /// every segment of `command`. A Rust floor raised after the controls run
+    /// consults this through [`Self::explicit_allow_covers_command`]; the
+    /// controls themselves reach it through [`Self::explicit_allow`].
     fn explicit_permissions_cover_command(
         &self,
         command: &CanonicalCommandV1,
-        batch: &NativeCommandObservationBatchV1,
+        observations: &[NativeCommandObservationV1],
+        permission_observations: &[NativeCommandPermissionObservationV1],
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> bool {
         if command.confidence != "exact"
             || command.path_overridden
@@ -415,10 +437,11 @@ impl CompiledNativeCommandControls {
         {
             return false;
         }
-        let mut covered: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
+        let benign: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
             .into_iter()
             .collect();
-        for observation in &batch.observations {
+        let mut covered = benign.clone();
+        for observation in observations {
             if observation.effective_segment_indexes.is_empty() {
                 continue;
             }
@@ -442,11 +465,93 @@ impl CompiledNativeCommandControls {
         }
         // GitHub permission-only owners run last so they never hide an
         // ungranted rule.
-        covered.extend(self.github_granted_segments(&batch.permission_observations));
+        covered.extend(self.github_granted_segments(permission_observations));
+        // A `cd` into the checkout a `git worktree add` of this command
+        // creates, and the `head`/`tail`/`wc` stages after it, are covered
+        // when the Git and GitHub steps after it are.
+        covered.extend(crate::pretool::entered_checkouts(
+            command,
+            context,
+            environment,
+        ));
+        // A Git ref read after covered steps keeps the proof it has alone.
+        covered.extend(crate::pretool::git_reads_after_allowed_steps(
+            command, context, &benign, &covered,
+        ));
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
         (0..command.segments.len()).all(|index| covered.contains(&index))
+    }
+
+    /// Whether the user's authenticated extension permissions settle
+    /// `command` on their own, for a Rust floor that is raised after the
+    /// controls have run and so cannot be read off the result's reason.
+    ///
+    /// The caller establishes that the floor it is about to raise is one an
+    /// Allow may settle; this answers only whether the Allow reaches the
+    /// whole command. It reads the observations already recorded on the
+    /// result, so it classifies exactly what the controls classified, and it
+    /// keeps every fixed floor: a segment that runs a configured Git program
+    /// or names Guard itself fails `fixed_command_floor`, a Git checkout
+    /// into a protected location fails `protected_checkout_destination`, and
+    /// an evaluation error leaves nothing to read.
+    pub(crate) fn explicit_allow_covers_command(
+        &self,
+        command: &CanonicalCommandV1,
+        observations: &NativeCommandObservationsV1,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> bool {
+        observations.evaluation_error.is_none()
+            && !crate::pretool::fixed_command_floor(command)
+            && !crate::pretool::protected_checkout_destination(command, context)
+            && self.explicit_permissions_cover_command(
+                command,
+                &observations.observations,
+                &observations.permission_observations,
+                context,
+                environment,
+            )
+    }
+
+    /// Whether an enabled extension names `executable` among the programs it
+    /// watches. A projection that rewrites one spelling of a command into
+    /// another drops the program it rewrote away, and with it the extension
+    /// evidence that program carried, so a watched program keeps its own
+    /// evaluation instead.
+    ///
+    /// An extension reaches a program two ways: the list it declares, and the
+    /// executables its own rules require. Both are read the way the rest of
+    /// the program reads a program name — by basename, without case — so
+    /// `/usr/bin/tee` and `TEE` name the same watched program `tee` does.
+    ///
+    /// A rule that can match without naming any program is left out rather
+    /// than read as watching everything. A quarter of the packaged
+    /// extensions carry such a rule, the required `command.filesystem` and
+    /// `command.git` among them, so reading one as watching every program
+    /// would answer `true` for every name and leave no projection able to
+    /// run at all. Those rules name no program, which is not the same as
+    /// naming this one, and the unmodeled-command path reads its own name
+    /// sets the same way.
+    pub(crate) fn watches_executable(&self, executable: &str) -> bool {
+        let wanted = crate::command_ascii_comparison::lowercase_for_ascii_comparison(
+            crate::native_command_program::basename(executable),
+        );
+        self.program
+            .extensions
+            .iter()
+            .enumerate()
+            .any(|(index, extension)| {
+                self.active_extensions.contains(&extension.extension_id)
+                    && self
+                        .program
+                        .extension_known_names(
+                            index,
+                            unmodeled::compatibility_executables(&extension.extension_id),
+                        )
+                        .contains(&wanted)
+            })
     }
 }
 
@@ -464,7 +569,8 @@ mod precedence;
 mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
 pub(crate) use unmodeled::{
-    bounds_its_owners, python_is_builtin_only, python_stdin, unread_file_interpreter,
+    bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
+    python_stdin, unread_file_interpreter, Handover,
 };
 
 #[cfg(test)]

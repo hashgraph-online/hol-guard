@@ -24,7 +24,7 @@ from .native_policy_snapshot_direct_lane import (
     local_cli_block_rules_present,
     with_direct_hook_state,
 )
-from .native_policy_snapshot_direct_lane_review import recheckable_review_facts, review_facts_bound, with_review_facts
+from .native_policy_snapshot_direct_lane_review import recheckable_review_facts, with_review_facts
 from .native_policy_snapshot_direct_lane_saved import refresh_integrity_state, with_saved_decision_state
 from .native_policy_snapshot_direct_lane_structured import bound_structured_output_view, with_structured_output_view
 from .native_policy_snapshot_harness_postures import (
@@ -32,19 +32,12 @@ from .native_policy_snapshot_harness_postures import (
     valid_harness_postures,
     write_harness_postures_sidecar,
 )
+from .native_policy_snapshot_reconcile import reconcile_policy_inputs
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
-
-
-def _local_cli_revision_or_none(publisher: NativePolicySnapshotPublisher) -> int | None:
-    try:
-        return publisher._current_local_cli_revision()
-    except (NativePolicySnapshotError, OSError, RuntimeError, ValueError, sqlite3.Error):
-        # -1 is never a bound revision, so an unreadable one closes the lane.
-        return -1
 
 
 def _publisher_api():
@@ -66,31 +59,7 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
-            fingerprint = publisher._current_input_fingerprint()
-            if publisher._input_fingerprint is None:
-                publisher._input_fingerprint = fingerprint
-            elif fingerprint[1] != publisher._input_fingerprint[1]:
-                publisher._accept_resident_fingerprint(fingerprint)
-            elif fingerprint[0] != publisher._input_fingerprint[0]:
-                previous_inputs = dict(publisher._input_fingerprint[0])
-                current_inputs = dict(fingerprint[0])
-                changed_paths = {
-                    path
-                    for path in previous_inputs.keys() | current_inputs.keys()
-                    if previous_inputs.get(path) != current_inputs.get(path)
-                }
-                publisher._input_fingerprint = fingerprint
-                if publisher._policy_input_changed(changed_paths):
-                    publisher._republish_preserving_watch()
-            if publisher._monotonic_clock() >= publisher._reconcile_due_monotonic:
-                publisher._reconcile_due_monotonic = publisher._monotonic_clock() + 1.0
-                if publisher._policy_input_changed():
-                    publisher._republish_preserving_watch()
-                publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
-                publisher._recheck_direct_lane_review_facts()
-                publisher._recheck_direct_lane_structured_output()
-                publisher._recheck_direct_lane_mcp_relay()
-                publisher._recheck_direct_lane_saved_state()
+            reconcile_policy_inputs(publisher)
             with publisher._condition:
                 if publisher._closed:
                     return
@@ -286,29 +255,28 @@ class NativePolicySnapshotPublicationMixin:
                 return
             identity, capabilities, master_key, config, command_extensions, client = context
             bound_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
-            resident_features = tuple(getattr(capabilities, "features", ()))
             direct_lane = with_direct_hook_state(
                 direct_lane,
                 home_dir=publisher._direct_lane_home_dir(),
                 harness_postures=bound_postures,
                 local_cli_block_rules=local_cli_block_rules,
-                evidence_drain=publisher.direct_evidence_bound(resident_features),
-                contained_sink_command=contained_sink_command(resident_features),
-                integrity_key=direct_lane_integrity_key(publisher.store, resident_features),
+                evidence_drain=publisher.direct_evidence_bound(),
+                contained_sink_command=contained_sink_command(),
+                integrity_key=direct_lane_integrity_key(publisher.store),
+                connector_setup_notice=publisher.direct_evidence_bound(),
+                resident_activity=publisher.direct_evidence_bound(),
             )
-            direct_lane = with_saved_decision_state(direct_lane, store=publisher.store, features=resident_features)
+            direct_lane = with_saved_decision_state(direct_lane, store=publisher.store)
             direct_lane = with_review_facts(
                 direct_lane,
                 store=publisher.store,
-                features=resident_features,
                 blocked_request_mode=publisher._compiled_blocked_request_mode,
             )
             direct_lane = with_structured_output_view(
                 direct_lane,
-                features=resident_features,
                 view=publisher._compiled_structured_output_view,
             )
-            direct_lane = publisher._with_mcp_relay_view(direct_lane, resident_features)
+            direct_lane = publisher._with_mcp_relay_view(direct_lane)
             resident_fingerprint_before = publisher._current_input_fingerprint()[1]
             try:
                 business_source = publisher._compiled_business_source()
@@ -424,13 +392,11 @@ class NativePolicySnapshotPublicationMixin:
                         publisher._direct_lane_local_cli_revision = local_cli_revision
                         publisher._direct_lane_review_facts = (
                             (direct_lane.get("approval_center_origin"), direct_lane.get("review_host_cwd"))
-                            if isinstance(direct_lane, Mapping) and review_facts_bound(resident_features)
+                            if isinstance(direct_lane, Mapping)
                             else None
                         )
-                        publisher._direct_lane_structured_output = bound_structured_output_view(
-                            direct_lane, resident_features
-                        )
-                        publisher._bind_relay_and_saved_state(direct_lane, resident_features)
+                        publisher._direct_lane_structured_output = bound_structured_output_view(direct_lane)
+                        publisher._bind_relay_and_saved_state(direct_lane)
                         evidence_drain = isinstance(direct_lane, Mapping) and direct_lane.get("evidence_drain") is True
                         publisher._publish_direct_lane_ack(snapshot, evidence_drain=evidence_drain)
                     else:

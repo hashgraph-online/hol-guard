@@ -39,7 +39,7 @@ const OWNED_SETTINGS: [(&[&str], &str); 4] = [
     ),
     (
         &[".config", "antigravity", "user", "settings.json"],
-        "settings:xdg-user",
+        XDG_LOWER_SOURCE,
     ),
     (
         &["AppData", "Roaming", "Antigravity", "User", "settings.json"],
@@ -47,11 +47,17 @@ const OWNED_SETTINGS: [(&[&str], &str); 4] = [
     ),
 ];
 
-const SKILL_CANDIDATES: [(&[&str], &str); 4] = [
+const XDG_LOWER_SOURCE: &str = "settings:xdg-user-lower";
+
+/// Antigravity-owned skill roots. Home `.agents/skills` belongs to other
+/// harnesses, so it is not in this list.
+const SKILL_CANDIDATES: [(&[&str], &str); 3] = [
     (&[".gemini", "antigravity", "skills"], "skills"),
-    (&[".gemini", "antigravity", "builtin", "skills"], "skills/builtin"),
+    (
+        &[".gemini", "antigravity", "builtin", "skills"],
+        "skills/builtin",
+    ),
     (&[".gemini", "config", "plugins"], "skills/plugins"),
-    (&[".agents", "skills"], "skills/agents"),
 ];
 
 fn under(base: &Path, parts: &[&str]) -> PathBuf {
@@ -64,7 +70,10 @@ fn under(base: &Path, parts: &[&str]) -> PathBuf {
 /// precedes the matched suffix, else the token of its last four parts, which
 /// for these fixed names is their lowercased alphanumeric runs.
 fn settings_source(path: &Path, source: &str, parts: &[&str]) -> String {
-    if path.components().count() > parts.len() {
+    // A parent directory keeps the caller's source. The lowercase XDG file
+    // keeps its source even when the path is only the suffix: folding those
+    // parts to lowercase would give it the capitalized file's id.
+    if path.components().count() > parts.len() || source == XDG_LOWER_SOURCE {
         return source.to_owned();
     }
     let tokens: Vec<String> = parts[parts.len().saturating_sub(4)..]
@@ -206,19 +215,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
     }
     for root in &roots {
         for (parts, prefix) in SKILL_CANDIDATES {
-            let skill_root = under(root, parts);
-            let scope = Scope {
-                harness: HARNESS,
-                scope: inventory.scope_for(&skill_root),
-            };
-            inventory.skills(
-                &scope,
-                "Antigravity",
-                &SkillNaming::Prefixed,
-                &skill_root,
-                root,
-                prefix,
-            )?;
+            record_skills(&mut inventory, root, parts, prefix)?;
         }
     }
 
@@ -261,5 +258,210 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         inventory.found(&path);
         signal = true;
     }
+    // Workspace `.agents/skills` is scanned after settings so those shared
+    // documents do not by themselves admit unrelated editor settings.
+    if let Some(workspace) = &request.workspace {
+        record_skills(
+            &mut inventory,
+            workspace,
+            &[".agents", "skills"],
+            "skills/agents",
+        )?;
+    }
     inventory.finish()
+}
+
+fn record_skills(
+    inventory: &mut Inventory,
+    root: &Path,
+    parts: &[&str],
+    prefix: &str,
+) -> Result<(), &'static str> {
+    let skill_root = under(root, parts);
+    let scope = Scope {
+        harness: HARNESS,
+        scope: inventory.scope_for(&skill_root),
+    };
+    inventory.skills(
+        &scope,
+        "Antigravity",
+        &SkillNaming::Prefixed,
+        &skill_root,
+        root,
+        prefix,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write(path: &Path, body: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    }
+
+    fn detect_at(home: &Path, workspace: Option<&Path>) -> Value {
+        let mut args = json!({
+            "harness": HARNESS,
+            "home": home.to_string_lossy(),
+        });
+        if let Some(workspace) = workspace {
+            args["workspace"] = json!(workspace.to_string_lossy());
+        }
+        detect(&args).expect("detect")
+    }
+
+    fn same_inode(left: &Path, right: &Path) -> bool {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let Ok(left) = std::fs::metadata(left) else {
+                return false;
+            };
+            let Ok(right) = std::fs::metadata(right) else {
+                return false;
+            };
+            return left.ino() == right.ino();
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (left, right);
+            false
+        }
+    }
+
+    fn ids(result: &Value) -> Vec<String> {
+        result["artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["artifact_id"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn lowercase_xdg_source_stays_distinct_when_the_path_is_only_the_suffix() {
+        let parts = [".config", "antigravity", "user", "settings.json"];
+        let path = Path::new(".config/antigravity/user/settings.json");
+        assert_eq!(
+            settings_source(path, XDG_LOWER_SOURCE, &parts),
+            XDG_LOWER_SOURCE
+        );
+        let upper_parts = [".config", "Antigravity", "User", "settings.json"];
+        let upper = Path::new(".config/Antigravity/User/settings.json");
+        assert_ne!(
+            settings_source(upper, "settings:xdg-user", &upper_parts),
+            XDG_LOWER_SOURCE
+        );
+    }
+
+    #[test]
+    fn lowercase_xdg_settings_keep_a_distinct_mcp_id() {
+        let root = std::env::temp_dir().join(format!("ag-xdg-lower-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let home = root.join("home");
+        let upper = home.join(".config/Antigravity/User/settings.json");
+        let lower = home.join(".config/antigravity/user/settings.json");
+        write(
+            &lower,
+            r#"{"mcpServers":{"demo_server":{"command":"demo"}}}"#,
+        );
+        let found = ids(&detect_at(&home, None));
+        let same_file = same_inode(&upper, &lower);
+        if same_file {
+            assert!(
+                found.contains(&"antigravity:global:mcp:settings:xdg-user:demo_server".to_owned())
+            );
+            assert!(!found.contains(
+                &"antigravity:global:mcp:settings:xdg-user-lower:demo_server".to_owned()
+            ));
+        } else {
+            assert!(found.contains(
+                &"antigravity:global:mcp:settings:xdg-user-lower:demo_server".to_owned()
+            ));
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn xdg_case_variants_do_not_collapse_when_they_are_different_files() {
+        let root = std::env::temp_dir().join(format!("ag-xdg-both-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let home = root.join("home");
+        let upper = home.join(".config/Antigravity/User/settings.json");
+        let lower = home.join(".config/antigravity/user/settings.json");
+        write(
+            upper.as_path(),
+            r#"{"mcpServers":{"shared":{"command":"upper"}}}"#,
+        );
+        write(
+            lower.as_path(),
+            r#"{"mcpServers":{"shared":{"command":"lower"}}}"#,
+        );
+        let found = ids(&detect_at(&home, None));
+        let shared: Vec<_> = found
+            .into_iter()
+            .filter(|id| id.ends_with(":shared"))
+            .collect();
+        let same_file = same_inode(&upper, &lower);
+        if same_file {
+            assert_eq!(
+                shared,
+                vec!["antigravity:global:mcp:settings:xdg-user:shared".to_owned()]
+            );
+        } else {
+            assert!(shared.contains(&"antigravity:global:mcp:settings:xdg-user:shared".to_owned()));
+            assert!(shared
+                .contains(&"antigravity:global:mcp:settings:xdg-user-lower:shared".to_owned()));
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn home_agents_skills_are_not_antigravity_and_do_not_admit_editor_settings() {
+        let root = std::env::temp_dir().join(format!("ag-agents-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let home = root.join("home");
+        let workspace = root.join("workspace");
+        write(
+            &home.join(".agents/skills/other-tool/SKILL.md"),
+            "---\nname: other-tool\n---\nShared.\n",
+        );
+        write(
+            &workspace.join(".vscode/settings.json"),
+            r#"{"mcpServers":{"editor":{"command":"code"}}}"#,
+        );
+        let found = ids(&detect_at(&home, Some(&workspace)));
+        assert!(found
+            .iter()
+            .all(|id| !id.contains("other-tool") && !id.ends_with(":editor")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn workspace_agents_skills_and_builtin_skills_keep_distinct_ids() {
+        let root = std::env::temp_dir().join(format!("ag-skills-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let home = root.join("home");
+        let workspace = root.join("workspace");
+        write(
+            &home.join(".gemini/antigravity/skills/custom/SKILL.md"),
+            "---\nname: custom\n---\nOwned.\n",
+        );
+        write(
+            &home.join(".gemini/antigravity/builtin/skills/custom/SKILL.md"),
+            "---\nname: custom\n---\nBuiltin.\n",
+        );
+        write(
+            &workspace.join(".agents/skills/team-helper/SKILL.md"),
+            "---\nname: team-helper\n---\nTeam.\n",
+        );
+        let found = ids(&detect_at(&home, Some(&workspace)));
+        assert!(found.contains(&"antigravity:global:skill:skills/custom".to_owned()));
+        assert!(found.contains(&"antigravity:global:skill:skills/builtin/custom".to_owned()));
+        assert!(found.contains(&"antigravity:project:skill:skills/agents/team-helper".to_owned()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

@@ -394,6 +394,7 @@ pub(super) fn rename_into_directory(
     parent: &std::fs::File,
     source: &std::fs::File,
     destination: &OsStr,
+    replace_existing: bool,
 ) -> io::Result<()> {
     let name = destination.encode_wide().collect::<Vec<_>>();
     if name.is_empty() || name.contains(&0) {
@@ -417,8 +418,14 @@ pub(super) fn rename_into_directory(
     // UTF-16 payload expected by FILE_RENAME_INFO.
     unsafe {
         let info = buffer.as_mut_ptr() as *mut FILE_RENAME_INFO;
-        (*info).ReplaceIfExists =
-            (FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS) as BOOL;
+        // A publish that must not overwrite clears the replace bit: the
+        // rename then fails with ERROR_ALREADY_EXISTS instead of destroying
+        // the object already at the destination.
+        (*info).ReplaceIfExists = if replace_existing {
+            (FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS) as BOOL
+        } else {
+            FILE_RENAME_POSIX_SEMANTICS as BOOL
+        };
         (*info).RootDirectory = parent.as_raw_handle() as HANDLE;
         (*info).FileNameLength = byte_count as DWORD;
         std::ptr::copy_nonoverlapping(

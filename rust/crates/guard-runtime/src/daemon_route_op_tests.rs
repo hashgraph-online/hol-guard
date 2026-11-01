@@ -6,6 +6,24 @@ use serde_json::{json, Value};
 
 const VECTORS: &str = include_str!("../tests/fixtures/daemon_route_vectors.json");
 
+#[test]
+fn context_assistance_control_routes_require_existing_dashboard_or_header_authorization() {
+    for path in [
+        "/v1/context-assistance",
+        "/v1/context-assistance/installations",
+        "/v1/context-assistance/recheck",
+        "/v1/context-assistance/activate",
+        "/v1/context-assistance/stop",
+        "/v1/context-assistance/workspace",
+        "/v1/context-assistance/workspace-access",
+        "/v1/context-assistance/workspace-grant",
+    ] {
+        assert!(crate::daemon_route_paths::requires_header_token(path));
+        assert!(crate::daemon_route_paths::session_path("GET", path));
+        assert!(!crate::daemon_route_paths::protection_repair_session_allowed("POST", path));
+    }
+}
+
 fn request_with(schema: &str, query: &Value) -> Value {
     json!({
         "operation": "daemon_route",
@@ -207,4 +225,19 @@ fn the_releases_screen_reads_are_session_paths() {
         "GET",
         "/v1/releases/contributors"
     ));
+}
+
+#[test]
+fn plugin_update_prompts_are_token_gated_session_paths() {
+    use crate::daemon_route_paths::{requires_header_token, session_path};
+    // The check downloads HOL's public indexes, so a page without the
+    // dashboard session must not be able to start one.
+    assert!(requires_header_token("/v1/plugins/updates"));
+    assert!(requires_header_token("/v1/plugins/updates/dismiss"));
+    assert!(session_path("GET", "/v1/plugins/updates"));
+    assert!(!session_path("POST", "/v1/plugins/updates"));
+    assert!(session_path("POST", "/v1/plugins/updates/dismiss"));
+    assert!(!session_path("GET", "/v1/plugins/updates/dismiss"));
+    // Reset stays a CLI action; the dashboard cannot clear every dismissal.
+    assert!(!session_path("POST", "/v1/plugins/updates/reset"));
 }

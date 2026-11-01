@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot import (
 )
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 _NATIVE_DIAGNOSTIC_RE = re.compile(rb"\bnative_[a-z0-9_]+\b")
@@ -309,7 +310,7 @@ def _initialize_protected_scope(runtime: Path, state_dir: Path) -> Path:
             (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
             check=False,
             capture_output=True,
-            timeout=3,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         raise AssertionError("native scope initialization failed: native_resident_stop_timeout") from None

@@ -466,7 +466,8 @@ class _SupplyChainRoutes:
             )
         elif error_code == "workspace_dir_invalid":
             error_payload["message"] = (
-                "Guard could not use the selected project folder. Choose an existing local folder and try again."
+                "Guard could not use the selected project folder. "
+                "Choose an existing folder inside your home folder and try again."
             )
         return error_payload
 

@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     canonical_json_bytes,
 )
 from tests.guard_mdm_health_lease_support import NOW, prepare, signer, snapshot
-from tests.guard_mdm_health_lease_support import paths as machine_paths
 
 
 def _ack(outbox: HealthLeaseOutbox, **updates: object) -> bytes:
@@ -31,26 +30,6 @@ def _ack(outbox: HealthLeaseOutbox, **updates: object) -> bytes:
     }
     payload.update(updates)
     return canonical_json_bytes(payload)
-
-
-def test_windows_atomic_create_omits_unsupported_follow_symlinks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    paths = machine_paths(tmp_path)
-    paths.state_root.mkdir(parents=True)
-    linked: list[tuple[Path, Path]] = []
-
-    def link(source: Path, target: Path) -> None:
-        linked.append((source, target))
-
-    monkeypatch.setattr(health_lease.os, "name", "nt")
-    monkeypatch.setattr(health_lease.os, "link", link)
-
-    target = paths.state_root / "pending.json"
-    health_lease._atomic_create(paths, target, b"payload", conflict_reason="conflict")
-
-    assert len(linked) == 1
-    assert linked[0][1] == target
 
 
 def test_authenticated_ack_retires_one_item_and_advances_exact_chain(
@@ -74,7 +53,7 @@ def test_authenticated_ack_retires_one_item_and_advances_exact_chain(
     )
 
     assert isinstance(ack, HealthLeaseAck)
-    assert health_lease.load_pending_health_lease(paths) is None
+    assert health_lease._load_pending(paths) is None
     assert (paths.state_root / "health-lease-ack.json").read_bytes() == ack.canonical_bytes()
 
     second = health_lease.issue_or_load_pending_health_lease(
@@ -111,7 +90,7 @@ def test_replayed_ack_is_idempotent_after_retirement(tmp_path: Path, monkeypatch
     )
 
     assert first == second
-    assert health_lease.load_pending_health_lease(paths) is None
+    assert health_lease._load_pending(paths) is None
     with pytest.raises(OSError, match="health_lease_outbox_absent"):
         health_lease.acknowledge_pending_health_lease(
             paths, HealthLeaseBinding("workspace-b", "device-a"), payload, system_name="Darwin"
@@ -180,7 +159,7 @@ def test_ack_durable_crash_recovers_without_backfill(tmp_path: Path, monkeypatch
             system_name="Darwin",
             crash_hook=crash,
         )
-    assert health_lease.load_pending_health_lease(paths) == first
+    assert health_lease._load_pending(paths) == first
 
     second = health_lease.issue_or_load_pending_health_lease(
         paths,

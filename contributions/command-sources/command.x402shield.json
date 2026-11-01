@@ -1,0 +1,319 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.x402shield",
+    "version": "1.0.0",
+    "name": "x402Shield command protection",
+    "description": "Reviews x402Shield commands that can directly affect authorization, signing, migration, or live payment execution. Payment-intent binding stays enforced by x402Shield itself; this descriptor only classifies each invocation.",
+    "action_classes": [
+      "x402shield live payment execution command",
+      "x402shield external signer service command",
+      "x402shield authorization issuer service command",
+      "x402shield gateway database migration command"
+    ],
+    "risk_classes": [
+      "financial_transaction",
+      "destructive_shell"
+    ],
+    "safer_alternatives": [
+      "Use the read-only diagnostic subcommands before any live payment run."
+    ],
+    "reference_urls": [
+      "https://x402shield.dev"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": [
+      "x402shield-e2e-buyer-runner",
+      "x402shield-external-signer",
+      "x402shield-authorization-issuer",
+      "x402shield-gateway"
+    ],
+    "project_markers": [],
+    "permissions": [
+      {
+        "permission_id": "command.x402shield.permission.live-payment",
+        "implementation_version": "1.0.0",
+        "label": "x402Shield live payment execution",
+        "description": "Identifies `x402shield-e2e-buyer-runner` live-run, live, a2a-x402-live, and a2a-live, which sign and submit real test-network payments from configured wallet credentials.",
+        "risk_tier": "critical",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "x402shield live payment execution command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run config-check, dry-run, or preflight first; they do not submit a payment.",
+          "Confirm the configured network, recipient, and funding wallet before a live run."
+        ],
+        "example_command": "x402shield-e2e-buyer-runner live-run"
+      },
+      {
+        "permission_id": "command.x402shield.permission.external-signer",
+        "implementation_version": "1.0.0",
+        "label": "x402Shield external signer service",
+        "description": "Identifies any invocation of `x402shield-external-signer`, the service that verifies permits and signs payments. The command model cannot distinguish its diagnostic flags, so every invocation is reviewed.",
+        "risk_tier": "critical",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "x402shield external signer service command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Confirm the trusted permit issuers and signer scope in the environment before starting the signer.",
+          "Start the signer only in the environment that is meant to hold signing authority."
+        ],
+        "example_command": "x402shield-external-signer"
+      },
+      {
+        "permission_id": "command.x402shield.permission.authorization-issuer",
+        "implementation_version": "1.0.0",
+        "label": "x402Shield authorization issuer service",
+        "description": "Identifies any invocation of `x402shield-authorization-issuer`, the service that issues signed payment permits. The command model cannot distinguish its diagnostic flags, so every invocation is reviewed.",
+        "risk_tier": "critical",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "x402shield authorization issuer service command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Confirm the issuer policy version and maximum permit lifetime in the environment before starting the issuer.",
+          "Start the issuer only in the environment that is meant to hold permit-issuing authority."
+        ],
+        "example_command": "x402shield-authorization-issuer"
+      },
+      {
+        "permission_id": "command.x402shield.permission.gateway-migrate",
+        "implementation_version": "1.0.0",
+        "label": "x402Shield gateway database migration",
+        "description": "Identifies `x402shield-gateway migrate`, which applies database migrations to the DATABASE_URL target.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "x402shield gateway database migration command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Confirm DATABASE_URL points at the intended database and take a backup before migrating.",
+          "Review the pending migrations first."
+        ],
+        "example_command": "x402shield-gateway migrate"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.x402shield.live-payment",
+        "rule_version": "1.0.0",
+        "permission_id": "command.x402shield.permission.live-payment",
+        "title": "x402Shield live payment execution",
+        "description": "Matches `x402shield-e2e-buyer-runner` with the live-run, live, a2a-x402-live, or a2a-live subcommand. Read-only subcommands such as config-check, dry-run, preflight, observe-tx, and verify-evidence are not matched.",
+        "severity": "critical",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "x402shield live payment execution command"
+        ],
+        "safer_alternatives": [
+          "Use config-check, dry-run, or preflight to inspect the setup without submitting a payment."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "x402shield-e2e-buyer-runner",
+                  "x402shield-e2e-buyer-runner.cmd",
+                  "x402shield-e2e-buyer-runner.exe"
+                ],
+                "subcommands": [
+                  "live-run"
+                ],
+                "allow_leading_options": false,
+                "fail_secure_unknown_options": true
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "x402shield-e2e-buyer-runner",
+                  "x402shield-e2e-buyer-runner.cmd",
+                  "x402shield-e2e-buyer-runner.exe"
+                ],
+                "subcommands": [
+                  "live"
+                ],
+                "allow_leading_options": false,
+                "fail_secure_unknown_options": true
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "x402shield-e2e-buyer-runner",
+                  "x402shield-e2e-buyer-runner.cmd",
+                  "x402shield-e2e-buyer-runner.exe"
+                ],
+                "subcommands": [
+                  "a2a-x402-live"
+                ],
+                "allow_leading_options": false,
+                "fail_secure_unknown_options": true
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "x402shield-e2e-buyer-runner",
+                  "x402shield-e2e-buyer-runner.cmd",
+                  "x402shield-e2e-buyer-runner.exe"
+                ],
+                "subcommands": [
+                  "a2a-live"
+                ],
+                "allow_leading_options": false,
+                "fail_secure_unknown_options": true
+              }
+            }
+          ]
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.x402shield.external-signer",
+        "rule_version": "1.0.0",
+        "permission_id": "command.x402shield.permission.external-signer",
+        "title": "x402Shield external signer service",
+        "description": "Matches any invocation of `x402shield-external-signer`.",
+        "severity": "critical",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "x402shield external signer service command"
+        ],
+        "safer_alternatives": [
+          "Verify the permit trust configuration before starting the signer."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "x402shield-external-signer",
+              "x402shield-external-signer.cmd",
+              "x402shield-external-signer.exe"
+            ],
+            "subcommands": [],
+            "allow_leading_options": false
+          }
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.x402shield.authorization-issuer",
+        "rule_version": "1.0.0",
+        "permission_id": "command.x402shield.permission.authorization-issuer",
+        "title": "x402Shield authorization issuer service",
+        "description": "Matches any invocation of `x402shield-authorization-issuer`.",
+        "severity": "critical",
+        "risk_classes": [
+          "financial_transaction"
+        ],
+        "action_classes": [
+          "x402shield authorization issuer service command"
+        ],
+        "safer_alternatives": [
+          "Verify the issuer policy configuration before starting the issuer."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "x402shield-authorization-issuer",
+              "x402shield-authorization-issuer.cmd",
+              "x402shield-authorization-issuer.exe"
+            ],
+            "subcommands": [],
+            "allow_leading_options": false
+          }
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.x402shield.gateway-migrate",
+        "rule_version": "1.0.0",
+        "permission_id": "command.x402shield.permission.gateway-migrate",
+        "title": "x402Shield gateway database migration",
+        "description": "Matches `x402shield-gateway migrate`. `x402shield-gateway run` is not matched.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "x402shield gateway database migration command"
+        ],
+        "safer_alternatives": [
+          "Back up the database and confirm DATABASE_URL before migrating."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "x402shield-gateway",
+              "x402shield-gateway.cmd",
+              "x402shield-gateway.exe"
+            ],
+            "subcommands": [
+              "migrate"
+            ],
+            "allow_leading_options": false,
+            "fail_secure_unknown_options": true
+          }
+        },
+        "safe_variants": []
+      }
+    ]
+  }
+}

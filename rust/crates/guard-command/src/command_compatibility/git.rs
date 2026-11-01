@@ -15,6 +15,10 @@ pub(crate) use git_hooks_path::rooted_hooks_inert;
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
     ("worktree", "command.git.worktree"),
+    ("bisect", "command.git.bisect"),
+    ("notes", "command.git.notes"),
+    ("replace", "command.git.replace"),
+    ("maintenance", "command.git.maintenance"),
     ("pull", "command.git.pull"),
     ("push", "command.git.push"),
     ("clone", "command.git.clone"),
@@ -31,7 +35,7 @@ const RULES: &[(&str, &str)] = &[
     ("reflog", "command.git.reflog"),
 ];
 
-fn command_index(arguments: &[String]) -> Option<usize> {
+pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         let option = argument.split('=').next().unwrap_or(argument);
@@ -86,6 +90,81 @@ fn bounded_inspection(arguments: &[String]) -> bool {
         // A stash listing and a `show` of one entry print; every other
         // stash spelling moves work and keeps its workspace attribution.
         || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
+        // A submodule status prints the recorded commit of each submodule the
+        // superproject's index names; the recursive walk and every other
+        // submodule spelling move work and keep their attribution.
+        || (command == "submodule" && crate::pretool::git_submodule_reads::read_form(rest))
+        // A bisect session's log, a note's listing and a replacement listing
+        // print; every other spelling of the three moves a ref, writes the
+        // notes or replacement ref, or runs a program the text names, and
+        // keeps its attribution.
+        || (matches!(command.as_str(), "bisect" | "notes" | "replace")
+            && crate::pretool::git_side_record_reads::read_form(command, rest))
+}
+
+/// An option of a staged-index diff that only shapes what the command prints.
+fn bounded_cached_diff_option(option: &str) -> bool {
+    matches!(
+        option,
+        "--cached"
+            | "--staged"
+            | "HEAD"
+            | "--check"
+            | "--stat"
+            | "--numstat"
+            | "--shortstat"
+            | "--summary"
+            | "--name-only"
+            | "--name-status"
+            | "--patch"
+            | "-p"
+            | "--quiet"
+            | "--exit-code"
+            | "--no-color"
+            | "--color=never"
+            | "--no-ext-diff"
+            | "--no-textconv"
+    ) || option
+        .strip_prefix("-U")
+        .or_else(|| option.strip_prefix("--unified="))
+        .is_some_and(|lines| {
+            !lines.is_empty() && lines.len() <= 6 && lines.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+/// An operand that git reads as a pathspec rather than as a revision. A `:`
+/// prefix (`:!vendor`, `:^docs`) can only be a pathspec, because a ref name
+/// cannot carry a colon. Anything else has to name an entry that is already
+/// there, which is the only way git itself tells a path from a revision:
+/// `git diff --cached origin/main` compares against a branch and keeps the
+/// index owner, while `git diff --cached web/package.json` narrows the same
+/// staged read the `--` form already admits. Without a known working
+/// directory nothing can be shown present, so the operand is not bounded.
+fn bounded_cached_diff_pathspec(operand: &str, directory: Option<&std::path::Path>) -> bool {
+    if operand.is_empty() || operand.starts_with('-') {
+        return false;
+    }
+    if operand.starts_with(':') {
+        return true;
+    }
+    // `symlink_metadata` rather than `exists`: a broken symlink is still an
+    // entry git sees, and any other error (an unreadable parent) refuses.
+    directory.is_some_and(|directory| directory.join(operand).symlink_metadata().is_ok())
+}
+
+/// The directory git resolves a bare operand against. A `-C <dir>` route moves
+/// it there, so an operand that is present beside the shell's own working
+/// directory proves nothing about the repository git actually reads; a relative
+/// route needs that working directory to resolve at all.
+fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path::PathBuf> {
+    let Some(route) = route else {
+        return cwd.map(std::path::PathBuf::from);
+    };
+    let route = std::path::PathBuf::from(route);
+    if route.is_absolute() {
+        return Some(route);
+    }
+    cwd.map(|cwd| std::path::Path::new(cwd).join(route))
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -93,41 +172,78 @@ fn bounded_inspection(arguments: &[String]) -> bool {
 /// than the working tree beside it, so the shared read proof (configuration
 /// probe, textconv and sensitive-pathspec screens) decides it. Forms that
 /// write a file or compare against another revision keep the index owner.
-fn bounded_cached_diff(arguments: &[String]) -> bool {
-    arguments
+///
+/// Trailing pathspecs are read the same way whether or not a `--` separates
+/// them, so the bare form is bounded on the same terms: every argument up to
+/// the first operand has to shape the output, and every operand from there on
+/// has to be a present in-tree pathspec. `directory` is where git resolves
+/// those operands: where the segment's native proofs ran, or the `-C` route it
+/// entered first.
+fn bounded_cached_diff(arguments: &[String], directory: Option<&std::path::Path>) -> bool {
+    let operands: Vec<&String> = arguments
         .iter()
         .take_while(|argument| argument.as_str() != "--")
-        .all(|argument| {
-            let option = argument.as_str();
-            matches!(
-                option,
-                "--cached"
-                    | "--staged"
-                    | "HEAD"
-                    | "--check"
-                    | "--stat"
-                    | "--numstat"
-                    | "--shortstat"
-                    | "--summary"
-                    | "--name-only"
-                    | "--name-status"
-                    | "--patch"
-                    | "-p"
-                    | "--quiet"
-                    | "--exit-code"
-                    | "--no-color"
-                    | "--color=never"
-                    | "--no-ext-diff"
-                    | "--no-textconv"
-            ) || option
-                .strip_prefix("-U")
-                .or_else(|| option.strip_prefix("--unified="))
-                .is_some_and(|lines| {
-                    !lines.is_empty()
-                        && lines.len() <= 6
-                        && lines.bytes().all(|b| b.is_ascii_digit())
-                })
-        })
+        .skip_while(|argument| bounded_cached_diff_option(argument))
+        .collect();
+    operands.len() <= 16
+        && operands
+            .iter()
+            .all(|operand| bounded_cached_diff_pathspec(operand, directory))
+}
+
+/// Whether a `symbolic-ref` form only reads the ref it names. The one-operand
+/// spelling prints where a symbolic ref points; a second operand makes Git
+/// write that ref instead, and `-d` deletes it.
+pub(super) fn symbolic_ref_read(rest: &[String]) -> bool {
+    let mut operands = rest.iter().filter(|argument| {
+        !matches!(
+            argument.as_str(),
+            "-q" | "--quiet" | "--short" | "--recurse" | "--no-recurse"
+        )
+    });
+    let Some(first) = operands.next() else {
+        return false;
+    };
+    !first.starts_with('-') && operands.next().is_none()
+}
+
+/// Whether a `check-mailmap` form reads only the repository's own mailmap.
+/// The contacts it translates are plain text, and `--stdin` reads them from
+/// the pipe, but `--mailmap-file` names any file on disk and `--mailmap-blob`
+/// any object, so neither spelling is this read.
+pub(super) fn mailmap_read(rest: &[String]) -> bool {
+    rest.iter().all(|argument| {
+        let option = argument.split('=').next().unwrap_or(argument);
+        match option {
+            "--stdin" => true,
+            _ => !option.starts_with('-'),
+        }
+    })
+}
+
+/// Whether an `interpret-trailers` form only filters the message it was
+/// handed. Git applies the repository's `trailer.*` configuration unless it
+/// is told not to, and a `trailer.<token>.command` runs its program on every
+/// invocation while a `trailer.<token>.cmd` runs on the token a `--trailer`
+/// names, so any spelling that applies that configuration can run a program
+/// the repository chose. `--only-input` turns the whole of it off and
+/// `--parse` implies `--only-input`, so the read is the spelling that carries
+/// one of them. `--in-place` and a file operand open a path besides, and both
+/// keep their review for that reason too.
+pub(super) fn trailers_read(rest: &[String]) -> bool {
+    let mut applies_configuration = true;
+    for argument in rest {
+        match argument.as_str() {
+            "--only-input" | "--parse" => applies_configuration = false,
+            // These shape the printed message, name neither a file nor a
+            // program, and take no value.
+            "--only-trailers" | "--unfold" | "--trim-empty" | "--divider" | "--no-divider" => {}
+            // `--in-place`, a file operand, `--`, `--no-only-input` and any
+            // option this grammar does not know keep their review.
+            _ => return false,
+        }
+    }
+    !applies_configuration
 }
 
 fn read_only_plumbing(arguments: &[String]) -> bool {
@@ -139,20 +255,29 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
     // drivers, touch the network, or write are excluded.
     match command.as_str() {
         "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
+        // `name-rev` prints the names a commit is reachable by, `show-branch`
+        // the commits two branches do not share, and `check-ref-format`
+        // answers about the spelling of a name without opening a repository
+        // at all. None of the three writes, reaches the network, or defines
+        // an option that names a program or an output file.
+        "name-rev" | "show-branch" | "check-ref-format" => true,
+        // `var` prints a logical variable, `patch-id` an id for the diff on
+        // its stdin and `stripspace` the cleaned-up message on its stdin.
+        // None opens a working-tree file, writes, or defines an option that
+        // names a program.
+        "var" | "patch-id" | "stripspace" => true,
+        "check-mailmap" => mailmap_read(rest),
+        "interpret-trailers" => trailers_read(rest),
         "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
-        // Both listings only print, and their grammars already exclude the
+        // These listings only print, and their grammars already exclude the
         // forms that run a configured program; the read proof still decides.
-        "shortlog" | "check-ignore" => crate::pretool::git_listing_reads::read_form(command, rest),
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout" => {
+            crate::pretool::git_listing_reads::read_form(command, rest)
+        }
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
-        "symbolic-ref" => {
-            let operands: Vec<&String> = rest
-                .iter()
-                .filter(|argument| !matches!(argument.as_str(), "-q" | "--quiet" | "--short"))
-                .collect();
-            operands.len() == 1 && !operands[0].starts_with('-')
-        }
+        "symbolic-ref" => symbolic_ref_read(rest),
         "config" if crate::pretool::git_config_reads::read_form(rest).is_some() => true,
         "config" => {
             let mut reads = false;
@@ -183,11 +308,20 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
-            | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
-            | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
-            | "shortlog" | "check-ignore",
+            "status" | "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "cherry"
+            | "show" | "blame" | "annotate" | "describe" | "reflog" | "branch" | "hash-object"
+            | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep"
+            | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog"
+            | "check-ignore" | "count-objects" | "check-attr" | "name-rev" | "show-branch"
+            | "check-ref-format" | "var" | "patch-id" | "stripspace",
         ) => true,
+        // Both also have a spelling that opens a file the caller names, so
+        // each is admitted only on the grammar that reads its own pipe.
+        Some("check-mailmap") => mailmap_read(&remaining[1..]),
+        Some("interpret-trailers") => trailers_read(&remaining[1..]),
+        // A second operand turns the ref read into a ref write, so the
+        // printing form is admitted on its own grammar.
+        Some("symbolic-ref") => symbolic_ref_read(&remaining[1..]),
         // A tag listing, a clean preview and a patch check only print, but the
         // same three subcommands also write a tag, remove a file and patch the
         // tree, so each is admitted only in the spelling its own grammar
@@ -198,6 +332,18 @@ pub(super) fn inspection_arguments<'a>(
         // `stash` reaches the worktree in every spelling but the two that
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
+        Some("submodule") => crate::pretool::git_submodule_reads::read_form(&remaining[1..]),
+        // A bisect session, a commit's notes and the replacement refs each
+        // print in one grammar and write in every other, so each is admitted
+        // only in that grammar.
+        Some(record @ ("bisect" | "notes" | "replace")) => {
+            crate::pretool::git_side_record_reads::read_form(record, &remaining[1..])
+        }
+        // `sparse-checkout` prints the patterns the tree is narrowed to in one
+        // spelling and changes that narrowing in every other.
+        Some("sparse-checkout") => {
+            crate::pretool::git_listing_reads::read_form("sparse-checkout", &remaining[1..])
+        }
         _ => false,
     };
     admitted.then_some(remaining)
@@ -205,6 +351,12 @@ pub(super) fn inspection_arguments<'a>(
 
 pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
     git_fetch::origin_shaped_arguments(arguments)
+}
+
+/// Whether a refresh's operands name a reach the proof can follow, and whether
+/// that reach is every configured remote rather than `origin` alone.
+pub(super) fn fetch_reach(arguments: &[String]) -> Option<bool> {
+    git_fetch::reach(arguments).map(|reach| reach == git_fetch::Reach::EveryRemote)
 }
 
 pub(super) fn routed_arguments<'a>(
@@ -222,6 +374,18 @@ fn routed<'a>(
     context: crate::pretool::PathContext<'_>,
     inspection: bool,
 ) -> Option<&'a [String]> {
+    routed_with_route(arguments, context, inspection).map(|(rest, _)| rest)
+}
+
+/// [`routed`] plus the last `-C <dir>` the prefix entered. Git resolves a bare
+/// operand against that directory rather than against the shell's own working
+/// directory, so a proof over such an operand has to be taken there.
+fn routed_with_route<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+    inspection: bool,
+) -> Option<(&'a [String], Option<&'a str>)> {
+    let mut route = None;
     let mut index = 0;
     let mut saw_change_directory = false;
     let mut saw_git_dir = false;
@@ -230,6 +394,20 @@ fn routed<'a>(
         if matches!(
             argument.as_str(),
             "-P" | "--no-pager" | "--no-optional-locks"
+        ) {
+            index += 1;
+            continue;
+        }
+        // Neither of these chooses a program or moves the repository Git
+        // reads. `--no-replace-objects` turns off the replacement refs, so
+        // Git reports the objects it actually stores, and
+        // `--literal-pathspecs` turns off pathspec magic, so a pathspec
+        // reaches the one path it spells rather than the set a wildcard or a
+        // `:(exclude)` prefix would widen it to. A proof taken over the words
+        // after them reads the same operation either way.
+        if matches!(
+            argument.as_str(),
+            "--no-replace-objects" | "--literal-pathspecs"
         ) {
             index += 1;
             continue;
@@ -313,13 +491,33 @@ fn routed<'a>(
             return None;
         }
         saw_change_directory = true;
+        route = Some(target);
         index += 1;
     }
     let rest = arguments.get(index..)?;
     if without_repository && crate::pretool::reads_without_repository(rest) {
         return None;
     }
-    Some(rest)
+    Some((rest, route))
+}
+
+/// The owner a read subcommand answers to when it has no declarative rule of
+/// its own.
+///
+/// `diff-tree`, `diff-index` and `diff-files` print the comparison `diff` owns,
+/// `cherry`
+/// lists the commits `log` owns and `annotate` is `blame` in another output
+/// format, built from the same walk and reading the same `blame.*` settings. Without this each would fall to the catch-all
+/// below, which leaves every git rule uncertain and sends an ordinary read to
+/// review; naming the owner instead keeps the permission a user disables
+/// working on the spelling they disabled it for.
+fn read_owner(command: &str) -> &str {
+    match command {
+        "diff-tree" | "diff-index" | "diff-files" => "diff",
+        "cherry" => "log",
+        "annotate" => "blame",
+        other => other,
+    }
 }
 
 #[cfg(test)]
@@ -414,7 +612,7 @@ pub(super) fn observe_with_contexts(
     {
         return;
     }
-    if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == command) {
+    if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == read_owner(command)) {
         // Attribution is deliberately stronger than legacy Python's inert
         // matcher=None porcelain entries: disabling a permission must work.
         result.rule(
@@ -458,18 +656,26 @@ pub(super) fn observe_with_contexts(
         // A trailing `2>&1` only merges the fetch's progress into stdout.
         let stripped = crate::pretool::without_stderr_merge(segment);
         let refresh = stripped.as_ref().unwrap_or(segment);
-        let plain = git_fetch::plain_origin_refresh(refresh, command_index)
-            || (routed_remote && git_fetch::routed_origin_refresh(refresh, command_index));
+        let plain = git_fetch::plain_refresh(refresh, command_index).is_some()
+            || (routed_remote && git_fetch::routed_refresh(refresh, command_index).is_some());
         if !(plain && crate::pretool::verified_origin_operation(refresh, proof_context)) {
             result.rule("command.git.unverified-fetch", index, !plain);
         }
     }
-    if command == "diff"
+    // `diff-index --cached` prints the same staged content `diff --cached`
+    // does, so it answers to the same index owner.
+    if matches!(command, "diff" | "diff-index")
         && arguments[command_index + 1..]
             .iter()
             .take_while(|argument| argument.as_str() != "--")
             .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
-        && !inspection.is_some_and(|remaining| bounded_cached_diff(&remaining[1..]))
+        && !inspection.is_some_and(|remaining| {
+            let route = routed_with_route(arguments, context, true).and_then(|(_, route)| route);
+            bounded_cached_diff(
+                &remaining[1..],
+                operand_directory(proof_context.cwd, route).as_deref(),
+            )
+        })
     {
         result.rule("command.git.index-inspection", index, true);
     }

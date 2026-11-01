@@ -16,12 +16,16 @@ from ..native_daemon_handler import native_events_cursor
 from ..runtime.network_status import build_network_status
 from ..store import GuardStore
 from .command_activity_health_repair import auto_repair_command_activity_health_if_degraded
+from .context_assistance_http import READ_PATHS as CONTEXT_ASSISTANCE_READ_PATHS
+from .context_assistance_http import respond as respond_context_assistance
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
 from .harness_version_api import attach_version_compatibility
 from .local_cli_http import handle_local_cli_list
+from .plugin_updates_http import handle_plugin_updates_read
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
+from .workspace_assessment_api import handle_workspace_assessment_get
 
 m = _ServerProxy()
 
@@ -29,6 +33,9 @@ m = _ServerProxy()
 class _DashboardRuntimeReadRoutes:
     def _serve_dashboard_runtime_read(self, parsed: ParseResult, path_parts: list[str], store: GuardStore) -> bool:
         """Serve a dashboard read route; return True when the route was handled."""
+        if parsed.path in CONTEXT_ASSISTANCE_READ_PATHS:
+            respond_context_assistance(self, CONTEXT_ASSISTANCE_READ_PATHS[parsed.path])
+            return True
         if parsed.path == "/v1/extension-controls/catalog":
             try:
                 catalog = self._daemon_server().extension_control_api.catalog()
@@ -130,6 +137,8 @@ class _DashboardRuntimeReadRoutes:
         if parsed.path == "/v1/supply-chain/bundle":
             self._handle_get_supply_chain_bundle()
             return True
+        if handle_workspace_assessment_get(self, parsed.path, parsed.query):
+            return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
             self._handle_cloud_app_handoff(path_parts[2], parsed.query)
             return True
@@ -184,6 +193,9 @@ class _DashboardRuntimeReadRoutes:
             from .cloud_review_settings import cloud_review_settings_status
 
             self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
+            return True
+        if parsed.path == "/v1/plugins/updates":
+            handle_plugin_updates_read(self)
             return True
         if parsed.path == "/v1/update/status":
             self._write_json(

@@ -84,11 +84,11 @@ def configured_mcp_server_names(loaded: Sequence[HarnessDetection]) -> dict[str,
 
 
 def configured_harness_detections(
-    home_dir: Path, guard_home: Path, workspace_dir: Path | None = None
+    home_dir: Path, guard_home: Path, workspace_dir: Path | None = None, *, skipped: list[str] | None = None
 ) -> list[HarnessDetection]:
-    """One detection pass that both ``discover_*`` functions can share."""
+    """One detection pass both ``discover_*`` functions share; unreadable harnesses are named in ``skipped``."""
 
-    return _safe_detections(home_dir, guard_home, workspace_dir)
+    return _safe_detections(home_dir, guard_home, workspace_dir, skipped)
 
 
 def _collect_stdio_servers(detection: HarnessDetection, groups: dict[str, _DiscoveryGroup]) -> None:
@@ -354,7 +354,9 @@ class _DiscoveryGroup:
     harness: str
 
 
-def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | None) -> list[HarnessDetection]:
+def _safe_detections(
+    home_dir: Path, guard_home: Path, workspace_dir: Path | None, skipped: list[str] | None = None
+) -> list[HarnessDetection]:
     from . import list_adapters
     from .base import HarnessContext
 
@@ -384,6 +386,9 @@ def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | Non
                     type(exc).__name__,
                 )
                 continue
+        else:
+            if skipped is not None:
+                skipped.append(adapter.harness)
     return detections
 
 

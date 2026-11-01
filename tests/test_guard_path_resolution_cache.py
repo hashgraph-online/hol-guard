@@ -10,7 +10,8 @@ from codex_plugin_scanner.guard import path_resolution_cache as cache
 
 @pytest.fixture(autouse=True)
 def _clear() -> None:
-    cache.clear_cached_realpaths()
+    with cache._lock:
+        cache._remembered.clear()
 
 
 def test_matches_realpath_for_symlinked_directory(tmp_path: Path) -> None:

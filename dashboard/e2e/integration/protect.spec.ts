@@ -24,7 +24,7 @@ async function readSeededRuntime(state: Parameters<typeof daemonApi>[0]): Promis
   return { runtime, home };
 }
 
-test("Protect shows degraded posture, per-app protection and every app Guard can watch", async ({ page, state }) => {
+test("Protect shows degraded posture and every app Guard can watch, with per-app protection on its row", async ({ page, state }) => {
   const { home } = await readSeededRuntime(state);
   await page.goto("/protect");
   await expectNoErrorBoundary(page);
@@ -41,14 +41,21 @@ test("Protect shows degraded posture, per-app protection and every app Guard can
   await expect(statValue("Watched apps")).toHaveText(/^[1-9]\d*$/);
   await expect(statValue("Runtime")).toHaveText("active");
 
-  await expect(main.getByText("Protection by app", { exact: true })).toBeVisible();
+  // One list: each connected app's Protected or Watch choice sits on its
+  // coverage row, with no separate per-app card.
+  const coverage = main.getByRole("region", { name: "App coverage" });
+  await expect(coverage.getByText("App coverage", { exact: true })).toBeVisible();
+  await expect(main.getByText("Protection by app", { exact: true })).toHaveCount(0);
   for (const harness of home.activeApps) {
-    await expect(main.getByText(APP_LABELS[harness], { exact: true }).first()).toBeVisible();
+    const choice = coverage.getByRole("group", { name: `Protection for ${APP_LABELS[harness]}` });
+    await expect(choice).toBeVisible();
+    await expect(choice.getByRole("radio", { name: "Watch" })).toBeEnabled();
   }
-
-  await expect(main.getByText("App coverage", { exact: true })).toBeVisible();
+  for (const harness of home.inactiveApps) {
+    await expect(coverage.getByRole("group", { name: `Protection for ${APP_LABELS[harness]}` })).toHaveCount(0);
+  }
   for (const app of ["Codex", "Claude Code", "Cursor"]) {
-    await expect(main.getByRole("button", { name: new RegExp(`^${app}\\b`) })).toBeVisible();
+    await expect(coverage.getByRole("button", { name: new RegExp(`^${app}\\b`) })).toBeVisible();
   }
 });
 

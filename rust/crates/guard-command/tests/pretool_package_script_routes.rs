@@ -266,3 +266,82 @@ fn an_unverifiable_vite_config_output_does_not_take_the_build_receipt() {
     assert_ne!(through_a_package.reason_code, NODE_BUILD);
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// Bun started on an installed entrypoint runs the same program Node does, so
+/// it takes the receipt Node takes, also when the run names another checkout.
+/// Installs, `bun x` and a refused build output keep Bun's own reading.
+#[test]
+fn bun_on_an_installed_entrypoint_takes_the_node_route() {
+    let root = root();
+    let vitest = "vitest/vitest.mjs";
+    let ws = project(&root, "main", json!({}), &[VITE, vitest]);
+    let tree = project(&root, "tree", json!({}), &[]);
+    let modules = ws.join("node_modules");
+    let builds = [
+        format!("{{}} {} build", modules.join(VITE).display()),
+        format!("{{}} node_modules/{VITE} build --root {}", tree.display()),
+    ];
+    let runs = [
+        format!("{{}} ./node_modules/{vitest} run"),
+        format!(
+            "{{}} {} run --root {}",
+            modules.join(vitest).display(),
+            tree.display()
+        ),
+    ];
+    for harness in HARNESSES {
+        for shape in builds.iter().chain(&runs) {
+            let bun = classify(&ws, harness, &shape.replacen("{}", "bun", 1));
+            let node = classify(&ws, harness, &shape.replacen("{}", "node", 1));
+            assert_ne!(bun.decision, "allow", "{harness}: {shape}");
+            // A run node itself does not contain says nothing about bun.
+            if cfg!(target_os = "macos")
+                && (builds.contains(shape) || node.minimum_action == "sandbox-required")
+            {
+                assert_eq!(
+                    (bun.minimum_action.as_str(), bun.reason_code.as_str()),
+                    (node.minimum_action.as_str(), node.reason_code.as_str()),
+                    "{harness}: {shape}"
+                );
+                if builds.contains(shape) {
+                    assert_eq!(bun.reason_code, NODE_BUILD, "{harness}: {shape}");
+                }
+            }
+        }
+        for command in [
+            "bun install",
+            "bun add left-pad",
+            "bun x vite build --outDir /tmp/out",
+            "bun node_modules/vite/bin/vite.js build --outDir /tmp/out",
+        ] {
+            let result = classify(&ws, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            assert_ne!(result.reason_code, NODE_BUILD, "{harness}: {command}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A test-named script whose body is a read-only tool keeps the package
+/// receipt only while that tool is installed where the sink resolves it. The
+/// sink reads the same body and plans it as that tool, so a receipt issued
+/// without the tool names a run the sink then refuses; the command belongs on
+/// the generic route instead.
+#[test]
+fn a_test_named_tool_body_keeps_the_receipt_only_while_the_tool_is_installed() {
+    let root = root();
+    let scripts = json!({"test:types": "tsc --noEmit -p ."});
+    let without = project(&root, "types-absent", scripts.clone(), &[]);
+    let with = project(&root, "types-present", scripts, &["typescript/bin/tsc"]);
+    for harness in HARNESSES {
+        let absent = classify(&without, harness, "npm run test:types");
+        assert_ne!(absent.decision, "allow", "{harness}");
+        assert_ne!(absent.reason_code, PACKAGE_TEST, "{harness}");
+        let present = classify(&with, harness, "npm run test:types");
+        assert_ne!(present.decision, "allow", "{harness}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(present.reason_code, PACKAGE_TEST, "{harness}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(root);
+}

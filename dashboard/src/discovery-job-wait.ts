@@ -37,6 +37,10 @@ function stageFailure(code: unknown): DiscoveryFailure {
       return new DiscoveryFailure("codex_host_unavailable", "Guard could not reach the Codex app. Open or reopen the Codex app, then choose Check for connectors again. Known connections were kept.");
     case "observed_provider_scan_failed":
       return new DiscoveryFailure("observed_provider_scan_failed", "Guard could not merge observed provider tools. Known tools and choices were kept; choose Check for connectors again.");
+    case "cli_help_unreadable":
+      return new DiscoveryFailure("cli_help_unreadable", "Guard could not read this tool's --help output. Known commands and choices were kept.");
+    case "cli_identity_changed":
+      return new DiscoveryFailure("cli_identity_changed", "This tool was found again as a different program while Guard read its --help, so nothing was saved. Load commands again to read the new one.");
     case "catalog_limit_reached":
       return new DiscoveryFailure("catalog_limit_reached", "This connector has more tools than Guard can catalog safely. Existing choices were kept; remove tools you do not use in the host app, then check again.");
     case "discovery_failed":
@@ -45,6 +49,20 @@ function stageFailure(code: unknown): DiscoveryFailure {
       console.warn("Unknown discovery error code:", code);
       return new DiscoveryFailure("discovery_failed", "Discovery did not finish. Known tools and choices were kept. Try again shortly.");
   }
+}
+
+/**
+ * How long to wait before each progress check. Most jobs, such as reading a
+ * tool's --help, finish within a few hundred milliseconds, so the first
+ * checks come quickly; longer scans settle into a steady half-second.
+ */
+const EARLY_POLL_DELAYS_MS = [100, 150, 250];
+
+/** How long a job may run before the page stops waiting, however quickly it checks. */
+export const DISCOVERY_WAIT_MS = 60_000;
+
+export function discoveryPollDelay(poll: number): number {
+  return EARLY_POLL_DELAYS_MS[poll] ?? 500;
 }
 
 export async function waitForDiscoveryJob(cliId: string, initialJob: unknown, signal: AbortSignal, readJson: (response: Response) => Promise<unknown>): Promise<void> {
@@ -68,18 +86,20 @@ export async function waitForDiscoveryJob(cliId: string, initialJob: unknown, si
   let job = normalize(initialJob);
   let finished = false;
   try {
-    for (let poll = 0; poll < 120; poll += 1) {
+    for (let poll = 0, waited = 0; waited < DISCOVERY_WAIT_MS; poll += 1) {
       if (signal.aborted) return;
       if (job.state === "complete" || job.state === "cancelled") { finished = true; return; }
       if (job.state === "failed") {
         finished = true;
         throw stageFailure(job.error);
       }
+      const delay = discoveryPollDelay(poll);
       await new Promise<void>((resolve) => {
         const done = () => { window.clearTimeout(timer); signal.removeEventListener("abort", done); resolve(); };
-        const timer = window.setTimeout(done, 500);
+        const timer = window.setTimeout(done, delay);
         signal.addEventListener("abort", done, { once: true });
       });
+      waited += delay;
       if (!signal.aborted) job = await request({ job_id: job.job_id });
     }
     throw new DiscoveryFailure("discovery_timeout", "Discovery took too long. Known tools and choices were kept. Try again shortly.");

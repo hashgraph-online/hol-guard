@@ -313,3 +313,124 @@ def test_package_shim_status_distinguishes_absent_and_unreadable_manifests(
 
     assert status["manifest_state"] == "unreadable"
     assert status["installed_managers"] == []
+
+
+_OLD_DIGEST = "a" * 64
+_NEW_DIGEST = "b" * 64
+
+
+def _pinned_config(path: Path, digest: str) -> Path:
+    path.write_text(
+        '{"hooks": {"PreToolUse": [{"command": "/g/native-runtime/'
+        + digest
+        + '/hol-guard-runtime bounded-hook-bridge"}]}}',
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.parametrize(("pinned", "expected"), [(_OLD_DIGEST, ("zcode",)), (_NEW_DIGEST, ())])
+def test_harness_repair_repins_a_hook_config_naming_an_older_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pinned: str,
+    expected: tuple[str, ...],
+) -> None:
+    config = _pinned_config(tmp_path / "config.json", pinned)
+    install = {"harness": "zcode", "active": True, "manifest": {"config_path": str(config)}}
+    store = _Store(tmp_path / "guard")
+    store.list_managed_installs = lambda: [install]
+    store.get_managed_install = lambda _harness: install
+    applied: list[str] = []
+
+    def apply(_command: str, harness: str, *_args: object) -> None:
+        applied.append(harness)
+        _pinned_config(config, _NEW_DIGEST)
+
+    monkeypatch.setattr(reconciliation, "_live_hook_verification", lambda *_args: {"zcode": True})
+    monkeypatch.setattr(reconciliation, "_current_durable_runtime_digest", lambda: _NEW_DIGEST)
+    monkeypatch.setattr(reconciliation, "apply_managed_install", apply)
+
+    repaired, failed = reconciliation.repair_failing_managed_harness_hooks(store, home_dir=tmp_path / "home")
+
+    assert repaired == expected
+    assert applied == list(expected)
+    assert failed == ()
+
+
+def test_harness_repair_fails_when_reinstall_leaves_the_older_runtime_pinned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _pinned_config(tmp_path / "config.json", _OLD_DIGEST)
+    install = {"harness": "zcode", "active": True, "manifest": {"config_path": str(config)}}
+    store = _Store(tmp_path / "guard")
+    store.list_managed_installs = lambda: [install]
+    store.get_managed_install = lambda _harness: install
+
+    monkeypatch.setattr(reconciliation, "_live_hook_verification", lambda *_args: {"zcode": True})
+    monkeypatch.setattr(reconciliation, "_current_durable_runtime_digest", lambda: _NEW_DIGEST)
+    monkeypatch.setattr(reconciliation, "apply_managed_install", lambda *_args: None)
+
+    assert reconciliation.repair_failing_managed_harness_hooks(store, home_dir=tmp_path / "home") == ((), ("zcode",))
+
+
+def test_a_source_install_never_repins_hook_configs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delattr(reconciliation.sys, "frozen", raising=False)
+
+    assert reconciliation._current_durable_runtime_digest() is None
+    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": "/missing"}}, None)
+
+
+def test_a_windows_escaped_pin_is_read(tmp_path: Path) -> None:
+    config = tmp_path / "config.json"
+    config.write_text(
+        '{"command": "C:\\\\g\\\\native-runtime\\\\' + _OLD_DIGEST + '\\\\hol-guard-runtime.exe"}', encoding="utf-8"
+    )
+
+    assert reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _NEW_DIGEST)
+    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(config)}}, _OLD_DIGEST)
+
+
+def test_a_hook_artifact_outside_config_path_is_read(tmp_path: Path) -> None:
+    hook = _pinned_config(tmp_path / "pretool.sh", _OLD_DIGEST)
+    yaml_config = tmp_path / "hermes.yaml"
+    yaml_config.write_text("guard: managed\n", encoding="utf-8")
+    manifest = {
+        "config_path": str(yaml_config),
+        "pretool_hook_path": str(hook),
+        "files": [{"path": str(hook)}],
+    }
+
+    assert reconciliation._pins_stale_native_runtime({"manifest": manifest}, _NEW_DIGEST)
+    assert not reconciliation._pins_stale_native_runtime({"manifest": {"config_path": str(yaml_config)}}, _NEW_DIGEST)
+
+
+# The pin grammar and scan budget are covered by hook_launch_scan_tests.rs.
+
+
+def test_a_malformed_persisted_path_does_not_stop_the_remaining_harnesses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _pinned_config(tmp_path / "config.json", _OLD_DIGEST)
+    broken = {"harness": "cursor", "active": True, "manifest": {"config_path": "/g/\x00/config.json"}}
+    stale = {"harness": "zcode", "active": True, "manifest": {"config_path": str(config)}}
+    store = _Store(tmp_path / "guard")
+    store.list_managed_installs = lambda: [broken, stale]
+    store.get_managed_install = lambda harness: broken if harness == "cursor" else stale
+    applied: list[str] = []
+
+    def apply(_command: str, harness: str, *_args: object) -> None:
+        applied.append(harness)
+        _pinned_config(config, _NEW_DIGEST)
+
+    monkeypatch.setattr(reconciliation, "_live_hook_verification", lambda *_args: {"cursor": True, "zcode": True})
+    monkeypatch.setattr(reconciliation, "_current_durable_runtime_digest", lambda: _NEW_DIGEST)
+    monkeypatch.setattr(reconciliation, "apply_managed_install", apply)
+
+    repaired, failed = reconciliation.repair_failing_managed_harness_hooks(store, home_dir=tmp_path / "home")
+
+    assert applied == ["zcode"]
+    assert repaired == ("zcode",)
+    assert failed == ()

@@ -51,7 +51,7 @@ fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     }
 }
 
@@ -81,10 +81,14 @@ fn home_result(
             shell_home_matches: true,
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             ripgrep_config_absent: false,
+            gem_config_absent: false,
+            http_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&environment),
     )
@@ -132,7 +136,7 @@ fn evidence(result: &guard_contracts::PreToolResultV1) -> String {
 /// plain directory, all below a private home.
 fn fixture() -> (PathBuf, PathBuf, PathBuf) {
     // `/tmp`, not `$TMPDIR`: macOS puts the latter below `/private/var`,
-    // which no path proof admits outside the working directory.
+    // which the path proofs judge as its own location rather than a home.
     let root = Path::new("/tmp").join(format!(
         "guard-sibling-{}-{}",
         std::process::id(),
@@ -193,10 +197,14 @@ fn the_home_projection_answers_for_a_sibling_root() {
         shell_home_matches: true,
         cdpath_unset: false,
         rustup_override_absent: false,
+        cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
         ripgrep_config_absent: false,
+        gem_config_absent: false,
+        http_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     };
     assert_eq!(
         crate::pretool::directory_targets::verified_cwd_target("~/projects/app-report", context)
@@ -233,6 +241,9 @@ fn a_list_after_cd_into_a_sibling_root_runs_contained_there() {
         format!("cd {} && npm run build && ls dist", tree.display()),
         // A removal is contained there exactly as it is in the session's own root.
         format!("cd {} && ls && rm notes.txt", tree.display()),
+        // Git in a linked worktree is bounded as it is in the root itself: the
+        // sink grants the shared Git directory the worktree's index lives in.
+        format!("cd {} && git add -A && git status", tree.display()),
         format!(
             "cd {} && npm run build && cat package.json",
             other.display()
@@ -292,10 +303,6 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
         format!("cd {}/plain; npm run build", projects.display()),
         format!("cd {}/plain 2>/dev/null; npm run build", projects.display()),
         // The rest still faces every check it would from that root.
-        format!(
-            "cd {}/app-report && git add -A && git status",
-            projects.display()
-        ),
         format!(
             "cd {}/app-report && npm run build && curl https://example.com",
             projects.display()

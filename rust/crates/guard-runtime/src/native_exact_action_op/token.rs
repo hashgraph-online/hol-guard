@@ -278,9 +278,12 @@ pub(super) fn exact_action_components(
             "policy_action": facts.policy_action.as_deref().unwrap_or(""),
             "reason_code": facts.reason_code.as_deref().unwrap_or(""),
         }),
+        // The compiled `rule_digest` is not part of the token: a Guard upgrade
+        // that changes rule sources must not re-ask for every saved Always.
+        // The verdict facts above still bind it, and a saved approval never
+        // lowers a block or a sandbox requirement the new rules raise.
         policy: json!({
             "version": POLICY_VERSION,
-            "rule_digest": binding.get("rule_digest").cloned().unwrap_or(Value::Null),
             "command_extensions": binding.get("command_extensions").cloned().unwrap_or(Value::Null),
         }),
         sandbox: json!({"required": facts.minimum_action.as_deref() == Some("sandbox-required")}),

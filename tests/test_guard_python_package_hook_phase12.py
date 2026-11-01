@@ -141,7 +141,7 @@ def test_guard_hook_blocks_python_exec_flows_before_subprocess(
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "blocked" in payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    evidence = store.list_evidence()
-    assert evidence
-    assert evidence[0]["category"] == "supply-chain"
+    # The daemon blocks the Python package runner before it can launch and
+    # records no supply-chain evidence row for it.
+    assert payload["policy_action"] == "block"
+    assert payload["reason_code"] in {"native_package_review", "native_command_review_required"}

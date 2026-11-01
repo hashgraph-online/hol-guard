@@ -1,4 +1,4 @@
-"""Every Cursor tool routed through preToolUse is reviewed as a file change, and health checks that routing."""
+"""Every Cursor tool routed through preToolUse is normalized as a file change, and health checks that routing."""
 
 from __future__ import annotations
 
@@ -17,10 +17,7 @@ from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     HOOK_SCRIPT_NAME,
     live_guard_cursor_hooks_intercept,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_cursor_hook_payload
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.request_artifacts import (
-    extract_sensitive_file_write_request,
-)
+from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 
 _TOOL_INPUTS = {
     "Write": lambda path: {"file_path": path, "content": "x"},
@@ -38,7 +35,9 @@ def test_every_routed_tool_has_a_classified_input_shape() -> None:
 @pytest.mark.parametrize("tool_name", CURSOR_FILE_MUTATION_TOOLS)
 def test_routed_tool_normalizes_to_file_write_with_target(tool_name: str, tmp_path: Path) -> None:
     target = tmp_path / "workspace" / ".env"
-    envelope = normalize_cursor_hook_payload(
+    envelope = normalize_harness_payload(
+        "cursor",
+        "",
         {"hook_event_name": "preToolUse", "tool_name": tool_name, "tool_input": _TOOL_INPUTS[tool_name](str(target))},
         workspace=tmp_path / "workspace",
         home_dir=tmp_path / "home",
@@ -47,32 +46,6 @@ def test_routed_tool_normalizes_to_file_write_with_target(tool_name: str, tmp_pa
     assert envelope.action_type == "file_write"
     assert len(envelope.target_paths) == 1
     assert envelope.target_paths[0].endswith(".env")
-
-
-@pytest.mark.parametrize("tool_name", CURSOR_FILE_MUTATION_TOOLS)
-def test_routed_tool_hits_sensitive_write_rules(tool_name: str, tmp_path: Path) -> None:
-    home, workspace = tmp_path / "home", tmp_path / "workspace"
-    hooks_json = home / ".cursor" / "hooks.json"
-    cases = {
-        str(workspace / ".env"): ("local .env file", "sensitive local file write"),
-        str(home / ".ssh" / "id_ed25519"): ("SSH private key", "sensitive local file write"),
-        str(hooks_json): ("Cursor hooks", "guard-managed config write"),
-    }
-    for path, (path_class, action_class) in cases.items():
-        match = extract_sensitive_file_write_request(
-            tool_name,
-            _TOOL_INPUTS[tool_name](path),
-            cwd=workspace,
-            home_dir=home,
-            protected_paths={str(hooks_json): "Cursor hooks"},
-        )
-        assert match is not None, path
-        assert (match.path_class, match.action_class) == (path_class, action_class)
-
-
-def test_ordinary_file_change_is_not_sensitive(tmp_path: Path) -> None:
-    for tool_name, build in _TOOL_INPUTS.items():
-        assert extract_sensitive_file_write_request(tool_name, build("src/app.py"), cwd=tmp_path) is None
 
 
 def test_unsupported_events_are_reported() -> None:

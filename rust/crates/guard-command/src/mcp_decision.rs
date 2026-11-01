@@ -11,6 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
+pub(crate) use guard_contracts::python_strip;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -72,29 +73,6 @@ fn canonical_material_bytes(material: &Value) -> Vec<u8> {
 fn context_sha256_digest_local(material: &Value, prefix: Option<&str>) -> String {
     let bytes = canonical_material_bytes(material);
     format!("{}{}", prefix.unwrap_or(""), sha256_hex(&bytes))
-}
-
-/// CPython `str.strip()` whitespace set: the ASCII controls 0x09-0x0d and
-/// 0x1c-0x1f plus every Unicode code point whose `isspace` is true.
-fn is_python_space(ch: char) -> bool {
-    matches!(
-        ch,
-        '\u{09}'..='\u{0d}'
-            | ' '
-            | '\u{1c}'..='\u{1f}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'..='\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
-}
-
-pub(crate) fn python_strip(text: &str) -> &str {
-    text.trim_matches(is_python_space)
 }
 
 /// `str.partition` → `(before, found, after)`.

@@ -51,18 +51,184 @@ runs:
   - name: Lint production sources
     run: |
       uv run --no-sync python -m ruff check \
+        scripts/ci/protected_runtime_archives.py \
+        scripts/ci/prune_superseded_caches.py \
+        tests/test_ci_protected_runtime_archives.py \
+        tests/test_ci_prune_superseded_caches.py \
+        tests/test_fleet_posture_builder.py \
+        tests/test_runner_sync_payload.py \
+        tests/test_guard_approval_extension_recommendation.py \
+        scripts/ci/normalize_rust_toolchains.py \
+        tests/test_ci_rust_toolchain_cache.py \
+        scripts/ci/dashboard_integration_server.py \
+        scripts/ci/dashboard_integration_discovery.py \
+        tests/test_dashboard_integration_discovery.py \
+        tests/test_ci_native_evaluator_fast_path.py \
+        scripts/ci/native_approval_contract_gate.py \
+        tests/test_ci_native_approval_workflow.py \
+        tests/test_policy_bundle_crate_boundary.py \
+        tests/test_ci_command_source_inputs_manifest.py \
+        tests/test_ci_macos_gate_shards.py \
+        tests/test_ci_windows_sccache_readiness.py \
+        tests/test_ci_required_aggregate.py \
+        tests/test_ci_rust_preflight.py \
+        tests/test_ci_rust_test_archives.py \
+        tests/test_ci_rust_archive_inputs.py \
+        scripts/ci/rust_test_archive_inputs.py \
+        tests/test_ci_runtime_test_archive.py \
+        tests/test_ci_pytest_shard.py \
+        tests/test_ci_pytest_shard_plan.py \
+        tests/test_ci_quality_feedback.py \
+        tests/test_native_regression_shard.py \
+        tests/test_guard_gauntlet_ci.py \
+        tests/test_guard_gauntlet_session_folder.py \
+        tests/release_workflow_helpers.py \
+        tests/test_alpha_fast_native_release.py \
+        tests/test_ci_speed_contracts.py \
+        tests/test_installed_canary_workflow.py \
+        tests/test_pr_testpypi_canary_workflow.py \
+        tests/test_publish_target_lanes.py \
+        tests/test_release_compiler_cache.py \
+        tests/test_release_critical_path.py \
+        tests/test_release_native_binary_cache.py \
+        tests/test_release_please_workflow.py \
+        tests/test_release_publication_workflow.py \
+        tests/test_release_train_workflow.py \
+        tests/test_unpublished_alpha_reservation.py \
         src/ \
+        scripts/build_native_command_program.py \
+        scripts/ci/run_projection_shard.py \
+        scripts/ci/build_pytest_shard_plan.py \
+        scripts/ci/pytest_shard_resources.py \
+        tests/test_ci_pytest_shard_resources.py \
+        scripts/ci/verify_native_command_program.py \
+        scripts/core_command_build_inputs.py \
+        scripts/native_directory_inventory.py \
+        scripts/native_projection_inventory.py \
+        scripts/prepare_extension_directory.py \
+        tests/test_ci_projection_shard.py \
+        tests/test_native_projection_inventory.py \
+        tests/test_native_projection_descriptor_destinations.py \
         tests/test_guard_durable_io.py \
         tests/test_guard_managed_install_context.py \
-        tests/test_guard_private_file_io.py
+        tests/test_guard_private_file_io.py \
+        tests/test_native_offline_cache.py \
+        tests/offline_resource_census.py \
+        tests/offline_data_fixture.py \
+        tests/test_offline_resource_census.py \
+        tests/test_offline_data_fixture.py \
+        scripts/ci/pytest_duration_report.py \
+        tests/test_ci_pytest_duration_report.py \
+        tests/test_native_policy_test_support.py \
+        tests/test_native_policy_snapshot_direct_lane_saved.py \
+        tests/test_native_policy_integrity_state_publish.py \
+        tests/test_guard_runtime.py \
+        tests/test_ci_native_evaluator_cache.py \
+        tests/test_cursor_native_bridge.py \
+        tests/test_grok_native_bridge.py \
+        tests/test_frozen_windows_daemon_bootstrap.py \
+        tests/test_frozen_windows_daemon_cleanup_diagnostics.py \
+        tests/test_native_approval_gate_bridge.py \
+        tests/test_native_review_allow_hint.py \
+        tests/test_ci_quality_marker_scan.py
+      uv run --no-sync python -m ruff check \
+        scripts/release/native_artifact.py \
+        scripts/release/prepared_native.py \
+        tests/test_release_native_artifact.py
     shell: bash
   - name: Check formatting for production sources
     run: |
       uv run --no-sync python -m ruff format --check \
+        scripts/ci/protected_runtime_archives.py \
+        scripts/ci/prune_superseded_caches.py \
+        tests/test_ci_protected_runtime_archives.py \
+        tests/test_ci_prune_superseded_caches.py \
+        tests/test_fleet_posture_builder.py \
+        tests/test_runner_sync_payload.py \
+        tests/test_guard_approval_extension_recommendation.py \
+        scripts/ci/normalize_rust_toolchains.py \
+        tests/test_ci_rust_toolchain_cache.py \
+        scripts/ci/dashboard_integration_server.py \
+        scripts/ci/dashboard_integration_discovery.py \
+        tests/test_dashboard_integration_discovery.py \
+        tests/test_ci_native_evaluator_fast_path.py \
+        scripts/ci/native_approval_contract_gate.py \
+        tests/test_ci_native_approval_workflow.py \
+        tests/test_policy_bundle_crate_boundary.py \
+        tests/test_ci_command_source_inputs_manifest.py \
+        tests/test_ci_macos_gate_shards.py \
+        tests/test_ci_windows_sccache_readiness.py \
+        tests/test_ci_required_aggregate.py \
+        tests/test_ci_rust_preflight.py \
+        tests/test_ci_rust_test_archives.py \
+        tests/test_ci_rust_archive_inputs.py \
+        scripts/ci/rust_test_archive_inputs.py \
+        tests/test_ci_runtime_test_archive.py \
+        tests/test_ci_pytest_shard.py \
+        tests/test_ci_pytest_shard_plan.py \
+        tests/test_ci_quality_feedback.py \
+        tests/test_native_regression_shard.py \
+        tests/test_guard_gauntlet_ci.py \
+        tests/test_guard_gauntlet_session_folder.py \
+        tests/release_workflow_helpers.py \
+        tests/test_alpha_fast_native_release.py \
+        tests/test_ci_speed_contracts.py \
+        tests/test_installed_canary_workflow.py \
+        tests/test_pr_testpypi_canary_workflow.py \
+        tests/test_publish_target_lanes.py \
+        tests/test_release_compiler_cache.py \
+        tests/test_release_critical_path.py \
+        tests/test_release_native_binary_cache.py \
+        tests/test_release_please_workflow.py \
+        tests/test_release_publication_workflow.py \
+        tests/test_release_train_workflow.py \
+        tests/test_unpublished_alpha_reservation.py \
         src/ \
+        scripts/build_native_command_program.py \
+        scripts/ci/run_projection_shard.py \
+        scripts/ci/build_pytest_shard_plan.py \
+        scripts/ci/pytest_shard_resources.py \
+        tests/test_ci_pytest_shard_resources.py \
+        scripts/ci/verify_native_command_program.py \
+        scripts/core_command_build_inputs.py \
+        scripts/native_directory_inventory.py \
+        scripts/native_projection_inventory.py \
+        scripts/prepare_extension_directory.py \
+        tests/test_ci_projection_shard.py \
+        tests/test_native_projection_inventory.py \
+        tests/test_native_projection_descriptor_destinations.py \
         tests/test_guard_durable_io.py \
         tests/test_guard_managed_install_context.py \
-        tests/test_guard_private_file_io.py
+        tests/test_guard_private_file_io.py \
+        tests/test_native_offline_cache.py \
+        tests/offline_resource_census.py \
+        tests/offline_data_fixture.py \
+        tests/test_offline_resource_census.py \
+        tests/test_offline_data_fixture.py \
+        scripts/ci/pytest_duration_report.py \
+        tests/test_ci_pytest_duration_report.py \
+        tests/test_native_policy_test_support.py \
+        tests/test_native_policy_snapshot_direct_lane_saved.py \
+        tests/test_native_policy_integrity_state_publish.py \
+        tests/test_guard_runtime.py \
+        tests/test_ci_native_evaluator_cache.py \
+        tests/test_cursor_native_bridge.py \
+        tests/test_grok_native_bridge.py \
+        tests/test_frozen_windows_daemon_bootstrap.py \
+        tests/test_frozen_windows_daemon_cleanup_diagnostics.py \
+        tests/test_native_approval_gate_bridge.py \
+        tests/test_native_review_allow_hint.py \
+        tests/test_ci_quality_marker_scan.py
+      if ! uv run --no-sync python -m ruff format --check \
+        scripts/release/native_artifact.py \
+        scripts/release/prepared_native.py \
+        tests/test_release_native_artifact.py; then
+        uv run --no-sync python -m ruff format --diff \
+          scripts/release/native_artifact.py \
+          scripts/release/prepared_native.py \
+          tests/test_release_native_artifact.py || true
+        exit 1
+      fi
     shell: bash
   - run: uv run --no-sync basedpyright --level error
     shell: bash

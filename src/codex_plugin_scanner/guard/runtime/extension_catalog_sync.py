@@ -202,34 +202,6 @@ def native_wire_call(action: str, *, guard_home: Path | None = None, **fields: o
     raise RuntimeError("Native Extension catalog answer is malformed")
 
 
-def canonical_extension_catalog_json(
-    extensions: list[ExtensionCatalogEntryWire], *, guard_home: Path | None = None
-) -> str:
-    """Return the shared canonical JSON for an Extension projection."""
-
-    text = native_wire_call("v1_canonical", guard_home=guard_home, extensions=extensions).get("canonical_json")
-    if not isinstance(text, str):
-        raise RuntimeError("Native Extension catalog answer is malformed")
-    return text
-
-
-def catalog_digest_for_extensions(
-    extensions: list[ExtensionCatalogEntryWire], *, guard_home: Path | None = None
-) -> str:
-    """Return the cross-language SHA-256 digest over canonical projected Extensions."""
-
-    digest = native_wire_call("v1_canonical", guard_home=guard_home, extensions=extensions).get("catalog_digest")
-    if not isinstance(digest, str):
-        raise RuntimeError("Native Extension catalog answer is malformed")
-    return digest
-
-
-def validate_extension_catalog_wire(payload: object, *, guard_home: Path | None = None) -> ExtensionCatalogWire:
-    """Execute the shared catalog's bounded shape, privacy, identity, and digest contract."""
-
-    return _render(native_wire_call("v1_validate", guard_home=guard_home, payload=payload).get("catalog"))
-
-
 def build_extension_catalog_wire(
     registry: RegistryLike,
     *,

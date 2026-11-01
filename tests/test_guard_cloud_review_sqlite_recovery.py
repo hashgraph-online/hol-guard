@@ -8,15 +8,17 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import sqlite_cloud_review_recovery as recovery
 from codex_plugin_scanner.guard import store_connection_schema
+from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
+from codex_plugin_scanner.guard.review_policy_attribution import ATTRIBUTION_STATE_PREFIX
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     apply_exact_cloud_review,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
     exact_cloud_review_status,
 )
+from codex_plugin_scanner.guard.sqlite_recovery import salvage_quarantined_state
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_native_workspace_review import (
     NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX,
@@ -65,6 +67,10 @@ def _native_receipt(request_id: str) -> dict[str, object]:
         "status": "verified",
         "replayed": False,
     }
+
+
+def _salvage_cloud_review(source: Path, destination: Path) -> bool:
+    return salvage_quarantined_state(source=source, destination=destination)[0]
 
 
 def _recover(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -185,35 +191,62 @@ def test_incomplete_recovery_never_restores_authority(tmp_path: Path, table: str
     with sqlite3.connect(store.path) as connection:
         connection.execute(f'drop table "{table}"')
     destination = GuardStore(tmp_path / "new")
-    assert recovery.salvage_cloud_review_state(source=store.path, destination=destination.path) is False
+    assert _salvage_cloud_review(store.path, destination.path) is False
     assert destination.get_sync_payload("oauth_local_credentials") is None
     assert destination.get_sync_payload("guard_exact_cloud_review_capability") is None
     assert destination.get_approval_request("recover-pending") is None
 
 
-def test_partial_replay_copy_rolls_back_everything(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_partial_replay_copy_rolls_back_everything(tmp_path: Path) -> None:
     source = _prepare(tmp_path)
     destination = GuardStore(tmp_path / "new")
     identity = destination.get_or_create_installation_id()
-    copy = recovery._copy_complete_table
-
-    def fail_after_receipts(src: sqlite3.Connection, dst: sqlite3.Connection, table: str) -> None:
-        copy(src, dst, table)
-        if table == "guard_exact_cloud_review_receipts":
-            raise sqlite3.DatabaseError("database disk image is malformed")
-
-    monkeypatch.setattr(recovery, "_copy_complete_table", fail_after_receipts)
-    assert not recovery.salvage_cloud_review_state(source=source.path, destination=destination.path)
+    with sqlite3.connect(destination.path) as connection:
+        connection.execute(
+            "create trigger reject_replay before insert on guard_exact_cloud_review_receipts "
+            "begin select raise(abort, 'database disk image is malformed'); end"
+        )
+    assert not _salvage_cloud_review(source.path, destination.path)
     assert destination.get_or_create_installation_id() == identity
     assert destination.get_sync_payload("oauth_local_credentials") is None
+    with sqlite3.connect(destination.path) as connection:
+        connection.execute("drop trigger reject_replay")
     assert not destination.has_exact_cloud_review_receipt("consumed-receipt")
+
+
+def _lose_the_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    answer = runtime_request.runtime_answer
+
+    def lost(*args: object, **kwargs: object) -> None:
+        assert answer(*args, **kwargs) is not None  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lost)
+
+
+def test_a_lost_answer_after_a_committed_restore_still_reports_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _prepare(tmp_path)
+    destination = GuardStore(tmp_path / "new")
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (True, False)
+    assert destination.get_sync_payload("oauth_local_credentials") is not None
+
+
+def test_a_lost_answer_never_reports_credentials_the_store_already_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _prepare(tmp_path)
+    destination = connected_exact_review_store(tmp_path / "different")
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (False, False)
 
 
 def test_recovery_refuses_nonempty_destination(tmp_path: Path) -> None:
     source = _prepare(tmp_path)
     destination = connected_exact_review_store(tmp_path / "different")
     identity = destination.get_or_create_installation_id()
-    assert not recovery.salvage_cloud_review_state(source=source.path, destination=destination.path)
+    assert not _salvage_cloud_review(source.path, destination.path)
     assert destination.get_or_create_installation_id() == identity
     assert destination.get_sync_payload("guard_exact_cloud_review_capability") is None
 
@@ -262,10 +295,24 @@ def test_independent_cli_recovery_failure_does_not_discard_complete_review_state
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = _prepare(tmp_path)
-    monkeypatch.setattr(store_connection_schema, "salvage_local_cli_state", lambda **_kwargs: False)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("drop table local_cli_grant")
     _recover(store, monkeypatch)
     assert exact_cloud_review_status(store)["enabled"] is True
     assert store._last_sqlite_recovery_details == {"cloud_review": True, "local_cli": False}
     assert not store._recover_fatal_sqlite_store(ValueError("not a storage failure"))
     assert store._last_sqlite_recovery == "skipped"
     assert store._last_sqlite_recovery_details is None
+
+
+def test_recovery_keeps_each_requests_recorded_policy_rule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _prepare(tmp_path)
+    now = datetime.now(timezone.utc).isoformat()
+    recorded = {"policyBundleVersion": "policy-1730000000000", "policyRuleId": "review-env-reads"}
+    store.insert_sync_payload_if_absent(ATTRIBUTION_STATE_PREFIX + "recover-pending", recorded, now)
+    store.insert_sync_payload_if_absent(ATTRIBUTION_STATE_PREFIX + "no-cloud-rule", {}, now)
+    _recover(store, monkeypatch)
+    restarted = GuardStore(store.guard_home)
+    # A lost attribution would change the claim Cloud already holds for the request.
+    assert restarted.get_sync_payload(ATTRIBUTION_STATE_PREFIX + "recover-pending") == recorded
+    assert restarted.get_sync_payload(ATTRIBUTION_STATE_PREFIX + "no-cloud-rule") == {}

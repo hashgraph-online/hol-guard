@@ -11,6 +11,14 @@ from .runtime.observed_mcp_tools import OBSERVED_MCP_PREFIX, ObservedMcpTool, ob
 ProviderUpdate = tuple[str, str, int]
 
 
+def _source(marker: object) -> ObservedMcpTool | None:
+    if not isinstance(marker, str) or not marker.startswith(OBSERVED_MCP_PREFIX):
+        return None
+    harness, separator, namespace = marker[len(OBSERVED_MCP_PREFIX) :].partition(":")
+    source = observed_mcp_tool(harness, namespace + "probe") if separator else None
+    return source if source is not None and source.namespace == namespace else None
+
+
 def write_provider_choices(
     connection: sqlite3.Connection,
     *,
@@ -47,31 +55,6 @@ def write_provider_choices(
             "state = excluded.state, updated_at = excluded.updated_at",
             (cli_id, identity_hash, slug, state, updated_at),
         )
-
-
-def _source(marker: object) -> ObservedMcpTool | None:
-    if not isinstance(marker, str) or not marker.startswith(OBSERVED_MCP_PREFIX):
-        return None
-    harness, separator, namespace = marker[len(OBSERVED_MCP_PREFIX) :].partition(":")
-    source = observed_mcp_tool(harness, namespace + "probe") if separator else None
-    return source if source is not None and source.namespace == namespace else None
-
-
-def read_native_provider_choices(connection: sqlite3.Connection) -> dict[str, str]:
-    rows = connection.execute(
-        "select o.server_command, o.identity_hash, p.tool_slug, p.state "
-        "from local_mcp_provider_grant p "
-        "join local_cli_observation o on o.cli_id = p.cli_id and o.identity_hash = p.identity_hash "
-        "join local_cli_grant g on g.cli_id = p.cli_id and g.identity_hash = p.identity_hash "
-        "where o.surface = 'mcp' and g.state in ('allowed', 'blocked') and p.state = 'block'",
-    ).fetchall()
-    result: dict[str, str] = {}
-    for marker, identity_hash, slug, state in rows:
-        source = _source(marker)
-        if source is None or source.server_identity.identity_hash != identity_hash:
-            raise ValueError("invalid provider authority identity")
-        result[provider_action_selector(source, slug)] = state
-    return result
 
 
 def provider_choices_digest(updates: Sequence[ProviderUpdate]) -> str:

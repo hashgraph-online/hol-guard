@@ -108,7 +108,7 @@ fn decide_stamped(space: &Space, harness: &str, command: &str) -> guard_contract
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     evaluate_pre_tool_envelope_with_execution_context(
         harness,

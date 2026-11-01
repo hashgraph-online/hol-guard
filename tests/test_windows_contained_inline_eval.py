@@ -1,19 +1,17 @@
 """Windows contains installed Python and Node scripts, and only for harnesses with a sink."""
 
-import hashlib
-import json
-import os
+import shlex
 import sys
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
-from codex_plugin_scanner.guard import windows_paths
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_zcode_response
-from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_sink
-from codex_plugin_scanner.guard.runtime import contained_test_hook, restricted_inline_eval
+from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
+from codex_plugin_scanner.guard.runtime import restricted_inline_eval
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests.containment_resident import native_containment_sink
+from tests.containment_rewrite_client import native_containment_rewrite
 
 PYTHON = r"C:\Program Files\Python312\python.exe"
 RUNTIME = r"C:\Program Files\HOL Guard\hol-guard-runtime.exe"
@@ -137,113 +135,28 @@ def test_windows_routes_only_harnesses_with_a_sink_command(
     containment_resident, monkeypatch, tmp_path, harness, routed
 ):
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(windows_paths, "trusted_windows_local_temp", lambda: tmp_path)
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
         "cwd": str(tmp_path),
         "tool_input": {"command": "python3 test_calc.py"},
     }
-    config = {
-        "harness": harness,
-        "python_executable": sys.executable,
-        "package_root": str(tmp_path),
-        "guard_home": str(tmp_path / "guard"),
-    }
-    result = contained_zcode_response(_receipt(), input_text=json.dumps(payload), config=config, cli_args=[])
-    assert (result is not None) is routed
-    if harness == "codex":
-        command = result["hookSpecificOutput"]["updatedInput"]["command"]
-        assert command.startswith("& '")
+    rewrite = native_containment_rewrite(
+        _receipt(),
+        harness=harness,
+        bridge=True,
+        payload=payload,
+        workspace=tmp_path,
+        guard_home=tmp_path / "guard",
+        home_dir=tmp_path,
+        sink_command=contained_sink_command_prefix(sys.executable, tmp_path),
+    )
+    assert (rewrite.response is not None) is routed
+    if rewrite.response is not None:
+        command = rewrite.response["hookSpecificOutput"]["updatedInput"]["command"]
         assert "execute-contained-test" in command
-
-
-def test_windows_sink_finds_the_request_when_temp_differs(containment_resident, monkeypatch, tmp_path):
-    """The hook and the harness shell can set TEMP differently; both use the profile's."""
-    import shlex
-    import tempfile
-
-    profile_temp = (tmp_path / "profile-temp").resolve()
-    profile_temp.mkdir()
-    workspace = (tmp_path / "workspace").resolve()
-    workspace.mkdir()
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(windows_paths, "trusted_windows_local_temp", lambda: profile_temp)
-    monkeypatch.setattr(contained_test_hook, "trusted_windows_local_temp", lambda: profile_temp)
-    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "cwd": str(workspace),
-        "tool_input": {"command": "python3 test_calc.py"},
-    }
-    config = {
-        "harness": "claude-code",
-        "python_executable": sys.executable,
-        "package_root": str(tmp_path),
-        "guard_home": str(tmp_path / "guard"),
-    }
-    result = contained_zcode_response(_receipt(), input_text=json.dumps(payload), config=config, cli_args=[])
-    assert result is not None
-    argv = shlex.split(result["hookSpecificOutput"]["updatedInput"]["command"])
-    request = Path(argv[argv.index("--request-file") + 1])
-    assert request.parent.parent == profile_temp
-    monkeypatch.setattr(tempfile, "tempdir", str(workspace))
-    read = contained_test_hook._read_windows_request(
-        request, argv[argv.index("--request-sha256") + 1], workspace=workspace
-    )
-    assert read["tool_input"] == {"command": "python3 test_calc.py"}
-
-
-def _write_request(directory: Path, workspace: Path) -> tuple[Path, str]:
-    directory.mkdir()
-    raw = json.dumps(
-        {
-            "schema": "guard-contained-test-request.v1",
-            "workspace": str(workspace),
-            "payload": {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "bash",
-                "tool_input": {"command": "python3 test_calc.py"},
-                "cwd": str(workspace),
-            },
-        }
-    ).encode()
-    request = directory / "request.json"
-    request.write_bytes(raw)
-    return request, hashlib.sha256(raw).hexdigest()
-
-
-def test_windows_request_must_sit_directly_in_the_temporary_directory(monkeypatch, tmp_path):
-    temporary = (tmp_path / "temp").resolve()
-    temporary.mkdir()
-    workspace = (tmp_path / "workspace").resolve()
-    workspace.mkdir()
-    monkeypatch.setattr(contained_test_hook, "trusted_windows_local_temp", lambda: temporary)
-    request, digest = _write_request(temporary / "hol-guard-contained-test-a", workspace)
-    payload = contained_test_hook._read_windows_request(request, digest, workspace=workspace)
-    assert payload["tool_input"] == {"command": "python3 test_calc.py"}
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(request, "0" * 64, workspace=workspace)
-    nested, nested_digest = _write_request(
-        temporary / "hol-guard-contained-test-a" / "hol-guard-contained-test-b", workspace
-    )
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(nested, nested_digest, workspace=workspace)
-
-
-def test_windows_request_rejects_linked_files(monkeypatch, tmp_path):
-    temporary = (tmp_path / "temp").resolve()
-    temporary.mkdir()
-    workspace = (tmp_path / "workspace").resolve()
-    workspace.mkdir()
-    monkeypatch.setattr(contained_test_hook, "trusted_windows_local_temp", lambda: temporary)
-    request, digest = _write_request(temporary / "hol-guard-contained-test-a", workspace)
-    os.link(request, tmp_path / "second-name")
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(request, digest, workspace=workspace)
-    linked = temporary / "hol-guard-contained-test-b"
-    linked.symlink_to(request.parent, target_is_directory=True)
-    (tmp_path / "second-name").unlink()
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(linked / "request.json", digest, workspace=workspace)
+        # The snapshot is written on the host the resident runs on.
+        argv = shlex.split(command)
+        request = Path(argv[argv.index("--request-file") + 1])
+        request.unlink()
+        request.parent.rmdir()

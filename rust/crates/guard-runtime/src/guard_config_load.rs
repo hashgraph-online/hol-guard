@@ -9,13 +9,22 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use guard_command::effect_decision::GuardAction;
+use guard_context_assistance::{restrict_value, ContextAssistanceConfig};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 
 use crate::guard_config_coerce as coerce;
 use crate::guard_config_harness as harness;
 use crate::guard_config_managed::{apply_managed_policy, ManagedInput};
+use crate::managed_policy_floor::effective_managed_policy;
+use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
 use crate::package_authority_config as base;
+#[path = "context_assistance_update_preferences.rs"]
+pub(crate) mod cigar_updates;
+#[path = "context_assistance_config_snapshot.rs"]
+mod context_snapshot;
+#[cfg(test)]
+pub(crate) use context_snapshot::with_changed_reads;
 
 const SCHEMA: &str = "guard-config-load.v1";
 const MAX_REQUEST_BYTES: u64 = 4 * 1024 * 1024;
@@ -79,30 +88,211 @@ fn load(request: &LoadRequest) -> Result<Value, String> {
     let home = base::read_config_table(&request.guard_home, base::HOME_CONFIG_FILENAME)
         .map_err(error_reason)?
         .unwrap_or_default();
+    load_from_home(request, &home)
+}
+
+fn load_from_home(request: &LoadRequest, home: &Map<String, Value>) -> Result<Value, String> {
     let workspace: Option<&Path> = request.workspace.as_deref();
-    let workspace_config =
-        base::load_workspace_config(workspace, request.require_canonical_workspace)
+    let (workspace_config, assistance_restrictions) =
+        base::load_workspace_config_parts(workspace, request.require_canonical_workspace)
             .map_err(error_reason)?;
-    let mut merged = base::merge_config_payload(&home, &workspace_config);
+    let mut merged = base::merge_config_payload(home, &workspace_config);
+    let mut assistance = home.get("context_assistance").cloned();
+    for restriction in assistance_restrictions {
+        assistance = Some(restrict_value(assistance.as_ref(), &restriction));
+    }
+    if let Some(assistance) = assistance {
+        merged.insert("context_assistance".to_owned(), assistance);
+    }
     if let Some(policy) = &request.managed {
         merged = apply_managed_policy(&merged, policy);
     }
-    Ok(coerce_config(&merged, request.managed.as_ref()))
+    let mut value = coerce_config(&merged, request.managed.as_ref());
+    // Preserve validated local intent for presentation/settings round trips.
+    // Enforcement continues to use the restricted context_assistance value.
+    value["context_assistance_requested"] = match home.get("context_assistance") {
+        Some(local) => json!(ContextAssistanceConfig::load(Some(local)).0),
+        None => Value::Null,
+    };
+    Ok(value)
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(crate) struct AssistanceSettings {
+    pub(crate) requested: ContextAssistanceConfig,
+    pub(crate) effective: ContextAssistanceConfig,
+    pub(crate) diagnostic: Option<String>,
+    pub(crate) restriction: Option<&'static str>,
+    pub(crate) verification_permitted: bool,
+}
+
+impl Default for AssistanceSettings {
+    fn default() -> Self {
+        Self {
+            requested: ContextAssistanceConfig::default(),
+            effective: ContextAssistanceConfig::default(),
+            diagnostic: None,
+            restriction: None,
+            verification_permitted: true,
+        }
+    }
+}
+
+impl AssistanceSettings {
+    pub(crate) fn unavailable(code: &str) -> Self {
+        Self {
+            diagnostic: Some(code.into()),
+            verification_permitted: false,
+            ..Default::default()
+        }
+    }
+}
+
+/// Assistance control operations resolve machine authority themselves. A
+/// public request cannot omit or replace managed restrictions.
+pub(crate) fn context_assistance_config(home: &Path) -> Result<AssistanceSettings, String> {
+    let mut source = crate::managed_policy_load::ManagedPolicySource::native();
+    source.write_cache = false;
+    context_assistance_from_source(home, &source)
+}
+
+pub(crate) fn context_assistance_from_source(
+    home: &Path,
+    source: &crate::managed_policy_load::ManagedPolicySource,
+) -> Result<AssistanceSettings, String> {
+    context_assistance_at(home, None, source)
+}
+
+pub(crate) fn context_assistance_for_workspace(
+    home: &Path,
+    workspace: &Path,
+) -> Result<AssistanceSettings, String> {
+    let mut source = crate::managed_policy_load::ManagedPolicySource::native();
+    source.write_cache = false;
+    context_assistance_at(home, Some(workspace), &source)
+}
+
+fn context_assistance_at(
+    home: &Path,
+    workspace: Option<&Path>,
+    source: &crate::managed_policy_load::ManagedPolicySource,
+) -> Result<AssistanceSettings, String> {
+    let home_config = context_snapshot::read_home(home)?;
+    context_assistance_from_home(home, workspace, source, &home_config)
+}
+
+/// Hypothetical local intent is composed through the same native machine
+/// authority as ordinary activation. It never writes config or grants a scope.
+pub(crate) fn context_assistance_target_from_source(
+    home: &Path,
+    requested: &ContextAssistanceConfig,
+    source: &crate::managed_policy_load::ManagedPolicySource,
+) -> Result<AssistanceSettings, String> {
+    requested.validate().map_err(|e| e.0.to_owned())?;
+    let mut table = context_snapshot::read_home(home)?;
+    table.insert(
+        "context_assistance".into(),
+        serde_json::to_value(requested)
+            .map_err(|_| "context_assistance_schema_invalid".to_owned())?,
+    );
+    context_assistance_from_home(home, None, source, &table)
+}
+
+fn context_assistance_from_home(
+    home: &Path,
+    workspace: Option<&Path>,
+    source: &crate::managed_policy_load::ManagedPolicySource,
+    home_config: &Map<String, Value>,
+) -> Result<AssistanceSettings, String> {
+    let (requested, requested_error) =
+        ContextAssistanceConfig::load(home_config.get("context_assistance"));
+    let state = crate::managed_policy_load::load_managed_policy(source);
+    if state.status.fails_closed() {
+        let mut effective = requested.clone();
+        effective.enabled = false;
+        return Ok(AssistanceSettings {
+            requested,
+            effective,
+            diagnostic: Some("managed_policy_unavailable".into()),
+            restriction: Some("managed_policy"),
+            verification_permitted: false,
+        });
+    }
+    let managed =
+        crate::managed_policy_floor::effective_managed_policy(&state).map(|policy| ManagedInput {
+            settings: policy.settings,
+            locked_settings: policy.locked_settings.into_iter().collect(),
+        });
+    let verification_permitted = managed
+        .as_ref()
+        .and_then(|policy| {
+            policy
+                .settings
+                .get("context_assistance")
+                .and_then(|value| value.get("enabled"))
+        })
+        .and_then(Value::as_bool)
+        != Some(false);
+    let value = load_from_home(
+        &LoadRequest {
+            schema: SCHEMA.into(),
+            guard_home: home.into(),
+            workspace: workspace.map(Path::to_path_buf),
+            require_canonical_workspace: true,
+            managed,
+        },
+        home_config,
+    )?;
+    let (effective, fallback) =
+        ContextAssistanceConfig::load(value.get("context_assistance").filter(|v| !v.is_null()));
+    let diagnostic = value
+        .get("context_assistance_diagnostic")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .or_else(|| fallback.or(requested_error).map(|e| e.0.to_owned()));
+    let restriction =
+        (effective != requested || !verification_permitted).then_some(if workspace.is_some() {
+            "workspace_or_managed_policy"
+        } else {
+            "managed_policy"
+        });
+    Ok(AssistanceSettings {
+        requested,
+        effective,
+        diagnostic,
+        restriction,
+        verification_permitted,
+    })
 }
 
 /// Effective `approval_wait_timeout_seconds` for an in-process caller (the
-/// native MCP relay) from the Guard home and workspace configuration only.
-#[cfg_attr(not(unix), allow(dead_code))]
+/// native MCP relay, a waiting Codex hook's live wait): the Guard home and
+/// workspace configuration under this machine's managed policy, as
+/// `load_guard_config` composes them.
 pub(crate) fn approval_wait_timeout_seconds(
     guard_home: &Path,
     workspace: Option<&Path>,
 ) -> Result<i64, String> {
+    approval_wait_timeout_seconds_under(guard_home, workspace, &ManagedPolicySource::native())
+}
+
+/// `approval_wait_timeout_seconds` under the managed policy `source` loads.
+pub(crate) fn approval_wait_timeout_seconds_under(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+    source: &ManagedPolicySource,
+) -> Result<i64, String> {
+    let managed =
+        effective_managed_policy(&load_managed_policy(source)).map(|policy| ManagedInput {
+            settings: policy.settings.clone(),
+            locked_settings: policy.locked_settings.iter().cloned().collect(),
+        });
     let request = LoadRequest {
         schema: SCHEMA.to_owned(),
         guard_home: guard_home.to_path_buf(),
         workspace: workspace.map(Path::to_path_buf),
         require_canonical_workspace: false,
-        managed: None,
+        managed,
     };
     let config = load(&request)?;
     Ok(config
@@ -131,6 +321,14 @@ fn action_text(value: Option<&Value>, fallback: GuardAction) -> &'static str {
 /// Derive every field of the loaded configuration from the composed payload.
 pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&ManagedInput>) -> Value {
     let get = |key: &str| merged.get(key);
+    let (assistance, assistance_diagnostic) = match get("context_assistance") {
+        None => (None, None),
+        value => {
+            let (config, diagnostic) = ContextAssistanceConfig::load(value);
+            (Some(config), diagnostic.map(|error| error.0))
+        }
+    };
+    let assistance_export = assistance.as_ref().map(ContextAssistanceConfig::for_export);
     let loaded_mode = coerce::loaded_mode(get("mode"), "prompt");
     let security_level = base::coerce_security_level(get("security_level"));
     let explicit_posture = get("protection_posture").and_then(harness::normalize_posture);
@@ -191,11 +389,19 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
         "telemetry": coerce::python_truthy(get("telemetry")),
         "sync": coerce::python_truthy(get("sync")),
         "billing": coerce::python_truthy(get("billing")),
+        "context_assistance": assistance,
+        "context_assistance_diagnostic": assistance_diagnostic,
+        "context_assistance_export": assistance_export,
         "runtime_detector_registry": coerce::loaded_bool(get("runtime_detector_registry")),
         "runtime_detector_timeout_ms": coerce::positive_int(get("runtime_detector_timeout_ms"), 50),
         "runtime_detector_debug_trace": coerce::loaded_bool(get("runtime_detector_debug_trace")),
         "runtime_detector_disabled_ids": coerce::string_list(get("runtime_detector_disabled_ids")),
         "sandbox_analysis": coerce::sandbox_analysis(get("sandbox_analysis")),
+        // Only an explicit `false` stops the worker; a value Guard cannot read leaves it on.
+        "workspace_assessment_enabled": !matches!(
+            get("workspace_assessment_enabled"),
+            Some(Value::Bool(false))
+        ),
         "harness_actions": coerce::action_map(get("harnesses")),
         "publisher_actions": coerce::action_map(get("publishers")),
         "artifact_actions": coerce::action_map(get("artifacts")),
@@ -212,3 +418,7 @@ pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&Manage
 #[cfg(test)]
 #[path = "guard_config_load_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "guard_config_context_assistance_tests.rs"]
+mod context_assistance_tests;

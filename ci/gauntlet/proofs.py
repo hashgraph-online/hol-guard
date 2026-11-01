@@ -9,16 +9,22 @@ from .business_policy import BUSINESS_CLI_CASES
 from .catalog import Scenario
 from .clone_fixtures import LONG_LIVED_CLONE_CASE, LONG_LIVED_WORKTREE_CASE
 from .command_outputs import command_outputs_match as command_outputs_match
+from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
 from .input_evidence import input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
 from .review_fixtures import (
+    GITHUB_GUARD_NAMED_REPOSITORY_CASE,
     GITHUB_LOOKUP_CASE,
+    GITHUB_METADATA_CASE,
+    GITHUB_METADATA_CONTROL,
     GITHUB_REVIEW_CASE,
     PLAN_NOTE_PROTECTION_CASE,
     WORKTREE_CASE,
+    WORKTREE_DELIMITER_CASE,
 )
+from .runtime_cases import RUNTIME_BLOCK_REASONS, runtime_required_checks
 from .script_cases import CREDENTIAL_STORE_CASES, SCRIPT_BLOCK_REASONS, STORE_CHECK
 from .session_folder import EDIT_CASE as SESSION_EDIT_CASE
 from .session_folder import SHELL_CASE as SESSION_SHELL_CASE
@@ -50,6 +56,8 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
         return PACKAGE_BLOCK_REASONS[scenario.id]
     if scenario.id in SCRIPT_BLOCK_REASONS:
         return SCRIPT_BLOCK_REASONS[scenario.id]
+    if scenario.id in RUNTIME_BLOCK_REASONS:
+        return RUNTIME_BLOCK_REASONS[scenario.id]
     return REMOTE_CODE_CASES.get(scenario.id, BLOCK_REASONS)
 
 
@@ -76,8 +84,14 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("protected:.git/config")
     if scenario.id == GITHUB_REVIEW_CASE:
         checks.add("github-stub-calls-exact")
+    if scenario.id == GITHUB_GUARD_NAMED_REPOSITORY_CASE:
+        checks.add("github-guard-named-repository-call-exact")
     if scenario.id == GITHUB_LOOKUP_CASE:
         checks.add("github-lookup-ran-once")
+    if scenario.id == GITHUB_METADATA_CASE:
+        checks.add("github-metadata-calls-exact")
+    if scenario.id == GITHUB_METADATA_CONTROL:
+        checks.add("github-metadata-control-not-executed")
     if scenario.id == PLAN_NOTE_PROTECTION_CASE:
         checks.add("protected:.codex/hooks.json:not-written")
     if scenario.id == LONG_LIVED_CLONE_CASE:
@@ -96,6 +110,10 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.update(
             {"linked-worktree-settings-exact", "linked-worktree-note-exact", "main-checkout-settings-unchanged"}
         )
+    if scenario.id == WORKTREE_DELIMITER_CASE:
+        checks.update({"linked-worktree-settings-exact", "main-checkout-settings-unchanged"})
+    if scenario.id == CATALOG_CASE:
+        checks.add(CATALOG_CHECK)
     checks.update(supply_chain_required_checks(scenario.id))
     if scenario.id in CREDENTIAL_STORE_CASES:
         checks.add(STORE_CHECK)
@@ -103,6 +121,7 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("business-cli-executed-absent")
     if scenario.id == "linked-destination-touch":
         checks.add("protected:.env:metadata")
+    checks.update(runtime_required_checks(scenario.id))
     return checks
 
 

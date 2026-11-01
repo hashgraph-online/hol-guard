@@ -257,17 +257,35 @@ pub(super) fn complete(state: &mut Security, header: &Value, directory: &Path) -
         let manifest = lookup(directory, &index["index"], total, &id)?.ok_or_else(invalid)?;
         let manifest_digest = manifest["sha256"].as_str().ok_or_else(invalid)?;
         let old_manifest = object(directory, &manifest)?;
-        let mut denied = state.authority
-            > header["authority_epoch"].as_u64().ok_or_else(invalid)?
-            || state.root["engine"] != header["engine"];
+        // An activation older than an observation this home already
+        // authenticated is a security fact about the pack, so hold it.
+        let rollback = state.authority > header["authority_epoch"].as_u64().ok_or_else(invalid)?;
+        // An engine mismatch is not. It says the retained root describes a
+        // different compiler from the one running, so it carries no judgement
+        // about this pack either way, and this runtime can never obtain that
+        // engine's revocations: a publication is admitted only when its root
+        // engine equals this build's implementation digest. The revocations
+        // this runtime can read are checked below whatever the floor says, so
+        // holding every command the pack matches on an engine mismatch alone
+        // enforces an absence of information rather than a security fact.
+        let engine_mismatch = state.root["engine"] != header["engine"];
+        let mut denied = rollback;
         // A publisher can change reviewed trust without revoking the entire
         // extension. Only the active identity's authenticated native path is
-        // traversed; inactive policy payload never participates.
+        // traversed; inactive policy payload never participates. Reviewed trust
+        // is read under an engine mismatch too: a trust digest covers the
+        // declared trust alone and a semantic profile is a declared constant,
+        // so either changing is the publisher's judgement about this extension
+        // and not an artefact of which compiler wrote the root. Two parts of
+        // the comparison are such an artefact and are left out under a
+        // mismatch: the engine the entry names is the retained root's own, and
+        // an index that never described this engine's pack is silent about an
+        // extension rather than withdrawing it.
         if !denied {
             match super::trust::latest(directory, &state.root, &id)? {
                 Some(latest) => {
                     let incompatible = latest["trust_digest"] != old_manifest["trust_digest"]
-                        || latest["engine"] != old_manifest["engine"]
+                        || (!engine_mismatch && latest["engine"] != old_manifest["engine"])
                         || latest["semantic_profile"] != old_manifest["semantic_profile"];
                     denied |= incompatible;
                     if incompatible {
@@ -275,12 +293,10 @@ pub(super) fn complete(state: &mut Security, header: &Value, directory: &Path) -
                         "trust":latest["trust_digest"],"engine":latest["engine"],"semantics":latest["semantic_profile"]}));
                     }
                 }
-                None => denied = true,
+                None => denied = !engine_mismatch,
             }
         }
-        if state.authority > header["authority_epoch"].as_u64().ok_or_else(invalid)?
-            || state.root["engine"] != header["engine"]
-        {
+        if rollback || engine_mismatch {
             state.applied.insert(
                 format!("floor:{id}"),
                 json!({"authority":state.authority,"engine":state.root["engine"]}),

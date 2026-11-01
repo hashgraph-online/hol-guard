@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import re
 import stat
 import subprocess
 import sys
@@ -14,23 +12,32 @@ import time
 import urllib.parse
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import dataclass
 from http.client import HTTPConnection, HTTPException, HTTPResponse
 from pathlib import Path
 from typing import cast
 
-from codex_plugin_scanner.guard.adapters._modules.claude.claude_daemon_hook_transport import (
-    authenticated_claude_hook_response,
-)
-from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_auth import _DaemonResponseError
-from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_transport import _daemon_response_once
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from codex_plugin_scanner.guard.native_runtime import native_runtime_health
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts.daemon_hook_auth import _DaemonResponseError
+from scripts.daemon_hook_client import _daemon_response_once, authenticated_claude_hook_response
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 from scripts.native_slo_adapter import Observation, is_allowed, payload
 from scripts.native_slo_contract import MAX_READINESS_P95_MS
+from scripts.native_slo_diagnostics import preserve_session_diagnostics
+from scripts.native_slo_recovery_cleanup import recover_failed_stop
 from scripts.native_slo_route_provenance import RequestRouteTracker
+from scripts.native_slo_stop_diagnostics import (
+    _STOP_DIAGNOSTIC_FIELDS,
+    _STOP_FAILURE_STATUSES,
+    _STOP_RETRY_DELAY_SECONDS,
+    _TRANSIENT_STOP_ERRORS,
+    NativeStopResult,
+    _build_stop_diagnostic,
+    _stop_diagnostic_from_stderr,
+    _write_stop_diagnostic,
+)
 
 _MAX_HTTP_RESPONSE_BYTES = 2 * 1024 * 1024
 _CAPACITY_FAIL_SAFE = {
@@ -49,83 +56,6 @@ _CAPACITY_REASON_CODES = frozenset(
         "native_overloaded",
     }
 )
-_STOP_DIAGNOSTIC_SCHEMA = "hol-guard.native-resident-stop-diagnostic.v1"
-_STOP_DIAGNOSTIC_PATH_ENV = "NATIVE_STOP_DIAGNOSTIC_PATH"
-_STOP_DIAGNOSTIC_FIELDS = (
-    "acknowledged",
-    "authenticated",
-    "generation_present",
-    "owner_lock",
-    "marker_lock",
-    "endpoint",
-    "serving_shutdown",
-)
-_STOP_FAILURE_STATUSES = frozenset({"failed", "contained_client_cleanup_failed"})
-_TRANSIENT_STOP_ERRORS = frozenset(
-    {
-        "native_resident_stop_unavailable",
-        "native_resident_stop_in_progress",
-    }
-)
-_STOP_RETRY_DELAY_SECONDS = 0.1
-_STOP_DIAGNOSTIC_RE = re.compile(
-    rb"\b(?P<code>native_resident_[a-z0-9_]+)"
-    rb"(?P<fields>(?::[a-z_]+=(?:true|false|free|busy|unverified|absent|present))*)"
-)
-
-
-@dataclass(frozen=True)
-class NativeStopResult:
-    """Bounded resident-stop outcome and privacy-safe containment evidence."""
-
-    contained: bool
-    diagnostic: dict[str, object]
-
-    def __bool__(self) -> bool:
-        return self.contained
-
-
-def _build_stop_diagnostic(
-    status: str,
-    *,
-    error: str | None = None,
-    fields: Mapping[str, str] | None = None,
-) -> dict[str, object]:
-    diagnostic: dict[str, object] = {
-        "schema": _STOP_DIAGNOSTIC_SCHEMA,
-        "operation": "resident-stop",
-        "status": status,
-    }
-    if error is not None:
-        diagnostic["error"] = error
-    for field in _STOP_DIAGNOSTIC_FIELDS:
-        diagnostic[field] = (fields or {}).get(field, "unknown")
-    return diagnostic
-
-
-def _write_stop_diagnostic(diagnostic: Mapping[str, object]) -> None:
-    path_value = os.environ.get(_STOP_DIAGNOSTIC_PATH_ENV)
-    if not path_value:
-        return
-    try:
-        Path(path_value).write_text(json.dumps(diagnostic, separators=(",", ":")), encoding="utf-8")
-    except OSError:
-        return
-
-
-def _stop_diagnostic_from_stderr(stderr: bytes) -> dict[str, object]:
-    match = _STOP_DIAGNOSTIC_RE.search(stderr[:8192])
-    if match is None:
-        return _build_stop_diagnostic("failed", error="native_resident_stop_process_failed")
-    code = match.group("code").decode("ascii")
-    if not code.startswith("native_resident_stop_"):
-        code = "native_resident_stop_process_failed"
-    fields = {
-        key.decode("ascii"): value.decode("ascii")
-        for key, value in re.findall(rb":([a-z_]+)=([a-z]+)", match.group("fields"))
-        if key.decode("ascii") in _STOP_DIAGNOSTIC_FIELDS
-    }
-    return _build_stop_diagnostic("failed", error=code, fields=fields)
 
 
 def _resident_state_may_exist(state_dir: Path) -> bool:
@@ -171,12 +101,15 @@ def stop_native_resident(
                     (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
                     check=False,
                     capture_output=True,
-                    timeout=2,
+                    timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
                 )
-            except (OSError, subprocess.TimeoutExpired):
+            except (OSError, subprocess.TimeoutExpired) as error:
                 diagnostic = _build_stop_diagnostic(
                     "failed",
                     error="native_resident_stop_process_failed",
+                )
+                diagnostic["process_outcome"] = (
+                    "timed_out" if isinstance(error, subprocess.TimeoutExpired) else "launch_failed"
                 )
                 break
             if result.returncode == 0:
@@ -186,6 +119,8 @@ def stop_native_resident(
                 )
                 break
             diagnostic = _stop_diagnostic_from_stderr(result.stderr)
+            diagnostic["process_outcome"] = "exited"
+            diagnostic["process_returncode"] = result.returncode
             if attempt == 0 and diagnostic.get("error") in _TRANSIENT_STOP_ERRORS:
                 time.sleep(_STOP_RETRY_DELAY_SECONDS)
                 continue
@@ -200,8 +135,15 @@ def stop_native_resident(
     # Keep persistent client processes alive until the Rust stop command has
     # verified containment. Their resident supervisor reaper must remain
     # runnable while it waits for the serving process to exit.
-    if not preserve_clients:
-        close_native_resident_clients(guard_home)
+    if not preserve_clients and close_native_resident_clients(guard_home) is not True:
+        diagnostic = {
+            **diagnostic,
+            "status": "contained_client_cleanup_failed",
+            "error": "native_resident_stop_client_cleanup_failed",
+        }
+        if write_diagnostic:
+            _write_stop_diagnostic(diagnostic)
+        return NativeStopResult(False, diagnostic)
     if write_diagnostic:
         _write_stop_diagnostic(diagnostic)
     return NativeStopResult(True, diagnostic)
@@ -314,7 +256,8 @@ def _is_explicit_capacity_response(response: Mapping[str, object]) -> bool:
 class AdapterSession:
     """One private daemon and workspace, with deterministic resident cleanup."""
 
-    def __init__(self, runtime: Path) -> None:
+    def __init__(self, runtime: Path, *, diagnostics_dir: Path | None = None) -> None:
+        self._diagnostics_dir = diagnostics_dir
         # A resident that is still exiting can leave files behind for a moment;
         # a leftover scratch directory must not discard a finished measurement.
         self.temporary = tempfile.TemporaryDirectory(prefix="hol-guard-slo-", ignore_cleanup_errors=True)
@@ -440,18 +383,23 @@ class AdapterSession:
             if self._connection is not None:
                 self._connection.close()
         finally:
-            # Stop the resident before worker clients disappear, preserving containment evidence.
-            # After a failed stop, leave that failure as the recorded diagnostic;
-            # the final pass below still stops the resident.
-            if getattr(self, "last_stop_diagnostic", {}).get("status") not in _STOP_FAILURE_STATUSES:
-                with suppress(Exception):
-                    self.stop_resident()
+            # Quiesce daemon producers while their resident can still accept
+            # queued evidence. Persistent client reapers remain alive until
+            # the subsequent authenticated resident Stop verifies containment.
+            self.daemon_stop_contained = False
             try:
                 self.daemon.stop()
+                self.daemon_stop_contained = getattr(self.daemon, "_finish_service_completed", False) is True
             finally:
                 deadline = time.monotonic() + 2.0
                 while getattr(self.daemon._server, "active_hook_requests", 0) > 0 and time.monotonic() < deadline:
                     time.sleep(0.01)
+                # An earlier strict failure remains authoritative even when
+                # final cleanup later succeeds. Recovery measurements still
+                # call stop_resident explicitly with their original order.
+                if getattr(self, "last_stop_diagnostic", {}).get("status") not in _STOP_FAILURE_STATUSES:
+                    with suppress(Exception):
+                        self.stop_resident()
                 # The final pass must not overwrite an earlier worker-cleanup
                 # failure before we decide which bounded diagnostic to retain.
                 final_result = stop_native_resident(
@@ -460,6 +408,7 @@ class AdapterSession:
                     write_diagnostic=False,
                 )
                 final_diagnostic = final_result.diagnostic
+                self.final_stop_diagnostic = final_diagnostic
                 prior_diagnostic = getattr(self, "last_stop_diagnostic", {})
                 final_failure = final_diagnostic.get("status") in _STOP_FAILURE_STATUSES
                 if final_failure:
@@ -475,7 +424,18 @@ class AdapterSession:
                     _write_stop_diagnostic(diagnostic)
                     self._stop_diagnostic_written = True
                 self.last_stop_diagnostic = diagnostic
-                self.temporary.cleanup()
+                preserve_session_diagnostics(self, getattr(self, "_diagnostics_dir", None))
+                self.recovery_cleanup = recover_failed_stop(self.guard_home) if final_failure else None
+                if not self.daemon_stop_contained or (
+                    self.recovery_cleanup is not None and not self.recovery_cleanup["contained"]
+                ):
+                    # Python 3.10 has no TemporaryDirectory(delete=False).
+                    # Keep failed private state available to native recovery;
+                    # deleting it would destroy the authenticated Stop route
+                    # or remove state still owned by a quarantined producer.
+                    self.temporary._finalizer.detach()
+                else:
+                    self.temporary.cleanup()
 
     def stop_resident(self, *, preserve_clients: bool = False) -> bool:
         """Verify resident containment, optionally retaining clients for recovery."""

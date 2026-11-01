@@ -305,6 +305,27 @@ _BASE_HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         icon_label="Devin",
     ),
     HarnessProtectionContract(
+        harness="muse",
+        install_aliases=("muse", "muse-code"),
+        config_paths=(
+            "~/.config/muse/settings.json",
+            ".muse/settings.json",
+            ".muse-plugin/plugin.json",
+        ),
+        event_surfaces=("shell", "prompt", "mcp_tool", "file_read", "file_write", "tool_result"),
+        native_approval=True,
+        browser_fallback=True,
+        resume_support=True,
+        known_blind_spots=(
+            "Guard manages Muse hooks in the user settings file; hooks contributed by installed Muse "
+            "plugins run beside Guard's and are inventoried but not rewritten. Inline edits applied without "
+            "a tool call, and background shell output after a call returns, are not visible to Guard."
+        ),
+        smoke_command="hol-guard install muse --dry-run",
+        docs_path="docs/guard/muse.md",
+        icon_label="Muse",
+    ),
+    HarnessProtectionContract(
         harness="paseo",
         install_aliases=("paseo",),
         config_paths=("~/.paseo/config.json",),

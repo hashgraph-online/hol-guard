@@ -191,3 +191,32 @@ fn general_write_replays_every_recorded_outcome() {
     assert!(backfilled >= 2, "only {backfilled} legacy scenarios");
     assert!(created >= 6, "only {created} creation event scenarios");
 }
+
+/// A `tool_call` row's command is masked before it is stored; a native Bash
+/// row keeps its command, because its scope check re-parses it.
+#[test]
+fn tool_call_rows_store_the_command_with_credentials_masked() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let base = vectors["scenarios"][0]["request"].clone();
+    let command = "curl -H \"Authorization: Bearer secret-token-value\" https://api.example";
+    for (artifact_type, masked) in [
+        ("tool_call", true),
+        (guard_contracts::NATIVE_BASH_REVIEW_ARTIFACT_TYPE, false),
+    ] {
+        let mut request = base.clone();
+        request["artifact_type"] = json!(artifact_type);
+        request["launch_target"] = json!(command);
+        request["raw_command_text"] = json!(command);
+        let decoded =
+            crate::guard_store_approval_request::ApprovalRequest::decode(Some(&request)).unwrap();
+        for stored in [&decoded.launch_target, &decoded.raw_command_text] {
+            let stored = stored.as_deref().unwrap();
+            if masked {
+                assert!(!stored.contains("secret-token-value"), "{stored}");
+                assert!(stored.contains("Bearer *****"), "{stored}");
+            } else {
+                assert_eq!(stored, command, "{artifact_type}");
+            }
+        }
+    }
+}

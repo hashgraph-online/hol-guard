@@ -217,3 +217,55 @@ fn an_unreadable_container_or_request_is_refused() {
         "delivery object request invalid"
     );
 }
+
+#[test]
+fn shared_members_keep_one_snapshot_and_the_next_call_reads_again() {
+    let (bytes, first, second) = pair();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join(OBJECTS);
+    fs::write(&path, &bytes).unwrap();
+    let reads = read_count();
+    let requests = [(&*first, 7), (&*second, 8)]
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| {
+            // This iterator is consumed after the real file read and inspection.
+            if index == 1 {
+                fs::write(&path, b"corrupt").unwrap();
+            }
+            item
+        });
+    let replies = members(&path, OBJECTS, requests).unwrap();
+    assert_eq!(replies.len(), 2);
+    assert_eq!(replies[0]["data"], STANDARD.encode(br#"{"n":1}"#));
+    assert_eq!(replies[1]["data"], STANDARD.encode(br#"{"n":22}"#));
+    assert_eq!(read_count() - reads, 1);
+    assert_eq!(
+        members(&path, OBJECTS, [(&*first, 7)]).unwrap_err(),
+        "delivery container size or terminator invalid"
+    );
+    assert_eq!(read_count() - reads, 2);
+}
+
+#[test]
+fn shared_reads_keep_container_bounds_and_whole_directory_checks() {
+    let (bytes, first, _) = pair();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join(OBJECTS);
+    let file = fs::File::create(&path).unwrap();
+    file.set_len(location::family(OBJECTS).unwrap().bound() as u64 + 1)
+        .unwrap();
+    assert_eq!(
+        members(&path, OBJECTS, [(&*first, 7)]).unwrap_err(),
+        "delivery container unreadable"
+    );
+    let mut malformed = bytes.clone();
+    // Reject an unselected member's unsupported method before selecting the first.
+    let next = zip::entry(&bytes, central(&bytes)).unwrap().next;
+    malformed[next + 10] = 8;
+    fs::write(&path, malformed).unwrap();
+    assert_eq!(
+        members(&path, OBJECTS, [(&*first, 7)]).unwrap_err(),
+        "delivery container member invalid"
+    );
+}

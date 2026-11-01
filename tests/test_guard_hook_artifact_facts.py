@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_hook_artifact_facts as bridge
-from codex_plugin_scanner.guard.cli import commands_support_runtime_artifact_policy as policy
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.native_hook_artifact_facts import HookArtifactFactsUnavailableError
+from tests import native_hook_artifact_facts_support as bridge
+from tests import runtime_artifact_policy_support as policy
+from tests.native_hook_artifact_facts_support import HookArtifactFactsUnavailableError
 
 
 class _Config:
@@ -181,16 +181,6 @@ def test_one_identity_per_artifact_or_nothing_is_asked(monkeypatch: pytest.Monke
             _Config(), ((_artifact(), "claude-code"),), hash_metadata=(None, None)
         )
     assert captured == []
-
-
-def test_the_content_hash_is_the_residents_digest() -> None:
-    assert policy.artifact_fact_content_hash({"content_sha256": "a" * 64}) == "a" * 64
-
-
-@pytest.mark.parametrize("facts", [{}, {"content_sha256": None}, {"content_sha256": ""}, {"content_sha256": 7}])
-def test_a_missing_or_malformed_digest_fails_closed(facts: dict[str, object]) -> None:
-    with pytest.raises(HookArtifactFactsUnavailableError):
-        policy.artifact_fact_content_hash(facts)
 
 
 def test_every_entry_names_every_field_the_contract_serializes() -> None:

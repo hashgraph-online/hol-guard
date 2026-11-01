@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HiMiniArrowTopRightOnSquare, HiMiniExclamationTriangle, HiMiniSparkles } from "react-icons/hi2";
+import { HiMiniArrowTopRightOnSquare, HiMiniInformationCircle, HiMiniSparkles } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import { ExtensionAuthoritySetup, useExtensionAuthorityWatch } from "./approval-extension-authority-setup";
 import { approvalExtensionRecommendationCopy } from "./approval-extension-recommendation";
@@ -55,8 +55,10 @@ export function ApprovalExtensionRecommendationCard(props: {
   const handleAvailable = useCallback((next: GuardApprovalExtensionRecommendation) => {
     setLiveRecommendation(next);
   }, []);
+  // A risky permission is never offered as a one-tap allow, so there is nothing to enroll for.
+  const oneTap = recommendation?.caution !== true;
   const watch = useExtensionAuthorityWatch({
-    active: authorityUnavailable,
+    active: authorityUnavailable && oneTap,
     requestId: item.request_id,
     approvalGate: props.approvalGate,
     onAvailable: handleAvailable,
@@ -70,9 +72,24 @@ export function ApprovalExtensionRecommendationCard(props: {
   }, [dialogActive, onDialogActiveChange]);
   useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
 
-  const openPattern = useCallback(() => {
-    if (primary) commitDashboardLocation(extensionPatternHref(primary.extension_id, primary.rule_id));
-  }, [primary]);
+  // A compound command can earn permissions in more than one extension, and the
+  // card has to lead to each of them, not just the first.
+  const configurable = useMemo(() => {
+    const seen = new Map<string, { extensionId: string; extensionName: string; ruleId: string | null }>();
+    for (const permission of recommendation?.permissions ?? []) {
+      if (!seen.has(permission.extension_id)) {
+        seen.set(permission.extension_id, {
+          extensionId: permission.extension_id,
+          extensionName: permission.extension_name,
+          ruleId: permission.rule_id,
+        });
+      }
+    }
+    return [...seen.values()];
+  }, [recommendation]);
+  const openPattern = useCallback((extensionId: string, ruleId: string | null) => {
+    commitDashboardLocation(extensionPatternHref(extensionId, ruleId));
+  }, []);
   const openConfirm = useCallback(() => {
     setError(null);
     setConfirmOpen(true);
@@ -126,40 +143,68 @@ export function ApprovalExtensionRecommendationCard(props: {
 
   if (!recommendation || !copy || !primary) return null;
 
-  const caution = recommendation.caution;
-  const gateReady = approvalGateProofReady(approvalGate);
-  const gateLocked = approvalGateIsLocked(approvalGate);
-  const tone = caution
-    ? "border-brand-attention/30 bg-brand-attention/[0.05]"
-    : "border-brand-blue/20 bg-brand-blue/[0.04]";
-
-  return (
-    <section
-      className={`mt-5 rounded-xl border p-4 ${tone}`}
-      aria-labelledby="approval-extension-recommendation-title"
-      data-testid="approval-extension-recommendation"
+  const reviewLinks = configurable.map((entry) => (
+    <button
+      key={entry.extensionId}
+      type="button"
+      onClick={() => openPattern(entry.extensionId, entry.ruleId)}
+      className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
     >
-      <div className="flex items-start gap-3">
-        {caution ? (
-          <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
-        ) : (
-          <HiMiniSparkles className="mt-0.5 h-5 w-5 shrink-0 text-brand-blue" aria-hidden="true" />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended setting</p>
-          <h3 id="approval-extension-recommendation-title" className="mt-1 text-sm font-semibold text-brand-dark">
-            {copy.title}
-          </h3>
-          <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{copy.body}</p>
-          {copy.cautionLines.length > 0 && (
-            <ul className="mt-2 space-y-1" aria-label="Before you allow this">
+      {configurable.length === 1 ? copy.configureLabel : `${copy.configureVerb} in ${entry.extensionName}`}
+      <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  ));
+
+  // Allowing a destructive, critical or sensitive permission reaches every command it
+  // matches, not only this one. Name the rule and link to it; the decision on this
+  // request stays with the ordinary review choices below.
+  if (!copy.oneTap) {
+    return (
+      <section
+        className="mt-5 rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+        aria-labelledby="approval-extension-recommendation-title"
+        data-testid="approval-extension-recommendation"
+        data-caution="true"
+      >
+        <div className="flex items-start gap-3">
+          <HiMiniInformationCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{copy.eyebrow}</p>
+            <h3 id="approval-extension-recommendation-title" className="mt-1 text-sm font-semibold text-brand-dark">
+              {copy.title}
+            </h3>
+            <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{copy.body}</p>
+            <ul className="mt-2 space-y-1" aria-label="Why this is not offered as a one-tap setting">
               {copy.cautionLines.map((line) => (
                 <li key={line} className="text-sm font-medium text-brand-attention">
                   {line}
                 </li>
               ))}
             </ul>
-          )}
+            <div className="mt-2 flex flex-wrap items-center gap-2">{reviewLinks}</div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const gateReady = approvalGateProofReady(approvalGate);
+  const gateLocked = approvalGateIsLocked(approvalGate);
+
+  return (
+    <section
+      className="mt-5 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4"
+      aria-labelledby="approval-extension-recommendation-title"
+      data-testid="approval-extension-recommendation"
+    >
+      <div className="flex items-start gap-3">
+        <HiMiniSparkles className="mt-0.5 h-5 w-5 shrink-0 text-brand-blue" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{copy.eyebrow}</p>
+          <h3 id="approval-extension-recommendation-title" className="mt-1 text-sm font-semibold text-brand-dark">
+            {copy.title}
+          </h3>
+          <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{copy.body}</p>
           {authorityUnavailable && <ExtensionAuthoritySetup watch={watch} commandText={copy.commandText} />}
           {justEnrolled && savedMessage === null && (
             <p className="mt-2 text-sm font-medium text-brand-green-text" role="status">
@@ -184,7 +229,7 @@ export function ApprovalExtensionRecommendationCard(props: {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {resolutionAvailable && !authorityUnavailable && savedMessage === null && gateReady && (
               <ActionButton
-                variant={caution ? "outline" : "primary"}
+                variant="primary"
                 onClick={openConfirm}
                 disabled={props.disabled || busy || gateLocked}
               >
@@ -196,14 +241,7 @@ export function ApprovalExtensionRecommendationCard(props: {
                 Set up approval password
               </ActionButton>
             )}
-            <button
-              type="button"
-              onClick={openPattern}
-              className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            >
-              {copy.configureLabel}
-              <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            {reviewLinks}
           </div>
           {gateReady && gateLocked && !authorityUnavailable && (
             <p className="mt-2 text-xs text-slate-500">
@@ -220,7 +258,7 @@ export function ApprovalExtensionRecommendationCard(props: {
       {confirmOpen && (
         <ApprovalProofModal
           title={copy.confirmTitle}
-          detail={caution ? `${copy.confirmDetail} ${copy.cautionLines.join(" ")}` : copy.confirmDetail}
+          detail={copy.confirmDetail}
           confirmLabel={copy.primaryLabel}
           approvalGate={approvalGate}
           busy={busy}

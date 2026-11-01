@@ -1,28 +1,31 @@
-"""Bounded previews, complete hashes, and fail-closed Hermes config parsing."""
+"""Bounded previews, complete hashes, and fail-closed Hermes config parsing.
+
+The native runtime's `hermes-file-inspect` command does the race-checked read
+and the PyYAML-compatible parse; this module only frames the request and
+validates the answer. Without a compatible runtime every inspection is an
+explicit `file_unreadable` failure, so callers refuse rather than guess.
+"""
 
 from __future__ import annotations
 
-import codecs
-import hashlib
-import json
-import math
 import os
-import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
-import yaml  # type: ignore[import-untyped]
-
-from ..file_identity import full_stat_identity
-from ..windows_paths import open_windows_locked_regular_descriptor
+from ..mdm.runtime_request import runtime_answer
 
 HERMES_PREVIEW_BYTES = 64 * 1024
 HERMES_CONFIG_MAX_BYTES = 2 * 1024 * 1024
 HERMES_CONFIG_MAX_DEPTH = 32
 HERMES_CONFIG_MAX_NODES = 20_000
 HERMES_CONFIG_MAX_ALIASES = 0
-_HASH_CHUNK_BYTES = 64 * 1024
+_FEATURE = "native-hermes-file-inspect-v1"
+_COMMAND = "hermes-file-inspect"
+_SCHEMA = "hermes-file-inspect.v1"
+# Complete content can escape to six bytes per input byte.
+_OUTPUT_LIMIT = 32 * 1024 * 1024
+_TIMEOUT_SECONDS = 30.0
 
 HermesFileInspectionReason = Literal[
     "file_missing",
@@ -73,12 +76,6 @@ class HermesConfigInspection:
     reason: HermesConfigInspectionReason | None
 
 
-class _HermesConfigLimitError(ValueError):
-    def __init__(self, reason: HermesConfigInspectionReason) -> None:
-        super().__init__(reason)
-        self.reason: HermesConfigInspectionReason = reason
-
-
 def inspect_hermes_text_file(
     path: Path,
     *,
@@ -92,293 +89,108 @@ def inspect_hermes_text_file(
     complete digest, but are marked incomplete for parsing.
     """
 
-    logical_path = Path(path)
-    try:
-        before = os.lstat(logical_path)
-    except FileNotFoundError:
-        return _file_failure("file_missing")
-    except OSError:
-        return _file_failure("file_unreadable")
-    if stat.S_ISLNK(before.st_mode):
-        return _file_failure("file_symlink_unsupported", size_bytes=before.st_size)
-    if not stat.S_ISREG(before.st_mode):
-        return _file_failure("file_not_regular", size_bytes=before.st_size)
-    if scope_root is not None and not _resolves_within(logical_path, scope_root):
-        return _file_failure("file_symlink_escape", size_bytes=before.st_size)
-
-    try:
-        descriptor = (
-            open_windows_locked_regular_descriptor(logical_path)
-            if os.name == "nt"
-            else os.open(
-                logical_path,
-                os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-            )
-        )
-    except FileNotFoundError:
-        return _file_failure("file_changed_during_read", size_bytes=before.st_size)
-    except OSError:
-        return _file_failure("file_unreadable", size_bytes=before.st_size)
-
-    preview = bytearray()
-    retained = bytearray()
-    digest = hashlib.sha256()
-    decoder = codecs.getincrementaldecoder("utf-8")("strict")
-    total = 0
-    invalid_utf8 = False
-    changed = False
-    try:
-        opened = os.fstat(descriptor)
-        # Windows path and CRT descriptor stats expose different identity
-        # fields. The native handle denies write/delete sharing, so compare
-        # path stats while that lock is held and descriptor stats across reads.
-        try:
-            opened_path = os.lstat(logical_path) if os.name == "nt" else opened
-        except OSError:
-            return _file_failure("file_changed_during_read", size_bytes=before.st_size)
-        if not stat.S_ISREG(opened.st_mode) or _stat_key(opened_path) != _stat_key(before):
-            changed = True
-        while not changed:
-            try:
-                chunk = os.read(descriptor, _HASH_CHUNK_BYTES)
-            except OSError:
-                return _file_failure("file_unreadable", size_bytes=total)
-            if not chunk:
-                break
-            total += len(chunk)
-            digest.update(chunk)
-            if len(preview) < HERMES_PREVIEW_BYTES:
-                preview.extend(chunk[: HERMES_PREVIEW_BYTES - len(preview)])
-            if content_limit_bytes is not None and len(retained) < content_limit_bytes:
-                # Keep the parse buffer at the exact configured ceiling even
-                # when the final read chunk crosses it.  The full stream is
-                # still decoded and hashed before oversized input fails.
-                retained.extend(chunk[: content_limit_bytes - len(retained)])
-            try:
-                decoder.decode(chunk, final=False)
-            except UnicodeDecodeError:
-                invalid_utf8 = True
-        if not invalid_utf8 and not changed:
-            try:
-                decoder.decode(b"", final=True)
-            except UnicodeDecodeError:
-                invalid_utf8 = True
-        final_opened = os.fstat(descriptor)
-        if total != opened.st_size or _stat_key(final_opened) != _stat_key(opened):
-            changed = True
-    finally:
-        os.close(descriptor)
-
-    try:
-        after = os.lstat(logical_path)
-    except OSError:
-        changed = True
-    else:
-        if _stat_key(after) != _stat_key(before):
-            changed = True
-    preview_text = bytes(preview).decode("utf-8", errors="ignore")
-    truncated = total > len(preview)
-    if changed:
-        return _file_failure(
-            "file_changed_during_read",
-            preview=preview_text,
-            size_bytes=total,
-            analysis_truncated=truncated,
-        )
-
-    content_hash = f"sha256:{digest.hexdigest()}"
-    if invalid_utf8:
-        return HermesFileInspection(
-            preview=preview_text,
-            content=None,
-            content_hash=content_hash,
-            size_bytes=total,
-            readable=True,
-            complete=False,
-            analysis_truncated=truncated,
-            reason="file_invalid_utf8",
-        )
-    if content_limit_bytes is not None and total > content_limit_bytes:
-        return HermesFileInspection(
-            preview=preview_text,
-            content=None,
-            content_hash=content_hash,
-            size_bytes=total,
-            readable=True,
-            complete=False,
-            analysis_truncated=truncated,
-            reason="file_too_large",
-        )
-    full_content = bytes(retained).decode("utf-8") if content_limit_bytes is not None else None
-    return HermesFileInspection(
-        preview=preview_text,
-        content=full_content,
-        content_hash=content_hash,
-        size_bytes=total,
-        readable=True,
-        complete=True,
-        analysis_truncated=truncated,
-        reason=None,
-    )
+    request: dict[str, object] = {"op": "text", "path": os.path.abspath(path)}
+    if scope_root is not None:
+        request["scope_root"] = os.path.abspath(scope_root)
+    if content_limit_bytes is not None:
+        request["content_limit_bytes"] = content_limit_bytes
+    answer = _answer(request)
+    file = _file(answer.get("file")) if answer is not None else None
+    return file if file is not None else _unavailable()
 
 
 def inspect_hermes_config(path: Path, *, syntax: Literal["json", "yaml"]) -> HermesConfigInspection:
     """Parse a complete bounded config without accepting a prefix."""
 
-    file = inspect_hermes_text_file(path, content_limit_bytes=HERMES_CONFIG_MAX_BYTES)
-    if not file.complete or file.content is None:
+    answer = _answer({"op": "config", "path": os.path.abspath(path), "syntax": syntax})
+    inspection = _config(answer) if answer is not None else None
+    if inspection is None:
+        file = _unavailable()
         return HermesConfigInspection(file=file, payload=None, complete=False, reason=file.reason)
-    try:
-        if syntax == "json":
-            parsed = json.loads(file.content, object_pairs_hook=_unique_json_mapping)
-        else:
-            parsed = _load_yaml(file.content)
-        _validate_config_value(parsed)
-    except _HermesConfigLimitError as exc:
-        return HermesConfigInspection(file=file, payload=None, complete=False, reason=exc.reason)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return HermesConfigInspection(file=file, payload=None, complete=False, reason="config_parse_error")
-    if parsed is None and syntax == "yaml":
-        parsed = {}
-    if not isinstance(parsed, dict):
-        return HermesConfigInspection(file=file, payload=None, complete=False, reason="config_not_mapping")
-    return HermesConfigInspection(file=file, payload=parsed, complete=True, reason=None)
+    return inspection
 
 
-def parse_hermes_yaml_mapping(content: str) -> dict[str, object] | None:
-    """Safely parse bounded in-memory YAML used for skill frontmatter."""
-
-    if len(content.encode("utf-8")) > HERMES_PREVIEW_BYTES:
-        return None
-    try:
-        parsed = _load_yaml(content)
-        _validate_config_value(parsed)
-    except (TypeError, ValueError, _HermesConfigLimitError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
-def _load_yaml(content: str) -> object:
-    alias_count = 0
-    depth = 0
-    nodes = 0
-    try:
-        for event in yaml.parse(content, Loader=yaml.SafeLoader):
-            if isinstance(event, yaml.events.AliasEvent):
-                alias_count += 1
-                if alias_count > HERMES_CONFIG_MAX_ALIASES:
-                    raise _HermesConfigLimitError("config_alias_limit_exceeded")
-            if isinstance(event, (yaml.events.MappingStartEvent, yaml.events.SequenceStartEvent)):
-                depth += 1
-                nodes += 1
-                if depth > HERMES_CONFIG_MAX_DEPTH:
-                    raise _HermesConfigLimitError("config_depth_limit_exceeded")
-            elif isinstance(event, (yaml.events.MappingEndEvent, yaml.events.SequenceEndEvent)):
-                depth -= 1
-            elif isinstance(event, yaml.events.ScalarEvent):
-                nodes += 1
-            if nodes > HERMES_CONFIG_MAX_NODES:
-                raise _HermesConfigLimitError("config_node_limit_exceeded")
-        loader = _UniqueKeySafeLoader(content)
-        try:
-            return loader.get_single_data()
-        finally:
-            loader.dispose()
-    except _HermesConfigLimitError:
-        raise
-    except yaml.YAMLError as exc:
-        raise ValueError("invalid Hermes YAML") from exc
-
-
-class _UniqueKeySafeLoader(yaml.SafeLoader):  # type: ignore[misc]
-    pass
-
-
-def _construct_unique_mapping(loader: object, node: object, deep: bool = False) -> dict[object, object]:
-    if not isinstance(loader, yaml.SafeLoader) or not isinstance(node, yaml.nodes.MappingNode):
-        raise ValueError("invalid YAML mapping")
-    loader.flatten_mapping(node)
-    mapping: dict[object, object] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        try:
-            duplicate = key in mapping
-        except TypeError as exc:
-            raise _HermesConfigLimitError("config_value_invalid") from exc
-        if duplicate:
-            raise _HermesConfigLimitError("config_duplicate_key")
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-_UniqueKeySafeLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_unique_mapping,
-)
-
-
-def _unique_json_mapping(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    mapping: dict[str, object] = {}
-    for key, value in pairs:
-        if key in mapping:
-            raise _HermesConfigLimitError("config_duplicate_key")
-        mapping[key] = value
-    return mapping
-
-
-def _validate_config_value(value: object) -> None:
-    stack: list[tuple[object, int]] = [(value, 1)]
-    nodes = 0
-    while stack:
-        current, depth = stack.pop()
-        nodes += 1
-        if nodes > HERMES_CONFIG_MAX_NODES:
-            raise _HermesConfigLimitError("config_node_limit_exceeded")
-        if depth > HERMES_CONFIG_MAX_DEPTH:
-            raise _HermesConfigLimitError("config_depth_limit_exceeded")
-        if isinstance(current, dict):
-            for key, item in current.items():
-                if not isinstance(key, str):
-                    raise _HermesConfigLimitError("config_value_invalid")
-                stack.append((item, depth + 1))
-        elif isinstance(current, list):
-            stack.extend((item, depth + 1) for item in current)
-        elif (isinstance(current, float) and not math.isfinite(current)) or (
-            current is not None and not isinstance(current, (str, int, float, bool))
-        ):
-            raise _HermesConfigLimitError("config_value_invalid")
-
-
-def _file_failure(
-    reason: HermesFileInspectionReason,
-    *,
-    preview: str = "",
-    size_bytes: int = 0,
-    analysis_truncated: bool = False,
-) -> HermesFileInspection:
-    return HermesFileInspection(
-        preview=preview,
-        content=None,
-        content_hash=None,
-        size_bytes=size_bytes,
-        readable=False,
-        complete=False,
-        analysis_truncated=analysis_truncated,
-        reason=reason,
+def _answer(request: dict[str, object]) -> dict[str, object] | None:
+    return runtime_answer(
+        _FEATURE,
+        _COMMAND,
+        {"schema": _SCHEMA, **request},
+        output_limit=_OUTPUT_LIMIT,
+        timeout_seconds=_TIMEOUT_SECONDS,
     )
 
 
-def _resolves_within(path: Path, root: Path) -> bool:
-    try:
-        resolved = path.resolve(strict=True)
-        resolved_root = root.resolve(strict=True)
-        _ = resolved.relative_to(resolved_root)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return True
+def _file(value: object) -> HermesFileInspection | None:
+    if not isinstance(value, dict):
+        return None
+    fields = cast("dict[str, object]", value)
+    preview = fields.get("preview")
+    content = fields.get("content")
+    content_hash = fields.get("content_hash")
+    size_bytes = fields.get("size_bytes")
+    readable = fields.get("readable")
+    complete = fields.get("complete")
+    truncated = fields.get("analysis_truncated")
+    reason = fields.get("reason")
+    if (
+        not isinstance(preview, str)
+        or not (content is None or isinstance(content, str))
+        or not (content_hash is None or isinstance(content_hash, str))
+        or not isinstance(size_bytes, int)
+        or isinstance(size_bytes, bool)
+        or size_bytes < 0
+        or not isinstance(readable, bool)
+        or not isinstance(complete, bool)
+        or not isinstance(truncated, bool)
+        or not (reason is None or isinstance(reason, str))
+        or complete != (reason is None)
+    ):
+        return None
+    return HermesFileInspection(
+        preview=preview,
+        content=content,
+        content_hash=content_hash,
+        size_bytes=size_bytes,
+        readable=readable,
+        complete=complete,
+        analysis_truncated=truncated,
+        reason=cast("HermesFileInspectionReason | None", reason),
+    )
 
 
-_stat_key = full_stat_identity
+def _config(answer: dict[str, object]) -> HermesConfigInspection | None:
+    file = _file(answer.get("file"))
+    payload = answer.get("payload")
+    complete = answer.get("complete")
+    reason = answer.get("reason")
+    if (
+        file is None
+        or not (payload is None or isinstance(payload, dict))
+        or not isinstance(complete, bool)
+        or not (reason is None or isinstance(reason, str))
+        or complete != (reason is None)
+        or complete != (payload is not None)
+    ):
+        return None
+    return HermesConfigInspection(
+        file=file,
+        payload=cast("dict[str, object] | None", payload),
+        complete=complete,
+        reason=cast("HermesConfigInspectionReason | None", reason),
+    )
+
+
+def _unavailable() -> HermesFileInspection:
+    return HermesFileInspection(
+        preview="",
+        content=None,
+        content_hash=None,
+        size_bytes=0,
+        readable=False,
+        complete=False,
+        analysis_truncated=False,
+        reason="file_unreadable",
+    )
 
 
 __all__ = [
@@ -393,5 +205,4 @@ __all__ = [
     "HermesFileInspectionReason",
     "inspect_hermes_config",
     "inspect_hermes_text_file",
-    "parse_hermes_yaml_mapping",
 ]

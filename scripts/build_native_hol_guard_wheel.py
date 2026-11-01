@@ -51,7 +51,14 @@ else:
     )
     from native_wheel_provenance import runtime_capabilities
 
+# The shipped runtime is built with fat LTO and stripped symbols, so 128 MiB is
+# generous for it and still bounds what this build reads into memory.
 _MAX_RUNTIME_BYTES = 128 * 1024 * 1024
+# A runtime built with the Gauntlet development profile carries every workspace
+# crate at opt-level 0 with per-crate codegen, which on macOS arm64 is several
+# times the shipped size. Those wheels are never published, so they may name a
+# larger ceiling, up to this one, and the read stays bounded either way.
+_MAX_UNPUBLISHED_RUNTIME_BYTES = 768 * 1024 * 1024
 _MAX_SOURCE_WHEEL_BYTES = 256 * 1024 * 1024
 _MAX_SOURCE_ENTRY_BYTES = 64 * 1024 * 1024
 _MAX_SOURCE_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
@@ -121,7 +128,7 @@ def _open_regular_file(path: Path, *, max_bytes: int, label: str) -> BinaryIO:
     if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
         raise NativeWheelError(f"{label} must be a regular non-symlink file")
     if before.st_size <= 0 or before.st_size > max_bytes:
-        raise NativeWheelError(f"{label} size is outside the accepted release bounds")
+        raise NativeWheelError(f"{label} size {before.st_size} is outside the accepted bound of {max_bytes} bytes")
 
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -248,8 +255,8 @@ def _load_source_wheel(path: Path, *, version: str) -> SourceWheel:
     )
 
 
-def _load_runtime(path: Path) -> bytes:
-    with _open_regular_file(path, max_bytes=_MAX_RUNTIME_BYTES, label="runtime") as handle:
+def _load_runtime(path: Path, max_bytes: int = _MAX_RUNTIME_BYTES) -> bytes:
+    with _open_regular_file(path, max_bytes=max_bytes, label="runtime") as handle:
         metadata = os.fstat(handle.fileno())
         if os.name != "nt":
             mode = stat.S_IMODE(metadata.st_mode)
@@ -257,10 +264,10 @@ def _load_runtime(path: Path) -> bytes:
                 raise NativeWheelError("runtime is group/world writable")
             if not mode & stat.S_IXUSR:
                 raise NativeWheelError("runtime is not owner-executable")
-        runtime = handle.read(_MAX_RUNTIME_BYTES + 1)
+        runtime = handle.read(max_bytes + 1)
         after = os.fstat(handle.fileno())
-        if len(runtime) > _MAX_RUNTIME_BYTES:
-            raise NativeWheelError("runtime size is outside the accepted release bounds")
+        if len(runtime) > max_bytes:
+            raise NativeWheelError(f"runtime grew past the accepted bound of {max_bytes} bytes while being read")
         if (metadata.st_size, metadata.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise NativeWheelError("runtime changed while being read")
         if len(runtime) != metadata.st_size:
@@ -296,11 +303,12 @@ def _verify_runtime_provenance(
     source_sha: str,
     rule_digest: str,
     engine: str | None = None,
+    max_runtime_bytes: int = _MAX_RUNTIME_BYTES,
 ) -> bytes:
-    before = _load_runtime(path)
+    before = _load_runtime(path, max_runtime_bytes)
     capabilities = _runtime_capabilities(path)
     verify_engine(path, engine)
-    after = _load_runtime(path)
+    after = _load_runtime(path, max_runtime_bytes)
     if not hashlib.sha256(before).digest() == hashlib.sha256(after).digest():
         raise NativeWheelError("runtime changed during capabilities verification")
     if capabilities.protocol_version != 1:
@@ -368,8 +376,11 @@ def build_native_wheel(
     rule_digest: str,
     implementation_digest: str | None = None,
     base_program_digest: str | None = None,
+    max_runtime_bytes: int = _MAX_RUNTIME_BYTES,
 ) -> Path:
     """Return a new native HOL Guard wheel without changing the source wheel."""
+    if max_runtime_bytes <= 0 or max_runtime_bytes > _MAX_UNPUBLISHED_RUNTIME_BYTES:
+        raise NativeWheelError(f"runtime bound must be between 1 and {_MAX_UNPUBLISHED_RUNTIME_BYTES} bytes")
     if not version.strip():
         raise NativeWheelError("package version is required")
     if not _PLATFORM_TAG_RE.fullmatch(platform_tag):
@@ -400,6 +411,7 @@ def build_native_wheel(
         source_sha=source_sha,
         rule_digest=rule_digest,
         engine=implementation_digest if bundle is not None else None,
+        max_runtime_bytes=max_runtime_bytes,
     )
     runtime_name = "hol-guard-runtime.exe" if platform_tag.startswith("win") else "hol-guard-runtime"
     runtime_path = f"{_NATIVE_DIR}/{runtime_name}"
@@ -460,6 +472,16 @@ def main() -> int:
     parser.add_argument("--rule-digest", required=True)
     parser.add_argument("--implementation-digest")
     parser.add_argument("--base-program-digest")
+    parser.add_argument(
+        "--max-runtime-bytes",
+        type=int,
+        default=_MAX_RUNTIME_BYTES,
+        help=(
+            "Largest runtime this build will read, in bytes. The default suits the shipped "
+            "release profile; raise it only for wheels that are never published, such as the "
+            "Gauntlet development profile."
+        ),
+    )
     args = parser.parse_args()
     output = build_native_wheel(
         source_wheel=args.wheel,
@@ -472,6 +494,7 @@ def main() -> int:
         rule_digest=args.rule_digest,
         implementation_digest=args.implementation_digest,
         base_program_digest=args.base_program_digest,
+        max_runtime_bytes=args.max_runtime_bytes,
     )
     print(output)
     return 0

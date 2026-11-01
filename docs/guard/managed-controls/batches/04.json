@@ -1,8 +1,8 @@
 {
   "batch": 4,
   "evidence": [
-    "src/codex_plugin_scanner/guard/managed_controls/privacy.py",
-    "src/codex_plugin_scanner/guard/managed_controls/identity.py",
+    "tests/managed_controls/privacy.py",
+    "tests/managed_controls/identity.py",
     "tests/managed_controls/test_catalog_privacy_identity.py"
   ],
   "repository": "hashgraph-online/hol-guard",

@@ -6,12 +6,45 @@ the resident receives a separately prepared pack set and signed policy first.
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+
+def _resident_command_model(command: str, guard_home: Path) -> dict[str, object] | None:
+    """The resident's command model for ``command``, as the pre-tool reply carries it."""
+    from codex_plugin_scanner.guard.native_resident_client import native_resident_client_request
+    from codex_plugin_scanner.guard.native_runtime import _isolated_environment, native_runtime_status
+
+    status = native_runtime_status()
+    assert status.identity is not None, "native runtime unavailable"
+    envelope = {
+        "operation": "command_model",
+        "deadline_budget_ms": 1_000,
+        "request": {
+            "command": command,
+            "dialect": "posix",
+            "transport": "shell_string",
+            "extraction_provenance": "guard-shell",
+        },
+    }
+    output = native_resident_client_request(
+        executable=status.identity.path,
+        guard_home=guard_home,
+        environment=_isolated_environment(),
+        payload=json.dumps(envelope, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+        deadline_monotonic=time.monotonic() + 1.0,
+    )
+    if output is None:
+        return None
+    model = json.loads(output)
+    return model if isinstance(model, dict) and "segments" in model else None
+
 
 COMMAND_MODULES = {
     "test_retired_command_extension_continuity",
@@ -75,7 +108,7 @@ def optional_command_catalog(request, monkeypatch, tmp_path):
     if module not in COMMAND_MODULES and not optional_integration:
         return
 
-    from codex_plugin_scanner.guard import native_command_model, native_hook_edge, native_policy_snapshot
+    from codex_plugin_scanner.guard import native_hook_edge, native_policy_snapshot
     from codex_plugin_scanner.guard.catalog_delivery import preparation
     from codex_plugin_scanner.guard.runtime import command_evaluation
     from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -220,9 +253,13 @@ def optional_command_catalog(request, monkeypatch, tmp_path):
             assert edge is not None, "authenticated optional command resident unavailable"
             payload = dict(edge["result"])
             # The hook default leaves 250 ms; loaded Windows runners need the full second.
-            model = native_command_model.review_command_model_native(
-                command, guard_home=guard_home, timeout_seconds=1.0
-            )
+            # The call caps itself at that second, which a busy resident on a loaded
+            # runner can still miss, so a miss is retried before the fixture fails.
+            model = None
+            for _attempt in range(3):
+                model = _resident_command_model(command, guard_home)
+                if model is not None:
+                    break
             assert model is not None, "native command model unavailable"
             payload["command_model"] = model
             admitted = _BINDINGS[guard_home]

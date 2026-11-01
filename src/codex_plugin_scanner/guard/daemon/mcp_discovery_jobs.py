@@ -43,6 +43,10 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "codex_host_limit",
         "codex_host_timeout",
         "codex_host_unavailable",
+        # A command-line tool's --help could not be read or parsed.
+        "cli_help_unreadable",
+        # The tool's stored identity changed while its --help was read.
+        "cli_identity_changed",
     }
 )
 
@@ -57,12 +61,47 @@ class DiscoveryStageError(ValueError):
         super().__init__(code)
 
 
+class DiscoveryCancel(threading.Event):
+    """A job's cancel flag that stops taking effect once the job starts writing.
+
+    A cancel that lands after a job began its writes would otherwise report a
+    job as cancelled whose results are already stored.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._commit_lock = threading.Lock()
+        self._committed = False
+
+    def set(self) -> None:
+        with self._commit_lock:
+            if not self._committed:
+                super().set()
+
+    def begin_commit(self) -> bool:
+        """Close the flag for good; False when a cancel already arrived."""
+
+        with self._commit_lock:
+            if self.is_set():
+                return False
+            self._committed = True
+            return True
+
+
+def begin_commit(cancel: threading.Event) -> bool:
+    """Start a job's writes unless it was cancelled first."""
+
+    if isinstance(cancel, DiscoveryCancel):
+        return cancel.begin_commit()
+    return not cancel.is_set()
+
+
 @dataclass
 class _Job:
     job_id: str
     cli_id: str
     started: float
-    cancel: threading.Event = field(default_factory=threading.Event)
+    cancel: threading.Event = field(default_factory=DiscoveryCancel)
     state: str = "running"
     code: str | None = None
     finished: float | None = None
@@ -150,7 +189,8 @@ class McpDiscoveryJobs:
                 raise DiscoveryJobError("discovery_job_unavailable")
             if cancel and job.finished is None:
                 job.cancel.set()
-                job.state = "cancelling"
+                if job.cancel.is_set():
+                    job.state = "cancelling"
             return job.public()
 
     def _run(self, job: _Job, run: Callable[[threading.Event], None]) -> None:

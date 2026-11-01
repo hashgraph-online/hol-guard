@@ -17,7 +17,7 @@ pub(crate) const EMBEDDED_ARGUMENT_KEYS: [&str; 12] = [
 ];
 
 /// Every key whose value may name a file the tool reads or writes.
-const PATH_KEYS: [&str; 11] = [
+pub(super) const PATH_KEYS: [&str; 11] = [
     "path",
     "paths",
     "file",
@@ -79,6 +79,76 @@ fn empty_argument_targets(maps: &[&Map<String, Value>]) -> bool {
     present
 }
 
+/// Every argument a request for the output of work the harness already
+/// started may carry. The set is closed on purpose: a retrieval tool's name is
+/// model-supplied, and the keys this extractor reads are not the only places a
+/// target can hide. A key outside this set may name a file, an address, a
+/// request body or an instruction under a spelling nothing here reads, so a
+/// call that carries one keeps its review.
+const RETRIEVAL_KEYS: [&str; 18] = [
+    "task_id",
+    "task_ids",
+    "taskId",
+    "taskIds",
+    "command_id",
+    "command_ids",
+    "commandId",
+    "commandIds",
+    "id",
+    "ids",
+    "timeout_ms",
+    "timeoutMs",
+    "timeout",
+    "block",
+    "wait",
+    "limit",
+    "offset",
+    "cursor",
+];
+
+/// The longest list of identifiers one retrieval may name.
+const MAX_RETRIEVAL_ITEMS: usize = 32;
+
+/// Whether every argument the call carries is a retrieval argument. A map with
+/// no arguments at all proves nothing, because the call's real target may sit
+/// outside the maps this extractor collects.
+fn retrieval_arguments_only(maps: &[&Map<String, Value>]) -> bool {
+    maps.iter().any(|record| !record.is_empty())
+        && maps.iter().all(|record| {
+            record.iter().all(|(key, value)| {
+                RETRIEVAL_KEYS.contains(&key.as_str()) && bounded_identifier(value)
+            })
+        })
+}
+
+/// Whether the value is an identifier or a bounded list of them. A nested map,
+/// or a list holding one, can carry a request of its own, so neither passes.
+fn bounded_identifier(value: &Value) -> bool {
+    match value {
+        Value::String(_) | Value::Number(_) | Value::Bool(_) | Value::Null => true,
+        Value::Array(items) => {
+            items.len() <= MAX_RETRIEVAL_ITEMS
+                && items.iter().all(|item| {
+                    matches!(item, Value::String(_) | Value::Number(_) | Value::Bool(_))
+                })
+        }
+        Value::Object(_) => false,
+    }
+}
+
+/// Whether the text is a JSON-encoded empty list. Only an empty one qualifies:
+/// a list that names targets keeps every value it carries.
+fn encodes_an_empty_list(value: &str) -> bool {
+    let trimmed = value.trim();
+    if !trimmed.starts_with('[') || trimmed.len() > MAX_COMMAND_BYTES {
+        return false;
+    }
+    matches!(
+        parse_strict_nested_json(trimmed.as_bytes()),
+        Ok(Value::Array(items)) if items.is_empty()
+    )
+}
+
 pub(crate) fn extract_generic_signals(
     payload: &Value,
 ) -> Result<GenericSignals, GenericExtractionError> {
@@ -117,6 +187,11 @@ pub(crate) fn extract_generic_signals(
     let command = collect_commands(&maps)?;
     let tool_name = collect_tool_names(payload)?;
     let mut path_values = collect_key_strings(&maps, &PATH_KEYS)?;
+    // Cline's compatibility copy encodes each parameter as a JSON string, so a
+    // call that names no file to read arrives as the text `[]`. That text is
+    // the empty list it encodes, not a file called `[]`, and reading it as a
+    // target hides the read-nothing proof behind a review.
+    path_values.retain(|value| !encodes_an_empty_list(value));
     // Adapter aliases can repeat one target; distinct targets must still
     // prevent the single-file benign proof.
     path_values.sort();
@@ -166,12 +241,12 @@ pub(crate) fn extract_generic_signals(
         && url_values.is_empty()
         && text_values.is_empty()
         && benign_prompt_text(&prompt_values[0]);
-    let independent_sensitive_target = sensitive_text(&path_values)
-        || sensitive_text(&url_values)
+    let non_path_sensitive_target = sensitive_text(&url_values)
         || prompt_values
             .iter()
             .any(|value| prompt_sensitive_text(value))
         || sensitive_text(&text_values);
+    let independent_sensitive_target = sensitive_text(&path_values) || non_path_sensitive_target;
     let content_sensitive = independent_sensitive_target
         || command
             .as_deref()
@@ -189,7 +264,9 @@ pub(crate) fn extract_generic_signals(
         path_values,
         url_values,
         request_body_or_method: request_body_or_method(&maps),
+        retrieval_arguments_only: retrieval_arguments_only(&argument_maps(root)),
         github_read_only: false,
+        mirrored_input_unproven: false,
         prompt_present: !prompt_values.is_empty(),
         env_reference,
         benign_prompt,
@@ -201,6 +278,8 @@ pub(crate) fn extract_generic_signals(
         content_sensitive,
         sensitive_target,
         independent_sensitive_target: guard_bypass_intent || independent_sensitive_target,
+        non_path_sensitive_target: guard_bypass_intent || non_path_sensitive_target,
+        declares_secret_object: super::tracked_names::declares_secret_object(payload),
         event_hint,
     })
 }

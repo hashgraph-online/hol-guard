@@ -9,7 +9,10 @@ the same receipt writers the proxy calls, so a relayed call leaves the
 receipt and runtime evidence the proxy would have left. A call the proxy
 decides only after claiming its saved approval carries the evidence the
 post-claim check appended, which follows the decision's own evidence as in
-``_allow_and_forward``.
+``_allow_and_forward``. A current resident writes the receipt of a plain
+forward, policy block or refused inline prompt itself once the daemon
+acknowledges the page that passed over it, so only an older resident still
+hands those records here.
 
 A call the proxy would queue for approval under the ``safe-alternative``
 blocked-request mode is blocked by the resident, and its record carries the
@@ -37,7 +40,7 @@ from typing import Any
 
 MCP_TOOL_CALL_EVIDENCE_KIND = "mcp_tool_call"
 # The harnesses whose MCP proxy the relay replaces.
-_RELAY_HARNESSES = frozenset({"codex", "copilot", "cursor", "opencode"})
+_RELAY_HARNESSES = frozenset({"cline", "codex", "copilot", "cursor", "hermes", "opencode"})
 _RECORD_KEYS = frozenset(
     {
         "kind",

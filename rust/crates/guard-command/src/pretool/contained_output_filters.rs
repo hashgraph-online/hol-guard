@@ -1,6 +1,6 @@
-//! Output filters after a contained core: `| head -N`, `| tail -N` and a
-//! `grep` or `rg` that only reads its standard input, chained up to three
-//! deep.
+//! Output filters after a contained core: `| head -N`, `| tail -N`, the same
+//! two bounded by bytes (`-c N`) or spelled with `-n N`, and a `grep` or `rg`
+//! that only reads its standard input, chained up to three deep.
 //!
 //! The execution sink (`contained_output_filters.py`) peels the same chain,
 //! runs the core contained and applies the filters to its captured output.
@@ -9,7 +9,7 @@
 use crate::CommandSegmentV1;
 
 /// The longest chain the sink applies.
-pub(super) const MAX_FILTERS: usize = 3;
+pub(in crate::pretool) const MAX_FILTERS: usize = 3;
 
 /// Single-letter `grep` switches that change only which lines of standard
 /// input are printed and how. Recursion (`-r`), pattern files (`-f`), file
@@ -25,6 +25,7 @@ const RG_SWITCHES: &str = "FNSUacinosvwx";
 /// Options that take a line count, spelled alike by both programs.
 const GREP_COUNTS: &[&str] = &["-A", "-B", "-C", "-m"];
 
+/// Whether `value` is a count small enough to be a filter's bound.
 fn bounded_count(value: &str) -> bool {
     !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
 }
@@ -46,12 +47,47 @@ pub(super) fn filter_stage(segment: &CommandSegmentV1, source: &str) -> bool {
     }
 }
 
-pub(super) fn head_tail_arguments(arguments: &[String]) -> bool {
-    match arguments {
-        [count] => count.strip_prefix('-').is_some_and(bounded_count),
-        [flag, count] => flag == "-n" && bounded_count(count),
+/// Whether `program <arguments>` is a matcher reading only standard input.
+///
+/// The sink's own peel reads a stage from the command text rather than from a
+/// parsed segment, so it asks this directly.
+pub(in crate::pretool) fn matcher_stage(program: &str, arguments: &[String]) -> bool {
+    match program {
+        "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
+        "rg" => stdin_arguments(arguments, RG_SWITCHES),
         _ => false,
     }
+}
+
+/// The bound one `head`/`tail` stage keeps: the count, and whether it counts
+/// bytes rather than lines.
+///
+/// `head -40`, `head -n 40` and `head -c 1500` all bound the text the stage
+/// prints and read nothing but standard input, so the sink applies each of
+/// them in process. A byte count truncates the captured bytes exactly where
+/// the program would, which may be mid-character; the sink keeps those bytes
+/// as they stand rather than rounding to a character boundary.
+pub(in crate::pretool) fn head_tail_bound(arguments: &[String]) -> Option<(u32, bool)> {
+    let (digits, bytes) = match arguments {
+        [single] => match single.strip_prefix("-c").filter(|rest| !rest.is_empty()) {
+            Some(digits) => (digits, true),
+            None => (single.strip_prefix('-')?, false),
+        },
+        [flag, count] => match flag.as_str() {
+            "-n" => (count.as_str(), false),
+            "-c" => (count.as_str(), true),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    if !bounded_count(digits) {
+        return None;
+    }
+    Some((digits.parse().ok()?, bytes))
+}
+
+pub(in crate::pretool) fn head_tail_arguments(arguments: &[String]) -> bool {
+    head_tail_bound(arguments).is_some()
 }
 
 /// A matcher that reads only standard input: switches from `switches`,
@@ -152,7 +188,7 @@ pub(super) fn plain_source(source: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{plain_source, stdin_arguments, GREP_SWITCHES, RG_SWITCHES};
+    use super::{head_tail_bound, plain_source, stdin_arguments, GREP_SWITCHES, RG_SWITCHES};
 
     fn words(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
@@ -271,6 +307,38 @@ mod tests {
             "grep \"a\nb\"",
         ] {
             assert!(!plain_source(source), "{source}");
+        }
+    }
+
+    #[test]
+    fn a_head_or_tail_bound_reads_lines_or_bytes() {
+        for (arguments, expected) in [
+            (&["-40"][..], (40u32, false)),
+            (&["-n", "40"][..], (40, false)),
+            (&["-c", "1500"][..], (1500, true)),
+            (&["-c1500"][..], (1500, true)),
+        ] {
+            assert_eq!(
+                head_tail_bound(&words(arguments)),
+                Some(expected),
+                "{arguments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bound_that_names_a_file_or_no_count_is_not_a_filter() {
+        for arguments in [
+            &[][..],
+            &["-c"],
+            &["-n"],
+            &["-c", "1500", "notes.txt"],
+            &["-c", "-1500"],
+            &["-c", "1500000000"],
+            &["-q", "1500"],
+            &["notes.txt"],
+        ] {
+            assert_eq!(head_tail_bound(&words(arguments)), None, "{arguments:?}");
         }
     }
 }

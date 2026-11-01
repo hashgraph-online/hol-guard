@@ -267,6 +267,7 @@ def _binding_error(
     proofs: list[Any],
     own_exit_ok: bool = False,
     contained_ok: bool = False,
+    benign_exit: frozenset[str] = frozenset(),
 ) -> tuple[str, str] | None:
     reason = pre.get("reason_code")
     profile = CONTAINMENT_PROFILES.get(reason) if isinstance(reason, str) else None
@@ -322,9 +323,18 @@ def _binding_error(
     # OMP reports exitCode only for a failed command; a present code must be zero. In a full task the
     # agent's own commands fail too (a missing directory, a test it has yet to fix), and the host would
     # have returned the same code, so there a non-zero exit counts only when the sandbox refused it.
+    # A command the catalog declares as answering by failing keeps that answer when Guard reruns it
+    # contained, exactly as it would have on the host. The declaration names the reviewed command,
+    # not the wrapper, and excuses only the command's own exit: a sandbox refusal (126) and a
+    # missing binary (127) are faults of the contained run itself.
+    reviewed_command = (pre.get("input") or {}).get("command")
+    declared_benign = isinstance(reviewed_command, str) and reviewed_command in benign_exit
     exit_code = details.get("exitCode", 0)
     if call.get("is_error") is not False or exit_code != 0:
-        own_failure = own_exit_ok and isinstance(exit_code, int) and exit_code not in (0, 126)
+        own_failure = isinstance(exit_code, int) and (
+            (own_exit_ok and exit_code not in (0, 126))
+            or (declared_benign and exit_code not in (0, 126, 127))
+        )
         if not own_failure or _sandbox_refused(call, details, pre.get("input")):
             if contained_ok:
                 # A protection case's rerun is not ordinary work, so a refusal here is a missing
@@ -344,11 +354,15 @@ def contained_calls(
     *,
     approval_retry: bool = False,
     contained_ok: bool = False,
+    benign_exit: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, dict[str, Any]], tuple[str, str] | None]:
     """Reviewed inputs of fully bound contained calls, or the outcome for a rewrite that is not bound.
 
     Only a call Guard denied for containment whose host input differs from the reviewed input is a
     contained rewrite; any other deny keeps the ordinary judgement and still counts as interruption.
+
+    ``benign_exit`` carries the catalog's ``benign_exit_commands`` so a command declared to answer
+    by failing is judged the same way here as it is on the host.
 
     ``contained_ok`` is the author's declaration that a protection case accepts Guard's own
     contained route as its stop. It widens only which containment reasons open this path; every
@@ -386,6 +400,7 @@ def contained_calls(
             proofs,
             own_exit_ok=case.get("full_task_mode") is not None or approval_retry,
             contained_ok=contained_ok,
+            benign_exit=benign_exit,
         )
         if error:
             return {}, error

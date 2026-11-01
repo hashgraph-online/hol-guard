@@ -388,10 +388,10 @@ fn listing(
                     false,
                 ),
                 "block",
-                super::evaluate::MISSING_PATH,
+                super::read_decisions::MISSING_PATH,
                 "",
             );
-            result.reason = super::evaluate::missing_path_reason(
+            result.reason = super::read_decisions::missing_path_reason(
                 "HOL Guard did not run this listing because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
                 "listing",
                 targets.iter().find(|target| !proven(target)).copied(),
@@ -936,10 +936,10 @@ fn grep_scope(
                     false,
                 ),
                 "block",
-                super::evaluate::MISSING_PATH,
+                super::read_decisions::MISSING_PATH,
                 "",
             );
-            result.reason = super::evaluate::missing_path_reason(
+            result.reason = super::read_decisions::missing_path_reason(
                 reason,
                 "search",
                 targets.iter().find(|target| !proven(target)).copied(),
@@ -969,7 +969,7 @@ fn missing_under_searchable_folder(target: &str, home: Option<&str>, cwd: Option
             .filter(|folder| folder.is_dir())
             .and_then(std::path::Path::to_str)
             .is_some_and(|folder| {
-                super::super::search_scope::content_search_scope_proven(folder, home, cwd)
+                super::super::search_scope::content_search_scope_proven(folder, home, cwd, None)
                     || (std::path::Path::new(folder).parent().is_some()
                         && super::super::read_paths::bounded_read_target(folder, home, cwd, true)
                         && guard_secure_fs::sensitive_path_family(path).is_none()

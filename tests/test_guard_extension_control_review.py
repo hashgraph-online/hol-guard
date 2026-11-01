@@ -256,7 +256,7 @@ def test_first_remote_fallback_preserves_installed_security_floors(
             "status": "ahead",
             "base_commit": {"sha": floor["source"]},
             "merge_base_commit": {"sha": floor["source"]},
-            "head_commit": {"sha": new},
+            "url": f"https://api.github.com/repos/hashgraph-online/hol-guard/compare/{floor['source']}...{new}",
             "ahead_by": 1,
             "behind_by": 0,
         }

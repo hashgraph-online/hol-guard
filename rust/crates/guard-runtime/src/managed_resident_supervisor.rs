@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+use zeroize::Zeroizing;
 
 #[cfg(windows)]
 use guard_runtime_windows_process::ManagedChild;
@@ -420,11 +421,18 @@ pub(crate) fn supervise_managed(
     }
 }
 
-fn hex_token(token: &[u8]) -> String {
-    let mut output = String::with_capacity(token.len() * 2);
+/// Render the authentication key for the one stdin write that hands it to the
+/// serving child.
+///
+/// The rendering is a plaintext copy of the key, so it is cleared when the
+/// write is done rather than left in a freed allocation. The supervisor hands
+/// the key over on the same terms as `managed_resident_containment::hex_token`
+/// does on the contained route.
+fn hex_token(token: &[u8]) -> Zeroizing<String> {
+    let mut output = Zeroizing::new(String::with_capacity(token.len() * 2));
     for byte in token {
         use std::fmt::Write as _;
-        let _ = write!(output, "{byte:02x}");
+        let _ = write!(*output, "{byte:02x}");
     }
     output
 }

@@ -16,14 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.claude.claude_daemon_hook_transport import (
-    authenticated_claude_hook_response,
-)
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts.daemon_hook_client import authenticated_claude_hook_response
 from tests.coverage_ci import under_coverage_scale
 
 

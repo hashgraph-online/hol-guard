@@ -54,7 +54,7 @@ def projection_builder(tmp_path, monkeypatch):
     limits.write_bytes(module.DELIVERY_LIMITS.read_bytes())
     monkeypatch.setattr(module, "DELIVERY_LIMITS", limits)
     monkeypatch.setattr(module, "implementation_digest", lambda: "d" * 64)
-    monkeypatch.setattr(module, "_pack_descriptors", lambda compiler: [descriptor])
+    monkeypatch.setattr(module, "_pack_descriptors", lambda compiler, **kwargs: [descriptor])
     public_blobs = {}
 
     def run(command, **kwargs):
@@ -81,6 +81,7 @@ def projection_builder(tmp_path, monkeypatch):
         return module.main()
 
     build.public_blobs = public_blobs
+    build.module = module
     return build, descriptor
 
 

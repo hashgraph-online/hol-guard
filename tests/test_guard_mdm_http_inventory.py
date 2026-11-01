@@ -30,9 +30,6 @@ _RAW_HTTP_BOUNDARIES = frozenset(
         "daemon/manager.py",
         "bridge/__init__.py",
         "adapters/bounded_cli_hook_daemon.py",
-        "adapters/_modules/claude/claude_daemon_hook_transport.py",
-        "adapters/_modules/cursor/cursor_hook_script_template_head.py",
-        "adapters/_modules/codex/codex_daemon_hook_transport.py",
     }
 )
 
@@ -100,6 +97,7 @@ def test_external_runtime_paths_import_the_managed_transport() -> None:
         "cli/update_commands.py",
         "catalog_delivery/transport.py",
         "local_supply_chain.py",
+        "plugin_telemetry/report.py",
         "proxy/remote.py",
         "runtime/runner.py",
         "runtime/verified_github_reads.py",

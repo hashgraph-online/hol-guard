@@ -24,6 +24,7 @@ import {
   REVIEW_SEMANTIC_GROUPS,
   type QueueCategory,
   type QueueCategoryId,
+  type QueueGroup,
   type QueueSortDirection,
   type SemanticGroupId,
 } from "./queue-state";
@@ -77,6 +78,7 @@ export type ReviewWorkspaceProps = {
   }) => Promise<void> | void;
   onGoHome: () => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
+  onBulkBlock?: (groups: QueueGroup[]) => Promise<void>;
 };
 
 const QUEUE_PAGE_SIZE = 10;
@@ -222,6 +224,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
     onBulkApprove: props.onBulkApprove,
+    onBulkBlock: props.onBulkBlock,
     settingsHref: guardAwareHref("/settings"),
   });
 
@@ -306,7 +309,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       <QueueBulkStickyBar {...bulkApprove.stickyBar} />
       {bulkApprove.bulkSelection.selectionMode && (
         <span aria-live="polite" className="sr-only">
-          {bulkApprove.bulkSelection.selectedActionCount} of {filteredRequests.length} reads selected for bulk approval.
+          {bulkApprove.bulkSelection.selectedActionCount} of {filteredRequests.length} requests selected.
         </span>
       )}
       <QueueBulkDrawer {...bulkApprove.drawer} />

@@ -11,16 +11,16 @@ use guard_command::command_evaluation_controls::{
     authority_failure_for_health, control_layers_from_wire,
 };
 use guard_command::direct_vitest::DirectToolAuthority;
-use guard_command::{Ctx, GitCheck, GitProbe, GitRun, InspectionHost};
+use guard_command::{Ctx, GitCheck, GitProbe, InspectionHost};
 use guard_contracts::{
     CodexToolOutputFactsV1, CompoundGitSegmentV1, HookControlSnapshotV1, RequestContextRequestV1,
     RequestContextSensitiveRequestV1, MAX_REQUEST_CONTEXT_PATH_BYTES,
 };
 use serde_json::{json, Value};
 
-use crate::codex_tool_output_op::ResidentInspectionHost;
 use crate::direct_tool_context_op::{admit, Authority};
 use crate::request_context_op::Budget;
+use crate::resident_inspection_host::ResidentInspectionHost;
 
 const INVALID: &str = "native_sensitive_request_input_invalid";
 const MAX_INPUT_BYTES: usize = 6 * 1024 * 1024;
@@ -74,12 +74,6 @@ impl InspectionHost for SensitiveRequestHost<'_> {
     }
     fn git_binary_trusted(&self, git: &str, cwd: &str) -> bool {
         self.within_budget() && self.inner.git_binary_trusted(git, cwd)
-    }
-    fn run_git(&self, git: &str, args: &[String], cwd: &str) -> GitRun {
-        if !self.within_budget() {
-            return GitRun::Failed("native_request_context_budget_exceeded");
-        }
-        self.inner.run_git(git, args, cwd)
     }
     fn compound_git_chain(&self, segments: &[CompoundGitSegmentV1], complete: bool) -> bool {
         self.within_budget() && self.inner.compound_git_chain(segments, complete)
@@ -203,22 +197,10 @@ pub(crate) fn evaluate(
     }
     let controls = controls(body.control_snapshot.as_ref())?;
     let facts = &body.facts;
-    // The unmodeled-shell recognizers prove git hooks against the account's
-    // passwd home, which the caller reports as the shell and developer
-    // inspection requests do, so a redirected `HOME` cannot stand in for it.
-    let account_home = if body.query == "unmodeled_shell_artifact" {
-        match body.input.get("account_home") {
-            None | Some(Value::Null) => None,
-            Some(Value::String(path)) if absolute_path_is_bounded(Some(path)) => Some(path.clone()),
-            Some(_) => return Err(INVALID),
-        }
-    } else {
-        Some(facts.caller_home.clone())
-    };
     let inspection = CodexToolOutputFactsV1 {
         process_cwd: facts.cwd.clone(),
         home: facts.home_dir.clone(),
-        account_home,
+        account_home: Some(facts.caller_home.clone()),
         groups: facts.groups.clone(),
         environment: facts.environment.clone(),
         git_executable: body.git_executable.clone(),

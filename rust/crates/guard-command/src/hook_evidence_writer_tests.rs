@@ -15,6 +15,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
+#[path = "hook_evidence_batch_tests.rs"]
+mod batch_tests;
+
 use crate::hook_evidence_writer::{
     ComposioActionSchema, ComposioWorkflowProposal, CorrelationApi, CorrelationHandle,
     EvidenceJournalApi, EvidenceRecord, EvidenceStoreApi, EvidenceWriterDeps,

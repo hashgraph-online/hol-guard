@@ -36,11 +36,8 @@ from codex_plugin_scanner.guard.approval_gate import (
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_command
-from codex_plugin_scanner.guard.cli.commands import (
-    _persist_claude_native_permission_policy,
-    _queue_claude_native_approval_gate_fallback,
-    run_guard_command,
-)
+from codex_plugin_scanner.guard.cli.commands import run_guard_command
+from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -52,10 +49,12 @@ from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.self_approval import _AGENT_ENV_MARKERS
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
+from tests.claude_native_gate_fallback import queue_claude_native_approval_gate_fallback
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
-from tests.native_permission_plan_stub import answer_persist_plans
+from tests.guard_totp_support import read_totp_secret, totp_code_at_counter
+from tests.native_permission_plan_stub import saved_plan
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 from tests.support.network import stub_authenticated_urlopen
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -238,23 +237,6 @@ def _enable_totp(store: GuardStore, *, now: str) -> str:
         now=now,
     )
     return secret
-
-
-def test_totp_atomic_temp_paths_are_random(tmp_path: Path) -> None:
-    target_path = tmp_path / "guard-home" / "totp-secrets" / "seed.secret"
-    first = _temporary_atomic_path(target_path)
-    second = _temporary_atomic_path(target_path)
-    try:
-        assert first != second
-        assert first.parent == target_path.parent
-        assert second.parent == target_path.parent
-        assert first.name != f"{target_path.name}.tmp"
-        assert second.name != f"{target_path.name}.tmp"
-    finally:
-        if first.exists():
-            first.unlink()
-        if second.exists():
-            second.unlink()
 
 
 def test_approval_gate_missing_password_fails_closed(tmp_path: Path) -> None:
@@ -1339,7 +1321,7 @@ def test_approval_gate_cli_totp_commands_round_trip(tmp_path: Path) -> None:
 
     state = json.loads((store.guard_home / "approval-gate.json").read_text(encoding="utf-8"))
     pending_secret_id = str(state["totp_pending_secret_id"])
-    secret = TotpSecretStore(store.guard_home).get_secret(pending_secret_id)
+    secret = read_totp_secret(store.guard_home, pending_secret_id)
     assert secret is not None
 
     verify_counter = _counter(datetime.now(timezone.utc).isoformat())
@@ -1854,7 +1836,8 @@ def test_daemon_approval_false_artifact_scope_still_allows_once(
     assert body["resolved"] is True
     assert store.list_policy_decisions("codex") == []
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             f"codex:project:{request_id}",
             f"hash-{request_id}",
@@ -1863,7 +1846,8 @@ def test_daemon_approval_false_artifact_scope_still_allows_once(
         == "allow"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             f"codex:project:{request_id}",
             f"hash-{request_id}",
@@ -1914,7 +1898,7 @@ def test_approval_gate_direct_lower_layers_cannot_bypass(tmp_path: Path) -> None
     with pytest.raises(ApprovalGateError):
         store.upsert_policy(decision, "2026-04-11T00:00:00+00:00")
     with pytest.raises(ApprovalGateError):
-        store.replace_remote_policies([decision], "2026-04-11T00:00:00+00:00")
+        replace_remote_policies(store, [decision], "2026-04-11T00:00:00+00:00")
     with pytest.raises(ApprovalGateError):
         record_policy(store, "codex", "allow", "artifact", "codex:project:record", None)
     with pytest.raises(ApprovalGateError):
@@ -1989,7 +1973,7 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     assert store.list_receipts(limit=5) == []
 
 
-def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashing(
+def test_approval_gate_background_sync_applies_signed_remote_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2008,7 +1992,7 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
         {
             "ruleId": "cloud-allow",
             "action": "allow",
-            "reason": "Exercise approval-gated activation of signed remote policy.",
+            "reason": "Exercise signed remote policy activation behind the approval gate.",
             "artifactId": "codex:project:cloud-allow",
             "scope": {
                 "agents": [],
@@ -2056,11 +2040,41 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
     }
     payload = guard_runner_module.sync_receipts(store, auth_context=auth_context)
 
-    assert payload["remote_policies_stored"] == 0
-    assert payload["remote_policy_sync_blocked"] is True
-    assert store.list_policy_decisions("codex") == []
-    events = store.list_events(event_name="approval_gate/remote_policy_sync_blocked")
-    assert events[0]["payload"]["error"] == "approval_gate_required"
+    # A background sync holds no password grant. The workspace signature is
+    # the authority for these rows, so the team policy still lands.
+    assert payload["remote_policies_stored"] == 1
+    assert "remote_policy_sync_blocked" not in payload
+    decisions = store.list_policy_decisions("codex")
+    assert ("codex:project:cloud-allow", "allow") in {(item["artifact_id"], item["action"]) for item in decisions}
+    assert store.list_events(event_name="approval_gate/remote_policy_sync_blocked") == []
+    assert not store.get_sync_payload("policy_bundle_last_error")
+
+
+def test_approval_gate_still_guards_review_memory_rows_rebuilt_from_local_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    planted = PolicyDecision(
+        harness="codex",
+        scope="artifact",
+        action="allow",
+        artifact_id="codex:project:planted",
+        artifact_hash="hash-planted",
+        source="cloud-signed-memory",
+    )
+
+    # Review-memory rows come from a registry kept in local state, so no
+    # workspace signature covers them and the password still decides.
+    with pytest.raises(ApprovalGateError):
+        store.apply_review_policy_memory_state(
+            [planted],
+            registry=[],
+            version={},
+            acknowledgement={},
+            now="2026-04-19T00:00:00+00:00",
+        )
+    assert ("codex:project:planted", "allow") not in {
+        (item["artifact_id"], item["action"]) for item in store.list_policy_decisions("codex")
+    }
 
 
 def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
@@ -2122,30 +2136,34 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     assert store.list_policy_decisions("codex") == []
 
 
-def test_approval_gate_native_permission_persistence_cannot_bypass(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    answer_persist_plans(monkeypatch)
+def _write_native_allow(store: GuardStore, artifact_id: str) -> bool:
+    inputs = {
+        "artifact_id": artifact_id,
+        "artifact_hash": "hash-native",
+        "action": "allow",
+        "reason": "native approval",
+    }
+    return _write_claude_native_permission_plan(
+        store=store,
+        plan=saved_plan(inputs),
+        artifact_id=artifact_id,
+        reason="native approval",
+        source="claude-native-approval",
+        now="2026-04-11T00:00:00+00:00",
+    )
+
+
+def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
 
-    saved = _persist_claude_native_permission_policy(
-        store=store,
-        artifact_id="claude:project:tool",
-        artifact_hash="hash-native",
-        action="allow",
-        reason="native approval",
-        now="2026-04-11T00:00:00+00:00",
-    )
+    saved = _write_native_allow(store, "claude:project:tool")
 
     assert saved is False
     assert store.list_policy_decisions("claude-code") == []
 
 
-def test_approval_gate_native_permission_failure_queues_guard_fallback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    answer_persist_plans(monkeypatch)
+def test_approval_gate_native_permission_failure_queues_guard_fallback(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     artifact = GuardArtifact(
@@ -2158,15 +2176,8 @@ def test_approval_gate_native_permission_failure_queues_guard_fallback(
         command="echo MALICIOUS > marker",
     )
 
-    saved = _persist_claude_native_permission_policy(
-        store=store,
-        artifact_id=artifact.artifact_id,
-        artifact_hash="hash-native",
-        action="allow",
-        reason="native approval",
-        now="2026-04-11T00:00:00+00:00",
-    )
-    queued = _queue_claude_native_approval_gate_fallback(
+    saved = _write_native_allow(store, artifact.artifact_id)
+    queued = queue_claude_native_approval_gate_fallback(
         store=store,
         harness="claude-code",
         artifact=artifact,

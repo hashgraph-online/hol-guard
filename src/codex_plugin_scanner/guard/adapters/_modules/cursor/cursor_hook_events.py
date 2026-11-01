@@ -35,6 +35,10 @@ CURSOR_SUPPORTED_HOOK_EVENTS = frozenset(
 # The matcher is a regex on tool_name, so shell, MCP and read calls keep their own hooks.
 CURSOR_FILE_MUTATION_TOOLS = ("Write", "Edit", "StrReplace", "MultiEdit", "Delete")
 CURSOR_FILE_MUTATION_TOOL_MATCHER = "^(" + "|".join(CURSOR_FILE_MUTATION_TOOLS) + ")$"
+# Outside Windows preToolUse also takes Shell: Cursor applies its updated_input before
+# beforeShellExecution runs, so a test call can move into Guard's contained sink. That
+# probe only ever allows; beforeShellExecution stays the shell call's review.
+CURSOR_SHELL_ROUTE_TOOL_MATCHER = "^(" + "|".join((*CURSOR_FILE_MUTATION_TOOLS, "Shell")) + ")$"
 
 
 def unsupported_cursor_hook_events(hooks: dict[str, object]) -> list[str]:

@@ -1,6 +1,5 @@
 //! Port of `hook_execution_environment.py` (`stamp_hook_input_text`) and
-//! `codex_daemon_hook_transport.py::_with_remaining_hint` for the native
-//! Claude hook bridge.
+//! the remaining-time hint for the native hook bridges.
 //!
 //! Both rewrite the hook input the way CPython's `json.loads` + `json.dumps`
 //! would: object members keep their first position, numbers keep their
@@ -12,7 +11,7 @@
 //! range the two can no longer be told apart, and the stamp is refused
 //! rather than guessed.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -21,6 +20,9 @@ use crate::guard_store_wfcap_frame::sha256_hex;
 use crate::pyjson::{self, in_surrogate_plane, JsonFailure, PyVal, SURROGATE_PLANE_BASE};
 
 pub(crate) const HOOK_EXECUTION_ENVIRONMENT_KEY: &str = "guard_execution_environment";
+/// Set on a newer bridge that answers a stale bridge's hook, so it never
+/// hands the hook on again. Guard sets it, never the harness.
+pub(crate) const HOOK_HANDED_OFF_ENV: &str = "HOL_GUARD_HOOK_HANDED_OFF";
 pub(crate) const MAX_STAMPED_HOOK_INPUT_BYTES: usize = 1_000_000;
 const PAGER_NAMES: [&str; 2] = ["GIT_PAGER", "PAGER"];
 const GIT_TRUE_VALUES: [&str; 4] = ["1", "true", "yes", "on"];
@@ -55,7 +57,17 @@ pub(crate) struct DecodedEnvironment {
 }
 
 pub(crate) fn current_environment() -> DecodedEnvironment {
-    decode_environment(std::env::vars_os())
+    decode_environment(harness_variables(std::env::vars_os()))
+}
+
+/// The variables the harness set. Guard's own hand-off marker is dropped, so
+/// a handed-off hook is stamped exactly as the stale bridge would stamp it.
+fn harness_variables(
+    variables: impl IntoIterator<Item = (OsString, OsString)>,
+) -> impl Iterator<Item = (OsString, OsString)> {
+    variables
+        .into_iter()
+        .filter(|(name, _)| name.as_os_str() != OsStr::new(HOOK_HANDED_OFF_ENV))
 }
 
 pub(crate) fn decode_environment(
@@ -220,7 +232,7 @@ pub(crate) fn collect_hook_execution_environment(environment: &DecodedEnvironmen
         Some(value) => PyVal::Str(value.to_owned()),
         None => PyVal::Null,
     };
-    PyVal::Dict(vec![
+    let mut stamp = vec![
         (
             "path".to_owned(),
             PyVal::Str(lookup(environment, "PATH").unwrap_or_default().to_owned()),
@@ -257,7 +269,19 @@ pub(crate) fn collect_hook_execution_environment(environment: &DecodedEnvironmen
             "environment_digest".to_owned(),
             PyVal::Str(sha256_hex(digest_text.as_bytes())),
         ),
-    ])
+    ];
+    // Present only when true, so stamps from hosts without the variable are
+    // byte-identical to the Python hook's older output.
+    if lookup(environment, "NODE_OPTIONS").is_some_and(guard_contracts::node_options_inert) {
+        stamp.push(("node_options_inert".to_owned(), PyVal::Bool(true)));
+    }
+    if guard_contracts::cargo_home_default(
+        lookup(environment, "HOME"),
+        lookup(environment, "CARGO_HOME"),
+    ) {
+        stamp.push(("cargo_home_default".to_owned(), PyVal::Bool(true)));
+    }
+    PyVal::Dict(stamp)
 }
 
 /// `stamp_hook_input_text(text)` against `environment`.

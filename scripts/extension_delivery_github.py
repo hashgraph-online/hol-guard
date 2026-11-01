@@ -179,6 +179,14 @@ def publish_assets(tag, source, paths, expected, *, verify_existing_provenance=N
         raise ValueError("delivery release is unexpected or incomplete")
     for name, spec in sorted(expected.items()):
         asset = assets.get(name)
+        if asset is not None and asset.get("state") != "uploaded":
+            # An upload cut off by a gateway error leaves a placeholder that
+            # cannot be downloaded. Only a draft may drop it and upload again.
+            if not current["draft"]:
+                raise ValueError("published delivery asset upload is incomplete")
+            pace_write()
+            github("api", f"repos/{REPOSITORY}/releases/assets/{github_id(asset.get('id'))}", "--method", "DELETE")
+            asset = None
         if asset is not None:
             if verify_existing_provenance is not None and name.endswith(".intoto.jsonl"):
                 if type(asset.get("size")) is not int or not 0 < asset["size"] <= MAX_PROVENANCE_BYTES:

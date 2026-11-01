@@ -50,7 +50,6 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
     for command in [
         "./todo.py add x",
         "python3 app.py",
-        "mkdir -p src && touch src/a.js",
         "git add -A && git commit -m x",
         "git commit -m init",
         "npm run build && git diff",
@@ -67,6 +66,12 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "kill -SIGTERM %1",
         "kill -- %1",
         "kill %+ %-",
+        // Signal 0 delivers nothing, so these ask whether a process is still
+        // there and leave every process they name running.
+        "kill -0 4821",
+        "kill -s 0 4821",
+        "kill -n 0 4821 7312",
+        "kill -0 %1",
         "rm -f init_repo.py",
         "rm a.py && rm -rf __pycache__",
         "echo hi > scratch.txt && rm scratch.txt",
@@ -79,6 +84,11 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "git checkout -b fix-1",
         "git stash",
         "git stash push -m 'wip: parser'",
+        // A pathspec keeps strictly less work than the unbounded form does,
+        // and the entry still holds every change the command moves.
+        "git stash push -- src/app.py",
+        "git stash push src/app.py",
+        "git stash push -m 'warm cache' -- src/app.py",
         "git stash -u && git switch -c spike",
     ] {
         let got = reason("omp", command, &ws, true);
@@ -212,6 +222,25 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "kill -9 -4821 %1",
         "kill -s TERM -1 %1",
         "kill -- -1 %1",
+        // The exception is signal 0 with an operand that names a process:
+        // a negative operand asks about every process the user can reach,
+        // and a signal that is only spelled like 0 is a different signal.
+        "kill -0 -1",
+        "kill -0 -4821",
+        "kill -00 4821",
+        "kill -s SIGNULL 4821",
+        "kill -0",
+        // Pid `0` asks about the caller's own process group, which is the
+        // same survey a negative operand asks for, and a leading zero writes
+        // both of those another way.
+        "kill -0 0",
+        "kill -0 00",
+        "kill -0 01",
+        "kill -s 0 0",
+        // Arithmetic stands for a number by the time the operands are read,
+        // so the words the caller wrote are what this form admits.
+        "kill -0 $((-1))",
+        "kill -0 $((4821))",
         "echo $(x)",
         "echo hi > ../out",
         "git reset --hard",
@@ -225,7 +254,6 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "git stash pop",
         "git stash drop",
         "git stash clear",
-        "git stash push -- src/app.py",
         "git stash -m",
         "cat .env",
         "GIT_DIR=/x git status",
@@ -410,8 +438,11 @@ fn path_with_node(_home: &Path) -> String {
     std::env::var("PATH").unwrap()
 }
 
+/// A linked worktree keeps its index, `HEAD`, refs and objects in the main
+/// checkout's shared Git directory, which `workspace-contained-v1` grants the
+/// run, so ordinary Git there is bounded exactly as it is in a main checkout.
 #[test]
-fn a_linked_worktree_contains_everything_but_git() {
+fn a_linked_worktree_contains_git_with_its_shared_directory() {
     let root = std::env::temp_dir().join(format!("guard-ws-{}-linked", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let (main, tree) = (root.join("main"), root.join("tree"));
@@ -437,8 +468,33 @@ fn a_linked_worktree_contains_everything_but_git() {
             && got == "native_node_build_output_containment_required";
         assert_eq!(got == CONTAINED || narrower, host(), "{command}");
     }
-    // Its index and objects live in the shared Git directory, out of reach.
-    for command in ["git add -A", "git rm -q src/a.ts", "npm test && git status"] {
+    // Its index, reflog and objects are the shared Git directory's, which the
+    // sandbox grants the run, so these are bounded as in a main checkout.
+    for command in [
+        "git add -A && git commit -m x",
+        "git commit -m init",
+        "git stash",
+    ] {
+        assert_eq!(
+            reason("omp", command, &tree, true) == CONTAINED,
+            host(),
+            "{command}"
+        );
+    }
+    // The shared configuration, hooks and the other worktrees' entries stay
+    // write-denied, so Git that has to write one keeps its review.
+    for command in [
+        "git worktree remove --force ../other",
+        "git config user.email agent@example.com",
+        "git push origin HEAD",
+        // Rebase, sequencer, bisect and squash state are outside the grant.
+        "git rebase main",
+        "git cherry-pick HEAD~1",
+        "git revert --no-edit HEAD",
+        "git bisect start",
+        "git am -3 fix.patch",
+        "git merge --squash main",
+    ] {
         assert_ne!(reason("omp", command, &tree, true), CONTAINED, "{command}");
     }
     let _ = std::fs::remove_dir_all(&root);
@@ -549,7 +605,7 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let controls = controls();
     let reason = |command: &str| {
@@ -568,10 +624,18 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         )
         .reason_code
     };
+    // Git answers for a lone recursive removal of a missing target on every
+    // platform, before the sandbox is asked. Git cannot restore ignored
+    // files, so `dist` is left to the sandbox.
+    let missing = "rm -rf coverage";
+    assert_eq!(
+        reason(missing),
+        "native_exact_safe_recoverable_removal",
+        "{missing}"
+    );
     for command in [
         "rm -rf dist",
         "rm -rf dist && npm run build",
-        "rm -rf coverage",
         "rm src/a.ts",
         "rm -f src/a.ts dist/out.js",
         "sed --in-place=.orig -n 'p' src/a.ts && rm -f src/a.ts.orig",
@@ -601,7 +665,9 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
     let exec = "sed -i '' 's/1/2/e' src/a.ts";
     assert_ne!(reason(exec), "native_exact_safe_command", "{exec}");
     // A tracked or unknown tree may hold uncommitted work the sandbox would
-    // write back as deleted.
+    // write back as deleted. `truncate` rewrites one file in place the way
+    // `sed -i` above does, so it reaches the sandbox instead; see
+    // `truncating_a_workspace_file_runs_in_the_workspace_sandbox`.
     for command in [
         "rm -rf src",
         "rm -rf src 2>&1",
@@ -611,7 +677,6 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         "cd src && rm -rf .",
         "rm -rf $DIR",
         "shred -u src/a.ts",
-        "truncate -s 0 src/a.ts",
         "rm --no-preserve-root -rf dist",
         "GLOBIGNORE=x rm -rf dist",
         "sed --follow-symlinks -i 's/1/2/' src/a.ts",
@@ -657,6 +722,57 @@ fn a_timeout_clock_keeps_the_command_it_wraps_in_the_sandbox() {
         "timeout 30 curl https://example.com",
         "timeout 30 cat /Users/nobody/.ssh/id_rsa",
         "timeout 30 git push origin main",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+/// `truncate -s 0 log` empties a file the way `> log` does, and `truncate -s
+/// 1M blob` grows one the way a write does. Both are the sandbox's ordinary
+/// workspace write, so they reach it like the removal they stand next to,
+/// while a target outside the workspace is refused for the target.
+#[test]
+fn truncating_a_workspace_file_runs_in_the_workspace_sandbox() {
+    let ws = workspace("truncate", true);
+    std::fs::create_dir_all(ws.join("logs")).unwrap();
+    std::fs::write(ws.join("logs/app.log"), "old\n").unwrap();
+    for command in [
+        "truncate -s 0 logs/app.log",
+        "truncate -s0 logs/app.log",
+        "truncate --size 0 logs/app.log",
+        "truncate --size=0 logs/app.log",
+        "truncate -c -s 0 logs/app.log",
+        "truncate -s 1M data/blob.bin",
+        "truncate -r logs/app.log logs/copy.log",
+        "truncate -s 0 -- logs/app.log",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+    for command in [
+        "truncate -s 0 /etc/hosts",
+        "truncate -s 0 ../outside.txt",
+        "truncate -s 0 ~/.bashrc",
+        "truncate -s 0 $HOME/.bashrc",
+        "truncate -s 0 .git/config",
+        // A reference attached to its own option is skipped by the reach
+        // check, so the spelling is refused instead of read as a bare size.
+        "truncate -r/etc/passwd logs/app.log",
+        "truncate --reference=/etc/passwd logs/app.log",
+        // The shell picks what a pattern names, and these select inside
+        // `.git` while their literal spelling does not say so.
+        "truncate -s 0 .*/*",
+        "truncate -s 0 logs/*.log",
+        // An option neither spelling documents could mean anything.
+        "truncate -z 0 logs/app.log",
+        "truncate --follow logs/app.log",
+        // With no operand there is no target to hold to the workspace.
+        "truncate -s 0",
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }

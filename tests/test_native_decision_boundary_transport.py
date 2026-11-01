@@ -1,38 +1,23 @@
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import native_runner_authority, native_signal_projection, store_review_event_outbox
-from codex_plugin_scanner.guard.decision_boundaries import (
-    canonical_approval_decision,
-    canonical_approval_surfaces,
-    canonical_approval_surfaces_batch,
-    canonical_receipt_decision,
-)
-from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
+from codex_plugin_scanner.guard import native_runner_authority, store_review_event_outbox
 from codex_plugin_scanner.guard.native_signal_projection import NativeSignalProjectionUnavailableError
-from codex_plugin_scanner.guard.store_approvals import resolvable_approval_request_ids
+from tests import decision_boundaries_support as native_signal_projection
+from tests.decision_boundaries_support import canonical_approval_surfaces_batch
 
 
-@pytest.mark.parametrize("operation", ("approval", "receipt", "surfaces", "batch"))
-def test_boundary_native_outage_has_no_local_verdict(monkeypatch: pytest.MonkeyPatch, operation: str) -> None:
+def test_boundary_native_outage_has_no_local_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
     def unavailable(*args: object, **kwargs: object) -> object:
         raise native_runner_authority.NativeRunnerAuthorityError("native_runtime_unavailable")
 
     monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
     with pytest.raises(NativeSignalProjectionUnavailableError, match="native_runtime_unavailable") as caught:
-        if operation == "approval":
-            canonical_approval_decision("allow", None, reject_contradiction=False)
-        elif operation == "receipt":
-            canonical_receipt_decision("allow", None, reject_contradiction=False)
-        elif operation == "surfaces":
-            canonical_approval_surfaces("allow", None, None, reject_contradiction=False)
-        else:
-            canonical_approval_surfaces_batch([("allow", None, None)])
+        canonical_approval_surfaces_batch([("allow", None, None)])
     assert not isinstance(caught.value, ValueError)
     assert isinstance(caught.value.__cause__, native_runner_authority.NativeRunnerAuthorityError)
 
@@ -147,7 +132,7 @@ def test_boundary_healthy_refusal_is_validation(monkeypatch: pytest.MonkeyPatch)
 def test_unkeyed_projection_home_never_creates_store_signing_state(tmp_path: Path) -> None:
     home = tmp_path / "uninitialized-read-home"
     home.mkdir()
-    result = canonical_approval_surfaces("review", None, None, reject_contradiction=False, guard_home=home)
+    (result,) = canonical_approval_surfaces_batch([("review", None, None)], guard_home=home)
     assert result.policy_action == "review"
     assert list(home.iterdir()) == []
 
@@ -155,7 +140,7 @@ def test_unkeyed_projection_home_never_creates_store_signing_state(tmp_path: Pat
 @pytest.mark.usefixtures("native_prompt_runtime")
 def test_large_readable_rows_split_without_reordering(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "large-page-home"
-    source = canonical_approval_decision("review", None, reject_contradiction=False, guard_home=home).decision_v2_json
+    source = canonical_approval_surfaces_batch([("review", None, None)], guard_home=home)[0].decision_v2_json
     inputs = [("review", {**source, "policyVersion": str(index) + ":" + "x" * 30_000}, None) for index in range(100)]
     original = native_signal_projection._request
     batches: list[int] = []
@@ -187,21 +172,6 @@ def test_unencodable_row_fails_closed_without_hiding_the_page(tmp_path: Path) ->
     )
     assert (results[0].policy_action, results[0].contract_error) == ("review", None)
     assert (results[1].policy_action, results[1].contract_error) == ("block", "authoritative_decision_inconsistent")
-
-
-def test_resolution_sweep_skips_an_unencodable_row_in_one_projection(tmp_path: Path) -> None:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    bind_connection_guard_home(connection, tmp_path / "sweep-home")
-    rows = connection.execute(
-        """
-        select 'readable' as request_id, 'review' as policy_action,
-               null as decision_v2_json, null as action_envelope_json
-        union all
-        select 'unencodable', 'review', '{"score": NaN}', null
-        """
-    ).fetchall()
-    assert resolvable_approval_request_ids(connection, rows) == ["readable"]
 
 
 def test_batch_request_bytes_are_bounded_even_below_the_row_cap(monkeypatch: pytest.MonkeyPatch) -> None:

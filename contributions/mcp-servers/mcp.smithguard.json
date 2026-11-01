@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.smithguard",
+  "version": "1.0.0",
+  "name": "SmithGuard",
+  "description": "Read dated vulnerability and malware evidence for an explicitly selected exact public package, plus coverage, verification keys and public bulletins. Hosted service; no local scanner or automatic package-install check. Public coordinates reach SmithGuard. External and off until locally enabled.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "ai.smithlabs",
+    "displayName": "Smith Labs, LLC",
+    "url": "https://smithlabs.ai"
+  },
+  "icon": {"kind": "none"},
+  "homepage": "https://smithguard.io",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://api.smithguard.io/mcp",
+    "serverNames": ["smithguard"]
+  },
+  "riskClasses": ["external-network-read", "external-public-data-read"],
+  "tools": [
+    {"name": "assess_public_artifact", "state": "review"},
+    {"name": "get_coverage", "state": "inherit"},
+    {"name": "get_verification_key", "state": "inherit"},
+    {"name": "get_emerging_leads", "state": "inherit"},
+    {"name": "list_bulletins", "state": "inherit"},
+    {"name": "get_bulletin", "state": "inherit"},
+    {"name": "get_bulletin_changes", "state": "inherit"},
+    {"name": "get_bulletin_status", "state": "inherit"},
+    {"name": "other", "state": "review"}
+  ],
+  "referenceUrls": [
+    "https://smithguard.io/agents/",
+    "https://api.smithguard.io/openapi.json",
+    "https://api.smithguard.io/v1/coverage.json",
+    "https://smithguard.io/privacy/",
+    "https://smithguard.io/terms/",
+    "https://github.com/SmithLabsLLC/smithguard-core"
+  ],
+  "saferAlternatives": [
+    "Keep this contribution off and use Guard's existing local evidence when no disclosure to SmithGuard is intended. Local activation alone does not authorize sending private names, inventories, source, files or credentials.",
+    "Do not treat a no-match result, unavailable evidence or a valid signature as proof of safety. Review coverage and each public-coordinate request before sending it."
+  ]
+}

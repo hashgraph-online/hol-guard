@@ -126,20 +126,34 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             pack_record_digest=_plan_pack_digest(plan),
         )
 
-    def _roll_back_abandoned_transition(self, revision: int, *, snapshot_digest: str, key: bytes) -> bool:
+    def _roll_back_abandoned_transition(
+        self,
+        revision: int,
+        *,
+        snapshot_digest: str,
+        key: bytes,
+        own_transition_digest: str | None = None,
+    ) -> bool:
         """Discard a prepared transition the vault anchor never moved past.
 
         The resident decides: the row must sit above a committed anchor that
         still pins ``snapshot_digest``, authenticate as prepared, and have
         outlived the window in which its own request may retry with its
-        single-use proof. Anchored or committed transitions are left for
-        explicit recovery. Returns whether the abandoned row was removed.
+        single-use proof. A caller that wrote the row and failed to anchor it
+        names it with ``own_transition_digest`` and skips that window.
+        Anchored or committed transitions are left for explicit recovery.
+        Returns whether the abandoned row was removed.
         """
 
         from .native_policy_snapshot_constants import NativePolicySnapshotError
 
         plan = self._authority_plan(
-            "rollback_plan", key=key, revision=revision, snapshot_digest=snapshot_digest, now=_now()
+            "rollback_plan",
+            key=key,
+            revision=revision,
+            snapshot_digest=snapshot_digest,
+            now=_now(),
+            own_transition_digest=own_transition_digest,
         )
         if plan["outcome"] != "abandon":
             return False
@@ -156,17 +170,6 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             # recovery remains available.
             return False
         return True
-
-    def _validate_transition_chain(
-        self,
-        revision: int,
-        *,
-        current_snapshot_digest: str,
-        key: bytes,
-    ) -> None:
-        self._extension_control_authority_op(
-            "validate_chain", key=key, revision=revision, snapshot_digest=current_snapshot_digest
-        )
 
     def list_extension_control_authority_history(
         self,
@@ -224,10 +227,3 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
             (AuthorityPhase.COMMITTED.value, _now(), _row_int(row, "revision")),
         )
-
-    def _pending_transition(self, revision: int) -> sqlite3.Row | None:
-        with self._connect() as connection:
-            return connection.execute(
-                "select * from extension_control_authority_transition where revision = ?",
-                (revision,),
-            ).fetchone()

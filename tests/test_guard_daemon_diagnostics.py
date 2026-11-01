@@ -29,7 +29,7 @@ def test_daemon_diagnostics_writes_json_records_on_a_background_worker(tmp_path:
         assert diagnostics.log_directory.stat().st_mode & 0o777 == 0o700
 
 
-def test_daemon_diagnostics_records_exception_tracebacks(tmp_path: Path) -> None:
+def test_daemon_diagnostics_records_the_exception_class_that_failed(tmp_path: Path) -> None:
     diagnostics = DaemonDiagnostics(tmp_path / "guard-home")
 
     try:
@@ -40,7 +40,52 @@ def test_daemon_diagnostics_records_exception_tracebacks(tmp_path: Path) -> None
 
     payload = json.loads(diagnostics.log_path.read_text(encoding="utf-8").splitlines()[-1])
     assert payload["event"] == "daemon_serve_failed"
-    assert "RuntimeError: diagnostic failure" in payload["exception"]
+    assert payload["exception"] == "RuntimeError"
+
+
+def test_daemon_diagnostics_disclose_no_part_of_the_failure_they_recorded(tmp_path: Path) -> None:
+    """`daemon.log` is handed to an operator, so what raised must not come with it.
+
+    Every entry point is driven with one failure that carries each shape this
+    log must never repeat: the absolute path of a file, the account that owns
+    it, and a credential a caller was holding. None of them is recoverable from
+    the record, and neither is the source line that raised, which a formatted
+    traceback would have printed verbatim.
+    """
+
+    secret = "sample-not-a-credential"
+    account = "a-real-account-name"
+    path = f"/Users/{account}/.hol-guard/keys/{secret}.pem"
+    diagnostics = DaemonDiagnostics(tmp_path / "guard-home")
+
+    try:
+        try:
+            raise OSError(2, "No such file or directory", path)
+        except OSError as error:
+            raise RuntimeError(f"could not reach https://example.test/?token={secret}") from error
+    except RuntimeError:
+        assert diagnostics.record_exception("daemon_start_failed") is True
+        assert diagnostics.record_exception("daemon_serve_failed", exc_info=False) is True
+        assert diagnostics.record("daemon_ready") is True
+        assert diagnostics.record_background("native_hook_worker_exception", "harness=codex") is True
+    assert diagnostics.close(timeout_seconds=1.0) is True
+
+    written = diagnostics.log_path.read_text(encoding="utf-8")
+    for disclosure in (secret, account, path, "Traceback", "raise OSError", __file__):
+        assert disclosure not in written, f"daemon.log disclosed {disclosure!r}"
+    records = [json.loads(line) for line in written.splitlines()]
+    assert [record["event"] for record in records] == [
+        "daemon_start_failed",
+        "daemon_serve_failed",
+        "daemon_ready",
+        "native_hook_worker_exception",
+    ]
+    # The chain names what failed and what it failed under, which is the whole
+    # of what the operator gets and all the log needs to be useful.
+    assert records[0]["exception"] == "RuntimeError <- FileNotFoundError"
+    assert "exception" not in records[1]
+    assert "exception" not in records[2]
+    assert records[3]["detail"] == "harness=codex"
 
 
 def test_daemon_diagnostics_without_a_worker_writes_queued_records_on_close(tmp_path: Path) -> None:
@@ -57,7 +102,7 @@ def test_daemon_diagnostics_without_a_worker_writes_queued_records_on_close(tmp_
     payload = json.loads(diagnostics.log_path.read_text(encoding="utf-8").splitlines()[-1])
     assert payload["event"] == "native_hook_worker_exception"
     assert payload["detail"] == "harness=codex"
-    assert "one shot failure" in payload["exception"]
+    assert payload["exception"] == "RuntimeError"
 
 
 def test_one_shot_diagnostics_append_without_rotating_the_daemon_log(tmp_path: Path) -> None:
@@ -71,7 +116,7 @@ def test_one_shot_diagnostics_append_without_rotating_the_daemon_log(tmp_path: P
     assert diagnostics.close(timeout_seconds=1.0) is True
     assert list(diagnostics.log_directory.glob("daemon.log.*")) == []
     payload = json.loads(diagnostics.log_path.read_text(encoding="utf-8").splitlines()[-1])
-    assert "hook failure" in payload["exception"]
+    assert payload["exception"] == "RuntimeError"
 
 
 def test_one_shot_diagnostics_leave_log_retention_to_the_daemon(tmp_path: Path) -> None:

@@ -80,7 +80,7 @@ def test_marker_hint_verifies_content_without_republishing_own_ack(
 def _allow_terminal_proof(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
 
 

@@ -94,6 +94,16 @@ def test_compose_sends_every_config_in_order(monkeypatch) -> None:
     assert result == {"mode": "enforce"}
     assert seen[0]["op"] == "compose"
     assert [config["mode"] for config in seen[0]["configs"]] == ["enforce", "observe"]
+    assert "observed" not in seen[0]
+
+
+def test_compose_hands_the_stored_mcp_choices_to_the_composer(monkeypatch) -> None:
+    seen = _install(monkeypatch, {"ok": True, "policy": {"mode": "enforce"}})
+    observed = {"mcp_tool_actions": {"codex:mcp__server__read": "block"}, "mcp_provider_actions": {}}
+
+    client.compose_effective_native_policies((dict(_BASE),), observed=observed)
+
+    assert seen[0]["observed"] == observed
 
 
 def test_compose_requires_a_config(monkeypatch) -> None:

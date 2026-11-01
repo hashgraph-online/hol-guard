@@ -1,30 +1,19 @@
 """Policy bundle schema validation and integrity hashing.
 
 Rust owns v1 bundle schema validation, canonical hashing, signature
-verification and downgrade ordering. This module keeps the public names,
+verification and downgrade ordering. This module keeps the sync-time names,
 remediation text rendering and the transport calls; a native failure is a
 typed rejection, never a Python verdict.
 """
 
 from __future__ import annotations
 
-import time
-
 from ..version import __version__
 from .native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
-    PolicyBundleNativeError,
     PolicyBundleNativeUnavailableError,
     native_policy_bundle,
-    native_rejection_code,
     policy_bundle_chunks,
-    policy_bundle_paged_text,
-    policy_bundle_verdict,
-)
-from .policy_bundle_trusted_keys import PolicyBundleVerificationKey
-
-_POLICY_BUNDLE_RULE_MATCHER_FAMILIES = frozenset(
-    {"file-read", "mcp", "mcp-tool", "package-request", "prompt", "prompt-env-read", "tool-action"}
 )
 
 CANONICAL_COMPILE_REJECTION_PREFIX = "canonical_compile_"
@@ -44,18 +33,24 @@ CANONICAL_COMPILE_DOCUMENT_CODES = frozenset(
 # rejection.
 _CANONICAL_COMPILE_REMEDIATION = {
     "unsupported_policy_match": (
-        "Guard enforces match on artifacts, harnesses, publishers, tools and workspaces; other match "
-        "fields, such as packages, domains or paths, are not enforced on this device, and tools cannot "
-        "be combined with artifacts or publishers."
+        "Guard enforces match on artifacts, exact commands, harnesses, publishers, tools and workspaces; "
+        "other match fields, such as packages, domains or paths, are not enforced on this device. Tools "
+        "cannot be combined with artifacts or publishers, and an exact command cannot be combined with "
+        "artifacts, tools or publishers."
     ),
     "invalid_policy_match_selector": "Every match field needs at least one non-empty value.",
-    "unsupported_policy_effect": "Guard enforces only allow and block rules.",
+    "unsupported_policy_effect": "Guard enforces allow, block and review rules.",
+    "unsupported_exact_command_review": (
+        "Guard cannot ask for review on an exact command; it enforces only allow and block there. Block "
+        "the command, or ask for review on its tool instead."
+    ),
     "unsupported_policy_lifetime": ("Guard enforces lifetime.mode permanent, or until with an expiresAt time."),
     "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
     "command_expression_requires_guard_3_1_runtime": (
-        "This device does not enforce command expressions, so the rule stays unapplied. A tool match is "
-        "not a substitute: it covers every call to that tool, not only this command, so widen the rule "
-        "only as a deliberate policy decision."
+        "This device does not enforce command expressions, such as a command prefix, so the rule stays "
+        "unapplied. Match the exact command instead, which Guard enforces. A tool match is not a "
+        "substitute: it covers every call to that tool, not only this command, so widen the rule only as "
+        "a deliberate policy decision."
     ),
     "policy_compilation_limit": (
         "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "
@@ -110,7 +105,6 @@ _POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS = frozenset(
 )
 _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS = frozenset(
     {
-        "bundle_version_downgrade",
         "invalid_bundle_version",
         "invalid_min_daemon_version",
         "unsupported_contract_version",
@@ -121,27 +115,6 @@ _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS = frozenset(
 
 def _non_empty_string(value: object) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
-
-
-def _bundle_value(kind: str, policy_bundle: dict[str, object]) -> str:
-    result = policy_bundle_verdict(kind, {"bundle_chunks": policy_bundle_chunks(policy_bundle)})
-    return str(result["value"])
-
-
-def _bundle_text(kind: str, policy_bundle: dict[str, object]) -> str:
-    return policy_bundle_paged_text(kind, {"bundle_chunks": policy_bundle_chunks(policy_bundle)})
-
-
-def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
-    return _bundle_value("v1_bundle_hash", policy_bundle)
-
-
-def canonical_policy_bundle_payload(policy_bundle: dict[str, object]) -> bytes:
-    return _bundle_text("v1_canonical_payload", policy_bundle).encode("utf-8")
-
-
-def payload_hash_for_policy_bundle(policy_bundle: dict[str, object]) -> str:
-    return _bundle_value("v1_payload_hash", policy_bundle)
 
 
 def _flag(kind: str, request: dict[str, object], *, otherwise: bool) -> bool:
@@ -185,8 +158,30 @@ def policy_bundle_acceptance_checkpoint(policy_bundle: dict[str, object]) -> dic
         "issuedAt": policy_bundle.get("issuedAt"),
         "payloadHash": policy_bundle.get("payloadHash"),
         "workspaceId": policy_bundle.get("workspaceId"),
+        "cloudExceptionsIssuedAt": policy_bundle.get("cloudExceptionsIssuedAt"),
+        "cloudExceptionsHash": policy_bundle_cloud_exceptions_hash(policy_bundle),
     }
     return {key: value for key, value in checkpoint.items() if value is not None}
+
+
+def policy_bundle_cloud_exceptions_hash(policy_bundle: dict[str, object]) -> str | None:
+    """Return the identity of the bundle's signed Cloud exception set, if any.
+
+    A checkpoint keeps it beside the issue time, so a different set signed at
+    the same instant is a replay rather than the set the device accepted.
+    """
+
+    stored = policy_bundle.get("cloudExceptionsHash")
+    if isinstance(stored, str):
+        return stored
+    if "cloudExceptions" not in policy_bundle:
+        return None
+    result = native_policy_bundle(
+        "v2_cloud_exceptions_hash",
+        {"bundle_chunks": policy_bundle_chunks({"cloudExceptions": policy_bundle["cloudExceptions"]})},
+    )
+    value = result.get("value")
+    return value if isinstance(value, str) else None
 
 
 _ORDERING_KEYS = ("bundleVersion", "bundleHash", "payloadHash", "issuedAt", "workspaceId")
@@ -262,6 +257,14 @@ def policy_bundle_rejection_message(reason: str | None) -> str | None:
             "The policy bundle was not applied because its validity period is not current. "
             "Check the system clock. Sync again to fetch the current workspace policy."
         )
+    if reason == "bundle_version_downgrade":
+        return (
+            "The policy bundle was not applied because it is older than, or conflicts with, "
+            "the policy this device already accepted. This device keeps the policy it already had. "
+            "Publish the policy again in Guard Cloud so it gets a newer version, then sync again. "
+            "If a newer publish is also rejected, the policy record on this device may be damaged; "
+            "contact your workspace administrator."
+        )
     if reason in _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS:
         return (
             "The policy bundle was not applied because its contract or daemon version is incompatible. "
@@ -270,36 +273,4 @@ def policy_bundle_rejection_message(reason: str | None) -> str | None:
     return None
 
 
-def validated_policy_bundle_payload(
-    policy_bundle: dict[str, object],
-    *,
-    trusted_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
-    anchored_verification_keys: tuple[PolicyBundleVerificationKey, ...] = (),
-    expected_workspace_id: str | None = None,
-    now: float | None = None,
-) -> tuple[dict[str, object] | None, str | None]:
-    try:
-        result = policy_bundle_verdict(
-            "validate_v1",
-            {
-                "bundle_chunks": policy_bundle_chunks(policy_bundle),
-                "trusted_keys": [key.to_dict() for key in trusted_verification_keys],
-                "anchored_keys": [key.to_dict() for key in anchored_verification_keys],
-                "expected_workspace_id": expected_workspace_id,
-                "now": now if now is not None else time.time(),
-                "daemon_version": __version__,
-            },
-        )
-    except PolicyBundleNativeError as error:
-        return None, "invalid_json_value" if error.code == "non_finite_number" else native_rejection_code(error)
-    keys = result.get("payload_keys")
-    payload_hash = result.get("payload_hash")
-    if not isinstance(keys, list) or not isinstance(payload_hash, str):
-        return None, "native_policy_bundle_authority_schema_mismatch"
-    payload = {key: policy_bundle[key] for key in keys if key != "payloadHash"}
-    payload["payloadHash"] = payload_hash
-    return payload, None
-
-
 non_empty_string = _non_empty_string
-POLICY_BUNDLE_RULE_MATCHER_FAMILIES = _POLICY_BUNDLE_RULE_MATCHER_FAMILIES

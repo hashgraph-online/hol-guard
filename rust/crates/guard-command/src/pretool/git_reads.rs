@@ -2,7 +2,7 @@
 //!
 //! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
 //! branch listings, `show-ref`, `for-each-ref`, `rev-list` commit walks, `hash-object`, `config`,
-//! `ls-tree` and `cat-file` reads. Diff-style reads that can run a configured helper need the
+//! `ls-tree`, `cat-file` and `sparse-checkout list` reads. Diff-style reads that can run a configured helper need the
 //! helper-context probe or both `--no-ext-diff` and `--no-textconv`.
 
 #[path = "git_log_names.rs"]
@@ -13,6 +13,54 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
         exact.contains(&argument.as_str())
             || prefixes.iter().any(|prefix| argument.starts_with(prefix))
     })
+}
+
+/// The long options that name a program for Git to run or a file for Git to
+/// write, as this module refuses them.
+const REFUSED_LONG_OPTIONS: &[&str] = &["--ext-diff", "--output", "--textconv"];
+
+/// Whether the word names one of those options, written in full or as any
+/// prefix of one.
+///
+/// Git's own parser resolves an unambiguous prefix to the option that owns
+/// it, so `--textc` starts the program a `diff.<driver>.textconv` setting
+/// names and `--ext-d` the one `diff.external` names, while `--no-textconv`
+/// and `--no-ext-diff` on the same line still satisfy the pair asked for
+/// above. A screen that compares whole words lets both past.
+///
+/// `--text` is left in: the comparison verbs spell it in full for their own
+/// "treat the file as text", and Git resolves an exact spelling to the
+/// option that owns it rather than reading it as a prefix of another.
+///
+/// [`crate::contained_git::names_helper_or_output`] asks the same question
+/// of the containment route. It is kept separate because it answers per verb
+/// from that route's own table, and the verbs admitted here -- `status`,
+/// `ls-files`, `remote`, `rev-parse` -- are not in it.
+fn names_refused_option(word: &str) -> bool {
+    let name = word.split('=').next().unwrap_or(word);
+    if name == "-o" {
+        return true;
+    }
+    if !name.starts_with("--") || name.len() < 3 || name == "--text" {
+        return false;
+    }
+    REFUSED_LONG_OPTIONS
+        .iter()
+        .any(|option| option.starts_with(name))
+}
+
+/// Whether `value`, a `git grep` target, is a tracked document whose name
+/// only reads like a credential, such as a committed
+/// `command.kubernetes-secrets.json`. A leading option other than the pager
+/// switch can move Git elsewhere, so a relative target is proven only
+/// without one.
+fn tracked_target(value: &str, leading: &[String], context: super::PathContext<'_>) -> bool {
+    (std::path::Path::new(value).is_absolute()
+        || leading
+            .iter()
+            .all(|option| matches!(option.as_str(), "--no-pager" | "-P")))
+        && !super::sensitive_path_argument(value)
+        && super::search_scope_tracked::names::resolves_to_tracked(value, context.cwd)
 }
 
 pub(super) fn safe_git_arguments(
@@ -47,8 +95,16 @@ pub(super) fn safe_git_arguments(
                 return leading_safe
                     && allow_helper_context
                     && super::git_grep::targets(rest).is_some_and(|targets| {
+                        // The tracked proof reads the working-tree file, so it
+                        // covers only pathspecs Git searches there: after a
+                        // `--` with no revision before it, and without
+                        // `--cached`, which searches the index instead.
+                        let working_tree = targets.first().is_some_and(|first| first == "--")
+                            && !rest.iter().any(|argument| argument == "--cached");
                         !targets.iter().any(|value| {
-                            value.starts_with(':') || super::sensitive_read_path_argument(value)
+                            value.starts_with(':')
+                                || (super::sensitive_read_path_argument(value)
+                                    && !(working_tree && tracked_target(value, leading, context)))
                         })
                     });
             }
@@ -64,8 +120,12 @@ pub(super) fn safe_git_arguments(
     // `-S`, `-G` and `--grep` values are search text too.
     let listed = log_names::pathspec_start(arguments, context);
     let search_text = super::git_search_text::pattern_positions(arguments);
+    // A replacement listing's pattern is matched against the refs under
+    // `refs/replace/`, not expanded over the files that are there.
+    let replacement = super::git_side_record_reads::listing_pattern_position(arguments, context);
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
+            && replacement != Some(index)
             && (value.starts_with(':')
                 || (super::sensitive_read_path_argument(value)
                     && listed.is_none_or(|start| index < start)))
@@ -107,14 +167,17 @@ pub(super) fn safe_git_arguments(
         return allow_helper_context
             && super::git_object_reads::read_form(subcommand, &arguments[1..]);
     }
-    if matches!(subcommand, "blame" | "describe" | "reflog") {
+    if matches!(subcommand, "blame" | "annotate" | "describe" | "reflog") {
         // History reads page (pager.blame, pager.reflog, core.pager) and
         // blame converts blobs, so the configuration probe clears them first.
         return allow_helper_context
             && super::git_history_reads::read_form(subcommand, &arguments[1..]);
     }
-    if matches!(subcommand, "shortlog" | "check-ignore") {
-        // A shortlog pages (pager.shortlog) and both run under the
+    if matches!(
+        subcommand,
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout"
+    ) {
+        // A shortlog pages (pager.shortlog) and all of them run under the
         // repository's configuration, so the probe clears them first.
         return allow_helper_context
             && super::git_listing_reads::read_form(subcommand, &arguments[1..]);
@@ -129,6 +192,22 @@ pub(super) fn safe_git_arguments(
         // configuration probe has to clear those helpers first. Every stash
         // spelling that moves work keeps its own review.
         return allow_helper_context && super::git_stash_reads::read_form(&arguments[1..]);
+    }
+    if subcommand == "submodule" {
+        // A status line is printed from the superproject, whose index it
+        // reads, so a configured `core.fsmonitor` there can start and the
+        // configuration probe has to clear it first. The recursive walk,
+        // which reads each submodule's own configuration, and every verb
+        // that moves work keep their own review.
+        return allow_helper_context && super::git_submodule_reads::read_form(&arguments[1..]);
+    }
+    if matches!(subcommand, "bisect" | "notes" | "replace") {
+        // A bisect log, a note and the replacement refs print through the
+        // pager (core.pager), so the configuration probe has to clear it
+        // first. Every spelling of any of the three that moves a ref, runs a
+        // program or opens the editor keeps its own review.
+        return allow_helper_context
+            && super::git_side_record_reads::read_form(subcommand, &arguments[1..]);
     }
     if subcommand == "rev-list" {
         // A commit walk honors pager.rev-list and can fetch from a partial
@@ -164,9 +243,53 @@ pub(super) fn safe_git_arguments(
                 })
             });
     }
+    if matches!(subcommand, "name-rev" | "show-branch" | "check-ref-format") {
+        // None of the three starts a pager of its own, runs a configured
+        // driver or opens a working-tree file, but an explicit `pager.<verb>`
+        // key can still name a program, so the configuration probe clears
+        // that first.
+        return allow_helper_context;
+    }
+    if matches!(subcommand, "var" | "patch-id" | "stripspace") {
+        // `var` prints a logical variable, and the other two filter the text
+        // on their stdin. None opens a working-tree file or runs a configured
+        // driver, but an explicit `pager.<verb>` key can still name a
+        // program, so the configuration probe clears that first.
+        return allow_helper_context;
+    }
+    if subcommand == "check-mailmap" {
+        // Translating contacts reads the repository's own mailmap. The
+        // options that name another file or object keep their review.
+        return allow_helper_context
+            && crate::command_compatibility::git_mailmap_read(&arguments[1..]);
+    }
+    if subcommand == "interpret-trailers" {
+        // The pipe-only spelling prints the message it was handed.
+        // `--in-place` and a file operand open the path instead and keep
+        // their review.
+        return allow_helper_context
+            && crate::command_compatibility::git_trailers_read(&arguments[1..]);
+    }
+    if subcommand == "symbolic-ref" {
+        // Printing where a symbolic ref points reads one loose file. A second
+        // operand writes that ref instead and keeps its own review; the
+        // explicit `pager.symbolic-ref` key is the probe's to clear.
+        return allow_helper_context
+            && crate::command_compatibility::git_symbolic_ref_read(&arguments[1..]);
+    }
     if !matches!(
         subcommand,
-        "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
+        "status"
+            | "cherry"
+            | "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "show"
+            | "rev-parse"
+            | "ls-files"
+            | "remote"
     ) {
         return false;
     }
@@ -190,38 +313,58 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|option| matches!(option.as_str(), "--push" | "--all"));
     }
+    if subcommand == "remote" && arguments.get(1).is_some_and(|argument| argument == "show") {
+        // `show -n` prints what the configuration already holds about a
+        // remote and says so: `-n` is the switch that keeps Git from asking
+        // the remote itself, so the command stays inside the repository.
+        // Without it Git opens the connection, which is a different question
+        // than a read of the local configuration.
+        let (names, options): (Vec<&String>, Vec<&String>) = arguments[2..]
+            .iter()
+            .partition(|argument| !argument.starts_with('-'));
+        return !options.is_empty()
+            && options.iter().all(|option| option.as_str() == "-n")
+            && names.len() <= 1;
+    }
     if subcommand == "remote" {
+        // Bare `git remote` prints the configured names, which `-v` already
+        // prints beside their URLs.
         let has_arguments_after_options = option_end + 1 < arguments.len();
-        return !active_options.is_empty()
-            && !has_arguments_after_options
+        return !has_arguments_after_options
             && active_options
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
-    // These three read through the diff machinery, so without the
+    // These read through the diff machinery, so without the
     // configuration probe only the spelling that turns the external driver
     // and the textconv filter off is proven. A `-C` route that discovers no
     // repository needs neither: Git dies in its own setup before it reads a
     // diff, textconv, pager or filter setting, so there is no configured
-    // helper for the options to turn off.
+    // helper for the options to turn off. `git cherry` runs no helper of its
+    // own, but it still prints under `pager.cherry`, so it asks for the same
+    // clearance and has no spelling of its own that answers instead: the two
+    // diff switches are not options it defines.
     let helpers_off = active_options
         .iter()
         .any(|argument| argument == "--no-ext-diff")
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
-    if matches!(subcommand, "diff" | "log" | "show")
+    let diff_family = matches!(
+        subcommand,
+        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show"
+    );
+    if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
-            || helpers_off
+            || (diff_family && helpers_off)
             || super::git_helper_context::arguments_route_to_no_repository(with_route, context))
     {
         return false;
     }
-    !has_argument(
-        active_options,
-        &["--ext-diff", "--textconv", "--output", "-o"],
-        &["--output=", "--exec-path="],
-    )
+    !active_options
+        .iter()
+        .any(|argument| names_refused_option(argument))
+        && !has_argument(active_options, &[], &["--exec-path="])
 }
 
 /// Whether a Git inspection, once the configuration probe cleared its helpers,
@@ -243,7 +386,26 @@ pub(super) fn inspection_writes_nothing(
     };
     if !matches!(
         subcommand.as_str(),
-        "status" | "diff" | "log" | "show" | "grep" | "merge-base" | "stash"
+        "status"
+            | "cherry"
+            | "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "show"
+            | "grep"
+            | "merge-base"
+            | "stash"
+            | "name-rev"
+            | "show-branch"
+            | "check-ref-format"
+            | "symbolic-ref"
+            | "var"
+            | "patch-id"
+            | "stripspace"
+            | "check-mailmap"
+            | "interpret-trailers"
     ) {
         return false;
     }
@@ -252,9 +414,52 @@ pub(super) fn inspection_writes_nothing(
         .position(|argument| argument == "--")
         .unwrap_or(inspected.len());
     !has_argument(leading, &[], &["--exec-path"])
-        && !has_argument(
-            &inspected[1..option_end],
-            &["--ext-diff", "--textconv", "--output", "-o"],
-            &["--output=", "--exec-path="],
-        )
+        && !inspected[1..option_end]
+            .iter()
+            .any(|argument| names_refused_option(argument))
+        && !has_argument(&inspected[1..option_end], &[], &["--exec-path="])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::names_refused_option;
+
+    /// Git takes any unambiguous prefix of a long option, so a read that
+    /// disables both helpers in full can turn one back on in an abbreviation
+    /// the screen never compared against.
+    #[test]
+    fn an_abbreviated_helper_names_the_option_it_resolves_to() {
+        for word in [
+            "--textconv",
+            "--textcon",
+            "--textc",
+            "--ext-diff",
+            "--ext-d",
+            "--output",
+            "--outp",
+            "--output=/tmp/changed.patch",
+            "-o",
+        ] {
+            assert!(names_refused_option(word), "{word}");
+        }
+    }
+
+    /// `--text` is the comparison verbs' own "treat the file as text", and
+    /// Git answers an exact spelling with the option that owns it, so reading
+    /// it as a prefix of `--textconv` would refuse an ordinary read.
+    #[test]
+    fn a_word_a_verb_spells_in_full_is_not_an_abbreviation() {
+        for word in [
+            "--text",
+            "--no-textconv",
+            "--no-ext-diff",
+            "--oneline",
+            "--topo-order",
+            "--",
+            "-O",
+            "HEAD",
+        ] {
+            assert!(!names_refused_option(word), "{word}");
+        }
+    }
 }

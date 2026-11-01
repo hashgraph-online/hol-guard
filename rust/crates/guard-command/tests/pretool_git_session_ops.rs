@@ -172,6 +172,29 @@ impl Session {
         );
     }
 
+    /// `command` runs without a review: Git's own write proof allows it with
+    /// `reason_code`, or, on a host with a workspace sandbox, the sink runs it
+    /// contained there. A linked worktree takes the second route.
+    pub(crate) fn quiet_at(
+        &self,
+        command: &str,
+        cwd: &Path,
+        reason_code: &str,
+    ) -> Result<(), String> {
+        let result = self.evaluate_at(command, cwd);
+        let (action, reason) = (result.minimum_action.as_str(), result.reason_code.as_str());
+        let allowed = action == "allow" && reason == reason_code;
+        let contained =
+            action == "sandbox-required" && reason == "native_workspace_containment_required";
+        (allowed || contained)
+            .then_some(())
+            .ok_or(format!("{command}: {action} {reason}"))
+    }
+
+    pub(crate) fn assert_quiet(&self, command: &str, reason_code: &str) {
+        self.quiet_at(command, &self.org, reason_code).unwrap();
+    }
+
     pub(crate) fn assert_not_allow(&self, command: &str) {
         let result = self.evaluate(command);
         assert_ne!(
@@ -323,6 +346,49 @@ fn fast_forward_pull_is_quiet_only_without_merge_or_checkout_programs() {
     }
 }
 
+/// The chain an agent sends to catch a checkout up and look at where it
+/// landed. The pull's fast-forward rewrites tracked files, so the reads after
+/// it settle only while no configuration include names a file the work tree
+/// holds.
+#[test]
+fn a_proven_fast_forward_pull_settles_the_reads_after_it() {
+    const REFRESH: &str = "native_exact_safe_git_origin_refresh";
+    let session = session("pull-reads");
+    let primary = session.primary.display();
+    session.config(&["branch.main.remote", "origin"]);
+    session.config(&["branch.main.merge", "refs/heads/main"]);
+    let compound = format!(
+        "git -C {primary} pull --ff-only origin main \
+         && git -C {primary} log -1 --oneline \
+         && git -C {primary} status -sb"
+    );
+    session.assert_allow(&compound, REFRESH);
+    session.assert_allow(
+        &format!("git -C {primary} pull --ff-only && git -C {primary} status --short"),
+        REFRESH,
+    );
+    // An include names a file a commit the fast-forward checks out may
+    // rewrite, so what the reads after it obey is not what this proved.
+    let tracked = session.primary.join("ci.gitconfig");
+    std::fs::write(&tracked, "[core]\n\tabbrev = 12\n").unwrap();
+    for value in [
+        "ci.gitconfig".to_string(),
+        tracked.display().to_string(),
+        "../app-portal/ci.gitconfig".to_string(),
+    ] {
+        session.config(&["include.path", value.as_str()]);
+        session.assert_not_allow(&compound);
+        session.config(&["--unset-all", "include.path"]);
+    }
+    session.assert_allow(&compound, REFRESH);
+    // An include outside the work tree names no file the fast-forward writes.
+    let outside = session.home.join("ci.gitconfig");
+    std::fs::write(&outside, "[core]\n\tabbrev = 12\n").unwrap();
+    session.config(&["include.path", outside.display().to_string().as_str()]);
+    session.assert_allow(&compound, REFRESH);
+    session.config(&["--unset-all", "include.path"]);
+}
+
 #[test]
 fn forged_checkout_is_not_a_push_or_removal_target() {
     let session = session("forged");
@@ -426,6 +492,53 @@ fn dependency_symlink_is_quiet_only_between_checkouts_of_one_repository() {
 }
 
 #[test]
+fn a_checkout_proves_the_branch_it_takes_not_a_tag_of_one_name() {
+    const WRITE: &str = "native_exact_safe_git_local_write";
+    let session = session("switch-tag");
+    let home = &session.home;
+    let worktree = &session.worktree;
+    // Git refuses rather than overwrite a tracked or untracked file, so the
+    // only file a checkout replaces silently is an ignored one.
+    std::fs::write(worktree.join(".gitignore"), "node_modules/\ngenerated/\n").unwrap();
+    git(home, worktree, &["add", ".gitignore"]);
+    git(
+        home,
+        worktree,
+        &["commit", "--quiet", "-m", "chore: ignore generated output"],
+    );
+    // A tag at `HEAD` adds nothing. The branch of the same name adds the
+    // ignored path, and a plain checkout takes the branch.
+    git(home, worktree, &["tag", "release"]);
+    git(home, worktree, &["switch", "--quiet", "-c", "release"]);
+    std::fs::create_dir_all(worktree.join("generated")).unwrap();
+    std::fs::write(worktree.join("generated/report.txt"), "recorded\n").unwrap();
+    git(home, worktree, &["add", "-f", "generated/report.txt"]);
+    git(
+        home,
+        worktree,
+        &["commit", "--quiet", "-m", "chore: record the report"],
+    );
+    git(home, worktree, &["switch", "--quiet", "fix/report-lane"]);
+    std::fs::create_dir_all(worktree.join("generated")).unwrap();
+    std::fs::write(worktree.join("generated/report.txt"), "working\n").unwrap();
+
+    let result = session.evaluate_at("git switch release", worktree);
+    assert_ne!(
+        (result.minimum_action.as_str(), result.reason_code.as_str()),
+        ("allow", WRITE),
+        "a tag of the branch's name proved the wrong commit"
+    );
+    assert_ne!(
+        result.reason_code, "native_workspace_containment_required",
+        "a contained run still replaces the ignored file"
+    );
+    // The branch the work tree is already on adds nothing, so it stays quiet.
+    session
+        .quiet_at("git switch fix/report-lane", worktree, WRITE)
+        .unwrap();
+}
+
+#[test]
 fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
     const WRITE: &str = "native_exact_safe_git_local_write";
     let session = session("writes");
@@ -438,8 +551,11 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
             .then_some(())
             .ok_or(format!("{command}: {}", result.reason_code))
     };
-    session.assert_allow(&format!("cd {worktree} && git add notes.md"), WRITE);
-    session.assert_allow(
+    // The sandbox may take these into the worktree's shared Git directory
+    // instead; either way they raise no review.
+    let quiet = |command: &str| session.quiet_at(command, &session.worktree, WRITE);
+    session.assert_quiet(&format!("cd {worktree} && git add notes.md"), WRITE);
+    session.assert_quiet(
         &format!("cd {worktree} && git rm -q tracked.txt && git status --short | head -10"),
         WRITE,
     );
@@ -452,12 +568,15 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git add notes.md > out.txt",
         "git switch -c feat/retry",
         "git checkout -b feat/retry",
+        // Moving to a branch the repository already holds writes only the
+        // index and work tree the checkout already owns.
+        "git switch main",
         "git stash",
         "git stash list",
         "git stash apply",
         "git stash pop",
     ] {
-        allowed(command).unwrap();
+        quiet(command).unwrap();
     }
     for command in [
         "git add -f notes.md",
@@ -467,7 +586,6 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git commit -e -m x",
         "git -c core.hooksPath=/tmp/hooks commit -m x",
         "git add notes.md && rm -rf build",
-        "git switch main",
         "git stash drop",
     ] {
         assert!(allowed(command).is_err(), "{command}");
@@ -484,20 +602,20 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         session.config(&["--unset-all", key]);
     }
     // Signing by default asks of a commit what `-S` asks, and of nothing else.
-    let explicit = allowed("git add -A && git commit -S -m x").is_ok();
+    let explicit = quiet("git add -A && git commit -S -m x").is_ok();
     session.config(&["commit.gpgSign", "true"]);
-    allowed("git add -A").unwrap();
-    allowed("git switch -c feat/signed").unwrap();
-    assert_eq!(allowed("git add -A && git commit -m x").is_ok(), explicit);
+    quiet("git add -A").unwrap();
+    quiet("git switch -c feat/signed").unwrap();
+    assert_eq!(quiet("git add -A && git commit -m x").is_ok(), explicit);
     session.config(&["gpg.program", "/tmp/gpg"]);
-    allowed("git add -A").unwrap();
+    quiet("git add -A").unwrap();
     assert!(allowed("git add -A && git commit -m x").is_err());
     session.config(&["--unset-all", "gpg.program"]);
     session.config(&["--unset-all", "commit.gpgSign"]);
     // Each form answers only for the hooks it runs.
     let hook = session.primary.join(".git/hooks/pre-commit");
     executable_hook(&hook);
-    allowed("git add notes.md").unwrap();
+    quiet("git add notes.md").unwrap();
     assert!(allowed("git commit -m x").is_err());
     std::fs::remove_file(hook).unwrap();
     executable_hook(&session.primary.join(".git/hooks/post-index-change"));

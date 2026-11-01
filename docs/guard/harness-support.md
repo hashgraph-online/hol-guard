@@ -13,9 +13,9 @@ they do not maintain independent exit-code tables.
 
 | Harness | Blocking verdict | Nonblocking verdict |
 | --- | --- | --- |
-| Codex, Claude Code, Copilot, Pi, OMP | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
+| Codex, Claude Code, Copilot, Pi, OMP, Muse | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
 | Cursor, Devin, Kimi, Hermes | `2` | `0` |
-| OpenCode, Superagent, Antigravity | `1` | `0` |
+| OpenCode, Superagent | `1` | `0` |
 | Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
 | Unknown harness | `1` | `0` |
 
@@ -77,12 +77,14 @@ Current Guard support in this repo:
   - records synthetic bridge canaries separately from live Cline runtime proofs and does not mark a transport ready from file presence alone
   - reports JetBrains protection as unverified until a live pre-tool proof exists; see [Cline local protection contract](cline-local-protection-contract.md)
 - `antigravity`
-  - detects user settings in `~/.config/antigravity/user/settings.json` (`%APPDATA%\Antigravity\User\settings.json` on Windows), Antigravity extension manifests in `~/.antigravity/extensions/extensions.json`, and MCP configurations in `~/.gemini/antigravity/mcp_config.json`
-  - discovers Antigravity-owned skill directories bound to full accepted directory identity (see [Skill directory identity](./skill-directory-identity.md)) under `.gemini/antigravity/skills/`, `.gemini/config/plugins/`, and workspace `.agents/skills/`
-  - uses Rust runner authority `antigravity_detect` for fast, zero-dependency configuration parsing and artifact inspection
-  - supports wrapper-mode management state with smoke validation via `hol-guard install antigravity --dry-run`
-  - routes newly introduced or modified artifact reviews through the local Guard approval center (`127.0.0.1`)
-  - shell commands inside Antigravity are not currently observable via native editor hook traps, focusing Guard on pre-launch artifact verification and MCP server boundary checks
+  - detects user settings in `~/.config/antigravity/user/settings.json` and `~/.config/Antigravity/User/settings.json`, macOS Application Support settings, and `%APPDATA%\Antigravity\User\settings.json`
+  - reads those two XDG paths once when the filesystem is case-insensitive; when both files exist, their MCP servers keep separate artifact ids
+  - detects extension manifests in `~/.antigravity/extensions/extensions.json` and MCP configuration in `.gemini/antigravity/mcp_config.json`
+  - discovers skill directories under `.gemini/antigravity/skills/`, `.gemini/antigravity/builtin/skills/`, and `.gemini/config/plugins/`, plus workspace `.agents/skills/`. Home `.agents/skills/` stays with the harnesses that own it. Skill artifact ids include the discovery root. See [Skill directory identity](./skill-directory-identity.md)
+  - uses Rust runner authority `antigravity_detect`
+  - supports wrapper-mode management state; install smoke is `hol-guard install antigravity --dry-run`
+  - uses the local approval center for blocked artifact changes
+  - shell commands are not observable through the Antigravity hook surface
 - `gemini`
   - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
   - supports wrapper-mode management state
@@ -151,6 +153,12 @@ Current Guard support in this repo:
   - refuses to install when the user config is JSONC (comments or trailing commas) rather than rewriting it lossy
   - blocks by returning exit code `2` and Devin-native stdout JSON `{"decision":"block","reason":"..."}` with a `hookSpecificOutput.permissionDecision: "deny"` envelope; Guard never emits Devin's `decision: "approve"` auto-approve response
   - fails closed (exit `2` deny) when hook input is malformed or the Guard authority denies for `PreToolUse`, `PermissionRequest`, and `UserPromptSubmit`; a timed-out or crashed review continues the session with an allow envelope so a wedged Guard cannot stall Devin, and `PostToolUse` is observation-only
+- `muse`
+  - detects `~/.config/muse/settings.json` (`$XDG_CONFIG_HOME/muse/settings.json` when set), project `.muse/settings.json`, workspace `.muse-plugin/plugin.json` hook and MCP capabilities, and Muse skill roots
+  - installs Guard-managed `PreToolUse`, `PermissionRequest`, `UserPromptSubmit`, `PostToolUse`, `SessionStart`, and `Stop` hooks in the `hooks` section of the user settings file without touching `provider`, `model`, `skills`, `mcpServers`, or pre-existing hooks; refuses to rewrite a settings file that does not parse as a JSON object
+  - blocks with a `hookSpecificOutput.permissionDecision: "deny"` envelope on exit `0` (Muse reads hook JSON on exit 0 and rejects a bare `permissionDecision: "allow"`, so an allow is empty stdout); prompt blocks use `{"decision":"block","reason":"..."}`
+  - waits inside the pending `PreToolUse` hook for a queued approval and then lets the identical call run, like Oh My Pi's approval resume; `PostToolUse` is observation-only
+  - fails closed when hook input is malformed or the Guard authority denies, so a wedged Guard cannot authorize a protected Muse tool call
 
 ## Reported to Cloud
 
@@ -179,9 +187,10 @@ plugin rows from the same local inventory. `hol-guard mcp list` prints the MCP s
 | `omp` (Oh My Pi) | `plugin`, `package`, `skill` |
 | `zcode` | `mcp_server`, `plugin`, `hook`, `skill` |
 | `devin` | `mcp_server`, `hook`, `skill` |
+| `muse` | `mcp_server`, `hook`, `skill` |
 | `paseo` | none |
 
-For `codex`, `claude-code`, `cursor`, `gemini`, `kimi`, `grok`, `opencode`, `pi`, `omp`, `zcode` and `devin`, `skill`
+For `codex`, `claude-code`, `cursor`, `gemini`, `kimi`, `grok`, `opencode`, `pi`, `omp`, `zcode`, `devin` and `muse`, `skill`
 rows also come from workspace skill discovery, which runs when Guard has a project workspace.
 
 Items are reported only while reporting is on. With `hol-guard settings set fleet-posture off`, Guard sends
@@ -260,6 +269,7 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
 | `devin` | `devin`, `devin-cli`, `cognition-devin` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
+| `muse` | `muse`, `muse-code` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
 | `paseo` | `paseo` | ❌ | ❌ | ❌ | — |
 
 ## Versioned Event Capability Report

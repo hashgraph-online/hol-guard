@@ -23,7 +23,6 @@ from typing import Final, cast
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.ci.hook_route_handler_roots import ROUTE_HANDLER_ROOTS
 from scripts.ci.rust_io_ownership_cache import analysis_cache
 from scripts.ci.rust_io_ownership_cache import parsed_module as _parsed_module
 from scripts.ci.rust_io_ownership_contract import capability_contract
@@ -41,7 +40,6 @@ from scripts.ci.rust_io_ownership_policy import (
     _PERSISTENCE_PATH_PREFIXES,
     _PRESENTATION_PATHS,
     _SERVICE_PATHS,
-    _STRUCTURED_OUTPUT_MEDIATION_PATHS,
     _TRANSPORT_AUTHORITY_PATHS,
     _TRANSPORT_DECODE_PATHS,
     _TRANSPORT_ENCODE_OPERATIONS,
@@ -105,9 +103,6 @@ ROOTS: Final = (
     RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
     RootSpec("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", "try_native_hook_authority"),
     RootSpec("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", "route_native_hook"),
-    # The resident's route names native hook handlers through a table, which a
-    # call walk cannot follow, so each handler is a root of its own.
-    *(RootSpec(path, name) for path, name in ROUTE_HANDLER_ROOTS),
 )
 
 
@@ -191,8 +186,6 @@ def _category(path: str, kind: str) -> str:
         return "transport_encode"
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
-    if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:
-        return "adapter_output_mediation"
     if path in _PERSISTENCE_ONLY_PATHS:
         return "persistence_only"
     if path in _TRANSPORT_IDENTITY_PATHS:

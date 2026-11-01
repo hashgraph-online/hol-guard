@@ -12,7 +12,6 @@ from codex_plugin_scanner.guard import native_pretool as pretool
 from codex_plugin_scanner.guard import native_route_receipt as routes
 from codex_plugin_scanner.guard import native_runtime as runtime
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -116,68 +115,6 @@ def test_missing_pretool_feature_records_fail_safe_provenance(
         is None
     )
     assert routes.native_hook_route() == "native_fail_safe"
-
-
-def test_policy_floor_asks_the_resident_with_the_whole_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    review = _native_block("rm -rf /")
-    reviewed: list[dict[str, Any]] = []
-    floored: list[tuple[dict[str, Any], Path | None]] = []
-
-    def review_pre_tool_native(*_args: object, **kwargs: Any) -> dict[str, Any]:
-        reviewed.append(kwargs)
-        return review
-
-    def native_pretool_floor(answer: dict[str, Any], *, guard_home: Path | None) -> str:
-        floored.append((answer, guard_home))
-        return "block"
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.native_pretool.review_pre_tool_native", review_pre_tool_native)
-    monkeypatch.setattr("codex_plugin_scanner.guard.native_pretool.native_pretool_floor", native_pretool_floor)
-    assert (
-        pretool.native_pre_tool_policy_floor(
-            "rm -rf /",
-            guard_home=tmp_path,
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        == "block"
-    )
-    # The floor path admits every canonical action, so a contained or
-    # reapproval answer reaches the resident instead of collapsing to a block.
-    assert [call["full_lattice"] for call in reviewed] == [True]
-    assert floored == [(review, tmp_path)]
-
-
-def test_policy_floor_without_a_review_is_the_host_outage(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # This used to return ``block``, a floor Python picked. No review is a
-    # resident outage, which the hook answers with the host outage response.
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
-        lambda: runtime.NativeRuntimeStatus(
-            mode="force",
-            available=False,
-            compatible=False,
-            reason="missing",
-        ),
-    )
-    with pytest.raises(NativeHookDecisionError) as raised:
-        pretool.native_pre_tool_policy_floor(
-            "pwd",
-            guard_home=tmp_path,
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-    assert raised.value.code == "native_pre_tool_floor_unavailable"
 
 
 def test_hook_worker_fails_closed_when_forced_native_is_missing(
@@ -349,18 +286,14 @@ def _sent_request(
     return sent
 
 
-_EVIDENCE_FEATURES = (
-    "pre-tool-command-authority-v1",
-    "resident-protocol-v2",
-    "pre-tool-extension-evidence-v1",
-)
+_FEATURES = ("pre-tool-command-authority-v1",)
 
 
 def test_a_caller_that_resolves_extensions_asks_for_their_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES, extension_evidence=True)
+    sent = _sent_request(tmp_path, monkeypatch, _FEATURES, extension_evidence=True)
     assert sent["request"]["extension_evidence"] is True
 
 
@@ -368,15 +301,7 @@ def test_the_enforcing_review_never_asks_for_extension_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES)
-    assert "extension_evidence" not in sent["request"]
-
-
-def test_an_older_runtime_is_never_sent_the_evidence_field(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES[:2], extension_evidence=True)
+    sent = _sent_request(tmp_path, monkeypatch, _FEATURES)
     assert "extension_evidence" not in sent["request"]
 
 
@@ -387,7 +312,7 @@ def test_pre_tool_request_carries_the_directories_the_command_runs_in(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        ("pre-tool-command-authority-v1", "resident-protocol-v2", "pre-tool-path-context-v1"),
+        _FEATURES,
     )
     assert sent["request"]["cwd"] == str(tmp_path / "app-portal")
     assert sent["request"]["home_dir"] == str(tmp_path)
@@ -410,12 +335,7 @@ def test_the_request_carries_the_shell_the_command_will_run_in(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        (
-            "pre-tool-command-authority-v1",
-            "resident-protocol-v2",
-            "pre-tool-path-context-v1",
-            "pre-tool-execution-environment-v1",
-        ),
+        _FEATURES,
         execution_environment=stamp,
     )
     assert sent["request"]["execution_environment"] == stamp
@@ -435,24 +355,6 @@ def test_a_caller_that_cannot_name_the_shell_sends_no_environment(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        (
-            "pre-tool-command-authority-v1",
-            "resident-protocol-v2",
-            "pre-tool-path-context-v1",
-            "pre-tool-execution-environment-v1",
-        ),
+        _FEATURES,
     )
     assert "execution_environment" not in sent["request"]
-
-
-def test_a_runtime_without_the_feature_is_asked_the_question_it_understands(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sent = _sent_request(
-        tmp_path,
-        monkeypatch,
-        ("pre-tool-command-authority-v1", "resident-protocol-v2"),
-    )
-    assert "cwd" not in sent["request"]
-    assert "home_dir" not in sent["request"]

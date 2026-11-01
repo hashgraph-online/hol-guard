@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
+from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..daemon.runtime_peer import (
     daemon_refresh_outcome_succeeded,
     retained_desktop_owner_note,
     retained_desktop_owner_payload,
 )
+from ..daemon.start_classification import GuardDaemonStillStartingError
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..store import GuardStore
 from .update_desktop_core import (
@@ -24,9 +27,14 @@ from .update_desktop_core import (
     pypi_desktop_core_versions,
     select_desktop_core_latest,
 )
+from .update_desktop_core_start import wait_for_started_core
 from .update_release_candidates import live_release_candidates
 
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
+# Guard Desktop's supervisor respawns a retired daemon on its own schedule,
+# which has been observed to take close to half a minute for a onefile Core.
+_DESKTOP_RESPAWN_WAIT_SECONDS = 60.0
+_DESKTOP_RESPAWN_POLL_SECONDS = 0.5
 _APPLY_FAILURE_FALLBACK = "HOL Guard could not apply the signed Core update. The installed version stays in place."
 _APPLY_FAILURE_MESSAGES = {
     "desktop_core_download_failed": (
@@ -243,22 +251,38 @@ def refresh_desktop_core_daemon(
 
     try:
         retire_all_guard_daemons_for_home(context.guard_home)
-        if not guard_daemon_retirement_is_complete(context.guard_home):
-            # The Guard Desktop supervisor can respawn a retired daemon faster
-            # than retirement completes. When the respawn already serves the
-            # applied version, keeping it is success instead of a failed update.
+        # The Guard Desktop supervisor can start its own respawn before
+        # retirement completes, and that respawn can take a while to answer.
+        # Wait for one of two outcomes: retirement completes and this process
+        # launches the daemon, or the respawn serves the applied version and
+        # is kept. Only when neither happens in time is the refresh a failure.
+        deadline = time.monotonic() + _DESKTOP_RESPAWN_WAIT_SECONDS
+        while not guard_daemon_retirement_is_complete(context.guard_home):
             retained = retained_desktop_owner_payload(
                 context.guard_home,
                 minimum_version=minimum_version,
             )
             if retained is not None:
                 return retained, retained_desktop_owner_note(retained.get("daemon_version"))
-            return None, "Could not stop the running Guard daemon before launching the updated Core."
+            if time.monotonic() >= deadline:
+                return None, "Could not stop the running Guard daemon before launching the updated Core."
+            time.sleep(_DESKTOP_RESPAWN_POLL_SECONDS)
         url = ensure_guard_daemon_after_update(
             context.guard_home,
             home_dir=context.home_dir,
             executable=executable,
         )
+    except GuardDaemonStillStartingError:
+        # The updated Core can take longer to load than the post-update start
+        # window on a busy machine. The launch is left running in that case, so
+        # wait for it to answer before calling the refresh a failure.
+        # Without an applied version, the Core being started is this
+        # executable, so nothing older than this process may stand in for it.
+        url = wait_for_started_core(context.guard_home, minimum_version=minimum_version or __version__)
+        if url is None:
+            return None, (
+                "The updated Guard daemon is still starting. Run `hol-guard daemon status` shortly to confirm it is up."
+            )
     except (OSError, RuntimeError) as error:
         return None, f"Could not restart the Guard daemon after update: {error}"
     # ensure_guard_daemon_after_update only returns once the restarted daemon

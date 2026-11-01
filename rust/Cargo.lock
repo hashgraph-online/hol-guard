@@ -43,6 +43,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloc-no-stdlib"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
+
+[[package]]
+name = "alloc-stdlib"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e76a019e91224d279006ff972f1e984179a6e9feb050adba6ce8274aef23195"
+dependencies = [
+ "alloc-no-stdlib",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -155,6 +170,16 @@ name = "borrow-or-share"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
+
+[[package]]
+name = "brotli-decompressor"
+version = "5.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a32acac15fe1967bc3986b2a6347dffc965602354ea6f450ad07e8bfd253583"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+]
 
 [[package]]
 name = "bumpalo"
@@ -629,8 +654,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -655,6 +682,7 @@ version = "0.1.0"
 name = "guard-archive"
 version = "0.1.0"
 dependencies = [
+ "brotli-decompressor",
  "caseless",
  "flate2",
  "guard-alloc-probe",
@@ -665,6 +693,45 @@ dependencies = [
  "sha2",
  "tar",
  "unicode-normalization",
+]
+
+[[package]]
+name = "guard-cigar-artifacts"
+version = "0.1.0"
+dependencies = [
+ "guard-cigar-release",
+ "guard-secure-fs",
+ "nix",
+ "sha2",
+]
+
+[[package]]
+name = "guard-cigar-install"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "guard-cigar-artifacts",
+ "guard-cigar-release",
+ "guard-context-assistance",
+ "guard-secure-fs",
+ "nix",
+ "ring",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
+name = "guard-cigar-release"
+version = "0.1.0"
+dependencies = [
+ "pep440_rs",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -686,6 +753,7 @@ dependencies = [
  "guard-scanner",
  "guard-secure-fs",
  "hex",
+ "hmac",
  "idna",
  "libc",
  "mailparse",
@@ -731,6 +799,7 @@ dependencies = [
  "guard-scanner",
  "guard-secure-fs",
  "hex",
+ "hmac",
  "idna",
  "libc",
  "mailparse",
@@ -783,6 +852,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-context-assistance"
+version = "0.1.0"
+dependencies = [
+ "guard-cigar-artifacts",
+ "guard-cigar-release",
+ "guard-scanner",
+ "guard-secure-fs",
+ "nix",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "guard-contracts"
 version = "0.1.0"
 dependencies = [
@@ -818,6 +902,7 @@ dependencies = [
 name = "guard-hook-core"
 version = "0.1.0"
 dependencies = [
+ "guard-command",
  "guard-contracts",
  "guard-rules",
  "guard-scanner",
@@ -845,6 +930,44 @@ version = "0.1.0"
 dependencies = [
  "guard-command-build",
  "serde_json",
+]
+
+[[package]]
+name = "guard-plugin-kit"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "guard-plugin-telemetry"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "hmac",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "guard-policy-bundle"
+version = "0.1.0"
+dependencies = [
+ "base64ct",
+ "flate2",
+ "guard-contracts",
+ "guard-policy-snapshot",
+ "hex",
+ "ring",
+ "rsa",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -900,6 +1023,8 @@ name = "guard-scanner"
 version = "0.1.0"
 dependencies = [
  "base64ct",
+ "flate2",
+ "guard-alloc-probe",
  "guard-rules",
  "hex",
  "hmac",
@@ -908,6 +1033,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tar",
+ "zeroize",
 ]
 
 [[package]]
@@ -985,11 +1112,17 @@ dependencies = [
  "getrandom 0.3.4",
  "guard-adapter-detection",
  "guard-archive",
+ "guard-cigar-install",
+ "guard-cigar-release",
  "guard-command",
  "guard-contained-process",
+ "guard-context-assistance",
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
+ "guard-plugin-kit",
+ "guard-plugin-telemetry",
+ "guard-policy-bundle",
  "guard-policy-snapshot",
  "guard-rule-contract",
  "guard-runtime-pyjson",
@@ -1010,6 +1143,7 @@ dependencies = [
  "roxmltree 0.21.1",
  "rsa",
  "rusqlite",
+ "rustix",
  "saphyr-parser",
  "scrypt",
  "seccompiler",
@@ -1025,6 +1159,7 @@ dependencies = [
  "unicode-normalization",
  "windows-permissions",
  "zeroize",
+ "zip",
 ]
 
 [[package]]
@@ -1972,9 +2107,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -2313,7 +2448,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -2504,6 +2639,12 @@ name = "tree-sitter-language"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
+
+[[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typenum"
@@ -3076,6 +3217,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "zip"
+version = "9.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec2e3161de27091f18a831d9494e9c53378a34833af5c1dda35ad85849da18d6"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3083,27 +3240,27 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zstd"
-version = "0.14.0"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf06bd8162af0734b344780deb55b42a2429ae430870d13fcc12f238e880fe6e"
+checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "8.0.0"
+version = "8.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae42c0555055784c70058d19ba8e275528e8a99a706684868ace5da4e716a4ab"
+checksum = "ded520f16b29e1a9b771c722221b2b0a0398c2316d9bb3c42b458a5414d7434b"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.1.0+zstd.1.5.7"
+version = "2.1.2+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ef0a8027ec3ee71300ab3bcbcd0393f434aa72b91ca6d635a39941deae8eea0"
+checksum = "481ada9c543b2323cbb7bbdbb5249177fbf0188ed959ed2c15e4b22421c84ed3"
 dependencies = [
  "cc",
  "pkg-config",

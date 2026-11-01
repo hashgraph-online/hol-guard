@@ -13,7 +13,12 @@
 //! shell default. Entries with non-ASCII names also send it to review,
 //! because `?` matches a byte or a character depending on the locale. The
 //! directory prefix stays in every expanded word, so no match can begin with
-//! `-` and be read as an option.
+//! `-` and be read as an option, nor spell the `name=value` an `awk` operand
+//! would take as a variable assignment rather than a file. A pattern with no
+//! directory at all (`cat *.md`) names the working directory and expands to
+//! bare names, so each of those words is checked for both shapes of its own:
+//! a name like `FS=x.txt` would make `awk` assign `FS` and fall back to
+//! standard input, leaving the read this proof stands for undone.
 
 use std::path::{Path, PathBuf};
 
@@ -23,8 +28,9 @@ mod harness_globs;
 const MAX_ENTRIES: usize = 4_096;
 const MAX_MATCHES: usize = 256;
 
-/// True when `value` is `<directory>/<pattern>` and every name the shell can
-/// expand it to is a bounded, non-sensitive regular file.
+/// True when `value` is `<directory>/<pattern>`, or a bare `<pattern>` in the
+/// working directory, and every name the shell can expand it to is a bounded,
+/// non-sensitive regular file.
 pub(super) fn bounded_glob_file_read_target(
     value: &str,
     context: super::super::PathContext<'_>,
@@ -32,13 +38,22 @@ pub(super) fn bounded_glob_file_read_target(
     glob_file_matches(value, context).is_some()
 }
 
-/// The words the shell passes on for `value`, each `<directory>/<name>`,
-/// when every one of them clears the proof above; `None` otherwise.
+/// The words the shell passes on for `value` -- `<directory>/<name>`, or a
+/// bare `<name>` when the pattern named no directory -- when every one of
+/// them clears the proof above; `None` otherwise.
 pub(in crate::pretool) fn glob_file_matches(
     value: &str,
     context: super::super::PathContext<'_>,
 ) -> Option<Vec<String>> {
-    let (directory, pattern) = value.rsplit_once('/')?;
+    // A pattern with no directory names the working directory. The shell
+    // passes each match on as the bare name, so `.` anchors the proof exactly
+    // as an explicit `./` prefix does while the word stays what the shell
+    // spells, and a match a reader would take for an option or an assignment
+    // keeps its review.
+    let (directory, pattern, bare) = match value.rsplit_once('/') {
+        Some((directory, pattern)) => (directory, pattern, false),
+        None => (".", value, true),
+    };
     if directory.contains(['*', '?']) {
         return harness_globs::harness_directory_glob_matches(value, context);
     }
@@ -66,10 +81,18 @@ pub(in crate::pretool) fn glob_file_matches(
         if !wildcard_matches(pattern.as_bytes(), name.as_bytes()) {
             continue;
         }
-        if matches.len() >= MAX_MATCHES || !readable_match(directory, name, &base, context) {
+        let word = if bare {
+            name.to_owned()
+        } else {
+            format!("{directory}/{name}")
+        };
+        if matches.len() >= MAX_MATCHES
+            || (bare && (word.starts_with('-') || word.contains('=')))
+            || !readable_match(&word, name, &base, context)
+        {
             return None;
         }
-        matches.push(format!("{directory}/{name}"));
+        matches.push(word);
     }
     (!matches.is_empty()).then_some(matches)
 }
@@ -113,7 +136,7 @@ fn directory_path(directory: &str, context: super::super::PathContext<'_>) -> Op
 
 /// A match is admitted exactly as the literal word the shell passes on.
 fn readable_match(
-    directory: &str,
+    word: &str,
     name: &str,
     base: &Path,
     context: super::super::PathContext<'_>,
@@ -143,11 +166,10 @@ fn readable_match(
         .and_then(|extension| extension.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let word = format!("{directory}/{name}");
     !super::super::search::SECRET_EXTENSIONS.contains(&extension.as_str())
         && !guard_secure_fs::credential_named_path(Path::new(name))
         && std::fs::symlink_metadata(base.join(name)).is_ok_and(|metadata| !metadata.is_dir())
-        && super::bounded_read_target(&word, context.home_dir, context.cwd, false)
+        && super::bounded_read_target(word, context.home_dir, context.cwd, false)
 }
 
 /// `*` and `?` over ASCII names, ignoring case.

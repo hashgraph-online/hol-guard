@@ -6,30 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.config import _migrate_guard_home_state
 from codex_plugin_scanner.guard.store import GuardStore
-
-
-def test_migrate_guard_home_state_preserves_custom_extension_authority(tmp_path: Path) -> None:
-    canonical_home = tmp_path / ".hol-guard"
-    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
-    legacy_home.mkdir(parents=True)
-    with sqlite3.connect(legacy_home / "guard.db") as connection:
-        connection.execute("create table migration_probe (value text)")
-    canonical_home.mkdir(parents=True)
-    with sqlite3.connect(canonical_home / "guard.db") as connection:
-        connection.execute("create table extension_control_authority_snapshot (singleton integer, layers_json text)")
-        connection.execute('insert into extension_control_authority_snapshot values (1, \'[{"kind":"local"}]\')')
-
-    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
-
-    with sqlite3.connect(canonical_home / "guard.db") as connection:
-        row = connection.execute("select singleton from extension_control_authority_snapshot").fetchone()
-        legacy_table = connection.execute(
-            "select 1 from sqlite_master where type = 'table' and name = 'migration_probe'"
-        ).fetchone()
-    assert row == (1,)
-    assert legacy_table is None
 
 
 def test_fatal_error_requires_two_stable_fatal_probes(

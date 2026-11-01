@@ -169,7 +169,7 @@ fn a_bridged_timeout_keeps_the_verdict_the_direct_call_gives() {
 fn one_bridged_call_carries_the_reason_the_direct_call_gives() {
     let session = session("omp-eval-one-call");
     let worktree = session.worktree.to_str().unwrap();
-    for command in ["rm -rf build", "npm install zod"] {
+    for command in ["rm -rf /srv/app/build", "npm install zod"] {
         let alone = direct(&session, command, worktree);
         assert_ne!(alone.minimum_action, "allow", "{command}: {}", alone.reason);
         let result = bridged_with_timeout(&session, command, worktree, None);

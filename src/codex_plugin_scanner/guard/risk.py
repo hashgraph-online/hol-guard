@@ -163,18 +163,6 @@ def artifact_risk_profile(artifact: GuardArtifact) -> ArtifactRiskProfile:
     return profile
 
 
-def artifact_risk_signals_typed(artifact: GuardArtifact) -> tuple[GuardSignal, ...]:
-    """Return structured risk signals for a Guard artifact."""
-
-    return artifact_risk_profile(artifact).signals
-
-
-def artifact_risk_signals(artifact: GuardArtifact) -> tuple[str, ...]:
-    """Backward-compatible string signals derived from structured signals."""
-
-    return tuple(signal.explanation for signal in artifact_risk_profile(artifact).signals)
-
-
 def artifact_risk_signals_v2(artifact: GuardArtifact) -> tuple[RiskSignalV2, ...]:
     """Return product-facing V2 risk signals derived from legacy Guard signals."""
 

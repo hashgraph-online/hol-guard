@@ -31,9 +31,7 @@ def _handler(path: str) -> daemon_server_module._GuardDaemonHandler:
 
 def _answers(handler: daemon_server_module._GuardDaemonHandler) -> list[object]:
     answers: list[object] = []
-    handler._write_json = lambda payload, *, status=200, extra_headers=None: answers.append(
-        (status, payload)
-    )
+    handler._write_json = lambda payload, *, status=200, extra_headers=None: answers.append((status, payload))
     handler._write_json_bytes = lambda body, *, status, extra_headers=None: answers.append(
         (status, body, extra_headers)
     )
@@ -189,3 +187,32 @@ def test_a_digit_the_parser_refuses_is_an_invalid_request(
         answers = _answers(handler)
         handler._serve_release_feed_read(urlparse(f"/v1/releases/index{query}"))
         assert answers == [(400, {"error": RELEASE_FEED_REQUEST_INVALID})], query
+
+
+def test_every_dashboard_page_is_served_as_the_dashboard() -> None:
+    # Opening or reloading any dashboard page, the Releases tab included,
+    # serves the dashboard rather than 404.
+    for route in (
+        "/",
+        "/home",
+        "/dashboard",
+        "/inbox",
+        "/requests",
+        "/requests/r1",
+        "/approvals",
+        "/approvals/a1",
+        "/protect",
+        "/apps/slack",
+        "/evidence",
+        "/extensions",
+        "/extensions/command.git",
+        "/supply-chain",
+        "/audit",
+        "/policy",
+        "/feed-health",
+        "/workspaces",
+        "/protection/repair",
+        "/releases",
+        "/settings",
+    ):
+        assert daemon_server_module._GuardDaemonHandler._is_dashboard_route(route), route

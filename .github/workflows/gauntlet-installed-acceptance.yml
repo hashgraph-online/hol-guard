@@ -139,6 +139,11 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # This lane builds the development profile above, so the runtime is several times the
+          # shipped size. These wheels are never published; they name a larger bound and the
+          # release path keeps the default.
+          wheel_bound=(--max-runtime-bytes $((512 * 1024 * 1024)))
+          echo "RUNTIME_BOUND=$((512 * 1024 * 1024))" >> "$GITHUB_ENV"
           runtime="rust/target/$TARGET/release/hol-guard-runtime"
           compiler="rust/target/$TARGET/release/guard-command-source"
           "$compiler" export-built > source-compiled.json
@@ -154,7 +159,8 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST" \
             --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
-            --base-program-digest "$(jq -r '.program.program_digest' source-compiled.json)"
+            --base-program-digest "$(jq -r '.program.program_digest' source-compiled.json)" \
+            "${wheel_bound[@]}"
           WHEEL=$(find native-dist -maxdepth 1 -type f -name 'hol_guard-*.whl' -print)
           test "$(printf '%s\n' "$WHEEL" | wc -l)" -eq 1
           echo "WHEEL=$PWD/$WHEEL" >> "$GITHUB_ENV"
@@ -169,7 +175,7 @@ jobs:
             --index-url https://pypi.org/simple "$WHEEL"
           python3 -m ci.gauntlet installed \
             --runtime "$RUNNER_TEMP/wheel-venv/bin/hol-guard" \
-            --harness claude-code codex omp zcode \
+            --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
             $REPORT_ONLY \
             --output "$RUNNER_TEMP/evidence/wheel"
@@ -182,12 +188,14 @@ jobs:
             --wheel "$WHEEL" \
             --destination "$RUNNER_TEMP/native-runtime" \
             --expected-version "$VERSION" \
-            --expected-target "$TARGET"
+            --expected-target "$TARGET" \
+            --max-runtime-bytes "$RUNTIME_BOUND"
           uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py --source-root "$PWD"
           uv pip install --python .venv/bin/python --no-deps --force-reinstall "$WHEEL"
           uv run --no-sync pyinstaller \
             --clean --noconfirm --onedir --name hol-guard \
             --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+            --hidden-import sigstore._store --collect-data sigstore \
             --add-data "$RUNNER_TEMP/native-runtime/hol-guard-runtime:codex_plugin_scanner/_native" \
             --add-data "$RUNNER_TEMP/native-runtime/runtime-manifest.json:codex_plugin_scanner/_native" \
             --add-data "$PWD/src/codex_plugin_scanner/version.py:." \
@@ -206,7 +214,7 @@ jobs:
           set -euo pipefail
           python3 -m ci.gauntlet installed \
             --runtime "$ONEDIR/hol-guard" \
-            --harness claude-code codex omp zcode \
+            --harness claude-code codex muse omp zcode \
             --repeat "$REPEAT" \
             --require-frozen \
             $REPORT_ONLY \

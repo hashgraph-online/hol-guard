@@ -307,7 +307,6 @@ class GeneratedCommandCatalog:
         self._by_id = MappingProxyType(by_id)
         self._aliases = MappingProxyType(aliases)
         self._by_rule_id = MappingProxyType(rules)
-        self._by_action_class = MappingProxyType(action_owners)
         self._by_action_rule = MappingProxyType(
             {
                 action.strip().lower(): rule
@@ -366,9 +365,6 @@ class GeneratedCommandCatalog:
     def get(self, extension_id: str) -> GeneratedCommandExtension | None:
         normalized = extension_id.strip().lower()
         return self._by_id.get(self._aliases.get(normalized, normalized))
-
-    def for_action_class(self, action_class: str) -> GeneratedCommandExtension | None:
-        return self._by_action_class.get(action_class.strip().lower())
 
     def get_rule(self, rule_id: str) -> GeneratedCommandRule | None:
         return self._by_rule_id.get(rule_id.strip().lower())

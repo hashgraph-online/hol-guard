@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -14,7 +15,9 @@ from typing import Any
 
 from packaging.version import InvalidVersion, Version
 
-PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
+DEFAULT_PROJECT = "hol-guard"
+PYPI_JSON_URL = f"https://pypi.org/pypi/{DEFAULT_PROJECT}/json"
+_PROJECT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 PYPI_PROJECT_LIMIT_GIB = 10
 PYPI_PROJECT_LIMIT_BYTES = PYPI_PROJECT_LIMIT_GIB * 1024**3
 LIMIT_ENV = "HOL_GUARD_PYPI_PROJECT_LIMIT_BYTES"
@@ -148,11 +151,17 @@ def quota_outlook(used_bytes: int, limit_bytes: int, growth_bytes_per_day: int) 
     }
 
 
-def report_near_limit(outlook: Mapping[str, Any]) -> None:
+def project_json_url(project: str) -> str:
+    if _PROJECT_NAME.fullmatch(project) is None:
+        raise ValueError(f"PyPI project name is not canonical: {project}")
+    return f"https://pypi.org/pypi/{project}/json"
+
+
+def report_near_limit(outlook: Mapping[str, Any], project: str = DEFAULT_PROJECT) -> None:
     """Surface an early quota warning in GitHub Actions without changing stdout JSON."""
     if not outlook["near_limit"]:
         return
-    message = "PyPI hol-guard storage needs attention: " + "; ".join(outlook["near_limit_reasons"]) + "."
+    message = f"PyPI {project} storage needs attention: " + "; ".join(outlook["near_limit_reasons"]) + "."
     print(message, file=sys.stderr)
     if os.environ.get("GITHUB_ACTIONS") == "true":
         print(f"::warning title=PyPI project quota::{message}", file=sys.stderr)
@@ -168,6 +177,11 @@ def report_near_limit(outlook: Mapping[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--payload", help="Optional local PyPI JSON path for offline checks")
+    parser.add_argument(
+        "--project",
+        default=DEFAULT_PROJECT,
+        help=f"PyPI project to measure (default: {DEFAULT_PROJECT})",
+    )
     parser.add_argument(
         "--fail-if-over-limit",
         action="store_true",
@@ -189,12 +203,17 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         print("Project limit must be a positive integer byte count.", file=sys.stderr)
         return 1
+    try:
+        project_url = project_json_url(args.project)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     if args.payload:
         payload = json.loads(Path(args.payload).read_text(encoding="utf-8"))
     else:
         from urllib.request import Request, urlopen
 
-        request = Request(PYPI_JSON_URL, headers={"Accept": "application/json"})
+        request = Request(project_url, headers={"Accept": "application/json"})
         with urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, dict):
@@ -217,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         json.dumps(
             {
-                "project": "hol-guard",
+                "project": args.project,
                 "limit_bytes": limit_bytes,
                 "used_bytes": total,
                 "pending_bytes": pending_bytes,
@@ -231,10 +250,10 @@ def main(argv: list[str] | None = None) -> int:
             sort_keys=True,
         )
     )
-    report_near_limit(outlook)
+    report_near_limit(outlook, args.project)
     if args.fail_if_over_limit and over_limit:
         print(
-            f"PyPI hol-guard is at or over the {limit_bytes / 1024**3:g} GiB project limit.",
+            f"PyPI {args.project} is at or over the {limit_bytes / 1024**3:g} GiB project limit.",
             file=sys.stderr,
         )
         if reclaimable:

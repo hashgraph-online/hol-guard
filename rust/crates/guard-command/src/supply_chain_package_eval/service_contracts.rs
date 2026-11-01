@@ -109,12 +109,14 @@ pub trait GuardSyncRunnerApi {
         dpop_nonce: Option<&str>,
     ) -> EvalResult<GuardSyncRequest>;
     /// `runner._urlopen_json_with_timeout_retry(request=, timeout_seconds=,
-    /// retry_timeout_seconds=)` (:5545) -> response JSON dict.
+    /// retry_timeout_seconds=)` (:5545) -> response JSON dict. Every attempt,
+    /// retry and pause is charged to `budget`.
     fn urlopen_json_with_timeout_retry(
         &self,
         request: &GuardSyncRequest,
         timeout_seconds: u64,
         retry_timeout_seconds: u64,
+        budget: &crate::guard_sync_transport::SyncBudget,
     ) -> EvalResult<Map<String, Value>>;
     /// `runner._is_timeout_error(error)` (:5448) — classifies a transport error
     /// (including wrapped/`.reason` causes) as a timeout.

@@ -30,13 +30,19 @@ runs:
           echo "partition=" >> "$GITHUB_OUTPUT"
         fi
         python3 -m scripts.ci.native_cache_environment >> "$GITHUB_OUTPUT"
+    - name: Identify the selected package inputs
+      id: inputs
+      shell: bash
+      env:
+        ARCHIVE_PARTITION: ${{ inputs.partition }}
+      run: python3 -m scripts.ci.rust_test_archive_inputs --partition "$ARCHIVE_PARTITION" >> "$GITHUB_OUTPUT"
     - name: Restore the exact runtime test archive
       id: archive
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
         path: ${{ runner.temp }}/runtime-test-archive.tar.zst
         # No prefix fallback: source, compiler, profile and runner must all match.
-        # Scripts and contracts cover build-time includes outside the Rust tree.
-        # Helper imports can create timestamp-bearing bytecode before this step.
-        # Neither those files nor Cargo outputs identify the authored inputs.
-        key: runtime-test-archive-v2-${{ steps.environment.outputs.partition }}${{ runner.arch }}-${{ steps.environment.outputs.image }}-${{ steps.environment.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'tests/fixtures/**', 'src/codex_plugin_scanner/guard/contracts/**', 'src/codex_plugin_scanner/guard/schemas/**', '.cargo/**', '.github/actions/setup-rust/**', '.github/actions/restore-runtime-tests/**', '.github/workflows/ci.yml', 'scripts/**', '!**/__pycache__/**', '!rust/target/**') }}
+        # Hash every local dependency kind and shared source, plus the existing
+        # global metadata/contracts/fixtures. Unrelated package source edits do
+        # not discard complete test binaries for another package group.
+        key: runtime-test-archive-v3-${{ steps.environment.outputs.partition }}${{ runner.arch }}-${{ steps.environment.outputs.image }}-${{ steps.environment.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ steps.inputs.outputs.digest }}

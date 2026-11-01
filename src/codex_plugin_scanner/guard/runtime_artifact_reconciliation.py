@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approvals import _live_hook_verification
 from .cli.install_commands import apply_managed_install
@@ -16,6 +18,11 @@ from .cursor_hook_rebind import rebind_stale_cursor_hooks
 from .shim_refresh import refresh_stale_harness_shims
 from .shims import package_shim_dashboard_status, package_shim_status, repair_package_shims
 from .store import GuardStore
+
+_LAUNCH_SCAN_TIMEOUT_SECONDS = 10.0
+_LAUNCH_SCAN_FEATURE = "native-hook-launch-scan-v1"
+_MANIFEST_SCAN_MAX_PATHS = 16
+_MANIFEST_SCAN_MAX_NODES = 512
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,12 +74,190 @@ def _package_shim_reconciliation_status(context: HarnessContext) -> dict[str, ob
     return status
 
 
+def _current_durable_runtime_digest() -> str | None:
+    """The digest a frozen build's hook commands should pin, or None.
+
+    Only a frozen build writes ``native-runtime/<sha256>`` into hook commands,
+    so a source install never repins them.
+    """
+
+    if not getattr(sys, "frozen", False):
+        return None
+    from .native_runtime import native_runtime_status
+
+    status = native_runtime_status()
+    if not status.available or not status.compatible or status.identity is None:
+        return None
+    return status.identity.sha256
+
+
+def _manifest_file_paths(manifest: object) -> tuple[Path, ...]:
+    """Every existing file an install manifest names, bounded.
+
+    Harnesses record their artifacts under their own keys: Cursor keeps a list
+    of written files, OpenCode names ``managed_config_path`` and Hermes points
+    ``config_path`` at its YAML while its hook lives in ``pretool_hook_path``.
+    Reading every string the manifest holds covers all of them without a
+    per-harness table that would silently miss the next adapter. Paths come
+    back in manifest order, so the bound drops the last artifacts, never the
+    hook launchers an adapter lists first.
+    """
+
+    found: list[Path] = []
+    seen: set[str] = set()
+    pending: list[object] = [manifest]
+    nodes = 0
+    while pending and len(found) < _MANIFEST_SCAN_MAX_PATHS and nodes < _MANIFEST_SCAN_MAX_NODES:
+        node = pending.pop()
+        nodes += 1
+        if isinstance(node, Mapping):
+            pending.extend(reversed(list(node.values())))
+            continue
+        if isinstance(node, (list, tuple)):
+            pending.extend(reversed(node))
+            continue
+        if not isinstance(node, str) or not node or node in seen:
+            continue
+        seen.add(node)
+        try:
+            candidate = Path(node)
+            if not candidate.is_absolute() or not candidate.is_file():
+                continue
+        except (OSError, ValueError):
+            # A persisted path can hold an embedded NUL or an unreadable
+            # mount; that is this harness's problem, not the whole pass's.
+            continue
+        found.append(candidate)
+    return tuple(found)
+
+
+def _planned_artifact_paths(harness: str, context: HarnessContext) -> tuple[Path, ...]:
+    """Existing files a fresh install would rewrite that the stored manifest may not name.
+
+    A manifest records what the adapter chose to; ZCode writes the CLI's
+    ``setting.json`` beside the Desktop ``config.json`` and names only the
+    latter, so a hook pinned to an older runtime there was never read. The
+    adapter's own install plan lists everything it publishes. A file the plan
+    would leave byte-identical cannot be stale, which also keeps preserved
+    backups of the user's earlier config out of the scan. Adapters that write
+    without a plan fall back to their manifest alone.
+    """
+
+    try:
+        plan = get_adapter(harness).prepare_install(context)
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError):
+        return ()
+    paths: list[Path] = []
+    for change in plan.files:
+        if change.after is None or change.after == change.before:
+            continue
+        try:
+            if change.path.is_file():
+                paths.append(change.path)
+        except (OSError, ValueError):
+            continue
+    return tuple(paths[:_MANIFEST_SCAN_MAX_PATHS])
+
+
+def _scanned_paths(install: Mapping[str, object], extra_paths: tuple[Path, ...]) -> tuple[Path, ...]:
+    manifest = install.get("manifest")
+    named = _manifest_file_paths(manifest) if isinstance(manifest, Mapping) else ()
+    return (*named, *(path for path in extra_paths if path not in named))
+
+
+def current_guard_python() -> str | None:
+    """The interpreter this process bakes into hook artifacts, or None when frozen.
+
+    A frozen Guard has no Python install of its own, so every launcher that
+    runs the Guard package through an interpreter belongs to another install.
+    """
+
+    if bool(getattr(sys, "frozen", False)):
+        return None
+    return str(Path(sys.executable).absolute())
+
+
+def _scan_launchers(
+    paths: tuple[Path, ...],
+    *,
+    current_digest: str | None,
+    guard_home: Path | None,
+) -> Mapping[str, object] | None:
+    """``hook_launch_scan.rs`` over the install's artifacts; None when the scan did not answer.
+
+    A scan that never answered is not a clean one: callers treat it as a
+    launcher that still needs repair, so the harness reports as failed rather
+    than keeping a stale or foreign launcher in place. A runtime that does not
+    offer the scan (none installed yet, or an older one mid-upgrade) skips it,
+    since no reinstall could make it answer.
+    """
+
+    if not paths or (current_digest is None and guard_home is None):
+        return {}
+    from .mdm.runtime_request import runtime_answer, runtime_offers
+
+    interpreter = None if guard_home is None else {"current": current_guard_python(), "guard_home": str(guard_home)}
+    answer = runtime_answer(
+        _LAUNCH_SCAN_FEATURE,
+        "hook-launch-scan",
+        {
+            "schema": "hook-launch-scan.v1",
+            "paths": [str(path) for path in paths],
+            "runtime_digest": current_digest,
+            "interpreter": interpreter,
+        },
+        output_limit=4 * 1024,
+        timeout_seconds=_LAUNCH_SCAN_TIMEOUT_SECONDS,
+    )
+    if answer is None and not runtime_offers(_LAUNCH_SCAN_FEATURE):
+        return {}
+    return answer
+
+
+def _pins_stale_native_runtime(
+    install: Mapping[str, object],
+    current_digest: str | None,
+    extra_paths: tuple[Path, ...] = (),
+) -> bool:
+    """Whether the install's harness artifacts still launch an older runtime.
+
+    The resident refuses a hook bridge whose runtime digest differs from its
+    own, so a stale pin silently sends every hook to the slower Python path.
+    """
+
+    scan = _scan_launchers(_scanned_paths(install, extra_paths), current_digest=current_digest, guard_home=None)
+    return scan is None or scan.get("stale_runtime") is True
+
+
+def _launches_stale_client(
+    harness: str,
+    install: Mapping[str, object],
+    context: HarnessContext,
+    current_digest: str | None,
+) -> bool:
+    """Whether the install's hook artifacts pin an older runtime or run another Guard install's Python.
+
+    The install-time file proof only hashes what it recorded, and the runtime
+    pin only knows a frozen build's own copy. A launcher left by a different
+    Guard install keeps both of them satisfied while every hook reaches a
+    client the resident no longer serves.
+    """
+
+    paths = _scanned_paths(install, _planned_artifact_paths(harness, context))
+    scan = _scan_launchers(paths, current_digest=current_digest, guard_home=context.guard_home)
+    return scan is None or scan.get("stale_runtime") is True or scan.get("foreign_interpreter") is True
+
+
 def _managed_install_needs_artifact_repair(
     harness: str,
     *,
     context: HarnessContext,
     verified: Mapping[str, bool],
+    install: Mapping[str, object],
+    current_digest: str | None,
 ) -> bool:
+    if _launches_stale_client(harness, install, context, current_digest):
+        return True
     if harness == "grok":
         from .cli.install_commands import grok_hooks_protection_ready
 
@@ -86,7 +271,10 @@ def _managed_install_artifacts_ready(
     context: HarnessContext,
     install: Mapping[str, object],
     store: GuardStore,
+    current_digest: str | None,
 ) -> bool:
+    if _launches_stale_client(harness, install, context, current_digest):
+        return False
     if harness == "grok":
         from .cli.install_commands import grok_hooks_protection_ready
 
@@ -103,6 +291,7 @@ def repair_failing_managed_harness_hooks(
 
     installs: list[Mapping[str, object]] = list(store.list_managed_installs())
     verified = _live_hook_verification(installs, store)
+    current_digest = _current_durable_runtime_digest()
     repaired: list[str] = []
     failed: list[str] = []
     for install in installs:
@@ -116,7 +305,13 @@ def repair_failing_managed_harness_hooks(
             home_dir=home_dir,
             workspace_dir=Path(workspace).expanduser() if workspace is not None else None,
         )
-        if not _managed_install_needs_artifact_repair(harness, context=context, verified=verified):
+        if not _managed_install_needs_artifact_repair(
+            harness,
+            context=context,
+            verified=verified,
+            install=install,
+            current_digest=current_digest,
+        ):
             continue
         try:
             apply_managed_install(
@@ -137,6 +332,7 @@ def repair_failing_managed_harness_hooks(
             context=context,
             install=refreshed,
             store=store,
+            current_digest=current_digest,
         ):
             failed.append(harness)
             continue

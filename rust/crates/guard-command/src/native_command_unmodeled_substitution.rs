@@ -5,6 +5,12 @@
 //! redirect target. Every program such a command runs is named, so its owners
 //! bound it the way they bound the rest of the text.
 //!
+//! A process substitution reads the same way. `diff <(sort a.txt) b.txt` runs
+//! `sort` and hands `diff` the path of a pipe to read, so the word it leaves
+//! behind is an operand exactly as a printed word is, and every program it
+//! runs is named. Only the input form is read: `>(cmd)` feeds the inner
+//! program data this text does not hold, so it stays an evaluation failure.
+//!
 //! The substitution that stays an evaluation failure is the one that could run
 //! a program the text does not name or put its output somewhere the floor
 //! cannot read: in command position, in an assignment, as a redirect target,
@@ -43,8 +49,9 @@ pub(super) struct BoundedSubstitutions {
     pub(super) programs: BTreeSet<String>,
 }
 
-/// The text with every `$(...)` read as the words it prints, or `None` when one
-/// is not bounded. Text with no substitution comes back unchanged.
+/// The text with every `$(...)` read as the words it prints and every `<(...)`
+/// as the path it opens, or `None` when one is not bounded. Text with no
+/// substitution comes back unchanged.
 pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> {
     if text.contains("<<") || text.contains('`') {
         return None;
@@ -76,41 +83,46 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
             continue;
         }
         if character == '$' && chars.get(index + 1) == Some(&'(') {
-            if chars.get(index + 2) == Some(&'(') || redirect_target {
-                return None;
-            }
-            // Output glued to the command's first word is part of the program
-            // name, and output read before any word is an assignment or a
-            // prefix: neither is an argument.
-            let receiver = words
-                .iter()
-                .skip_while(|word| SHELL_PREFIXES.contains(&word.as_str()))
-                .find(|word| !is_assignment(word))?;
-            // A launcher such as `timeout` or `sudo`, or a `find -exec`, runs
-            // a program named by a later word, and an option in command
-            // position, such as the `-p` of `command -p`, can be followed by
-            // the program itself. The program this output reaches is not
-            // named here.
-            let name = program_name(receiver);
-            if receiver.starts_with('-')
-                || INTERPRETERS.contains(&name.as_str())
-                || LAUNCHERS.contains(&name.as_str())
-                || words
-                    .iter()
-                    .any(|word| matches!(word.as_str(), "-exec" | "-execdir" | "-ok" | "-okdir"))
-            {
-                return None;
-            }
-            // `env NAME=$(...)` and `make NAME=$(...)` set a variable the
-            // program reads. A word shaped like a setting is never read as
-            // printed output, whatever program receives it.
-            if is_assignment(&word) {
-                return None;
-            }
+            // `$(( … ))` is arithmetic: it expands to a number and runs no
+            // program at all. The shell reads the same three characters as a
+            // substitution around a subshell only when the arithmetic does
+            // not close on a `))` of its own, so `$((count + 1))` is a number
+            // and `$((cat id) | sh)` is a pipeline.
+            let arithmetic = match chars.get(index + 2) {
+                Some(&'(') => Some(crate::parser_segments::arithmetic_close(&chars, index)?),
+                _ => None,
+            };
+            let receiver = receiving_program(&words, &word, redirect_target)?;
+            // Arithmetic prints a number and reaches no program of its own,
+            // so it leaves the owner set the rest of the text names.
+            let (close, printed) = match arithmetic {
+                Some(close) => (close, crate::parser_segments::ARITHMETIC_VALUE),
+                None => {
+                    let close = closing_parenthesis(&chars, index + 2)?;
+                    let inner: String = chars[index + 2..close].iter().collect();
+                    programs.extend(inner_programs(&inner)?);
+                    programs.insert(receiver);
+                    (close, OUTPUT)
+                }
+            };
+            word.push_str(printed);
+            out.push_str(printed);
+            index = close + 1;
+            continue;
+        }
+        if character == '<' && !double && chars.get(index + 1) == Some(&'(') {
+            // `<(cmd)` runs `cmd` and leaves the path of a pipe the command
+            // around it opens for reading. That path is an operand, never a
+            // program, an operator or a redirect target, so the shape reads
+            // exactly as a printed word does. Inside double quotes the same
+            // characters are literal text and never run anything, and `>(cmd)`
+            // writes into a program this text does not bound, so neither is
+            // read here.
+            let receiver = receiving_program(&words, &word, redirect_target)?;
             let close = closing_parenthesis(&chars, index + 2)?;
             let inner: String = chars[index + 2..close].iter().collect();
             programs.extend(inner_programs(&inner)?);
-            programs.insert(program_name(receiver));
+            programs.insert(receiver);
             word.push_str(OUTPUT);
             out.push_str(OUTPUT);
             index = close + 1;
@@ -181,6 +193,40 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
     })
 }
 
+/// The program a substitution's result reaches, or `None` when this text does
+/// not name it.
+///
+/// Output glued to the command's first word is part of the program name, and
+/// output read before any word is an assignment or a prefix: neither is an
+/// argument. A launcher such as `timeout` or `sudo`, or a `find -exec`, runs
+/// a program named by a later word, and an option in command position, such as
+/// the `-p` of `command -p`, can be followed by the program itself. `env
+/// NAME=$(...)` and `make NAME=$(...)` set a variable the program reads, so a
+/// word shaped like a setting is never read as a substitution's result
+/// whatever program receives it. The POSIX dot builtin runs what it is given
+/// as shell code, exactly as `source` does, so it is refused the same way.
+fn receiving_program(words: &[String], word: &str, redirect_target: bool) -> Option<String> {
+    if redirect_target || is_assignment(word) {
+        return None;
+    }
+    let receiver = words
+        .iter()
+        .skip_while(|word| SHELL_PREFIXES.contains(&word.as_str()))
+        .find(|word| !is_assignment(word))?;
+    let name = program_name(receiver);
+    if receiver.starts_with('-')
+        || name == "."
+        || INTERPRETERS.contains(&name.as_str())
+        || LAUNCHERS.contains(&name.as_str())
+        || words
+            .iter()
+            .any(|word| matches!(word.as_str(), "-exec" | "-execdir" | "-ok" | "-okdir"))
+    {
+        return None;
+    }
+    Some(name)
+}
+
 /// The `)` that closes a substitution opened just before `start`. A nested
 /// parenthesis, an unterminated quote or a missing close is `None`.
 fn closing_parenthesis(chars: &[char], start: usize) -> Option<usize> {
@@ -205,8 +251,11 @@ fn closing_parenthesis(chars: &[char], start: usize) -> Option<usize> {
 }
 
 /// The programs a substitution's text runs when each is named and plain.
+/// A `#` is refused along with the other shell punctuation: the scan for the
+/// closing `)` does not read comments, so a `)` inside one ends the text early
+/// and the words after it would never reach this list.
 fn inner_programs(inner: &str) -> Option<Vec<String>> {
-    if inner.contains(['`', '<', '>', '(', ')', '{', '}', '\n', '\\'])
+    if inner.contains(['`', '<', '>', '(', ')', '{', '}', '\n', '\\', '#'])
         || inner.contains("$(")
         || !expansions_are_names(inner)
         || named_words(inner)

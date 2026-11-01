@@ -43,6 +43,8 @@ def test_routing_is_active_for_pi_and_omp_and_does_not_change_frozen_previous(tm
     assert pi_source.count("Object.assign(event.input, input);") == 1
     # The sink re-checks authority under Pi's own harness policy, not OMP's default.
     assert pi_source.count('"execute-contained-test", "--harness", "pi", "--guard-home"') == 1
+    assert pi_source.count('"contained-workspace-sink", "--harness", boundBashHarness,') == 1
+    assert pi_source.count('const boundBashHarness = "pi";') == 1
     # Pi has no session_stop event, so shutdown releases unconsumed request files.
     assert "for (const key of containedTestRequests.keys()) cleanupContainedTestRequest(key);\n  });" in pi_source
 
@@ -153,7 +155,7 @@ console.log(JSON.stringify(output));
     assert result["snapshot"]["payload"]["tool_input"]["command"] == "python3 -m pytest -q"
 
 
-def test_windows_routes_only_python_through_the_fixed_sink_and_profile_temp(tmp_path: Path) -> None:
+def test_windows_routes_python_and_pytest_through_the_fixed_sink_and_profile_temp(tmp_path: Path) -> None:
     bun = shutil.which("bun")
     if bun is None:
         pytest.skip("requires the OMP Bun runtime")
@@ -191,14 +193,19 @@ const python = { decision: 'deny', policy_action: 'sandbox-required',
   required_execution_profile: 'python-eval-readonly-v1' };
 const pytest = { decision: 'deny', policy_action: 'sandbox-required',
   reason_code: 'native_pytest_readonly_containment_required', required_execution_profile: 'pytest-readonly-v2' };
+const vitest = { decision: 'deny', policy_action: 'sandbox-required',
+  reason_code: 'native_vitest_readonly_containment_required', required_execution_profile: 'vitest-readonly-v1' };
 const input = prepareContainedTestInput(python, snapshot('python-call', 'python3 test_calc.py'));
 const directory = containedTestRequests.get('python-call');
 const raw = directory ? readFileSync(join(directory, 'request.json'), 'utf8') : null;
-const rejected = prepareContainedTestInput(pytest, snapshot('pytest-call', 'python3 -m pytest'));
+const pytestInput = prepareContainedTestInput(pytest, snapshot('pytest-call', 'nice -n 10 pytest -q'));
+const pytestDirectory = containedTestRequests.get('pytest-call');
+// Vitest has no Windows sink profile, so it keeps its block.
+const rejected = prepareContainedTestInput(vitest, snapshot('vitest-call', 'npx vitest run'));
 // A request root removed after install denies the route instead of throwing.
 rmSync(process.argv[2], { recursive: true, force: true });
 const gone = prepareContainedTestInput(python, snapshot('gone-call', 'python3 test_calc.py'));
-console.log(JSON.stringify({ input, directory, raw, rejected, gone }));
+console.log(JSON.stringify({ input, directory, raw, pytestInput, pytestDirectory, rejected, gone }));
 """,
         encoding="utf-8",
     )
@@ -215,3 +222,74 @@ console.log(JSON.stringify({ input, directory, raw, rejected, gone }));
     assert argv[5] == "execute-contained-test"
     assert argv[argv.index("--request-file") + 1] == str(Path(result["directory"]) / "request.json")
     assert argv[argv.index("--request-sha256") + 1] == hashlib.sha256(result["raw"].encode()).hexdigest()
+    pytest_argv = shlex.split(result["pytestInput"]["command"])
+    assert pytest_argv[:6] == argv[:6]
+    assert Path(result["pytestDirectory"]).parent == request_root
+    assert pytest_argv[pytest_argv.index("--request-file") + 1] == str(Path(result["pytestDirectory"]) / "request.json")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the runtime's own sink runs only on macOS and Linux")
+def test_a_marked_workspace_sandbox_starts_the_runtime_sink(tmp_path: Path) -> None:
+    bun = shutil.which("bun")
+    if bun is None:
+        pytest.skip("requires the OMP Bun runtime")
+    script = tmp_path / "contained-routing-native.ts"
+    script.write_text(
+        """
+import { createHash } from 'node:crypto';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const handlers = {};
+const pi = { on(name, callback) { handlers[name] = callback; } };
+const GUARD_CLI_WRAPPER_COMMAND = "/tmp/guard";
+// A wrapper the Python sink cannot use keeps the runtime's sink available.
+const GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS = true;
+const GUARD_HOME = "/tmp/guard-home";
+const GUARD_HOME_DIR_IS_DEFAULT = true;
+const GUARD_HOME_DIR = "/tmp/home dir";
+const GUARD_NATIVE_HOOK_RUNTIME = "/opt/hol guard/runtime";
+const GUARD_CONTAINED_SINK_COMMAND = [];
+const GUARD_CONTAINED_REQUEST_ROOT = "";
+const toolCallIdKey = (value) => typeof value === 'string' ? value : null;
+"""
+        + CONTAINED_TEST_HELPERS_SOURCE
+        + """
+const snapshot = (id) => ({
+  cwd: "/project",
+  payload: { hook_event_name: 'PreToolUse', tool_name: 'bash', tool_call_id: id,
+    tool_input: { command: 'pytest -q' } },
+});
+const required = { decision: 'deny', policy_action: 'sandbox-required',
+  reason_code: 'native_workspace_containment_required', required_execution_profile: 'workspace-contained-v1' };
+const marked = prepareContainedTestInput({ ...required, native_contained_sink: true }, snapshot('marked'));
+const raw = readFileSync(join(containedTestRequests.get('marked'), 'request.json'), 'utf8');
+// An unmarked answer keeps Guard's sink, which this wrapper cannot start.
+const unmarked = prepareContainedTestInput(required, snapshot('unmarked'));
+const other = prepareContainedTestInput({ ...required, native_contained_sink: 'yes' }, snapshot('other'));
+// A marked read-only run takes the runtime's sink on Linux too.
+const readonly = prepareContainedTestInput({ decision: 'deny', policy_action: 'sandbox-required',
+  reason_code: 'native_pytest_readonly_containment_required', required_execution_profile: 'pytest-readonly-v2',
+  native_contained_sink: true }, snapshot('readonly'));
+handlers.session_stop();
+console.log(JSON.stringify({ marked, raw, unmarked, other, readonly }));
+""",
+        encoding="utf-8",
+    )
+    completed = subprocess.run([bun, str(script)], text=True, capture_output=True, timeout=30, check=False)
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["unmarked"] is None
+    assert result["other"] is None
+    assert shlex.split(result["readonly"]["command"])[:2] == ["/opt/hol guard/runtime", "contained-workspace-sink"]
+    argv = shlex.split(result["marked"]["command"])
+    assert argv[:4] == ["/opt/hol guard/runtime", "contained-workspace-sink", "--harness", "omp"]
+    # The runtime's sink takes exactly its six named values, home included.
+    assert dict(zip(argv[2::2], argv[3::2], strict=True)) == {
+        "--harness": "omp",
+        "--guard-home": "/tmp/guard-home",
+        "--workspace": "/project",
+        "--request-file": argv[argv.index("--request-file") + 1],
+        "--request-sha256": hashlib.sha256(result["raw"].encode()).hexdigest(),
+        "--home": "/tmp/home dir",
+    }

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 # Harness detection algorithms behind a narrow host port. The runtime owns the
 # request, inventory orchestration, skill discovery and the kind result; a leaf

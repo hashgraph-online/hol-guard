@@ -42,6 +42,11 @@ fn valid_ref_component(value: &str) -> bool {
 /// `../report-worktree`, the usual sibling layout; `fresh_destination` then
 /// requires the canonical parent to stay under home or an owned temporary
 /// directory.
+///
+/// On macOS `$TMPDIR` ends in `/`, so `$TMPDIR/name` expands to
+/// `/var/folders/<a>/<b>/T//name`. A repeated separator inside the path
+/// names the same directory as a single one, so it passes. A leading `//`,
+/// which names a network share on Windows, and a trailing `/` do not.
 pub(super) fn valid_path_text(value: &str) -> bool {
     let absolute = value.strip_prefix('/');
     let mut parts = absolute.unwrap_or(value).split('/').peekable();
@@ -50,15 +55,14 @@ pub(super) fn valid_path_text(value: &str) -> bool {
     }
     let parts: Vec<&str> = parts.collect();
     value.len() <= super::MAX_DESTINATION_BYTES
-        && !parts.is_empty()
+        && parts.first().is_some_and(|part| !part.is_empty())
+        && parts.last().is_some_and(|part| !part.is_empty())
         && value.trim() == value
         && !value.starts_with('~')
         && !value.contains([
             '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}', '\\',
         ])
-        && !parts
-            .iter()
-            .any(|part| part.is_empty() || *part == "." || *part == "..")
+        && !parts.iter().any(|part| *part == "." || *part == "..")
 }
 
 /// A destination as `git worktree add` receives it. `~/<path>` is accepted

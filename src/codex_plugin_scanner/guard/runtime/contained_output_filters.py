@@ -1,227 +1,111 @@
-"""Output filters after a contained core, as native authority classifies them.
+"""Running the output filters native authority classified after a contained core.
 
-A chain of up to three `| head -N`, `| tail -N`, `| grep` and `| rg` stages
-that read only standard input. Head and tail run in-process. A matcher runs
-as its own binary on the text the core already produced, in this process
-rather than in the core's sandbox, so its argument list is validated first:
-no file operand, pattern file, recursion or other output, so it can only
-print lines of the text it is given. The environment is built here, never
-the caller's. The binary is the installed one, located by ownership rather
-than by the caller's `PATH`; a matcher an agent could rewrite is one every
-plain `grep` or `rg` search already runs, so locating it this way is what
-this screen can decide, and the sandbox the core ran in does not extend
-here. `contained_output_filters.rs` accepts the same chain.
+`contained_output_filters.rs` decides which chain of `| head`, `| tail`,
+`| grep` and `| rg` stages a contained command may carry: at most three, each
+reading only standard input, with no file operand, pattern file, recursion or
+other output, so a stage can only print part of the text it is given. That
+grammar lives there alone. This module carries out the chain it chose.
+
+Head and tail run in-process, bounded by lines (`head`, `N`) or by bytes
+(`head`, `-c`, `N`). A matcher stage is the native runtime's: it runs the
+installed binary, located by ownership rather than by the caller's `PATH`,
+with an environment it builds, on the text the core already produced.
 """
 
 from __future__ import annotations
 
-import os
-import re
-import stat
-import subprocess
-from pathlib import Path
+import base64
+import binascii
 
-MAX_FILTERS = 3
-_COUNT = re.compile(r"[0-9]{1,6}")
-# Single-letter switches that change only which input lines print and how.
-_GREP_SWITCHES = frozenset("EFGacinosvwx")
-# The same for ripgrep, which spells its own set. `-E` (encoding) and `-g`
-# (glob) take a value there, and `-P` opts into a second regex engine.
-_RG_SWITCHES = frozenset("FNSUacinosvwx")
-_GREP_COUNTS = ("-A", "-B", "-C", "-m")
-_GREP_PROGRAMS = {"grep": (), "egrep": ("-E",), "fgrep": ("-F",)}
-_GREP_BINARIES = (Path("/usr/bin/grep"), Path("/bin/grep"))
-# ripgrep ships from a package manager rather than the system image, so it is
-# looked for in the ordinary install directories instead of a fixed path.
-_RG_DIRECTORIES = (
-    Path("/usr/bin"),
-    Path("/bin"),
-    Path("/usr/local/bin"),
-    Path("/opt/homebrew/bin"),
-    Path("/opt/local/bin"),
-    Path("/home/linuxbrew/.linuxbrew/bin"),
-)
-_LOCALE = ("LANG", "LC_ALL", "LC_CTYPE", "LC_COLLATE")
-_FILTER_TIMEOUT_SECONDS = 60
+_MATCH_FEATURE = "native-contained-output-match-v1"
+_MATCH_COMMAND = "contained-output-match"
+_MATCH_SCHEMA = "contained-output-match.v1"
+# The runtime's own matcher deadline is 60 seconds; this leaves it room to
+# answer before the call gives up.
+_MATCH_TIMEOUT_SECONDS = 70.0
+# The runtime refuses requests over 192 MiB and the input travels as base64,
+# a third larger, so a capture past this bound is refused here instead.
+_MATCH_INPUT_LIMIT = 128 * 1024 * 1024
+# A matcher's output can outgrow its input (`-n` prefixes every line), so the
+# answer gets more room than the request.
+_MATCH_OUTPUT_LIMIT = 384 * 1024 * 1024
 
 Stage = tuple[str, ...]
-
-
-def bounded_count(values: list[str]) -> int | None:
-    """The line count of a `head`/`tail` stage: `-N` or `-n N`."""
-    if len(values) == 1 and values[0].startswith("-") and _COUNT.fullmatch(values[0][1:]):
-        return int(values[0][1:])
-    if len(values) == 2 and values[0] == "-n" and _COUNT.fullmatch(values[1]):
-        return int(values[1])
-    return None
-
-
-def stdin_arguments(values: list[str], switches: frozenset[str]) -> bool:
-    """Whether a matcher called with `values` reads only standard input.
-
-    Switches from `switches`, counted options, `-e PATTERN`, and one pattern
-    operand unless `-e` gave the patterns. Any further operand is a file, so
-    it is refused.
-    """
-    expressions = operands = 0
-    options_done = False
-    index = 0
-    while index < len(values):
-        value = values[index]
-        index += 1
-        if value == "-":
-            return False
-        if options_done or not value.startswith("-"):
-            operands += 1
-            continue
-        if value == "--":
-            options_done = True
-            continue
-        if value == "-e":
-            if index >= len(values):
-                return False
-            index += 1
-            expressions += 1
-            continue
-        option = next((option for option in _GREP_COUNTS if value.startswith(option)), None)
-        if option is not None:
-            count = value[len(option) :]
-            if not count:
-                if index >= len(values):
-                    return False
-                count = values[index]
-                index += 1
-            if not _COUNT.fullmatch(count):
-                return False
-            continue
-        flags = value[1:]
-        if not flags or not set(flags) <= switches:
-            return False
-    return operands == 0 if expressions else operands == 1
-
-
-def grep_arguments(values: list[str]) -> bool:
-    """Whether `grep <values>` reads only standard input."""
-    return stdin_arguments(values, _GREP_SWITCHES)
-
-
-def rg_arguments(values: list[str]) -> bool:
-    """Whether `rg <values>` reads only standard input."""
-    return stdin_arguments(values, _RG_SWITCHES)
-
-
-def matcher_stage(program: str, values: list[str]) -> bool:
-    """Whether `program <values>` is a matcher reading only standard input."""
-    if program in _GREP_PROGRAMS:
-        return grep_arguments(values)
-    return program == "rg" and rg_arguments(values)
-
-
-def filter_chain(tokens: list[tuple[str, bool]]) -> tuple[Stage, ...]:
-    """The stages after a core's first `|`, or ValueError for any other shape."""
-    stages: list[list[str]] = [[]]
-    for value, operator in tokens:
-        if (value, operator) == ("|", True):
-            stages.append([])
-        elif operator:
-            raise ValueError("unsupported output filter")
-        else:
-            stages[-1].append(value)
-    if len(stages) > MAX_FILTERS:
-        raise ValueError("unsupported output filter")
-    chain: list[Stage] = []
-    for program, *arguments in (stage or [""] for stage in stages):
-        if program in {"head", "tail"} and (count := bounded_count(arguments)) is not None:
-            chain.append((program, str(count)))
-        elif matcher_stage(program, arguments):
-            chain.append((program, *arguments))
-        else:
-            raise ValueError("unsupported output filter")
-    return tuple(chain)
 
 
 def keep_lines(lines: list[str], kind: str, count: int) -> list[str]:
     if kind == "head":
         return lines[:count]
-    return lines[len(lines) - count :] if count else []
+    # `max(0, ...)` rather than a bare negative start: a count larger than the
+    # text keeps all of it, the way `tail -n` does, instead of counting back
+    # from the end and dropping the first lines.
+    return lines[max(0, len(lines) - count) :] if count else []
 
 
-def _owners() -> set[int]:
-    """The identities a filter binary may belong to: root or this user."""
-    return {0, os.getuid()} if hasattr(os, "getuid") else {0}
+def keep_bytes(text: str, kind: str, count: int) -> str:
+    """The first or last `count` bytes of `text`, as `head -c`/`tail -c` cut it.
 
-
-def _rewritable_only_by_owner(info: os.stat_result) -> bool:
-    return stat.S_ISREG(info.st_mode) and info.st_uid in _owners() and not info.st_mode & 0o022
-
-
-def _trusted_ripgrep() -> str:
-    """The installed ripgrep: an executable file only its owner can rewrite.
-
-    Its path is not fixed the way the system grep's is, so the install
-    directories are searched in turn and the resolved file must belong to root
-    or to this user with no group or other write bit. A name that cannot be
-    executed is not the install, so the search goes on to the next directory
-    rather than failing on it.
+    The cut is made on the encoded bytes, so it lands exactly where the program
+    would even in the middle of a character. `surrogateescape` carries a partial
+    character through unchanged, so what the sink writes out is the byte string
+    the pipeline would have produced.
     """
-    for directory in _RG_DIRECTORIES:
-        try:
-            resolved = (directory / "rg").resolve(strict=True)
-            info = resolved.stat()
-        except OSError:
-            continue
-        if _rewritable_only_by_owner(info) and os.access(resolved, os.X_OK):
-            return str(resolved)
-    raise RuntimeError("no trusted ripgrep")
-
-
-def _trusted_grep() -> str:
-    """The system grep: a root-owned regular file nobody else can rewrite."""
-    for candidate in _GREP_BINARIES:
-        try:
-            info = candidate.stat()
-        except OSError:
-            continue
-        if stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022:
-            return str(candidate)
-    raise RuntimeError("no trusted system grep")
-
-
-def _matcher_command(program: str, arguments: list[str]) -> list[str]:
-    """The screened binary and argument list one matcher stage runs."""
-    if not matcher_stage(program, arguments):
-        raise ValueError("unsupported output filter")
-    if program == "rg":
-        return [_trusted_ripgrep(), *arguments]
-    return [_trusted_grep(), *_GREP_PROGRAMS[program], *arguments]
+    data = text.encode("utf-8", "surrogateescape")
+    # `max(0, len(data) - count)` rather than `-count`: a zero count keeps
+    # nothing instead of keeping everything, and a count larger than the text
+    # keeps all of it instead of counting back from the end.
+    cut = data[:count] if kind == "head" else data[max(0, len(data) - count) :]
+    return cut.decode("utf-8", "surrogateescape")
 
 
 def _match_lines(text: str, stage: Stage) -> tuple[str, str, int]:
+    from ..mdm.runtime_request import runtime_answer
+
     program, *arguments = stage
-    try:
-        command = _matcher_command(program, arguments)
-    except RuntimeError:
+    unfinished = f"hol-guard: {program}: the output filter did not finish\n"
+    data = text.encode("utf-8", "surrogateescape")
+    if len(data) > _MATCH_INPUT_LIMIT:
+        return "", f"hol-guard: {program}: the captured output is too large to filter\n", 2
+    sent = False
+
+    def request() -> dict[str, object]:
+        # Built only once the runtime has offered the feature, so a `None`
+        # answer after this ran is a runtime that failed, not one that is
+        # missing.
+        nonlocal sent
+        sent = True
+        return {
+            "schema": _MATCH_SCHEMA,
+            "program": program,
+            "arguments": arguments,
+            "input": base64.b64encode(data).decode("ascii"),
+        }
+
+    answer = runtime_answer(
+        _MATCH_FEATURE,
+        _MATCH_COMMAND,
+        request,
+        output_limit=_MATCH_OUTPUT_LIMIT,
+        timeout_seconds=_MATCH_TIMEOUT_SECONDS,
+    )
+    if answer is None and sent:
+        return "", unfinished, 2
+    if answer is None:
         # The shape was accepted before the core ran, so the core has already
-        # done its work. A machine without the matcher installed gets the
-        # status a shell gives a missing program, not an exception from the
-        # wrapper.
-        return "", f"hol-guard: {program}: not found\n", 127
-    # No `RIPGREP_CONFIG_PATH` or `GREP_OPTIONS`: the environment is built here.
-    environment = {"PATH": "/usr/bin:/bin"}
-    environment.update({name: os.environ[name] for name in _LOCALE if name in os.environ})
-    completed = subprocess.run(  # screened binary, validated stdin-only arguments
-        command,
-        input=text.encode("utf-8", "surrogateescape"),
-        capture_output=True,
-        env=environment,
-        timeout=_FILTER_TIMEOUT_SECONDS,
-        check=False,
-    )
-    return (
-        completed.stdout.decode("utf-8", "replace"),
-        completed.stderr.decode("utf-8", "replace"),
-        completed.returncode,
-    )
+        # done its work: a missing matcher gets the status a shell gives a
+        # missing program, not an exception from the wrapper.
+        return "", f"hol-guard: {program}: native runtime unavailable\n", 127
+    stdout, stderr, status = answer.get("stdout"), answer.get("stderr"), answer.get("status")
+    if not isinstance(stdout, str) or not isinstance(stderr, str) or type(status) is not int:
+        return "", unfinished, 2
+    try:
+        output = base64.b64decode(stdout, validate=True)
+    except (binascii.Error, ValueError):
+        return "", unfinished, 2
+    # `surrogateescape` on the matcher's output as well as its input: a byte
+    # bound earlier in the chain can hand the matcher a partial character, and
+    # the bytes it prints back are the pipeline's bytes.
+    return output.decode("utf-8", "surrogateescape"), stderr, status
 
 
 def apply_filters(text: str, stages: tuple[Stage, ...]) -> tuple[str, str, int]:
@@ -230,7 +114,10 @@ def apply_filters(text: str, stages: tuple[Stage, ...]) -> tuple[str, str, int]:
     status = 0
     for stage in stages:
         if stage[0] in {"head", "tail"}:
-            text = "".join(keep_lines(text.splitlines(keepends=True), stage[0], int(stage[1])))
+            if len(stage) == 3 and stage[1] == "-c":
+                text = keep_bytes(text, stage[0], int(stage[2]))
+            else:
+                text = "".join(keep_lines(text.splitlines(keepends=True), stage[0], int(stage[1])))
             status = 0
             continue
         text, error, status = _match_lines(text, stage)

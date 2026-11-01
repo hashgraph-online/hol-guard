@@ -1,5 +1,5 @@
 import type { ConnectorSetupMatch } from "./custom-extension-profile";
-import { shortIdentity } from "./custom-extension-profile";
+import { connectorSetupReady, shortIdentity } from "./custom-extension-profile";
 import { connectorSetupCopy } from "./local-cli-panel-copy";
 
 /** Shown on Protect when it was opened from a request held on this connector. */
@@ -14,7 +14,7 @@ export function ConnectorSetupBanner(props: {
 }) {
   // After a setup from this page the item is decided; keep the outcome, not the "already decided" note.
   const copy = props.outcome ? { title: `${props.name} is set up`, body: "" } : connectorSetupCopy(props.match, props.name);
-  const ready = props.outcome !== null || props.match === "ready";
+  const ready = props.outcome !== null || connectorSetupReady(props.match);
   return (
     <section
       data-testid="connector-setup-banner"
@@ -40,7 +40,7 @@ export function ConnectorSetupBanner(props: {
           disabled={props.busy}
           onClick={props.onSetUp}
         >
-          Set up with recommended
+          {props.match === "reallow" ? "Allow this version" : "Set up with recommended"}
         </button>
       ) : null}
     </section>

@@ -25,12 +25,23 @@ pub(in crate::pretool) fn repository_inert(
 ) -> Option<bool> {
     // `git describe --dirty` and `--broken` refresh the index before they
     // answer, so they reach the `post-index-change` hook the same way.
-    let refreshes = matches!(operation, "status" | "diff")
+    // `git submodule status` reads the superproject index, so it is held to
+    // the same hook and ownership inspection.
+    let refreshes = matches!(operation, "status" | "diff" | "submodule")
         || super::super::git_history_reads::refreshes_the_index(
             operation,
             arguments.get(1..).unwrap_or_default(),
         );
-    if refreshes && !super::submodules_are_inert(base, arguments, deadline)? {
+    // A tracked gitlink leaves a descending read unproven: `status` and `diff`
+    // open each recorded submodule and refresh its index there, under that
+    // submodule's own configuration, which a superproject-rooted probe never
+    // read. The status listing does not descend. It names each recorded object
+    // id from the superproject index and describes it against the submodule's
+    // refs, starting nothing a submodule's `core.fsmonitor`, `core.hooksPath`,
+    // `core.pager` or `diff.external` names, so the gitlink rejection would
+    // refuse it in exactly the superprojects it is written for.
+    let descends = refreshes && operation != "submodule";
+    if descends && !super::submodules_are_inert(base, arguments, deadline)? {
         return Some(false);
     }
     let roots = super::super::git_routes::owned_temporary_roots();
@@ -71,6 +82,35 @@ pub(in crate::pretool) fn repository_inert(
             husky_directory_reached(base, directory, deadline)
         })
     }))
+}
+
+/// Whether `git bisect log` prints only the session's own record. Git opens
+/// `BISECT_LOG` in the Git directory and copies it to standard output, and
+/// `open` follows a link, so a link there names a file the log would print. A
+/// missing file is Git's "not bisecting" answer and a plain file is the record
+/// itself. Outside any repository there is no log to print.
+///
+/// The file is named from the Git directory rather than asked of `--git-path`:
+/// an absolute `--git-path` answer is Git's resolved path, which already
+/// follows a link at `BISECT_LOG` and would report the file it points at.
+pub(in crate::pretool) fn bisect_log_inert(base: &Command, deadline: Instant) -> Option<bool> {
+    let mut command = super::copy_command(base)?;
+    command.args([
+        "--no-pager",
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-dir",
+    ]);
+    let (status, bytes) = super::output(&mut command, deadline, PATH_LIMIT)?;
+    if !status.success() {
+        return super::outside_repository(base, deadline)?.then_some(true);
+    }
+    let path = absolute_lines(&bytes, 1)?.pop()?.join("BISECT_LOG");
+    match std::fs::symlink_metadata(&path) {
+        Ok(metadata) => Some(metadata.is_file()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(true),
+        Err(_) => None,
+    }
 }
 
 /// Whether Git reaches `directory` through the repository's own relative
@@ -399,3 +439,7 @@ mod tests {
         assert_eq!(absolute_lines(b"/r/.git\n\n/r/.git\n", 2), None);
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "git_probe_submodule_tests.rs"]
+mod submodule_tests;

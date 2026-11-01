@@ -14,7 +14,9 @@ import pytest
 from ci.gauntlet.approval_rows import CONNECTOR_CLASSES, connector_class, connector_coverage, row_connector
 from ci.gauntlet.catalog import CONNECTOR_CATALOG, load_catalog, load_catalog_data
 from ci.gauntlet.connector_fixtures import (
+    GRANTED_SCRIPT_CASES,
     REMOTE_MCP_HOST,
+    allow_custom_script,
     remote_stub_resolver_args,
     stage_connector_case,
     state_digest,
@@ -26,10 +28,12 @@ from ci.gauntlet.connector_judge import (
     final_message,
     reason_text,
     targets_connector,
+    ungranted_stop,
 )
 from ci.gauntlet.fixtures import scenario_fixture_name
 from ci.gauntlet.harnesses import read_transcript
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, safe_alternative_reason
+from codex_plugin_scanner.guard.store import GuardStore
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts" / "ci"))
@@ -153,6 +157,38 @@ def test_fixtures_build_a_working_loopback_cli_and_mcp_configs(tmp_path: Path) -
             ["node", str(fixture.echo_server)], input=request, text=True, capture_output=True, timeout=30, check=True
         )
         assert json.loads(reply.stdout)["result"]["content"][0]["text"] == "ping"
+
+
+def test_the_granted_script_case_seeds_the_allow_a_user_saves(tmp_path: Path) -> None:
+    home, guard_home = tmp_path / "home", tmp_path / "guard-home"
+    home.mkdir()
+    fixture = stage_connector_case("commands", tmp_path, home, guard_home, "claude-code")
+    assert set(CATALOG) >= GRANTED_SCRIPT_CASES
+    assert CATALOG["connector-granted-env-script"].commands == ("{{home}}/tools/approve-merge.sh 42",)
+    assert fixture.approve_script.read_text(encoding="utf-8").startswith("#!/usr/bin/env bash\n")
+    ran = subprocess.run(
+        [str(fixture.approve_script), "42"],
+        env={**os.environ, "HOME": str(home)},
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    assert ran.stdout.strip() == "approve-merge: would approve and merge #42"
+    store = GuardStore(guard_home)
+    seeded = allow_custom_script(store, fixture.approve_script, home)
+    assert seeded["state"] == "allowed"
+    grant = store.read_local_cli_grant(seeded["cli_id"])
+    assert grant is not None
+    assert grant["state"] == "allowed"
+
+
+def test_a_stop_on_the_granted_script_is_never_written_off_as_unexercised() -> None:
+    stop = {"decision": "deny", "reason_code": CONNECTOR_SETUP_REQUIRED}
+    assert ungranted_stop(CATALOG["connector-granted-env-script"], [stop]) is None
+    unseeded = ungranted_stop(CATALOG["connector-granted-local-cli-loopback"], [stop])
+    assert unseeded is not None
+    assert unseeded[0] == "not-exercised"
 
 
 @pytest.mark.parametrize("harness", ["codex", "cursor"])

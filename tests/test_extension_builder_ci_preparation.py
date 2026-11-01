@@ -52,7 +52,7 @@ def checkout(tmp_path, monkeypatch):
         {
             "schemaVersion": "guard.extension-trust-class-map.v1",
             "publishers": {
-                "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                "hol": {"id": "hol", "displayName": "HOL"},
                 "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
             },
             "classes": {

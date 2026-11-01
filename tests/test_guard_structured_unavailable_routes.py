@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import hook_worker
-from codex_plugin_scanner.guard.runtime.structured_output_mediation import StructuredOutputResolution
+from codex_plugin_scanner.guard.daemon import hook_worker, hook_worker_structured
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.structured_output_mediation_support import _config
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
@@ -21,15 +21,20 @@ def test_daemon_unavailable_routes_withhold_only_required_structured_content(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     worker = hook_worker.HookWorker(store=GuardStore(guard_home))
+    # The native resolution is what says whether the managed policy covers this
+    # harness; pin it so the result does not depend on an installed runtime.
     monkeypatch.setattr(
-        worker,
-        "_structured_output_resolution",
-        lambda **_: StructuredOutputResolution(
-            binding=None,
-            required=required,
-            reason_code="structured_managed_authority_unavailable" if required else None,
-        ),
+        hook_worker_structured,
+        "content_query",
+        lambda *_args, **_kwargs: {
+            "binding": None,
+            "required": required,
+            "reason_code": "structured_managed_authority_unavailable" if required else None,
+        },
     )
+    # A readable config; an unreadable one is always required, so reading the
+    # real one would make the result depend on an installed runtime.
+    monkeypatch.setattr(worker, "_load_config", lambda *_args, **_kwargs: _config())
     # Pin the native edge as unavailable so the result is independent of any
     # runtime binary installed on the machine running the test.
     monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_: None)

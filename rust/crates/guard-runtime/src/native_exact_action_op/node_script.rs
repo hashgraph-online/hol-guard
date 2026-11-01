@@ -263,10 +263,13 @@ impl Graph<'_> {
 
 /// The bound module graph of `node <script>`, or the reason it stays once-only.
 pub(super) fn node_script(arguments: &[String], cwd: &str, ctx: &Ctx) -> Proof<Value> {
-    if LOADER_ENVIRONMENT
-        .iter()
-        .any(|name| ctx.env.get(*name).is_some_and(|value| !value.is_empty()))
-    {
+    // A heap-size or diagnostics-only `NODE_OPTIONS` loads nothing.
+    if LOADER_ENVIRONMENT.iter().any(|name| {
+        ctx.env.get(*name).is_some_and(|value| {
+            let inert = *name == "NODE_OPTIONS" && guard_contracts::node_options_inert(value);
+            !(value.is_empty() || inert)
+        })
+    }) {
         return Err(MUTABLE_LAUNCHER);
     }
     let script = script_argument(arguments).ok_or(MUTABLE_LAUNCHER)?;

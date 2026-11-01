@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 const GIT_ADD: &str = "command.git.permission.add";
 const HARD_RESET: &str = "command.git.permission.hard-reset";
 const COMMIT: &str = "command.git.permission.commit";
+const SCP_TRANSFER: &str = "command.remote.scp.permission.transfer";
 
 /// One control: target kind, target id, state.
 type Control = (&'static str, &'static str, &'static str);
@@ -178,6 +179,26 @@ fn destructive_permission_carries_caution() {
     assert!(["critical", "destructive", "sensitive"]
         .contains(&permission.caution_reason.as_deref().unwrap()));
     assert!(permission.caution_detail.is_some());
+}
+
+#[test]
+fn an_overwriting_transfer_carries_caution() {
+    let catalog = catalog();
+    let permission = catalog
+        .permission(SCP_TRANSFER)
+        .expect("a packaged SCP permission");
+    // The catalog names the effect without the word `destructive`, and no rule
+    // of this permission is critical, so only the overwrite reads as one.
+    assert_eq!(permission.action_classes, vec!["SCP overwrite command"]);
+    let recommendation = recommendation(
+        hint(&catalog, &[SCP_TRANSFER]),
+        snapshot(&catalog, "protected", &[], &[]),
+    )
+    .expect("an overwriting transfer is still recommended");
+    assert!(recommendation.caution);
+    let permission = &recommendation.permissions[0];
+    assert!(permission.caution);
+    assert_eq!(permission.caution_reason.as_deref(), Some("destructive"));
 }
 
 #[test]

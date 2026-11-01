@@ -21,8 +21,9 @@ use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{
     classify_scannable_source_path, classify_source_path, credential_path_markers,
     hidden_empty_work_tree_file, hidden_project_document, hidden_read_parts_allowed,
-    is_source_code_extension, sensitive_external_filename, sensitive_path_family, source_like,
-    win32_name, EXTERNAL_SENSITIVE_PARTS,
+    is_source_code_extension, project_config_file_name, sensitive_external_filename,
+    sensitive_path_family, source_document_extension, source_like, tool_login_file_name,
+    tool_login_name, win32_name, EXTERNAL_SENSITIVE_PARTS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,6 +299,19 @@ pub fn open_immutable_blob(path: &Path) -> Result<SecureBlob, SecureReadError> {
     })
 }
 
+/// A path stat can land on the inode a concurrent rename is replacing, after
+/// its last link is gone. Zero links means the file changed under the read,
+/// not that a second name aliases it, so callers that retry an atomic
+/// replacement see `Changed` instead of a hard-link rejection.
+#[cfg(unix)]
+fn stable_leaf_link_error(links: u64) -> Option<SecureReadError> {
+    match links {
+        1 => None,
+        0 => Some(SecureReadError::Changed),
+        _ => Some(SecureReadError::HardLinkedFile),
+    }
+}
+
 /// Read a mutable context input without trusting a path-only snapshot.
 ///
 /// Ancestor symlinks are resolved before the descriptor walk. Leaf symlinks
@@ -325,8 +339,8 @@ pub fn read_stable(
             return Err(SecureReadError::PermissionDenied);
         }
         #[cfg(unix)]
-        if metadata.nlink() != 1 {
-            return Err(SecureReadError::HardLinkedFile);
+        if let Some(error) = stable_leaf_link_error(metadata.nlink()) {
+            return Err(error);
         }
         Ok(metadata)
     }

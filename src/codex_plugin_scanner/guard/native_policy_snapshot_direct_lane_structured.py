@@ -1,12 +1,12 @@
-"""The managed-policy view the daemon resolves Oh My Pi output mediation from.
+"""The managed-policy view the resident resolves Oh My Pi output mediation from.
 
-After an Oh My Pi or Pi ``PostToolUse`` the daemon resolves structured output
-mediation from the managed policy in Guard config. When nothing is required
-it returns the edge response unchanged. A resident that answers such a hook
-without the daemon needs the same managed-policy view, as the daemon had it
-when it published; the resident resolves it itself. A view the resident
-could not read exactly as the daemon's native query does is left out, so
-such a hook defers to this daemon.
+After an Oh My Pi or Pi ``PostToolUse`` structured output mediation resolves
+from the managed policy in Guard config, which only the daemon reads. The
+daemon sends the edge that managed-policy view with each such hook, and binds
+it into the direct lane when it publishes, so a resident that answers a hook
+without the daemon resolves the same view itself. A view the resident could
+not read exactly as the daemon's native query does is left out, so such a hook
+defers to this daemon.
 """
 
 from __future__ import annotations
@@ -17,16 +17,10 @@ from collections.abc import Iterable, Mapping
 from .native_policy_snapshot_codec import _validate_json_limits_v3
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 
-# The resident accepts the managed-policy view below in its direct-lane binding.
-DIRECT_HOOK_STRUCTURED_OUTPUT_FEATURE = "hook-direct-structured-output-v1"
 STRUCTURED_OUTPUT_BINDING_KEY = "structured_output_config"
 
 _MAX_VIEW_BYTES = 65_536
 _MAX_SAFE_INTEGER = 2**53 - 1
-
-
-def structured_output_bound(features: Iterable[str]) -> bool:
-    return DIRECT_HOOK_STRUCTURED_OUTPUT_FEATURE in set(features)
 
 
 def _plain(value: object) -> bool:
@@ -43,15 +37,40 @@ def _plain(value: object) -> bool:
     return False
 
 
+def _config_wire(config: object) -> dict[str, object]:
+    """The four managed-policy fields the resident's ``resolution`` reads."""
+
+    policy = getattr(config, "managed_policy", None)
+    locked = getattr(config, "managed_locked_settings", ())
+    settings = getattr(policy, "settings", None)
+    if isinstance(settings, Mapping):
+        control = settings.get("data_control")
+        settings = (
+            {"data_control": {"structured_output": control["structured_output"]}}
+            if isinstance(control, Mapping) and "structured_output" in control
+            else {}
+        )
+    return {
+        "managed_policy_status": getattr(config, "managed_policy_status", None),
+        "managed_policy_hash": getattr(config, "managed_policy_hash", None),
+        "managed_locked_settings": list(locked) if isinstance(locked, (list, tuple, set, frozenset)) else [],
+        "managed_policy": None
+        if policy is None
+        else {
+            "content_hash": getattr(policy, "content_hash", None),
+            "settings": settings,
+        },
+    }
+
+
 def structured_output_view(config: object) -> dict[str, object] | None:
-    """The ``_config_wire`` the daemon sends its ``resolution`` query, or ``None``.
+    """The managed-policy view the resident resolves for ``config``, or ``None``.
 
-    The daemon encodes that query as JSON. A view that does not survive the
-    same encoding unchanged, or that the snapshot codec would refuse, binds
-    nothing, so the resident never resolves a different view.
+    The view is sent as JSON, to the edge with each hook and to the resident in
+    its binding. A view that does not survive that encoding unchanged, or that
+    the snapshot codec would refuse, binds nothing, so the resident never
+    resolves a different view.
     """
-
-    from .runtime.structured_output_mediation import _config_wire
 
     try:
         view = _config_wire(config)
@@ -82,23 +101,22 @@ def uniform_structured_output_view(configs: Iterable[object]) -> dict[str, objec
 def with_structured_output_view(
     binding: Mapping[str, object] | None,
     *,
-    features: Iterable[str],
     view: Mapping[str, object] | None,
 ) -> dict[str, object] | None:
-    """Add the managed-policy view, for a resident that accepts it."""
+    """Add the managed-policy view."""
 
     if binding is None:
         return None
     bound = dict(binding)
-    if view is not None and structured_output_bound(features):
+    if view is not None:
         bound[STRUCTURED_OUTPUT_BINDING_KEY] = dict(view)
     return bound
 
 
-def bound_structured_output_view(binding: object, features: Iterable[str]) -> dict[str, object] | None:
+def bound_structured_output_view(binding: object) -> dict[str, object] | None:
     """The view an ACKed binding carries, for the reconcile recheck."""
 
-    if not isinstance(binding, Mapping) or not structured_output_bound(features):
+    if not isinstance(binding, Mapping):
         return None
     view = binding.get(STRUCTURED_OUTPUT_BINDING_KEY)
     return dict(view) if isinstance(view, Mapping) else None

@@ -14,9 +14,11 @@
 //! script keeps the narrow receipt only for an output directory it accepts.
 
 #[cfg(unix)]
+use crate::contained_package_test::lifecycle;
+#[cfg(unix)]
 use crate::contained_runner::pkg_json::{object_of, read_json_with_integrity};
 #[cfg(unix)]
-use crate::sfrs_shlex::{split_with, PLAIN_LEXER, SCRIPT_LEXER};
+use crate::sfrs_shlex::{split_with, PLAIN_LEXER};
 use crate::CanonicalCommandV1;
 #[cfg(unix)]
 use serde_json::{Map, Value};
@@ -29,8 +31,8 @@ use super::super::contained_wrapper::{contained_core, package_dir};
 use super::super::executable_basename;
 use super::super::PathContext;
 
-#[path = "package_script_vite.rs"]
-mod package_script_vite;
+#[path = "bun_package_entry.rs"]
+mod bun_package_entry;
 
 #[cfg(unix)]
 const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
@@ -44,6 +46,9 @@ pub(in crate::pretool) fn contained_test_reason(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<&'static str> {
+    // `bun node_modules/<package>/<entry>` is the run `node` names.
+    let spelled = bun_package_entry::node_spelling(model);
+    let model = spelled.as_ref().unwrap_or(model);
     if let Some(reason) = super::readonly_test_reason(model) {
         return resolved(model, reason, context.cwd.map(PathBuf::from), context);
     }
@@ -89,11 +94,13 @@ fn resolved(
     // The same name the build classification reads, so `npm.exe run build`
     // is the package script `npm run build` is and keeps the review prompt.
     let manager = crate::program_basename(segment.executable.as_deref()?);
-    // `pnpm exec <tool>` is a local-bin run, not a script body.
-    let local_run = manager == "pnpm" && arguments.first().is_some_and(|word| word == "exec");
+    // A manager's `exec` spelling runs a local bin, not a script body.
+    let local_run = super::manager_local_bin_arguments(manager, arguments).is_some();
     if matches!(manager, "npm" | "pnpm" | "bun" | "yarn")
         && !local_run
-        && (arguments.first().is_some_and(|word| word == "run")
+        && (arguments
+            .first()
+            .is_some_and(|word| crate::contained_argv::names_script_run_verb(manager, word))
             || super::manager_script_task(manager, arguments).is_some())
     {
         return None;
@@ -115,37 +122,24 @@ fn resolved(
 }
 
 /// The entrypoints a read-only tool run stages, for the invocation forms the
-/// classifier admits on Windows: a local bin, `npx`, `bunx`, `pnpm exec`, or
-/// Node started on the tool's own entrypoint.
+/// classifier admits on Windows: a local bin, `npx`, `bunx`, a manager's
+/// `exec` spelling, or Node started on the tool's own entrypoint.
 #[cfg(not(unix))]
 fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [&'static str]> {
-    const ESLINT: &[&str] = &["eslint/bin/eslint.js"];
-    const TSC: &[&str] = &["typescript/bin/tsc"];
-    // Prettier publishes one entrypoint per major; the sink resolves the same set.
-    const PRETTIER: &[&str] = &super::PRETTIER_ENTRIES;
     let tool = match program {
         "npx" | "bunx" => arguments.first()?.as_str(),
-        // Only the bare `pnpm exec <tool>` spelling is a local-bin run.
-        "pnpm" => arguments
-            .get(1)
-            .filter(|_| arguments.first().is_some_and(|word| word == "exec"))?
+        // Only a manager's bare `exec` spelling is a local-bin run.
+        "npm" | "pnpm" | "yarn" => super::manager_local_bin_arguments(program, arguments)?
+            .first()?
             .as_str(),
-        "node" | "nodejs" => {
-            let entry = arguments.first()?;
-            return [ESLINT, TSC, PRETTIER].into_iter().find(|entries| {
-                entries
-                    .iter()
-                    .any(|name| super::local_package_entry(entry, name))
-            });
-        }
+        "node" | "nodejs" => crate::contained_node_tool::entry_tool(arguments.first()?),
         other => other,
     };
-    Some(match tool {
-        "eslint" => ESLINT,
-        "tsc" => TSC,
-        "prettier" => PRETTIER,
-        _ => return None,
-    })
+    // `vite build` is the build-output route, which stages its entry above.
+    if tool == "vite" {
+        return None;
+    }
+    crate::contained_node_tool::tool_entries(tool).map(|(_, entries)| entries)
 }
 
 /// Whether the nearest install carrying one of `entries` is a flat npm or
@@ -197,9 +191,19 @@ fn resolved(
         // narrower or broader execution is offered. A conventional name says
         // what the script does on its own; any other name is only as good as
         // the body behind it, so without the manifest it stays a package
-        // script and keeps the generic route.
-        return (test || task.is_some_and(|task| matches!(task, "lint" | "typecheck" | "build")))
-            .then_some(reason);
+        // script and keeps the generic route. A checking name runs read-only
+        // whatever the run passes on, and the words it passes have already
+        // been read for writes and shell effects, so a tail rides with it. A
+        // build's receipt names an output directory instead, and `--outDir`
+        // arriving in that tail can only be read against the manifest, so a
+        // build with a tail keeps the generic route.
+        return (test
+            || task.is_some_and(|(task, tail)| match task {
+                "lint" | "typecheck" => true,
+                "build" => tail.is_empty(),
+                _ => false,
+            }))
+        .then_some(reason);
     };
     let package = nearest(&directory, &workspace, "package.json");
     let (manifest, _) = read_json_with_integrity(&package.join("package.json"), false);
@@ -208,10 +212,31 @@ fn resolved(
             .as_ref()
             .and_then(|manifest| manifest.get("scripts")),
     );
+    let scripts = scripts?;
     if test {
-        return test_script(scripts?, arguments).then_some(PACKAGE_TEST);
+        // The sink reads the same manifest and runs whatever the body spells,
+        // so a test-named entry keeps the package route even when the body is
+        // a read-only tool rather than a runner. A body the sink refuses
+        // leaves the command on the generic route.
+        if !test_script(manager, scripts, arguments) {
+            return None;
+        }
+        // A tool body is gated as that tool, and the tool's own gate includes
+        // being installed where the sink looks. Without that check a
+        // `test:types` entry holding `tsc --noEmit` would take the package
+        // route with no local TypeScript, and the sink would fail the run
+        // that the generic route would have put to the user instead.
+        if let Some((tool, tool_arguments)) =
+            crate::contained_package_test::script_tool_body(manager, arguments, Some(scripts))
+        {
+            let (_, entries, _) =
+                crate::contained_node_tool::supported_tool(&tool, &tool_arguments)?;
+            return tool_entry_installed(entries, &directory, &workspace).then_some(PACKAGE_TEST);
+        }
+        return Some(PACKAGE_TEST);
     }
-    tool_script(scripts?, task?, &directory, &workspace)
+    let (task, tail) = task?;
+    tool_script(scripts, task, tail, &directory, &workspace)
 }
 
 #[cfg(unix)]
@@ -260,7 +285,7 @@ fn build_output_allowed(arguments: &[String], roots: Option<(&Path, &Path)>) -> 
         // literal output. A config that names an output the sink cannot
         // verify must not take the narrow receipt.
         return roots.is_none_or(|(directory, workspace)| {
-            package_script_vite::vite_config_output_is_verifiable(directory, workspace)
+            crate::vite_output::config_output_is_verifiable(directory, workspace)
         });
     };
     let output = Path::new(output);
@@ -334,59 +359,10 @@ fn nearest(directory: &Path, workspace: &Path, relative: &str) -> PathBuf {
 }
 
 #[cfg(unix)]
-/// Python truthiness of a manifest value.
-fn truthy(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(value)) => *value,
-        Some(Value::Number(value)) => value.as_f64().is_some_and(|value| value != 0.0),
-        Some(Value::String(value)) => !value.is_empty(),
-        Some(Value::Array(value)) => !value.is_empty(),
-        Some(Value::Object(value)) => !value.is_empty(),
-    }
-}
-
-#[cfg(unix)]
-fn lifecycle(scripts: &Map<String, Value>, task: &str) -> bool {
-    ["pre", "post"]
-        .iter()
-        .any(|phase| truthy(scripts.get(&format!("{phase}{task}"))))
-}
-
-#[cfg(unix)]
-/// `resolve_package_test`: an explicit `--` before arguments, no lifecycle
-/// scripts, no shell expansion or effects, and `node --test` or `vitest run`.
-fn test_script(scripts: &Map<String, Value>, arguments: &[String]) -> bool {
-    let trailing = match arguments {
-        [test, rest @ ..] if test == "test" => rest,
-        [_, _, rest @ ..] => rest,
-        _ => return false,
-    };
-    if trailing.first().is_some_and(|word| word != "--") || lifecycle(scripts, "test") {
-        return false;
-    }
-    let Some(script) = scripts.get("test").and_then(Value::as_str) else {
-        return false;
-    };
-    if script.contains(['$', '`', '\n', '\r']) {
-        return false;
-    }
-    let Ok(tokens) = split_with(SCRIPT_LEXER, script) else {
-        return false;
-    };
-    if tokens
-        .iter()
-        .any(|token| !token.is_empty() && token.chars().all(|c| ";&|<>".contains(c)))
-    {
-        return false;
-    }
-    match tokens.as_slice() {
-        [runner, flag, ..] => {
-            (matches!(executable_basename(runner), "node" | "nodejs") && flag == "--test")
-                || (runner == "vitest" && flag == "run")
-        }
-        _ => false,
-    }
+/// `resolve_package_test`: the sink's own reading of the declared script, so
+/// the route offers the narrow receipt only for a run the sink will resolve.
+fn test_script(manager: &str, scripts: &Map<String, Value>, arguments: &[String]) -> bool {
+    crate::contained_package_test::script_tokens(manager, arguments, Some(scripts)).is_ok()
 }
 
 #[cfg(unix)]
@@ -396,6 +372,7 @@ fn test_script(scripts: &Map<String, Value>, arguments: &[String]) -> bool {
 fn tool_script(
     scripts: &Map<String, Value>,
     task: &str,
+    tail: &[String],
     directory: &Path,
     workspace: &Path,
 ) -> Option<&'static str> {
@@ -403,47 +380,36 @@ fn tool_script(
         return None;
     }
     let tokens = split_with(PLAIN_LEXER, scripts.get(task)?.as_str()?).ok()?;
-    let (tool, arguments) = tokens.split_first()?;
-    let (entries, reason): (&[&str], &'static str) = match tool.as_str() {
-        "eslint" => (&["eslint/bin/eslint.js"], NODE_TOOL),
-        "tsc" if arguments.iter().any(|word| word == "--noEmit") => {
-            (&["typescript/bin/tsc"], NODE_TOOL)
-        }
-        // Prettier publishes one entrypoint per major, and only a checking
-        // mode reports instead of rewriting the files it visits.
-        "prettier" if super::prettier_checks(arguments) => (&super::PRETTIER_ENTRIES, NODE_TOOL),
-        "vite" if arguments.first().is_some_and(|word| word == "build") => {
-            (&["vite/bin/vite.js"], NODE_BUILD)
-        }
-        _ => return None,
-    };
-    if reason == NODE_BUILD && !build_output_allowed(arguments, Some((directory, workspace))) {
+    let (tool, body) = tokens.split_first()?;
+    // The words after `--` are the run's own arguments, so the tool is gated
+    // holding them: an `--outDir` or a redirection arriving that way is read
+    // here rather than reaching the sink unseen.
+    if !crate::contained_node_tool::passed_tail_reports_only(tool, tail) {
         return None;
     }
-    if arguments.iter().any(|word| {
-        matches!(
-            word.as_str(),
-            ";" | "&&"
-                | "||"
-                | "|"
-                | "|&"
-                | "&"
-                | "--fix"
-                | "--fix-dry-run"
-                | "--output-file"
-                | "-o"
-                | "--emitDeclarationOnly"
-                | "--write"
-                | "-w"
-        ) || word.starts_with("--fix=")
-            || word.starts_with("--output-file=")
-            || word.starts_with("--write=")
-    }) {
+    let passed = [body, tail].concat();
+    let arguments = passed.as_slice();
+    let (_, entries, mode) = crate::contained_node_tool::supported_tool(tool, arguments)?;
+    let build = mode == crate::contained_node_tool::ToolMode::Build;
+    let reason = if build { NODE_BUILD } else { NODE_TOOL };
+    if build && !build_output_allowed(arguments, Some((directory, workspace))) {
         return None;
     }
-    // A tool that publishes one entrypoint per major is installed under
-    // whichever spelling its version uses, and the sink resolves the same set.
-    let installed = entries.iter().any(|entry| {
+    if crate::contained_node_tool::writes_or_chains(arguments) {
+        return None;
+    }
+    tool_entry_installed(entries, directory, workspace).then_some(reason)
+}
+
+#[cfg(unix)]
+/// Whether the tool is installed where the sink resolves it.
+///
+/// A tool that publishes one entrypoint per major is installed under
+/// whichever spelling its version uses, and the sink resolves the same set.
+/// A receipt issued for a tool that is not there names a run the sink cannot
+/// make, so the command belongs on the generic route instead.
+fn tool_entry_installed(entries: &[&str], directory: &Path, workspace: &Path) -> bool {
+    entries.iter().any(|entry| {
         let relative = format!("node_modules/{entry}");
         let modules = nearest(directory, workspace, &relative).join("node_modules");
         // `node_modules` may be a link to another directory in the workspace.
@@ -454,6 +420,5 @@ fn tool_script(
         };
         std::fs::canonicalize(modules.join(entry))
             .is_ok_and(|resolved| resolved.is_file() && resolved.starts_with(&modules))
-    });
-    installed.then_some(reason)
+    })
 }

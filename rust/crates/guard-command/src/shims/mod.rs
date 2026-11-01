@@ -21,10 +21,14 @@ mod manifest;
 mod path_order;
 mod probe;
 mod profile;
+mod profile_block;
 mod pyfs;
 mod pyfs_nt;
 mod status;
 mod template;
+mod tool_dirs;
+#[cfg(all(test, unix))]
+mod tool_dirs_tests;
 mod values;
 mod winpath;
 
@@ -37,10 +41,8 @@ pub use audit::record_package_shim_audit_result;
 pub use digest_binding_sink::package_shim_digest_binding_sink;
 pub use path_order::get_path_order_status;
 pub use probe::{probe_package_shim_intercepts, ProbeOptions};
-pub use profile::{
-    ensure_package_shim_path_in_shell_profile, remove_guard_profile_blocks,
-    strip_managed_marker_blocks,
-};
+pub use profile::{ensure_package_shim_path_in_shell_profile, remove_guard_profile_blocks};
+pub use profile_block::{guard_shim_profile_content, strip_managed_marker_blocks};
 pub use status::{
     package_shim_cloud_coverage, package_shim_dashboard_status, package_shim_protection,
     package_shim_protection_from_status, package_shim_status,

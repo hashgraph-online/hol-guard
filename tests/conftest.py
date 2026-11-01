@@ -4,8 +4,9 @@ import json
 import os
 import sys
 import threading
+import time
 from collections.abc import Callable, Iterator
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from hashlib import sha256
 from pathlib import Path
 
@@ -14,13 +15,13 @@ import pytest
 from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 from tests.home_isolation import isolate_user_home
+from tests.outbound_network_guard import outbound_network_attempts
 
 # Before any Guard module computes a default home or a test spawns a helper.
 isolate_user_home()
 
 pytest_plugins = [
     "tests.bundle_first_cloud",
-    "tests.command_control_binding_memo_fixtures",
     "tests.approval_mode_fixtures",
     "tests.approval_reuse_fixtures",
     "tests.containment_resident",
@@ -59,6 +60,26 @@ if pythonpath_prefix:
 os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
 os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
+# Fixtures carry production Guard Cloud URLs and tokens that are not valid
+# there, so no test may reach a public host. Inside this process the socket
+# guard below refuses it; a fake that stands in for the transport never opens a
+# socket and is unaffected. The flag carries the rule to supply-chain egress in
+# helpers a test spawns, and to archive fetches the native runtime makes, which
+# no Python socket guard can see. Tests that need Cloud answers serve them from loopback.
+os.environ["HOL_GUARD_TEST_LOOPBACK_EGRESS_ONLY"] = "1"
+
+_session_network_guard = ExitStack()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    # Session-wide rather than per test: background threads a test leaves
+    # running are still covered after its own fixtures are torn down.
+    _session_network_guard.enter_context(outbound_network_attempts())
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    _session_network_guard.close()
+
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
@@ -80,6 +101,10 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
     monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     monkeypatch.setenv("HOL_GUARD_RESIDENT_TEST_SEAMS", "1")
+    # Catalog sync ships on. Tests that exercise it opt in explicitly, so the
+    # rest keep a runtime session without catalog posture.
+    if "GUARD_EXTENSION_CATALOG_SYNC_V1" not in os.environ:
+        monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "false")
     if "HOL_GUARD_NATIVE" not in os.environ:
         regression = os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1"
         monkeypatch.setenv("HOL_GUARD_NATIVE", "force" if regression else "auto")
@@ -106,11 +131,22 @@ def _checkout_runtime_judges_distribution(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.fixture(autouse=True)
+def _no_fleet_runtime_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep receipt-sync tests off the real runtime probe; its own tests stub ``_observe``."""
+    from codex_plugin_scanner.guard.runtime import fleet_posture_runtimes
+
+    def unavailable(_context: object, _now: object) -> None:
+        raise RuntimeError("runtime probe disabled in tests")
+
+    monkeypatch.setattr(fleet_posture_runtimes, "_observe", unavailable)
+
+
+@pytest.fixture(autouse=True)
 def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep reused native answers from crossing tests that stub native replies."""
-    from codex_plugin_scanner.guard.catalog_delivery import active_security, installed_bundle, object_native
+    from codex_plugin_scanner.guard.catalog_delivery import installed_bundle, object_native
 
-    for module in (active_security, installed_bundle, object_native):
+    for module in (installed_bundle, object_native):
         monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
 
 
@@ -165,15 +201,50 @@ def _fetch_pi_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.Mo
 
 
 @pytest.fixture(autouse=True)
-def _python_mcp_proxy_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
+def _python_mcp_proxy_launcher(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """Install MCP proxies with the Python launcher argv unless a test opts in.
 
-    Most install and refresh tests pin the Python proxy entry. Relay tests
-    select the native relay by setting or clearing ``HOL_GUARD_MCP_RELAY``.
+    Most install and refresh tests pin the Python proxy entry. Tests marked
+    ``native_mcp_relay`` keep the native relay selection.
     """
 
-    # Subprocess installers copy os.environ, so the pin is an environment value.
-    monkeypatch.setenv("HOL_GUARD_MCP_RELAY", "python")
+    if request.node.get_closest_marker("native_mcp_relay") is not None:
+        return
+    from codex_plugin_scanner.guard.adapters import mcp_relay_native
+
+    monkeypatch.setattr(mcp_relay_native, "native_mcp_relay", lambda guard_home=None: None)
+
+
+_session_daemon_runtime_fingerprint: list[tuple[str, str]] = []
+_daemon_runtime_fingerprint_attempts: list[None] = []
+
+
+@pytest.fixture(autouse=True)
+def _pinned_daemon_runtime_fingerprint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer the daemon runtime identity from one measurement per session.
+
+    The runtime measures it with a native call, which a test that fakes
+    ``subprocess.Popen`` would intercept. The measurement runs before the
+    test's own fakes and is retried by the next few tests when a loaded
+    runner times it out: a stand-in digest would never match the identity a
+    real daemon child measures, so a failed measurement leaves the memo for
+    the daemon code to fill. Tests of the measurement reset the memo
+    themselves.
+    """
+    from codex_plugin_scanner.guard.daemon import manager
+
+    if not _session_daemon_runtime_fingerprint:
+        if len(_daemon_runtime_fingerprint_attempts) >= 3:
+            return
+        _daemon_runtime_fingerprint_attempts.append(None)
+        # Measured without the cache file, which lives under the real home.
+        source_root = Path(manager._current_guard_daemon_source_root())
+        try:
+            _tree_sig, fingerprint, _reused = manager._measure_runtime_fingerprint(source_root, None)
+        except RuntimeError:
+            return
+        _session_daemon_runtime_fingerprint.append(("session", fingerprint))
+    monkeypatch.setattr(manager, "_runtime_fingerprint_cache", _session_daemon_runtime_fingerprint[0])
 
 
 @pytest.fixture(autouse=True)
@@ -322,6 +393,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         raise pytest.UsageError(f"Protected test invariants are missing from collection: {details}")
 
 
+_DAEMON_HOME_MARKERS = frozenset({"daemon-state.json", "daemon-wake-reservation.json"})
+
+
 def _test_guard_homes_with_daemon_state(root: Path) -> set[Path]:
     guard_homes: set[Path] = set()
     pending = [root]
@@ -333,7 +407,7 @@ def _test_guard_homes_with_daemon_state(root: Path) -> set[Path]:
                     try:
                         if entry.is_dir(follow_symlinks=False):
                             pending.append(Path(entry.path))
-                        elif entry.is_file(follow_symlinks=False) and entry.name == "daemon-state.json":
+                        elif entry.is_file(follow_symlinks=False) and entry.name in _DAEMON_HOME_MARKERS:
                             guard_homes.add(Path(entry.path).parent)
                     except OSError:
                         continue
@@ -351,29 +425,90 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
     if not isinstance(test_tmp_path, Path):
         return
 
-    from codex_plugin_scanner.guard.daemon.manager import retire_all_guard_daemons_for_home
+    from codex_plugin_scanner.guard.daemon.manager import (
+        guard_daemon_retirement_is_complete,
+        retire_all_guard_daemons_for_home,
+    )
     from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 
     # The per-test native mode is already undone here; the lifecycle decisions
     # that identify the daemons to retire need the same compiled authority.
     guard_homes = sorted(_test_guard_homes_with_daemon_state(test_tmp_path))
+    deadline = time.monotonic() + _DAEMON_WAKE_SETTLE_SECONDS
+    woken_homes = _wait_for_detached_daemon_wakes(guard_homes, deadline)
+    retirement = _DaemonRetirement(
+        retire_all_guard_daemons_for_home,
+        guard_daemon_retirement_is_complete,
+        NativeDaemonLifecycleError,
+        woken_homes,
+        deadline,
+    )
     if guard_homes and "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
         os.environ["HOL_GUARD_NATIVE"] = "force"
         os.environ["HOL_GUARD_TEST_MODE"] = "1"
         try:
-            _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+            retirement.run(guard_homes)
         finally:
             os.environ.pop("HOL_GUARD_NATIVE", None)
             os.environ.pop("HOL_GUARD_TEST_MODE", None)
         return
-    _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+    retirement.run(guard_homes)
 
 
-def _retire_homes(guard_homes: list[Path], retire: Callable[[Path], object], unavailable: type[Exception]) -> None:
-    for guard_home in guard_homes:
+# A hook that finds no live daemon reserves a detached `guard daemon ensure`
+# and returns at once. That launch can finish after the test does, so
+# retirement waits for the reservation to clear and then retries until no
+# daemon, pending launch or process remains for that home.
+_DAEMON_WAKE_SETTLE_SECONDS = 15.0
+
+
+def _wait_for_detached_daemon_wakes(guard_homes: list[Path], deadline: float) -> frozenset[Path]:
+    woken = frozenset(guard_home for guard_home in guard_homes if _daemon_wake_reserved(guard_home))
+    waking = list(woken)
+    while waking and time.monotonic() < deadline:
+        time.sleep(0.1)
+        waking = [guard_home for guard_home in waking if _daemon_wake_reserved(guard_home)]
+    return woken
+
+
+def _daemon_wake_reserved(guard_home: Path) -> bool:
+    try:
+        reservation = json.loads((guard_home / "daemon-wake-reservation.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(reservation, dict) and bool(reservation.get("token"))
+
+
+class _DaemonRetirement:
+    def __init__(
+        self,
+        retire: Callable[[Path], object],
+        is_complete: Callable[[Path], bool],
+        unavailable: type[Exception],
+        woken_homes: frozenset[Path],
+        deadline: float,
+    ) -> None:
+        self._retire = retire
+        self._is_complete = is_complete
+        self._unavailable = unavailable
+        self._woken_homes = woken_homes
+        self._deadline = deadline
+
+    def run(self, guard_homes: list[Path]) -> None:
+        for guard_home in guard_homes:
+            self._retire_home(guard_home)
+
+    def _retire_home(self, guard_home: Path) -> None:
         # Best-effort cleanup: an unavailable native authority must not mask the test result.
-        with suppress(unavailable):
-            retire(guard_home)
+        with suppress(self._unavailable):
+            self._retire(guard_home)
+            # Only a home a detached wake touched is retried: fixture state
+            # files with made-up pids never read as retired.
+            while guard_home in self._woken_homes and not self._is_complete(guard_home):
+                if time.monotonic() >= self._deadline:
+                    return
+                time.sleep(0.2)
+                self._retire(guard_home)
 
 
 @pytest.fixture(autouse=True)
@@ -404,6 +539,30 @@ def _isolate_lifecycle_authority_home(
 
 
 @pytest.fixture(autouse=True)
+def _isolate_hook_cli_loader_search_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the runner's loader search paths out of `hol-guard hook` reviews.
+
+    The hook CLI stamps the caller's environment like a bridge does. CI's Python
+    exports LD_LIBRARY_PATH, which the native review rightly treats as a loader
+    override, so hook tests would answer for the runner rather than the fixture.
+    Child processes still inherit the variable.
+    """
+    from codex_plugin_scanner.guard.cli import commands_hook_native_authority as hook_authority
+    from codex_plugin_scanner.guard.hook_execution_environment import LIBRARY_SEARCH_PATH_NAMES
+
+    collect = hook_authority.collect_hook_execution_environment
+
+    def collect_without_runner_loader_paths() -> dict[str, object]:
+        stamped = collect()
+        names = stamped.get("environment_names")
+        if isinstance(names, list):
+            stamped["environment_names"] = [name for name in names if name not in LIBRARY_SEARCH_PATH_NAMES]
+        return {**stamped, "library_search_paths": {}}
+
+    monkeypatch.setattr(hook_authority, "collect_hook_execution_environment", collect_without_runner_loader_paths)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_trust_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear trust attestation env vars so tests don't inherit the developer's shell config."""
     for key in (
@@ -427,6 +586,7 @@ def _isolate_daemon_background_refresh_workers(
         "daemon_aibom_refresh": "_start_aibom_inventory_refresh",
         "daemon_bundle_refresh": "_start_supply_chain_bundle_refresh",
         "daemon_headless_refresh": "_start_headless_cloud_sync",
+        "daemon_plugin_telemetry": "_start_plugin_telemetry",
     }
     for marker, method_name in worker_markers.items():
         if request.node.get_closest_marker(marker) is None:

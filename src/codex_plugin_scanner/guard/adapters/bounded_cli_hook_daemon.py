@@ -7,23 +7,24 @@ import sqlite3
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ..action_lattice import is_guard_action
-from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..daemon.auth_token import load_guard_daemon_auth_token as _read_daemon_auth_token
-from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
-from ._modules.zcode.zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
-from .bounded_cli_hook_envelope import _canonical_event_token, _event_name, _json_object
-from .bounded_cli_hook_failure import grok_observe_event
+from .bounded_cli_hook_envelope import _event_name, _json_object
+from .bounded_cli_hook_failure import failure_payload, grok_observe_event
 from .bounded_hook_http import post_hook_json, prepare_grok_prompt
 
 _MAX_HOOK_RESPONSE_BYTES = 1_000_000
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DAEMON_TIMEOUT_BUDGET_SECONDS = 5.0
+# The approval wait and the render share one hook budget. The render now goes
+# to the resident, so the wait stops this far short of the deadline and leaves
+# it room to answer; spending the last second waiting would turn a granted
+# approval into a fail-closed refusal.
+_RENDER_RESERVE_SECONDS = 2
 
 
 def _assert_loopback_http_url(url: str) -> None:
@@ -58,6 +59,15 @@ def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:
     )
     if raw_state is None:
         return None
+    origin = daemon_state_origin(raw_state)
+    return None if origin is None else f"{origin}/v1/hooks/{harness}"
+
+
+def daemon_state_origin(raw_state: str) -> str | None:
+    """The loopback origin a published daemon state names, or None.
+
+    A cleared (``{}``) or malformed state names no daemon.
+    """
     try:
         state = json.loads(raw_state)
     except json.JSONDecodeError:
@@ -75,251 +85,66 @@ def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:
     ):
         return None
     rendered_host = f"[{host}]" if host == "::1" else host
-    return f"http://{rendered_host}:{port}/v1/hooks/{harness}"
+    return f"http://{rendered_host}:{port}"
 
 
-def _native_hook_permission_decision(policy_action: str) -> str | None:
-    if policy_action in {"allow", "warn"}:
-        return "allow"
-    if policy_action in {"review", "require-reapproval", "sandbox-required"}:
-        return "ask"
-    if policy_action == "block":
-        return "deny"
-    return None
-
-
-def _zcode_envelope_decision(policy_action: str) -> str | None:
-    """ZCode envelope decisions aligned with the zcode exit policy.
-
-    ``sandbox-required`` keeps the blocking exit for zcode, so its envelope
-    must say ``deny``; ``ask`` paired with exit 2 would be discarded by zcode
-    and mislead any consumer that reads the JSON.
-    """
-
-    decision = _native_hook_permission_decision(policy_action)
-    if decision == "ask" and policy_action == "sandbox-required":
-        return "deny"
-    return decision
-
-
-def _policy_action_from_daemon(daemon_response: Mapping[str, object], *, event_name: str) -> str:
-    raw_policy_action = daemon_response.get("policy_action")
-    if isinstance(raw_policy_action, str) and is_guard_action(raw_policy_action.strip()):
-        return raw_policy_action.strip()
-    reason_code = str(daemon_response.get("reason_code") or "")
-    if not hook_event_pauses_when_unavailable(event_name) and hook_reason_continues_session(reason_code):
-        return "warn"
-    return "block"
-
-
-def _should_exit_block(harness: str, event_name: str, policy_action: str) -> bool:
-    canonical = harness.strip().lower().replace("_", "-")
-    compact = event_name.replace("_", "").replace("-", "").lower()
-    blocking_events = {"pretooluse", "userpromptsubmit", "pretoolcall"}
-    if canonical == "devin":
-        blocking_events.add("permissionrequest")
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and compact in blocking_events:
-        if canonical == "zcode":
-            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
-        return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    return False
-
-
-def _consistent_native_response(
-    daemon_response: dict[str, object],
+def _rendered_bridge_answer(
+    parsed: dict[str, object],
     *,
     harness: str,
     event_name: str,
-) -> tuple[dict[str, object], str]:
-    """Align recognized native decisions without weakening review semantics."""
-
-    response = dict(daemon_response)
-    gating_event = event_name.replace("_", "").replace("-", "").lower() in {
-        "permissionrequest",
-        "pretoolcall",
-        "pretooluse",
-        "userpromptsubmit",
-    }
-    raw_policy = response.get("policy_action")
-    policy_action = raw_policy.strip() if isinstance(raw_policy, str) and is_guard_action(raw_policy.strip()) else None
-    if gating_event and "policy_action" in response and policy_action is None:
-        policy_action = "block"
-        response["policy_action"] = policy_action
-    explicit_restrictive_policy = policy_action in {
-        "block",
-        "require-reapproval",
-        "review",
-        "sandbox-required",
-    }
-    raw_top = response.get("decision")
-    top = raw_top.strip().lower() if isinstance(raw_top, str) else None
-    if top not in {"allow", "ask", "deny", "block"}:
-        top = None
-    if gating_event and "decision" in response and top is None:
-        top = "deny"
-        response["decision"] = top
-    raw_hook_specific = response.get("hookSpecificOutput")
-    hook_specific = dict(raw_hook_specific) if isinstance(raw_hook_specific, dict) else None
-    raw_nested = hook_specific.get("permissionDecision") if hook_specific is not None else None
-    nested = raw_nested.strip().lower() if isinstance(raw_nested, str) else None
-    if nested not in {"allow", "ask", "deny", "block"}:
-        nested = None
-    if gating_event and hook_specific is not None and "permissionDecision" in hook_specific and nested is None:
-        nested = "deny"
-        hook_specific["permissionDecision"] = nested
-
-    compact_event = event_name.replace("_", "").replace("-", "").lower()
-    canonical_harness = harness.strip().lower().replace("_", "-")
-    if explicit_restrictive_policy and compact_event == "userpromptsubmit" and top is None:
-        top = "block"
-        response["decision"] = top
-    elif explicit_restrictive_policy and compact_event in {"permissionrequest", "pretoolcall", "pretooluse"}:
-        if hook_specific is None and "hookSpecificOutput" in response:
-            hook_specific = {"hookEventName": event_name}
-        if hook_specific is not None and nested is None:
-            nested = "deny" if policy_action == "block" else "ask"
-            hook_specific["permissionDecision"] = nested
-        if canonical_harness in {"grok", "openclaw"} and top is None:
-            top = "deny"
-            response["decision"] = top
-
-    decisions = {decision for decision in (top, nested) if decision is not None}
-    has_deny = bool(decisions & {"deny", "block"})
-    has_ask = "ask" in decisions
-    if policy_action in {"allow", "warn"} and has_deny:
-        policy_action = "block"
-        response["policy_action"] = policy_action
-    elif policy_action in {"allow", "warn"} and has_ask:
-        policy_action = "review"
-        response["policy_action"] = policy_action
-
-    if policy_action == "block" or (policy_action is None and has_deny):
-        if top is not None:
-            response["decision"] = "block" if top == "block" else "deny"
-        if nested is not None and hook_specific is not None:
-            hook_specific["permissionDecision"] = "deny"
-    elif policy_action in {"review", "require-reapproval", "sandbox-required"} or (policy_action is None and has_ask):
-        if top is not None:
-            response["decision"] = "block" if top == "block" else "deny"
-        if nested == "allow" and hook_specific is not None:
-            hook_specific["permissionDecision"] = "ask"
-    elif policy_action in {"allow", "warn"}:
-        if top is not None:
-            response["decision"] = "allow"
-        if nested is not None and hook_specific is not None:
-            hook_specific["permissionDecision"] = "allow"
-
-    if hook_specific is not None:
-        response["hookSpecificOutput"] = hook_specific
-    if policy_action is not None:
-        return response, policy_action
-    if has_deny:
-        return response, "block"
-    if has_ask:
-        return response, "review"
-    return response, "allow"
-
-
-def _daemon_response_to_native(
-    daemon_response: dict[str, object],
-    *,
-    harness: str,
-    event_name: str,
+    guard_home: Path,
+    deadline: float,
 ) -> tuple[str, str, int]:
-    """Transform daemon policy data into harness-native output."""
-    event_name = _canonical_event_token(event_name) or event_name
-    canonical = harness.strip().lower().replace("_", "-")
-    if canonical == "grok" and not daemon_response:
-        from .grok_hooks import is_grok_observe_only_event
+    """What the harness reads for the daemon's answer, rendered by the resident.
 
-        if is_grok_observe_only_event(event_name) or event_name == "UserPromptSubmit":
-            return "{}", "", 0
+    A resident that cannot render it leaves the fixed fail-closed payload for
+    this harness and event, as an unreachable daemon would.
+    """
+    if harness.strip().lower().replace("_", "-") == "muse":
+        from .muse_hook_render import apply_muse_pretool_approval_wait, muse_bridge_response
 
-    if "hookSpecificOutput" in daemon_response or "decision" in daemon_response:
-        native_response, policy_action_for_exit = _consistent_native_response(
-            daemon_response,
-            harness=harness,
-            event_name=event_name,
-        )
-        hook_specific = native_response.get("hookSpecificOutput")
-        exit_code = 2 if _should_exit_block(harness, event_name, policy_action_for_exit) else 0
-        stderr = ""
-        if exit_code == 2 and canonical in {"kimi", "devin", "zcode"}:
-            reason = native_response.get("reason")
-            if (not isinstance(reason, str) or not reason) and isinstance(hook_specific, dict):
-                reason = hook_specific.get("permissionDecisionReason")
-            # ZCode prefers stderr over stdout when a hook exits 2; without it
-            # the raw JSON envelope becomes the user-facing block reason, so a
-            # missing reason falls back to a human-readable default.
-            if not isinstance(reason, str) or not reason:
-                reason = f"HOL Guard blocked this action ({policy_action_for_exit})"
-            stderr = zcode_authority_block_reason(reason) if canonical == "zcode" else reason
-        if exit_code == 2 and canonical == "devin":
-            native_response["decision"] = "block"
-            if not native_response.get("reason"):
-                native_response["reason"] = stderr or f"HOL Guard blocked this action ({policy_action_for_exit})"
-        stdout = json.dumps(native_response, ensure_ascii=True, separators=(",", ":"))
-        return stdout, stderr, exit_code
+        answer: dict[str, object] = dict(parsed)
+        try:
+            from ..config import load_guard_config
+            from ..store import GuardStore
 
-    policy_action = _policy_action_from_daemon(daemon_response, event_name=event_name)
-    reason = str(daemon_response.get("reason") or daemon_response.get("permission_decision_reason") or "")
-    payload: dict[str, object] = {}
-    if event_name == "UserPromptSubmit":
-        if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-            payload["decision"] = "block"
-            payload["reason"] = reason or f"HOL Guard blocked this action ({policy_action})"
-            if canonical == "codex":
-                payload["continue"] = False
-                payload["stopReason"] = payload["reason"]
-                payload["hookSpecificOutput"] = {
-                    "hookEventName": event_name,
-                    "additionalContext": payload["reason"],
-                }
-        elif canonical in {"claude-code", "codex"}:
-            payload["hookSpecificOutput"] = {"hookEventName": event_name}
-    else:
-        permission_decision = _native_hook_permission_decision(policy_action)
-        if canonical == "zcode":
-            permission_decision = _zcode_envelope_decision(policy_action)
-        if canonical == "codex" and event_name == "PreToolUse" and permission_decision is None:
-            return "", "", 0
-        hook_specific_output: dict[str, object] = {"hookEventName": event_name}
-        if permission_decision is not None:
-            hook_specific_output["permissionDecision"] = permission_decision
-            if permission_decision != "allow" or "unreachable" in reason.lower():
-                hook_specific_output["permissionDecisionReason"] = reason or f"HOL Guard {policy_action} this action"
-        payload["hookSpecificOutput"] = hook_specific_output
-        if canonical in {"grok", "openclaw"} and permission_decision is not None:
-            payload["decision"] = "allow" if permission_decision == "allow" else "deny"
-            payload["policy_action"] = policy_action
-            if permission_decision != "allow" and reason:
-                payload["reason"] = reason
-            for key in (
-                "reason_code",
-                "approval_url",
-                "approval_request_id",
-                "primary_approval_request_id",
-                "primary_approval_url",
-                "guardApprovalRequestId",
-                "guardApprovalUrl",
-                "approval_requests",
-            ):
-                value = daemon_response.get(key)
-                # A default-mode connector setup reason carries no approval link.
-                if value is not None and (key == "reason_code" or not is_unlinked_connector_setup_reason(reason)):
-                    payload[key] = value
+            remaining = max(0, int(deadline - time.monotonic()) - _RENDER_RESERVE_SECONDS)
+            configured = load_guard_config(guard_home).approval_wait_timeout_seconds
+            wait_seconds = min(configured, remaining)
+            if wait_seconds > 0:
+                answer = apply_muse_pretool_approval_wait(
+                    answer,
+                    event_name=event_name,
+                    store=GuardStore(guard_home),
+                    timeout_seconds=wait_seconds,
+                )
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, sqlite3.Error):
+            answer = dict(parsed)
+        return muse_bridge_response(answer, event_name=event_name, guard_home=guard_home, deadline=deadline)
+    from ..native_hook_render import native_cli_hook_emit
 
-    exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0
-    if canonical == "devin" and exit_code == 2:
-        payload["decision"] = "block"
-        if not payload.get("reason"):
-            payload["reason"] = reason or f"HOL Guard blocked this action ({policy_action})"
-    stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-    if exit_code == 2 and canonical == "zcode":
-        stderr = zcode_authority_block_reason(reason or f"HOL Guard blocked this action ({policy_action})")
-    else:
-        stderr = reason if exit_code == 2 and canonical in {"kimi", "devin"} else ""
-    return stdout, stderr, exit_code
+    rendered = native_cli_hook_emit(
+        harness, parsed, event_name=event_name, guard_home=guard_home, deadline=deadline, bridge=True
+    )
+    if rendered is not None:
+        stdout = rendered.get("stdout")
+        stderr = rendered.get("stderr")
+        exit_code = rendered.get("exit_code")
+        if (
+            isinstance(stdout, str)
+            and isinstance(stderr, str)
+            and isinstance(exit_code, int)
+            and not isinstance(exit_code, bool)
+        ):
+            return stdout, stderr, exit_code
+    payload, exit_code = failure_payload(
+        harness=harness,
+        event_name=event_name,
+        reason="HOL Guard could not read the daemon's answer to this hook.",
+        recording_only=False,
+    )
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":")), "", exit_code
 
 
 def _apply_grok_bridge_approval_wait(
@@ -434,7 +259,13 @@ def try_daemon_hook(
 
         # Render within what is left of the hook's own budget, not a fresh timeout.
         return hermes_bridge_response(parsed, event_name=event_name, guard_home=guard_home, deadline=deadline)
-    return _daemon_response_to_native(parsed, harness=harness, event_name=event_name)
+    return _rendered_bridge_answer(
+        parsed,
+        harness=harness.strip().lower().replace("_", "-"),
+        event_name=event_name,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
 
 
-__all__ = ["try_daemon_hook"]
+__all__ = ["daemon_state_origin", "try_daemon_hook"]

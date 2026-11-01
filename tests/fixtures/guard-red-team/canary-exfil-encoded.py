@@ -3,7 +3,7 @@ HOL Guard encoded canary exfil fixture — T605.
 
 This script uses base64 encoding to test HOL Guard's encoded-execution detector.
 All credentials are fake sentinel values. The endpoint is a canary domain
-controlled by Hashgraph Online for testing purposes only.
+controlled by HOL for testing purposes only.
 """
 
 import base64

@@ -1,4 +1,4 @@
-"""Exact native reuse must retain formatting, source verification and both binaries."""
+"""Exact native reuse must retain source verification and both binaries."""
 
 from __future__ import annotations
 
@@ -58,16 +58,30 @@ def test_linux_cache_skips_only_compilation_and_always_verifies_current_sources(
         }:
             assert step["if"] == MISS
     stage = next(step for step in steps if step.get("name") == "Stage native build trust bindings")
-    formatting = next(step for step in steps if step.get("name") == "Check native formatting before compilation")
     binaries = next(step for step in steps if step.get("name") == "Require both executable native evaluators")
     verify = next(
         step for step in steps if step.get("name") == "Verify generated native command catalogs before pytest fan-out"
     )
-    assert all("if" not in step for step in (stage, formatting, binaries, verify))
-    assert steps.index(stage) < steps.index(restore) < steps.index(formatting) < steps.index(binaries)
+    assert all("if" not in step for step in (stage, binaries, verify))
+    assert steps.index(stage) < steps.index(restore) < steps.index(binaries)
     assert steps.index(binaries) < steps.index(verify) < steps.index(save)
-    assert 'rustup toolchain install "$toolchain" --profile minimal --component rustfmt' in formatting["run"]
+    # Required workspace validation owns formatting; a warm producer need not
+    # install a toolchain solely to recheck it before artifact fan-out.
+    assert all("cargo" not in step.get("run", "") or " fmt " not in step["run"] for step in steps)
+    assert all("rustfmt" not in str(step) for step in steps)
     assert "verify_native_command_program.py" in verify["run"]
+    build = next(step for step in steps if step.get("name") == "Build native command evaluators once for pytest shards")
+    timings = next(step for step in steps if step.get("name") == "Retain native compilation timings")
+    assert build["run"].splitlines()[0].endswith(" --timings")
+    assert timings["if"] == f"always() && {MISS}"
+    assert timings["with"] == {
+        "name": "native-compilation-timings-linux",
+        "path": "rust/target/cargo-timings/cargo-timing.html",
+        "if-no-files-found": "ignore",
+        "retention-days": 1,
+        "overwrite": True,
+    }
+    assert steps.index(build) < steps.index(binaries) < steps.index(verify) < steps.index(timings)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="The Linux cache preflight uses executable mode bits")
@@ -104,6 +118,30 @@ def test_platform_cache_tracks_compiler_inputs_not_unrelated_workflow_edits(plat
         assert required in key
     assert ".github/workflows/ci.yml" not in key
     assert "restore-keys" not in restore["with"]
+
+    build = next(step for step in steps if step.get("name", "").startswith("Build the "))
+    upload = next(step for step in steps if step.get("name", "").startswith("Upload the "))
+    timings = next(step for step in steps if step.get("name") == "Retain native compilation timings")
+    miss = "steps.runtime-cache.outputs.cache-hit != 'true'"
+    command = (
+        "cargo build --manifest-path rust/Cargo.toml --locked --release "
+        "-p hol-guard-runtime --bin hol-guard-runtime --timings"
+    )
+    assert build["run"].splitlines()[-1] == command
+    assert build["if"] == miss
+    assert "if" not in upload  # Runtime delivery remains mandatory even on exact cache hits.
+    assert upload["with"]["if-no-files-found"] == "error"
+    assert not any(step.get("continue-on-error", False) for step in (build, upload, timings))
+    assert timings["if"] == f"always() && {miss}"
+    assert timings["uses"] == upload["uses"]
+    assert timings["with"] == {
+        "name": f"native-compilation-timings-{platform}",
+        "path": "rust/target/cargo-timings/cargo-timing.html",
+        "if-no-files-found": "ignore",
+        "retention-days": 1,
+        "overwrite": True,
+    }
+    assert steps.index(restore) < steps.index(build) < steps.index(upload) < steps.index(timings)
 
 
 def test_native_offline_previous_caches_pinned_artifacts_and_verifies_executables() -> None:
@@ -148,3 +186,24 @@ def test_native_offline_previous_caches_pinned_artifacts_and_verifies_executable
     assert save["if"] == PREVIOUS_WRITE
     assert save["with"]["key"] == "${{ steps.previous-cache.outputs.cache-primary-key }}"
     assert steps.index(identify) < steps.index(restore) < steps.index(build) < steps.index(require) < steps.index(save)
+
+
+def test_quality_action_lints_and_formats_offline_export_and_ci_cache_contracts() -> None:
+    steps = composite_action_steps("ci-job-quality")
+    required_paths = {
+        "src/",
+        "tests/test_guard_durable_io.py",
+        "tests/test_guard_managed_install_context.py",
+        "tests/test_guard_private_file_io.py",
+        "tests/test_native_offline_cache.py",
+        "tests/test_native_policy_test_support.py",
+        "tests/test_ci_native_evaluator_cache.py",
+    }
+    for name, invocation in (
+        ("Lint production sources", "python -m ruff check"),
+        ("Check formatting for production sources", "python -m ruff format --check"),
+    ):
+        step = next(step for step in steps if step.get("name") == name)
+        assert invocation in step["run"]
+        assert required_paths <= set(step["run"].replace("\\", "").split())
+        assert not step.get("continue-on-error", False)

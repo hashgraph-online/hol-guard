@@ -5,13 +5,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import platform
-import re
+import os
 import ssl
-import subprocess
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from typing import cast
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -19,7 +19,6 @@ from urllib3.poolmanager import ProxyManager
 
 from ...no_redirect import RejectRedirects
 from .contracts import ManagedNetworkPolicy
-from .network_credentials import read_proxy_credential_record
 from .network_trust import ManagedTrustError, build_default_ssl_context, build_managed_ssl_context
 from .network_urlopen import ManagedOpener, ManagedResponse, ManagedUrlOpener
 from .policy import load_managed_policy
@@ -40,7 +39,13 @@ _PUBLIC_REGISTRIES = frozenset(
         "goproxy.io",
     }
 )
-_MAX_PROXY_CREDENTIAL_BYTES = 16 * 1024
+_SYSTEM_PROXIES_FEATURE = "native-system-proxies-v1"
+_SYSTEM_PROXIES_TIMEOUT_SECONDS = 30.0
+_MAX_SYSTEM_PROXIES_OUTPUT_BYTES = 64 * 1024
+_PROXY_CREDENTIALS_FEATURE = "native-proxy-credentials-v1"
+_NATIVE_TIMEOUT_SECONDS = 30.0
+_MAX_NATIVE_OUTPUT_BYTES = 64 * 1024
+_SESSION_BUS_VARIABLES = ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "DISPLAY")
 
 
 class ManagedNetworkError(RuntimeError):
@@ -68,58 +73,58 @@ def resolved_network_policy(policy: ManagedNetworkPolicy | None) -> tuple[Manage
 
 
 def platform_system_proxies() -> dict[str, str]:
-    """Read OS proxy configuration without treating user environment as managed authority."""
+    """Read OS proxy configuration without treating user environment as managed authority.
 
-    system_name = platform.system()
-    if system_name == "Darwin":
-        try:
-            result = subprocess.run(
-                ["/usr/sbin/scutil", "--proxy"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return {}
-        values = dict(re.findall(r"^\s*([A-Za-z]+)\s*:\s*(.+?)\s*$", result.stdout, re.MULTILINE))
-        proxies: dict[str, str] = {}
-        for scheme, prefix in (("http", "HTTP"), ("https", "HTTPS")):
-            if values.get(f"{prefix}Enable") == "1" and values.get(f"{prefix}Proxy"):
-                port = values.get(f"{prefix}Port", "443" if scheme == "https" else "80")
-                proxies[scheme] = f"http://{values[f'{prefix}Proxy']}:{port}"
-        return proxies
-    if system_name == "Windows":
-        try:
-            import winreg
-        except ImportError:
-            return {}
-        server: object = None
-        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
-            try:
-                with winreg.OpenKey(
-                    hive,
-                    r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
-                ) as key:
-                    enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
-                    candidate, _ = winreg.QueryValueEx(key, "ProxyServer")
-            except OSError:
-                continue
-            if enabled and isinstance(candidate, str):
-                server = candidate
-                break
-        if not isinstance(server, str):
-            return {}
-        if "=" not in server:
-            return {"http": f"http://{server}", "https": f"http://{server}"}
-        return {
-            scheme: f"http://{address}"
-            for item in server.split(";")
-            if "=" in item
-            for scheme, address in [item.split("=", 1)]
-            if scheme in {"http", "https"} and address
-        }
-    return {}
+    An empty map means the OS has no proxy. A runtime that cannot answer raises instead,
+    so a managed system-proxy request is refused rather than sent direct.
+    """
+
+    from ..native_runtime import _run_native_process, native_runtime_status
+
+    deadline = time.monotonic() + _SYSTEM_PROXIES_TIMEOUT_SECONDS
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or _SYSTEM_PROXIES_FEATURE not in status.capabilities.features
+    ):
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
+    output = _run_native_process(
+        status.identity.path,
+        ("system-proxies", "--stdin"),
+        input_text=json.dumps({"schema": "system-proxies.v1"}),
+        timeout_seconds=remaining,
+        output_limit=_MAX_SYSTEM_PROXIES_OUTPUT_BYTES,
+    )
+    try:
+        answer = cast(object, json.loads(output)) if output is not None else None
+    except ValueError:
+        answer = None
+    payload = cast(dict[str, object], answer) if isinstance(answer, dict) else {}
+    proxies = payload.get("proxies")
+    if payload.get("ok") is not True or not isinstance(proxies, dict):
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
+    return {
+        scheme: proxy
+        for scheme, proxy in cast(dict[object, object], proxies).items()
+        if isinstance(scheme, str) and scheme in {"http", "https"} and isinstance(proxy, str)
+    }
+
+
+def available_system_proxies(*, managed: bool) -> dict[str, str]:
+    """Refuse a failed lookup under a managed policy; otherwise fall back to a direct connection."""
+
+    try:
+        return platform_system_proxies()
+    except ManagedNetworkError:
+        if managed:
+            raise
+        return {}
 
 
 def request_url(request: str | urllib.request.Request) -> str:
@@ -194,39 +199,65 @@ def proxy_map(policy: ManagedNetworkPolicy) -> dict[str, str]:
     return proxies
 
 
-def proxy_credential_key(proxy_url: str) -> str:
-    return hashlib.sha256(proxy_url.encode("utf-8")).hexdigest()
-
-
 def load_proxy_credentials(proxy_url: str) -> ProxyCredentials | None:
     """Load optional proxy auth from the native OS credential store without policy secrets."""
 
-    raw = read_proxy_credential_record(proxy_credential_key(proxy_url))
-    if raw is None:
+    answer = _native_proxy_credentials(proxy_url)
+    if answer is None:
         return None
-    if len(raw.encode("utf-8")) > _MAX_PROXY_CREDENTIAL_BYTES:
+    if answer.get("ok") is not True:
         raise ManagedNetworkError("managed_proxy_credentials_invalid")
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ManagedNetworkError("managed_proxy_credentials_invalid") from exc
-    if not isinstance(payload, dict) or set(payload) != {"username", "password"}:
+    credentials = answer.get("credentials")
+    if credentials is None:
+        return None
+    if not isinstance(credentials, dict):
         raise ManagedNetworkError("managed_proxy_credentials_invalid")
-    username = payload.get("username")
-    password = payload.get("password")
-    if (
-        not isinstance(username, str)
-        or not username
-        or ":" in username
-        or "\r" in username
-        or "\n" in username
-        or not isinstance(password, str)
-        or not password
-        or "\r" in password
-        or "\n" in password
-    ):
+    fields = cast(dict[str, object], credentials)
+    username, password = fields.get("username"), fields.get("password")
+    if not isinstance(username, str) or not username or not isinstance(password, str) or not password:
         raise ManagedNetworkError("managed_proxy_credentials_invalid")
     return ProxyCredentials(username=username, password=password)
+
+
+def _native_proxy_credentials(proxy_url: str) -> dict[str, object] | None:
+    """The runtime's answer for one proxy's stored credential, or ``None`` when it cannot answer."""
+
+    from ..codex_hook_launch_runtime import run_isolated_hook_process
+    from ..native_runtime import _isolated_environment, native_runtime_status
+
+    deadline = time.monotonic() + _NATIVE_TIMEOUT_SECONDS
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or _PROXY_CREDENTIALS_FEATURE not in status.capabilities.features
+    ):
+        return None
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None
+    # The Linux credential store is reached over the user's session bus, so
+    # the runtime keeps the variables that locate it on top of the usual
+    # isolated environment.
+    environment = _isolated_environment()
+    environment.update({name: os.environ[name] for name in _SESSION_BUS_VARIABLES if name in os.environ})
+    result = run_isolated_hook_process(
+        (str(status.identity.path), "proxy-credentials", "--stdin"),
+        input_text=json.dumps({"schema": "proxy-credentials.v1", "proxy_url": proxy_url}),
+        cwd=status.identity.path.parent,
+        environment=environment,
+        timeout_seconds=remaining,
+        output_limit=_MAX_NATIVE_OUTPUT_BYTES,
+    )
+    if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
+        return None
+    try:
+        answer = cast(object, json.loads(result.stdout))
+    except ValueError:
+        return None
+    return cast(dict[str, object], answer) if isinstance(answer, dict) else None
 
 
 def basic_proxy_authorization(credentials: ProxyCredentials) -> str:
@@ -257,8 +288,10 @@ def managed_opener(
     *,
     redirect_handler: urllib.request.HTTPRedirectHandler | None = None,
 ) -> ManagedOpener:
-    resolved = policy or active_network_policy()
-    proxies = proxy_map(resolved)
+    resolved, managed = resolved_network_policy(policy)
+    proxies = (
+        proxy_map(resolved) if managed or resolved.proxy_mode != "system" else available_system_proxies(managed=False)
+    )
     context = managed_ssl_context(resolved)
     direct_handlers: list[urllib.request.BaseHandler] = [
         urllib.request.ProxyHandler({}),
@@ -358,6 +391,28 @@ class _ManagedHTTPAdapter(HTTPAdapter):
         return headers
 
 
+class EncodedResponseRefusedError(ManagedNetworkError):
+    """A response arrived content-encoded and was closed before any decoder ran."""
+
+
+def refuse_encoded_response(response: requests.Response, *args: object, **kwargs: object) -> requests.Response:
+    # requests decodes gzip, deflate and, when their packages are present, br and
+    # zstd while reading the body. This hook runs before the body is read, so an
+    # encoded response never reaches a decoder, whatever the server ignored.
+    declared = response.headers.get("Content-Encoding")
+    if declared is not None and any(coding.strip().lower() not in {"", "identity"} for coding in declared.split(",")):
+        response.close()
+        raise EncodedResponseRefusedError("managed_response_content_encoding_refused")
+    return response
+
+
+def refuse_encoded_responses(session: requests.Session) -> requests.Session:
+    session.headers["Accept-Encoding"] = "identity"
+    # First, so a hook registered earlier never reads an encoded body before the refusal.
+    session.hooks["response"].insert(0, refuse_encoded_response)
+    return session
+
+
 def managed_requests_session(policy: ManagedNetworkPolicy | None = None) -> requests.Session:
     resolved, managed = resolved_network_policy(policy)
     proxies = proxy_map(resolved) if managed or resolved.proxy_mode != "system" else {}
@@ -378,13 +433,15 @@ def managed_requests_session(policy: ManagedNetworkPolicy | None = None) -> requ
     session.mount("http://", _ManagedHTTPAdapter(context, proxy_authorization, resolved))
     session.mount("https://", _ManagedHTTPAdapter(context, proxy_authorization, resolved))
     session.verify = True
-    return session
+    return refuse_encoded_responses(session)
 
 
 __all__ = [
+    "EncodedResponseRefusedError",
     "ManagedNetworkError",
     "ProxyCredentials",
     "active_network_policy",
+    "available_system_proxies",
     "basic_proxy_authorization",
     "load_proxy_credentials",
     "managed_opener",
@@ -394,6 +451,7 @@ __all__ = [
     "platform_system_proxies",
     "proxy_endpoint_hash",
     "proxy_map",
+    "refuse_encoded_responses",
     "resolved_network_policy",
     "selected_proxy_url",
     "validate_destination",

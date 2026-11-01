@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.native_probe_receipts import receipt_corpus_is_complete, wait_for_receipt_corpus, wait_for_route_corpus
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 
 def test_receipt_corpus_complete_requires_processed_count() -> None:
@@ -63,7 +65,7 @@ def test_wait_for_receipt_corpus_polls_until_processed() -> None:
 
 
 def test_installed_corpus_waits_before_mode_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from ci.native_runtime import probe_native_default_auto as probe
+    from scripts import native_installed_hook_corpus as probe
 
     events: list[str] = []
 
@@ -120,6 +122,20 @@ def test_installed_corpus_waits_before_mode_changes(tmp_path: Path, monkeypatch:
     assert result["native_resident_decisions"] == 23
     assert result["route_count"] == 23
     assert events == ["started", "modes", "stopped"]
+
+
+def test_probe_loads_when_an_installed_dependency_owns_the_ci_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib.util
+    import sys
+    from types import ModuleType
+
+    monkeypatch.setitem(sys.modules, "ci", ModuleType("ci"))
+    source = Path(__file__).resolve().parents[1] / "ci/native_runtime/probe_native_default_auto.py"
+    spec = importlib.util.spec_from_file_location("isolated_installed_probe", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert callable(module._installed_hook_corpus)
 
 
 def test_wait_for_route_corpus_observes_completion_before_snapshot() -> None:
@@ -209,7 +225,7 @@ def test_probe_closes_scoped_clients_before_stopping_resident(
     def stop_resident(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         assert events == [("close", guard_home)]
         assert command == (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime"))
-        assert kwargs == {"check": False, "capture_output": True, "timeout": 2}
+        assert kwargs == {"check": False, "capture_output": True, "timeout": RESIDENT_STOP_TIMEOUT_SECONDS}
         events.append(("stop", guard_home))
         if outcome == "timeout":
             raise subprocess.TimeoutExpired(command, timeout=2)
@@ -311,7 +327,7 @@ def test_probe_retries_supervisor_join_after_authenticated_stop(
 
     def stop_resident(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         stops.append(command)
-        assert kwargs == {"check": False, "capture_output": True, "timeout": 2}
+        assert kwargs == {"check": False, "capture_output": True, "timeout": RESIDENT_STOP_TIMEOUT_SECONDS}
         return subprocess.CompletedProcess(command, returncode=0)
 
     monkeypatch.setattr(probe, "close_native_residents", close_supervisor)
@@ -356,3 +372,32 @@ def test_stop_native_process_accepts_only_documented_idempotent_exit(
     )
 
     assert probe._stop_native_process(runtime, guard_home) is expected
+
+
+def test_probe_loads_from_a_script_under_scripts() -> None:
+    # The installed SLO benchmark runs as `python scripts/...` and loads this
+    # probe by path, so `scripts/` comes first on the search path and its own
+    # `ci` package shadows the top-level one.
+    root = Path(__file__).resolve().parents[1]
+    loader = (
+        "import importlib.util, sys\n"
+        "from pathlib import Path\n"
+        "root = Path(sys.argv[1])\n"
+        "sys.path.insert(0, str(root / 'scripts'))\n"
+        "sys.path.append(str(root))\n"
+        "spec = importlib.util.spec_from_file_location(\n"
+        "    'probe_under_scripts', root / 'ci/native_runtime/probe_native_default_auto.py'\n"
+        ")\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(module)\n"
+        "assert callable(module.review_post_tool_native)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", loader, str(root)],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

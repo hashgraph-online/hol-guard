@@ -8,8 +8,8 @@ import pytest
 from codex_plugin_scanner.guard.review_correlation import cloud_review_correlation_id
 from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery as delivery
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
-from codex_plugin_scanner.guard.store_review_event_outbox_writes import append_request_snapshot_event
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
+from tests.review_event_outbox_append_support import append_request_snapshot_event
 
 
 @pytest.mark.parametrize(
@@ -173,7 +173,10 @@ def test_rejected_retry_refresh_is_recovered_only_with_canonical_server_identity
     assert store.get_sync_payload("guard_exact_cloud_review_capability") is None
     outbox = result["outbox"]
     assert isinstance(outbox, dict)
-    assert outbox["depth"] == (0 if canonical_identity_confirmed else 1)
+    assert outbox["depth"] == 0
+    # Cloud stored the mismatch as a permanent quarantine: the event is kept
+    # locally for diagnostics instead of being re-sent.
+    assert outbox["quarantined_depth"] == (0 if canonical_identity_confirmed else 1)
 
 
 @pytest.mark.parametrize("status", ["accepted", "duplicate", "stale"])

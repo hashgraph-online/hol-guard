@@ -9,7 +9,7 @@ import {
   parseDiscoveryProjection,
   sponsoredCardLabel,
   featuredWindowLabel,
-  orderFeaturedFirst,
+  orderCatalogRows,
   inFeedSlotIndexes,
   type DiscoveryPlacement,
 } from "./extensions-discover-model";
@@ -167,15 +167,32 @@ assert.equal(sponsoredCardLabel(true), "Sponsored · Featured");
   assert.ok(markup.includes("Featured"));
 }
 
-// Only a time-window feature names its end; featured rows lead, the rest keep order.
+// Only a time-window feature names its end.
 {
   assert.equal(featuredWindowLabel(placement({ product: "always" })), null);
   assert.match(featuredWindowLabel(placement({ product: "time_slot" })) ?? "", /^Featured until /);
-  const ordered = orderFeaturedFirst(
-    [{ extension_id: "a" }, { extension_id: "b" }, { extension_id: "c" }],
-    new Set(["c"]),
+}
+
+// Sponsored rows lead an alphabetical catalog, then Guard's own coverage
+// (built in, then trusted), then free external contributions. A free external
+// extension never sorts above a paid placement or internal coverage.
+{
+  const ordered = orderCatalogRows(
+    [
+      { extension_id: "acme", trust_class: "external" as const },
+      { extension_id: "aws", trust_class: "trusted-library" as const },
+      { extension_id: "bolt", trust_class: "external" as const },
+      { extension_id: "git", trust_class: "first-party" as const },
+      { extension_id: "npm", trust_class: "trusted-library" as const },
+      { extension_id: "shell", trust_class: "first-party" as const },
+      { extension_id: "zeta", trust_class: "external" as const },
+    ],
+    new Set(["zeta"]),
   );
-  assert.deepEqual(ordered.map((entry) => entry.extension_id), ["c", "a", "b"]);
+  assert.deepEqual(
+    ordered.map((entry) => entry.extension_id),
+    ["zeta", "git", "shell", "aws", "npm", "acme", "bolt"],
+  );
 }
 
 // Offers are normalized, and a slot count survives only as a complete pair

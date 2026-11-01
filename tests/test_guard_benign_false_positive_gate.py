@@ -36,8 +36,9 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields, source_ref_payload
+from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields, cursor_route_probe, source_ref_payload
 from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
+from tests.outbound_network_guard import outbound_network_attempts
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
 
@@ -47,10 +48,17 @@ _CASES_PATH = Path(__file__).parent / "fixtures" / "benign_false_positive_gate.j
 _DOCUMENT = json.loads(_CASES_PATH.read_text(encoding="utf-8"))
 _PENDING_FIX: dict[str, str] = _DOCUMENT["pending_fix"]
 
-_SHELL_TOOL = {"codex": "Bash", "zcode": "Bash", "claude-code": "Bash", "omp": "bash", "cursor": "Shell"}
+_SHELL_TOOL = {
+    "codex": "Bash",
+    "zcode": "Bash",
+    "claude-code": "Bash",
+    "omp": "bash",
+    "cursor": "Shell",
+    "muse": "bash",
+}
 _READ_TOOL = {"zcode": "Read", "claude-code": "Read", "omp": "read", "cursor": "Read"}
 _GLOB_TOOL = {"claude-code": "Glob", "omp": "glob"}
-_GREP_TOOL = {"claude-code": "Grep", "omp": "grep"}
+_GREP_TOOL = {"claude-code": "Grep", "omp": "grep", "grok": "Grep"}
 _WRITE_TOOL = {"zcode": "Write", "claude-code": "Write", "omp": "write"}
 _FIXED_TOOLS = {
     "eval": "eval",
@@ -70,10 +78,7 @@ _FIXED_TOOLS = {
 _ALLOWED_PR = {"unassigned"}
 # The session-* cases replay prompts users approved by hand. Those still
 # reviewed on Linux CI are recorded here until their fixes land.
-# Every entry is the same class: Cursor is the one harness with no containment
-# route, so work the other four run quietly inside the workspace sandbox reaches
-# a Cursor user as a review card. One route fixes all of them at once.
-_PENDING_CEILING = 4
+_PENDING_CEILING = 0
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and
@@ -81,6 +86,12 @@ _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending markers record the Linux CI result. macOS sends some Oh My Pi and Z Code reads
 # through protected read-only execution, so local macOS runs do not judge marker staleness.
 _ENFORCE_STALE_PENDING = bool(os.environ.get("CI")) and sys.platform != "darwin"
+# The workspace sandbox the contained route runs in exists on macOS, and on
+# Linux only where the host offers it. A gate that accepts either a contained
+# route or a plain quiet allow cannot tell the two apart, so the cases that
+# depend on containment assert it where the host has a sandbox and fall back to
+# the quiet allow, never to a review, where it does not.
+_SANDBOX_HOST = sys.platform == "darwin"
 _PENDING_PR: dict[str, str] = _DOCUMENT["pending_pr"]
 _PENDING_ALWAYS: dict[str, str] = _DOCUMENT["pending_always"]
 
@@ -107,6 +118,11 @@ class GateCase:
 def _expand() -> list[GateCase]:
     expanded: list[GateCase] = []
     for entry in _DOCUMENT["cases"]:
+        # A case the workspace sandbox is the only allow route for measures the
+        # host's sandbox, not Guard, where the host has none. macOS CI runs the
+        # same gate, so the case still guards the decision it was written for.
+        if entry.get("requires_sandbox") and not _SANDBOX_HOST:
+            continue
         for harness in entry["harnesses"]:
             expanded.append(
                 GateCase(
@@ -179,10 +195,23 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     # Git read case behind a review that real agents never see.
     # A developer's RIPGREP_CONFIG_PATH likewise keeps every rg case on
     # review; a case that models one sets it through its environment.
+    # NPM_CONFIG_*, NODE_*, PIP_* and CARGO_* are the same shape: a CI runner or
+    # a developer shell that exports one makes npm, pip or cargo read a
+    # redirected configuration, which keeps their probes on review no matter
+    # what the case says.
     for name in list(os.environ):
-        if name.upper().startswith(("GIT_", "LD_", "DYLD_")) or name.upper() == "RIPGREP_CONFIG_PATH":
+        upper = name.upper()
+        if (
+            upper.startswith(("GIT_", "LD_", "DYLD_", "NPM_CONFIG_", "NODE_", "PIP_", "CARGO_"))
+            or upper == "RIPGREP_CONFIG_PATH"
+        ):
             patch.delenv(name)
     patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
+    # Hosted runners and devcontainers export CARGO_HOME at the place Cargo
+    # reads anyway, so the cases meet the spelling real sessions carry; the
+    # inherited value is dropped above because it names the runner's own home,
+    # which this fixture has moved.
+    patch.setenv("CARGO_HOME", str(fixture.home / ".cargo"))
     patch.setenv("HOL_GUARD_NATIVE", "force")
     binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
     if not binary:
@@ -224,20 +253,25 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
         assert isinstance(tool_input, dict)
         spelled = str(tool_input.get("path") or tool_input["file_path"])
         payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
+    if case.harness == "cursor" and case.tool == "shell" and case.event == "PreToolUse":
+        payload = cursor_route_probe(case.case_id, payload, fixture, worker, fixture.cwd(case.cwd))
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
     # Approval baselines stay from before the first attempt, so a retry never hides a row.
-    result = review_with_unavailable_retry(
-        case.case_id,
-        lambda: worker.review_http_payload(
-            payload=payload,
-            params={},
-            default_harness=case.harness,
-            home_dir=fixture.home,
-            guard_home=fixture.guard_home,
-            workspace=fixture.cwd(case.cwd),
-        ),
-    )
+    # Hooks answer from local state: a review that reaches for a remote host fails the case.
+    with outbound_network_attempts() as attempts:
+        result = review_with_unavailable_retry(
+            case.case_id,
+            lambda: worker.review_http_payload(
+                payload=payload,
+                params={},
+                default_harness=case.harness,
+                home_dir=fixture.home,
+                guard_home=fixture.guard_home,
+                workspace=fixture.cwd(case.cwd),
+            ),
+        )
+    assert not attempts, f"{case.case_id}: hook review used the network: {attempts}"
     # Claude's PostToolUse output carries no reason code, so a silent policy
     # warning is visible only in the native receipt the review just wrote.
     receipt = worker._last_native_decision_receipt
@@ -253,7 +287,8 @@ def _harness_route(
 ) -> dict[str, object]:
     """Apply the containment rewrite the harness's own hook performs.
 
-    ``review_http_payload`` already routes Z Code and Claude Code. Codex routes
+    ``review_http_payload`` already routes Z Code and Claude Code, and admits the
+    sink command Cursor's probe wrote. Codex routes
     in its hook bridge and Oh My Pi in its TypeScript extension (every profile
     on macOS, the workspace profile on Linux). Without this the gate
     counts their contained runs as reviews although the user sees nothing.
@@ -479,6 +514,111 @@ def test_an_environment_dump_is_reviewed_rather_than_refused(
         assert not always_gap(_ROWS[case.case_id]), f"environment dump offers no Always allow: {description}"
 
 
+def test_jvm_build_goals_run_without_an_approval_prompt(
+    gate_environment: tuple[BenignFixture, HookWorker],
+) -> None:
+    """Compiling or testing a Maven project is ordinary work, not a package fetch.
+
+    The JVM package firewall owns ``mvn`` and ``gradle`` by executable name and
+    carries no rule that tells a dependency operation from a lifecycle goal, so
+    every invocation but a bare ``--version`` queued a review row, ``mvn -q
+    test`` included. A Maven lifecycle goal now routes to the workspace sandbox
+    instead: it runs offline against a local repository of its own, linked to
+    the groups the host already fetched, so it compiles and tests without
+    reaching a registry. The goals that fetch or publish artifacts keep their
+    review, and so does Gradle, whose cache wants a writable home and takes
+    locks inside it, which the read-only link the sandbox grants cannot give.
+    """
+    fixture, worker = gate_environment
+    goals = ("mvn -q test", "mvn clean verify", "./mvnw test-compile", "mvn clean package -DskipTests")
+    for index, command in enumerate(goals):
+        case = GateCase(
+            case_id=f"jvm-build-{index}@claude-code",
+            base_id=f"jvm-build-{index}",
+            fix_area="package",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert approvals == 0, f"JVM build goal queued a review: {description}"
+        if _SANDBOX_HOST:
+            assert _contained(result), f"JVM build goal was not routed to the workspace sandbox: {description}"
+        else:
+            assert _quiet_allow(result, approvals), f"JVM build goal was reviewed: {description}"
+    fetches = (
+        "mvn dependency:copy-dependencies",
+        "mvn deploy",
+        "mvn -U test",
+        "gradle build",
+        "./gradlew :app:test",
+        "gradle --refresh-dependencies build",
+    )
+    for index, command in enumerate(fetches):
+        case = GateCase(
+            case_id=f"jvm-fetch-{index}@claude-code",
+            base_id=f"jvm-fetch-{index}",
+            fix_area="package",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="not_allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert _decision(result) != "allow", f"package fetch was allowed: {description}"
+        assert approvals == 1, f"package fetch left no approval to give: {description}"
+        assert not always_gap(_ROWS[case.case_id]), f"package fetch offers no Always allow: {description}"
+
+
+def test_cargo_subcommands_that_drive_the_workspace_build_are_not_reviewed(
+    gate_environment: tuple[BenignFixture, HookWorker],
+) -> None:
+    """Running the suite under coverage is a test run, not a package fetch.
+
+    Cargo resolves a subcommand it has no verb for to a ``cargo-NAME`` program
+    the host already carries, and the ones named here drive cargo's own build
+    of the checkout: ``llvm-cov`` and ``tarpaulin`` run the test suite under
+    instrumentation, ``insta`` runs the snapshot suite, ``expand`` prints what
+    the macros produced, ``machete`` and ``udeps`` read which dependencies the
+    crate actually uses. Each reaches no further than ``cargo test``, which is
+    contained already, so each is contained with it. A name this list does not
+    carry keeps its review, because cargo would run whatever program holds it.
+    """
+    fixture, worker = gate_environment
+    commands = (
+        "cargo llvm-cov --lcov --output-path lcov.info",
+        "cargo llvm-cov nextest",
+        "cargo tarpaulin --out Xml",
+        "cargo insta test",
+        "cargo expand --lib",
+        "cargo machete",
+        "cargo udeps --workspace",
+    )
+    for index, command in enumerate(commands):
+        case = GateCase(
+            case_id=f"cargo-subcommand-{index}@claude-code",
+            base_id=f"cargo-subcommand-{index}",
+            fix_area="package",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert approvals == 0, f"cargo subcommand queued a review: {description}"
+        if _SANDBOX_HOST:
+            assert _contained(result), f"cargo subcommand was not contained: {description}"
+        else:
+            assert _quiet_allow(result, approvals), f"cargo subcommand was reviewed: {description}"
+
+
 @pytest.mark.parametrize("case", mcp_cases(_DOCUMENT), ids=lambda case: case.case_id)
 def test_mcp_connectors_are_set_up_before_they_are_reviewed(
     case: McpCase, gate_environment: tuple[BenignFixture, HookWorker]
@@ -495,7 +635,7 @@ def test_pending_fix_entries_name_real_benign_cases() -> None:
 
 
 def test_every_harness_and_tool_family_is_exercised() -> None:
-    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp", "cursor"}
+    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp", "cursor", "muse", "grok"}
     omp_tools = {_tool_name(case) for case in _CASES if case.harness == "omp"}
     assert {"bash", "read", "glob", "grep", "eval", "task", "wait"} <= omp_tools
     assert sum(case.expect == "not_allow" for case in _CASES) >= 6

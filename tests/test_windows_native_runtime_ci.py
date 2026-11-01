@@ -226,13 +226,21 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
         ],
         "native-op": [
             "hol-guard-runtime --lib shim_op",
+            "hol-guard-runtime --lib fresh_non_unix_export_preserves_native_exclusive_creation",
             "hol-guard-runtime --lib direct_lane_input_tests",
             "hol-guard-runtime --lib storage_gate",
             "hol-guard-runtime --lib daemon_storage_hold",
             "hol-guard-runtime --lib windows_expanded_home",
             "guard-runtime-windows-process --test process_liveness",
+            "hol-guard-runtime --lib health_lease_state",
+            "hol-guard-runtime --lib supervisor_verdict",
             "hol-guard-runtime --lib managed_owner_lock",
             "hol-guard-runtime --lib owner_release",
+            "hol-guard-runtime --lib harness_coverage",
+            "hol-guard-runtime --lib ownership_acl_verdict",
+            "hol-guard-runtime --lib user_health_state",
+            "guard-command --lib egress_proxy_credentials",
+            "hol-guard-runtime --lib proxy_credentials",
         ],
         "mcp": [
             "guard-runtime-windows-process --test child_tree",
@@ -254,7 +262,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
         ]
         assert selected[gate] == commands
     flattened = [command for commands in selected.values() for command in commands]
-    assert len(flattened) == len(set(flattened)) == 15
+    assert len(flattened) == len(set(flattened)) == 23
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

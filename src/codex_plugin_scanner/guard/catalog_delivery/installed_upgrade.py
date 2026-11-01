@@ -5,13 +5,7 @@ from __future__ import annotations
 import json
 from typing import cast
 
-from ..runtime.extension_control_authority import (
-    AuthorityHealth,
-    AuthorityPhase,
-    ExtensionControlAuthorityError,
-    layers_to_json,
-)
-from ..runtime.extension_control_contract import ControlLayerKind
+from ..runtime.extension_control_authority import AuthorityPhase, layers_to_json
 from ..runtime.extension_control_proof import ExtensionControlMutation
 from ..runtime.generated_command_catalog import GeneratedCommandCatalog
 from . import activation_store, active_security, lifecycle
@@ -76,21 +70,18 @@ def migrate_active(store, installed):
             "candidate": {"record": draft.data, "digest": draft.digest, "mac": draft.mac},
             "floor": draft.lifecycle_before,
             "next_floor": draft.lifecycle_after,
+            # The managed policy this candidate was prepared against. The
+            # resident recomputes the same view and refuses the migration if
+            # it moved.
+            "managed": {
+                "revision": candidate.managed_revision,
+                "layers": json.loads(layers_to_json(candidate.managed_layers)),
+            },
         }
         with store._extension_control_authority_lock():
             key = store._authority_key(required=True)
             # Validate/resume the authenticated head before advancing its anchor.
-            current = store._read_extension_control_authority_locked(local.catalog_digest)
-            current = store._with_managed_controls_activation(
-                current, current_manifest=store._catalog_target_manifest(registry)
-            )
-            if (
-                current.health is not AuthorityHealth.PROTECTED
-                or current.managed_revision != candidate.managed_revision
-                or tuple(layer for layer in current.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
-                != candidate.managed_layers
-            ):
-                raise ExtensionControlAuthorityError("managed policy changed before installed upgrade")
+            store._read_extension_control_authority_locked(local.catalog_digest)
             with store._connect() as connection:
                 row = activation_store._row(connection)
                 if row is None:
@@ -114,6 +105,7 @@ def migrate_active(store, installed):
                 key=key,
                 pack_activation=draft,
                 installed_upgrade=evidence,
+                current_manifest=store._catalog_target_manifest(registry),
             )
         active_security.reconcile(store)
     finally:

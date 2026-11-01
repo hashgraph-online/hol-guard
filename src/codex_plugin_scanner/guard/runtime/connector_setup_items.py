@@ -38,13 +38,6 @@ class ConnectorSetupSummary:
     def needing_setup(self, surface: str | None = None) -> tuple[ConnectorSetupItem, ...]:
         return tuple(item for item in self.items if item.needs_setup and surface in {None, item.surface})
 
-    def in_state(self, state: str, surface: str | None = None) -> tuple[ConnectorSetupItem, ...]:
-        return tuple(
-            item
-            for item in self.items
-            if item.state == state and not item.needs_setup and surface in {None, item.surface}
-        )
-
 
 def listed_public_items(store: GuardStore) -> list[dict[str, object]]:
     """Stored connectors as the local-CLI API lists them.

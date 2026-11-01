@@ -270,11 +270,15 @@ pub(super) fn derive_context_with_snapshot(
             cwd: envelope.source.cwd.as_deref(),
             cdpath_unset: false,
             rustup_override_absent: false,
+            cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
+            gem_config_absent: false,
+            http_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(
             envelope

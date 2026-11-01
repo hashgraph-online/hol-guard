@@ -21,8 +21,7 @@ with ``reason`` as its blank fallback):
     PYTHONPATH=src .venv/bin/python scripts/ci/record_claude_permission_verdict_vectors.py
 
 The Rust ``hook_decision_claude_permission_verdict_tests`` replays every vector
-through the resident; ``tests/test_claude_permission_verdict.py`` checks that
-this oracle still reproduces the fixture.
+through the resident.
 """
 
 from __future__ import annotations

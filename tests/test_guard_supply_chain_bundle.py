@@ -1,655 +1,134 @@
-"""Tests for HOL Guard supply-chain bundle verification and offline decisions."""
+"""Tests for the bridge that asks the native runtime to verify a supply-chain bundle.
+
+Reading and verifying a bundle, and deciding what it says about a package,
+belong to the native runtime; those live in the `guard-command` and
+`guard-runtime` suites.
+"""
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
-from datetime import datetime, timedelta, timezone
 
 import pytest
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
-
-from codex_plugin_scanner.guard.runtime.supply_chain_bundle import (
-    SupplyChainBundleExpiredError,
-    SupplyChainBundleKeyringError,
-    SupplyChainBundleMalformedError,
-    SupplyChainBundlePayloadHashError,
-    SupplyChainBundleRollbackError,
-    canonical_supply_chain_bundle_payload,
-    evaluate_cached_supply_chain_bundle,
-    load_supply_chain_bundle_response,
-    verify_supply_chain_bundle_response,
-)
-
-WORKSPACE_ID = "workspace-alpha"
 
 
-def _iso(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+def test_verify_refuses_a_request_larger_than_the_resident_accepts(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # An oversized request is dropped by the transport with no explanation,
+    # which reads as an unreachable verifier. The bridge measures it first so
+    # the failure names the size instead.
+    from codex_plugin_scanner.guard import native_supply_chain_bundle as bridge
+
+    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda home, **kwargs: True)
+
+    def _unreachable(**kwargs: object) -> None:
+        raise AssertionError("an oversized request must not reach the transport")
+
+    monkeypatch.setattr(bridge, "_resident_request", _unreachable)
+    oversized = {"filler": "a" * (bridge._MAX_REQUEST_BYTES + 1)}
+
+    with pytest.raises(bridge.SupplyChainBundleTooLargeError) as raised:
+        bridge.native_verify_supply_chain_bundle_response(oversized, guard_home=tmp_path)
+
+    assert "over the" in str(raised.value)
+    assert str(bridge._MAX_REQUEST_BYTES) in str(raised.value)
 
 
-def _generate_key_pair() -> tuple[bytes, bytes]:
-    private_key = generate_private_key(public_exponent=65537, key_size=2048)
-    private_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    return private_pem, public_pem
+def test_verify_measures_the_bytes_the_transport_actually_sends(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The transport wraps the request in an envelope and encodes it with the
+    # default separators, so a compact encoding of the request on its own is
+    # smaller than what goes over the wire. A request between those two sizes
+    # would pass the pre-check and then be dropped by the transport, which is
+    # the unexplained unreachable verifier this check exists to rule out.
+    from codex_plugin_scanner.guard import native_supply_chain_bundle as bridge
 
+    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda home, **kwargs: True)
 
-def _fingerprint(public_key_pem: bytes) -> str:
-    return hashlib.sha256(public_key_pem.decode("utf-8").strip().encode("utf-8")).hexdigest()
+    def _unreachable(**kwargs: object) -> None:
+        raise AssertionError("an oversized request must not reach the transport")
 
-
-def _bundle_dict(
-    *,
-    bundle_version: str = "1747612800000-deadbeef",
-    default_action: str = "block",
-    exploit_level: str = "active",
-    expires_at: datetime | None = None,
-    generated_at: datetime | None = None,
-    known_exploited: bool = True,
-    malware_state: str = "known",
-    normalized_severity: str = "critical",
-    risk_score: int = 980,
-) -> dict[str, object]:
-    generated = generated_at or datetime(2026, 5, 19, tzinfo=timezone.utc)
-    expires = expires_at or (generated + timedelta(hours=12))
-    return {
-        "advisories": [
-            {
-                "advisoryId": "GHSA-vh95-rmgr-6w4m",
-                "aliases": ["CVE-2020-7598"],
-                "confidence": 990,
-                "exploitLevel": exploit_level,
-                "knownExploited": known_exploited,
-                "malwareState": "none",
-                "normalizedSeverity": normalized_severity,
-                "recommendedFixVersion": "1.2.9",
-                "sourceKey": "ghsa",
-                "summary": "Prototype pollution in minimist",
-                "title": "Prototype pollution in minimist",
-            }
-        ],
-        "bundleVersion": bundle_version,
-        "expiresAt": _iso(expires),
-        "feedSnapshotHash": "feed-snapshot-1",
-        "generatedAt": _iso(generated),
-        "keyId": "guard-bundle-key-2026-05",
-        "packages": [
-            {
-                "confidence": 990,
-                "defaultAction": default_action,
-                "ecosystem": "npm",
-                "exploitLevel": exploit_level,
-                "knownExploited": known_exploited,
-                "malwareState": malware_state,
-                "name": "minimist",
-                "namespace": None,
-                "normalizedSeverity": normalized_severity,
-                "packageAgeState": "watch",
-                "purl": "pkg:npm/minimist@1.2.8",
-                "reachability": "reachable",
-                "recommendedFixVersion": "1.2.9",
-                "relatedAdvisoryIds": ["GHSA-vh95-rmgr-6w4m"],
-                "riskScore": risk_score,
-                "sourceIntegrityState": "high-risk",
-                "version": "1.2.8",
-            }
-        ],
-        "policyHash": "policy-hash-1",
-        "policyRules": [],
-        "scoringVersion": "scf-v1",
-        "sourceHashes": [
-            {
-                "payloadHash": "ghsa-feed-hash",
-                "sourceKey": "ghsa",
-                "staleStatus": "fresh",
-            }
-        ],
-        "tier": "premium",
-        "workspaceId": WORKSPACE_ID,
+    monkeypatch.setattr(bridge, "_resident_request", _unreachable)
+    response = {"records": [{"name": f"record-{index}", "digest": "0" * 16} for index in range(64)]}
+    wire = {
+        "schema": bridge._REQUEST_SCHEMA,
+        "request_id": "supply-chain-bundle-verify-" + "0" * 32,
+        "response": dict(response),
+        "trusted_keys": None,
+        "cached_bundle_version": None,
+        "now": None,
     }
-
-
-def _package_record(
-    *,
-    ecosystem: str = "npm",
-    name: str,
-    namespace: str | None,
-    version: str = "1.2.3",
-    default_action: str = "block",
-) -> dict[str, object]:
-    record = dict(_bundle_dict()["packages"][0])  # type: ignore[index]
-    qualified_name = f"{namespace}/{name}" if namespace is not None else name
-    record.update(
-        {
-            "defaultAction": default_action,
-            "ecosystem": ecosystem,
-            "name": name,
-            "namespace": namespace,
-            "purl": f"pkg:{ecosystem}/{qualified_name}@{version}",
-            "version": version,
-        }
+    compact_bytes = len(json.dumps(wire, separators=(",", ":")).encode("utf-8"))
+    sent_bytes = len(
+        json.dumps(
+            {
+                "operation": "supply_chain_bundle_verify",
+                "request": wire,
+                "deadline_budget_ms": max(1, int(bridge._TIMEOUT_SECONDS * 1000)),
+            }
+        ).encode("utf-8")
     )
-    return record
+    assert compact_bytes < sent_bytes
+    monkeypatch.setattr(bridge, "_MAX_REQUEST_BYTES", (compact_bytes + sent_bytes) // 2)
+
+    with pytest.raises(bridge.SupplyChainBundleTooLargeError):
+        bridge.native_verify_supply_chain_bundle_response(response, guard_home=tmp_path)
 
 
-def _sign_bundle_response(
-    bundle: dict[str, object],
-    *,
-    private_key_pem: bytes,
-    previous_keys: list[dict[str, object]] | None = None,
-    signing_key_state: str = "active",
-    signing_key_valid_until: str | None = None,
-) -> dict[str, object]:
-    loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
-    assert isinstance(loaded_key, RSAPrivateKey)
-    canonical_payload = canonical_supply_chain_bundle_payload(bundle)
-    payload_hash = hashlib.sha256(canonical_payload).hexdigest()
-    signature = loaded_key.sign(
-        canonical_payload,
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-        hashes.SHA256(),
-    )
-    public_key_pem = loaded_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    )
-    verification_keys = [
-        {
-            "fingerprintSha256": _fingerprint(public_key_pem),
-            "keyId": str(bundle["keyId"]),
-            "publicKeyPem": public_key_pem.decode("utf-8").strip(),
-            "state": signing_key_state,
-            "validUntil": signing_key_valid_until,
-        }
-    ]
-    if previous_keys:
-        verification_keys.extend(previous_keys)
-    return {
-        "bundle": bundle,
-        "payloadHash": payload_hash,
-        "signature": base64.b64encode(signature).decode("utf-8"),
+def test_verify_provisions_the_resident_against_the_caller_s_own_store(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The verifier key is derived from the policy-integrity master, so
+    # provisioning has to read the store the caller already opened rather than
+    # whatever secret store a freshly opened default store resolves.
+    from codex_plugin_scanner.guard import native_supply_chain_bundle as bridge
+
+    seen: dict[str, object] = {}
+
+    def _record(home: object, **kwargs: object) -> bool:
+        seen.update(kwargs)
+        return True
+
+    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", _record)
+    monkeypatch.setattr(bridge, "_resident_request", lambda **kwargs: None)
+    monkeypatch.setattr(bridge, "_payload", lambda *args, **kwargs: {"outcome": "verified", "summary": {}})
+    sentinel = object()
+
+    bridge.native_verify_supply_chain_bundle_response({}, guard_home=tmp_path, store=sentinel)
+
+    assert seen["store"] is sentinel
+
+
+def test_verify_returns_the_cache_form_with_the_resident_summary(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_supply_chain_bundle as bridge
+
+    key = {
+        "fingerprintSha256": "0" * 64,
+        "keyId": "guard-bundle-key",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----",
+        "state": "active",
+        "validUntil": None,
+    }
+    response = {
+        "bundle": {"bundleVersion": "v1", "packages": [{}, {}], "advisories": [{}]},
+        "payloadHash": "0" * 64,
+        "signature": "c2ln",
         "signatureAlgorithm": "rsa-pss-sha256",
-        "verificationKeys": verification_keys,
+        "verificationKeys": [key],
+        "cached_at": 1.0,
     }
-
-
-def test_supply_chain_bundle_rejects_untrusted_signing_key_even_when_keyring_contains_trusted_key() -> None:
-    old_private_key, old_public_key = _generate_key_pair()
-    first_response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(_bundle_dict(), private_key_pem=old_private_key))
-    )
-    verify_supply_chain_bundle_response(first_response, now=first_response.bundle.generated_at_timestamp + 5)
-
-    new_private_key, _new_public_key = _generate_key_pair()
-    rotated_response = load_supply_chain_bundle_response(
-        json.dumps(
-            _sign_bundle_response(
-                _bundle_dict(bundle_version="1747616400000-rotated"),
-                private_key_pem=new_private_key,
-                previous_keys=[
-                    {
-                        "fingerprintSha256": _fingerprint(old_public_key),
-                        "keyId": "guard-bundle-key-2026-04",
-                        "publicKeyPem": old_public_key.decode("utf-8").strip(),
-                        "state": "grace",
-                        "validUntil": "2026-06-01T00:00:00Z",
-                    }
-                ],
-            )
-        )
-    )
-
-    with pytest.raises(SupplyChainBundleKeyringError):
-        verify_supply_chain_bundle_response(
-            rotated_response,
-            trusted_keys=first_response.verification_keys,
-            cached_bundle_version=first_response.bundle.bundle_version,
-            now=rotated_response.bundle.generated_at_timestamp + 5,
-        )
-
-    unanchored = load_supply_chain_bundle_response(
-        json.dumps(
-            _sign_bundle_response(
-                _bundle_dict(bundle_version="1747620000000-untrusted"),
-                private_key_pem=new_private_key,
-            )
-        )
-    )
-
-    with pytest.raises(SupplyChainBundleKeyringError):
-        verify_supply_chain_bundle_response(
-            unanchored,
-            trusted_keys=first_response.verification_keys,
-            cached_bundle_version=first_response.bundle.bundle_version,
-            now=unanchored.bundle.generated_at_timestamp + 5,
-        )
-
-
-def test_supply_chain_bundle_accepts_trusted_signing_key_refresh() -> None:
-    private_key, _public_key = _generate_key_pair()
-    first_response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(_bundle_dict(), private_key_pem=private_key))
-    )
-    refreshed_response = load_supply_chain_bundle_response(
-        json.dumps(
-            _sign_bundle_response(
-                _bundle_dict(bundle_version="1747616400000-refresh"),
-                private_key_pem=private_key,
-            )
-        )
-    )
-
-    verify_supply_chain_bundle_response(
-        refreshed_response,
-        trusted_keys=first_response.verification_keys,
-        cached_bundle_version=first_response.bundle.bundle_version,
-        now=refreshed_response.bundle.generated_at_timestamp + 5,
-    )
-
-
-def test_supply_chain_bundle_rejects_signing_key_fingerprint_mismatch() -> None:
-    old_private_key, old_public_key = _generate_key_pair()
-    first_response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(_bundle_dict(), private_key_pem=old_private_key))
-    )
-    new_private_key, _new_public_key = _generate_key_pair()
-    spoofed_payload = _sign_bundle_response(
-        _bundle_dict(bundle_version="1747616400000-spoofed"),
-        private_key_pem=new_private_key,
-    )
-    spoofed_payload["verificationKeys"][0]["fingerprintSha256"] = _fingerprint(old_public_key)
-    spoofed_response = load_supply_chain_bundle_response(json.dumps(spoofed_payload))
-
-    with pytest.raises(SupplyChainBundleKeyringError):
-        verify_supply_chain_bundle_response(
-            spoofed_response,
-            trusted_keys=first_response.verification_keys,
-            cached_bundle_version=first_response.bundle.bundle_version,
-            now=spoofed_response.bundle.generated_at_timestamp + 5,
-        )
-
-
-def test_supply_chain_bundle_rejects_payload_hash_mismatch_and_rollback() -> None:
-    private_key, _public_key = _generate_key_pair()
-    response_payload = _sign_bundle_response(_bundle_dict(), private_key_pem=private_key)
-    mismatched_payload = dict(response_payload)
-    mismatched_payload["payloadHash"] = "bad-payload-hash"
-    response = load_supply_chain_bundle_response(json.dumps(mismatched_payload))
-
-    with pytest.raises(SupplyChainBundlePayloadHashError):
-        verify_supply_chain_bundle_response(response, now=response.bundle.generated_at_timestamp + 5)
-
-    rollback_payload = load_supply_chain_bundle_response(json.dumps(response_payload))
-    with pytest.raises(SupplyChainBundleRollbackError):
-        verify_supply_chain_bundle_response(
-            rollback_payload,
-            cached_bundle_version="1747616400000-newerhash",
-            now=rollback_payload.bundle.generated_at_timestamp + 5,
-        )
-
-
-def test_supply_chain_bundle_rejects_revoked_or_expired_grace_signing_keys() -> None:
-    private_key, _public_key = _generate_key_pair()
-    grace_expired_payload = _sign_bundle_response(
-        _bundle_dict(),
-        private_key_pem=private_key,
-        signing_key_state="grace",
-        signing_key_valid_until="2026-05-18T00:00:00Z",
-    )
-    grace_expired_response = load_supply_chain_bundle_response(json.dumps(grace_expired_payload))
-
-    with pytest.raises(SupplyChainBundleKeyringError):
-        verify_supply_chain_bundle_response(
-            grace_expired_response,
-            now=datetime(2026, 5, 19, tzinfo=timezone.utc).timestamp(),
-        )
-
-    revoked_payload = _sign_bundle_response(
-        _bundle_dict(bundle_version="1747621200000-revoked"),
-        private_key_pem=private_key,
-        signing_key_state="revoked",
-    )
-    revoked_response = load_supply_chain_bundle_response(json.dumps(revoked_payload))
-
-    with pytest.raises(SupplyChainBundleKeyringError):
-        verify_supply_chain_bundle_response(
-            revoked_response,
-            now=revoked_response.bundle.generated_at_timestamp + 5,
-        )
-
-
-def test_supply_chain_bundle_rejects_expired_and_malformed_payloads() -> None:
-    private_key, _public_key = _generate_key_pair()
-    expired_bundle = _bundle_dict(
-        generated_at=datetime(2026, 5, 18, tzinfo=timezone.utc),
-        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
-    )
-    expired_response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(expired_bundle, private_key_pem=private_key))
-    )
-
-    with pytest.raises(SupplyChainBundleExpiredError):
-        verify_supply_chain_bundle_response(
-            expired_response,
-            now=datetime(2026, 5, 19, tzinfo=timezone.utc).timestamp(),
-        )
-
-    malformed_payload = _sign_bundle_response(_bundle_dict(), private_key_pem=private_key)
-    del malformed_payload["bundle"]["packages"]  # type: ignore[index]
-
-    with pytest.raises(SupplyChainBundleMalformedError):
-        load_supply_chain_bundle_response(json.dumps(malformed_payload))
-
-
-def test_supply_chain_bundle_deduplicates_identical_canonical_package_records() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    package = _package_record(name="pkg", namespace="@scope")
-    bundle["packages"] = [package, dict(package)]
-
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    assert response.bundle.packages == (response.bundle.packages[0],)
-    assert response.bundle.packages[0].namespace == "@scope"
-
-
-def test_supply_chain_bundle_normalizes_legacy_qualified_packagist_name() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["packages"] = [
-        _package_record(
-            ecosystem="packagist",
-            name="Laravel/Framework",
-            namespace=None,
-            version="11.1.0",
-        )
-    ]
-
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    package = response.bundle.packages[0]
-    assert package.ecosystem == "packagist"
-    assert package.namespace == "laravel"
-    assert package.name == "framework"
-
-
-@pytest.mark.parametrize(
-    ("first", "second"),
-    [
-        (
-            _package_record(name="pkg", namespace="@scope", default_action="block"),
-            _package_record(name="pkg", namespace="@scope", default_action="warn"),
-        ),
-        (
-            _package_record(name="Pkg", namespace="@Scope", default_action="block"),
-            _package_record(name="pkg", namespace="@scope", default_action="warn"),
-        ),
-    ],
-)
-def test_supply_chain_bundle_rejects_conflicting_canonical_package_records(
-    first: dict[str, object],
-    second: dict[str, object],
-) -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["packages"] = [first, second]
-
-    with pytest.raises(SupplyChainBundleMalformedError, match=r"Conflicting package records.*npm:@scope/pkg@1\.2\.3"):
-        load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-
-@pytest.mark.parametrize(
-    "package",
-    [
-        _package_record(name="pkg", namespace="scope"),
-        _package_record(name="pkg", namespace="@scope@"),
-        _package_record(name="@scope/pkg", namespace=None),
-        _package_record(ecosystem="pypi", name="org/pkg", namespace=None),
-        _package_record(ecosystem="packagist", name="pkg", namespace=None),
-    ],
-)
-def test_supply_chain_bundle_rejects_malformed_ecosystem_identity_fields(
-    package: dict[str, object],
-) -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["packages"] = [package]
-
-    with pytest.raises(SupplyChainBundleMalformedError, match="Invalid package identity"):
-        load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-
-def test_supply_chain_bundle_uses_ecosystem_specific_case_normalization() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["packages"] = [
-        _package_record(name="Pkg", namespace="@Scope"),
-        _package_record(ecosystem="pypi", name="Foo_Bar", namespace=None),
-        _package_record(ecosystem="go", name="Example.com/Org/Repo", namespace=None),
-    ]
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    npm = evaluate_cached_supply_chain_bundle(
-        response, package_name="@scope/pkg", package_version="1.2.3", ecosystem="npm"
-    )
-    pypi = evaluate_cached_supply_chain_bundle(
-        response, package_name="foo-bar", package_version="1.2.3", ecosystem="pypi"
-    )
-    uppercase_npm = evaluate_cached_supply_chain_bundle(
-        response, package_name="@scope/pkg", package_version="1.2.3", ecosystem="NPM"
-    )
-    exact_go = evaluate_cached_supply_chain_bundle(
-        response, package_name="Example.com/Org/Repo", package_version="1.2.3", ecosystem="go"
-    )
-    wrong_case_go = evaluate_cached_supply_chain_bundle(
-        response, package_name="example.com/org/repo", package_version="1.2.3", ecosystem="go"
-    )
-
-    assert npm.action == "block"
-    assert pypi.action == "block"
-    assert uppercase_npm.action == "block"
-    assert exact_go.action == "block"
-    assert wrong_case_go.reason == "no_cached_match"
-
-
-def test_supply_chain_bundle_keeps_multiple_scopes_and_unscoped_leaf_distinct() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["packages"] = [
-        _package_record(name="pkg", namespace=None, default_action="monitor"),
-        _package_record(name="pkg", namespace="@one", default_action="block"),
-        _package_record(name="pkg", namespace="@two", default_action="warn"),
-    ]
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-    now = response.bundle.generated_at_timestamp + 1
-
-    unscoped = evaluate_cached_supply_chain_bundle(
-        response, package_name="pkg", package_version="1.2.3", ecosystem="npm", now=now
-    )
-    first_scope = evaluate_cached_supply_chain_bundle(
-        response, package_name="@one/pkg", package_version="1.2.3", ecosystem="npm", now=now
-    )
-    second_scope = evaluate_cached_supply_chain_bundle(
-        response, package_name="@two/pkg", package_version="1.2.3", ecosystem="npm", now=now
-    )
-
-    assert unscoped.action == "monitor"
-    assert first_scope.action == "block"
-    assert second_scope.action == "warn"
-
-
-def test_supply_chain_bundle_offline_evaluation_blocks_high_confidence_and_monitors_stale_low_risk() -> None:
-    private_key, _public_key = _generate_key_pair()
-    blocking_response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(_bundle_dict(), private_key_pem=private_key))
-    )
-    blocking_decision = evaluate_cached_supply_chain_bundle(
-        blocking_response,
-        package_name="minimist",
-        package_version="1.2.8",
-        now=blocking_response.bundle.generated_at_timestamp + 60,
-    )
-
-    assert blocking_decision.action == "block"
-    assert blocking_decision.stale is False
-    assert blocking_decision.reason == "known_malware_or_kev"
-
-    low_risk_bundle = _bundle_dict(
-        default_action="monitor",
-        exploit_level="none",
-        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
-        known_exploited=False,
-        malware_state="none",
-        normalized_severity="low",
-        risk_score=220,
-    )
-    low_risk_response = load_supply_chain_bundle_response(
-        json.dumps(_sign_bundle_response(low_risk_bundle, private_key_pem=private_key))
-    )
-    stale_decision = evaluate_cached_supply_chain_bundle(
-        low_risk_response,
-        package_name="minimist",
-        package_version="1.2.8",
-        now=datetime(2026, 5, 19, tzinfo=timezone.utc).timestamp(),
-    )
-
-    assert stale_decision.action == "monitor"
-    assert stale_decision.stale is True
-    assert stale_decision.reason == "stale_low_confidence"
-
-
-def test_supply_chain_bundle_verifies_portal_signed_payload_with_emergency_denylist() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["emergencyDenylist"] = [
-        {
-            "ecosystem": "npm",
-            "name": "minimist",
-            "namespace": None,
-            "reason": "known_malware",
-            "recommendedFixVersion": "1.2.9",
-        }
-    ]
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    verify_supply_chain_bundle_response(response, now=response.bundle.generated_at_timestamp + 5)
-    assert len(response.bundle.emergency_denylist) == 1
-    assert response.bundle.emergency_denylist[0].reason == "known_malware"
-
-
-def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_without_package_entry() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict(
-        default_action="monitor",
-        exploit_level="none",
-        known_exploited=False,
-        malware_state="none",
-        normalized_severity="low",
-        risk_score=120,
-    )
-    bundle["packages"] = []
-    bundle["emergencyDenylist"] = [
-        {
-            "ecosystem": "npm",
-            "name": "minimist",
-            "namespace": None,
-            "reason": "known_malware",
-            "recommendedFixVersion": "1.2.9",
-        }
-    ]
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    decision = evaluate_cached_supply_chain_bundle(
-        response,
-        package_name="minimist",
-        package_version="1.2.8",
-        ecosystem="NPM",
-        now=response.bundle.generated_at_timestamp + 60,
-    )
-
-    assert decision.action == "block"
-    assert decision.reason == "known_malware"
-    assert decision.stale is False
-    assert decision.recommended_fix_version == "1.2.9"
-    assert decision.emergency_deny is True
-
-
-def test_supply_chain_bundle_offline_evaluation_enforces_emergency_deny_when_bundle_is_stale() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict(
-        default_action="monitor",
-        exploit_level="none",
-        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
-        known_exploited=False,
-        malware_state="none",
-        normalized_severity="low",
-        risk_score=120,
-    )
-    bundle["packages"] = []
-    bundle["emergencyDenylist"] = [
-        {
-            "ecosystem": "npm",
-            "name": "minimist",
-            "namespace": None,
-            "reason": "critical_active_exploit",
-            "recommendedFixVersion": None,
-        }
-    ]
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    decision = evaluate_cached_supply_chain_bundle(
-        response,
-        package_name="minimist",
-        package_version="9.9.9",
-        ecosystem="npm",
-        now=datetime(2026, 5, 19, tzinfo=timezone.utc).timestamp(),
-    )
-
-    assert decision.action == "block"
-    assert decision.reason == "critical_active_exploit"
-    assert decision.stale is True
-
-
-def test_supply_chain_bundle_verifies_portal_signed_payload_with_sparse_policy_rules() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["policyRules"] = [{"action": "block", "ruleId": "rule-1"}]
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    verify_supply_chain_bundle_response(response, now=response.bundle.generated_at_timestamp + 5)
-
-
-def test_supply_chain_bundle_offline_evaluation_does_not_match_scoped_entries_from_unscoped_names() -> None:
-    private_key, _public_key = _generate_key_pair()
-    bundle = _bundle_dict()
-    bundle["packages"] = [
-        {
-            **bundle["packages"][0],
-            "name": "minimist",
-            "namespace": "@scope",
-            "purl": "pkg:npm/%40scope/minimist@1.2.8",
-        }
-    ]
-    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
-
-    decision = evaluate_cached_supply_chain_bundle(
-        response,
-        package_name="minimist",
-        package_version="1.2.8",
-        now=response.bundle.generated_at_timestamp + 60,
-    )
-
-    assert decision.action == "monitor"
-    assert decision.matched_advisory_ids == ()
-    assert decision.reason == "no_cached_match"
+    summary = {"bundle_version": "v1", "package_count": 2}
+    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda home, **kwargs: True)
+    monkeypatch.setattr(bridge, "_resident_request", lambda **kwargs: None)
+    monkeypatch.setattr(bridge, "_payload", lambda *args, **kwargs: {"outcome": "verified", "summary": summary})
+
+    verified = bridge.native_verify_supply_chain_bundle_response(response, guard_home=tmp_path)
+
+    assert verified.response == {key: value for key, value in response.items() if key != "cached_at"}
+    assert [item.to_dict() for item in verified.verification_keys] == [key]
+    assert verified.summary == summary
+
+    # A verified reply without the parsed summary is not trusted for one
+    # counted from the raw bundle, which the parser would have merged.
+    monkeypatch.setattr(bridge, "_payload", lambda *args, **kwargs: {"outcome": "verified"})
+
+    with pytest.raises(bridge.SupplyChainBundleUnavailableError):
+        bridge.native_verify_supply_chain_bundle_response(response, guard_home=tmp_path)

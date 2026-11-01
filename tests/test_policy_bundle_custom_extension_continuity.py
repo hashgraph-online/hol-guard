@@ -9,13 +9,13 @@ from typing import cast
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from codex_plugin_scanner.guard.policy_bundle_v2 import validated_policy_bundle_v2_payload
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import CustomExtensionContinuityError
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_v2_support import validated_policy_bundle_v2_payload
 from tests.support.network import stub_authenticated_urlopen
 from tests.test_policy_bundle_v2 import _signed_bundle, _verification_key
 
@@ -150,7 +150,13 @@ def test_sync_receipts_consumes_signed_custom_extension_continuity_in_production
     remote_policies_stored = summary["remote_policies_stored"]
     assert isinstance(remote_policies_stored, int) and remote_policies_stored >= 0
     assert grant is not None and grant["state"] == "blocked"
-    assert store.get_sync_payload("policy_bundle_ack") == {}
+    acknowledgement = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(acknowledgement, dict)
+    assert "deliveryId" not in acknowledgement
+    assert acknowledgement["contractVersion"] == bundle["contractVersion"]
+    assert acknowledgement["bundleHash"] == bundle["bundleHash"]
+    assert acknowledgement["sequence"] == 1
+    assert acknowledgement["status"] == "applied"
     assert store.read_local_cli_command_states(identity.cli_id) == {"deploy": "block"}
     state = store.get_sync_payload("custom_extension_continuity")
     assert isinstance(state, dict)

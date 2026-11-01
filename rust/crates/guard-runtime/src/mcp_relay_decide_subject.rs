@@ -99,7 +99,7 @@ fn extension(
         server_name: present(metadata.get("server_name")),
         contributed_tool_name: present(tool_identity.and_then(|tool| tool.get("tool_name"))),
         layers: view.layers.clone(),
-        layers_unavailable: false,
+        layers_unavailable: view.layers_unavailable,
     })
 }
 

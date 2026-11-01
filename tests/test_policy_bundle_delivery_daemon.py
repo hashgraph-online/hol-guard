@@ -7,17 +7,13 @@ import copy
 import json
 from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import policy_bundle_parser, policy_bundle_v2
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard import policy_bundle_v2
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer, server_control_sync
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
-)
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    policy_bundle_verification_key_from_public_key,
 )
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -28,6 +24,7 @@ from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import parse_managed_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_verification_key_from_public_key
 from tests.test_guard_headless_daemon_api import (
     _dashboard_token_for,
     _read_json_response,
@@ -114,11 +111,6 @@ def _fixture(store: GuardStore) -> tuple[dict[str, object], dict[str, object]]:
 def _enable(monkeypatch: pytest.MonkeyPatch) -> None:
     # Keep the signed fixture byte-for-byte stable while making this test
     # deterministic after its real-world expiry date.
-    monkeypatch.setattr(
-        policy_bundle_parser,
-        "time",
-        SimpleNamespace(time=lambda: _POLICY_BUNDLE_FIXTURE_NOW.timestamp()),
-    )
     monkeypatch.setattr(policy_bundle_v2, "datetime", _PolicyBundleFixtureDatetime)
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -205,6 +197,32 @@ def test_daemon_persists_only_post_commit_managed_ack(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
     assert acknowledgement["appliedEffectiveProjectionDigest"] == f"sha256:{snapshot.effective_digest}"
+
+
+def test_daemon_builds_the_acknowledgement_on_the_stored_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A repeat sync of the same bundle must build on the stored receipt, or the
+    # device restarts its sequence and Cloud sees a conflict.
+    _enable(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-managed-controls")
+    bundle, delivery = _fixture(store)
+    stored = {"contractVersion": "guard-policy-bundle.v2", "sequence": 3, "status": "applied"}
+    store.set_sync_payload("policy_bundle_ack", stored, "2026-08-25T12:00:00Z")
+
+    previous_seen: list[object] = []
+    build = server_control_sync.policy_bundle_acknowledgement_payload
+
+    def _spy(**kwargs: object) -> dict[str, object]:
+        previous_seen.append(kwargs.get("previous"))
+        return build(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(server_control_sync, "policy_bundle_acknowledgement_payload", _spy)
+    _sync(store, bundle=bundle, delivery=delivery)
+
+    assert previous_seen == [stored]
 
 
 def test_daemon_accepts_cloud_normalized_device_identity(

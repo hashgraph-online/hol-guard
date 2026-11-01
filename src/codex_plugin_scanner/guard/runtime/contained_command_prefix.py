@@ -2,84 +2,86 @@
 
 from __future__ import annotations
 
-import math
 import os
-import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 
-# Mirrors the native inert-assignment allowlist: these names change output or
-# presentation, never which program runs or what it loads.
-_INERT_ENVIRONMENT_NAMES = frozenset(
-    {
-        "CI",
-        "NODE_ENV",
-        "FORCE_COLOR",
-        "NO_COLOR",
-        "CLICOLOR",
-        "CLICOLOR_FORCE",
-        "TERM",
-        "TZ",
-        "LANG",
-        "LANGUAGE",
-        "COLUMNS",
-        "LINES",
-        "DEBUG",
-        "NODE_NO_WARNINGS",
-        "RUST_LOG",
-        "RUST_BACKTRACE",
-        "PYTHONUNBUFFERED",
-        "PYTHONDONTWRITEBYTECODE",
-    }
-)
+
+def command_words(command: str) -> list[str]:
+    """Ask native authority for the words a contained command spells.
+
+    `pretool` lexed this same text when it decided the run is contained. A
+    second reading here is a second grammar: this one escapes a backslash on
+    every platform, the native lexer leaves it alone where the platform spells
+    paths with it, so `pytest tests\\a.py` parts into different words and the
+    receipt drawn over them would not name the run that executes.
+
+    An answer that is not a list of words is no reading at all, so it raises
+    rather than letting a partial parse reach a planner.
+    """
+    from ..native_restricted_pytest import restricted_native
+    from .restricted_pytest import RestrictedPytestError
+
+    words = restricted_native("command_words", {"command_text": command}, list)
+    if type(words) is not list or not all(type(word) is str for word in words):
+        raise RestrictedPytestError("pytest_restricted_invalid_command", "Invalid restricted execution request.")
+    return list(words)
 
 
-def _inert_assignment(word: str) -> tuple[str, str] | None:
-    name, separator, value = word.partition("=")
-    if (
-        separator
-        and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
-        and (name in _INERT_ENVIRONMENT_NAMES or name.startswith("LC_"))
-    ):
-        return name, value
-    return None
+def _read_command_prefix(command: list[str], *, drop_data: bool = False) -> tuple[list[str], dict[str, str], bool]:
+    """Ask native authority where the command's own program stands.
 
+    The native model reads `CI=1 command bun run build` as `bun run build`
+    with an inert assignment. It owns the whole reading: which names stand
+    transparently in front of a program, where each one's operands end, and
+    which settings a prefix may carry. A second copy of any of that is what
+    drift looks like — the copy here once held `env` as a bare spelling, so
+    `/usr/bin/env CI=1 pytest -q` reached the planners with `/usr/bin/env` as
+    its program and was refused, though native authority had already read it
+    as the `pytest -q` it runs.
 
-def _data_assignment(word: str) -> bool:
-    name, separator, value = word.partition("=")
-    return bool(
-        separator
-        and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
-        and name not in {"PYTHONPATH", "VIRTUAL_ENV", "NODE_PATH", "TMPDIR", "TMP", "TEMP"}
-        and len(value) <= 512
-        and re.fullmatch(r"(?!-)[A-Za-z0-9/._+@:,%-]*", value)
+    With `drop_data`, a plain-data setting (`REPORT_DIR=/tmp/r`) is dropped
+    too: callers ask for that only after the original drew a contained
+    receipt, since native authority grants a read-only profile only when that
+    profile's environment filter would drop the setting, and a workspace
+    receipt still runs the original as issued.
+
+    The last answer says whether a setting was dropped rather than carried, so
+    a caller can tell a core that is the command as issued from one that is
+    not without peeling the same command a second time.
+
+    An unreadable answer peels nothing, so the command reaches the planners as
+    it was written and they refuse what native authority has not read.
+    """
+    from ..native_restricted_pytest import restricted_native
+
+    reply = restricted_native(
+        "command_prefix_split",
+        {"command": command, "drop_data": drop_data},
+        (dict,),
     )
+    index = reply.get("core_index")
+    carried = reply.get("assignments")
+    dropped = reply.get("dropped_data")
+    if (
+        type(index) is not int
+        or not 0 <= index <= len(command)
+        or type(carried) is not list
+        or type(dropped) is not bool
+    ):
+        return command, {}, False
+    assignments: dict[str, str] = {}
+    for pair in carried:
+        if type(pair) is not list or len(pair) != 2 or not all(type(word) is str for word in pair):
+            return command, {}, False
+        assignments[pair[0]] = pair[1]
+    return command[index:], assignments, dropped
 
 
 def _split_command_prefix(command: list[str], *, drop_data: bool = False) -> tuple[list[str], dict[str, str]]:
-    """Peel `command`/`time`/`env` prefixes and inert `NAME=value` assignments.
-
-    The native model reads `CI=1 command bun run build` as `bun run build`
-    with an inert assignment. With `drop_data`, a plain-data setting
-    (`REPORT_DIR=/tmp/r`) is dropped too: callers do so only after the
-    original drew a contained receipt, since native authority grants a
-    read-only profile only when that profile's environment filter would drop
-    the setting, and a workspace receipt still runs the original as issued.
-    An option such as `command -v` or `env -i` keeps its prefix, and any
-    other assignment stays in the command, so the core is rejected.
-    """
-    assignments: dict[str, str] = {}
-    for _ in range(16):
-        if len(command) > 1 and command[0] in {"command", "time", "env"} and not command[1].startswith("-"):
-            command = command[1:]
-        elif command and (assignment := _inert_assignment(command[0])) is not None:
-            assignments[assignment[0]] = assignment[1]
-            command = command[1:]
-        elif drop_data and len(command) > 1 and _data_assignment(command[0]):
-            command = command[1:]
-        else:
-            break
-    return command, assignments
+    """Where the command's own program stands, and the settings peeled off it."""
+    core, assignments, _dropped = _read_command_prefix(command, drop_data=drop_data)
+    return core, assignments
 
 
 def _peel_for_receipt(command: list[str]) -> tuple[list[str], dict[str, str], bool]:
@@ -88,8 +90,7 @@ def _peel_for_receipt(command: list[str]) -> tuple[list[str], dict[str, str], bo
     A dropped setting means the core is not the command as issued, so the
     original must draw a contained receipt before the core runs.
     """
-    core, assignments = _split_command_prefix(command, drop_data=True)
-    return core, assignments, core != _split_command_prefix(command)[0]
+    return _read_command_prefix(command, drop_data=True)
 
 
 @contextmanager
@@ -111,68 +112,34 @@ def _assignments_applied(assignments: Mapping[str, str]) -> Iterator[None]:
                 os.environ[name] = value
 
 
-# The shell resolves a bare `timeout` on `PATH`, and the two system paths name
-# that same program. `./timeout` or `bin/timeout` is whatever that file holds,
-# so native authority leaves it wrapped and this peel does not read it either.
-_SYSTEM_TIMEOUT = frozenset({"timeout", "/usr/bin/timeout", "/bin/timeout"})
-_CLOCK_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+def peel_run_prefixes(command: list[str]) -> tuple[list[str], int | None]:
+    """Ask native authority for the program a contained run stands behind.
 
+    `nice -n 10 timeout 20 pytest -q` runs `pytest -q` for twenty seconds. A
+    system `timeout` bounds how long the work may take and not what it may
+    do, and the launchers the parser reads set scheduling, buffering or the
+    shell's own `exec`, so the program behind them is the program native
+    authority judged. The whole reading — which names launch a program, which
+    durations `timeout` accepts, and the inert prefix split between them —
+    belongs to that authority, which answers it in one call, so the sink
+    neither keeps a second copy of the grammar nor pays a round trip per
+    prefix on the hook's path.
 
-def _clock_seconds(value: str) -> int | None:
-    """Seconds in a duration `timeout` reads, mirroring the native reader.
+    The seconds are returned with the core so the run the clock was peeled
+    from is still bounded. `None` means nothing bounds it.
 
-    A number of seconds, or one carrying an `s`, `m`, `h` or `d` unit, with an
-    optional fraction. Anything else is not a duration, so the word after it is
-    not the program and the command is not peeled. A duration of zero turns
-    `timeout` off, and this answers `0` for it: the prefix is still peeled, and
-    the run it names is left unbounded rather than cut to a second.
+    An unreadable answer peels nothing, so the command reaches the planners
+    as it was written and they refuse what native authority has not read.
     """
-    number = value[:-1] if value[-1:] in _CLOCK_UNITS else value
-    whole, _, fraction = number.partition(".")
-    digits = set("0123456789")
-    if not number or len(number) > 10 or not whole or not set(whole) <= digits:
-        return None
-    if fraction and not set(fraction) <= digits:
-        return None
-    unit = _CLOCK_UNITS.get(value[-1:], 1) if value[-1:] in _CLOCK_UNITS else 1
-    duration = float(number) * unit
-    # Seconds are whole here, so a fractional duration rounds up: cutting
-    # `timeout 2.1` to two would end the run before the clock it was given.
-    # Only an exact zero means no bound at all.
-    return 0 if duration == 0 else math.ceil(duration)
+    from ..native_restricted_pytest import restricted_native
 
-
-def peel_timeout_clock(command: list[str]) -> tuple[list[str], int | None]:
-    """Peel a system `timeout <duration>` prefix and report its seconds.
-
-    The seconds are ``None`` when nothing bounds the run: either no prefix was
-    peeled, or every peeled clock was the zero that turns `timeout` off.
-
-    Native authority reads that clock through to the program it bounds, because
-    it limits how long the work may take and not what it may do. The contained
-    planners are handed the program the text already names, so `timeout 20
-    pytest -q` reaches the same read-only profile as `pytest -q`, and the clock
-    still bounds the run it is peeled from.
-    """
-    seconds: int | None = None
-    for _ in range(4):
-        if len(command) < 3 or command[0] not in _SYSTEM_TIMEOUT:
-            break
-        rest = command[1:]
-        if rest[0] == "--":
-            rest = rest[1:]
-        if len(rest) < 2:
-            break
-        clock = _clock_seconds(rest[0])
-        program = rest[1]
-        if clock is None or not program or program.startswith("-") or _assignment_word(program):
-            break
-        if clock:
-            seconds = clock if seconds is None else min(seconds, clock)
-        command = rest[1:]
-    return command, seconds
-
-
-def _assignment_word(word: str) -> bool:
-    name, separator, _ = word.partition("=")
-    return bool(separator and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name))
+    reply = restricted_native("run_prefix_peel", {"command": command}, (dict,))
+    core = reply.get("core")
+    seconds = reply.get("seconds")
+    if (
+        type(core) is not list
+        or not all(type(word) is str for word in core)
+        or (seconds is not None and type(seconds) is not int)
+    ):
+        return command, None
+    return core, seconds

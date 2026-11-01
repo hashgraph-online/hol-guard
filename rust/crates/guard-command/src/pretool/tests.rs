@@ -91,6 +91,11 @@ fn bounded_find_listings_do_not_admit_actions_or_sensitive_targets() {
     );
 }
 
+/// `[[ -f NAME ]]` is read as the `[ -f NAME ]` it asks: inside `[[ ]]` the
+/// shell splits no word and expands no glob, so the modeled form stands for
+/// at least the work the command does. Only a closed pair is read that way;
+/// an unclosed `[[`, a pair `&&` has already split, and an unmodeled
+/// predicate each keep their review.
 #[test]
 fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -105,6 +110,9 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -x src && echo searchable || echo closed",
         "test -s src/lib.rs && echo non-empty",
         "[ -f src/lib.rs ] && echo present || echo missing",
+        "[[ -f src/lib.rs ]] && echo present || echo missing",
+        "[[ -d src ]] && ls src",
+        "if [[ -f src/lib.rs ]]; then cat src/lib.rs; fi",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -125,6 +133,10 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -w src/lib.rs",
         "[ -f .env ] && echo set",
         "[ -f src/lib.rs",
+        "[[ -f .env ]] && echo set",
+        "[[ -f src/lib.rs",
+        "[[ -f src/lib.rs && -f .env ]]",
+        "[[ -w src/lib.rs ]]",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(
@@ -190,11 +202,15 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 cwd: Some("/tmp"),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
         ),
         vec![0, 1]
@@ -437,6 +453,12 @@ fn allows_bounded_exact_commands() {
         "uname -a",
         "git status --short",
         "git status --short --branch",
+        // Bare `git remote` prints the configured names, which the verbose
+        // form already prints beside their URLs, and `show -n` prints what
+        // the configuration holds without asking the remote itself.
+        "git remote",
+        "git remote show -n",
+        "git remote show -n origin",
         "git remote -v",
         "git remote --verbose",
         "git remote -v --",
@@ -487,6 +509,9 @@ fn allows_bounded_pipeline_consumers() {
         "git status --short | tail -n 2",
         "cat README.md | head -2 | tail -n 1",
         "git status --short | head",
+        // `|&` is the same pipe with stderr merged into it, so the bounded
+        // consumer on its right keeps the allow the plain `|` form gets.
+        "git status --short |& head -2",
     ] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
         assert_eq!(decision.minimum_action, "allow", "{command}");
@@ -499,7 +524,6 @@ fn allows_bounded_pipeline_consumers() {
     for command in [
         "head -2",
         "git status --short && head -2",
-        "git status --short |& head -2",
         "git status --short | head -2; tail -n 1",
         "git status --short | head -2 || tail -n 1",
         "cat ~/.ssh/id_ed25519 | head -2",
@@ -508,6 +532,13 @@ fn allows_bounded_pipeline_consumers() {
         "git status --short | tail -f",
         "git status --short | head -n",
         "git status --short | head -n $(whoami)",
+        // The Korn shell reads `|&` as a coprocess rather than as a pipe with
+        // standard error merged into it. Naming a shell keeps the command out
+        // of this allow either way: the text it is handed is not the text this
+        // scan read, so no spelling of the pipe inside it is benign here.
+        "ksh -c 'git status --short |& head -2'",
+        "ksh -c 'git status --short 2>&1 | head -2'",
+        "ksh ./build.sh |& head -2",
     ] {
         let decision = evaluate_pre_tool(&request(command)).unwrap();
         assert!(!decision.explicitly_benign, "{command}");
@@ -531,8 +562,11 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "date +%s +%N",
         "date -f timestamps.txt",
         "date -d tomorrow",
-        "git remote",
         "git remote add origin example",
+        // Without `-n` Git opens the connection to the remote, which is a
+        // different question than a read of the local configuration.
+        "git remote show origin",
+        "git remote show -n origin upstream",
         "git remote -v -- add origin example",
         "git remote -v -- remove origin",
         "git remote -v -- set-url origin example",

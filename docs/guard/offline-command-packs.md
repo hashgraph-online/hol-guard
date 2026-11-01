@@ -22,6 +22,13 @@ approvals, credentials or private inventory. Export generates the inventory
 automatically and requires a new destination directory. An interrupted export is
 incomplete and cannot be imported successfully.
 
+Native export creates the destination exclusively and synchronizes each file.
+Unix exports also synchronize both data directories and their hierarchy before
+publishing `root.json` last. Windows exports retain per-file synchronization and
+publish `root.json` last without those directory barriers. A failed export can
+leave its new destination behind; choose a new directory for the next export.
+Partial file progress is not a resumable or independently durable export.
+
 Offline import requires the exact Root bytes authenticated by the destination's
 installed package: source, native engine and content identity must match. A
 newer package can use an identical Root; the export does not assert a package

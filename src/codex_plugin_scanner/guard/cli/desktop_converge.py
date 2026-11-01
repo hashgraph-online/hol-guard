@@ -18,10 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TextIO
 
+from ...version import __version__
 from ..adapters.base import HarnessContext
 from ..desktop_foreign_installs import (
     DESKTOP_PATH_SHIM_MARKER,
     ForeignInventory,
+    foreign_removal_available,
     inventory_foreign_installs,
     remove_foreign_installs,
 )
@@ -62,6 +64,17 @@ def converge_on_desktop_core(
     payload: dict[str, object] = {"launcher": str(launcher), "found": _describe(inventory)}
     if dry_run:
         payload["status"] = "planned"
+        return payload
+    if not inventory.empty and not foreign_removal_available():
+        # Stop nothing when the runtime cannot remove what it would retire.
+        payload.update(
+            {
+                "status": "partial",
+                "removed": [],
+                "daemon_restart_required": False,
+                "notes": ["Kept every superseded install: Guard's native runtime is unavailable."],
+            }
+        )
         return payload
     if not inventory.empty:
         try:
@@ -176,7 +189,11 @@ def run_desktop_converge(
         failures = [*(note for note in repair_notes if _REPAIR_FAILURE_MARKER in note), *converge_notes(payload)]
         notes = [*repair_notes, *converge_notes(payload)]
         if payload.get("daemon_restart_required"):
-            refreshed, refresh_note = refresh_desktop_core_daemon(context, executable=Path(sys.executable).resolve())
+            refreshed, refresh_note = refresh_desktop_core_daemon(
+                context,
+                executable=Path(sys.executable).resolve(),
+                minimum_version=__version__,
+            )
             payload["daemon_refresh"] = refreshed
             notes.extend([refresh_note] if refresh_note else [])
             failures.extend([refresh_note] if refresh_note and refreshed is None else [])

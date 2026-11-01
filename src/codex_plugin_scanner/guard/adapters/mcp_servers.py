@@ -55,10 +55,12 @@ def is_verified_guard_mcp_companion(
 
 _GUARD_PROXY_COMMANDS = frozenset(
     {
+        "cline-mcp-proxy",
         "codex-mcp-proxy",
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",
+        "hermes-mcp-proxy",
         "mcp-proxy",
     }
 )

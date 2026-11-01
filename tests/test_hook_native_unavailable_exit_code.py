@@ -1,20 +1,11 @@
-"""Coverage for the verdict-derived native-hook exit-code contract.
+"""Coverage for the verdict-derived native-hook exit-code contract."""
 
-Exercises both the shared ``native_hook_verdict_exit_code`` table and the
-availability wrapper ``_native_unavailable_exit_code`` that feeds an emitted
-deny/allow envelope through it.
-"""
-
-import argparse
 import re
+import sys
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_hook_native_availability import (
-    _availability_response_is_deny,
-    _native_unavailable_exit_code,
-)
 from codex_plugin_scanner.guard.cli.native_hook_exit_code import (
     _BLOCKING_ACTIONS,
     _PREEMPTIVE_EVENTS,
@@ -23,42 +14,6 @@ from codex_plugin_scanner.guard.cli.native_hook_exit_code import (
     _RC_BLOCK_IS_ZERO_ENVELOPE,
     native_hook_verdict_exit_code,
 )
-
-
-def _args(harness):
-    return argparse.Namespace(harness=harness)
-
-
-class TestAvailabilityResponseIsDeny:
-    def test_non_mapping_is_not_deny(self):
-        assert _availability_response_is_deny("deny") is False
-        assert _availability_response_is_deny(None) is False
-        assert _availability_response_is_deny(2) is False
-
-    def test_cursor_permission_deny(self):
-        assert _availability_response_is_deny({"permission": "deny"}) is True
-        assert _availability_response_is_deny({"permission": "DENY"}) is True
-        assert _availability_response_is_deny({"permission": "allow"}) is False
-        assert _availability_response_is_deny({"permission": "ask"}) is False
-
-    def test_hook_specific_output_permission_decision(self):
-        assert _availability_response_is_deny({"hookSpecificOutput": {"permissionDecision": "deny"}}) is True
-        assert _availability_response_is_deny({"hookSpecificOutput": {"permissionDecision": "allow"}}) is False
-
-    def test_hook_specific_output_decision(self):
-        for verdict in ("deny", "block", "review"):
-            assert _availability_response_is_deny({"hookSpecificOutput": {"decision": verdict}}) is True, verdict
-        assert _availability_response_is_deny({"hookSpecificOutput": {"decision": "allow"}}) is False
-
-    def test_policy_action_blocking_set(self):
-        for action in ("deny", "block", "review", "require-reapproval", "sandbox-required"):
-            assert _availability_response_is_deny({"policy_action": action}) is True, action
-        for action in ("allow", "warn", "observe"):
-            assert _availability_response_is_deny({"policy_action": action}) is False, action
-
-    def test_empty_response_not_deny(self):
-        assert _availability_response_is_deny({}) is False
-        assert _availability_response_is_deny({"reason_code": "x"}) is False
 
 
 class TestVerdictExitCodeContract:
@@ -76,7 +31,7 @@ class TestVerdictExitCodeContract:
         assert native_hook_verdict_exit_code(h, "block") == 1
         assert native_hook_verdict_exit_code(h, "allow") == 0
 
-    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp", "muse"))
     def test_envelope_driven_deny_rc0(self, h):
         # Deny rides the decision envelope (permissionDecision / decision);
         # a nonzero PREEMPTIVE rc would read as a hook error and permit the
@@ -86,7 +41,7 @@ class TestVerdictExitCodeContract:
         assert native_hook_verdict_exit_code(h, "block", "PermissionRequest") == 0
         assert native_hook_verdict_exit_code(h, "allow", "PreToolUse") == 0
 
-    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp"))
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp", "muse"))
     def test_envelope_post_tool_block_rc1(self, h):
         # PostToolUse cannot preempt (the tool already ran) — a blocking
         # verdict flags the violation on the exit status instead.
@@ -98,42 +53,71 @@ class TestVerdictExitCodeContract:
         assert native_hook_verdict_exit_code("some-future-harness", "allow") == 0
 
 
-class TestNativeUnavailableExitCode:
-    """The availability wrapper must route deny->block and allow->allow."""
+class TestUnknownActionFailsClosed:
+    """An action outside the lattice is not evidence of permission.
 
-    def test_cursor_deny_rc2_allow_rc0(self):
-        assert _native_unavailable_exit_code(_args("cursor"), {"permission": "deny"}, "PreToolUse") == 2
-        assert _native_unavailable_exit_code(_args("cursor"), {"permission": "allow"}, "PreToolUse") == 0
+    ``policy_action`` reaches this table as a bare string decoded from the
+    resident's response, so a newer resident, a truncated value or a corrupted
+    field can name an action this build has never heard of. Testing membership
+    in the blocking set made every such value non-blocking, which is the one
+    direction the contract cannot afford. The lattice normalizes an unknown
+    action to the review tier instead, so each harness renders its own
+    review-tier code.
+    """
 
-    def test_grok_uses_adapter(self, monkeypatch):
-        from codex_plugin_scanner.guard.adapters import grok_hooks
+    UNKNOWN = ("quarantine-required", "", "BLOCK", "ask ", "deny", "0")
 
-        monkeypatch.setattr(grok_hooks, "_last_grok_policy_action", "block")
-        assert _native_unavailable_exit_code(_args("grok"), {"policy_action": "block"}, "PreToolUse") == 2
-        monkeypatch.setattr(grok_hooks, "_last_grok_policy_action", "allow")
-        assert _native_unavailable_exit_code(_args("grok"), {"policy_action": "allow"}, "PreToolUse") == 0
+    @pytest.fixture(autouse=True)
+    def _protection_is_on(self, monkeypatch):
+        # grok reads the Guard home to honour recording-only mode, which would
+        # otherwise answer 0 for every action regardless of the lattice.
+        monkeypatch.delenv("HOL_GUARD_HOME", raising=False)
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
 
-    def test_zcode_block(self):
-        assert _native_unavailable_exit_code(_args("zcode"), {"policy_action": "block"}, "PreToolUse") == 2
-        assert _native_unavailable_exit_code(_args("zcode"), {"policy_action": "allow"}, "PreToolUse") == 0
+    @pytest.mark.parametrize("action", UNKNOWN)
+    @pytest.mark.parametrize("h", ("cursor", "devin", "kimi", "hermes", "grok"))
+    def test_rc_two_harnesses_block_an_unknown_action(self, action, h):
+        assert native_hook_verdict_exit_code(h, action, "PreToolUse") == 2
+        assert native_hook_verdict_exit_code(h, action, "PostToolUse") == 2
 
-    def test_devin(self):
-        assert _native_unavailable_exit_code(_args("devin"), {"policy_action": "block"}, "PreToolUse") == 2
+    @pytest.mark.parametrize("action", UNKNOWN)
+    @pytest.mark.parametrize("h", ("opencode", "superagent", "some-future-harness"))
+    def test_rc_one_harnesses_block_an_unknown_action(self, action, h):
+        assert native_hook_verdict_exit_code(h, action, "PreToolUse") == 1
+        assert native_hook_verdict_exit_code(h, action, "PostToolUse") == 1
 
-    def test_envelope_driven_deny_rc0(self):
-        for h in ("codex", "claude-code"):
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
+    @pytest.mark.parametrize("action", UNKNOWN)
+    @pytest.mark.parametrize("h", ("codex", "claude-code", "copilot", "pi", "omp", "muse"))
+    def test_envelope_harnesses_flag_an_unknown_action_after_the_fact(self, action, h):
+        # The envelope carries the deny before execution, so a preemptive
+        # event still exits 0; PostToolUse has nothing left to preempt and
+        # resolves to the review tier's nonzero status.
+        assert native_hook_verdict_exit_code(h, action, "PreToolUse") == 0
+        assert native_hook_verdict_exit_code(h, action, "PostToolUse") == 1
 
-    def test_envelope_harnesses_deny_rc0(self):
-        for h in ("pi", "omp"):
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 0, h
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
+    @pytest.mark.parametrize("action", UNKNOWN)
+    def test_zcode_treats_an_unknown_action_as_review(self, action):
+        # zcode discards stdout when a hook exits 2, so its review tier has to
+        # exit 0 for the ``ask`` envelope to reach the permission prompt. Every
+        # other event takes the blocking status.
+        assert native_hook_verdict_exit_code("zcode", action, "PreToolUse") == 0
+        assert native_hook_verdict_exit_code("zcode", action, "PostToolUse") == 2
 
-    def test_rc_driven_deny_rc1(self):
-        for h in ("opencode", "superagent"):
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "block"}, "PreToolUse") == 1, h
-            assert _native_unavailable_exit_code(_args(h), {"policy_action": "allow"}, "PreToolUse") == 0, h
+    @pytest.mark.parametrize("h", ("cursor", "opencode", "codex", "grok", "zcode", "some-future-harness"))
+    def test_a_non_string_action_never_reads_as_allow(self, h):
+        # A decoder that hands back ``None`` or a number has not established
+        # permission either.
+        for action in (None, 7, {"policy_action": "allow"}, ["allow"]):
+            assert native_hook_verdict_exit_code(h, action, "PostToolUse") == native_hook_verdict_exit_code(
+                h, "review", "PostToolUse"
+            )
+
+    @pytest.mark.parametrize("h", ("cursor", "opencode", "codex", "grok", "zcode"))
+    def test_the_legacy_ask_alias_resolves_to_review(self, h):
+        # ``ask`` predates the lattice and used to exit 0 everywhere; the
+        # lattice maps it onto ``review`` rather than onto a permissive rank.
+        for event in ("PreToolUse", "PostToolUse"):
+            assert native_hook_verdict_exit_code(h, "ask", event) == native_hook_verdict_exit_code(h, "review", event)
 
 
 class TestRustTableParity:
@@ -151,7 +135,7 @@ class TestRustTableParity:
     RUST_DIRECTIVE = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/hook_decision_directive.rs"
     ACTIONS = (
         "allow",
-        "observe",
+        "warn",
         "review",
         "require-reapproval",
         "sandbox-required",
@@ -183,7 +167,7 @@ class TestRustTableParity:
             (
                 "ENVELOPE_HARNESSES",
                 _RC_BLOCK_IS_ZERO_ENVELOPE,
-                {"codex", "claude-code", "copilot", "pi", "omp"},
+                {"codex", "claude-code", "copilot", "pi", "omp", "muse"},
             ),
             (
                 "PREEMPTIVE_EVENTS",

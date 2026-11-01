@@ -10,8 +10,6 @@ from .store import GuardStore
 
 _VALID_SCOPES = frozenset({"artifact", "publisher", "harness", "workspace"})
 
-_VALID_COMMAND_POLICY_DURATIONS = frozenset({"once", "session", "machine", "workspace", "30d", "90d"})
-
 
 class CloudExceptionRequestError(RuntimeError):
     status: int
@@ -99,85 +97,6 @@ def validate_cloud_exception_request_payload(payload: dict[str, object]) -> dict
             normalized[key] = value
     if not _scope_selector_present(normalized):
         raise ValueError("Guard exception request must include a selector for its scope.")
-    return normalized
-
-
-def validate_command_policy_exception_payload(payload: dict[str, object]) -> dict[str, object]:
-    """Validate a command-policy exception request payload.
-
-    The payload carries only correlation identifiers — never raw command,
-    regex, graph, or policy action. The Cloud re-fetches the bound
-    pending command server-side.
-
-    Required fields:
-      - kind: must be "command-policy"
-      - sourceLocalRequestId: stable local request id from the queue
-      - sourceMachineInstallationId: machine that observed the command
-      - workspaceId: workspace binding
-      - requestedDuration: once | session | machine | workspace | 30d | 90d
-      - reason: at least 8 characters
-
-    Forbidden keys (rejected if present):
-      - rawCommand, command, commandExpression, graph, proposedGraph
-      - owner, requestedBy (the Cloud resolves these from auth)
-    """
-    kind = _as_trimmed_string(payload.get("kind"))
-    if kind != "command-policy":
-        raise ValueError("Command-policy exception request requires kind='command-policy'.")
-
-    # Reject forbidden keys — no command/graph/policy material crosses
-    # the dashboard-to-Cloud boundary.
-    forbidden_keys = frozenset(
-        {
-            "rawCommand",
-            "command",
-            "commandExpression",
-            "graph",
-            "proposedGraph",
-            "expression",
-            "regex",
-            "pattern",
-        }
-    )
-    for key in forbidden_keys:
-        if key in payload:
-            raise ValueError(f"Command-policy request must not include '{key}'.")
-
-    source_local_request_id = _as_trimmed_string(payload.get("sourceLocalRequestId"))
-    source_machine_installation_id = _as_trimmed_string(payload.get("sourceMachineInstallationId"))
-    workspace_id = _as_trimmed_string(payload.get("workspaceId"))
-    requested_duration = _as_trimmed_string(payload.get("requestedDuration"))
-    reason = _as_trimmed_string(payload.get("reason"))
-
-    if not source_local_request_id:
-        raise ValueError("Command-policy request requires sourceLocalRequestId.")
-    if not source_machine_installation_id:
-        raise ValueError("Command-policy request requires sourceMachineInstallationId.")
-    if not workspace_id:
-        raise ValueError("Command-policy request requires workspaceId.")
-    if not requested_duration or requested_duration not in _VALID_COMMAND_POLICY_DURATIONS:
-        raise ValueError("Command-policy request has an invalid requestedDuration.")
-    if not reason or len(reason) < 8:
-        raise ValueError("Command-policy request requires a reason of at least 8 characters.")
-
-    normalized: dict[str, object] = {
-        "kind": "command-policy",
-        "sourceLocalRequestId": source_local_request_id,
-        "sourceMachineInstallationId": source_machine_installation_id,
-        "workspaceId": workspace_id,
-        "requestedDuration": requested_duration,
-        "reason": reason,
-    }
-    # Optional note (max 500 chars).
-    note = _as_trimmed_string(payload.get("note"))
-    if note:
-        if len(note) > 500:
-            raise ValueError("Command-policy request note must be at most 500 characters.")
-        normalized["note"] = note
-    # Optional signed claim.
-    signed_claim = _as_trimmed_string(payload.get("signedClaim"))
-    if signed_claim:
-        normalized["signedClaim"] = signed_claim
     return normalized
 
 

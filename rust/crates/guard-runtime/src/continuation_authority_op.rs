@@ -70,7 +70,7 @@ pub(crate) fn evaluate(args: &Value) -> KindResult {
         _ => Err(ERR_INVALID),
     }
 }
-fn replay(args: &Value) -> KindResult {
+pub(crate) fn replay(args: &Value) -> KindResult {
     let value = &args["prior"];
     let offer = &args["offer"];
     if value["continuation_offer_hash"] != offer_hash(offer, false)?
@@ -124,7 +124,7 @@ pub(crate) fn has_time_zone(value: &str) -> bool {
             })
     })
 }
-fn offer(args: &Value) -> KindResult {
+pub(crate) fn offer(args: &Value) -> KindResult {
     let harness = args["harness"]
         .as_str()
         .map(super::guard_store_json::py_strip)
@@ -162,7 +162,7 @@ fn offer(args: &Value) -> KindResult {
         "contract_version":"guard.harness-continuation.v2"}}),
     )
 }
-fn finalize(args: &Value) -> KindResult {
+pub(crate) fn finalize(args: &Value) -> KindResult {
     let projection = project(args)?;
     let offer = &args["offer"];
     let result = &args["result"];
@@ -304,7 +304,7 @@ fn snapshot(value: &Value) -> Value {
     }
     json!({"correlationId":id,"capability":capability,"hookAttached":attached,"opaqueTargetId":target,"waitDeadline":deadline})
 }
-fn project(args: &Value) -> KindResult {
+pub(crate) fn project(args: &Value) -> KindResult {
     let offer = &args["offer"];
     let result = &args["result"];
     let harness = offer["harness"].as_str().ok_or(ERR_INVALID)?;

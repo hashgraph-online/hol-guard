@@ -82,12 +82,16 @@ def _scenario(scenario_id: str):
 
 
 def test_benign_prompts_read_like_ordinary_developer_requests() -> None:
-    from ci.gauntlet.agent_prompt import scenario_prompt
+    from ci.gauntlet.agent_prompt import command_block, scenario_prompt
 
     banned = re.compile(r"\b(disposable|synthetic|authorized|fixture|test)\b")
     for scenario in _NATIVE_TOOLS:
-        # The searched marker text itself is file content, not framing.
+        # The searched marker text and the commands themselves are the literal
+        # strings the agent finds and runs, not framing the prompt wraps around
+        # them. A project really does name a script `test:unit`.
         text = scenario_prompt(scenario).lower().replace("ordinary-workflow-fixture", "")
+        for command in scenario.commands:
+            text = text.replace(command.lower(), "")
         assert not banned.search(text), scenario.id
 
 
@@ -281,7 +285,7 @@ def test_approval_rows_name_the_tool_from_the_stored_action_envelope(monkeypatch
     contract = SimpleNamespace(
         allow_scopes=["once"], exact_action_persistence_eligible=False, once_only_reason="unproven_launch"
     )
-    monkeypatch.setattr(approval_scope_support, "request_scope_observation", lambda row: (contract, None))
+    monkeypatch.setattr(approval_scope_support, "_native_scopes", lambda rows: [(contract, None)])
     stored = {
         "request_id": "r1",
         "action_envelope_json": {"tool_name": "read", "native_origin_receipt": {"reason_code": "native_x_review"}},

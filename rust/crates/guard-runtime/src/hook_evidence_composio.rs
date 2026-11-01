@@ -1,9 +1,11 @@
 //! The Composio seam of the native hook evidence writer.
 //!
-//! Ports `runtime/observed_mcp_tools.py` (the `observed_mcp_tool` parser),
-//! `runtime/composio_discovery.py` and `runtime/composio_workflows.py`: the
-//! three readers the writer runs over an MCP tool response before any of it
-//! reaches the store.
+//! Ports `runtime/observed_mcp_tools.py` (the `observed_mcp_tool` parser) and
+//! the retired discovery and workflow readers of `runtime/composio_discovery.py`
+//! and `runtime/composio_workflows.py`, which now keep only the records these
+//! readers return: the three readers the writer runs over an MCP tool response
+//! before any of it reaches the store. Line references to those two modules
+//! name the retired Python.
 //!
 //! All three are provider-result evidence, never an authenticated inventory.
 //! A namespace parsed out of a tool name is an identity on one harness, not a
