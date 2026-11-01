@@ -34447,6 +34447,74 @@
       "expect": "allow"
     },
     {
+      "id": "control-flow-while-read-body-expansion",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do echo \"$line\"; done < README.md"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "control-flow-while-read-body-operand-expansion",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while IFS= read -r f; do wc -l \"$f\"; done < README.md"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-control-flow-while-read-expansion-command-word",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do \"$line\" --version; done < README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-control-flow-while-read-foreign-expansion",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do cat \"$HOME/.ssh/id_rsa\"; done < README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "control-flow-conditional-body-expansion",
       "fix_area": "shell",
       "harnesses": [

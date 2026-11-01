@@ -92,6 +92,43 @@ fn a_conditional_keeps_the_expansions_it_held() {
     }
 }
 
+/// A read-driven loop carries the one name its `read` binds. The body reads
+/// that name as an expansion, and so does the flat list: a line drawn from
+/// the redirected file is no more text a proof resolves than whatever the
+/// shell already holds, so the two stand for the same work. `${name}` and
+/// `$name` spell the same read, and the flat list writes the shorter one.
+#[test]
+fn a_read_loop_carries_the_name_it_binds() {
+    for (command, expected) in [
+        (
+            "while read -r line; do echo \"$line\"; done < list.txt",
+            "cat list.txt; echo \"$line\"",
+        ),
+        (
+            "while read -r f; do wc -l \"$f\"; done < list.txt",
+            "cat list.txt; wc -l \"$f\"",
+        ),
+        (
+            "while IFS= read -r line; do printf '%s\\n' \"$line\"; done < list.txt",
+            "cat list.txt; printf '%s\\n' \"$line\"",
+        ),
+        (
+            "while read line; do echo ${line}; done < README.md",
+            "cat README.md; echo $line",
+        ),
+        (
+            "while read -r name; do echo \"$name\"; cat README.md; done < list.txt",
+            "cat list.txt; echo \"$name\"; cat README.md",
+        ),
+    ] {
+        assert_eq!(
+            flatten(command).as_deref(),
+            Some(expected),
+            "{command} lost the name its read binds"
+        );
+    }
+}
+
 /// Anything the grammar does not cover keeps its review: a value the
 /// construct binds for itself, a nested construct, a substitution, an empty
 /// branch, and text that follows the closing keyword.
@@ -113,10 +150,14 @@ fn a_conditional_keeps_the_expansions_it_held() {
 /// command words against the environment the loop replaced. So does an item
 /// ending in an escaped space, whose backslash would escape the separator
 /// once the space is trimmed and swallow the rest of the list.
+///
+/// A loop body may read the one name its `read` binds and nothing else. An
+/// expansion of some other name would stand for a value the loop never
+/// bound, and a `read` that fills several names, or none, leaves no single
+/// name for the body to carry.
 #[test]
 fn an_unmodeled_construct_keeps_its_review() {
     for command in [
-        "while read line; do echo $line; done < README.md",
         "while read line; do echo \"${name}\"; done < README.md",
         "if [ -f \"$(which ls)\" ]; then ls; fi",
         "if [ -n \"$?\" ]; then ls; fi",
@@ -167,6 +208,10 @@ fn an_unmodeled_construct_keeps_its_review() {
         "while read -r PATH; do ls; done < README.md",
         "while read http_proxy; do ls; done < README.md",
         "while read line path; do ls; done < README.md",
+        "while read line path; do echo \"$line\"; done < README.md",
+        "while read -r; do echo \"$REPLY\"; done < README.md",
+        "while read -r line; do cat \"$line/$other\"; done < README.md",
+        "while read -r line; do \"$line\" --version; done < README.md",
         "if true; then echo a\\ ; rm -rf build; fi",
         "while read line; do echo a\\ ; rm -rf build; done < README.md",
         "while read line; do echo hi; done < /dev/urandom",
