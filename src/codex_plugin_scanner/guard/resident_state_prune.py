@@ -75,6 +75,14 @@ def prune_native_runtime(
     return answer if answer is not None and _valid_report(answer) else None
 
 
+def prune_runtime_offered() -> bool:
+    """Whether an installed runtime offers the prune, so a missing answer is its failure."""
+
+    from .mdm.runtime_request import runtime_offers
+
+    return runtime_offers(_FEATURE)
+
+
 def _valid_report(answer: dict[str, object]) -> bool:
     counts = (answer.get("stale_dirs"), answer.get("dead_sockets"))
     lists = (answer.get("removed_dirs"), answer.get("removed_sockets"), answer.get("errors"))
@@ -90,4 +98,4 @@ def _valid_report(answer: dict[str, object]) -> bool:
     )
 
 
-__all__ = ["OWNER_LOCK_NAME", "probe_owner_lock", "prune_native_runtime"]
+__all__ = ["OWNER_LOCK_NAME", "probe_owner_lock", "prune_native_runtime", "prune_runtime_offered"]

@@ -54,6 +54,9 @@ const MAX_ENTRIES: usize = 2000;
 const TIME_BUDGET: Duration = Duration::from_secs(30);
 const MAX_STATE_BYTES: u64 = 64 * 1024;
 const MAX_LISTED: usize = 50;
+/// The listed paths together stay well inside the caller's 64 KiB answer.
+const MAX_LISTED_BYTES: usize = 24 * 1024;
+const SOCKET_SETTLE: Duration = Duration::from_millis(100);
 const MAX_ERRORS: usize = 10;
 
 #[derive(Deserialize)]
@@ -79,6 +82,8 @@ struct Report {
     kept: BTreeMap<&'static str, u64>,
     budget_exhausted: bool,
     errors: Vec<&'static str>,
+    #[serde(skip)]
+    listed_bytes: usize,
 }
 
 impl Report {
@@ -102,18 +107,29 @@ impl Report {
 
     fn removed_dir(&mut self, directory: &Path) {
         self.stale_dirs += 1;
-        if self.removed_dirs.len() < MAX_LISTED {
-            self.removed_dirs
-                .push(directory.to_string_lossy().into_owned());
+        if let Some(text) = self.listable(self.removed_dirs.len(), directory) {
+            self.removed_dirs.push(text);
         }
     }
 
     fn removed_socket(&mut self, socket: &Path) {
         self.dead_sockets += 1;
-        if self.removed_sockets.len() < MAX_LISTED {
-            self.removed_sockets
-                .push(socket.to_string_lossy().into_owned());
+        if let Some(text) = self.listable(self.removed_sockets.len(), socket) {
+            self.removed_sockets.push(text);
         }
+    }
+
+    /// The path to list, while its list and the shared byte budget have
+    /// room. The counts always cover every removal.
+    fn listable(&mut self, listed: usize, item: &Path) -> Option<String> {
+        let text = item.to_string_lossy().into_owned();
+        // JSON escaping can at most double a path's bytes.
+        let cost = text.len() * 2 + 4;
+        if listed >= MAX_LISTED || self.listed_bytes + cost > MAX_LISTED_BYTES {
+            return None;
+        }
+        self.listed_bytes += cost;
+        Some(text)
     }
 
     fn error(&mut self, error: &'static str) {
@@ -148,6 +164,8 @@ trait Host {
     fn owner_lock_free(&mut self, directory: &Path) -> Option<bool>;
     fn probe_socket(&mut self, socket: &Path) -> SocketState;
     fn elapsed(&mut self) -> Duration;
+    /// The pause between the two probes of a refused socket.
+    fn settle(&mut self);
 }
 
 struct SystemHost {
@@ -169,6 +187,10 @@ impl Host for SystemHost {
 
     fn elapsed(&mut self) -> Duration {
         self.started.elapsed()
+    }
+
+    fn settle(&mut self) {
+        std::thread::sleep(SOCKET_SETTLE);
     }
 }
 
@@ -272,12 +294,14 @@ fn prune(guard_home: &Path, settings: &Settings, host: &mut impl Host) -> Report
         Some(extra) => roots.extend(extra.iter().cloned()),
         None => roots.extend(default_socket_roots(&SYSTEM_TMP_BASES.map(Path::new))),
     }
-    for socket in socket_candidates(&roots) {
+    let (sockets, truncated) = socket_candidates(&roots, settings.max_entries + 1);
+    for socket in sockets {
         if over_budget(&mut report, host.elapsed()) {
             return report;
         }
         prune_socket(&socket, &mut report, settings, host);
     }
+    report.budget_exhausted |= truncated;
     report
 }
 

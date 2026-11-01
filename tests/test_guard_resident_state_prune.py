@@ -59,14 +59,17 @@ def test_prune_reports_none_for_a_malformed_runtime_answer(tmp_path: Path, monke
     answers: list[dict[str, object] | None] = [
         {"outcome": "ok", "stale_dirs": -1, "dead_sockets": 0, "removed_dirs": [], "removed_sockets": []},
         None,
+        None,
     ]
     requests: list[object] = []
+    offered: list[bool] = [False, True]
 
     def fake_answer(_feature: str, _command: str, request: object, **_options: object) -> dict[str, object] | None:
         requests.append(request)
         return answers.pop(0)
 
     monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature, **_options: offered.pop(0))
     assert prune_native_runtime(tmp_path, include_system_sockets=False) is None
     assert requests[0] == {
         "schema": "resident-state-prune.v1",
@@ -79,6 +82,11 @@ def test_prune_reports_none_for_a_malformed_runtime_answer(tmp_path: Path, monke
     report = run_repair(guard_home=context.guard_home, context=context, store=store, include_daemon=False)
     native = next(item for item in report["steps"] if item["step"] == "native_runtime")  # type: ignore[union-attr]
     assert native["status"] == "skipped"
+    # A runtime that offers the prune but answers nothing usable failed; it
+    # is not reported as absent.
+    report = run_repair(guard_home=context.guard_home, context=context, store=store, include_daemon=False)
+    native = next(item for item in report["steps"] if item["step"] == "native_runtime")  # type: ignore[union-attr]
+    assert (native["status"], native["outcome"]) == ("error", "failed")
 
 
 def _context(tmp_path: Path) -> HarnessContext:

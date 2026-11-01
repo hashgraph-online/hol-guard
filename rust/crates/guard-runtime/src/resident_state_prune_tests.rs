@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime};
 
 use serde_json::{json, Value};
 
-use super::sockets::{default_socket_roots, probe_socket};
+use super::sockets::{default_socket_roots, probe_socket, socket_candidates};
 use super::{
     owner_lock_free, prune, run_command, unix_seconds, Host, Report, Settings, SocketState,
     OWNER_LOCK_NAME,
@@ -18,6 +18,9 @@ struct FakeHost {
     alive: Vec<i64>,
     lock: Option<bool>,
     socket: SocketState,
+    /// What every probe after a settle answers, when it differs.
+    settled_socket: Option<SocketState>,
+    settled: bool,
 }
 
 impl Default for FakeHost {
@@ -26,6 +29,8 @@ impl Default for FakeHost {
             alive: Vec::new(),
             lock: Some(true),
             socket: SocketState::Dead,
+            settled_socket: None,
+            settled: false,
         }
     }
 }
@@ -40,11 +45,18 @@ impl Host for FakeHost {
     }
 
     fn probe_socket(&mut self, _socket: &Path) -> SocketState {
-        self.socket
+        match self.settled_socket {
+            Some(state) if self.settled => state,
+            _ => self.socket,
+        }
     }
 
     fn elapsed(&mut self) -> Duration {
         Duration::ZERO
+    }
+
+    fn settle(&mut self) {
+        self.settled = true;
     }
 }
 
@@ -300,6 +312,16 @@ fn only_dead_old_resident_sockets_are_removed() {
     assert!(root.path().join("hook-v2-live.sock").exists());
     assert!(kept.removed_sockets.is_empty());
 
+    // Nor one refused once and then accepted, as a busy listener with a
+    // full backlog is on macOS.
+    let mut busy = FakeHost {
+        settled_socket: Some(SocketState::Live),
+        ..FakeHost::default()
+    };
+    let kept = prune_with(home.path(), &with_root, &mut busy);
+    assert!(root.path().join("hook-v2-live.sock").exists());
+    assert_eq!(kept.kept.get("socket_not_provably_dead"), Some(&1));
+
     // Nor one that is too recent to judge.
     let recent = Settings {
         now: now(),
@@ -343,6 +365,33 @@ fn the_entry_budget_bounds_work() {
     );
     assert!(report.budget_exhausted);
     assert_eq!(report.stale_dirs, 2);
+}
+
+#[test]
+fn the_socket_walk_stops_at_its_limit() {
+    let root = short_tempdir();
+    for index in 0..5 {
+        fs::write(root.path().join(format!("h3-{index}.sock")), b"").expect("file");
+    }
+    let roots = [root.path().to_path_buf()];
+    let (some, truncated) = socket_candidates(&roots, 3);
+    assert_eq!((some.len(), truncated), (3, true));
+    let (all, truncated) = socket_candidates(&roots, 10);
+    assert_eq!((all.len(), truncated), (5, false));
+}
+
+#[test]
+fn long_removed_paths_keep_the_answer_small_and_the_counts_whole() {
+    let mut report = Report::new(false);
+    let long = PathBuf::from(format!("/{}", "x".repeat(4000)));
+    for _ in 0..40 {
+        report.removed_dir(&long);
+        report.removed_socket(&long);
+    }
+    assert_eq!((report.stale_dirs, report.dead_sockets), (40, 40));
+    assert!(report.removed_dirs.len() + report.removed_sockets.len() < 10);
+    let bytes = serde_json::to_vec(&report).expect("encode");
+    assert!(bytes.len() < 32 * 1024, "{}", bytes.len());
 }
 
 #[test]

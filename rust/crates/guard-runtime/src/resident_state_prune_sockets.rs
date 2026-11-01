@@ -8,6 +8,8 @@ use super::{mtime_seconds, name_of, owned, Host, Report, Settings, SocketState};
 
 const SOCKET_PREFIXES: [&str; 2] = ["hook-v2-", "h3-"];
 const SOCKET_ROOT_PREFIX: &str = "hgr-";
+/// Directory entries one prune reads while looking for sockets.
+const MAX_SCANNED: usize = 64 * 1024;
 /// The resident binds its sockets under the fixed system tmp directory (see
 /// `socket_directory_path`), so the prune looks there too.
 pub(super) const SYSTEM_TMP_BASES: [&str; 2] = ["/private/tmp", "/tmp"];
@@ -41,6 +43,18 @@ pub(super) fn prune_socket(
             return;
         }
     }
+    // macOS and the BSDs also refuse a connect while a live listener's
+    // backlog is full, so one refusal is not proof. A busy resident drains
+    // its backlog between the two probes; a dead socket refuses both.
+    host.settle();
+    match host.probe_socket(socket) {
+        SocketState::Gone => return,
+        SocketState::Dead => {}
+        SocketState::Live | SocketState::Unknown => {
+            report.keep("socket_not_provably_dead");
+            return;
+        }
+    }
     if !settings.dry_run {
         match fs::symlink_metadata(socket) {
             Ok(current) if is_socket(&current) && same_inode(&current, &metadata) => {}
@@ -61,28 +75,39 @@ pub(super) fn prune_socket(
     report.removed_socket(socket);
 }
 
-/// Resident sockets directly inside each root, never recursive.
-pub(super) fn socket_candidates(roots: &[PathBuf]) -> Vec<PathBuf> {
+/// Resident sockets directly inside each root, never recursive. The walk
+/// stops after `limit` sockets or `MAX_SCANNED` directory entries, so a
+/// crowded root costs no more than the prune's own budget; `true` means it
+/// stopped early.
+pub(super) fn socket_candidates(roots: &[PathBuf], limit: usize) -> (Vec<PathBuf>, bool) {
     let mut sockets = Vec::new();
+    let mut scanned = 0usize;
     for root in roots {
         let Ok(entries) = fs::read_dir(root) else {
             continue;
         };
-        let mut found: Vec<PathBuf> = entries
-            .flatten()
-            .map(|entry| entry.path())
-            .filter(|candidate| {
-                let name = name_of(candidate);
-                name.ends_with(".sock")
-                    && SOCKET_PREFIXES
-                        .iter()
-                        .any(|prefix| name.starts_with(prefix))
-            })
-            .collect();
+        let mut found = Vec::new();
+        for entry in entries.flatten() {
+            scanned += 1;
+            if scanned > MAX_SCANNED || sockets.len() + found.len() >= limit {
+                found.sort();
+                sockets.extend(found);
+                return (sockets, true);
+            }
+            let candidate = entry.path();
+            let name = name_of(&candidate);
+            if name.ends_with(".sock")
+                && SOCKET_PREFIXES
+                    .iter()
+                    .any(|prefix| name.starts_with(prefix))
+            {
+                found.push(candidate);
+            }
+        }
         found.sort();
         sockets.extend(found);
     }
-    sockets
+    (sockets, false)
 }
 
 /// The resident's socket directories, `<tmp>/hgr-*`, from the first base that
@@ -115,8 +140,9 @@ pub(super) fn default_socket_roots(bases: &[&Path]) -> Vec<PathBuf> {
     Vec::new()
 }
 
-/// `Dead` only when `connect()` is refused. The connect never waits: a
-/// listener with a full backlog reads as `Unknown`.
+/// `Dead` only when `connect()` is refused. The connect never waits. On Linux
+/// a listener with a full backlog reads as `Unknown`; macOS and the BSDs
+/// refuse it, which is why `prune_socket` probes twice.
 #[cfg(unix)]
 pub(super) fn probe_socket(socket: &Path) -> SocketState {
     use nix::errno::Errno;
