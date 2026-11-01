@@ -70,7 +70,7 @@
     "https://www.npmjs.com/package/@vulnify/mcp"
   ],
   "saferAlternatives": [
-    "Use check_action or test_policies for a dry run: they skip the PII scan, record nothing, and a REVIEW from those tools does not open a human review. plan_policy_changes always runs with dryRun true and has no apply path. Call decide_action or check_mcp_tool_call to record a decision that can wait for a person.",
-    "A recorded REVIEW result waits for a person in the Vulnify app or Slack; this server cannot approve or deny one. Treat tool errors as not allowed, never as ALLOW."
+    "Dry-run check_action/test_policies (and plan_policy_changes with dryRun true) record nothing; a REVIEW from them does not open human review. Record via decide_action or check_mcp_tool_call first.",
+    "A recorded REVIEW waits for a person in the Vulnify app or Slack; this server cannot approve or deny. Treat tool errors as not allowed, never as ALLOW."
   ]
 }
