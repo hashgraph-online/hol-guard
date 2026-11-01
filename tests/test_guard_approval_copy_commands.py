@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import urllib.parse
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -488,6 +489,40 @@ def test_attach_primary_approval_link_prefers_artifact_over_operation_ids() -> N
 
     assert payload["primary_approval_request_id"] == "bound-req"
     assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
+
+
+def test_protect_receipt_binds_its_only_request_when_the_runtime_cannot_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli.protect_approvals import _bind_protect_receipt_approval
+
+    def unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    class Store:
+        def __init__(self) -> None:
+            self.bound: list[tuple[str, str]] = []
+
+        def update_receipt_approval_context(
+            self, receipt_id: str, *, approval_source: str, approval_request_id: str
+        ) -> None:
+            self.bound.append((receipt_id, approval_request_id))
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    for request_ids, expected in ((["only-req"], [("receipt-1", "only-req")]), (["a-req", "b-req"], [])):
+        payload: dict[str, object] = {
+            "receipt": {"receipt_id": "receipt-1"},
+            "approval_request_ids": request_ids,
+            "approval_requests": [{"request_id": request_id, "harness": "codex"} for request_id in request_ids],
+        }
+        attach_primary_approval_link(payload, harness="codex", approval_center_url="http://127.0.0.1:5474")
+        assert "primary_approval_request_id" not in payload
+        store = Store()
+
+        _bind_protect_receipt_approval(payload, store=cast(GuardStore, cast(object, store)))
+
+        assert store.bound == expected
 
 
 def test_attach_primary_approval_link_uses_operation_request_id() -> None:
