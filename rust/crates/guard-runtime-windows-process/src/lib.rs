@@ -46,10 +46,11 @@ pub use windows::{
     create_private_file, delete_private_file_handle, directory_file_id, handle_file_id,
     is_single_link_file, is_single_link_handle, open_bound_executable_file,
     open_bound_regular_file, open_bound_replaceable_file, open_private_directory,
-    open_private_file, open_skill_directory, path_is_within, path_stat, process_liveness,
-    process_parent_ids, process_start_marker, regular_file_id, remove_file_if_same,
-    running_process_image_path, running_process_start_marker, terminate_process,
-    terminate_process_verified, wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding,
+    open_private_file, open_skill_directory, path_is_within, path_stat, process_ids,
+    process_liveness, process_parent_ids, process_start_marker, regular_file_id,
+    remove_file_if_same, running_process_image_path, running_process_start_marker,
+    terminate_process, terminate_process_verified, wait_for_process_exit, FileId, PathStat,
+    PrivateDirectoryBinding, ProcessQuery,
 };
 
 #[cfg(windows)]
@@ -112,6 +113,36 @@ pub fn owned_by_current_user(_path: &Path) -> bool {
 #[cfg(not(windows))]
 pub fn process_liveness(_process_id: u32) -> Option<bool> {
     None
+}
+
+#[cfg(not(windows))]
+pub fn process_ids() -> io::Result<Vec<u32>> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Windows process support is unavailable",
+    ))
+}
+
+/// Only Windows has this process table; nothing ever opens.
+#[cfg(not(windows))]
+pub struct ProcessQuery;
+
+#[cfg(not(windows))]
+impl ProcessQuery {
+    pub fn open(_process_id: u32) -> io::Result<Self> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Windows process support is unavailable",
+        ))
+    }
+
+    pub fn image_path(&self) -> Option<String> {
+        None
+    }
+
+    pub fn command_line(&self, _max_command_line_bytes: usize) -> Option<String> {
+        None
+    }
 }
 
 #[cfg(not(windows))]

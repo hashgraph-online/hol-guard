@@ -136,6 +136,12 @@ pub(super) fn run() -> Result<(), String> {
             let response = device_key_helper::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag]
+            if windows_process_command_lines::is_command(command) && flag == "--stdin" =>
+        {
+            let response = windows_process_command_lines::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
