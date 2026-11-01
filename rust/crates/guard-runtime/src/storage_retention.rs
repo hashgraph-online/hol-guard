@@ -24,6 +24,7 @@
 //! A stale directory is removed with `remove_dir_all`, which never follows a
 //! link inside the tree and stops at the first entry it cannot remove.
 
+use std::collections::HashMap;
 use std::fs::{self, Metadata};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -218,23 +219,21 @@ fn event_epoch_seconds(base: &str, mtime: f64) -> f64 {
 
 fn prune_quarantine(guard_home: &Path, policy: &Retention) -> u64 {
     let mut events: Vec<Event> = Vec::new();
+    let mut positions: HashMap<String, usize> = HashMap::new();
     for (name, metadata) in snapshot_files(guard_home) {
         let base = event_base(&name);
         let mtime = modified_seconds(&metadata);
         let key = sort_key(base, mtime);
-        let index = match events.iter().position(|event| event.base == base) {
-            Some(index) => index,
-            None => {
-                events.push(Event {
-                    base: base.to_owned(),
-                    key: key.clone(),
-                    bytes: 0,
-                    mtime: 0.0,
-                    has_snapshot: false,
-                });
-                events.len() - 1
-            }
-        };
+        let index = *positions.entry(base.to_owned()).or_insert_with(|| {
+            events.push(Event {
+                base: base.to_owned(),
+                key: key.clone(),
+                bytes: 0,
+                mtime: 0.0,
+                has_snapshot: false,
+            });
+            events.len() - 1
+        });
         let event = &mut events[index];
         if key > event.key {
             event.key = key;
