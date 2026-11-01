@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import threading
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeGuard
 
 from ..mdm.runtime_request import runtime_answer
 from .false_positive_rules import KNOWN_SKILL_DOC_ROOT_SUFFIXES
@@ -27,6 +29,19 @@ _INDEX_OUTPUT_LIMIT = 32 * 1024 * 1024
 _INSPECT_OUTPUT_LIMIT = 64 * 1024
 _PATH_ENCODING = "utf16le" if os.name == "nt" else "os_bytes"
 _IDENTITY_KEYS = {"status", "manifest_digest", "entry_count", "total_bytes", "reason"}
+_IDENTITY_STATUSES = {"complete", "incomplete"}
+_METADATA_KEYS = {
+    "name",
+    "description",
+    "compatibility",
+    "requested_tools",
+    "metadata_digest",
+    "requirements_complete",
+    "instruction_content_loaded",
+    "dependencies",
+}
+_DIGEST = re.compile(r"[0-9a-f]{64}")
+_MANIFEST_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
@@ -93,15 +108,34 @@ def index_local_skills(
     home: Path,
     cancel: threading.Event,
 ) -> tuple[dict[str, LocalSkillRecord], list[dict[str, str]]]:
-    """Index every approved root's skill metadata in one runtime request."""
+    """Index each approved root's skill metadata, one runtime request per root.
 
-    if cancel.is_set() or not roots:
-        return {}, []
+    A cancelled scan stops before its next root rather than holding the job
+    for every remaining root.
+    """
+
+    records: dict[str, LocalSkillRecord] = {}
+    issues: list[dict[str, str]] = []
+    for root_id, root in roots.items():
+        if cancel.is_set():
+            break
+        _index_root(root_id, root, home=home, records=records, issues=issues)
+    return records, issues
+
+
+def _index_root(
+    root_id: str,
+    root: Path,
+    *,
+    home: Path,
+    records: dict[str, LocalSkillRecord],
+    issues: list[dict[str, str]],
+) -> None:
     answer = _skill_index_answer(
         {
             "op": "index",
             "home_hex": _encoded(home),
-            "roots": [{"root_id": root_id, "root_hex": _encoded(root)} for root_id, root in roots.items()],
+            "roots": [{"root_id": root_id, "root_hex": _encoded(root)}],
         },
         output_limit=_INDEX_OUTPUT_LIMIT,
         timeout=_INDEX_TIMEOUT_SECONDS,
@@ -109,25 +143,38 @@ def index_local_skills(
     raw_records = answer.get("records") if answer is not None else None
     raw_issues = answer.get("issues") if answer is not None else None
     if not isinstance(raw_records, list) or not isinstance(raw_issues, list):
-        return {}, [{"root_id": root_id, "reason": "skill-index-unavailable"} for root_id in roots]
-    records: dict[str, LocalSkillRecord] = {}
-    issues: list[dict[str, str]] = []
+        issues.append({"root_id": root_id, "reason": "skill-index-unavailable"})
+        return
     for raw in raw_issues:
-        root_id = raw.get("root_id") if isinstance(raw, dict) else None
         reason = raw.get("reason") if isinstance(raw, dict) else None
-        if root_id in roots and isinstance(reason, str):
-            issues.append({"root_id": str(root_id), "reason": reason})
+        if isinstance(raw, dict) and raw.get("root_id") == root_id and isinstance(reason, str):
+            issues.append({"root_id": root_id, "reason": reason})
     for raw in raw_records:
-        root_id = raw.get("root_id") if isinstance(raw, dict) else None
         metadata = raw.get("metadata") if isinstance(raw, dict) else None
         relative = _relative(raw.get("document_hex")) if isinstance(raw, dict) else None
-        if not isinstance(root_id, str) or root_id not in roots or not isinstance(metadata, dict) or relative is None:
-            issues.append({"root_id": str(root_id) if root_id in roots else "", "reason": "metadata-unreadable"})
+        if (
+            not isinstance(raw, dict)
+            or raw.get("root_id") != root_id
+            or not _valid_metadata(metadata)
+            or relative is None
+        ):
+            issues.append({"root_id": root_id, "reason": "metadata-unreadable"})
             continue
-        root = roots[root_id]
         skill_id = hashlib.sha256((str(root) + "\0" + relative).encode()).hexdigest()
         records[skill_id] = LocalSkillRecord(skill_id, root_id, root / relative, root, metadata)
-    return records, issues
+
+
+def _valid_metadata(metadata: object) -> TypeGuard[dict[str, object]]:
+    """The runtime's metadata shape, so listing and inspection never fail on it."""
+
+    return (
+        isinstance(metadata, dict)
+        and set(metadata) == _METADATA_KEYS
+        and isinstance(metadata["name"], str)
+        and isinstance(metadata["description"], str)
+        and isinstance(metadata["metadata_digest"], str)
+        and _DIGEST.fullmatch(metadata["metadata_digest"]) is not None
+    )
 
 
 def public_skill_page(
@@ -157,6 +204,26 @@ def public_skill_page(
     }
 
 
+def _count(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _valid_identity(identity: object) -> TypeGuard[dict[str, object]]:
+    """The runtime's identity answer: a known status, a digest or none, counts and a reason or none."""
+
+    if not isinstance(identity, dict) or set(identity) != _IDENTITY_KEYS:
+        return False
+    digest = identity["manifest_digest"]
+    reason = identity["reason"]
+    return (
+        identity["status"] in _IDENTITY_STATUSES
+        and (digest is None or (isinstance(digest, str) and _MANIFEST_DIGEST.fullmatch(digest) is not None))
+        and _count(identity["entry_count"])
+        and _count(identity["total_bytes"])
+        and (reason is None or isinstance(reason, str))
+    )
+
+
 def inspect_indexed_skill(record: LocalSkillRecord, *, home: Path) -> dict[str, object]:
     """Hash the indexed skill's directory, refusing metadata that moved since indexing."""
 
@@ -177,7 +244,7 @@ def inspect_indexed_skill(record: LocalSkillRecord, *, home: Path) -> dict[str, 
     if isinstance(error, str) and error:
         raise ValueError(error)
     identity = answer.get("identity")
-    if not isinstance(identity, dict) or set(identity) != _IDENTITY_KEYS:
+    if not _valid_identity(identity):
         raise OSError("skill-inspection-unavailable")
     return {
         "skill_id": record.skill_id,

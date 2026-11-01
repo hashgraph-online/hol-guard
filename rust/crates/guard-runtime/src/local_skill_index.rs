@@ -231,12 +231,24 @@ fn open_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::OpenOptionsExt;
     const FILE_SHARE_READ: u32 = 0x1;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
     // Share read only: no writer or deleter can change the file under the read.
-    fs::OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-        .open(path)
+    // A briefly open writer (an editor saving) is a sharing violation, so the
+    // open is retried a few times before the document counts as unreadable.
+    for attempt in 0..6 {
+        match fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)
+        {
+            Err(error) if error.raw_os_error() == Some(ERROR_SHARING_VIOLATION) && attempt < 5 => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => return result,
+        }
+    }
+    unreachable!("bounded open always returns")
 }
 
 /// Read one primary document's bounded frontmatter, refusing a linked,
