@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import cast
 
 from .acl import (
+    _macos_request,
     _native_answer,
     _native_deadline,
     _PathSurface,
     _run_windows_acl_payload,
-    _verify_macos_surface,
 )
 
 
@@ -50,7 +50,8 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
         return False
     if resolved_system == "Darwin":
         surface = _PathSurface("managed-file", path, False, Path(path.anchor))
-        return _verify_macos_surface(surface, expected_uid=0, cache={}).healthy
+        answer = _native_answer(_macos_request((surface,), 0), deadline=_native_deadline())
+        return answer is not None and answer.get("status") == "healthy"
     if resolved_system == "Windows":
         request: dict[str, object] = {"op": "windows-file-payload", "managed_file": str(path)}
         deadline = _native_deadline()

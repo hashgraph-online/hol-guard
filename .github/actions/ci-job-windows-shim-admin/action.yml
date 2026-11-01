@@ -128,6 +128,13 @@ runs:
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib harness_coverage
+    - name: Refuse the macOS ownership walk off Unix
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib ownership_acl_verdict::macos
     - name: Contain MCP server process trees in a JobObject on Windows
       if: inputs.shim-gate == 'mcp'
       shell: pwsh
