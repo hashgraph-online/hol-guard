@@ -242,10 +242,11 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
-            | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
-            | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
-            | "shortlog" | "check-ignore" | "count-objects" | "check-attr",
+            "status" | "diff" | "diff-tree" | "log" | "cherry" | "show" | "blame" | "describe"
+            | "reflog" | "branch" | "hash-object" | "rev-parse" | "merge-base" | "ls-files"
+            | "remote" | "worktree" | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref"
+            | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore" | "count-objects"
+            | "check-attr",
         ) => true,
         // A tag listing, a clean preview and a patch check only print, but the
         // same three subcommands also write a tag, remove a file and patch the
@@ -425,6 +426,22 @@ fn routed_with_route<'a>(
     Some((rest, route))
 }
 
+/// The owner a read subcommand answers to when it has no declarative rule of
+/// its own.
+///
+/// `diff-tree` prints the comparison `diff` owns and `cherry` lists the
+/// commits `log` owns. Without this each would fall to the catch-all below,
+/// which leaves every git rule uncertain and sends an ordinary read to
+/// review; naming the owner instead keeps the permission a user disables
+/// working on the spelling they disabled it for.
+fn read_owner(command: &str) -> &str {
+    match command {
+        "diff-tree" => "diff",
+        "cherry" => "log",
+        other => other,
+    }
+}
+
 #[cfg(test)]
 pub(super) fn observe_with_context(
     segment: &CommandSegmentV1,
@@ -517,7 +534,7 @@ pub(super) fn observe_with_contexts(
     {
         return;
     }
-    if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == command) {
+    if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == read_owner(command)) {
         // Attribution is deliberately stronger than legacy Python's inert
         // matcher=None porcelain entries: disabling a permission must work.
         result.rule(
