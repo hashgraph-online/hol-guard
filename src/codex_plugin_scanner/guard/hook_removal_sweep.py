@@ -14,7 +14,7 @@ re-parsed file equals the pruned payload.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,6 +23,7 @@ from .adapters.contracts import contract_for
 from .mdm.runtime_request import runtime_answer
 
 _FEATURE = "native-hook-removal-sweep-v1"
+_BACKUP_FEATURE = "native-hook-removal-backup-v1"
 _COMMAND = "hook-removal-sweep"
 _SCHEMA = "hook-removal-sweep.v1"
 _OUTPUT_LIMIT = 4 * 1024 * 1024
@@ -40,6 +41,10 @@ _WORKSPACE_EXTRA_FILES = {
     "devin": (".devin/hooks.v1.json",),
     "muse": (".muse/settings.json",),
 }
+
+
+class BackupError(OSError):
+    """A config file could not be backed up, so its harness must not be edited."""
 
 
 class SweepUnavailableError(OSError):
@@ -64,15 +69,22 @@ class SweepTotals:
         return sum(item.removed for item in self.files)
 
 
-def _answer(request: Mapping[str, object], key: str) -> object:
+def _runtime(request: Mapping[str, object], *, feature: str = _FEATURE) -> dict[str, object]:
     answer = runtime_answer(
-        _FEATURE,
+        feature,
         _COMMAND,
         {"schema": _SCHEMA, **request},
         output_limit=_OUTPUT_LIMIT,
         timeout_seconds=_TIMEOUT_SECONDS,
     )
-    if answer is None or key not in answer:
+    if answer is None:
+        raise SweepUnavailableError("native hook sweep unavailable")
+    return answer
+
+
+def _answer(request: Mapping[str, object], key: str) -> object:
+    answer = _runtime(request)
+    if key not in answer:
         raise SweepUnavailableError("native hook sweep unavailable")
     return answer[key]
 
@@ -154,10 +166,72 @@ def sweep_harness(harness: str, context: HarnessContext, *, dry_run: bool) -> Sw
     return SweepTotals(files=[_result(item) for item in files])
 
 
+def _entries(value: object, keys: frozenset[str]) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise SweepUnavailableError("native hook sweep answer malformed")
+    entries: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict) or set(item) != keys or not all(isinstance(text, str) for text in item.values()):
+            raise SweepUnavailableError("native hook sweep answer malformed")
+        entries.append({str(key): str(text) for key, text in item.items()})
+    return entries
+
+
+_BACKUP_KEYS = frozenset({"harness", "original_path", "backup_path"})
+
+
+def backup_harness_files(
+    backup_dir: Path, harness: str, files: tuple[Path, ...], *, skip: Collection[str]
+) -> list[dict[str, str]]:
+    """Copy each existing file of ``harness`` that ``skip`` does not name.
+
+    Returns one entry per copy, with the copied bytes' ``sha256``. Raises
+    ``BackupError`` when any file cannot be copied (the runtime removes this
+    harness's copies again).
+    """
+
+    request = {
+        "op": "backup",
+        "backup_dir": str(backup_dir),
+        "harness": harness,
+        "candidates": [str(path) for path in files],
+        "skip": sorted(skip),
+    }
+    answer = _runtime(request, feature=_BACKUP_FEATURE)
+    if answer.get("outcome") == "error":
+        raise BackupError(str(answer.get("error", "backup_failed")))
+    if answer.get("outcome") != "ok":
+        raise SweepUnavailableError("native hook sweep answer malformed")
+    return _entries(answer.get("entries"), _BACKUP_KEYS | {"sha256"})
+
+
+def finalize_backups(
+    backup_dir: Path, entries: list[dict[str, str]], *, stamp: str
+) -> tuple[Path | None, list[dict[str, str]]]:
+    """Keep copies of files that changed, drop the rest, and write the manifest.
+
+    Without a runtime answer every copy is kept, since nothing proved a file
+    unchanged.
+    """
+
+    request = {"op": "finalize-backups", "backup_dir": str(backup_dir), "stamp": stamp, "entries": entries}
+    try:
+        answer = _runtime(request, feature=_BACKUP_FEATURE)
+        kept = _entries(answer.get("files"), _BACKUP_KEYS)
+    except SweepUnavailableError:
+        kept = [{key: entry[key] for key in _BACKUP_KEYS} for entry in entries]
+        return (backup_dir if kept else None), kept
+    directory = answer.get("backup_dir")
+    return (Path(directory) if isinstance(directory, str) else None), kept
+
+
 __all__ = [
+    "BackupError",
     "SweepFileResult",
     "SweepTotals",
     "SweepUnavailableError",
+    "backup_harness_files",
+    "finalize_backups",
     "harness_hook_files",
     "sweep_config_file",
     "sweep_harness",

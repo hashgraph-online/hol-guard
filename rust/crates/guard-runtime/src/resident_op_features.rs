@@ -275,6 +275,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-policy-effective-v1",
     "native-policy-file-io-v1",
     "native-hook-removal-sweep-v1",
+    "native-hook-removal-backup-v1",
     "native-release-manifest-verify-v1",
     "native-ownership-acl-v1",
     "native-system-proxies-v1",

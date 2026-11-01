@@ -152,9 +152,7 @@ def test_remove_all_backs_up_before_editing(tmp_path: Path, monkeypatch: pytest.
     assert seen_backups == [original]
 
 
-def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import hook_removal
-
+def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path) -> None:
     context = _context(tmp_path)
     claude = context.home_dir / ".claude"
     claude.mkdir()
@@ -162,11 +160,10 @@ def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path, monkeypatch:
     settings.write_text(json.dumps(_claude_settings()))
     original = settings.read_bytes()
 
-    def refuse_backup_dir(_backup_dir: Path) -> None:
-        raise PermissionError("backup directory is read-only")
-
-    monkeypatch.setattr(hook_removal, "_private_backup_dir", refuse_backup_dir)
-    report = remove_all_guard_hooks(context=context, store=GuardStore(context.guard_home))
+    store = GuardStore(context.guard_home)
+    # A file where the backups folder belongs: no copy can be written.
+    (context.guard_home / "backups").write_text("")
+    report = remove_all_guard_hooks(context=context, store=store)
 
     assert report["status"] == "partial"
     assert settings.read_bytes() == original
@@ -174,7 +171,7 @@ def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path, monkeypatch:
     assert isinstance(harnesses, list)
     claude_entry = next(item for item in harnesses if item["harness"] == "claude-code")
     assert claude_entry["adapter_uninstall"] == "skipped"
-    assert "PermissionError" in str(claude_entry["backup_error"])
+    assert str(claude_entry["backup_error"]).startswith("backup_failed: ")
     assert report["backup_dir"] is None
 
 
