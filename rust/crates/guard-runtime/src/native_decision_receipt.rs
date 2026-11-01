@@ -323,6 +323,12 @@ fn canonical_identity(receipt: &PyVal) -> String {
     dumps_sorted(&PyVal::Dict(identity), false)
 }
 
+/// The decision id `valid` expects of `receipt`, for tests that build one.
+#[cfg(test)]
+pub(crate) fn sealed_decision_id(receipt: &PyVal) -> String {
+    hex::encode(Sha256::digest(canonical_identity(receipt).as_bytes()))
+}
+
 /// `validate_native_decision_receipt(value) is not None`.
 pub(crate) fn valid(receipt: &PyVal) -> bool {
     let Some(entries) = receipt.as_dict() else {

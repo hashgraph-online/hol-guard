@@ -399,6 +399,7 @@ mod guard_store_inventory_page_tests;
 #[cfg(test)]
 mod guard_store_inventory_vectors_tests;
 mod guard_store_json;
+mod guard_store_legacy_probe;
 mod guard_store_lineage;
 mod guard_store_local_cli;
 mod guard_store_local_cli_catalog;

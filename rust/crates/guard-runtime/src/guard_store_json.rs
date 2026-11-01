@@ -80,6 +80,14 @@ pub(crate) fn epoch_micros(text: &str) -> Option<i128> {
     Some(parsed.micros_since_epoch - i128::from(parsed.offset_seconds.unwrap_or(0)) * 1_000_000)
 }
 
+/// `datetime.fromisoformat(text)` in UTC microseconds, or `None` for a naive
+/// instant, for callers that refuse an instant without an offset.
+pub(crate) fn aware_epoch_micros(text: &str) -> Option<i128> {
+    let parsed = parse_iso(&text.replace('Z', "+00:00"))?;
+    let offset = parsed.offset_seconds?;
+    Some(parsed.micros_since_epoch - i128::from(offset) * 1_000_000)
+}
+
 /// Whole UTC days since 1970-01-01 of an ISO-8601 instant, offset applied.
 pub(crate) fn epoch_days(text: &str) -> Option<i64> {
     let micros = epoch_micros(text)?;
