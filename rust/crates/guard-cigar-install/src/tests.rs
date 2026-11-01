@@ -104,6 +104,8 @@ impl Fixture {
         build.identity.build_id = "test-only-future-build".into();
         build.identity.sdk_version = "0.15.2".into();
         build.identity.core_version = "0.15.1".into();
+        // Only the first platform gets the fixture locks; drop the real ones.
+        build.platforms.truncate(1);
         let artifact = &mut build.platforms[0];
         artifact.wheel = Some(locks.remove(0));
         artifact.dependencies = locks;

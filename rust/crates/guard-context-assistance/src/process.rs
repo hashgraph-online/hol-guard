@@ -14,6 +14,9 @@ use std::time::{Duration, Instant};
 pub(crate) const MAX_REQUEST: usize = 1024 * 1024;
 const MAX_RESPONSE: usize = 4 * 1024 * 1024;
 const SCHEMA: &str = "guard-cigar-bridge.v1";
+// The first launch of a freshly unpacked interpreter can be slow: macOS
+// translates an x64 build under Rosetta and Windows scans a new executable.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 type Job = (Vec<u8>, SyncSender<Result<Vec<u8>, RuntimeError>>);
 
 pub(crate) struct JsonProcess {
@@ -235,7 +238,7 @@ pub(crate) fn probe(
         let read = stdout.take(64 * 1024 + 1).read_to_end(&mut bytes);
         let _ = tx.send(read.map(|_| bytes));
     });
-    let result = receive(&rx, Duration::from_secs(3), cancel);
+    let result = receive(&rx, PROBE_TIMEOUT, cancel);
     terminate(&mut child);
     let bytes = result?.map_err(|_| RuntimeError::TransportFailed)?;
     if bytes.len() > 64 * 1024 {

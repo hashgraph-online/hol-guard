@@ -123,3 +123,18 @@ def test_concatenated_gzip_and_trailing_tar_are_not_the_shipped_layout(tmp_path)
     data = args.archive.read_bytes()
     with pytest.raises(ValueError, match="gzip framing"):
         tool.inspect_archive(data + data)
+
+
+def test_linux_trees_keep_names_that_differ_only_by_case():
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz", format=tarfile.GNU_FORMAT) as archive:
+        for name in ("python/share/terminfo/e/eterm", "python/share/terminfo/E/Eterm"):
+            member = tarfile.TarInfo(name)
+            member.size = 4
+            member.mode = 0o644
+            archive.addfile(member, io.BytesIO(name[-4:].encode()))
+    data = buffer.getvalue()
+    with pytest.raises(ValueError, match="collision"):
+        tool.inspect_archive(data)
+    files, _, _ = tool.inspect_archive(data, fold_case=False)
+    assert {"share/terminfo/e/eterm", "share/terminfo/E/Eterm"} <= set(files)

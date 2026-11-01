@@ -78,7 +78,8 @@ pub(super) fn read(
             } else {
                 name.to_owned()
             };
-            let name = paths::admit_name(canonical.as_bytes(), kind == b'5', &mut namespace)?;
+            let name =
+                paths::admit_interpreter_name(canonical.as_bytes(), kind == b'5', &mut namespace)?;
             match kind {
                 b'0' | 0 => {
                     total = total.checked_add(size).ok_or(InstallError::LimitExceeded)?;
@@ -162,5 +163,5 @@ fn resolve(name: &str, raw: &[u8], hard: bool) -> Result<String, InstallError> {
             other => parts.push(other),
         }
     }
-    paths::admit_name(parts.join("/").as_bytes(), false, &mut BTreeMap::new())
+    paths::admit_interpreter_name(parts.join("/").as_bytes(), false, &mut BTreeMap::new())
 }

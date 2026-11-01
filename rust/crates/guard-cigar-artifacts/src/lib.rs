@@ -3,7 +3,7 @@
 mod paths;
 mod python_snapshot;
 mod python_tree;
-pub use paths::{admit_name, private_child, private_directory};
+pub use paths::{admit_interpreter_name, admit_name, private_child, private_directory};
 pub use python_snapshot::VerifiedPythonSnapshot;
 pub use python_tree::{
     check_python_binding, verify_python_binding, verify_python_tree, VerifiedPythonBundle,
