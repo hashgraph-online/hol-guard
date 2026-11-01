@@ -22,7 +22,9 @@ use crate::cloud_action_binding::{
     valid_label, AdapterKind, AdmittedBinding, BindingSet, TargetCapability,
 };
 use crate::cloud_action_canonical::{canonical_arguments, domain_digest, parse_strict};
-use crate::cloud_action_policy::{decide_policy, validate_rules, CloudPolicyRule, PolicySubject};
+use crate::cloud_action_policy::{
+    decide_policy, rules_digest, validate_rules, CloudPolicyRule, PolicySubject,
+};
 use crate::contributed_mcp_decision::{
     contributions, decide_active_contribution, matching_contribution, ContributedMcpInput,
 };
@@ -231,12 +233,14 @@ impl CloudActionEvaluator {
                 });
             }
         }
+        let rules = rules_digest(&request.policy.rules);
         let provenance = domain_digest(
             PROVENANCE_DOMAIN,
             &[
                 program.program_digest.as_bytes(),
                 self.bindings.digest.as_bytes(),
                 request.policy.snapshot_id.as_bytes(),
+                rules.as_bytes(),
                 activation.digest.as_deref().unwrap_or("").as_bytes(),
             ],
         );

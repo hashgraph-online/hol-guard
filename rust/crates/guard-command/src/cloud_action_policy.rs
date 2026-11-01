@@ -7,6 +7,8 @@
 
 use serde::Deserialize;
 
+use crate::cloud_action_canonical::domain_digest;
+
 use crate::cloud_action_binding::{valid_action_id, valid_label, ActionEffect};
 use crate::effect_decision::GuardAction;
 
@@ -43,6 +45,30 @@ pub struct PolicyOutcome {
     pub action: GuardAction,
     pub matched_rule_id: Option<String>,
     pub reason_code: &'static str,
+}
+
+const RULES_DOMAIN: &str = "guard.cloud-action-policy-rules.v1";
+
+/// Digest of the rules exactly as evaluated, in request order, so a reused
+/// snapshot label cannot hide a rule change.
+pub fn rules_digest(rules: &[CloudPolicyRule]) -> String {
+    fn optional(value: Option<&String>) -> Vec<u8> {
+        value.map_or_else(|| b"-".to_vec(), |v| [b"+", v.as_bytes()].concat())
+    }
+    let fields: Vec<[Vec<u8>; 5]> = rules
+        .iter()
+        .map(|rule| {
+            [
+                rule.rule_id.as_bytes().to_vec(),
+                rule.action.as_str().as_bytes().to_vec(),
+                rule.matcher.action_id.as_bytes().to_vec(),
+                optional(rule.matcher.connection_id.as_ref()),
+                optional(rule.matcher.resource_id.as_ref()),
+            ]
+        })
+        .collect();
+    let parts: Vec<&[u8]> = fields.iter().flatten().map(Vec::as_slice).collect();
+    domain_digest(RULES_DOMAIN, &parts)
 }
 
 pub fn validate_rules(rules: &[CloudPolicyRule]) -> Result<(), &'static str> {
