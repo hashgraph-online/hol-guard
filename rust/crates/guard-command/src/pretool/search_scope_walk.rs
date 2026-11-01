@@ -13,6 +13,7 @@ use super::search_scope_ignore::{
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
 use super::search_scope_tracked::TrackedFiles;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -45,10 +46,13 @@ const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
 /// is read again for every spelling a rewrite reaches, so a clock started
 /// afresh for each walk would bound no single evaluation. The clock below is
 /// started once where the evaluation begins and shared by every include walk
-/// inside it, which is what the evaluation's own budget can afford.
+/// inside it, which is what the evaluation's own budget can afford. The
+/// repeated spellings pay nothing, because a root and glob set already
+/// walked is answered from [`INCLUDE_SCOPE_ANSWERS`] rather than walked
+/// again, so the clock bounds the distinct trees a submission names.
 /// Expiring only withholds the narrowing and leaves the answer the readings
 /// above already reached.
-const INCLUDE_SCOPE_BUDGET: Duration = Duration::from_millis(25);
+const INCLUDE_SCOPE_BUDGET: Duration = Duration::from_millis(75);
 
 thread_local! {
     /// When the include walks of the evaluation running on this thread have
@@ -56,11 +60,28 @@ thread_local! {
     /// directly -- where each walk gets the budget to itself.
     static INCLUDE_SCOPE_CLOCK: std::cell::Cell<Option<Instant>> =
         const { std::cell::Cell::new(None) };
+    /// What the include walks of this evaluation have already answered.
+    ///
+    /// A rewrite hands the same command back under several spellings, and
+    /// each of them resolves the same operand to the same directory and the
+    /// same globs. Without this the evaluation pays for that tree once per
+    /// spelling and runs the shared clock out on work it has already done.
+    static INCLUDE_SCOPE_ANSWERS: std::cell::RefCell<HashMap<IncludeScopeKey, bool>> =
+        std::cell::RefCell::new(HashMap::new());
 }
 
-/// Start the shared include-walk clock for the evaluation beginning now.
+/// What an include walk is decided by: the directory it starts at, the globs
+/// that select the files below it, and the home the sensitive-path readings
+/// are relative to. Two walks that agree on all three inspect the same
+/// entries and reach the same answer.
+type IncludeScopeKey = (PathBuf, String, Option<String>);
+
+/// Start the shared include-walk clock for the evaluation beginning now, and
+/// drop the answers the previous one reached: a tree is read again because
+/// what is in it may have changed since.
 pub(crate) fn begin_include_scope_budget() {
     INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(Some(Instant::now() + INCLUDE_SCOPE_BUDGET)));
+    INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
 }
 
 /// Put the thread back where it is outside an evaluation, for a test that
@@ -68,6 +89,7 @@ pub(crate) fn begin_include_scope_budget() {
 #[cfg(test)]
 fn clear_include_scope_budget() {
     INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(None));
+    INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
 }
 
 /// Which ignore files a walk honors, matching the host that searches.
@@ -227,6 +249,33 @@ pub(super) fn walk_include_scope(
         Some(MAX_INCLUDE_SCOPE_ENTRIES),
         Some(budget),
     )
+}
+
+/// [`walk_include_scope`], answered once per evaluation for a given root,
+/// glob set and home.
+///
+/// `globs` names the same files the caller built `filter` from; it is the
+/// spelling this evaluation remembers the answer under.
+pub(super) fn include_scope_proven(
+    root: &Path,
+    globs: &[&str],
+    filter: &SearchFilter,
+    home: Option<&str>,
+) -> bool {
+    let key: IncludeScopeKey = (
+        root.to_path_buf(),
+        globs.join("\u{0}"),
+        home.map(str::to_owned),
+    );
+    if let Some(answer) = INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow().get(&key).copied())
+    {
+        return answer;
+    }
+    let answer = walk_include_scope(root, filter, home, include_scope_deadline()).is_ok();
+    INCLUDE_SCOPE_ANSWERS.with(|answers| {
+        answers.borrow_mut().insert(key, answer);
+    });
+    answer
 }
 
 /// A content walk where a sensitive file `clearance` proves the pattern

@@ -575,3 +575,41 @@ fn an_include_walk_out_of_clock_leaves_the_scope_unproven() {
     assert!(walk(std::time::Instant::now() + std::time::Duration::from_secs(60)).is_ok());
     assert!(walk(std::time::Instant::now()).is_err());
 }
+
+/// One evaluation walks a root and glob set once.
+///
+/// A rewrite hands the same submission back under several spellings, each
+/// resolving to the same directory under the same globs. Walking the tree
+/// again for every spelling spends the shared clock on an answer already in
+/// hand, and the later spellings are the ones that then come back unproven.
+/// The tree below is removed between the two calls, so only a remembered
+/// answer can still say it was proven.
+#[test]
+fn one_evaluation_walks_a_root_and_glob_set_once() {
+    let (home, project) = fixture();
+    let home = home.to_string_lossy().into_owned();
+    let source = project.join("src");
+    let globs = ["*.md"];
+    let filter =
+        crate::pretool::search_scope_filter::SearchFilter::from_rg_inclusions(&globs).unwrap();
+    let proven = || {
+        crate::pretool::search_scope_walk::include_scope_proven(
+            &source,
+            &globs,
+            &filter,
+            Some(home.as_str()),
+        )
+    };
+    crate::pretool::search_scope_walk::begin_include_scope_budget();
+    assert!(proven(), "the walk did not prove the tree it was given");
+    std::fs::remove_dir_all(&source).unwrap();
+    assert!(
+        proven(),
+        "a second spelling of the same root and globs walked the tree again"
+    );
+    crate::pretool::search_scope_walk::begin_include_scope_budget();
+    assert!(
+        !proven(),
+        "the next evaluation reused the answer the previous one reached"
+    );
+}
