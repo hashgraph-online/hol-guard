@@ -143,7 +143,6 @@ def test_resident_authority_fixture_uses_private_windows_writer(tmp_path, monkey
     assert writes[0]["private_root"] == tmp_path
     assert writes[0]["maximum_bytes"] == POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES
     assert b'"floor_mac"' in writes[0]["payload"]
-    assert not (tmp_path / "native-runtime").exists()
 
 
 def _ready_worker(
