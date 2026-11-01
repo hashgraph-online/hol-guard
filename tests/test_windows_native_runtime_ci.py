@@ -260,7 +260,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
         ]
         assert selected[gate] == commands
     flattened = [command for commands in selected.values() for command in commands]
-    assert len(flattened) == len(set(flattened)) == 20
+    assert len(flattened) == len(set(flattened)) == 21
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:
