@@ -195,9 +195,12 @@ fn bounded_cached_diff(arguments: &[String], directory: Option<&std::path::Path>
 /// spelling prints where a symbolic ref points; a second operand makes Git
 /// write that ref instead, and `-d` deletes it.
 pub(super) fn symbolic_ref_read(rest: &[String]) -> bool {
-    let mut operands = rest
-        .iter()
-        .filter(|argument| !matches!(argument.as_str(), "-q" | "--quiet" | "--short"));
+    let mut operands = rest.iter().filter(|argument| {
+        !matches!(
+            argument.as_str(),
+            "-q" | "--quiet" | "--short" | "--recurse" | "--no-recurse"
+        )
+    });
     let Some(first) = operands.next() else {
         return false;
     };

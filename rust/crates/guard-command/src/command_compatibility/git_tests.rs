@@ -117,6 +117,7 @@ fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
         "git cat-file blob HEAD:README.md",
         "git symbolic-ref --short HEAD",
         "git symbolic-ref -q --short HEAD",
+        "git symbolic-ref --no-recurse HEAD",
         "git name-rev --name-only HEAD",
         "git name-rev --all",
         "git show-branch",

@@ -126,6 +126,13 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         "blame" | "describe" | "reflog" => true,
                         // grep pages by default through pager.grep or core.pager.
                         "grep" => true,
+                        // None of these starts a pager of its own, runs a
+                        // configured driver or opens a working-tree file, but
+                        // an explicit pager.<name> key can still name a
+                        // program, so the probe clears that first. The
+                        // `symbolic-ref` spellings that write a ref never
+                        // reach here: the inspection proof screens them.
+                        "name-rev" | "show-branch" | "check-ref-format" | "symbolic-ref" => true,
                         // A stash listing is a log that pages under
                         // pager.stash, and `stash show` runs the diff drivers.
                         "stash" => true,
@@ -258,3 +265,7 @@ pub(super) fn stdout_piped(model: &CanonicalCommandV1, index: usize) -> bool {
         _ => false,
     }
 }
+
+#[cfg(test)]
+#[path = "git_helper_context_tests.rs"]
+mod tests;
