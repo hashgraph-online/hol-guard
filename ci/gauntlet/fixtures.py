@@ -489,6 +489,8 @@ CALC_TEST = (
     "assert add(2, 3) == 5\nprint('calc ok')\n"
 )
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
+
+HOME_SKILL_SCRIPT = "#!/bin/sh\necho fixture\n"
 # A Node toolchain and a repository's own workflow, both below a hidden home
 # directory. Agents read files in these shapes all day; the names carry no
 # account, host or key.
@@ -592,6 +594,9 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (home / ".config/git/hooks").mkdir(parents=True)
     for relative, text in (
         (".agent/skills/x/SKILL.md", HOME_SKILL_DOC),
+        # A skill is its document and the helpers that document names. An
+        # agent reads the helper before it runs it.
+        (".agent/skills/x/scripts/run.sh", HOME_SKILL_SCRIPT),
         (".agent/artifacts/report.md", HOME_ARTIFACT_DOC),
         ("other-project/notes.md", SIBLING_PROJECT_DOC),
         ("other-project/src/report.ts", SIBLING_REPORT),
