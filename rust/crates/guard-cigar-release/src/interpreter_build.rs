@@ -197,17 +197,25 @@ mod tests {
         let build = &catalog.document().interpreters[0];
         assert_eq!(build.python_version, [3, 14, 10]);
         assert_eq!(build.download_url().unwrap(),"https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10%2B20261026-aarch64-apple-darwin-install_only_stripped.tar.gz");
+        // Preparing never grants setup; only a qualified entry resolves for it.
         assert!(!catalog
             .prepare_interpreter(&build.build_id, "darwin-arm64")
             .unwrap()
             .setup_qualified());
+        assert!(catalog
+            .interpreter_for_setup(&build.build_id, "darwin-arm64")
+            .unwrap()
+            .setup_qualified());
+        let mut doc = document();
+        doc.interpreters[0].qualification = Qualification::UpstreamOnly;
+        doc.interpreters[0].qualification_receipt_sha256 = None;
         assert_eq!(
-            catalog
+            verify(&doc)
+                .unwrap()
                 .interpreter_for_setup(&build.build_id, "darwin-arm64")
                 .unwrap_err(),
             ReleaseError::QualificationRequired
         );
-        let mut doc = document();
         doc.interpreters[0].qualification = Qualification::GuardQualified;
         doc.interpreters[0].qualification_receipt_sha256 = Some("b".repeat(64));
         let qualified = verify(&doc)
@@ -249,7 +257,10 @@ mod tests {
                 "tag" => build.source_release = "../escape".into(),
                 "hash" => build.tree_sha256 = "not-a-hash".into(),
                 "size" => build.expanded_bytes = 257 * 1024 * 1024,
-                "receipt" => build.qualification = Qualification::GuardQualified,
+                "receipt" => {
+                    build.qualification = Qualification::GuardQualified;
+                    build.qualification_receipt_sha256 = None;
+                }
                 _ => unreachable!(),
             }
             assert!(verify(&doc).is_err(), "{field}");

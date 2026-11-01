@@ -1,6 +1,6 @@
 # CIGAR interpreter compatibility
 
-Status: native release-specific Python patch preflight and exact wheel metadata binding are implemented and tested. [Private interpreter preparation](CIGAR_PRIVATE_PYTHON_PREPARATION.md) now has exact native CPython 3.14.10/source-build SDK evidence. Durable setup/discovery, authenticated registration/runtime binding and broader conditional dependency/ABI coverage remain part of P4. The bundled final SDK remains upstream-only; these checks do not promote or enable it.
+Status: native release-specific Python patch preflight and exact wheel metadata binding are implemented and tested. [Private interpreter preparation](CIGAR_PRIVATE_PYTHON_PREPARATION.md) now has exact native CPython 3.14.10/source-build SDK evidence. Durable setup/discovery, authenticated registration/runtime binding and broader conditional dependency/ABI coverage remain part of P4. These checks do not promote or enable the bundled final SDK; its darwin-arm64 qualification comes from the receipts described in [the maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md#current-darwin-arm64-qualification).
 
 The shipped adapter still requires a measured final CPython 3.14 interpreter with the supported platform ABI, standard GIL and release build. A compatible later 3.14 patch is selected through measured interpreter facts and catalog data, without changing a Python version constant in application code.
 

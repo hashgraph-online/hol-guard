@@ -35,6 +35,14 @@ The authorized catalog publisher signs the complete payload with an already prov
 
 Test both authenticated refresh and offline import on an isolated Guard profile. Neither import nor a Guard upgrade should select, enable or start CIGAR. Prepare the new installation beside the current runtime, then expose the explicit switch/reconnect boundary and rollback path to the user. Keep any real newer SDK or platform claim pending until the matching approved bytes and execution evidence exist.
 
+## Current darwin-arm64 qualification
+
+Qualification scope: CIGAR 0.14.1 (`cigar-0_14_1-10dd521dec82`) and CPython 3.14.10 (`cpython-3_14_10-20261026-darwin-arm64`) are `guard_qualified` for `darwin-arm64` only, from the two maintainer receipts under [evidence/qualification](evidence/qualification). No other platform has a bundled entry, and no other build or CPython patch is qualified.
+
+Both receipts come from real runs of `qualify_python` and `qualify` in `guard-cigar-install` against the exact published artifacts the catalog locks (CPython archive, SDK wheel and protobuf wheel were re-hashed against the catalog first). The catalog carries each receipt's SHA-256 and the features the receipt status shows as proven: `graph`, `sharing`, `persistence` and `execution_context`. The interpreter receipt also records the SDK verified on the relocated managed interpreter. Catalog revision 6 changed only qualification metadata and validity bounds; artifact, tree, worker and source identities are unchanged.
+
+What these receipts do not cover: any other platform or CPython patch, a different CIGAR build, the installed/frozen Guard distributions, an end-to-end install, switch, rollback and recovery run through the bundled catalog on a real Guard profile, and live native interpreter download. Those remain separate evidence. A requalification of different bytes needs its own receipts; do not reuse these digests.
+
 ## Checks that guard the next bump
 
 [The catalog CI workflow](../../../.github/workflows/cigar-catalog-contracts.yml) runs the native release/installer contract suites and maintainer generator tests when catalog, generator, locks or relevant source changes. This validates bundled schema/identity/profile routing and deterministic draft behavior. The workflow is prepared locally; hosted execution remains to be observed after normal repository review.

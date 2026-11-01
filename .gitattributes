@@ -49,6 +49,8 @@
 # CIGAR receipts and test logs are recorded evidence, not hand-edited product source.
 /docs/guard/cigar-integration/evidence/** linguist-generated
 /docs/guard/cigar-integration/evidence/*.log -whitespace linguist-generated
+# The bundled catalog carries the SHA-256 of these exact receipt bytes (no trailing newline).
+/docs/guard/cigar-integration/evidence/qualification/*.json text eol=lf -whitespace
 
 # The native runtime embeds the safety guide and hashes its earlier versions
 # as checkout bytes.

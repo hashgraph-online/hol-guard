@@ -1,6 +1,6 @@
 # CIGAR artifact acquisition
 
-Status: native source-build acquisition and exact package-tree reconstruction have real public artifact evidence on macOS arm64. This is one part of P4; it does not complete the user-facing updater or promote the bundled final 0.14.1 entry beyond `upstream_only`.
+Status: native source-build acquisition and exact package-tree reconstruction have real public artifact evidence on macOS arm64. This is one part of P4; it does not complete the user-facing updater. The bundled final 0.14.1 entry is `guard_qualified` for darwin-arm64 only (see [the maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md#current-darwin-arm64-qualification)).
 
 The release catalog owns the complete SDK/dependency filenames, hashes, byte lengths, package-tree digest and origins. The native worker handles transfer, cache verification and preparation. A version string or a successful download grants no activation authority. Native installation still requires a Guard-qualified platform/profile and actual interpreter, worker and feature checks.
 

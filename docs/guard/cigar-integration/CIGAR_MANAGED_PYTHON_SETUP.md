@@ -20,7 +20,7 @@ The existing versions dispatcher accepts an opaque-ID request:
 {"action":"setup_interpreter","job_id":"setup-python-1","build_id":"cpython-3_14_10-20261026-darwin-arm64"}
 ```
 
-The native owner chooses the profile, platform, paths and pinned URL. A trusted **Guard-qualified** interpreter build is required. The bundled catalog still records CPython and CIGAR as `upstream_only`; the request therefore refuses ordinary setup until their release qualifications are supplied. Test catalogs use explicit test-only signing keys and do not change that policy.
+The native owner chooses the profile, platform, paths and pinned URL. A trusted **Guard-qualified** interpreter build is required. The bundled catalog records CPython 3.14.10 and CIGAR 0.14.1 as `guard_qualified` for darwin-arm64 (see [the maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md#current-darwin-arm64-qualification)), so ordinary setup is accepted there. A build that is `upstream_only`, and any platform without a bundled entry, is still refused. Test catalogs use explicit test-only signing keys and do not change that policy.
 
 Python setup and SDK installation share one preparation controller and cross-process lease. Their combined job history is bounded to 32 records. Repeated requests converge; reusing an ID for another build or operation refuses. Progress, cancellation and recovery use the same native versions controls. Listing reads private metadata, never Python or SDK code.
 

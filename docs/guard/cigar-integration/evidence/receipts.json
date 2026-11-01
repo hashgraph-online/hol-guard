@@ -826,6 +826,28 @@
       }
     },
     {
+      "name": "qualification/cigar-0.14.1-darwin-arm64-prepared-qualification.json",
+      "schema": "guard-cigar-prepared-qualification.v1",
+      "captured_record_sha256": "fde63dc38ecca0aa6c6e7c073bfeee306b4bbe6108fbe78dd939b50ba5ff2892",
+      "captured_record_bytes": 3627,
+      "recorded_at_utc": "2026-11-01T14:22:52Z",
+      "status": "passed: graph, sharing, persistence and execution_context verified for the locked CIGAR 0.14.1 darwin-arm64 build on the exact CPython 3.14.10 interpreter; raw bytes stored in this tree",
+      "identity": {
+        "product_source_commit": "eb8313542e97a25010d660af54a7f9c8423d0a4c"
+      }
+    },
+    {
+      "name": "qualification/cpython-3.14.10-darwin-arm64-private-python-qualification.json",
+      "schema": "guard-cigar-private-python-qualification.v1",
+      "captured_record_sha256": "f9afff0612c87769e01862448a31b48668785da3884ca0b7bd91641e4e2e2b19",
+      "captured_record_bytes": 6250,
+      "recorded_at_utc": "2026-11-01T14:22:45Z",
+      "status": "passed: exact CPython 3.14.10 darwin-arm64 tree and executable verified, relocated, probed and used to verify the locked CIGAR 0.14.1 SDK with all four features; raw bytes stored in this tree",
+      "identity": {
+        "product_source_commit": "eb8313542e97a25010d660af54a7f9c8423d0a4c"
+      }
+    },
+    {
       "name": "runtime-development-verification.json",
       "schema": "hol-guard.cigar-runtime-development-evidence.v1",
       "captured_record_sha256": "ff6261d310b6c8249d18eb0c1d4111547c064c5a3a88a007296ccb5d5f158bda",
