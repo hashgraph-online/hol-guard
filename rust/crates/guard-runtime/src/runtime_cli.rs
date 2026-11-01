@@ -138,6 +138,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = release_manifest_verify_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if system_proxies::is_command(command) && flag == "--stdin" => {
+            let response = system_proxies::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if ownership_acl_verdict::is_command(command) && flag == "--stdin" => {
             let response = ownership_acl_verdict::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

@@ -65,7 +65,10 @@ pub use known_folders::{trusted_install_roots, user_profile_directory, windows_d
 pub use owner::owned_by_current_user;
 
 #[cfg(windows)]
-pub use registry::{read_machine_registry_string, MachineRegistryString};
+pub use registry::{
+    read_machine_registry_string, read_registry_value, MachineRegistryString, RegistryHive,
+    RegistryValue,
+};
 
 #[cfg(windows)]
 pub use secure_storage::{

@@ -5,13 +5,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import platform
-import re
 import ssl
-import subprocess
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from typing import cast
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -41,6 +40,9 @@ _PUBLIC_REGISTRIES = frozenset(
     }
 )
 _MAX_PROXY_CREDENTIAL_BYTES = 16 * 1024
+_SYSTEM_PROXIES_FEATURE = "native-system-proxies-v1"
+_SYSTEM_PROXIES_TIMEOUT_SECONDS = 10.0
+_MAX_SYSTEM_PROXIES_OUTPUT_BYTES = 64 * 1024
 
 
 class ManagedNetworkError(RuntimeError):
@@ -70,56 +72,45 @@ def resolved_network_policy(policy: ManagedNetworkPolicy | None) -> tuple[Manage
 def platform_system_proxies() -> dict[str, str]:
     """Read OS proxy configuration without treating user environment as managed authority."""
 
-    system_name = platform.system()
-    if system_name == "Darwin":
-        try:
-            result = subprocess.run(
-                ["/usr/sbin/scutil", "--proxy"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return {}
-        values = dict(re.findall(r"^\s*([A-Za-z]+)\s*:\s*(.+?)\s*$", result.stdout, re.MULTILINE))
-        proxies: dict[str, str] = {}
-        for scheme, prefix in (("http", "HTTP"), ("https", "HTTPS")):
-            if values.get(f"{prefix}Enable") == "1" and values.get(f"{prefix}Proxy"):
-                port = values.get(f"{prefix}Port", "443" if scheme == "https" else "80")
-                proxies[scheme] = f"http://{values[f'{prefix}Proxy']}:{port}"
-        return proxies
-    if system_name == "Windows":
-        try:
-            import winreg
-        except ImportError:
-            return {}
-        server: object = None
-        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
-            try:
-                with winreg.OpenKey(
-                    hive,
-                    r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
-                ) as key:
-                    enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
-                    candidate, _ = winreg.QueryValueEx(key, "ProxyServer")
-            except OSError:
-                continue
-            if enabled and isinstance(candidate, str):
-                server = candidate
-                break
-        if not isinstance(server, str):
-            return {}
-        if "=" not in server:
-            return {"http": f"http://{server}", "https": f"http://{server}"}
-        return {
-            scheme: f"http://{address}"
-            for item in server.split(";")
-            if "=" in item
-            for scheme, address in [item.split("=", 1)]
-            if scheme in {"http", "https"} and address
-        }
-    return {}
+    from ..native_runtime import _run_native_process, native_runtime_status
+
+    deadline = time.monotonic() + _SYSTEM_PROXIES_TIMEOUT_SECONDS
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or _SYSTEM_PROXIES_FEATURE not in status.capabilities.features
+    ):
+        return {}
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return {}
+    output = _run_native_process(
+        status.identity.path,
+        ("system-proxies", "--stdin"),
+        input_text=json.dumps({"schema": "system-proxies.v1"}),
+        timeout_seconds=remaining,
+        output_limit=_MAX_SYSTEM_PROXIES_OUTPUT_BYTES,
+    )
+    if output is None:
+        return {}
+    try:
+        answer = cast(object, json.loads(output))
+    except ValueError:
+        return {}
+    if not isinstance(answer, dict):
+        return {}
+    payload = cast(dict[str, object], answer)
+    proxies = payload.get("proxies")
+    if payload.get("ok") is not True or not isinstance(proxies, dict):
+        return {}
+    return {
+        scheme: proxy
+        for scheme, proxy in cast(dict[object, object], proxies).items()
+        if isinstance(scheme, str) and scheme in {"http", "https"} and isinstance(proxy, str)
+    }
 
 
 def request_url(request: str | urllib.request.Request) -> str:
