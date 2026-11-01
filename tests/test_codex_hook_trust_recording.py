@@ -12,8 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 import tomllib
 
+from codex_plugin_scanner.guard import codex_hook_trust
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.codex_hook_trust import (
     codex_command_hook_hash,
@@ -268,3 +270,13 @@ def test_an_upgrade_that_leaves_two_guard_hooks_on_one_event_drops_the_state(tmp
     remap_hook_state(before, hooks, config)
 
     assert hooks["state"] == {}
+
+
+def test_an_unanswered_trust_request_fails_the_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Codex skips hooks with no trusted hash, so writing them anyway would
+    # look installed while nothing runs.
+    monkeypatch.setattr(codex_hook_trust, "runtime_answer", lambda *_args, **_kwargs: None)
+    payload = _payload()
+    with pytest.raises(RuntimeError, match="codex_hook_trust_unavailable"):
+        record_guard_hook_trust(payload, tmp_path / "config.toml")
+    assert "state" not in payload["hooks"]
