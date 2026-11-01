@@ -412,6 +412,61 @@ fn a_member_named_twice_does_not_spend_the_budget_meant_for_another() {
 }
 
 #[test]
+fn a_directory_naming_one_member_over_and_over_leaves_room_for_the_rest() {
+    // A record costs a few dozen bytes and the member it names costs whatever
+    // the member costs, so repeating one record is the cheapest way to spend
+    // a walk's allowance on nothing. The repeats name one member, so they are
+    // charged for one, and the member they say nothing about is still read.
+    let hidden = other_credential_line();
+    let entries = [
+        stored("pad.txt", b"nothing here\n"),
+        stored("hidden.env", hidden.as_bytes()),
+    ];
+    let named = vec![0usize; super::MAX_MEMBERS];
+    let archive = zip_bytes_naming(&entries, &named, b"");
+    let (paths, scanned) = scan(&archive, "repeated.zip");
+    assert_eq!(paths, ["repeated.zip!/hidden.env"]);
+    // The repeated member's bytes were read once, not once per record.
+    assert_eq!(scanned, entries[0].stored.len() + hidden.len());
+}
+
+#[test]
+fn a_directory_of_records_that_name_nothing_leaves_room_for_the_members() {
+    // A record pointing at an offset this reader cannot follow names no
+    // member at all. Counting it would let a directory of such records use
+    // the allowance up before the pass that reads the members behind them.
+    let hidden = other_credential_line();
+    let mut unreachable = stored("ghost.txt", b"nothing here\n");
+    unreachable.zip64_offset = true;
+    let entries = [unreachable, stored("hidden.env", hidden.as_bytes())];
+    let named = vec![0usize; super::MAX_MEMBERS];
+    let archive = zip_bytes_naming(&entries, &named, b"");
+    let (paths, _) = scan(&archive, "dead.zip");
+    assert_eq!(paths, ["dead.zip!/hidden.env"]);
+}
+
+#[test]
+fn a_member_hidden_behind_an_inner_archive_is_still_found() {
+    // The walk steps over an inner archive's data in one move rather than
+    // reading each signature inside it. The move has to land where that data
+    // ends: a member left out of the directory and written after the inner
+    // archive is the first thing a step too far would hide.
+    let inner = zip_bytes(&[stored("prod.env", credential_line().as_bytes())]);
+    let hidden = other_credential_line();
+    let archive = zip_bytes_naming(
+        &[
+            stored("nested.zip", &inner),
+            stored("hidden.env", hidden.as_bytes()),
+        ],
+        &[0],
+        b"",
+    );
+    let (paths, scanned) = scan(&archive, "step.zip");
+    assert_eq!(paths, ["step.zip!/hidden.env"]);
+    assert_eq!(scanned, inner.len() + hidden.len());
+}
+
+#[test]
 fn a_zip_whose_directory_names_more_members_than_the_walk_reads_stops_at_the_bound() {
     let member = credential_line();
     let mut entries: Vec<Entry> = (0..super::MAX_MEMBERS)

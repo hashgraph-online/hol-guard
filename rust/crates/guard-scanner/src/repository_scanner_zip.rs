@@ -57,7 +57,7 @@
 //! archive is still walked, because one unreadable member is not a reason to
 //! stop reading the members beside it.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Read;
 
 use super::{member_path, Caps, MAX_MEMBERS};
@@ -136,8 +136,8 @@ pub(super) fn scan_members(
         findings: Vec::new(),
         scanned: 0,
         read: HashSet::new(),
-        taken: HashSet::new(),
-        spans: Vec::new(),
+        counted: HashSet::new(),
+        spans: BTreeMap::new(),
         seen: 0,
     };
     // An archive whose end record is missing or unreadable still has its
@@ -167,14 +167,17 @@ struct Walk<'a> {
     /// per repetition, all pointing at one member's data. The findings are
     /// collapsed on the same key the tar walk uses.
     read: HashSet<(String, usize, CandidateDigest)>,
-    /// The local headers whose data the directory pass already read, so the
-    /// second pass spends the budget only on what the first one missed.
-    taken: HashSet<usize>,
+    /// The local headers this walk has already accounted for, so the second
+    /// pass spends the budget only on what the first one missed and a
+    /// directory naming one member a hundred times is charged for one.
+    counted: HashSet<usize>,
     /// Where each member the directory accounted for keeps its data. A member
     /// stored verbatim may carry a local signature inside those bytes - a zip
     /// inside a zip is the ordinary case - and a signature found there belongs
-    /// to the inner archive, not to this one.
-    spans: Vec<(usize, usize)>,
+    /// to the inner archive, not to this one. The ranges are kept disjoint
+    /// and in order, so asking whether a header sits in one of them reads a
+    /// single range rather than every range recorded so far.
+    spans: BTreeMap<usize, usize>,
     seen: usize,
 }
 
@@ -199,10 +202,18 @@ impl Walk<'_> {
                 break;
             };
             cursor = record.next;
-            self.seen += 1;
             let Some(member) = record.member(self.data) else {
                 continue;
             };
+            // A record that names nothing a reader can reach, and a record
+            // naming a member another record already named, are cheap to
+            // write: a few dozen bytes each. Neither may spend a member of
+            // the walk's allowance, or a directory of them would use the
+            // allowance up and leave the members behind it unread.
+            if !self.counted.insert(member.header_at) {
+                continue;
+            }
+            self.seen += 1;
             self.take(&member);
         }
     }
@@ -215,16 +226,40 @@ impl Walk<'_> {
             return;
         };
         if end > member.data_at {
-            self.spans.push((member.data_at, end));
+            self.note_range(member.data_at, end);
         }
     }
 
-    /// Whether this header sits inside the data of a member the directory
-    /// already named.
-    fn inside_a_member(&self, header: usize) -> bool {
+    /// Record `from..to`, folding it into the ranges it touches so what is
+    /// kept stays an ordered set of disjoint ranges.
+    fn note_range(&mut self, mut from: usize, mut to: usize) {
+        if let Some((&start, &end)) = self.spans.range(..=from).next_back() {
+            if end >= from {
+                from = start;
+                to = to.max(end);
+            }
+        }
+        loop {
+            let Some((&start, &end)) = self.spans.range(from..=to).next() else {
+                break;
+            };
+            to = to.max(end);
+            self.spans.remove(&start);
+        }
+        self.spans.insert(from, to);
+    }
+
+    /// Where the data of the member this header sits inside ends, when it
+    /// sits inside one at all.
+    ///
+    /// The ranges are disjoint and ordered, so the one range beginning at or
+    /// before this header is the only one that can hold it.
+    fn enclosing_span_end(&self, header: usize) -> Option<usize> {
         self.spans
-            .iter()
-            .any(|&(from, to)| header >= from && header < to)
+            .range(..=header)
+            .next_back()
+            .map(|(_, &to)| to)
+            .filter(|&to| header < to)
     }
 
     /// Every member whose data the directory did not account for, found
@@ -248,12 +283,21 @@ impl Walk<'_> {
                 break;
             };
             at = header + LOCAL_SIGNATURE.len();
-            if self.taken.contains(&header) || self.inside_a_member(header) {
+            // A member stored verbatim may hold a million signatures of its
+            // own, so the walk steps over its data rather than asking about
+            // each one: an inner archive's headers are the inner archive's
+            // business however many of them it has.
+            if let Some(end) = self.enclosing_span_end(header) {
+                at = at.max(end);
+                continue;
+            }
+            if self.counted.contains(&header) {
                 continue;
             }
             let Some(member) = local_member(self.data, header) else {
                 continue;
             };
+            self.counted.insert(header);
             self.seen += 1;
             self.note_span(&member);
             self.take(&member);
@@ -271,7 +315,6 @@ impl Walk<'_> {
         let Some(bytes) = member.read(self.data) else {
             return;
         };
-        self.taken.insert(member.header_at);
         self.note_span(member);
         self.scanned = self.scanned.saturating_add(bytes.len());
         let member_path = member_path(self.path, &name);
