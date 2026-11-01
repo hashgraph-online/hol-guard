@@ -66,6 +66,11 @@ pub use known_folders::{trusted_install_roots, user_profile_directory, windows_d
 pub use owner::owned_by_current_user;
 
 #[cfg(windows)]
+pub use windows::{
+    command_line_to_argv, process_creation_time, process_owner_sid, terminate_if_creation_time,
+};
+
+#[cfg(windows)]
 pub use registry::{read_machine_registry_string, MachineRegistryString};
 
 #[cfg(windows)]
@@ -108,6 +113,30 @@ pub fn local_drive_letters() -> Option<Vec<char>> {
 #[cfg(not(windows))]
 pub fn owned_by_current_user(_path: &Path) -> bool {
     false
+}
+
+#[cfg(not(windows))]
+pub fn process_creation_time(_process_id: u32) -> Option<u64> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn process_owner_sid(_process_id: u32) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn terminate_if_creation_time(
+    _process_id: u32,
+    _expected_creation_time: u64,
+    _timeout: Option<std::time::Duration>,
+) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+pub fn command_line_to_argv(_command: &str) -> Option<Vec<String>> {
+    None
 }
 
 #[cfg(not(windows))]

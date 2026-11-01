@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
@@ -62,6 +62,35 @@ def sync_url(route: str, url: str, **parameters: object) -> str:
     """
 
     return _derived_url(route, url, tuple(sorted(parameters.items())))
+
+
+class CloudHttpError(NamedTuple):
+    """How one Guard Cloud HTTP error reads, as the resident decided it."""
+
+    message: str
+    retryable: bool
+    sync_message: str
+    plan_restricted: bool
+    plan_message: str
+    edge_block: str | None
+
+
+def cloud_http_error(*, status: int, reason: str, headers: Mapping[str, str] | None, body: str) -> CloudHttpError:
+    payload = native_runner_authority(
+        "cloud_http_error",
+        {"status": status, "reason": reason, "headers": None if headers is None else dict(headers), "body": body},
+    )
+    edge_block = payload.get("edge_block")
+    if edge_block is not None and not isinstance(edge_block, str):
+        raise _malformed()
+    return CloudHttpError(
+        message=_field(payload, "message", str),
+        retryable=_field(payload, "retryable", bool),
+        sync_message=_field(payload, "sync_message", str),
+        plan_restricted=_field(payload, "plan_restricted", bool),
+        plan_message=_field(payload, "plan_message", str),
+        edge_block=edge_block,
+    )
 
 
 def normalized_receipts_sync_url(url: str) -> str:
@@ -174,6 +203,65 @@ def completed_guard_event_ids(payload: Mapping[str, object]) -> list[str]:
     if not all(isinstance(item, str) for item in ids):
         raise _malformed()
     return ids
+
+
+# The session fields the runtime reads; nothing else crosses the transport.
+_SESSION_KEYS = (
+    "session_id",
+    "sessionId",
+    "workspace",
+    "harness",
+    "surface",
+    "status",
+    "client_name",
+    "clientName",
+    "client_title",
+    "clientTitle",
+    "client_version",
+    "clientVersion",
+    "capabilities",
+    "created_at",
+    "createdAt",
+    "updated_at",
+    "updatedAt",
+    "policy_document_versions",
+    "policyDocumentVersions",
+    "policy_bundle_versions",
+    "policyBundleVersions",
+    "policy_contracts",
+    "policyContracts",
+    "yaml_import",
+    "yamlImport",
+    "canonical_policy_enforcement",
+    "canonicalPolicyEnforcement",
+)
+
+
+def runtime_session_payload(
+    session: Mapping[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    cwd: str,
+    now: str,
+    version: str,
+) -> dict[str, object]:
+    """The runtime session the Cloud handshake sends, before the store-read fields."""
+
+    payload = native_runner_authority(
+        "runtime_session_payload",
+        {
+            "session": {key: session[key] for key in _SESSION_KEYS if key in session},
+            "device_id": device_id,
+            "device_name": device_name,
+            "cwd": cwd,
+            "now": now,
+            "version": version,
+        },
+    )
+    for key in ("sessionId", "harness", "surface", "workspace", "deviceId", "updatedAt"):
+        _field(payload, key, str)
+    return dict(payload)
 
 
 _STALE_INTEL_KEYS = (

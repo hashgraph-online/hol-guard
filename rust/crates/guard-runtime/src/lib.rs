@@ -207,6 +207,16 @@ mod contained_workspace_sink;
 mod contained_wrapper_plan_op;
 mod content_decode;
 mod content_sensitivity_op;
+mod context_assistance_action_facts;
+mod context_assistance_agent_op;
+mod context_assistance_agents;
+mod context_assistance_data;
+mod context_assistance_engine;
+mod context_assistance_execution;
+mod context_assistance_history;
+mod context_assistance_notifications;
+mod context_assistance_op;
+mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
@@ -794,6 +804,8 @@ mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
 mod runner_authority_signature;
+mod runner_cloud_http_error;
+mod runner_runtime_session;
 mod runner_sync_policy;
 mod runner_sync_signals;
 mod runner_sync_url;
@@ -865,6 +877,7 @@ mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
 mod windows_process_command_lines;
+mod windows_process_lifecycle;
 #[cfg(windows)]
 mod windows_pytest;
 #[cfg(windows)]

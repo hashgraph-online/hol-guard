@@ -51,6 +51,8 @@ mod job_guard;
 mod private_files;
 #[path = "process_command_line.rs"]
 mod process_command_line;
+#[path = "process_identity.rs"]
+mod process_identity;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
 pub use bound_open::{
@@ -73,6 +75,9 @@ pub use private_files::{
     create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
 };
 pub use process_command_line::{process_ids, ProcessQuery};
+pub use process_identity::{
+    command_line_to_argv, process_creation_time, process_owner_sid, terminate_if_creation_time,
+};
 pub use process_lifecycle::{
     process_liveness, process_parent_ids, process_start_marker, running_process_image_path,
     running_process_start_marker, terminate_process, terminate_process_verified,

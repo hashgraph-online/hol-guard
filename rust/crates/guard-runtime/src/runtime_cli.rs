@@ -3,6 +3,14 @@ use super::*;
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, flag] if command == "context-assistance-install-operator" && flag == "--stdin" => {
+            let response = policy_store::context_assistance_registry::run_operator_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if command == "context-assistance-enroll-local" && flag == "--stdin" => {
+            let response = policy_store::context_assistance_registry::run_enroll_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&pack_lifecycle::run(&bytes)?)
@@ -144,6 +152,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if windows_process_lifecycle::is_command(command) && flag == "--stdin" => {
+            let response = windows_process_lifecycle::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag]

@@ -42,6 +42,7 @@ _GUARD_HELP_GROUPS = (
     "  explain      Show evidence for one artifact\n"
     "  policies     Inspect local Guard policy state\n"
     "  settings     Settings: show or update local Guard rules\n"
+    "  context      Inspect, check, start or stop optional CIGAR assistance\n"
     "  exceptions   Inspect active exception windows\n"
     "  advisories   Inspect cached Guard Cloud advisories\n"
     "  events       Review Guard lifecycle events\n"

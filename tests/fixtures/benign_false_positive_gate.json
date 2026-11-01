@@ -4451,6 +4451,110 @@
       "expect": "not_allow"
     },
     {
+      "id": "git-worktree-name-rev-head",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git name-rev --name-only HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-show-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git show-branch"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-check-ref-format-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ref-format --branch main"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-symbolic-ref-routed",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C . symbolic-ref --short HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-symbolic-ref-write",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git symbolic-ref HEAD refs/heads/other"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-name-rev-configured-pager",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c core.pager=/tmp/payload.sh name-rev --all"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-git-diff-tree-output-file",
       "fix_area": "negative",
       "harnesses": [
@@ -21166,6 +21270,22 @@
       "tool": "shell",
       "tool_input": {
         "command": "doctl account get"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "doctl-auth-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "doctl auth list"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -44924,6 +45044,125 @@
         "command": "fd -t f -e ts . * -x cat"
       },
       "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "grep-include-markdown-glob-over-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN --include=\"*.md\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-include-markdown-glob-relative-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln TOKEN --include=\"*.md\" service-api"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-include-two-globs-over-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln TOKEN --include=\"*.md\" --include=\"*.rs\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-include-separate-value-over-checkout-with-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN --include \"*.md\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-include-every-file-glob-over-checkout",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN --include=\"*\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-dereference-include-over-checkout",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -Rn TOKEN --include=\"*.md\" ${ORG}/service-api"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-recursive-checkout-with-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN ${ORG}/service-api"
+      },
+      "cwd": "org_app",
       "expect": "not_allow"
     }
   ],

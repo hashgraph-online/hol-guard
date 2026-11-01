@@ -134,6 +134,7 @@ from .command_queue_worker import (
     start_command_queue_worker,
     stop_command_queue_worker,
 )
+from .context_assistance_versions_http import request_body_limit as context_request_body_limit
 from .dashboard_bundle import DASHBOARD_BUILD_HEADER, dashboard_build_id, pin_dashboard_bundle
 from .diagnostics import DaemonDiagnostics
 from .discovery import (
@@ -154,7 +155,9 @@ from .extension_discovery_read import (
     discovery_rollout_enabled,
     relay_discovery_measurement,
 )
+from .header_readiness import HeaderWatchdog
 from .hook_evidence_dispatch import HookEvidenceDispatch
+from .hook_evidence_shutdown import shutdown_hook_evidence
 from .hook_managed_install_state import _hook_harness_is_unmanaged
 from .hook_policy_admission import prepare_native_hook_policy
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
@@ -210,6 +213,7 @@ from .service_lifecycle import (
     contain_failed_service_start,
     start_serve_thread,
     startup_generation_is_current,
+    stop_interrupted_foreground_service,
 )
 from .sponsored_discovery_settings import (
     sponsored_discovery_allowed,
@@ -434,7 +438,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     pending_classifications: dict[int, tuple[tuple[str, int], float]]
     saturation_probes: dict[int, tuple[socket.socket, tuple[str, int], float]]
     unclassified_connections_lock: threading.Lock
-    unclassified_watchdog_stop: threading.Event
+    unclassified_watchdog_stop: HeaderWatchdog
     unclassified_watchdog_thread: threading.Thread | None
     runtime_heartbeat: RuntimeHeartbeatWriter
     general_request_executor: _BoundedRequestExecutor
@@ -463,27 +467,12 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.diagnostics.record_exception("http_request_failed")
 
     def server_close(self) -> None:
+        _ = self.stop_unclassified_watchdog()
         _ = self._stop_request_executors()
         audit_persistence = getattr(self, "audit_persistence", None)
         if audit_persistence is not None:
             audit_persistence.close()
-        hook_worker = getattr(self, "hook_worker", None)
-        if hook_worker is not None:
-            with suppress(Exception):
-                hook_worker.close()
-        dispatch = getattr(self, "runtime_hook_evidence_dispatch", None)
-        if dispatch is not None:
-            # What a finished hook left behind is submitted before the writer
-            # it submits to is dropped.
-            with suppress(Exception):
-                _ = dispatch.stop(1.0)
-        writer = getattr(self, "runtime_hook_evidence_writer", None)
-        if writer is not None:
-            # The writer now lives in the resident, which can refuse the call.
-            # Shutdown drops it either way; what it had queued is on its own
-            # journal, and the next writer for this home recovers that.
-            with suppress(Exception):
-                _ = writer.stop(timeout_seconds=1.0)
+        _ = shutdown_hook_evidence(self)
         capture_writer = getattr(self, "codex_binding_capture_writer", None)
         if capture_writer is not None:
             capture_writer.stop_capture()
@@ -581,7 +570,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.pending_classifications = {}
         self.saturation_probes = {}
         self.unclassified_connections_lock = threading.Lock()
-        self.unclassified_watchdog_stop = threading.Event()
+        self.unclassified_watchdog_stop = HeaderWatchdog(self)
         self.unclassified_watchdog_thread = None
         self.runtime_heartbeat = RuntimeHeartbeatWriter(
             store=store,
@@ -929,6 +918,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                         cast(tuple[str, int], client_address),
                         min(admission_deadline, accepted_at + _DAEMON_REQUEST_READ_TIMEOUT_SECONDS),
                     )
+            self.unclassified_watchdog_stop.notify()
             return
         self._submit_transport_request(request_socket, client_address, control=control)
 
@@ -942,6 +932,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             if len(self.saturation_probes) >= limit:
                 displaced = self.saturation_probes.pop(next(iter(self.saturation_probes)))
             self.saturation_probes[id(request)] = (request, cast(tuple[str, int], client_address), deadline)
+        self.unclassified_watchdog_stop.notify()
         if displaced is None:
             return
         with self.request_capacity_lock:
@@ -955,6 +946,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         # Classification advancement removes the socket before submit, so a
         # completed header does not return here.
         if not self._buffered_request_headers_complete(request_socket, pending=True):
+            parked = False
             with self.unclassified_connections_lock:
                 current = self.unclassified_connections.get(id(request_socket))
                 if current is not None and current[0] is request_socket:
@@ -962,7 +954,10 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                         cast(tuple[str, int], client_address),
                         current[1],
                     )
-                    return
+                    parked = True
+            if parked:
+                self.unclassified_watchdog_stop.notify()
+                return
         executor = (
             self.control_request_executor
             if control or self._transport_request_is_control(request_socket)
@@ -1144,6 +1139,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             thread.join(timeout=1.0)
         if thread is None or not thread.is_alive():
             self.unclassified_watchdog_thread = None
+            self.unclassified_watchdog_stop.close()
         return self.unclassified_watchdog_thread is None
 
     def _watch_unclassified_connections(self) -> None:
@@ -1683,7 +1679,7 @@ class _GuardDaemonHandler(
             except ValueError:
                 self._write_json({"error": "invalid_content_length"}, status=400)
                 return
-            if content_length < 0 or content_length > self._MAX_BODY_BYTES:
+            if content_length < 0 or content_length > context_request_body_limit(parsed.path, self._MAX_BODY_BYTES):
                 self._write_json({"error": "body_too_large"}, status=413)
                 return
         payload, body_error = self._load_request_body()
@@ -1827,7 +1823,7 @@ class _GuardDaemonHandler(
             return {}, "invalid_content_length"
         if length == 0:
             return {}, None
-        if length > self._MAX_BODY_BYTES:
+        if length > context_request_body_limit(urlparse(getattr(self, "path", "")).path, self._MAX_BODY_BYTES):
             return {}, "request_body_too_large"
         raw_body, body_error = self._read_request_body(length)
         if body_error is not None:
@@ -3388,6 +3384,7 @@ class GuardDaemonServer:
         self._cloud_review_sync_worker: CloudReviewSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._serve_loop_started = threading.Event()
+        self._serve_loop_finished = threading.Event()
         self._watchdog_thread: threading.Thread | None = None
         self._native_resident_watchdog_thread: threading.Thread | None = None
         self._workspace_assessment_thread: threading.Thread | None = None
@@ -3422,6 +3419,10 @@ class GuardDaemonServer:
         self._serve_thread_error = None
         try:
             self._begin_service(publish_before_workers=True)
+        except KeyboardInterrupt:
+            if self._serve_thread_error is not None or not stop_interrupted_foreground_service(self):
+                raise
+            return
         except RuntimeError as error:
             if str(error) == "Guard daemon stopped during startup":
                 return
@@ -3434,10 +3435,23 @@ class GuardDaemonServer:
             if serve_thread is None:
                 self._serve_forever()
                 return
+            # Waiting on an Event keeps Ctrl-C outside Thread.join's internal
+            # liveness bookkeeping; shutdown still joins the actual worker.
+            self._serve_loop_finished.wait()
             serve_thread.join()
             serve_error = self._serve_thread_error
             if serve_error is not None:
                 raise serve_error
+        except KeyboardInterrupt:
+            if self._serve_thread_error is not None:
+                contain_failed_service_start(
+                    self,
+                    self._serve_thread_error,
+                    serve_thread_started=serve_thread is not None,
+                )
+                raise
+            if not stop_interrupted_foreground_service(self):
+                raise
         except RuntimeError as error:
             if str(error) == "Guard daemon stopped during startup":
                 return
@@ -3950,26 +3964,7 @@ class GuardDaemonServer:
                 contained = runtime_heartbeat.stop(timeout_seconds=1.0) is not False and contained
             except Exception:
                 contained = False
-        runtime_hook_evidence_dispatch = getattr(self._server, "runtime_hook_evidence_dispatch", None)
-        if runtime_hook_evidence_dispatch is not None:
-            with suppress(Exception):
-                contained = runtime_hook_evidence_dispatch.stop(1.0) and contained
-        runtime_hook_evidence_writer = getattr(self._server, "runtime_hook_evidence_writer", None)
-        if runtime_hook_evidence_writer is not None:
-            try:
-                contained = runtime_hook_evidence_writer.stop(timeout_seconds=1.0) is not False and contained
-            except Exception:
-                contained = False
-        hook_worker = getattr(self._server, "hook_worker", None)
-        if hook_worker is not None:
-            try:
-                close_contained = getattr(hook_worker, "close_contained", None)
-                if callable(close_contained):
-                    contained = close_contained() is not False and contained
-                else:
-                    contained = hook_worker.close() is not False and contained
-            except Exception:
-                contained = False
+        contained = shutdown_hook_evidence(self._server) and contained
         contained = self._join_service_background_threads() and contained
         extension_control_api = getattr(self._server, "extension_control_api", None)
         if extension_control_api is not None:

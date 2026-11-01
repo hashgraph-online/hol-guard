@@ -1,0 +1,109 @@
+{
+  "native_test": {
+    "observation": {
+      "association": {
+        "action_type": "command",
+        "approval_grant": false,
+        "binding": "authenticated_native_decision",
+        "data_role": true,
+        "decision_id": "3ef464c2bc1b715322ff0e25133bad6dbb16d83b12f84a8ebd28413d4244a849",
+        "event": "PreToolUse",
+        "execution_binding": "unqualified",
+        "harness": "codex",
+        "operation": "execute",
+        "policy_generation": "1",
+        "schema": "guard-context-native-decision.v1"
+      },
+      "brief": {
+        "citations": [
+          {
+            "document_digest": "5bd22118cc3f7288ac910942aab9d36d993d953b5304a859100f15d105184039",
+            "end_line": 1,
+            "node_id": "guard-action-facts",
+            "source": "guard:action",
+            "start_line": 1
+          },
+          {
+            "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+            "end_line": 1,
+            "node_id": "guard-policy-facts",
+            "source": "guard:policy",
+            "start_line": 1
+          },
+          {
+            "document_digest": "5a62909c5d2376dc37cefb9e942de4945ac1a701d4d4cb2282e30c2315b2b216",
+            "end_line": 1,
+            "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+            "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+            "start_line": 1
+          }
+        ],
+        "data_role": true,
+        "excerpts": [
+          {
+            "citations": [
+              {
+                "document_digest": "5bd22118cc3f7288ac910942aab9d36d993d953b5304a859100f15d105184039",
+                "end_line": 1,
+                "node_id": "guard-action-facts",
+                "source": "guard:action",
+                "start_line": 1
+              }
+            ],
+            "text": "Authenticated native Guard decision 3ef464c2bc1b715322ff0e25133bad6dbb16d83b12f84a8ebd28413d4244a849 for codex: action type \"command\", operation \"execute\", decision allow, policy action warn, policy generation 1. Observed policy action: not recorded; observe mode: false. Bounded action: true; sensitive target: false. These are native evaluation facts. They do not confirm execution, prove current executable bytes, or grant approval."
+          },
+          {
+            "citations": [
+              {
+                "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+                "end_line": 1,
+                "node_id": "guard-policy-facts",
+                "source": "guard:policy",
+                "start_line": 1
+              }
+            ],
+            "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+          },
+          {
+            "citations": [
+              {
+                "document_digest": "5a62909c5d2376dc37cefb9e942de4945ac1a701d4d4cb2282e30c2315b2b216",
+                "end_line": 1,
+                "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+                "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+                "start_line": 1
+              }
+            ],
+            "text": "Project guidance for command execute review policy: deployment always follows the approved project procedure.\n"
+          }
+        ],
+        "graph_revision": 3,
+        "policy_revision": "d403c4a1167b5cba8dc4e7ee325c9cbf5bef2cf2b2c0f7c7e8825108c0e028b9",
+        "rendered": "{\"sources\":[[\"guard-action-facts\",\"guard:action\",1,1]],\"text\":\"Authenticated native Guard decision 3ef464c2bc1b715322ff0e25133bad6dbb16d83b12f84a8ebd28413d4244a849 for codex: action type \\\"command\\\", operation \\\"execute\\\", decision allow, policy action warn, policy generation 1. Observed policy action: not recorded; observe mode: false. Bounded action: true; sensitive target: false. These are native evaluation facts. They do not confirm execution, prove current executable bytes, or grant approval.\"}\n{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0\",\"source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5\",1,1]],\"text\":\"Project guidance for command execute review policy: deployment always follows the approved project procedure.\\n\"}",
+        "rendered_tokens": 279,
+        "schema": "guard-cigar-context-brief.v1",
+        "snapshot_id": "d291abae925294aeeb1e11ed423de4066152a5c1fcb36f09518d53365b0461f1"
+      },
+      "checks": [
+        "authenticated_native_origin",
+        "no_origin_before_opt_in",
+        "mandatory_native_decision_citation",
+        "native_only_private_bindings",
+        "actual_action_selection_explanation",
+        "generic_explain_isolation",
+        "caller_facts_rejected",
+        "paired_agent_action_context",
+        "agent_snapshot_isolation",
+        "changed_source_refused",
+        "refreshed_source_accepted",
+        "native_policy_generation_fence",
+        "clear_forgets_native_decision_origins",
+        "disabled_cached_calls_refused",
+        "no_execution_binding_claim"
+      ],
+      "qualification": "native-library-and-actual-sdk-only",
+      "schema": "guard-cigar-native-action-verification.v1",
+      "status": "passed"
+    }
+  }
+}

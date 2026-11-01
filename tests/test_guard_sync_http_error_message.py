@@ -13,11 +13,14 @@ import urllib.request
 import pytest
 import urllib3
 
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncNotAvailableError,
     _check_plan_restriction_403,
     _cloud_edge_block_from_http_error,
     _fetch_supply_chain_bundle_payload,
+    _guard_cloud_http_error_details,
     _refresh_guard_oauth_access_token_once,
     _sync_http_error_message,
     _urlopen_json_with_timeout_retry,
@@ -512,4 +515,24 @@ def test_receipt_sync_401_from_cloudflare_is_not_an_expired_sign_in() -> None:
     assert edge is not None and "blocked the request (HTTP 401" in edge
     assert (
         _cloud_edge_block_from_http_error(_cloudflare_error("", {"Content-Type": "application/json"}, code=401)) is None
+    )
+
+
+def test_an_unread_http_error_claims_no_verdict_the_runtime_never_gave(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unavailable(**_kwargs: object) -> object:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(runner_native_sync, "cloud_http_error", unavailable)
+    assert _guard_cloud_http_error_details(_http_error("", code=503, reason="Unavailable")) == (
+        "HTTP Error 503: Unavailable",
+        True,
+    )
+    assert _guard_cloud_http_error_details(_http_error("", code=500))[1] is False
+    # A 401 the runtime could not read is reported as it came, never as an expired sign-in.
+    assert _cloud_edge_block_from_http_error(_http_error("", code=401, reason="Unauthorized")) == (
+        "HTTP Error 401: Unauthorized"
+    )
+    assert _check_plan_restriction_403(_http_error("{}", code=403, reason="Forbidden")) == (
+        False,
+        "HTTP Error 403: Forbidden",
     )

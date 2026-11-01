@@ -1,4 +1,5 @@
 import { recordBusinessQueueReadResult } from "./business-review-queue-status";
+import { parseNativeDecisionSelector } from "./context-assistance/native-decision-selector";
 import {
   GUARD_ACTION_TYPES,
   GUARD_DECISION_V2_ACTIONS,
@@ -1338,6 +1339,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   if (!isRecord(rawPayloadRedacted)) {
     return null;
   }
+  const nativeOrigin = parseNativeDecisionSelector(raw["native_origin_receipt"], harness, eventName);
   return {
     schema_version: schemaVersion,
     action_id: actionId,
@@ -1364,7 +1366,8 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
       ? {}
       : { policy_action: isGuardAction(policyAction) ? policyAction : null }),
     script_name: scriptName,
-    raw_payload_redacted: rawPayloadRedacted
+    raw_payload_redacted: rawPayloadRedacted,
+    ...(nativeOrigin ? { native_origin_receipt: nativeOrigin } : {}),
   };
 }
 
@@ -2367,7 +2370,7 @@ function applyHarnessPosturePatch(
   return next;
 }
 
-export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures"> & {
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures" | "context_assistance_diagnostic" | "context_assistance_requested"> & {
   harness_postures?: GuardHarnessPosturePatch;
 };
 
