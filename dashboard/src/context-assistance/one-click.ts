@@ -16,7 +16,8 @@ export const CIGAR_SETUP_STAGE_LABELS: Record<CigarSetupStage, string> = {
   check: "Check it is the approved copy",
   start: "Start CIGAR",
 };
-export type CigarSetupBlock = { title: string; detail: string; tab?: CigarTab };
+/** `wait` marks a block that clears by itself, so the page re-checks instead of waiting for a click. */
+export type CigarSetupBlock = { title: string; detail: string; tab?: CigarTab; wait?: boolean };
 export type CigarSetupRun = {
   kind: "run";
   runtime_id: string | null;
@@ -30,7 +31,7 @@ export type CigarSetupRun = {
 export type CigarSetupPlan = { kind: "ready" } | { kind: "blocked"; block: CigarSetupBlock } | CigarSetupRun;
 
 const python314 = (version: readonly number[]) => version[0] === 3 && version[1] === 14;
-const blocked = (title: string, detail: string, tab?: CigarTab): CigarSetupPlan => ({ kind: "blocked", block: { title, detail, tab } });
+const blocked = (title: string, detail: string, tab?: CigarTab, wait?: boolean): CigarSetupPlan => ({ kind: "blocked", block: { title, detail, tab, wait } });
 
 /**
  * Choose the shortest path from native metadata. Every input is something
@@ -43,7 +44,7 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
   if (options.locked || (state.restriction && !state.effective_preferences.enabled)) {
     return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
-  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. Try again in a moment.", "versions");
+  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
   if (data.jobs.some((job) => job.phase === "recovery_required")) {
     return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
   }
@@ -121,6 +122,7 @@ export const isCigarProofError = (cause: unknown) => cause instanceof ContextAss
   && (cause.code.startsWith("approval_gate") || cause.code === "approval_required");
 const transient = (cause: unknown) => !(cause instanceof ContextAssistanceApiError)
   || cause.code.endsWith("context_stale") || cause.code.endsWith("outcome_unknown") || cause.code === "context_assistance_unavailable";
+const missingJob = (cause: unknown) => cause instanceof ContextAssistanceApiError && cause.code.endsWith("job_missing");
 
 function guard(deps: CigarSetupDeps) {
   if (deps.stopped()) throw new CigarSetupStopped();
@@ -138,10 +140,13 @@ async function follow(
 ): Promise<{ job: CigarVersionJob; state: ContextAssistanceStatus }> {
   guard(deps);
   deps.onJob(input.job_id);
+  // After an unknown submit outcome Guard may register the job late, so a missing job is not yet an answer.
+  let uncertain = false;
   try {
     deps.onState((await deps.versions(input, proof)).state);
   } catch (cause) {
     if (!transient(cause)) failure(stage, cause);
+    uncertain = true;
   }
   const started = deps.now();
   let misses = 0;
@@ -151,8 +156,13 @@ async function follow(
     try {
       reply = await deps.versions({ action: "job", job_id: input.job_id });
       misses = 0;
+      uncertain = false;
     } catch (cause) {
-      if (!transient(cause) || ++misses > 5) failure(stage, cause);
+      const retry = transient(cause) || (uncertain && missingJob(cause));
+      if (!retry) failure(stage, cause);
+      if (++misses > 5) {
+        throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
+      }
     }
     if (reply) {
       deps.onState(reply.state);
@@ -214,18 +224,22 @@ export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssista
     deps.onSaved(saved, previous);
   }
   guard(deps);
-  try { state = await deps.activate(); } catch (cause) { failure("start", cause); }
-  deps.onState(state);
+  // A lost activate reply is followed through live status; only a check that never appears allows another try.
+  let fresh = true;
+  try { state = await deps.activate(); } catch (cause) { if (!transient(cause)) failure("start", cause); fresh = false; }
+  if (fresh) deps.onState(state);
   const started = deps.now();
-  let sawJob = state.job !== null;
+  let sawJob = fresh && state.job !== null;
   for (;;) {
-    if (state.effective_enabled) return state;
+    if (fresh && state.effective_enabled) return state;
     guard(deps);
-    if (!state.requested_enabled) throw new CigarSetupStopped();
-    if (state.job === null && (sawJob || deps.now() - started > 3_000)) throw new CigarSetupError("start", contextStatusCopy(state).detail);
-    if (deps.now() - started > START_LIMIT_MS) throw new CigarSetupError("start", "CIGAR is taking longer than expected to start. Refresh status in a minute.");
+    if (fresh && !state.requested_enabled) throw new CigarSetupStopped();
+    if (fresh && state.job === null && (sawJob || deps.now() - started > 3_000)) throw new CigarSetupError("start", contextStatusCopy(state).detail);
+    if (deps.now() - started > START_LIMIT_MS) {
+      throw new CigarSetupError("start", "CIGAR is taking longer than expected to start. Refresh status in a minute.");
+    }
     await deps.sleep(POLL_MS);
-    try { state = await deps.status(); } catch (cause) { if (!transient(cause)) failure("start", cause); continue; }
+    try { state = await deps.status(); fresh = true; } catch (cause) { if (!transient(cause)) failure("start", cause); fresh = false; continue; }
     sawJob ||= state.job !== null;
     deps.onState(state);
   }

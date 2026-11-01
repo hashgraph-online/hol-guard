@@ -141,7 +141,8 @@ try {
   };
   const expect = (await import("@playwright/test")).expect;
   await open(false);
-  assert.ok(calls.every(call => call.method === "GET" && call.path.endsWith("installations")), "opening the workspace must not prepare or select an SDK");
+  // Opening reads metadata for the one-click plan; the only POST allowed is the read-only update-preferences action.
+  assert.ok(calls.every(call => call.method === "GET" || call.action === "preferences"), "opening the workspace must not prepare or select an SDK");
   pass("Workspace opening reads registered metadata without SDK effects");
   await page.getByRole("tab", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Local runtime", exact: true })).toHaveCount(0);

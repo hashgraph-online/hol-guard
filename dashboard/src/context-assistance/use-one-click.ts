@@ -27,7 +27,18 @@ type Options = {
   gate: GuardApprovalGatePublicConfig | null;
   publish: (state: ContextAssistanceStatus) => void;
   onSaved: (config: GuardContextAssistanceConfig, previous: GuardContextAssistanceConfig) => void;
+  /** Called when Stop lands after the start step began, so CIGAR ends up off like "Turn off CIGAR". */
+  onTurnOff: () => void;
 };
+
+/** Guard may register a just-submitted job after Stop, so keep asking briefly until the cancel lands. */
+async function cancelJob(job: string) {
+  const deadline = AbortSignal.timeout(15_000);
+  for (let attempt = 0; attempt < 6 && !deadline.aborted; attempt++) {
+    try { await requestCigarVersions({ action: "cancel", job_id: job }, undefined, deadline); return; }
+    catch { await new Promise((resolve) => setTimeout(resolve, 1_000)); }
+  }
+}
 
 const wait = (ms: number, signal: AbortSignal) => new Promise<void>((resolve) => {
   const timer = setTimeout(resolve, ms);
@@ -41,6 +52,7 @@ export function useCigarOneClick(options: Options) {
   const [run, setRun] = useState<CigarOneClickRun>({ phase: "idle" });
   const controller = useRef<AbortController | null>(null);
   const activeJob = useRef<string | null>(null);
+  const starting = useRef(false);
   const running = useRef(false), mounted = useRef(false), revision = useRef(0);
   const latest = useRef(options); latest.current = options;
 
@@ -68,6 +80,14 @@ export function useCigarOneClick(options: Options) {
     : planCigarStart(options.status, options.dirty),
   [data, options.status, options.locked, options.dirty]);
 
+  // A busy block clears on its own; re-check so the button comes back without a manual refresh.
+  const waiting = run.phase === "idle" && plan?.kind === "blocked" && plan.block.wait === true;
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => void refresh(), 3_000);
+    return () => clearInterval(timer);
+  }, [waiting, refresh]);
+
   async function execute(proof?: ContextProof) {
     if (running.current || latest.current.disabled || !latest.current.active) return;
     running.current = true;
@@ -76,6 +96,7 @@ export function useCigarOneClick(options: Options) {
     let stages: CigarSetupStage[] = [];
     let stage: CigarSetupStage | null = null;
     let planned: CigarSetupRun | null = null;
+    let progressed = false;
     try {
       const fresh = await loadCigarVersionsData(abort.signal).catch((cause: unknown) => {
         if (planCigarStart(latest.current.status, latest.current.dirty)) return null;
@@ -92,19 +113,24 @@ export function useCigarOneClick(options: Options) {
       setRun({ phase: "running", stages, stage: stages[0] });
       // A TOTP code is single use; Guard accepts its recent same-session proof for the later steps.
       let credentials = proof;
+      // Spend it once a request is sent, whatever the outcome: Guard may have used it even if the reply was lost.
       const spend = () => {
         if (credentials?.totpCode) credentials = credentials.currentPassword ? { currentPassword: credentials.currentPassword } : undefined;
       };
       await runCigarSetup(next, initial, {
         versions: async (input) => {
-          const reply = await requestCigarVersions(input, credentials, abort.signal);
-          if (input.action !== "job") spend();
-          return reply;
+          try {
+            const reply = await requestCigarVersions(input, credentials, abort.signal);
+            if (input.action !== "job") progressed = true;
+            return reply;
+          } finally { if (input.action !== "job") spend(); }
         },
         saveSettings: async (config) => {
-          const saved = await saveCigarPreference(config, credentials, abort.signal);
-          spend();
-          return saved;
+          try {
+            const saved = await saveCigarPreference(config, credentials, abort.signal);
+            progressed = true;
+            return saved;
+          } finally { spend(); }
         },
         activate: () => controlContextAssistance("activate", abort.signal),
         status: () => fetchContextAssistance(abort.signal),
@@ -112,7 +138,11 @@ export function useCigarOneClick(options: Options) {
         now: () => Date.now(),
         stopped: () => abort.signal.aborted,
         onJob: (id) => { activeJob.current = id; },
-        onStage: (value) => { stage = value; if (mounted.current) setRun({ phase: "running", stages, stage: value }); },
+        onStage: (value) => {
+          stage = value;
+          if (value === "start") starting.current = true;
+          if (mounted.current) setRun({ phase: "running", stages, stage: value });
+        },
         onState: (state) => { if (mounted.current && !abort.signal.aborted) latest.current.publish(state); },
         onSaved: (config, previous) => { if (mounted.current) latest.current.onSaved(config, previous); },
       });
@@ -121,9 +151,10 @@ export function useCigarOneClick(options: Options) {
       if (!mounted.current) return;
       if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
       else if (cause instanceof CigarSetupError && cause.needsProof) {
-        // Nothing past the approval check started; the next attempt re-plans from fresh metadata.
-        setRun(planned ? { phase: "proof", plan: planned, error: proof ? "That approval did not work. Try again." : null }
-          : { phase: "failed", stages, stage, message: cause.message });
+        // The next attempt re-plans from fresh metadata, so finished steps (Python, the download) are reused.
+        const error = progressed ? "Your approval expired while Guard was working. The finished steps are kept. Approve once more to finish."
+          : proof ? "That approval did not work. Try again." : null;
+        setRun(planned ? { phase: "proof", plan: planned, error } : { phase: "failed", stages, stage, message: cause.message });
       } else {
         setRun({ phase: "failed", stages, stage: cause instanceof CigarSetupError ? cause.stage : stage,
           message: cause instanceof Error ? cause.message : "CIGAR did not finish turning on. Nothing else changed." });
@@ -131,6 +162,7 @@ export function useCigarOneClick(options: Options) {
     } finally {
       running.current = false;
       activeJob.current = null;
+      starting.current = false;
       if (controller.current === abort) controller.current = null;
       if (mounted.current) void refresh();
     }
@@ -145,10 +177,12 @@ export function useCigarOneClick(options: Options) {
     dismiss: () => setRun({ phase: "idle" }),
     /** Stop always wins: abort in-flight polling so no later step runs. */
     stop: () => {
-      const job = activeJob.current;
+      const job = activeJob.current, turnOff = starting.current;
+      activeJob.current = null; starting.current = false;
       controller.current?.abort();
-      // Best effort: ask Guard to cancel the job that was running; it rolls back on its own terms.
-      if (job) void requestCigarVersions({ action: "cancel", job_id: job }, undefined, AbortSignal.timeout(10_000)).catch(() => undefined);
+      // Past the start step the preference may already be on and a check running; turn CIGAR off for real.
+      if (turnOff) latest.current.onTurnOff();
+      if (job) void cancelJob(job).finally(() => { if (mounted.current) void refresh(); });
     },
     refresh,
   };

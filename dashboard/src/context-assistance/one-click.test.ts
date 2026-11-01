@@ -200,4 +200,41 @@ const plan = install;
   await runCigarSetup(planCigarStart(saved, false)!, saved, deps);
   assert.deepEqual(script.calls.filter((call) => call !== "status"), ["activate"], "a start-only run saves nothing and installs nothing");
 }
+{
+  // Guard accepted the install but its reply was lost and the job showed up one poll late.
+  const { deps, script } = fakeGuard({ submitError: { install: new ContextAssistanceApiError("versions_outcome_unknown", "Lost") } });
+  let late = true;
+  const versions = deps.versions;
+  deps.versions = async (input, proof) => {
+    if (input.action === "job" && late && script.calls.includes("install")) { late = false; throw new ContextAssistanceApiError("context_assistance_install_job_missing", "Missing"); }
+    return versions(input, proof);
+  };
+  await runCigarSetup(plan, off, deps);
+  assert.equal(script.calls.filter((call) => call === "install").length, 1, "a late job is followed, not resubmitted");
+}
+{
+  const { deps } = fakeGuard();
+  const versions = deps.versions;
+  deps.versions = async (input, proof) => {
+    if (input.action === "job") throw new ContextAssistanceApiError("context_assistance_install_job_missing", "Missing");
+    return versions(input, proof);
+  };
+  await assert.rejects(runCigarSetup(plan, off, deps), (cause: unknown) => cause instanceof CigarSetupError && cause.stage === "python",
+    "a missing job after a confirmed submit is a real failure");
+}
+{
+  // The activate reply was lost after Guard scheduled the check: follow status instead of failing.
+  const { deps, script } = fakeGuard({ initial: saved });
+  const activate = deps.activate;
+  deps.activate = async () => { await activate(); throw new ContextAssistanceApiError("context_assistance_unavailable", "Lost"); };
+  const result = await runCigarSetup(planCigarStart(saved, false)!, saved, deps);
+  assert.equal(result.effective_enabled, true);
+  assert.equal(script.calls.filter((call) => call === "activate").length, 1, "an uncertain start is observed, never resent");
+}
+{
+  const { deps } = fakeGuard({ initial: saved });
+  deps.status = async () => { throw new ContextAssistanceApiError("context_assistance_unavailable", "Down"); };
+  await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps),
+    (cause: unknown) => cause instanceof CigarSetupError && /longer than expected/.test(cause.message), "status outages still end at the start deadline");
+}
 console.log("CIGAR one-click planning, approval, stop, retry and live-readiness contracts passed.");

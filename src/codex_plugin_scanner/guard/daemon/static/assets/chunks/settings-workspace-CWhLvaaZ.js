@@ -3832,7 +3832,7 @@ const CIGAR_SETUP_STAGE_LABELS = {
   start: "Start CIGAR"
 };
 const python314 = (version) => version[0] === 3 && version[1] === 14;
-const blocked = (title, detail, tab) => ({ kind: "blocked", block: { title, detail, tab } });
+const blocked = (title, detail, tab, wait2) => ({ kind: "blocked", block: { title, detail, tab, wait: wait2 } });
 function planCigarSetup(data, options) {
   const { state, catalog } = data;
   if (state.effective_enabled) return { kind: "ready" };
@@ -3840,7 +3840,7 @@ function planCigarSetup(data, options) {
   if (options.locked || state.restriction && !state.effective_preferences.enabled) {
     return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
   }
-  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. Try again in a moment.", "versions");
+  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. This button comes back when it is done.", "versions", true);
   if (data.jobs.some((job) => job.phase === "recovery_required")) {
     return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
   }
@@ -3922,6 +3922,7 @@ const JOB_LIMIT_MS = 18e4, START_LIMIT_MS = 12e4, POLL_MS = 800;
 const failedPhases = /* @__PURE__ */ new Set(["failed", "cancelled", "recovery_required"]);
 const isCigarProofError = (cause) => cause instanceof ContextAssistanceApiError && (cause.code.startsWith("approval_gate") || cause.code === "approval_required");
 const transient = (cause) => !(cause instanceof ContextAssistanceApiError) || cause.code.endsWith("context_stale") || cause.code.endsWith("outcome_unknown") || cause.code === "context_assistance_unavailable";
+const missingJob = (cause) => cause instanceof ContextAssistanceApiError && cause.code.endsWith("job_missing");
 function guard(deps) {
   if (deps.stopped()) throw new CigarSetupStopped();
 }
@@ -3933,10 +3934,12 @@ function failure(stage, cause) {
 async function follow(deps, stage, input, proof, done) {
   guard(deps);
   deps.onJob(input.job_id);
+  let uncertain = false;
   try {
     deps.onState((await deps.versions(input, proof)).state);
   } catch (cause) {
     if (!transient(cause)) failure(stage, cause);
+    uncertain = true;
   }
   const started = deps.now();
   let misses = 0;
@@ -3946,8 +3949,13 @@ async function follow(deps, stage, input, proof, done) {
     try {
       reply = await deps.versions({ action: "job", job_id: input.job_id });
       misses = 0;
+      uncertain = false;
     } catch (cause) {
-      if (!transient(cause) || ++misses > 5) failure(stage, cause);
+      const retry = transient(cause) || uncertain && missingJob(cause);
+      if (!retry) failure(stage, cause);
+      if (++misses > 5) {
+        throw new CigarSetupError(stage, "Guard did not confirm this step. Check Updates before trying again.");
+      }
     }
     if (reply) {
       deps.onState(reply.state);
@@ -4027,25 +4035,31 @@ async function runCigarSetup(plan, initial2, deps, proof) {
     deps.onSaved(saved, previous);
   }
   guard(deps);
+  let fresh = true;
   try {
     state = await deps.activate();
   } catch (cause) {
-    failure("start", cause);
+    if (!transient(cause)) failure("start", cause);
+    fresh = false;
   }
-  deps.onState(state);
+  if (fresh) deps.onState(state);
   const started = deps.now();
-  let sawJob = state.job !== null;
+  let sawJob = fresh && state.job !== null;
   for (; ; ) {
-    if (state.effective_enabled) return state;
+    if (fresh && state.effective_enabled) return state;
     guard(deps);
-    if (!state.requested_enabled) throw new CigarSetupStopped();
-    if (state.job === null && (sawJob || deps.now() - started > 3e3)) throw new CigarSetupError("start", contextStatusCopy(state).detail);
-    if (deps.now() - started > START_LIMIT_MS) throw new CigarSetupError("start", "CIGAR is taking longer than expected to start. Refresh status in a minute.");
+    if (fresh && !state.requested_enabled) throw new CigarSetupStopped();
+    if (fresh && state.job === null && (sawJob || deps.now() - started > 3e3)) throw new CigarSetupError("start", contextStatusCopy(state).detail);
+    if (deps.now() - started > START_LIMIT_MS) {
+      throw new CigarSetupError("start", "CIGAR is taking longer than expected to start. Refresh status in a minute.");
+    }
     await deps.sleep(POLL_MS);
     try {
       state = await deps.status();
+      fresh = true;
     } catch (cause) {
       if (!transient(cause)) failure("start", cause);
+      fresh = false;
       continue;
     }
     sawJob ||= state.job !== null;
@@ -5813,6 +5827,17 @@ async function saveCigarPreference(config, proof, signal) {
   }
   return saved;
 }
+async function cancelJob(job) {
+  const deadline = AbortSignal.timeout(15e3);
+  for (let attempt = 0; attempt < 6 && !deadline.aborted; attempt++) {
+    try {
+      await requestCigarVersions({ action: "cancel", job_id: job }, void 0, deadline);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 1e3));
+    }
+  }
+}
 const wait = (ms, signal) => new Promise((resolve) => {
   const timer = setTimeout(resolve, ms);
   signal.addEventListener("abort", () => {
@@ -5826,6 +5851,7 @@ function useCigarOneClick(options) {
   const [run, setRun] = reactExports.useState({ phase: "idle" });
   const controller = reactExports.useRef(null);
   const activeJob = reactExports.useRef(null);
+  const starting = reactExports.useRef(false);
   const running = reactExports.useRef(false), mounted = reactExports.useRef(false), revision = reactExports.useRef(0);
   const latest = reactExports.useRef(options);
   latest.current = options;
@@ -5855,6 +5881,12 @@ function useCigarOneClick(options) {
     () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty }) : planCigarStart(options.status, options.dirty),
     [data, options.status, options.locked, options.dirty]
   );
+  const waiting = run.phase === "idle" && plan?.kind === "blocked" && plan.block.wait === true;
+  reactExports.useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => void refresh(), 3e3);
+    return () => clearInterval(timer);
+  }, [waiting, refresh]);
   async function execute(proof) {
     if (running.current || latest.current.disabled || !latest.current.active) return;
     running.current = true;
@@ -5864,6 +5896,7 @@ function useCigarOneClick(options) {
     let stages = [];
     let stage = null;
     let planned = null;
+    let progressed = false;
     try {
       const fresh = await loadCigarVersionsData(abort.signal).catch((cause) => {
         if (planCigarStart(latest.current.status, latest.current.dirty)) return null;
@@ -5893,14 +5926,22 @@ function useCigarOneClick(options) {
       };
       await runCigarSetup(next, initial2, {
         versions: async (input) => {
-          const reply = await requestCigarVersions(input, credentials, abort.signal);
-          if (input.action !== "job") spend();
-          return reply;
+          try {
+            const reply = await requestCigarVersions(input, credentials, abort.signal);
+            if (input.action !== "job") progressed = true;
+            return reply;
+          } finally {
+            if (input.action !== "job") spend();
+          }
         },
         saveSettings: async (config) => {
-          const saved = await saveCigarPreference(config, credentials, abort.signal);
-          spend();
-          return saved;
+          try {
+            const saved = await saveCigarPreference(config, credentials, abort.signal);
+            progressed = true;
+            return saved;
+          } finally {
+            spend();
+          }
         },
         activate: () => controlContextAssistance("activate", abort.signal),
         status: () => fetchContextAssistance(abort.signal),
@@ -5912,6 +5953,7 @@ function useCigarOneClick(options) {
         },
         onStage: (value) => {
           stage = value;
+          if (value === "start") starting.current = true;
           if (mounted.current) setRun({ phase: "running", stages, stage: value });
         },
         onState: (state) => {
@@ -5926,7 +5968,8 @@ function useCigarOneClick(options) {
       if (!mounted.current) return;
       if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
       else if (cause instanceof CigarSetupError && cause.needsProof) {
-        setRun(planned ? { phase: "proof", plan: planned, error: proof ? "That approval did not work. Try again." : null } : { phase: "failed", stages, stage, message: cause.message });
+        const error = progressed ? "Your approval expired while Guard was working. The finished steps are kept. Approve once more to finish." : proof ? "That approval did not work. Try again." : null;
+        setRun(planned ? { phase: "proof", plan: planned, error } : { phase: "failed", stages, stage, message: cause.message });
       } else {
         setRun({
           phase: "failed",
@@ -5938,6 +5981,7 @@ function useCigarOneClick(options) {
     } finally {
       running.current = false;
       activeJob.current = null;
+      starting.current = false;
       if (controller.current === abort) controller.current = null;
       if (mounted.current) void refresh();
     }
@@ -5953,9 +5997,14 @@ function useCigarOneClick(options) {
     dismiss: () => setRun({ phase: "idle" }),
     /** Stop always wins: abort in-flight polling so no later step runs. */
     stop: () => {
-      const job = activeJob.current;
+      const job = activeJob.current, turnOff = starting.current;
+      activeJob.current = null;
+      starting.current = false;
       controller.current?.abort();
-      if (job) void requestCigarVersions({ action: "cancel", job_id: job }, void 0, AbortSignal.timeout(1e4)).catch(() => void 0);
+      if (turnOff) latest.current.onTurnOff();
+      if (job) void cancelJob(job).finally(() => {
+        if (mounted.current) void refresh();
+      });
     },
     refresh
   };
@@ -6080,7 +6129,8 @@ function ContextAssistanceSettings(props) {
     disabled: props.disabled || busy,
     gate: props.gate ?? null,
     publish: (state) => captureVersionStatus()(state),
-    onSaved: (config, previous) => props.onSelectionChanged?.(config, previous)
+    onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
+    onTurnOff: () => void perform("stop")
   });
   reactExports.useEffect(() => {
     if (!setup.busy) return;

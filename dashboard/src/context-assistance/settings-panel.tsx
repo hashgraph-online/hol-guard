@@ -117,6 +117,7 @@ export function ContextAssistanceSettings(props: Props) {
     active: workspace, status, dirty, locked: props.locked, disabled: props.disabled || busy, gate: props.gate ?? null,
     publish: (state) => captureVersionStatus()(state),
     onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
+    onTurnOff: () => void perform("stop"),
   });
   useEffect(() => {
     if (!setup.busy) return;
