@@ -18,6 +18,7 @@ mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
 mod url_credential;
+mod wiped_read;
 
 pub use match_spans::scan_match_spans;
 
