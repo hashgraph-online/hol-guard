@@ -59,6 +59,10 @@ WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
 WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
+# The commit hook a project runs over its staged files. It is declared,
+# installed and pinned exactly as the linter it drives is, and it is launched
+# through npx the same way, so the verdict has the same evidence to read.
+WORKSPACE_LINT_STAGED_CASE = "omp-native-workspace-npx-lint-staged"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -72,6 +76,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_SCRIPT_RUN_ALIAS_CASE,
         WORKSPACE_TSC_CASE,
         WORKSPACE_PNPM_TSC_CASE,
+        WORKSPACE_LINT_STAGED_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -263,6 +268,35 @@ _PNPM_TYPESCRIPT_FILES = {
 _PNPM_TYPESCRIPT_FILES["pnpm-lock.yaml"] = _PNPM_LOCK
 
 
+_LINT_STAGED_VERSION = "16.1.2"
+# The one line the workspace's own commit hook prints.
+LINT_STAGED_MARKER = f"lint-staged {_LINT_STAGED_VERSION} checked the staged files"
+_LINT_STAGED_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "lint-staged": {\n    "*.ts": "eslint --fix"\n  },\n'
+        f'  "devDependencies": {{\n    "lint-staged": "{_LINT_STAGED_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "lint-staged": "{_LINT_STAGED_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/lint-staged": {\n'
+        f'      "version": "{_LINT_STAGED_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "lint-staged": "bin/lint-staged.js"\n      }\n    }\n  }\n}\n'
+    ),
+    "src/settings.ts": "export const settings = { retries: 3 };\n",
+    "node_modules/lint-staged/package.json": (
+        f'{{"name": "lint-staged", "version": "{_LINT_STAGED_VERSION}", "bin": '
+        '{"lint-staged": "bin/lint-staged.js"}}\n'
+    ),
+    "node_modules/lint-staged/bin/lint-staged.js": (
+        f"#!/usr/bin/env node\nconsole.log('{LINT_STAGED_MARKER}');\n"
+    ),
+}
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
@@ -295,6 +329,7 @@ _INSTALLS = {
         package="typescript",
         entry="bin/tsc",
     ),
+    WORKSPACE_LINT_STAGED_CASE: _Install("lint-staged", _LINT_STAGED_FILES, LINT_STAGED_MARKER),
     WORKSPACE_PNPM_TSC_CASE: _Install(
         "tsc",
         _PNPM_TYPESCRIPT_FILES,

@@ -25775,6 +25775,22 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-npx-lint-staged",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx lint-staged"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "toolchain-npx-tsc-project-long-noemit",
       "fix_area": "shell",
       "harnesses": [
