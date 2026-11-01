@@ -4,15 +4,14 @@ Desktop owns one Core under its app data directory. A pipx or uv tool venv, a
 ``pip --user`` install, or a stale link left in a bin directory keeps an older
 ``hol-guard`` on PATH, and a later package update from it can take the hooks
 back. Desktop retires those copies so every hook and shell resolves one Core.
-The native runtime's ``desktop-foreign-inventory`` command finds them; this
-module removes them.
+The native runtime's ``desktop-foreign-inventory`` command finds them and
+``desktop-foreign-remove`` removes them once this module has stopped their
+residents.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -40,23 +39,27 @@ _ENVIRONMENT_NAMES = (
     "XDG_BIN_HOME",
     "XDG_DATA_HOME",
 )
-_PIP_UNINSTALL_TIMEOUT_SECONDS = 120.0
-_USER_SITE_PROBE_TIMEOUT_SECONDS = 30.0
-_NOT_INSTALLED_EXIT = 3
-# Prints the user site-packages that holds hol-guard. Exits 3 when the
-# interpreter has no hol-guard and 4 when the copy it imports lives elsewhere,
-# so pip is never pointed at a system or distro install.
-_USER_SITE_PROBE = """
-import importlib.metadata as metadata, os, site, sys
-try:
-    location = os.path.realpath(str(metadata.distribution("hol-guard").locate_file("")))
-except metadata.PackageNotFoundError:
-    sys.exit(3)
-user_site = os.path.realpath(site.getusersitepackages())
-if location != user_site:
-    sys.exit(4)
-print(location)
-"""
+# Each removal step that can block: the venv and link deletions, then per
+# ``pip --user`` interpreter its 30-second probe and 120-second uninstall.
+_REMOVAL_BASE_TIMEOUT_SECONDS = 30.0
+_REMOVAL_USER_SITE_TIMEOUT_SECONDS = 150.0
+# The variables a ``pip --user`` interpreter needs to find its user site.
+_REMOVAL_ENVIRONMENT_NAMES = (
+    "APPDATA",
+    "COMSPEC",
+    "HOME",
+    "LANG",
+    "LOCALAPPDATA",
+    "PATH",
+    "PATHEXT",
+    "PYTHONUSERBASE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "WINDIR",
+)
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,11 @@ class RemovalResult:
 
 
 _NOTHING_FOUND = ForeignInventory(venvs=(), stale_entries=(), user_site=())
+_NOTHING_REMOVED = RemovalResult(
+    removed=(),
+    removed_entry_dirs=frozenset(),
+    notes=("Kept every superseded install: Guard's native runtime is unavailable.",),
+)
 
 
 def inventory_foreign_installs(
@@ -162,70 +170,63 @@ def remove_foreign_installs(
     inventory: ForeignInventory,
     *,
     retire_runtime: Callable[[Path], bool],
-    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> RemovalResult:
-    """Remove each inventoried install, keeping any whose resident will not stop."""
+    """Remove each inventoried install, keeping any whose resident will not stop.
 
-    removed: list[dict[str, str]] = []
-    entry_dirs: set[Path] = set()
-    notes: list[str] = []
-    for venv in inventory.venvs:
-        if not all(_retire(retire_runtime, runtime) for runtime in venv.runtimes):
-            notes.append(f"Kept {venv.root}: its Guard runtime is still running.")
-            continue
-        for entry in venv.entries:
-            if _unlink(entry):
-                entry_dirs.add(entry.parent)
-        try:
-            shutil.rmtree(venv.root)
-        except OSError as error:
-            notes.append(f"Could not remove {venv.root}: {error.strerror or error}.")
-            continue
-        removed.append({"kind": venv.kind, "path": str(venv.root)})
-    for entry in inventory.stale_entries:
-        if _unlink(entry):
-            entry_dirs.add(entry.parent)
-            removed.append({"kind": "stale_link", "path": str(entry)})
-    for interpreter, entries in inventory.user_site:
-        location = _user_site_location(interpreter, run)
-        if location == _NOT_INSTALLED_EXIT:
-            # The package is gone and only its console scripts remain.
-            for entry in entries:
-                if _unlink(entry):
-                    entry_dirs.add(entry.parent)
-                    removed.append({"kind": "stale_script", "path": str(entry)})
-            continue
-        if not isinstance(location, Path) or _is_relative_to(_resolve(Path(__file__)), location):
-            notes.append(f"Kept hol-guard for {interpreter}: it is not a separate pip --user install.")
-            continue
-        command = [str(interpreter), "-m", "pip", "uninstall", "-y", "hol-guard"]
-        try:
-            completed = run(command, capture_output=True, text=True, timeout=_PIP_UNINSTALL_TIMEOUT_SECONDS)
-        except (OSError, subprocess.SubprocessError) as error:
-            notes.append(f"Could not uninstall hol-guard from {interpreter}: {error}.")
-            continue
-        if completed.returncode != 0:
-            notes.append(f"Could not uninstall hol-guard from {interpreter}: pip exited {completed.returncode}.")
-            continue
-        removed.append({"kind": "pip_user", "path": str(interpreter)})
-        entry_dirs.update(entry.parent for entry in entries if not entry.exists())
-    return RemovalResult(removed=tuple(removed), removed_entry_dirs=frozenset(entry_dirs), notes=tuple(notes))
+    ``desktop_foreign_remove.rs`` deletes the venvs and links and uninstalls
+    each confirmed ``pip --user`` copy. Without a native runtime nothing is
+    removed.
+    """
 
+    from .mdm.runtime_request import runtime_answer
 
-def _user_site_location(interpreter: Path, run: Callable[..., subprocess.CompletedProcess[str]]) -> Path | int | None:
+    if inventory.empty:
+        return RemovalResult(removed=(), removed_entry_dirs=frozenset(), notes=())
+    answer = runtime_answer(
+        "native-desktop-foreign-remove-v1",
+        "desktop-foreign-remove",
+        {
+            "schema": "desktop-foreign-remove.v1",
+            "venvs": [
+                {
+                    "kind": venv.kind,
+                    "root": str(venv.root),
+                    "entries": [str(entry) for entry in venv.entries],
+                    "retired": all(_retire(retire_runtime, runtime) for runtime in venv.runtimes),
+                }
+                for venv in inventory.venvs
+            ],
+            "stale_entries": [str(entry) for entry in inventory.stale_entries],
+            "user_site": [
+                {"interpreter": str(interpreter), "entries": [str(entry) for entry in entries]}
+                for interpreter, entries in inventory.user_site
+            ],
+            "running_module": str(_resolve(Path(__file__))),
+            "environment": {
+                name: value for name in _REMOVAL_ENVIRONMENT_NAMES if (value := os.environ.get(name)) is not None
+            },
+        },
+        output_limit=_INVENTORY_OUTPUT_LIMIT,
+        timeout_seconds=_REMOVAL_BASE_TIMEOUT_SECONDS + _REMOVAL_USER_SITE_TIMEOUT_SECONDS * len(inventory.user_site),
+    )
     try:
-        completed = run(
-            [str(interpreter), "-c", _USER_SITE_PROBE],
-            capture_output=True,
-            text=True,
-            timeout=_USER_SITE_PROBE_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if completed.returncode == _NOT_INSTALLED_EXIT:
-        return _NOT_INSTALLED_EXIT
-    location = completed.stdout.strip() if completed.returncode == 0 else ""
-    return Path(location) if location and Path(location).is_absolute() else None
+        return _removal_from_answer(answer)
+    except (KeyError, TypeError, ValueError):
+        return _NOTHING_REMOVED
+
+
+def _removal_from_answer(answer: dict[str, object] | None) -> RemovalResult:
+    if answer is None:
+        return _NOTHING_REMOVED
+    removed = cast("list[dict[str, object]]", answer["removed"])
+    notes = answer["notes"]
+    if not isinstance(notes, list):
+        raise TypeError(notes)
+    return RemovalResult(
+        removed=tuple({"kind": str(item["kind"]), "path": str(item["path"])} for item in removed),
+        removed_entry_dirs=frozenset(_paths(answer["removed_entry_dirs"])),
+        notes=tuple(str(note) for note in cast("list[object]", notes)),
+    )
 
 
 def _retire(retire_runtime: Callable[[Path], bool], runtime: Path) -> bool:
@@ -233,16 +234,6 @@ def _retire(retire_runtime: Callable[[Path], bool], runtime: Path) -> bool:
         return retire_runtime(runtime)
     except Exception:
         return False
-
-
-def _unlink(path: Path) -> bool:
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        return False
-    except OSError:
-        return False
-    return True
 
 
 def _protected_roots() -> tuple[Path, ...]:
@@ -256,14 +247,6 @@ def _resolve(path: Path) -> Path:
         return path.resolve()
     except OSError:
         return path.absolute()
-
-
-def _is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        _ = path.relative_to(root)
-    except ValueError:
-        return False
-    return True
 
 
 __all__ = [
