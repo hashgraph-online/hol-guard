@@ -175,3 +175,34 @@ pub(super) fn is_dir(path: &Path) -> bool {
 pub(super) fn exists(path: &Path) -> bool {
     fs::metadata(path).is_ok()
 }
+
+/// `re.fullmatch(r"python(\d+(\.\d+)*)?", name)`.
+pub(super) fn is_python_name(name: &str) -> bool {
+    let Some(version) = name.strip_prefix("python") else {
+        return false;
+    };
+    version.is_empty()
+        || version
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+/// The `python*` part of a `glob` pattern, case-blind where the platform is.
+pub(super) fn glob_prefix_matches(name: &str, prefix: &str) -> bool {
+    if cfg!(windows) {
+        name.to_lowercase().starts_with(prefix)
+    } else {
+        name.starts_with(prefix)
+    }
+}
+
+pub(super) fn text(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+pub(super) fn texts(paths: &[PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}

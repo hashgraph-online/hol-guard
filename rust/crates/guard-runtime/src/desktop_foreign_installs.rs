@@ -9,9 +9,10 @@
 //!
 //! The runtime runs with an isolated environment and its own working
 //! directory, so the caller sends the variables and the directory the lookup
-//! reads. Paths follow `pathlib`: a lexical spelling for what is reported, a
-//! non-strict `resolve` for what is compared, and `normpath` for a link
-//! target that may no longer exist.
+//! reads. A relative configured path is anchored to that directory, since
+//! the runtime's own working directory is elsewhere. Paths follow `pathlib`:
+//! a lexical spelling for what is reported, a non-strict `resolve` for what is
+//! compared, and `normpath` for a link target that may no longer exist.
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -28,7 +29,8 @@ use crate::cloud_request_text::py_strip;
 mod paths;
 
 use paths::{
-    contains, exists, head, is_dir, is_file, is_symlink, link_target, path_key, pure, within,
+    contains, exists, glob_prefix_matches, head, is_dir, is_file, is_python_name, is_symlink,
+    link_target, path_key, pure, text, texts, within,
 };
 
 const COMMAND: &str = "desktop-foreign-inventory";
@@ -81,7 +83,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         return Err(invalid());
     }
     let host = Host {
-        home: pure(&request.home),
+        home: cwd.join(pure(&request.home)),
         cwd,
         environment: request.environment,
     };
@@ -122,7 +124,7 @@ impl Host {
             .chain(self.uv_tool_dirs().into_iter().map(|root| ("uv", root)))
             .collect();
         let mut candidates = Vec::new();
-        for (kind, collection) in &collections {
+        for &(kind, ref collection) in &collections {
             for name in PACKAGE_DIR_NAMES {
                 let venv = collection.join(name);
                 if !is_dir(&venv) || is_symlink(&venv) || self.contains_any(&venv, protected) {
@@ -131,7 +133,7 @@ impl Host {
                 // A runtime that cannot be named cannot be stopped first.
                 if let Some(runtimes) = self.venv_runtimes(&venv) {
                     candidates.push(Candidate {
-                        kind: *kind,
+                        kind,
                         root: venv,
                         runtimes,
                         entries: Vec::new(),
@@ -233,7 +235,7 @@ impl Host {
             if py_strip(entry).is_empty() {
                 continue;
             }
-            let directory = pure(&self.expanduser(entry));
+            let directory = self.anchored(pure(&self.expanduser(entry)));
             if within(&self.resolve(&directory), &resolved_home) {
                 dirs.push(directory);
             }
@@ -263,28 +265,51 @@ impl Host {
     /// `_env_path`: a set, non-blank variable as a user-expanded path.
     fn env_path(&self, name: &str) -> Option<PathBuf> {
         let value = py_strip(self.environment.get(name)?);
-        (!value.is_empty()).then(|| pure(&self.expanduser(value)))
+        (!value.is_empty()).then(|| self.anchored(pure(&self.expanduser(value))))
     }
 
-    /// `os.path.expanduser` for `~` and `~/...`. Another user's `~name` is
-    /// left as written.
+    /// A configured path as the caller reads it from its own directory.
+    fn anchored(&self, path: PathBuf) -> PathBuf {
+        if path == Path::new(".") {
+            self.cwd.clone()
+        } else {
+            self.cwd.join(path)
+        }
+    }
+
+    /// `os.path.expanduser` for `~`, `~/...` and this user's own `~name`.
+    /// Another account's `~name` is left as written: its tool installs are
+    /// not this user's to retire.
     fn expanduser(&self, value: &str) -> String {
         let Some(rest) = value.strip_prefix('~') else {
             return value.to_owned();
         };
         let separators: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
-        if !(rest.is_empty() || rest.starts_with(separators)) {
-            return value.to_owned();
-        }
+        let (name, tail) = rest.split_at(rest.find(separators).unwrap_or(rest.len()));
         let Some(home) = self.user_home() else {
             return value.to_owned();
         };
-        let expanded = format!("{}{rest}", home.trim_end_matches(separators));
+        if !name.is_empty() && !self.names_this_user(name) {
+            return value.to_owned();
+        }
+        let expanded = format!("{}{tail}", home.trim_end_matches(separators));
         if expanded.is_empty() {
             MAIN_SEPARATOR.to_string()
         } else {
             expanded
         }
+    }
+
+    /// Whether `~name` names the login the environment carries.
+    fn names_this_user(&self, name: &str) -> bool {
+        let logins: &[&str] = if cfg!(windows) {
+            &["USERNAME"]
+        } else {
+            &["USER", "LOGNAME"]
+        };
+        logins
+            .iter()
+            .any(|login| self.environment.get(*login).map(String::as_str) == Some(name))
     }
 
     fn user_home(&self) -> Option<String> {
@@ -448,26 +473,6 @@ fn user_site_interpreter(entry: &Path) -> Option<PathBuf> {
     Some(interpreter)
 }
 
-/// `re.fullmatch(r"python(\d+(\.\d+)*)?", name)`.
-fn is_python_name(name: &str) -> bool {
-    let Some(version) = name.strip_prefix("python") else {
-        return false;
-    };
-    version.is_empty()
-        || version
-            .split('.')
-            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
-}
-
-/// The `python*` part of a `glob` pattern, case-blind where the platform is.
-fn glob_prefix_matches(name: &str, prefix: &str) -> bool {
-    if cfg!(windows) {
-        name.to_lowercase().starts_with(prefix)
-    } else {
-        name.starts_with(prefix)
-    }
-}
-
 fn entry_file_names() -> Vec<String> {
     if !cfg!(windows) {
         return ENTRY_POINT_NAMES
@@ -478,17 +483,6 @@ fn entry_file_names() -> Vec<String> {
     ENTRY_POINT_NAMES
         .iter()
         .flat_map(|name| ["", ".exe", ".cmd"].map(|suffix| format!("{name}{suffix}")))
-        .collect()
-}
-
-fn text(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
-}
-
-fn texts(paths: &[PathBuf]) -> Vec<String> {
-    paths
-        .iter()
-        .map(|path| path.to_string_lossy().into_owned())
         .collect()
 }
 

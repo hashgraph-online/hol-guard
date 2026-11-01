@@ -4,8 +4,14 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use super::paths::normpath;
-use super::{is_python_name, pure, run_command, Host};
+use super::paths::{is_python_name, normpath};
+use super::{pure, run_command, Host};
+
+const RUNTIME: &str = if cfg!(windows) {
+    "hol-guard-runtime.exe"
+} else {
+    "hol-guard-runtime"
+};
 
 struct Fixture {
     _dir: tempfile::TempDir,
@@ -33,6 +39,7 @@ impl Fixture {
     fn environment(&self) -> BTreeMap<String, String> {
         BTreeMap::from([
             ("HOME".to_owned(), text(&self.home)),
+            ("USERPROFILE".to_owned(), text(&self.home)),
             (
                 "XDG_DATA_HOME".to_owned(),
                 text(&self.home.join(".local").join("share")),
@@ -77,7 +84,7 @@ impl Fixture {
             .join("guard")
             .join("_native");
         fs::create_dir_all(&native).expect("native dir");
-        write(&native.join("hol-guard-runtime"), "runtime");
+        write(&native.join(RUNTIME), "runtime");
         venv
     }
 }
@@ -103,13 +110,19 @@ fn reports_a_pipx_venv_with_its_entry_and_runtime() {
     write(
         &entry,
         &format!(
-            "#!{}/bin/python\nimport codex_plugin_scanner\n",
-            venv.display()
+            "#!{}\nimport codex_plugin_scanner\n",
+            venv.join("bin").join("python").display()
         ),
     );
 
     let runtime = venv
-        .join("lib/python3.12/site-packages/codex_plugin_scanner/guard/_native/hol-guard-runtime");
+        .join("lib")
+        .join("python3.12")
+        .join("site-packages")
+        .join("codex_plugin_scanner")
+        .join("guard")
+        .join("_native")
+        .join(RUNTIME);
     assert_eq!(
         fixture.inventory(&[]),
         json!({
@@ -172,6 +185,47 @@ fn uv_tool_dir_from_the_environment_is_read() {
 }
 
 #[test]
+fn a_relative_tool_dir_is_read_from_the_callers_directory() {
+    let fixture = fixture();
+    let tools = fixture.root.join("uv-tools");
+    fs::create_dir_all(tools.join("hol_guard")).expect("uv venv");
+    let mut environment = fixture.environment();
+    environment.insert("UV_TOOL_DIR".to_owned(), "uv-tools".to_owned());
+
+    let inventory = fixture
+        .host(environment)
+        .inventory(&text(&fixture.bin()), &[]);
+
+    assert_eq!(
+        inventory["venvs"][0]["root"],
+        text(&tools.join("hol_guard"))
+    );
+}
+
+#[test]
+fn only_this_users_named_home_expands() {
+    let fixture = fixture();
+    let tools = fixture.home.join("uv-tools");
+    fs::create_dir_all(tools.join("hol_guard")).expect("uv venv");
+    let login = if cfg!(windows) { "USERNAME" } else { "USER" };
+    let found = |spelling: &str| {
+        let mut environment = fixture.environment();
+        environment.insert(login.to_owned(), "guard-user".to_owned());
+        environment.insert("UV_TOOL_DIR".to_owned(), spelling.to_owned());
+        fixture
+            .host(environment)
+            .inventory(&text(&fixture.bin()), &[])["venvs"]
+            .clone()
+    };
+
+    assert_eq!(
+        found("~guard-user/uv-tools")[0]["root"],
+        text(&tools.join("hol_guard"))
+    );
+    assert_eq!(found("~someone-else/uv-tools"), json!([]));
+}
+
+#[test]
 fn a_users_own_shell_wrapper_is_ignored() {
     let fixture = fixture();
     write(
@@ -182,6 +236,8 @@ fn a_users_own_shell_wrapper_is_ignored() {
     assert_eq!(fixture.inventory(&[]), empty());
 }
 
+// A `pip --user` console script and `pathlib` spellings are POSIX shapes.
+#[cfg(unix)]
 #[test]
 fn a_pip_user_script_names_its_system_interpreter() {
     let fixture = fixture();
@@ -246,6 +302,7 @@ fn a_desktop_path_shim_is_left_alone() {
     assert_eq!(fixture.inventory(&[]), empty());
 }
 
+#[cfg(unix)]
 #[test]
 fn path_entries_outside_home_are_not_searched() {
     let fixture = fixture();
@@ -272,6 +329,7 @@ fn path_entries_outside_home_are_not_searched() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn a_tilde_bin_dir_expands_against_home() {
     let fixture = fixture();
@@ -307,6 +365,7 @@ fn is_python_name_matches_the_interpreter_pattern() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn pure_and_normpath_follow_pathlib() {
     assert_eq!(pure("/a//b/./c/"), PathBuf::from("/a/b/c"));
@@ -320,10 +379,11 @@ fn pure_and_normpath_follow_pathlib() {
 #[test]
 fn requests_are_validated() {
     let request = |value: Value| run_command(value.to_string().as_bytes());
+    let fixture = fixture();
     let valid = json!({
         "schema": "desktop-foreign-inventory.v1",
-        "home": "/nonexistent-home",
-        "cwd": "/",
+        "home": text(&fixture.home),
+        "cwd": text(&fixture.root),
         "path": "",
         "environment": {},
         "protected": [],
