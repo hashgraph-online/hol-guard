@@ -51,7 +51,7 @@ const MANAGED_BLOCK: &str = "<!-- BEGIN HOL GUARD SAFETY GUIDANCE -->
 ";
 const SAFETY_GUIDANCE: &str = concat!(
     "<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n",
-    include_str!("../../../../src/codex_plugin_scanner/guard/agent-safety-guidance.md")
+    include_str!("agent_safety_guidance.md")
 );
 const LEGACY_SAFETY_DIGESTS: [&str; 5] = [
     // Guidance before the self-approval section: unprefixed, then v2-prefixed.
