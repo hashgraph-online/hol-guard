@@ -25,6 +25,7 @@ pub mod business_gws_command;
 pub mod business_input_properties;
 pub mod business_mime_properties;
 pub mod business_transfer_properties;
+pub mod cloud_action_cli;
 pub mod command_compatibility;
 pub mod command_compatibility_stderr_merge;
 pub mod compatibility_safe_scope;

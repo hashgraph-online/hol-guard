@@ -4,9 +4,11 @@
 //! operator may allow one and block the other, so a tool whose `--help` names
 //! no subcommands is not one command. This reads the options a help text
 //! names, from its usage lines and option rows. For a script whose `--help`
-//! printed nothing usable, it reads the script's own source the same way,
-//! with comment markers removed, and adds the shell `case` arms and option
-//! parser calls (`add_argument`, `.option`, `getopts`) that define them.
+//! printed nothing usable, or that Guard reads before running it, it reads
+//! the script's own source the same way, with comment markers removed, and
+//! adds the shell `case` arms, option parser calls (`add_argument`,
+//! `.option`, `getopts`) and the JavaScript, Python and Ruby dispatch that
+//! define them.
 //!
 //! The text is untrusted and nothing here runs it. Only names that pass
 //! [`is_option_name`] are kept, and a source read never probes anything.
@@ -16,17 +18,26 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::LocalCliCommand;
+use super::{is_skipped, LocalCliCommand, COMMAND_NAME};
 use crate::daemon_lifecycle_text::{py_splitlines, py_strip};
 
 #[path = "local_cli_help_source.rs"]
 mod source;
 use source::{source_line, ShellState};
 
+#[path = "local_cli_help_script.rs"]
+mod script;
+use script::ScriptState;
+
+#[path = "local_cli_help_script_facts.rs"]
+mod facts;
+pub(super) use facts::{Facts, HelpHandler};
+
 /// Most option variations one read reports. The catalog keeps room for its
 /// root and other rows and for subcommands a source read finds.
 const MAX_OPTIONS: usize = 64;
-/// Most subcommands a source read reports from `case "$1"` arms.
+/// Most subcommands a source read reports from `case "$1"` arms and the
+/// dispatch of other languages.
 const MAX_SOURCE_COMMANDS: usize = 32;
 const DESCRIPTION_CHARS: usize = 200;
 const VALUE_CHARS: usize = 40;
@@ -54,9 +65,33 @@ pub(crate) fn is_option_name(text: &str) -> bool {
 
 static USAGE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\busage:\s*(.*)$").unwrap());
 
-/// `<<EOF`, `<<-'EOF'` or `<< "USAGE"`: the lines up to the marker are text.
+/// `<<EOF`, `<<-'EOF'`, `<< "USAGE"` or Ruby's `<<~USAGE`: the lines up to
+/// the marker are text.
 static HEREDOC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"<<-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?"#).unwrap());
+    LazyLock::new(|| Regex::new(r#"<<[-~]?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?"#).unwrap());
+
+/// Ruby's heredoc outside a shell script: `<<~USAGE`, `<<-EOS` or
+/// `<<'EOS'`, with no space after `<<` and not after a value it could shift
+/// or append to. An unquoted marker that is not `~`/`-` led must be upper
+/// case, so `1 <<shift` stays code.
+static RUBY_HEREDOC: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r#"(?:^|[^\w)\]\s]\s*|\b(?:puts|print|return)\s+)<<"#,
+        r#"(?:[-~]["']?([A-Za-z_][A-Za-z0-9_]*)["']?|["']([A-Za-z_][A-Za-z0-9_]*)["']|([A-Z_][A-Z0-9_]*)\b)"#,
+    ))
+    .unwrap()
+});
+
+const SHELLS: [&str; 6] = ["sh", "bash", "zsh", "dash", "ksh", "ash"];
+
+/// Quotes that open a string spanning lines: a Python docstring or a
+/// JavaScript template literal, where a script keeps its usage text.
+const MULTILINE_QUOTES: [&str; 3] = ["\"\"\"", "'''", "`"];
+
+/// `USAGE = `, `const HELP = ` or `__doc__ = ` before such a quote.
+static STRING_TARGET: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*(?:(?:export\s+)?(?:const|let|var)\s+)?[A-Za-z_$][\w$.]*\s*=\s*$").unwrap()
+});
 
 /// One option in the order the text first named it.
 struct Variation {
@@ -70,6 +105,9 @@ struct Found {
     options: Vec<Variation>,
     index: HashMap<String, usize>,
     commands: Vec<LocalCliCommand>,
+    /// The script compares its first argument to a command name itself, so
+    /// its own code, not a parser library, runs that command.
+    by_hand: bool,
 }
 
 impl Found {
@@ -102,6 +140,35 @@ impl Found {
             value,
             description,
         });
+    }
+
+    /// Record a subcommand a source read names, once, up to the cap.
+    fn command(&mut self, name: &str, description: &str) {
+        let known = self.commands.iter().any(|command| command.name == name);
+        if !COMMAND_NAME.is_match(name)
+            || is_skipped(name)
+            || known
+            || self.commands.len() >= MAX_SOURCE_COMMANDS
+        {
+            return;
+        }
+        self.commands.push(LocalCliCommand {
+            command_id: name.to_owned(),
+            name: name.to_owned(),
+            usage: name.to_owned(),
+            description: py_strip(description)
+                .chars()
+                .take(DESCRIPTION_CHARS)
+                .collect(),
+            parent_id: None,
+        });
+    }
+
+    /// A command the script's own code dispatches on, rather than one a
+    /// parser library declares.
+    fn hand_command(&mut self, name: &str, description: &str) {
+        self.by_hand |= COMMAND_NAME.is_match(name);
+        self.command(name, description);
     }
 
     /// Several spellings of one option: the first long one carries the
@@ -141,21 +208,56 @@ pub(super) fn variations(
     invocation: &[String],
     script_source: bool,
 ) -> Vec<LocalCliCommand> {
+    let found = read(text, invocation, script_source);
+    let program = invocation.first().map(String::as_str).unwrap_or("");
+    let mut rows = found.commands;
+    rows.extend(found.options.into_iter().map(|option| {
+        let usage = match &option.value {
+            Some(value) => format!("{program} {} {value}", option.name),
+            None => format!("{program} {}", option.name),
+        };
+        LocalCliCommand {
+            command_id: option.name.clone(),
+            name: option.name,
+            usage: py_strip(&usage).to_owned(),
+            description: option.description,
+            parent_id: None,
+        }
+    }));
+    rows
+}
+
+/// Whether a script source dispatches its first argument by hand: a `case
+/// "$1"` arm, a `switch`, `match` or comparison on it. A parser library may
+/// answer `<command> --help` without running the command, but a command the
+/// script's own code runs gets `--help` as an ordinary argument.
+pub(super) fn dispatches_by_hand(text: &str, invocation: &[String]) -> bool {
+    read(text, invocation, true).by_hand
+}
+
+fn read(text: &str, invocation: &[String], script_source: bool) -> Found {
     let raw: Vec<&str> = py_splitlines(text);
     // Usage lines and option rows are read only from text a person reads: all
     // of a help text, and a script's comments and heredocs. A code line such
     // as `  --json state)` is an argument to some other program.
     let lines: Vec<Option<String>> = if script_source {
-        source_text_lines(&raw)
+        source_text_lines(&raw, is_shell(&raw, invocation))
     } else {
         raw.iter().map(|line| Some((*line).to_owned())).collect()
     };
     let mut found = Found::default();
     let mut shell = ShellState::default();
+    let mut script = script_source.then(|| {
+        let code: Vec<bool> = lines.iter().map(Option::is_none).collect();
+        ScriptState::prepare(&raw, &code, &facts::facts(&raw, &lines))
+    });
     let mut index = 0;
     while index < lines.len() {
         let Some(text_line) = &lines[index] else {
             source_line(py_strip(raw[index]), &raw[index..], &mut shell, &mut found);
+            if let Some(script) = &mut script {
+                script.line(raw[index], &raw[index..], &mut found);
+            }
             index += 1;
             continue;
         };
@@ -176,41 +278,62 @@ pub(super) fn variations(
         }
         index += 1;
     }
-    let program = invocation.first().map(String::as_str).unwrap_or("");
-    let mut rows = found.commands;
-    rows.extend(found.options.into_iter().map(|option| {
-        let usage = match &option.value {
-            Some(value) => format!("{program} {} {value}", option.name),
-            None => format!("{program} {}", option.name),
-        };
-        LocalCliCommand {
-            command_id: option.name.clone(),
-            name: option.name,
-            usage: py_strip(&usage).to_owned(),
-            description: option.description,
-            parent_id: None,
-        }
-    }));
-    rows
+    found
+}
+
+/// How a script source answers `--help`, and the local modules it imports.
+pub(super) fn script_facts(text: &str, invocation: &[String]) -> Facts {
+    let raw = py_splitlines(text);
+    facts::facts(&raw, &source_text_lines(&raw, is_shell(&raw, invocation)))
 }
 
 /// A script source's comment and heredoc text, one line per source line, with
 /// code lines left blank so a section still ends where the code starts.
-pub(super) fn comment_lines(text: &str) -> String {
-    source_text_lines(&py_splitlines(text))
+pub(super) fn comment_lines(text: &str, invocation: &[String]) -> String {
+    let raw = py_splitlines(text);
+    source_text_lines(&raw, is_shell(&raw, invocation))
         .into_iter()
         .map(Option::unwrap_or_default)
         .collect::<Vec<_>>()
         .join("\n")
 }
 
+/// Whether a source is a shell script: its `#!` line names a shell, or the
+/// program it was launched as carries a shell suffix.
+fn is_shell(raw: &[&str], invocation: &[String]) -> bool {
+    let shebang = raw.first().and_then(|line| line.strip_prefix("#!"));
+    let names_shell = |text: &str| {
+        text.split(|c: char| c == '/' || c.is_whitespace())
+            .any(|word| SHELLS.contains(&word))
+    };
+    let program = invocation.first().map(String::as_str).unwrap_or("");
+    shebang.is_some_and(names_shell)
+        || [".sh", ".bash", ".zsh", ".ksh"]
+            .iter()
+            .any(|suffix| program.to_ascii_lowercase().ends_with(suffix))
+}
+
 /// Each source line's readable text, or `None` for a line of code. Comments
-/// lose their marker; a heredoc's body (a `usage()` that `cat`s its text) is
-/// read as written.
-fn source_text_lines(raw: &[&str]) -> Vec<Option<String>> {
+/// lose their marker; a heredoc's body (a `usage()` that `cat`s its text) and
+/// a string that spans lines are read as written. `<<` opens a heredoc
+/// anywhere in a shell script; elsewhere it is also a shift or Ruby's append
+/// (`errors << msg`), so only Ruby's own heredoc spelling counts there.
+fn source_text_lines(raw: &[&str], shell: bool) -> Vec<Option<String>> {
+    let heredoc: &Regex = if shell { &HEREDOC } else { &RUBY_HEREDOC };
     let mut lines = Vec::with_capacity(raw.len());
     let mut heredoc_end: Option<String> = None;
+    let mut string_end: Option<&str> = None;
     for line in raw {
+        if let Some(end) = string_end {
+            match line.find(end) {
+                Some(at) => {
+                    string_end = None;
+                    lines.push(Some(line[..at].to_owned()));
+                }
+                None => lines.push(Some((*line).to_owned())),
+            }
+            continue;
+        }
         if let Some(end) = &heredoc_end {
             if py_strip(line) == end {
                 heredoc_end = None;
@@ -222,13 +345,32 @@ fn source_text_lines(raw: &[&str]) -> Vec<Option<String>> {
         }
         let comment = comment_text(line);
         if comment.is_none() {
-            heredoc_end = HEREDOC
+            if let Some((end, before, text)) = opened_string(line) {
+                // A docstring or `USAGE = """Usage: ...` starts its text on
+                // this line; a call such as `ArgumentParser(description="""`
+                // keeps the line as code.
+                string_end = Some(end);
+                let only_string = before.trim().is_empty() || STRING_TARGET.is_match(before);
+                lines.push(only_string.then(|| text.to_owned()));
+                continue;
+            }
+            heredoc_end = heredoc
                 .captures(line)
-                .map(|captures| captures[1].to_owned());
+                .and_then(|captures| (1..=3).find_map(|group| captures.get(group)))
+                .map(|marker| marker.as_str().to_owned());
         }
         lines.push(comment);
     }
     lines
+}
+
+/// The quote a code line leaves open, the code before it and the text after.
+fn opened_string(line: &str) -> Option<(&'static str, &str, &str)> {
+    MULTILINE_QUOTES.into_iter().find_map(|quote| {
+        let opened = line.matches(quote).count() % 2 == 1;
+        let at = line.rfind(quote)?;
+        opened.then(|| (quote, &line[..at], &line[at + quote.len()..]))
+    })
 }
 
 /// A comment line's text without its marker, keeping the indentation after

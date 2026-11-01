@@ -2411,6 +2411,30 @@
    "body": "aeb9e90f0af4"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The daemon process queries are POSIX-only, as before the move: Windows reads its process table through `windows-process-command-lines`, and the Python wrapper returns `None` on Windows before it asks. With no trusted `ps` and no procfs root off Unix, every query answers `null`, which callers read as \"cannot be proven\"; `without_ps_or_procfs_nothing_is_proven` pins that answer on every platform.",
+   "file": "rust/crates/guard-runtime/src/posix_processes.rs",
+   "item": "fn trusted_ps_path() -> Option<PathBuf>",
+   "cfg": "not(unix)",
+   "body": "3a781c167585"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn isolate_group(_command: &mut Command)",
+   "cfg": "not(unix)",
+   "body": "ec39219807ef"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "POSIX process groups have no Windows equivalent, and the only grouped caller, `posix-processes`, never starts a command off Unix: `trusted_ps_path` answers `None` there, so `bounded_stdout_in_group` is unreachable. Without a group the call behaves as `bounded_stdout`. The kill test `a_failed_query_kills_what_ps_started` is `cfg(unix)` for that reason.",
+   "file": "rust/crates/guard-runtime/src/onefile_open_paths.rs",
+   "item": "fn kill_group(_child: &Child)",
+   "cfg": "not(unix)",
+   "body": "42851029dd12"
+  },
+  {
    "verdict": "windows-equivalent",
    "note": "Windows has no `st_mtime_nsec`; the arm reads the modification time `Metadata::modified` reports, in nanoseconds from the epoch, as `os.stat().st_mtime_ns` gives it on Windows. The value only feeds the cache key, so a coarser clock can at worst recompute the content fingerprint. `the_fingerprint_ignores_mtime_and_tracks_content` is not Unix-only, so any Windows run of the crate's tests exercises this arm.",
    "file": "rust/crates/guard-runtime/src/runtime_fingerprint.rs",

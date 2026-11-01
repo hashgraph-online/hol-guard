@@ -1373,7 +1373,7 @@ def _recognize_mcp_summary(name: str, help_status: str, tool_count: int) -> str:
 def _recognize_summary(name: str, help_status: str, command_count: int) -> str:
     if help_status == "ok":
         return (
-            f"Guard read {command_count} commands from {name} --help. "
+            f"Guard found {command_count} commands in {name}. "
             "Recommended keeps the usual review. Allow or block each command like a built-in tool."
         )
     if help_status == "empty":

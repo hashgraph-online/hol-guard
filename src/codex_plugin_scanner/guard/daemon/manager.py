@@ -31,7 +31,7 @@ from typing import Any, BinaryIO, Literal, TypedDict, cast
 
 from ...version import __version__
 from .. import live_process_identity as _live_process_identity
-from .. import windows_processes
+from .. import posix_processes, windows_processes
 from ..fork_safety import forget_in_child
 from ..frozen_runtime_commands import (
     decode_frozen_daemon_serve_payload,
@@ -119,16 +119,12 @@ _START_CLASSIFICATION_RESERVE_FRACTION = 0.25
 # One readiness poll may ask the resident who published daemon state. Cap that
 # ask so a missed answer is retried instead of spending the whole start budget.
 _SPAWNED_URL_POLL_LIFECYCLE_SECONDS = 5.0
-_GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES = 1024 * 1024
-_GUARD_DAEMON_PROCESS_QUERY_MONITOR_INTERVAL_SECONDS = 0.01
-_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS = 0.25
 _RUNTIME_FINGERPRINT_CACHE_MAX_BYTES = 4096
 _RUNTIME_FINGERPRINT_HEX_LENGTH = 64
 _WINDOWS_CREATE_NEW_PROCESS_GROUP = 0x00000200
 _WINDOWS_DETACHED_PROCESS = 0x00000008
 _WINDOWS_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-_GUARD_DAEMON_POSIX_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _GUARD_DAEMON_BOOTSTRAP = (
     "import json,runpy,sys; "
     # Signal liveness before the slow Guard imports so a cold start is not
@@ -2618,18 +2614,13 @@ def _guard_daemon_process_inventory_for_guard_home(
         if entries is None:
             return None
     else:
-        ps_path = _trusted_posix_ps_path()
-        if ps_path is None:
-            if not sys.platform.startswith("linux"):
-                return None
-            proc_entries = _linux_proc_process_entries()
-            if proc_entries is None:
-                return None
-            entries = proc_entries
+        inventory = posix_processes.posix_process_inventory()
+        if inventory is None:
+            return None
+        if isinstance(inventory, str):
+            output = inventory
         else:
-            output = _bounded_process_query_stdout([ps_path, "-axo", "pid=,command="])
-            if output is None:
-                return None
+            entries = inventory
 
     query: dict[str, object] = {
         "guard_home": str(guard_home),
@@ -2816,21 +2807,7 @@ def _guard_daemon_pid_is_running(pid: int) -> bool:
 def _guard_daemon_parent_pid(pid: int) -> int | None:
     """Return the parent PID for a live process, or ``None`` when it cannot be proven."""
 
-    if pid <= 0:
-        return None
-    if os.name == "nt":
-        return None
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    output = _bounded_process_query_stdout([ps_path, "-p", str(pid), "-o", "ppid="])
-    if output is None:
-        return None
-    try:
-        parent_pid = int(output.strip())
-    except ValueError:
-        return None
-    return parent_pid if parent_pid > 0 else None
+    return posix_processes.posix_parent_pid(pid)
 
 
 def _guard_daemon_pid_is_spawned_launch(pid: int, expected_pid: int) -> bool:
@@ -2933,16 +2910,7 @@ def _guard_daemon_command_for_pid(pid: int) -> str | None:
             pid,
             max_command_line_bytes=_GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
         )
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    output = _bounded_process_query_stdout(
-        [ps_path, "-p", str(pid), "-o", "command="],
-    )
-    if output is None:
-        return None
-    stdout = output.strip()
-    return stdout or None
+    return posix_processes.posix_process_command(pid)
 
 
 def _guard_daemon_pid_identity_for_retirement(pid: int) -> tuple[str, str] | None:
@@ -3529,13 +3497,4 @@ from .manager_ephemeral_reap import (  # noqa: E402, F401
     _running_ephemeral_guard_daemon_processes,
     _schedule_stale_ephemeral_guard_daemon_reap,
     _state_path_age_seconds,
-)
-from .manager_process_query import (  # noqa: E402, F401
-    _bounded_process_query_stdout,
-    _capture_bounded_process_query_stdout,
-    _linux_proc_process_entries,
-    _process_query_environment,
-    _spawn_bounded_process_query,
-    _terminate_bounded_process_query,
-    _trusted_posix_ps_path,
 )

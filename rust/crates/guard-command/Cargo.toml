@@ -75,6 +75,10 @@ workspace = true
 name = "guard-cloud-catalog"
 path = "src/cloud_catalog_cli.rs"
 
+[[bin]]
+name = "guard-cloud-action"
+path = "src/cloud_action_cli.rs"
+
 [[test]]
 name = "integration"
 path = "tests/integration.rs"

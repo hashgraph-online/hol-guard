@@ -131,24 +131,30 @@ export function LocalCliLoadCommands(props: {
   const recorded = recordedToolPath(item);
   return (
     <div className="mt-3 max-w-2xl" aria-busy={busy}>
-      <p className="text-sm leading-6 text-brand-dark/75">
-        {recorded || !script ? (
-          <>
-            Guard runs <code className={CODE_CLASS}>{recorded || item.name} --help</code>
-          </>
-        ) : (
-          // An older record names no file yet; the daemon finds the one an
-          // agent ran and shows it here once it has read its help.
-          <>
-            Guard finds the {item.name} file your agent ran and runs it with <code className={CODE_CLASS}>--help</code>
-          </>
-        )}{" "}
-        from an empty temporary folder, then the same for each command it lists.{" "}
-        {script
-          ? "A script that ignores --help may do its normal work instead, so load commands only for scripts you trust."
-          : "A program that ignores --help may do its normal work instead, so load commands only for tools you trust."}{" "}
-        Loading adds commands and never changes a choice you already made.
-      </p>
+      {script ? (
+        <p className="text-sm leading-6 text-brand-dark/75">
+          {recorded ? (
+            <>
+              Guard reads <code className={CODE_CLASS}>{recorded}</code> first, without running it,
+            </>
+          ) : (
+            // An older record names no file yet; the daemon finds the one an
+            // agent ran and shows it here once it has read it.
+            <>Guard finds the {item.name} file your agent ran and reads it first, without running it,</>
+          )}{" "}
+          and lists the commands and options its code checks for. It runs{" "}
+          {recorded ? <code className={CODE_CLASS}>{recorded} --help</code> : "it with --help"} from an empty temporary
+          folder only when that code handles --help, and asks each command for its own help only when a parser library such as argparse
+          or Commander answers it. Code that only looks like a help check can still do its normal work, so load
+          commands only for scripts you trust. Loading adds commands and never changes a choice you already made.
+        </p>
+      ) : (
+        <p className="text-sm leading-6 text-brand-dark/75">
+          Guard runs <code className={CODE_CLASS}>{recorded || item.name} --help</code> from an empty temporary folder,
+          then the same for each command it lists. A program that ignores --help may do its normal work instead, so
+          load commands only for tools you trust. Loading adds commands and never changes a choice you already made.
+        </p>
+      )}
       {askPath ? (
         <>
           <label htmlFor={pathId} className="mt-3 block text-sm font-semibold text-brand-dark">
