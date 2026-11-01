@@ -442,3 +442,12 @@ def test_network_parser_defaults_to_status(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert commands_dispatch_local._run_guard_network_command(args) == 0
     assert emitted[0][0] == "network"
+
+
+def test_no_runtime_never_presents_network_truth(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *args, **kwargs: None)
+
+    with pytest.raises(NetworkStatusSchemaError, match="native runtime"):
+        validate_network_status(build_network_status(platform_name="linux"))
