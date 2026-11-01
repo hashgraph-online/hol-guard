@@ -139,6 +139,36 @@ def test_a_cancelled_scan_stops_before_its_next_root(tmp_path: Path, monkeypatch
     assert requested == [[{"root_id": "a", "root_hex": str(tmp_path / "a").encode().hex()}]]
 
 
+def test_the_skill_cap_spans_every_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    requested: list[object] = []
+
+    def fake_answer(request: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        roots = request["roots"]
+        assert isinstance(roots, list)
+        root_id = roots[0]["root_id"]
+        requested.append(root_id)
+        documents = (b"a/SKILL.md", b"b/SKILL.md")
+        return {
+            "records": [{"root_id": root_id, "document_hex": doc.hex(), "metadata": _METADATA} for doc in documents],
+            "issues": [],
+        }
+
+    monkeypatch.setattr(local_skill_index, "_skill_index_answer", fake_answer)
+    monkeypatch.setattr(local_skill_index, "_INDEX_LIMIT", 3)
+    roots = {"a": tmp_path / "a", "b": tmp_path / "b", "c": tmp_path / "c"}
+    records, issues = index_local_skills(roots, home=tmp_path, cancel=threading.Event())
+    assert len(records) == 3
+    assert issues == [{"root_id": "b", "reason": "skill-index-limit"}]
+    assert requested == ["a", "b"]
+
+    monkeypatch.setattr(local_skill_index, "_INDEX_LIMIT", 2)
+    requested.clear()
+    records, issues = index_local_skills(roots, home=tmp_path, cancel=threading.Event())
+    assert len(records) == 2
+    assert issues == [{"root_id": "b", "reason": "skill-index-limit"}]
+    assert requested == ["a"]
+
+
 @pytest.mark.parametrize(
     "record",
     [

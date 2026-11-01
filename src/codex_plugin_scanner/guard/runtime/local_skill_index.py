@@ -26,6 +26,8 @@ _SCHEMA = "local-skill-index.v1"
 _INDEX_TIMEOUT_SECONDS = 60.0
 _INSPECT_TIMEOUT_SECONDS = 30.0
 _INDEX_OUTPUT_LIMIT = 32 * 1024 * 1024
+# The runtime caps each request; one scan keeps the same cap across its roots.
+_INDEX_LIMIT = 1000
 _INSPECT_OUTPUT_LIMIT = 64 * 1024
 _PATH_ENCODING = "utf16le" if os.name == "nt" else "os_bytes"
 _IDENTITY_KEYS = {"status", "manifest_digest", "entry_count", "total_bytes", "reason"}
@@ -111,7 +113,8 @@ def index_local_skills(
     """Index each approved root's skill metadata, one runtime request per root.
 
     A cancelled scan stops before its next root rather than holding the job
-    for every remaining root.
+    for every remaining root. The whole scan keeps at most `_INDEX_LIMIT`
+    records, as the single request it replaced did.
     """
 
     records: dict[str, LocalSkillRecord] = {}
@@ -119,7 +122,11 @@ def index_local_skills(
     for root_id, root in roots.items():
         if cancel.is_set():
             break
-        _index_root(root_id, root, home=home, records=records, issues=issues)
+        if len(records) >= _INDEX_LIMIT:
+            issues.append({"root_id": root_id, "reason": "skill-index-limit"})
+            break
+        if _index_root(root_id, root, home=home, records=records, issues=issues):
+            break
     return records, issues
 
 
@@ -130,7 +137,9 @@ def _index_root(
     home: Path,
     records: dict[str, LocalSkillRecord],
     issues: list[dict[str, str]],
-) -> None:
+) -> bool:
+    """Index one root; True when the scan reached its record cap."""
+
     answer = _skill_index_answer(
         {
             "op": "index",
@@ -144,7 +153,7 @@ def _index_root(
     raw_issues = answer.get("issues") if answer is not None else None
     if not isinstance(raw_records, list) or not isinstance(raw_issues, list):
         issues.append({"root_id": root_id, "reason": "skill-index-unavailable"})
-        return
+        return False
     for raw in raw_issues:
         reason = raw.get("reason") if isinstance(raw, dict) else None
         if isinstance(raw, dict) and raw.get("root_id") == root_id and isinstance(reason, str):
@@ -160,8 +169,12 @@ def _index_root(
         ):
             issues.append({"root_id": root_id, "reason": "metadata-unreadable"})
             continue
+        if len(records) >= _INDEX_LIMIT:
+            issues.append({"root_id": root_id, "reason": "skill-index-limit"})
+            return True
         skill_id = hashlib.sha256((str(root) + "\0" + relative).encode()).hexdigest()
         records[skill_id] = LocalSkillRecord(skill_id, root_id, root / relative, root, metadata)
+    return False
 
 
 def _valid_metadata(metadata: object) -> TypeGuard[dict[str, object]]:
