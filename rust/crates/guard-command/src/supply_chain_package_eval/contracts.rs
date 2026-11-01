@@ -31,17 +31,32 @@ pub(super) fn severity_rank_map() -> &'static HashMap<&'static str, u8> {
     &MAP
 }
 
-/// Seconds Guard Cloud gets for each chunk of packages in one evaluate
-/// request, on the first try and again on the retry.
+/// Seconds Guard Cloud gets for each chunk of packages on the first try. One
+/// second is a fast path, not a verdict deadline: the request still has to
+/// reach Guard Cloud, which looks every package up before it answers.
 pub(super) const TIMEOUT_SECONDS: u64 = 1;
 
-pub(super) const RETRY_TIMEOUT_SECONDS: u64 = 1;
+/// Seconds the one timeout retry gets for each chunk. The retry machine in
+/// `guard_sync_transport::sync_retries` follows a timed-out attempt with a
+/// longer one; while this matched [`TIMEOUT_SECONDS`] the retry expired on the
+/// deadline that had just failed, so an evaluation needing more than a second
+/// never got it and the package request was paused for explicit review over an
+/// availability failure rather than a verdict.
+pub(super) const RETRY_TIMEOUT_SECONDS: u64 = 5;
 
 /// Guard Cloud checks an evaluate request in chunks of this many packages.
 pub(super) const CLOUD_EVALUATE_CHUNK_PACKAGES: usize = 100;
 
-/// Longest wait for one evaluate attempt, however many packages it carries.
+/// Longest wait for one first-try evaluate attempt, however many packages it
+/// carries.
 pub(super) const CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS: u64 = 5;
+
+/// Longest wait for the timeout retry. Above
+/// [`CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS`] so that a lockfile large enough to
+/// reach the first-try ceiling still gets a longer second attempt instead of
+/// two identical ones. The worst case is five seconds plus ten, inside
+/// [`CLOUD_EVALUATE_BUDGET_SECONDS`].
+pub(super) const CLOUD_EVALUATE_MAX_RETRY_TIMEOUT_SECONDS: u64 = 10;
 
 /// Seconds one Cloud evaluation may spend on Guard Cloud: every attempt,
 /// retry and retry pause, the sign-in refresh retry included. Rate-limit
@@ -50,19 +65,38 @@ pub(super) const CLOUD_EVALUATE_BUDGET_SECONDS: f64 = 20.0;
 
 /// Timeout for one evaluate attempt carrying `package_count` packages. A
 /// request of up to one chunk keeps `base_seconds`; each further chunk adds
-/// `base_seconds`, up to [`CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS`].
-pub(super) fn cloud_evaluate_timeout_seconds(base_seconds: u64, package_count: usize) -> u64 {
+/// `base_seconds`, up to `max_seconds`.
+pub(super) fn cloud_evaluate_timeout_capped(
+    base_seconds: u64,
+    package_count: usize,
+    max_seconds: u64,
+) -> u64 {
     let chunks = package_count.div_ceil(CLOUD_EVALUATE_CHUNK_PACKAGES).max(1) as u64;
     base_seconds
         .saturating_mul(chunks)
-        .min(CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS.max(base_seconds))
+        .min(max_seconds.max(base_seconds))
 }
 
-/// First-try and retry timeouts for an evaluate POST of `package_count` packages.
+/// First-try timeout for an evaluate POST of `package_count` packages.
+pub(super) fn cloud_evaluate_timeout_seconds(base_seconds: u64, package_count: usize) -> u64 {
+    cloud_evaluate_timeout_capped(
+        base_seconds,
+        package_count,
+        CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS,
+    )
+}
+
+/// First-try and retry timeouts for an evaluate POST of `package_count`
+/// packages. The retry is always the longer of the two, which is the whole
+/// point of retrying a request that ran out of time.
 pub(super) fn cloud_evaluate_timeouts(package_count: usize) -> (u64, u64) {
     (
         cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, package_count),
-        cloud_evaluate_timeout_seconds(RETRY_TIMEOUT_SECONDS, package_count),
+        cloud_evaluate_timeout_capped(
+            RETRY_TIMEOUT_SECONDS,
+            package_count,
+            CLOUD_EVALUATE_MAX_RETRY_TIMEOUT_SECONDS,
+        ),
     )
 }
 
@@ -312,10 +346,33 @@ mod cloud_evaluate_timeout_tests {
     fn a_lockfile_of_several_chunks_gets_a_second_per_chunk() {
         assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 101), 2);
         assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 267), 3);
-        assert_eq!(
-            cloud_evaluate_timeout_seconds(RETRY_TIMEOUT_SECONDS, 267),
-            3
-        );
+        assert_eq!(cloud_evaluate_timeout_capped(1, 267, 5), 3);
+    }
+
+    /// The retry exists to give a timed-out attempt a longer deadline. While it
+    /// shared both the base and the ceiling with the first try it expired on
+    /// the deadline that had just failed, which turned every slow Cloud
+    /// evaluation into a review prompt for a package Guard had no finding on.
+    #[test]
+    fn the_retry_waits_longer_than_the_first_try() {
+        for package_count in [0, 1, 100, 101, 267, 1_000, 100_000, usize::MAX] {
+            let (first, retry) = cloud_evaluate_timeouts(package_count);
+            assert!(
+                retry > first,
+                "retry {retry}s must outlast first try {first}s for {package_count} packages"
+            );
+            assert!(
+                (first + retry) as f64 <= CLOUD_EVALUATE_BUDGET_SECONDS,
+                "first try {first}s plus retry {retry}s must fit the evaluate budget"
+            );
+        }
+    }
+
+    #[test]
+    fn the_retry_ceiling_is_the_one_that_bounds_the_retry() {
+        assert_eq!(cloud_evaluate_timeouts(0), (1, 5));
+        assert_eq!(cloud_evaluate_timeouts(267), (3, 10));
+        assert_eq!(cloud_evaluate_timeouts(usize::MAX), (5, 10));
     }
 
     #[test]
