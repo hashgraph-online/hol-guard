@@ -23,7 +23,11 @@ from typing import TypedDict
 
 from packaging.version import InvalidVersion, Version
 
-from ..macos_code_signing import verified_macos_signing_team
+from ..macos_code_signing import (
+    macos_bundle_sealed,
+    macos_tree_signature_failure,
+    verified_macos_signing_team,
+)
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from .desktop_core_paths import executable_is_desktop_core, installed_desktop_app_version
@@ -34,16 +38,6 @@ INSTALL_SCHEMA = "hol-guard-core-install.v1"
 BOOTSTRAP_SCHEMA = "guard-desktop-bootstrap.v1"
 _ONEDIR_FORMAT = "onedir-zip"
 _ONEDIR_TREE_ROOT = "hol-guard"
-_MACHO_MAGICS = {
-    b"\xce\xfa\xed\xfe",
-    b"\xcf\xfa\xed\xfe",
-    b"\xfe\xed\xfa\xce",
-    b"\xfe\xed\xfa\xcf",
-    b"\xca\xfe\xba\xbe",
-    b"\xca\xfe\xba\xbf",
-    b"\xbe\xba\xfe\xca",
-    b"\xbf\xba\xfe\xca",
-}
 _RELEASE_DOWNLOAD_PREFIX = "https://github.com/hashgraph-online/hol-guard/releases/download/"
 _DESKTOP_APP_ID = "org.hol.guard.desktop"
 _MAX_MANIFEST_BYTES = 128 * 1024
@@ -562,40 +556,17 @@ def _unpack_onedir(archive: Path, destination: Path, *, file_count: int) -> None
         raise DesktopCoreUpdateError("desktop_core_install_failed")
 
 
-def _is_macho_file(path: Path) -> bool:
-    try:
-        with path.open("rb") as handle:
-            return handle.read(4) in _MACHO_MAGICS
-    except OSError:
-        return False
-
-
 def _require_sealed_onedir(launcher: Path) -> None:
     if sys.platform != "darwin":
         return
-    resources = launcher.parent / "_CodeSignature" / "CodeResources"
-    if not resources.is_file():
-        raise DesktopCoreUpdateError("desktop_core_signature_invalid")
-    result = subprocess.run(
-        ["/usr/bin/codesign", "--display", "--verbose=4", str(launcher)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    output = result.stderr + result.stdout
-    if result.returncode != 0 or "Format=app bundle" not in output or "Sealed Resources version=2" not in output:
+    if not macos_bundle_sealed(launcher):
         raise DesktopCoreUpdateError("desktop_core_signature_invalid")
 
 
 def _verify_onedir_tree_signatures(tree: Path, *, expected_team: str) -> None:
-    internal = tree / "_internal"
-    if not internal.is_dir():
-        raise DesktopCoreUpdateError("desktop_core_install_failed")
-    for path in sorted(tree.rglob("*")):
-        if path.is_symlink() or not path.is_file() or not _is_macho_file(path):
-            continue
-        if _macos_signing_team(path) != expected_team:
-            raise DesktopCoreUpdateError("desktop_core_signature_mismatch")
+    failure = macos_tree_signature_failure(tree, expected_team=expected_team)
+    if failure is not None:
+        raise DesktopCoreUpdateError(failure)
 
 
 def _install_managed_core_onedir(tree: Path, manifest: _ParsedOnedirManifest, target: str) -> Path:
