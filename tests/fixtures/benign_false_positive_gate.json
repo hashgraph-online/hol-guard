@@ -4950,6 +4950,23 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-switch-create-report-window-notes",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -c fix/report-window-notes"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-worktree-add-file",
       "fix_area": "git",
       "harnesses": [
@@ -38595,6 +38612,40 @@
         "command": "git checkout feat/other-branch"
       },
       "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "git-switch-previous-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -"
+      },
+      "cwd": "org_wt",
+      "expect": "allow"
+    },
+    {
+      "id": "git-checkout-previous-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git checkout -"
+      },
+      "cwd": "org_wt",
       "expect": "allow"
     },
     {

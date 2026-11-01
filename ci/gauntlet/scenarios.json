@@ -1229,6 +1229,20 @@
       ]
     },
     {
+      "id": "omp-native-git-switch-previous-branch",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Open a branch for the report window notes and then go back to the branch you started on, writing the second switch the short way rather than naming the branch again. Run each listed command once, in order, from the project directory, then tell me which branch is checked out at the end.",
+      "commands": [
+        "git switch -c fix/report-window-notes",
+        "git switch -",
+        "git branch --show-current"
+      ]
+    },
+    {
       "id": "omp-native-git-long-lived-clone-branch-work",
       "expectation": "allow",
       "oracle": "native-tools",
