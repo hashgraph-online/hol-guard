@@ -31,7 +31,6 @@ from ..redaction import redact_sensitive_text
 from ..shims import _trusted_python_flags
 from ..update_staging import note_update_activity, reject_linked_path_components
 from ..windows_paths import (
-    _WindowsByHandleFileInformation,
     trusted_windows_roaming_appdata,
     trusted_windows_system_directories,
     trusted_windows_system_executable,
@@ -306,6 +305,21 @@ class _FilesystemSnapshot:
     size: int
     sha256: str | None
     prefix: bytes | None
+
+
+class _WindowsByHandleFileInformation(ctypes.Structure):
+    _fields_ = [
+        ("dwFileAttributes", wintypes.DWORD),
+        ("ftCreationTime", wintypes.FILETIME),
+        ("ftLastAccessTime", wintypes.FILETIME),
+        ("ftLastWriteTime", wintypes.FILETIME),
+        ("dwVolumeSerialNumber", wintypes.DWORD),
+        ("nFileSizeHigh", wintypes.DWORD),
+        ("nFileSizeLow", wintypes.DWORD),
+        ("nNumberOfLinks", wintypes.DWORD),
+        ("nFileIndexHigh", wintypes.DWORD),
+        ("nFileIndexLow", wintypes.DWORD),
+    ]
 
 
 class _WindowsJobObjectBasicLimitInformation(ctypes.Structure):
