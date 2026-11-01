@@ -179,6 +179,20 @@ def test_status_names_cloud_version_for_an_applied_v1_bundle(tmp_path: Path, mon
     assert "Live version: policy-1793516302845-a\n" in text
 
 
+def test_status_keeps_the_number_of_an_applied_v2_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.set_sync_payload("policy_bundle", {"bundleVersion": 8, "bundleHash": "ab" * 32}, NOW)
+    applied = {"id": "a", "name": "laptop", "state": "applied", "reason": None}
+    delivery = {"available": True, "versionNumber": 1, "devices": [applied], "thisDevice": applied}
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.policy_delivery_status.fetch_policy_delivery", lambda _store: delivery
+    )
+
+    text = format_policy_status(policy_status_payload(store, offline=False))
+
+    assert "Live version: 8\n" in text
+
+
 def test_status_counts_listed_devices_when_fleet_counts_are_malformed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

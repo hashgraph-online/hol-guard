@@ -191,7 +191,10 @@ def policy_status_payload(store: GuardStore, *, offline: bool) -> dict[str, obje
 
 
 def _live_version_text(version: object, delivery: dict[str, object]) -> str:
-    """A v1 bundle names its publication by id; show Cloud's number once Cloud says this device applied it."""
+    """A v1 bundle names its publication by id; show Cloud's number once Cloud says this device applied it.
+
+    A version-two bundle already carries a number, so it is shown as it is.
+    """
 
     if not version:
         return "none"
@@ -199,6 +202,7 @@ def _live_version_text(version: object, delivery: dict[str, object]) -> str:
     mine = delivery.get("thisDevice")
     if (
         isinstance(cloud_version, int)
+        and not str(version).isdigit()
         and str(version) != str(cloud_version)
         and isinstance(mine, dict)
         and mine.get("state") == "applied"
