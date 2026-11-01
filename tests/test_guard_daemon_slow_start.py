@@ -14,7 +14,18 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import recovery_worker, start_classification, start_heartbeat
-from codex_plugin_scanner.guard.native_daemon_lifecycle import _DAEMON_LIFECYCLE_DEADLINE
+from codex_plugin_scanner.guard.native_daemon_lifecycle import (
+    _DAEMON_LIFECYCLE_DEADLINE,
+    native_daemon_lifecycle,
+)
+
+# The packaged Windows runtime's own start timeline, as
+# tests/test_frozen_windows_daemon_bootstrap.py printed it on a GitHub
+# Windows runner: ``daemon_ready`` landed 30.4, 33.0 and 36.0 seconds after
+# the daemon's first import, with ``init_http_server`` alone costing between
+# 10.6 and 15.1 of them. A client that stops waiting earlier than that calls a
+# healthy start a failure.
+_PACKAGED_WINDOWS_READY_SECONDS = 36.0
 
 
 class _FakeProcess:
@@ -343,3 +354,49 @@ def test_recovery_worker_treats_a_still_starting_daemon_as_success(tmp_path: Pat
 
     assert recovery_worker.main() == 0
     assert cleared == ["reservation-token"]
+
+
+def test_a_windows_start_outlasts_the_packaged_runtime_it_waits_on(native_hook_force: Path, tmp_path: Path) -> None:
+    """The Windows budget covers the start the packaged runtime actually performs."""
+
+    query = {"desktop": True, "worker_ready_floor": 14.0}
+    windows = native_daemon_lifecycle("start_timeouts", query, platform="nt", guard_home=tmp_path)
+    posix = native_daemon_lifecycle("start_timeouts", query, platform="posix", guard_home=tmp_path)
+
+    assert windows["default"] == windows["post_update"]
+    assert windows["default"] > _PACKAGED_WINDOWS_READY_SECONDS
+    assert posix["default"] == 30.0
+
+    # The client stops polling before the deadline so it still has time to
+    # classify the child it spawned, so the poll itself is what has to outlast
+    # the start. At the POSIX budget it ran out roughly nine seconds early.
+    started = time.monotonic()
+    deadline = daemon_manager_module._spawned_daemon_wait_deadline(started + windows["default"])
+    assert deadline - started > _PACKAGED_WINDOWS_READY_SECONDS
+    posix_deadline = daemon_manager_module._spawned_daemon_wait_deadline(started + posix["default"])
+    assert posix_deadline - started < _PACKAGED_WINDOWS_READY_SECONDS
+
+
+def test_a_windows_start_record_stays_live_as_long_as_the_client_waits(native_hook_force: Path, tmp_path: Path) -> None:
+    """The start-progress gate and the client read one budget, not two."""
+
+    now_ns = 200 * 1_000_000_000
+    recorded_at_ns = now_ns - int(_PACKAGED_WINDOWS_READY_SECONDS * 1_000_000_000)
+    query = {
+        "record": {"pid": 424242, "process_start_token": "token", "recorded_at_ns": recorded_at_ns},
+        "now_ns": now_ns,
+        "worker_ready_floor": 14.0,
+    }
+    facts = {
+        "pid_running:424242": True,
+        "start_token:424242": "token",
+        "matches_command:424242": True,
+    }
+    windows = native_daemon_lifecycle(
+        "start_progress_live",
+        query,
+        resolve_fact=lambda key: facts[key],
+        platform="nt",
+        guard_home=tmp_path,
+    )
+    assert windows == {"live": True}

@@ -15,6 +15,14 @@ const PORT_RANGE: i64 = 1000;
 const CANDIDATE_WINDOW: i64 = 25;
 const START_TIMEOUT_SECONDS: f64 = 15.0;
 const POST_UPDATE_START_TIMEOUT_SECONDS: f64 = 30.0;
+// A frozen Windows daemon unpacks its runtime, reads the installed
+// command-pack authority and projects the catalog before it publishes a port,
+// and every file it touches is scanned on the way. The packaged runtime's own
+// start timeline puts `daemon_ready` between 30 and 36 seconds after its first
+// import, so the POSIX budgets left the client waiting about 27 seconds for a
+// daemon that had not finished and was never going to within them.
+const NT_START_TIMEOUT_SECONDS: f64 = 40.0;
+const NT_POST_UPDATE_START_TIMEOUT_SECONDS: f64 = 75.0;
 const START_TIMEOUT_MARGIN_SECONDS: f64 = 5.0;
 
 /// `_stable_port_for_guard_home`: a port derived from the resolved home.
@@ -91,15 +99,29 @@ pub(crate) fn adoptable_ports(ctx: &Ctx, query: &DaemonAdoptablePortsQueryV1) ->
     json!({"ports": ordered})
 }
 
-pub(crate) fn start_timeouts(query: &DaemonStartTimeoutsQueryV1) -> Value {
-    let base = if query.desktop {
-        POST_UPDATE_START_TIMEOUT_SECONDS
+/// The longest a client waits on a daemon that is still starting.
+///
+/// The start-progress gate answers the same question from the other side, so
+/// both read this one budget rather than their own copy of it.
+pub(crate) fn post_update_start_timeout(nt: bool, worker_ready_floor: f64) -> f64 {
+    let base = if nt {
+        NT_POST_UPDATE_START_TIMEOUT_SECONDS
     } else {
-        START_TIMEOUT_SECONDS
+        POST_UPDATE_START_TIMEOUT_SECONDS
+    };
+    base.max(worker_ready_floor + START_TIMEOUT_MARGIN_SECONDS)
+}
+
+pub(crate) fn start_timeouts(ctx: &Ctx, query: &DaemonStartTimeoutsQueryV1) -> Value {
+    let base = match (ctx.nt, query.desktop) {
+        (true, true) => NT_POST_UPDATE_START_TIMEOUT_SECONDS,
+        (true, false) => NT_START_TIMEOUT_SECONDS,
+        (false, true) => POST_UPDATE_START_TIMEOUT_SECONDS,
+        (false, false) => START_TIMEOUT_SECONDS,
     };
     let floor = query.worker_ready_floor + START_TIMEOUT_MARGIN_SECONDS;
     json!({
         "default": base.max(floor),
-        "post_update": POST_UPDATE_START_TIMEOUT_SECONDS.max(floor),
+        "post_update": post_update_start_timeout(ctx.nt, query.worker_ready_floor),
     })
 }
