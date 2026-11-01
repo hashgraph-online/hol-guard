@@ -277,6 +277,7 @@ mod decision_authority_op;
 mod decision_authority_vectors_tests;
 mod delivery_object;
 mod desktop_core_onedir;
+mod desktop_foreign_installs;
 mod desktop_notification;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
