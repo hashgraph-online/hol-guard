@@ -3,7 +3,7 @@
   "id": "mcp.litepod",
   "version": "1.0.0",
   "name": "Litepod MCP",
-  "description": "Reviews Litepod exec calls that start or stop applications, change environment variables, domains, compose files or source, redeploy, roll back, delete projects and applications, or deploy code from a repository, ZIP or Compose file. Reads through get stay on Guard's usual handling. Litepod gives each organization its own MCP endpoint, so connect and turn this on for each organization you use. Off until you turn it on.",
+  "description": "Reviews Litepod exec calls (start, stop, environment variables, domains, compose files or source, redeploy, roll back, delete, and deploys from a repository, ZIP or Compose file) only when the harness reports no endpoint and the server is named litepod. It does not cover connections that report a Litepod organization endpoint (/api/v1/organizations/<id>/mcp) or self-hosted Litepod; those stay on Guard's usual handling. Reads through get stay on Guard's usual handling. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
