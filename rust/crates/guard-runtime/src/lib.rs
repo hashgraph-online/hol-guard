@@ -699,6 +699,7 @@ mod oci_bundle_op;
 mod oci_bundle_vectors_tests;
 mod oci_path;
 mod omp_yield_input_scan;
+mod onefile_open_paths;
 mod oneshot;
 #[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
