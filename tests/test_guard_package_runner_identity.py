@@ -398,3 +398,56 @@ def test_package_shim_routes_local_only_execution_through_guard(tmp_path: Path, 
         ("--no-install", "vitest", "--help"),
         workspace=tmp_path,
     )
+
+
+def _write_routine_runner_workspace(workspace: Path, name: str, *, locked: str) -> None:
+    """A runner pinned in the manifest, installed, and agreed on by bun.lock."""
+
+    (workspace / "package.json").write_text(
+        '{"name":"demo","dependencies":{"%s":"^4.22.4"}}\n' % name,
+        encoding="utf-8",
+    )
+    (workspace / "bun.lock").write_text(
+        '{"packages": {"%s": ["%s@%s", "", {}, ""]}}\n' % (name, name, locked),
+        encoding="utf-8",
+    )
+    installed = workspace / "node_modules" / name
+    installed.mkdir(parents=True)
+    (installed / "package.json").write_text(
+        '{"name":"%s","version":"4.22.4"}\n' % name,
+        encoding="utf-8",
+    )
+    _write_executable(installed / "dist" / "cli.mjs", "runner")
+    _write_executable(workspace / "node_modules" / ".bin" / name, "runner")
+
+
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_package_shim_runs_a_locally_pinned_runner_without_review(
+    tmp_path: Path,
+    manager: str,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _write_routine_runner_workspace(workspace, "tsx", locked="4.22.4")
+
+    assert not package_shim_command_requires_guard(
+        manager,
+        ("tsx", "scripts/generate-inventory.ts"),
+        workspace=workspace,
+    )
+
+
+@pytest.mark.parametrize("manager", ["npx", "bunx"])
+def test_package_shim_reviews_a_runner_the_lockfile_contradicts(
+    tmp_path: Path,
+    manager: str,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _write_routine_runner_workspace(workspace, "tsx", locked="4.9.0")
+
+    assert package_shim_command_requires_guard(
+        manager,
+        ("tsx", "scripts/generate-inventory.ts"),
+        workspace=workspace,
+    )

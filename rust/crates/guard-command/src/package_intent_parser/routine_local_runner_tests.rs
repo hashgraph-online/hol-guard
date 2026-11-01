@@ -114,7 +114,7 @@ fn a_runner_bound_to_local_project_state_is_routine() {
 
 #[test]
 fn every_routine_runner_name_qualifies_and_no_other_does() {
-    for name in ["eslint", "jest", "tsc", "vitest"] {
+    for name in ["eslint", "jest", "mocha", "tsc", "tsx", "vitest"] {
         let dir = TempDir::new().unwrap();
         let root = dir.path();
         write(

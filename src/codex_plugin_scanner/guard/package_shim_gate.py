@@ -65,7 +65,15 @@ def package_shim_command_requires_guard(
         }
     command = [normalized_manager, *normalized_argv]
     intent = _parse_shim_package_intent(shlex.join(command), workspace=workspace, guard_home=guard_home)
-    return intent is not None
+    if intent is None:
+        return False
+    # A runner the native parser has already bound to local project state
+    # installs nothing: it is the lint, test or TypeScript entry point this
+    # project pins in its own manifest, resolved under this workspace's
+    # `node_modules` and agreed on by every lockfile. The parser reaches that
+    # verdict from those reads, so the shim runs it the way the project
+    # declared it rather than asking about a fetch that will not happen.
+    return not intent.routine_local_runner
 
 
 def package_shim_command_requires_external_archive_binding(
