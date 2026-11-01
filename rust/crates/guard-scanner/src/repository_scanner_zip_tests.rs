@@ -153,6 +153,36 @@ fn zip_bytes_naming(entries: &[Entry], named: &[usize], comment: &[u8]) -> Vec<u
     out
 }
 
+/// Set the encrypted flag on one member's central record and nowhere else,
+/// so the directory's account of that member disagrees with the local header
+/// that owns it. A builder that wrote both from one `Entry` could not shape
+/// this, and a directory disagreeing with the data it indexes is the whole
+/// reason the local headers are walked.
+fn claim_encrypted_in_the_directory(archive: &mut [u8], name: &str) {
+    const CENTRAL_SIGNATURE: [u8; 4] = [0x50, 0x4b, 0x01, 0x02];
+    const FIXED: usize = 46;
+    let mut at = 0usize;
+    loop {
+        // A `while let` over the search would hold the borrow of the archive
+        // across the body, where the record is written; a `let ... else`
+        // statement drops it at the end of the statement.
+        let Some(offset) = archive[at..]
+            .windows(CENTRAL_SIGNATURE.len())
+            .position(|window| window == CENTRAL_SIGNATURE)
+        else {
+            panic!("no central record names {name}");
+        };
+        let record = at + offset;
+        at = record + CENTRAL_SIGNATURE.len();
+        let length = u16::from_le_bytes([archive[record + 28], archive[record + 29]]) as usize;
+        if &archive[record + FIXED..record + FIXED + length] != name.as_bytes() {
+            continue;
+        }
+        archive[record + 8] = 1;
+        return;
+    }
+}
+
 fn gzip_bytes(data: &[u8]) -> Vec<u8> {
     let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(data).unwrap();
@@ -409,6 +439,21 @@ fn a_member_named_twice_does_not_spend_the_budget_meant_for_another() {
     );
     let paths: Vec<&str> = findings.iter().map(|f| f.path.as_str()).collect();
     assert_eq!(paths, ["repeat.zip!/same.env", "repeat.zip!/other.env"]);
+}
+
+#[test]
+fn a_directory_that_lies_about_a_member_does_not_hide_it() {
+    // The directory is the archive's own account of itself, and an archive
+    // that wants a member left unread can call it encrypted there while the
+    // bytes sit in plain sight behind a local header that says otherwise.
+    // Charging the walk for a member it could not read must not also spend
+    // the second pass's right to read it from the header that owns it.
+    let hidden = credential_line();
+    let mut archive = zip_bytes(&[stored("prod.env", hidden.as_bytes())]);
+    claim_encrypted_in_the_directory(&mut archive, "prod.env");
+    let (paths, scanned) = scan(&archive, "lying.zip");
+    assert_eq!(paths, ["lying.zip!/prod.env"]);
+    assert_eq!(scanned, hidden.len());
 }
 
 #[test]

@@ -17,13 +17,15 @@
 //!
 //! The directory is not believed to be complete. It is an index, written
 //! separately from the data it indexes, and anyone who wants a member unread
-//! can leave its record out, name a shorter run of records from a forged end
-//! record planted in the trailing comment, or corrupt the directory
-//! altogether. None of that removes the member: its data is still in the file,
-//! behind its own local header, and a reader that wants it still gets it. So
-//! the local headers are walked afterwards and every member the directory did
-//! not account for is read from its own header. What the directory names is
-//! read on the directory's terms; what it omits is read anyway.
+//! can leave its record out, call it encrypted or name a codec with no
+//! reader for it, name a shorter run of records from a forged end record
+//! planted in the trailing comment, or corrupt the directory altogether.
+//! None of that removes the member: its data is still in the file, behind
+//! its own local header, and a reader that wants it still gets it. So the
+//! local headers are walked afterwards and every member the directory did
+//! not read is read from its own header. What the directory names is read
+//! on the directory's terms; what it omits, and what it names in a way that
+//! leaves the member unread, is read anyway.
 //!
 //! What a member carries is that member's own business. A zip stored verbatim
 //! inside this one holds local signatures of its own, and reading them here
@@ -137,6 +139,7 @@ pub(super) fn scan_members(
         scanned: 0,
         read: HashSet::new(),
         counted: HashSet::new(),
+        taken: HashSet::new(),
         spans: BTreeMap::new(),
         seen: 0,
     };
@@ -167,10 +170,18 @@ struct Walk<'a> {
     /// per repetition, all pointing at one member's data. The findings are
     /// collapsed on the same key the tar walk uses.
     read: HashSet<(String, usize, CandidateDigest)>,
-    /// The local headers this walk has already accounted for, so the second
-    /// pass spends the budget only on what the first one missed and a
-    /// directory naming one member a hundred times is charged for one.
+    /// The local headers the directory pass has already charged a member of
+    /// the allowance for, so a directory naming one member a hundred times is
+    /// charged for one.
     counted: HashSet<usize>,
+    /// The local headers whose data was actually read, so the second pass
+    /// spends the budget only on what the first one missed. A header the
+    /// first pass charged for but could not read is not here: the record that
+    /// named it is the archive's own account of it, and a record claiming a
+    /// member is encrypted, or larger than the budget, or in a codec with no
+    /// reader is exactly how a plaintext member behind a sound local header
+    /// would be kept from a reader that took the directory's word for it.
+    taken: HashSet<usize>,
     /// Where each member the directory accounted for keeps its data. A member
     /// stored verbatim may carry a local signature inside those bytes - a zip
     /// inside a zip is the ordinary case - and a signature found there belongs
@@ -214,7 +225,9 @@ impl Walk<'_> {
                 continue;
             }
             self.seen += 1;
-            self.take(&member);
+            if self.take(&member) {
+                self.taken.insert(member.header_at);
+            }
         }
     }
 
@@ -291,13 +304,12 @@ impl Walk<'_> {
                 at = at.max(end);
                 continue;
             }
-            if self.counted.contains(&header) {
+            if self.taken.contains(&header) {
                 continue;
             }
             let Some(member) = local_member(self.data, header) else {
                 continue;
             };
-            self.counted.insert(header);
             self.seen += 1;
             self.note_span(&member);
             self.take(&member);
@@ -305,21 +317,24 @@ impl Walk<'_> {
     }
 
     /// Read one member and keep what it holds, on the budget's terms.
-    fn take(&mut self, member: &Member<'_>) {
+    ///
+    /// Returns whether the member's data was read, which is what decides
+    /// whether the pass over the local headers may pass this one by.
+    fn take(&mut self, member: &Member<'_>) -> bool {
         let Some(name) = member.name() else {
-            return;
+            return false;
         };
         if !member.is_readable() || member.uncompressed > self.room() {
-            return;
+            return false;
         }
         let Some(bytes) = member.read(self.data) else {
-            return;
+            return false;
         };
         self.note_span(member);
         self.scanned = self.scanned.saturating_add(bytes.len());
         let member_path = member_path(self.path, &name);
         let Some(text) = decode_text(&member_path, &bytes) else {
-            return;
+            return true;
         };
         let remaining = self.finding_budget.saturating_sub(self.findings.len());
         let summary = scan_secret_text(text, &member_path, self.source, self.commit, remaining);
@@ -333,6 +348,7 @@ impl Walk<'_> {
                 self.findings.push(finding);
             }
         }
+        true
     }
 }
 
