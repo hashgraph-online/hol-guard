@@ -19,6 +19,7 @@ from .local_cli_commands import LocalCliCommand, merge_discovered_commands
 from .local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
 from .local_cli_script_source import (
     local_import_paths,
+    read_local_module,
     read_script_source,
     script_source_path,
 )
@@ -36,7 +37,6 @@ _COMMAND_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,40}$")
 _HELP_TIMEOUT_SECONDS = 2.5
 _HELP_OUTPUT_LIMIT = 8192
 _MAX_NESTED_PROBES = 8
-_HANDLER_STRENGTH: dict[str, int] = {"none": 0, "script": 1, "framework": 2}
 _SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
 
 
@@ -247,15 +247,19 @@ def _discover_from_source(
     from_source = list(_commands(read.rows))
     handler: _HelpHandler = read.help_handler
     for module in local_import_paths(script, read.imports):
-        module_text = read_script_source(module, shebang_only=False)
+        module_text = read_local_module(module, script)
         if module_text is None:
             continue
         imported = _source_read(module_text, invocation, guard_home)
         if imported is None:
-            break
+            # Half a read could leave out the module that answers --help, or
+            # that dispatches by hand, so nothing from this script is used.
+            return merge_discovered_commands(identity.name, empty), "failed"
         from_source.extend(_commands(imported.rows))
-        if _HANDLER_STRENGTH[imported.help_handler] > _HANDLER_STRENGTH[handler]:
-            handler = imported.help_handler
+        # The entry script decides whether a parser answers each command's
+        # --help; a module can only show that something checks for it.
+        if imported.help_handler != "none" and handler == "none":
+            handler = "script"
     if handler == "none":
         found = _distinct(from_source)
         return merge_discovered_commands(identity.name, found), "ok" if found else "empty"

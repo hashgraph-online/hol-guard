@@ -86,6 +86,13 @@ static PARSE_ARGS_OPTION: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap()
 });
 
+/// The first line of a `parseArgs` option written over several lines.
+static OPEN_OPTION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^["']?[A-Za-z][\w-]*["']?\s*:\s*\{\s*$"#).unwrap());
+
+/// Most lines one wrapped `parseArgs` option is joined across.
+const OPTION_LINES: usize = 5;
+
 static SHORT_KEYWORD: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\bshort\s*:\s*["']([A-Za-z0-9])["']"#).unwrap());
 
@@ -175,7 +182,7 @@ impl ScriptState {
             .retain(|block| block.language != Language::Js || block.at <= depth);
         self.comparisons(line, found);
         self.frameworks.line(line, rest, found);
-        options(line, found);
+        options(line, rest, found);
         self.values.consume(line);
     }
 
@@ -201,9 +208,9 @@ impl ScriptState {
                 .saturating_add_signed(brace_balance(&line[..before]))
                 + 1;
             (Language::Js, at, captures[1].to_owned())
-        } else if let Some(captures) = PY_MATCH.captures(line) {
+        } else if let Some(captures) = PY_MATCH.captures(without_comment(line)) {
             (Language::Python, indent, captures[1].to_owned())
-        } else if let Some(captures) = RUBY_CASE.captures(line) {
+        } else if let Some(captures) = RUBY_CASE.captures(without_comment(line)) {
             (Language::Ruby, indent, captures[1].to_owned())
         } else {
             return;
@@ -226,12 +233,12 @@ impl ScriptState {
             Language::Js if block.subject == Kind::First && depth == block.at => {
                 for captures in JS_CASE.captures_iter(line) {
                     if let Some(name) = (1..=3).find_map(|group| captures.get(group)) {
-                        found.command(name.as_str(), comment);
+                        found.hand_command(name.as_str(), comment);
                     }
                 }
             }
             Language::Python => {
-                let Some(captures) = PY_CASE.captures(line) else {
+                let Some(captures) = PY_CASE.captures(without_comment(line)) else {
                     return;
                 };
                 let pattern = match block.subject {
@@ -244,14 +251,14 @@ impl ScriptState {
                 };
                 for alternative in pattern.split('|') {
                     if let Some(name) = literal(alternative) {
-                        found.command(&name, comment);
+                        found.hand_command(&name, comment);
                     }
                 }
             }
             Language::Ruby if block.subject == Kind::First => {
-                if let Some(captures) = RUBY_WHEN.captures(line) {
+                if let Some(captures) = RUBY_WHEN.captures(without_comment(line)) {
                     for name in literals(&captures[1]) {
-                        found.command(&name, comment);
+                        found.hand_command(&name, comment);
                     }
                 }
             }
@@ -264,12 +271,12 @@ impl ScriptState {
         let comment = line_comment(line);
         for captures in COMPARED.captures_iter(line) {
             if self.values.kind(operand(matched(captures.get(1)))) == Kind::First {
-                found.command(matched(captures.get(2).or(captures.get(3))), comment);
+                found.hand_command(matched(captures.get(2).or(captures.get(3))), comment);
             }
         }
         for captures in COMPARED_REVERSED.captures_iter(line) {
             if self.values.kind(operand(matched(captures.get(3)))) == Kind::First {
-                found.command(matched(captures.get(1).or(captures.get(2))), comment);
+                found.hand_command(matched(captures.get(1).or(captures.get(2))), comment);
             }
         }
         let listed = IN_LIST
@@ -283,7 +290,7 @@ impl ScriptState {
         for (subject, list) in listed {
             if self.values.kind(operand(subject)) == Kind::First {
                 for name in self.values.words(list) {
-                    found.command(&name, comment);
+                    found.hand_command(&name, comment);
                 }
             }
         }
@@ -295,7 +302,7 @@ fn matched<'h>(m: Option<regex::Match<'h>>) -> &'h str {
 }
 
 /// Options a line compares an argument against, and Node `parseArgs` options.
-fn options(line: &str, found: &mut Found) {
+fn options(line: &str, rest: &[&str], found: &mut Found) {
     for captures in OPTION_TEST.captures_iter(line) {
         if let Some(name) = (1..=5).find_map(|group| captures.get(group)) {
             found.option(name.as_str(), None, "");
@@ -308,14 +315,33 @@ fn options(line: &str, found: &mut Found) {
             }
         }
     }
-    if let Some(captures) = PARSE_ARGS_OPTION.captures(line) {
+    let option = option_object(line, rest);
+    if let Some(captures) = PARSE_ARGS_OPTION.captures(&option) {
         let value = (&captures[2] == "string").then_some(VALUE_PLACEHOLDER);
         let mut names = vec![format!("--{}", &captures[1])];
-        if let Some(short) = SHORT_KEYWORD.captures(line) {
+        if let Some(short) = SHORT_KEYWORD.captures(&option) {
             names.push(format!("-{}", &short[1]));
         }
         found.aliases(&names, value, "");
     }
+}
+
+/// A `parseArgs` option as one line: `force: {` joined with the lines after
+/// it up to the one that closes it.
+fn option_object(line: &str, rest: &[&str]) -> String {
+    let mut text = line.to_owned();
+    if !OPEN_OPTION.is_match(line) {
+        return text;
+    }
+    for next in rest.iter().skip(1).take(OPTION_LINES) {
+        let next = py_strip(next);
+        text.push(' ');
+        text.push_str(next);
+        if next.contains('}') {
+            break;
+        }
+    }
+    text
 }
 
 /// A compared expression without the brackets and negation around it.
@@ -358,17 +384,27 @@ fn brace_balance(line: &str) -> isize {
 
 /// The text of a `// ...` or ` # ...` comment that ends a line.
 fn line_comment(line: &str) -> &str {
+    comment_at(line).map_or("", |(at, marker)| py_strip(&line[at + marker..]))
+}
+
+/// A line without the `// ...` or ` # ...` comment that ends it.
+fn without_comment(line: &str) -> &str {
+    comment_at(line).map_or(line, |(at, _)| py_strip(&line[..at]))
+}
+
+/// Where a trailing comment starts outside quotes, and its marker's length.
+fn comment_at(line: &str) -> Option<(usize, usize)> {
     for marker in [" // ", " # "] {
         let mut from = 0;
         while let Some(at) = line[from..].find(marker) {
             let at = from + at;
             if !inside_quotes(&line[..at]) {
-                return py_strip(&line[at + marker.len()..]);
+                return Some((at, marker.len()));
             }
             from = at + marker.len();
         }
     }
-    ""
+    None
 }
 
 /// The first item of a Python list pattern: `"build"` in `["build", *rest]`.

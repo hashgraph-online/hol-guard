@@ -542,11 +542,18 @@ library that answers `--help` for each subcommand). Python
 at most four imported modules that resolve, through symlinks, to script files
 inside the script's own folder. On the answer it runs nothing for `none`, only
 the top-level `--help` for `script`, and nested `<command> --help` probes only
-for `framework`. A resident that cannot read the source leaves the CLI with no
+for `framework`. A parser in the entry script answers only for the commands
+the script does not compare by hand, so a script that dispatches its own
+subcommands is `script` even when it also builds a parser. An imported module
+can raise `none` to `script`, never to `framework`, and a module the resident
+cannot read fails the whole discovery. Each module is opened without following
+a final symlink and read only when the open file is the one its path resolves
+to inside the script's folder. A script in a language the resident does not
+read (Perl, PHP, Lua) has `none`, so it is never run. A resident that cannot read the source leaves the CLI with no
 commands and runs nothing, and so does a runtime whose status cannot be read:
 a busy or missing resident is never taken for an older one. Only a resident
-whose capabilities list lacks the feature, or a file that is not a readable
-script, takes the help-first path above.
+whose capabilities list lacks the feature, or a compiled program that is not
+a script, takes the help-first path above.
 
 Two consequences are worth naming. Discovery fails closed: a resident that
 cannot answer leaves the CLI with no commands found, and the grant falls back

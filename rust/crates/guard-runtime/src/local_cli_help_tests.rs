@@ -279,3 +279,21 @@ fn a_script_source_read_says_how_the_script_answers_help() {
     assert!(help.get("help_handler").is_none());
     assert!(help.get("imports").is_none());
 }
+
+#[test]
+fn a_parser_does_not_answer_for_commands_the_script_dispatches_itself() {
+    let by_hand = concat!(
+        "import argparse\nimport sys\n",
+        "cmd = sys.argv[1]\n",
+        "if cmd == \"deploy\":\n    deploy()\n",
+        "parser = argparse.ArgumentParser()\nparser.parse_args()\n",
+    );
+    assert_eq!(payload(by_hand, true)["help_handler"], "script");
+    let parser_only = concat!(
+        "import argparse\n",
+        "parser = argparse.ArgumentParser()\n",
+        "sub = parser.add_subparsers()\n",
+        "sub.add_parser(\"deploy\")\n",
+    );
+    assert_eq!(payload(parser_only, true)["help_handler"], "framework");
+}

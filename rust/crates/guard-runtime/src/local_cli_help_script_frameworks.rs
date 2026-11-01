@@ -19,6 +19,17 @@ static COMMAND_CALL: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap()
 });
 
+/// yargs' object form: `.command({ command: 'serve', describe: '...' })`.
+static COMMAND_OBJECT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"([A-Za-z_$][\w$]*)?\s*\.command\s*\(\s*\{").unwrap());
+
+static OBJECT_COMMAND: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\bcommand\s*:\s*(?:"([^"\\]*)"|'([^'\\]*)')"#).unwrap());
+
+static OBJECT_DESCRIPTION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\b(?:describe|desc|description)\s*:\s*(?:"([^"\\]*)"|'([^'\\]*)')"#).unwrap()
+});
+
 static DESCRIPTION_CALL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\.(?:description|describe|summary)\s*\(\s*(?:"([^"\\]*)"|'([^'\\]*)')"#).unwrap()
 });
@@ -62,6 +73,15 @@ impl Frameworks {
 
     pub(super) fn line(&mut self, line: &str, rest: &[&str], found: &mut Found) {
         let following = rest.get(1..).unwrap_or_default();
+        // `sub.add_parser(` with its name on the next line reads as one call.
+        let joined;
+        let (line, following) = match following.split_first() {
+            Some((next, after)) if line.ends_with('(') => {
+                joined = format!("{line}{}", py_strip(next));
+                (joined.as_str(), after)
+            }
+            _ => (line, following),
+        };
         if self.decorator.is_some() {
             self.decorated(line, following, found);
         }
@@ -101,6 +121,23 @@ impl Frameworks {
                 .or_else(|| keyword(&DESCRIPTION_CALL, next).filter(|_| next.starts_with('.')))
                 .unwrap_or_default();
             found.command(name, &description);
+        }
+        for captures in COMMAND_OBJECT.captures_iter(line) {
+            let at = captures.get(0).map_or(0, |m| m.start());
+            let receiver = captures.get(1).map_or("", |m| m.as_str());
+            if inside_quotes(&line[..at]) || !owns(&mut self.commander, receiver) {
+                continue;
+            }
+            let after = captures.get(0).map_or(line.len(), |m| m.end());
+            let call = call_text(&line[after..], following);
+            let Some(spec) = keyword(&OBJECT_COMMAND, &call) else {
+                continue;
+            };
+            let name = spec.split_whitespace().next().unwrap_or("");
+            found.command(
+                name,
+                &keyword(&OBJECT_DESCRIPTION, &call).unwrap_or_default(),
+            );
         }
     }
 

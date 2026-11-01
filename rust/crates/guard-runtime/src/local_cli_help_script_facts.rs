@@ -58,11 +58,49 @@ pub(crate) struct Facts {
     pub(super) argparse: bool,
     /// Click, Typer or Cyclopts: `@cli.command()` names a subcommand.
     pub(super) decorators: bool,
+    /// argparse, optparse or Ruby's optparse is imported, so a parser
+    /// constructor is the library's and not one the script defines itself.
+    parser_library: bool,
+    /// A shell `case ... in` has opened, so a `-h)` line is one of its arms.
+    shell_case: bool,
 }
 
-/// `--help`, `"-h"`, or a shell `case` arm such as `-h)` or `-h|--help)`.
-static ASKS_FOR_HELP: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"--help\b|["']-h["']|(?:^|[\s(|])-h\s*[)|]"#).unwrap());
+/// Code that tests an argument for `-h` or `--help`, not code that merely
+/// passes one to another program (`du -h`, `spawn('ls', ['-h'])`) or names it
+/// in a message: a comparison, a lookup in the argument list, a membership
+/// test, a `case`/`when` arm, or a shell test. A shell `case` arm is
+/// [`SHELL_HELP_ARM`].
+static ASKS_FOR_HELP: LazyLock<Regex> = LazyLock::new(|| {
+    let flag = r#"["'](?:-h|--help)["']"#;
+    let bare = r#"["']?\*?(?:-h|--help)\*?["']?"#;
+    Regex::new(&format!(
+        concat!(
+            r"(?:===|!==|==|!=|\beq\b|\bne\b)\s*{flag}",
+            r"|{flag}\s*(?:===|!==|==|!=|\beq\b|\bne\b)",
+            r"|\.(?:includes|has|include\?|indexOf|index|count)\s*\(\s*{flag}",
+            r"|{flag}\s+(?:not\s+)?in\b",
+            r"|^(?:if|elif|elsif|unless|while)\b.*\bin\s*[(\[{{][^)\]}}]*{flag}",
+            r"|^case\s[^:]*{flag}[^:]*:",
+            r"|^when\s.*{flag}",
+            r"|(?:\[\[?|\btest)\s[^\]]*\s(?:==?|!=)\s*{bare}(?:\s|\]|;|$)",
+        ),
+        flag = flag,
+        bare = bare,
+    ))
+    .unwrap()
+});
+
+/// A shell `case` arm such as `-h)` or `-h|--help)`. Read only after a shell
+/// `case ... in` opens, since a wrapped call's last line can look the same.
+static SHELL_HELP_ARM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r#"^\(?\s*(?:[^\s()|]+\s*\|\s*)*["']?(?:-h|--help)["']?"#,
+        r"\s*(?:\|\s*[^\s()|]+\s*)*\)",
+    ))
+    .unwrap()
+});
+
+static SHELL_CASE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^case\s.+\sin$").unwrap());
 
 static JS_FRAMEWORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
@@ -80,13 +118,21 @@ static PY_FRAMEWORK: LazyLock<Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
-/// A parser whose `--help` is answered by the library: Python's argparse and
-/// optparse, and Ruby's OptionParser.
-static HELP_PARSER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\b(?:ArgumentParser|OptionParser)\b").unwrap());
+/// A parser made from a library that answers `--help` for it: Python's
+/// argparse and optparse, and Ruby's OptionParser. Only a constructor call
+/// counts; an import or a class of the same name makes no parser.
+static HELP_PARSER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b(?:ArgumentParser|OptionParser)\s*\(|\bOptionParser\s*\.\s*new\b").unwrap()
+});
+
+static DEFINITION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(?:class|def|function|async\s+def)\s").unwrap());
 
 static NO_HELP: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\badd_help\s*=\s*False\b").unwrap());
+    LazyLock::new(|| Regex::new(r"\badd_help(?:_option)?\s*=\s*False\b").unwrap());
+
+static RUBY_OPTPARSE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\brequire\s+["']optparse["']"#).unwrap());
 
 static OTHER_FRAMEWORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\brequire\s+["'](?:optparse|thor|slop)["']|\bpod2usage\b|\bThor\b"#).unwrap()
@@ -131,6 +177,7 @@ pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
 }
 
 fn read_help(line: &str, rest: &[&str], facts: &mut Facts) {
+    facts.shell_case |= SHELL_CASE.is_match(line);
     let mut framework = false;
     if let Some(captures) = JS_FRAMEWORK.captures(line) {
         framework = true;
@@ -139,6 +186,7 @@ fn read_help(line: &str, rest: &[&str], facts: &mut Facts) {
     if let Some(captures) = PY_FRAMEWORK.captures(line) {
         let name = &captures[1];
         facts.argparse |= name == "argparse";
+        facts.parser_library |= matches!(name, "argparse" | "optparse");
         facts.decorators |= matches!(
             name,
             "click" | "typer" | "cyclopts" | "rich_click" | "asyncclick"
@@ -146,7 +194,8 @@ fn read_help(line: &str, rest: &[&str], facts: &mut Facts) {
         // Importing argparse or optparse answers nothing until a parser is made.
         framework |= !matches!(name, "argparse" | "optparse");
     }
-    if HELP_PARSER.is_match(line) {
+    facts.parser_library |= RUBY_OPTPARSE.is_match(line);
+    if facts.parser_library && HELP_PARSER.is_match(line) && !DEFINITION.is_match(line) {
         let call: String = rest
             .iter()
             .take(6)
@@ -158,7 +207,7 @@ fn read_help(line: &str, rest: &[&str], facts: &mut Facts) {
     framework |= OTHER_FRAMEWORK.is_match(line);
     let handler = if framework {
         HelpHandler::Framework
-    } else if ASKS_FOR_HELP.is_match(line) {
+    } else if ASKS_FOR_HELP.is_match(line) || (facts.shell_case && SHELL_HELP_ARM.is_match(line)) {
         HelpHandler::Script
     } else {
         HelpHandler::None

@@ -18,7 +18,11 @@ import pytest
 from codex_plugin_scanner.guard.native_local_cli_help_parse import SourceRead
 from codex_plugin_scanner.guard.runtime.local_cli_help import discover_local_cli_commands
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-from codex_plugin_scanner.guard.runtime.local_cli_script_source import MAX_FOLLOWED_IMPORTS, local_import_paths
+from codex_plugin_scanner.guard.runtime.local_cli_script_source import (
+    MAX_FOLLOWED_IMPORTS,
+    local_import_paths,
+    read_local_module,
+)
 
 BRIDGE = "codex_plugin_scanner.guard.native_local_cli_help_parse"
 
@@ -219,6 +223,62 @@ def test_help_handled_in_an_imported_module_lets_the_script_run(
     ran, probe = _probe()
     discover_local_cli_commands(_identity("tool.py"), ("/usr/bin/python3", str(script), "--help"), runner=probe)
     assert ran == [("/usr/bin/python3", str(script), "--help")]
+
+
+def test_a_module_cannot_turn_on_per_command_help_probes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    entry = "from cli import main\nmain()\n"
+    module = "import argparse\nparser = argparse.ArgumentParser()\n"
+    script = _script(tmp_path, "tool.py", entry)
+    _script(tmp_path, "cli.py", module)
+    _resident(monkeypatch, {entry: _read(imports=["./cli.py"]), module: _read(handler="framework")}, (_row("deploy"),))
+    ran, probe = _probe()
+    discover_local_cli_commands(_identity("tool.py"), ("/usr/bin/python3", str(script), "--help"), runner=probe)
+    assert ran == [("/usr/bin/python3", str(script), "--help")]
+
+
+def test_a_module_the_resident_cannot_read_fails_the_whole_script(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    entry = "import { main } from './cli.mjs';\nif (process.argv.includes('--help')) usage();\n"
+    module = "switch (process.argv[2]) { case 'sync': break; }\n"
+    script = _script(tmp_path, "tool.mjs", entry)
+    _script(tmp_path, "cli.mjs", module)
+    read = _resident(monkeypatch, {entry: _read("deploy", handler="script", imports=["./cli.mjs"]), module: None})
+    ran, probe = _probe()
+    commands, status = discover_local_cli_commands(
+        _identity("tool.mjs"), ("/usr/bin/node", str(script), "--help"), runner=probe
+    )
+    assert read == [entry, module]
+    assert (ran, status) == ([], "failed")
+    assert "deploy" not in _ids(commands)
+
+
+def test_a_module_swapped_for_a_symlink_after_it_was_checked_is_not_read(tmp_path: Path) -> None:
+    folder = tmp_path / "tool"
+    (folder / "lib").mkdir(parents=True)
+    script = _script(folder, "tool.mjs", "import './lib/cli.mjs';\n")
+    module = _script(folder / "lib", "cli.mjs", "switch (process.argv[2]) {}\n")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    _script(outside, "cli.mjs", "secret\n")
+    (found,) = local_import_paths(str(script), ["./lib/cli.mjs"])
+    assert read_local_module(found, str(script)) is not None
+    module.unlink()
+    module.symlink_to(outside / "cli.mjs")
+    assert read_local_module(found, str(script)) is None
+    module.unlink()
+    (folder / "lib").rmdir()
+    (folder / "lib").symlink_to(outside, target_is_directory=True)
+    assert read_local_module(found, str(script)) is None
+
+
+def test_a_script_the_resident_cannot_read_for_help_is_not_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source = "use Getopt::Long;\nGetOptions('help' => \\my $help);\n"
+    script = _script(tmp_path, "tool.pl", source)
+    _resident(monkeypatch, {source: _read()}, (_row("deploy"),))
+    ran, probe = _probe()
+    discover_local_cli_commands(_identity("tool.pl"), ("/usr/bin/perl", str(script), "--help"), runner=probe)
+    assert ran == []
 
 
 def test_a_compiled_program_still_runs_its_help(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -1,6 +1,14 @@
 use super::super::facts::HelpHandler;
 use super::super::{script_facts, variations};
 
+fn handler(source: &str) -> HelpHandler {
+    script_facts(source, &["tool".to_owned()]).help
+}
+
+fn imports(source: &str) -> Vec<String> {
+    script_facts(source, &["tool".to_owned()]).imports
+}
+
 fn ids(source: &str) -> Vec<String> {
     variations(source, &["tool".to_owned()], true)
         .into_iter()
@@ -36,7 +44,7 @@ fn destructured_arguments_compared_to_words_are_subcommands() {
 
 #[test]
 fn a_script_that_never_looks_for_help_is_not_run() {
-    assert_eq!(script_facts(PIN_SCRIPT).help, HelpHandler::None);
+    assert_eq!(handler(PIN_SCRIPT), HelpHandler::None);
 }
 
 #[test]
@@ -177,7 +185,7 @@ prune_sub.add_parser("deep")
     let found = ids(script);
     assert_eq!(found, vec!["clear", "prune"]);
     assert_eq!(description(script, "prune"), "Remove stale entries");
-    assert_eq!(script_facts(script).help, HelpHandler::Framework);
+    assert_eq!(handler(script), HelpHandler::Framework);
 }
 
 #[test]
@@ -261,12 +269,37 @@ fn the_help_handler_follows_the_strongest_evidence() {
         ),
         ("// Pass --help for usage.\nrun();\n", HelpHandler::None),
         (
+            "case \"$1\" in\n  -h|--help) usage ;;\nesac\n",
+            HelpHandler::Script,
+        ),
+        (
+            "if arg in (\"-h\", \"--help\"):\n    usage()\n",
+            HelpHandler::Script,
+        ),
+        (
+            "if [[ $1 == --help ]]; then usage; fi\n",
+            HelpHandler::Script,
+        ),
+        ("when '-h', '--help' then usage\n", HelpHandler::Script),
+        (
+            "from argparse import ArgumentParser\np = ArgumentParser()\n",
+            HelpHandler::Framework,
+        ),
+        (
+            "from argparse import ArgumentParser\np = ArgumentParser(add_help=False)\n",
+            HelpHandler::None,
+        ),
+        (
+            "class ArgumentParser(Base):\n    pass\np = ArgumentParser()\n",
+            HelpHandler::None,
+        ),
+        (
             "\"\"\"Pass --help for usage.\n\"\"\"\nrun()\n",
             HelpHandler::None,
         ),
     ];
     for (source, expected) in checks {
-        assert_eq!(script_facts(source).help, expected, "{source}");
+        assert_eq!(handler(source), expected, "{source}");
     }
 }
 
@@ -279,15 +312,89 @@ fn only_imports_inside_the_scripts_folder_are_local() {
         "const lazy = await import('./lazy.mjs');\n",
         "// import './commented.mjs';\n",
     );
-    assert_eq!(
-        script_facts(node).imports,
-        vec!["./lib/run.mjs", "./lazy.mjs"]
-    );
+    assert_eq!(imports(node), vec!["./lib/run.mjs", "./lazy.mjs"]);
     let python = "from helpers import usage\nimport os, tools.cli as cli\nfrom . import nope\n";
     assert_eq!(
-        script_facts(python).imports,
+        imports(python),
         vec!["./helpers.py", "./os.py", "./tools/cli.py"]
     );
     let ruby = "require_relative 'lib/cmd'\nrequire_relative \"../up\"\n";
-    assert_eq!(script_facts(ruby).imports, vec!["./lib/cmd.rb"]);
+    assert_eq!(imports(ruby), vec!["./lib/cmd.rb"]);
+}
+
+#[test]
+fn help_flags_passed_to_other_programs_are_not_help_checks() {
+    for source in [
+        "du -h | sort -h\n",
+        "size=$(df -h)\n",
+        "tool --help >/dev/null\n",
+        "HELP=\"--help\"\n",
+        "const usage = 'Run tool --help';\n",
+        "spawn('ls', ['-h']);\n",
+        "if [ -h \"$link\" ]; then echo link; fi\n",
+        // A wrapped call's last line outside a shell `case`.
+        "run(\"ls\",\n    \"-h\")\n",
+    ] {
+        assert_eq!(handler(source), HelpHandler::None, "{source}");
+    }
+}
+
+#[test]
+fn ruby_appends_and_shifts_do_not_open_a_heredoc() {
+    let ruby = r#"command = ARGV.shift
+errors << msg
+case command
+when "start" then start
+end
+"#;
+    assert_eq!(ids(ruby), vec!["start"]);
+    let node = r#"const flags = 1 << shift;
+const [command] = process.argv.slice(2);
+switch (command) {
+  case 'build':
+    break;
+}
+"#;
+    assert_eq!(ids(node), vec!["build"]);
+    let heredoc = "USAGE = <<~EOS\n  -q, --quiet  Say less\nEOS\n";
+    assert_eq!(ids(heredoc), vec!["--quiet", "-q"]);
+}
+
+#[test]
+fn a_python_case_with_a_trailing_comment_is_read() {
+    let script = r#"import sys
+match sys.argv[1]:
+    case "build":  # Build the site
+        build()
+"#;
+    assert_eq!(ids(script), vec!["build"]);
+    assert_eq!(description(script, "build"), "Build the site");
+}
+
+#[test]
+fn wrapped_parser_calls_and_options_are_read() {
+    let argparse = r#"import argparse
+parser = argparse.ArgumentParser()
+sub = parser.add_subparsers()
+sub.add_parser(
+    "clear", help="Remove every entry")
+"#;
+    assert_eq!(ids(argparse), vec!["clear"]);
+    let yargs = r#"import yargs from 'yargs';
+yargs(process.argv.slice(2))
+  .command({
+    command: 'serve [port]',
+    describe: 'Start the server',
+  });
+"#;
+    assert_eq!(ids(yargs), vec!["serve"]);
+    assert_eq!(description(yargs, "serve"), "Start the server");
+    let node = r#"const { values } = parseArgs({ options: {
+  force: {
+    type: 'boolean',
+    short: 'f',
+  },
+} });
+"#;
+    assert_eq!(ids(node), vec!["--force", "-f"]);
 }

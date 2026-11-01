@@ -273,7 +273,7 @@ fn case_option_arm(arms: &str, body: &str, found: &mut Found) {
 fn case_word_arm(arms: &str, body: &str, found: &mut Found) {
     let description = trailing_comment(body);
     for arm in arms.split('|') {
-        found.command(
+        found.hand_command(
             arm.trim().trim_matches(|c: char| c == '"' || c == '\''),
             description,
         );

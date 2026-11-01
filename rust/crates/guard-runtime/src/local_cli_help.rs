@@ -32,6 +32,7 @@ use crate::package_authority_op::request_digest_with_limit;
 #[path = "local_cli_help_options.rs"]
 mod options;
 pub(crate) use options::is_option_name;
+use options::HelpHandler;
 
 /// Read the commands a `--help` text names, for the resident's Python caller.
 pub(crate) fn evaluate_local_cli_help_parse_request(
@@ -62,10 +63,19 @@ pub(crate) fn evaluate_local_cli_help_parse_request(
     let payload = if request.script_source {
         // What the source says about running it, so the caller decides from
         // the code whether `script --help` is safe to ask for at all.
-        let facts = options::script_facts(&request.text);
+        let facts = options::script_facts(&request.text, &request.invocation);
+        let mut help = facts.help;
+        // A parser that answers `<command> --help` speaks only for the
+        // commands it runs. One the script dispatches itself gets `--help` as
+        // an argument, so only the top-level `--help` is asked for.
+        if help == HelpHandler::Framework
+            && options::dispatches_by_hand(&request.text, &request.invocation)
+        {
+            help = HelpHandler::Script;
+        }
         json!({
             "commands": commands,
-            "help_handler": facts.help.as_str(),
+            "help_handler": help.as_str(),
             "imports": facts.imports,
         })
     } else {
@@ -96,7 +106,12 @@ fn commands_and_variations(
         // choice sets, so only its comment text is read as help, and without
         // the whole-text choice-set fallback. Its code names options whether
         // or not its comments name commands, so both are kept.
-        let mut commands = parse_help(&options::comment_lines(text), None, invocation, false);
+        let mut commands = parse_help(
+            &options::comment_lines(text, invocation),
+            None,
+            invocation,
+            false,
+        );
         for row in options::variations(text, invocation, true) {
             if !commands
                 .iter()
