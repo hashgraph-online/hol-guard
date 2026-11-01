@@ -190,6 +190,23 @@ def policy_status_payload(store: GuardStore, *, offline: bool) -> dict[str, obje
     return payload
 
 
+def _live_version_text(version: object, delivery: dict[str, object]) -> str:
+    """A v1 bundle names its publication by id; show Cloud's number once Cloud says this device applied it."""
+
+    if not version:
+        return "none"
+    cloud_version = delivery.get("versionNumber") if delivery.get("available") else None
+    mine = delivery.get("thisDevice")
+    if (
+        isinstance(cloud_version, int)
+        and str(version) != str(cloud_version)
+        and isinstance(mine, dict)
+        and mine.get("state") == "applied"
+    ):
+        return f"{cloud_version} (bundle {version})"
+    return str(version)
+
+
 def format_policy_status(payload: dict[str, object]) -> str:
     live = payload["live"] if isinstance(payload["live"], dict) else {}
     ack = payload["lastAck"] if isinstance(payload["lastAck"], dict) else {}
@@ -198,7 +215,7 @@ def format_policy_status(payload: dict[str, object]) -> str:
     local = local_value if isinstance(local_value, dict) else None
     lines = [
         f"Local policy: {local['documentId']} ({local['rules']} rules)" if local else "Local policy: none",
-        f"Live version: {live.get('version') or 'none'}",
+        f"Live version: {_live_version_text(live.get('version'), delivery)}",
         f"Mode: {live.get('mode') or 'unknown'}",
         f"Last sync: {payload.get('lastSync') or 'never'}",
         f"Last ACK: {ack.get('status') or 'none'}"
