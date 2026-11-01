@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
+            let response = macos_code_signing::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
             let response = removal_evidence::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -138,6 +142,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if user_health_state::is_command(command) && flag == "--stdin" => {
             let response = user_health_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if local_skill_index::is_command(command) && flag == "--stdin" => {
+            let response = local_skill_index::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if windows_private_state::is_command(command) && flag == "--stdin" => {

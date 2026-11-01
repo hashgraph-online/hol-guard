@@ -9,12 +9,17 @@ const GIT_RULES: [&str; 3] = ["command.git.diff", "command.git.log", "command.gi
 /// Bun inline evaluation reports package protection because Bun is a package
 /// manager image; pretool admits that only for an exact, screened `bun -e/-p`
 /// argv, under its own reason. `node -e` never carries the permission.
-const PACKAGE_PERMISSION_CODES: [&str; 7] = [
+///
+/// `bun test` reaches the read-only Node test profile through the same image,
+/// so it reports the permission too. A `node --test` run under that profile
+/// carries no permission list at all and is unaffected by this entry.
+const PACKAGE_PERMISSION_CODES: [&str; 8] = [
     guard_contracts::NATIVE_BASH_DELIVERY_REASON,
     "native_workspace_containment_required",
     "native_bun_eval_readonly_containment_required",
     "native_vitest_readonly_containment_required",
     "native_package_test_readonly_containment_required",
+    "native_node_test_readonly_containment_required",
     "native_node_tool_readonly_containment_required",
     "native_node_build_output_containment_required",
 ];

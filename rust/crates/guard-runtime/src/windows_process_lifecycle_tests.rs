@@ -10,6 +10,7 @@ struct FakeProcesses {
     liveness: BTreeMap<u32, Option<bool>>,
     creation_times: BTreeMap<u32, u64>,
     owner_sids: BTreeMap<u32, String>,
+    current_owner_sid: Option<String>,
     /// Every termination asked for: process, creation time and timeout.
     terminations: RefCell<Vec<(u32, u64, Option<Duration>)>>,
 }
@@ -25,6 +26,10 @@ impl Processes for FakeProcesses {
 
     fn owner_sid(&self, process_id: u32) -> Option<String> {
         self.owner_sids.get(&process_id).cloned()
+    }
+
+    fn current_owner_sid(&self) -> Option<String> {
+        self.current_owner_sid.clone()
     }
 
     fn terminate_if_creation_time(
@@ -195,4 +200,33 @@ fn off_windows_nothing_is_read() {
         answer(&request, &SystemProcesses).unwrap(),
         json!({"liveness": [null]})
     );
+}
+
+#[test]
+fn the_current_owner_sid_needs_no_process_id() {
+    let processes = FakeProcesses {
+        current_owner_sid: Some("sid:S-1-5-18".to_owned()),
+        ..FakeProcesses::default()
+    };
+    assert_eq!(
+        ask(&processes, json!({"op": "current_owner_sid"})).unwrap(),
+        json!({"owner_sid": "sid:S-1-5-18"})
+    );
+    assert_eq!(
+        ask(
+            &FakeProcesses::default(),
+            json!({"op": "current_owner_sid"})
+        )
+        .unwrap(),
+        json!({"owner_sid": null})
+    );
+    for request in [
+        json!({"op": "current_owner_sid", "pids": [10]}),
+        json!({"op": "current_owner_sid", "pid": 10}),
+    ] {
+        assert_eq!(
+            ask(&processes, request).unwrap_err(),
+            "windows_process_lifecycle_request_invalid"
+        );
+    }
 }

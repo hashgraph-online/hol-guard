@@ -220,3 +220,49 @@ fn path_leaves_the_workspace(value: &str) -> bool {
         || windows_root
         || value.split('/').any(|segment| segment == "..")
 }
+
+/// The `bun test` options this reading models, paired with whether the option
+/// carries a value joined to its name with `=`. Bun's runner parses its own
+/// line, so an option missing from this table keeps the call at review rather
+/// than leaving the reading to guess what the words around it mean.
+///
+/// What the table leaves out is the point of it. `--watch` and `--hot` never
+/// finish inside the sink; `-u`/`--update-snapshots` rewrites the workspace;
+/// `--preload`, `-r`, `--config`, `-c`, `--env-file`, `--define`, `--loader`
+/// and `--inspect` each name something the run loads from outside its tests;
+/// `--install` fetches; `--cwd` moves the run; and a reporter written to a
+/// file is a write.
+const BUN_TEST_OPTIONS: &[(&str, bool)] = &[
+    ("--bail", true),
+    ("--coverage", false),
+    ("--only", false),
+    ("--rerun-each", true),
+    ("--silent", false),
+    ("--test-name-pattern", true),
+    ("--timeout", true),
+    ("--todo", false),
+    ("-t", false),
+];
+
+/// True when a `bun test` call runs once over the workspace it was admitted
+/// for.
+///
+/// Bun's runner takes a single pass and exits by default, so this reading is
+/// about what the rest of the line adds rather than what it must say. Every
+/// word is either an option the table above models or an operand -- a path
+/// filter, or the pattern a bare `-t` takes -- and an operand naming a path
+/// the workspace does not hold leaves the call at review.
+pub(crate) fn bun_test_runs_once(arguments: &[String]) -> bool {
+    arguments.iter().all(|argument| {
+        if !argument.starts_with('-') {
+            return !path_leaves_the_workspace(argument);
+        }
+        let (name, joined) = match argument.split_once('=') {
+            Some((name, _)) => (name, true),
+            None => (argument.as_str(), false),
+        };
+        BUN_TEST_OPTIONS
+            .iter()
+            .any(|(option, takes_value)| *option == name && (*takes_value || !joined))
+    })
+}
