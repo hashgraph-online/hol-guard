@@ -8,7 +8,7 @@ use winapi::shared::winerror::S_OK;
 use winapi::um::combaseapi::CoTaskMemFree;
 use winapi::um::knownfolders::{
     FOLDERID_Profile, FOLDERID_ProgramFiles, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86,
-    FOLDERID_Windows,
+    FOLDERID_RoamingAppData, FOLDERID_Windows,
 };
 use winapi::um::shlobj::{SHGetKnownFolderPath, KF_FLAG_DEFAULT};
 
@@ -69,4 +69,10 @@ pub fn windows_directory() -> Option<PathBuf> {
 /// requesting environment cannot move it.
 pub fn user_profile_directory() -> Option<PathBuf> {
     known_folder(&FOLDERID_Profile)
+}
+
+/// Return the current user's Roaming AppData directory, wherever folder
+/// redirection placed it.
+pub fn roaming_appdata_directory() -> Option<PathBuf> {
+    known_folder(&FOLDERID_RoamingAppData)
 }
