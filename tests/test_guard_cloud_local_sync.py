@@ -492,6 +492,60 @@ def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:
     assert "key_id" not in serialized
 
 
+def test_runtime_snapshot_cloud_status_copy_comes_from_the_native_runtime(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    provision_native_verifier_key_for_store(store)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["cloud_state"] == "local_only"
+    assert snapshot["cloud_state_label"] == "Local only"
+    assert snapshot["cloud_pairing_state"]["label"] == "Local only"
+    assert snapshot["cloud_sync_health"] == {
+        "state": "disabled",
+        "label": "Cloud optional",
+        "detail": (
+            "Local Guard is active. Cloud sync is optional and currently off; connect it for shared team proof."
+        ),
+        "pending_events": 0,
+        "last_synced_at": None,
+        "next_retry_after": None,
+    }
+    assert snapshot["proof_status"]["state"] == "not_connected"
+    assert snapshot["proof_status"]["label"] == "Cloud proof not started"
+    assert snapshot["proof_status"]["request_id"] is None
+    assert snapshot["proof_status"]["receipts_stored"] == 0
+
+
+def test_runtime_snapshot_reports_cloud_status_unavailable_without_the_native_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority as authority_module
+
+    store = GuardStore(tmp_path / "guard-home")
+    asked: list[str] = []
+    original = authority_module.native_runner_authority
+
+    def refuse_cloud_status(kind: str, args: object, **kwargs: object) -> dict[str, object]:
+        if kind == "runtime_cloud_status":
+            asked.append(kind)
+            raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+        return original(kind, args, **kwargs)
+
+    monkeypatch.setattr(authority_module, "native_runner_authority", refuse_cloud_status)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert asked == ["runtime_cloud_status"]
+    assert snapshot["cloud_state"] == "local_only"
+    assert snapshot["cloud_state_label"] == "Cloud status unavailable"
+    assert snapshot["cloud_sync_health"]["state"] == "unavailable"
+    assert snapshot["cloud_sync_health"]["pending_events"] == 0
+    assert snapshot["proof_status"]["state"] == "unavailable"
+    assert snapshot["proof_status"]["first_synced_at"] is None
+
+
 def test_runtime_snapshot_trust_status_does_not_refresh_integrity_state(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     provision_native_verifier_key_for_store(store)
