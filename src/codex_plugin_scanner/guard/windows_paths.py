@@ -32,6 +32,9 @@ _LIFECYCLE_SCHEMA = "windows-process-lifecycle.v1"
 _LIFECYCLE_OUTPUT_LIMIT = 64 * 1024
 _LIFECYCLE_MAX_TIMEOUT_MS = 600_000
 _LIFECYCLE_TIMEOUT_SECONDS = 10.0
+# What a bounded termination may take beyond its own timeout: starting the
+# runtime and reading its answer.
+_LIFECYCLE_TERMINATION_GRACE_SECONDS = 1.0
 _FOLDERID_PROFILE = uuid.UUID("5e6c858f-0e22-4760-9afe-ea3317b67173").bytes_le
 _FOLDERID_ROAMING_APPDATA = uuid.UUID("3eb685db-65f9-4cf6-a03a-e3ef65729f3d").bytes_le
 
@@ -185,7 +188,12 @@ def _canonical_windows_path(path: Path | str) -> str:
     return value
 
 
-def _lifecycle_answer(request: dict[str, object], *, output_limit: int) -> dict[str, object] | None:
+def _lifecycle_answer(
+    request: dict[str, object],
+    *,
+    output_limit: int,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
     from .mdm.runtime_request import runtime_answer
 
     return runtime_answer(
@@ -194,6 +202,7 @@ def _lifecycle_answer(request: dict[str, object], *, output_limit: int) -> dict[
         {"schema": _LIFECYCLE_SCHEMA, **request},
         output_limit=output_limit,
         timeout_seconds=_LIFECYCLE_TIMEOUT_SECONDS,
+        deadline=deadline,
     )
 
 
@@ -273,9 +282,14 @@ def windows_terminate_process_if_creation_time(
         "pid": pid,
         "expected_creation_time": expected_creation_time,
     }
+    deadline = None
     if timeout is not None:
-        request["timeout_ms"] = min(_LIFECYCLE_MAX_TIMEOUT_MS, int(max(0.0, timeout) * 1000))
-    answer = _lifecycle_answer(request, output_limit=_LIFECYCLE_OUTPUT_LIMIT)
+        timeout_ms = min(_LIFECYCLE_MAX_TIMEOUT_MS, int(max(0.0, timeout) * 1000))
+        request["timeout_ms"] = timeout_ms
+        # The status check, the spawn and the native wait share the caller's
+        # budget.
+        deadline = time.monotonic() + timeout_ms / 1000 + _LIFECYCLE_TERMINATION_GRACE_SECONDS
+    answer = _lifecycle_answer(request, output_limit=_LIFECYCLE_OUTPUT_LIMIT, deadline=deadline)
     return answer is not None and answer.get("terminated") is True
 
 

@@ -1019,9 +1019,14 @@ def test_windows_daemon_pid_probe_never_uses_os_kill(monkeypatch) -> None:
 def _fake_lifecycle_runtime(monkeypatch, answer: dict[str, object] | None) -> list[dict[str, object]]:
     requests: list[dict[str, object]] = []
 
-    def fake_answer(request: dict[str, object], *, output_limit: int) -> dict[str, object] | None:
+    def fake_answer(
+        request: dict[str, object],
+        *,
+        output_limit: int,
+        deadline: float | None = None,
+    ) -> dict[str, object] | None:
         assert output_limit > 0
-        requests.append(request)
+        requests.append(request if deadline is None else {**request, "deadline": deadline})
         return answer
 
     monkeypatch.setattr(windows_paths_module, "os", _WindowsOSProxy())
@@ -1083,6 +1088,7 @@ def test_windows_process_lifecycle_never_asks_the_runtime_about_invalid_pids(mon
 
 def test_windows_exact_termination_sends_the_generation_and_bounded_timeout(monkeypatch) -> None:
     requests = _fake_lifecycle_runtime(monkeypatch, {"terminated": True})
+    monkeypatch.setattr(windows_paths_module, "time", SimpleNamespace(monotonic=lambda: 100.0))
 
     assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77)
     assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77, timeout=0.25)
@@ -1090,9 +1096,27 @@ def test_windows_exact_termination_sends_the_generation_and_bounded_timeout(monk
     assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77, timeout=10_000.0)
     assert requests == [
         {"op": "terminate_if_creation_time", "pid": 4321, "expected_creation_time": 77},
-        {"op": "terminate_if_creation_time", "pid": 4321, "expected_creation_time": 77, "timeout_ms": 250},
-        {"op": "terminate_if_creation_time", "pid": 4321, "expected_creation_time": 77, "timeout_ms": 0},
-        {"op": "terminate_if_creation_time", "pid": 4321, "expected_creation_time": 77, "timeout_ms": 600_000},
+        {
+            "op": "terminate_if_creation_time",
+            "pid": 4321,
+            "expected_creation_time": 77,
+            "timeout_ms": 250,
+            "deadline": 101.25,
+        },
+        {
+            "op": "terminate_if_creation_time",
+            "pid": 4321,
+            "expected_creation_time": 77,
+            "timeout_ms": 0,
+            "deadline": 101.0,
+        },
+        {
+            "op": "terminate_if_creation_time",
+            "pid": 4321,
+            "expected_creation_time": 77,
+            "timeout_ms": 600_000,
+            "deadline": 701.0,
+        },
     ]
 
     refused: list[dict[str, object] | None] = [{"terminated": False}, {"terminated": 1}, {}, None]
