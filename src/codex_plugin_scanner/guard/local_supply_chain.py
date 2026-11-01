@@ -119,6 +119,8 @@ _CLOUD_AUDIT_JOB_PAGE_SIZE = 1
 _CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS = 0.5
 _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
+# The job fields the native summary reads; the rest of a cloud reply stays here.
+_AUDIT_JOB_SUMMARY_FIELDS = ("status", "totalPackages", "processedCount", "error")
 _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
 _PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
@@ -1290,7 +1292,7 @@ def sync_managed_workspace_audits(
                     "job_id": job_id,
                     "package_count": len(inventory),
                     "enqueue_status": enqueue_response.get("status"),
-                    "final": final_response,
+                    "final": {key: final_response[key] for key in _AUDIT_JOB_SUMMARY_FIELDS if key in final_response},
                     "manifest_paths": list(workspace_inventory.manifest_paths),
                     "lockfile_paths": list(workspace_inventory.lockfile_paths),
                 }

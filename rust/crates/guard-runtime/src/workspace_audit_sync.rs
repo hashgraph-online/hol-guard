@@ -14,8 +14,10 @@
 //!
 //! The answer is the summary the caller persists, rows in outcome order.
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
+use crate::approval_queue_identity_op::py_str;
+use crate::cloud_request_text::py_truthy;
 use crate::daemon_lifecycle_text::py_strip;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -127,7 +129,7 @@ fn job_row(workspace: &str, outcome: &Value, counts: &mut Counts) -> Result<Valu
         .into_iter()
         .flatten()
         .find(|value| py_truthy(value));
-    let reported = reported.map_or_else(|| "queued".to_owned(), py_str);
+    let reported = reported.map_or_else(|| "queued".to_owned(), py_text);
     let final_status = py_strip(&reported).to_lowercase();
     let final_status = final_status.as_str();
     let visible = int_value(final_response.get("totalPackages"));
@@ -136,7 +138,7 @@ fn job_row(workspace: &str, outcome: &Value, counts: &mut Counts) -> Result<Valu
         && visible.is_some_and(|count| int_number(count) < i128::from(package_count));
     let (status, message) = if incomplete {
         counts.incomplete += 1;
-        let visible = visible.map(py_str).unwrap_or_default();
+        let visible = visible.map(py_text).unwrap_or_default();
         let message = format!(
             "Guard Cloud accepted fewer package rows than hol-guard discovered \
              ({visible} of {package_count} visible)."
@@ -182,28 +184,11 @@ fn int_number(value: &Value) -> i128 {
     }
 }
 
-fn py_truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(map) => !map.is_empty(),
-    }
-}
-
 /// `str(value)` for the scalars a status or count carries. A container falls
 /// back to its JSON text; Python would print its repr, and either way it is
 /// not a status the summary recognizes.
-fn py_str(value: &Value) -> String {
-    match value {
-        Value::String(text) => text.clone(),
-        Value::Bool(true) => "True".to_owned(),
-        Value::Bool(false) => "False".to_owned(),
-        Value::Null => "None".to_owned(),
-        other => other.to_string(),
-    }
+fn py_text(value: &Value) -> String {
+    py_str(value).unwrap_or_else(|| value.to_string())
 }
 
 #[cfg(test)]
