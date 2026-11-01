@@ -229,17 +229,24 @@ fn every_macho_file_in_the_tree_carries_the_team() {
     let directory = tempfile::tempdir().expect("tempdir");
     let tree = tree(directory.path());
     fs::write(tree.join("tool"), b"\xca\xfe\xba\xbetool").expect("tool");
+    fs::write(tree.join("universal"), b"\xbe\xba\xfe\xcauniversal").expect("universal");
+    fs::write(tree.join("_internal-tool"), b"\xcf\xfa\xed\xfetool").expect("sibling");
     let (failure, checked) = tree_answer(&tree, team_display);
     assert_eq!(failure, Value::Null);
     let expected: Vec<String> = [
         tree.join("_internal").join("libx.dylib"),
+        tree.join("_internal-tool"),
         tree.join("hol-guard"),
         tree.join("tool"),
+        tree.join("universal"),
     ]
     .iter()
     .map(|path| path.to_string_lossy().into_owned())
     .collect();
-    assert_eq!(checked, expected, "Mach-O files only, in path order");
+    assert_eq!(
+        checked, expected,
+        "Mach-O files only, ordered component by component"
+    );
 }
 
 #[test]

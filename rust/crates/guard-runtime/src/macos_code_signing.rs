@@ -33,13 +33,15 @@ const TREE_FILE_TIMEOUT: Duration = Duration::from_secs(5);
 /// More entries than any onedir build ships; a larger tree is refused rather
 /// than walked without end.
 const MAX_TREE_ENTRIES: usize = 200_000;
-const MACHO_MAGICS: [[u8; 4]; 6] = [
+const MACHO_MAGICS: [[u8; 4]; 8] = [
     [0xce, 0xfa, 0xed, 0xfe],
     [0xcf, 0xfa, 0xed, 0xfe],
     [0xfe, 0xed, 0xfa, 0xce],
     [0xfe, 0xed, 0xfa, 0xcf],
     [0xca, 0xfe, 0xba, 0xbe],
     [0xca, 0xfe, 0xba, 0xbf],
+    [0xbe, 0xba, 0xfe, 0xca],
+    [0xbf, 0xba, 0xfe, 0xca],
 ];
 
 const INSTALL_FAILED: &str = "desktop_core_install_failed";
@@ -184,7 +186,8 @@ fn tree_failure(
     let Ok(mut files) = regular_files(tree) else {
         return Some(INSTALL_FAILED);
     };
-    files.sort_by(|left, right| left.as_os_str().cmp(right.as_os_str()));
+    // Component by component, as Python orders paths: `a/b` before `a-c`.
+    files.sort_by(|left, right| left.components().cmp(right.components()));
     for file in files.iter().filter(|file| is_macho(file)) {
         let Some(path) = file.to_str() else {
             return Some(SIGNATURE_INVALID);
