@@ -72,6 +72,7 @@ fn shell_with(home: &Path, command: &str, names: &[&str]) -> String {
                 pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                gem_config_absent: false,
                 http_config_absent: false,
                 psql_environment: Default::default(),
                 creates_nothing: false,

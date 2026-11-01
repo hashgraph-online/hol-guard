@@ -112,6 +112,7 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "rebase",
     "reflog",
     "remote",
+    "replace",
     "reset",
     "restore",
     "rev-list",

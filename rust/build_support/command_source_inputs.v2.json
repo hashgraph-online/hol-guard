@@ -336,6 +336,7 @@
       "src/pretool/for_loop_unroll.rs",
       "src/pretool/for_loop_unroll_body.rs",
       "src/pretool/for_loop_unroll_pipeline.rs",
+      "src/pretool/gem_reads.rs",
       "src/pretool/generic.rs",
       "src/pretool/generic_build_review.rs",
       "src/pretool/generic_cline_view.rs",
