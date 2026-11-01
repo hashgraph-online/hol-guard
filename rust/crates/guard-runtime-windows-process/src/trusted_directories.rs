@@ -51,12 +51,26 @@ fn real_path(path: &str, kind: impl FnOnce(&std::fs::Metadata) -> bool) -> Optio
         return None;
     }
     let resolved = std::fs::canonicalize(path).ok()?;
-    let text = resolved.to_str()?;
-    Some(if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+    Some(ordinary_path(resolved.to_str()?))
+}
+
+/// `text` without its `\\?\` prefix when the ordinary spelling still fits
+/// `MAX_PATH`, as `ntpath.realpath` answers; a longer path keeps the prefix
+/// so callers can still open it.
+fn ordinary_path(text: &str) -> String {
+    const MAX_PATH: usize = 260;
+    let ordinary = if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{unc}")
+    } else if let Some(local) = text.strip_prefix(r"\\?\") {
+        local.to_owned()
     } else {
-        text.strip_prefix(r"\\?\").unwrap_or(text).to_owned()
-    })
+        return text.to_owned();
+    };
+    if ordinary.encode_utf16().count() < MAX_PATH {
+        ordinary
+    } else {
+        text.to_owned()
+    }
 }
 
 #[cfg(test)]
@@ -77,5 +91,19 @@ mod tests {
         assert!(cmd.to_lowercase().ends_with("\\cmd.exe"));
         assert!(real_directory(&format!("{system}\\cmd.exe")).is_none());
         assert!(real_directory(&format!("{system}\\no-such-guard-directory")).is_none());
+    }
+
+    #[test]
+    fn long_paths_keep_their_extended_prefix() {
+        assert_eq!(ordinary_path(r"\\?\C:\Users\guard"), r"C:\Users\guard");
+        assert_eq!(
+            ordinary_path(r"\\?\UNC\server\share\guard"),
+            r"\\server\share\guard"
+        );
+        assert_eq!(ordinary_path(r"C:\Users\guard"), r"C:\Users\guard");
+        let long = format!(r"\\?\C:\{}", "a".repeat(300));
+        assert_eq!(ordinary_path(&long), long);
+        let long_unc = format!(r"\\?\UNC\server\share\{}", "a".repeat(300));
+        assert_eq!(ordinary_path(&long_unc), long_unc);
     }
 }
