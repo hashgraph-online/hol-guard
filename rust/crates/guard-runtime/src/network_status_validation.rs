@@ -133,7 +133,7 @@ fn validate(payload: &Value, now_epoch_ms: u64) -> Checked<String> {
 
     let backends = validate_backends(payload.get("backends"), host_platform)?;
     let active: Vec<&Backend> = backends.iter().filter(|backend| backend.active).collect();
-    if protection_active != !active.is_empty() {
+    if protection_active == active.is_empty() {
         return Err("network protection summary is inconsistent");
     }
     if protection_active && active.len() != 1 {

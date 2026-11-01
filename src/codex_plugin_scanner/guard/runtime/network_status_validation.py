@@ -21,6 +21,10 @@ class NetworkStatusSchemaError(ValueError):
     """Raised when daemon status cannot safely be treated as network truth."""
 
 
+class NetworkStatusValidatorUnavailableError(NetworkStatusSchemaError):
+    """Raised when no native runtime can validate the daemon's status."""
+
+
 def validate_network_status(
     payload: object,
     *,
@@ -50,7 +54,7 @@ def validate_network_status(
         timeout_seconds=_TIMEOUT_SECONDS,
     )
     if answer is None:
-        raise NetworkStatusSchemaError("network status validation requires the native runtime")
+        raise NetworkStatusValidatorUnavailableError("network status validation requires the native runtime")
     status = answer.get("status")
     if isinstance(status, dict):
         return cast(dict[str, object], status)
