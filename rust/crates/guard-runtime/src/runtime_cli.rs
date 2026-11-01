@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if bounded_probe::is_command(command) && flag == "--stdin" => {
+            let response = bounded_probe::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
             let response = removal_evidence::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

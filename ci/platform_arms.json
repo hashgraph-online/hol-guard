@@ -835,6 +835,14 @@
    "body": "c4f2341b990a"
   },
   {
+   "verdict": "other-platform",
+   "note": "Unix and Windows each have their own arm above; elsewhere the probe never spawns and answers `execution_failed`, which the Python caller turns into a probe failure instead of trusting a guessed result.",
+   "file": "rust/crates/guard-runtime/src/bounded_probe.rs",
+   "item": "fn run(_request: &Request, _deadline: Instant) -> Result<Probe, ()>",
+   "cfg": "not(any(unix, windows))",
+   "body": "c7a13ce02f07"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/cisco_containment.rs",
    "item": "fn mode_of(meta: &std::fs::Metadata) -> u32",
    "verdict": "posix-primitive",

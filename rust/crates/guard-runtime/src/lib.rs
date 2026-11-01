@@ -81,6 +81,7 @@ mod bounded_hook_bridge_grok_script;
 mod bounded_hook_bridge_hermes;
 mod bounded_hook_bridge_remediation;
 mod bounded_hook_bridge_render;
+mod bounded_probe;
 mod browser_open;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
