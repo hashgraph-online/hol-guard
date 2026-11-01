@@ -321,6 +321,19 @@ fn the_property_list_reads_like_plistlib() {
     assert_eq!(values["off"], json!(false));
     assert_eq!(parse_plist(b"<plist/>"), Some(Value::Null));
 
+    let utf16 = INSTALLED_PLIST.replacen("UTF-8", "UTF-16", 1);
+    let little: Vec<u8> = utf16.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let big: Vec<u8> = utf16.encode_utf16().flat_map(u16::to_be_bytes).collect();
+    for spelled in [
+        [&[0xFF, 0xFE][..], &little].concat(),
+        [&[0xFE, 0xFF][..], &big].concat(),
+        little.clone(),
+        big,
+    ] {
+        assert_eq!(parse_plist(&spelled).as_ref(), Some(&parsed));
+    }
+    assert_eq!(parse_plist(&little[..little.len() - 1]), None);
+
     for refused in [
         &b"<dict/>"[..],
         b"<plist><dict><key>a</key></dict></plist>",

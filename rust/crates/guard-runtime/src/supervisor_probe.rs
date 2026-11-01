@@ -180,12 +180,14 @@ fn read_registration(path: &Path) -> Result<Option<Value>, ()> {
     parse_plist(&read.bytes).map(Some).ok_or(())
 }
 
-/// `plistlib.loads` for the XML property list Guard installs. A binary
-/// property list, an entity declaration or an element `plistlib` would
-/// refuse reads as `None`; `data` and `date` values, which the JSON evidence
-/// never carried, become `null`, which no checked key accepts.
+/// `plistlib.loads` for the XML property list Guard installs, in UTF-8 or,
+/// as `plistlib` also reads it, UTF-16. A binary property list, an entity
+/// declaration or an element `plistlib` would refuse reads as `None`; `data`
+/// and `date` values, which the JSON evidence never carried, become `null`,
+/// which no checked key accepts.
 pub(super) fn parse_plist(bytes: &[u8]) -> Option<Value> {
-    let text = std::str::from_utf8(bytes).ok()?;
+    let text = plist_text_of(bytes)?;
+    let text = text.as_str();
     if text.contains("<!ENTITY") {
         return None;
     }
@@ -205,6 +207,35 @@ pub(super) fn parse_plist(bytes: &[u8]) -> Option<Value> {
         None => Value::Null,
     };
     values.next().is_none().then_some(value)
+}
+
+/// The document's text: UTF-16 when it opens with a UTF-16 byte order mark
+/// or a `<` in UTF-16, the way the XML parser under `plistlib` detects it,
+/// and UTF-8 otherwise.
+fn plist_text_of(bytes: &[u8]) -> Option<String> {
+    let from_units = |big_endian: bool, body: &[u8]| -> Option<String> {
+        if !body.len().is_multiple_of(2) {
+            return None;
+        }
+        let units: Vec<u16> = body
+            .chunks_exact(2)
+            .map(|pair| {
+                if big_endian {
+                    u16::from_be_bytes([pair[0], pair[1]])
+                } else {
+                    u16::from_le_bytes([pair[0], pair[1]])
+                }
+            })
+            .collect();
+        String::from_utf16(&units).ok()
+    };
+    match bytes {
+        [0xFF, 0xFE, body @ ..] => from_units(false, body),
+        [0xFE, 0xFF, body @ ..] => from_units(true, body),
+        [b'<', 0, ..] => from_units(false, bytes),
+        [0, b'<', ..] => from_units(true, bytes),
+        _ => std::str::from_utf8(bytes).ok().map(str::to_owned),
+    }
 }
 
 fn plist_value(node: Node, depth: usize) -> Option<Value> {
