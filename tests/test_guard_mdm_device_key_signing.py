@@ -28,24 +28,39 @@ def _paths(root: Path) -> MachinePaths:
 def _fake_native(
     monkeypatch: pytest.MonkeyPatch, answer: object, *, features: tuple[str, ...] | None = None
 ) -> list[dict[str, object]]:
-    """Route the device-key helper through a fake runtime that records each request."""
+    """Route the device-key helper through a fake runtime that records each request.
+
+    The claims check still reaches the real runtime, so only the device-key helper answer is faked.
+    """
 
     requests: list[dict[str, object]] = []
-    status = SimpleNamespace(
-        available=True,
-        compatible=True,
-        identity=SimpleNamespace(path=Path("/opt/hol-guard/hol-guard-native")),
-        capabilities=SimpleNamespace(
-            features=features if features is not None else (device_key_native.DEVICE_KEY_HELPER_FEATURE,)
-        ),
-    )
+    real_status = native_runtime.native_runtime_status
+    real_spawn = native_runtime._run_native_process
+    helper_features = features if features is not None else (device_key_native.DEVICE_KEY_HELPER_FEATURE,)
 
-    def spawn(_path: Path, args: tuple[str, ...], *, input_text: str, **_kwargs: object) -> str:
+    def status(**kwargs: object) -> object:
+        real = real_status(**kwargs)  # pyright: ignore[reportArgumentType]
+        real_features = real.capabilities.features if real.capabilities is not None else ()
+        return SimpleNamespace(
+            available=True,
+            compatible=True,
+            identity=real.identity or SimpleNamespace(path=Path("/opt/hol-guard/hol-guard-native")),
+            capabilities=SimpleNamespace(
+                features=tuple(
+                    feature for feature in real_features if feature != device_key_native.DEVICE_KEY_HELPER_FEATURE
+                )
+                + helper_features
+            ),
+        )
+
+    def spawn(native_path: Path, args: tuple[str, ...], *, input_text: str, **kwargs: object) -> str | None:
+        if args[:1] != ("device-key-helper",):
+            return real_spawn(native_path, args, input_text=input_text, **kwargs)  # pyright: ignore[reportArgumentType]
         assert args == ("device-key-helper", "--stdin")
         requests.append(json.loads(input_text))
         return json.dumps(answer)
 
-    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(native_runtime, "native_runtime_status", status)
     monkeypatch.setattr(native_runtime, "_run_native_process", spawn)
     return requests
 
