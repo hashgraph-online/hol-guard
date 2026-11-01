@@ -69,3 +69,18 @@ def runtime_answer(
     except ValueError:
         return None
     return cast(dict[str, object], answer) if isinstance(answer, dict) else None
+
+
+def runtime_offers(feature: str, *, status_timeout_seconds: float = _STATUS_TIMEOUT_SECONDS) -> bool:
+    """Whether a compatible runtime offers `feature`, without asking it anything."""
+
+    from ..native_runtime import native_runtime_status
+
+    status = native_runtime_status(deadline_monotonic=time.monotonic() + status_timeout_seconds)
+    return bool(
+        status.available
+        and status.compatible
+        and status.identity is not None
+        and status.capabilities is not None
+        and feature in status.capabilities.features
+    )

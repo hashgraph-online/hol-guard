@@ -39,6 +39,7 @@ _ONEDIR_FORMAT = "onedir-zip"
 _ONEDIR_TREE_ROOT = "hol-guard"
 _RELEASE_DOWNLOAD_PREFIX = "https://github.com/hashgraph-online/hol-guard/releases/download/"
 _DESKTOP_APP_ID = "org.hol.guard.desktop"
+_ONEDIR_FEATURE = "native-desktop-core-onedir-v1"
 _MAX_MANIFEST_BYTES = 128 * 1024
 _MAX_BINARY_BYTES = 300 * 1024 * 1024
 _USER_AGENT = "HOL-Guard-Core-Updater"
@@ -487,6 +488,9 @@ def _try_apply_onedir(
 ) -> Path | None:
     if not _desktop_version():
         return None
+    # A runtime that cannot unpack the tree leaves the single-file artifact.
+    if not _onedir_unpack_available():
+        return None
     try:
         raw = downloader(_release_url(tag, f"{artifact}.onedir.json"), _MAX_MANIFEST_BYTES)
     except DesktopCoreUpdateError as error:
@@ -534,6 +538,12 @@ def _try_apply_onedir(
     return installed
 
 
+def _onedir_unpack_available() -> bool:
+    from ..mdm.runtime_request import runtime_offers
+
+    return runtime_offers(_ONEDIR_FEATURE)
+
+
 def _unpack_onedir(archive: Path, destination: Path, *, file_count: int) -> None:
     """Check the archive's members, extract it with `ditto` and count the tree, in the native runtime."""
     from ..mdm.runtime_request import runtime_answer
@@ -545,7 +555,7 @@ def _unpack_onedir(archive: Path, destination: Path, *, file_count: int) -> None
         "file_count": file_count,
     }
     answer = runtime_answer(
-        "native-desktop-core-onedir-v1",
+        _ONEDIR_FEATURE,
         "desktop-core-onedir",
         request,
         output_limit=4096,

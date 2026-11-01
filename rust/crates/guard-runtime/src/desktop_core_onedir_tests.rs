@@ -246,6 +246,93 @@ fn an_unreadable_archive_is_refused() {
     assert!(admitted(&directory.path().join("missing.zip")).is_none());
 }
 
+fn on_disk(bytes: &[u8]) -> (tempfile::TempDir, PathBuf) {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let archive = directory.path().join("core.zip");
+    fs::write(&archive, bytes).expect("archive");
+    (directory, archive)
+}
+
+fn recorded(bytes: &[u8]) -> Option<u64> {
+    let (_directory, archive) = on_disk(bytes);
+    recorded_entries(&mut fs::File::open(&archive).expect("open"))
+}
+
+fn admits_bytes(bytes: &[u8]) -> bool {
+    let (_directory, archive) = on_disk(bytes);
+    admitted(&archive).is_some()
+}
+
+/// `archive` with its end record deferring, through a Zip64 locator, to a
+/// Zip64 end record that declares `total` entries.
+fn zip64(archive: &[u8], total: u64) -> Vec<u8> {
+    let end = archive.len() - 22;
+    let field = |at: usize| {
+        u64::from(u32::from_le_bytes(
+            archive[end + at..end + at + 4].try_into().expect("field"),
+        ))
+    };
+    let (central_size, central_offset) = (field(12), field(16));
+    let mut out = archive[..end].to_vec();
+    let record_offset = out.len() as u64;
+    out.extend_from_slice(&0x0606_4b50u32.to_le_bytes());
+    out.extend_from_slice(&44u64.to_le_bytes());
+    out.extend_from_slice(&45u16.to_le_bytes());
+    out.extend_from_slice(&45u16.to_le_bytes());
+    // This disk and the central directory's disk.
+    out.extend_from_slice(&[0u8; 8]);
+    for value in [total, total, central_size, central_offset] {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out.extend_from_slice(&0x0706_4b50u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&record_offset.to_le_bytes());
+    out.extend_from_slice(&1u32.to_le_bytes());
+    let mut tail = archive[end..].to_vec();
+    tail[8..12].copy_from_slice(&[0xff; 4]);
+    out.extend_from_slice(&tail);
+    out
+}
+
+#[test]
+fn a_repeated_member_name_is_refused() {
+    let members = with(vec![
+        file("hol-guard/_internal/twice", b"a"),
+        file("hol-guard/_internal/twice", b"b"),
+    ]);
+    let count = members.len() as u64;
+    let bytes = zipped(&members);
+    assert_eq!(recorded(&bytes), Some(count));
+    // The refusal rests on the reader listing a repeated name once.
+    if let Ok(reader) = ZipArchive::new(io::Cursor::new(bytes.clone())) {
+        assert!((reader.len() as u64) < count);
+    }
+    assert!(!admits_bytes(&bytes));
+}
+
+#[test]
+fn an_end_record_count_that_disagrees_is_refused() {
+    let mut bytes = zipped(&sealed());
+    let end = bytes.len() - 22;
+    let count = u16::try_from(sealed().len()).expect("few members") + 1;
+    bytes[end + 10..end + 12].copy_from_slice(&count.to_le_bytes());
+    assert_eq!(recorded(&bytes), Some(u64::from(count)));
+    assert!(!admits_bytes(&bytes));
+}
+
+#[test]
+fn a_zip64_end_record_declares_the_count() {
+    let plain = zipped(&sealed());
+    let count = sealed().len() as u64;
+    assert_eq!(recorded(&zip64(&plain, count)), Some(count));
+    assert_eq!(recorded(&zip64(&plain, count + 1)), Some(count + 1));
+    assert!(!admits_bytes(&zip64(&plain, count + 1)));
+    let mut unlocated = zip64(&plain, count);
+    let locator = unlocated.len() - 22 - 20;
+    unlocated[locator] ^= 0xff;
+    assert_eq!(recorded(&unlocated), None);
+}
+
 /// Records each `ditto` call and, when it succeeds, lays out a tree in the
 /// destination as the extraction would.
 struct FakeDitto {

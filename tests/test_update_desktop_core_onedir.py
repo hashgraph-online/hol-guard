@@ -23,6 +23,7 @@ ARTIFACT = f"hol-guard-core-{VERSION}-{TARGET}"
 @pytest.fixture(autouse=True)
 def _no_installed_desktop_app(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_desktop_core, "installed_desktop_app_version", lambda: None)
+    monkeypatch.setattr(update_desktop_core, "_onedir_unpack_available", lambda: True)
 
 
 def _v1_manifest(*, sha256: str, size: int, minimum: str = "0.1.0") -> dict[str, object]:
@@ -262,6 +263,29 @@ class TestTryApplyOnedirFallback:
             )
             is None
         )
+
+    def test_a_runtime_without_onedir_unpacking_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "3.0.113")
+        monkeypatch.setattr(update_desktop_core, "_onedir_unpack_available", lambda: False)
+        fetched: list[str] = []
+
+        def fetch(url: str, limit: int) -> bytes:
+            _ = limit
+            fetched.append(url)
+            raise DesktopCoreUpdateError("desktop_core_download_failed")
+
+        assert (
+            update_desktop_core._try_apply_onedir(
+                fetch,
+                tag=TAG,
+                artifact=ARTIFACT,
+                channel="alpha",
+                expected_version=VERSION,
+                expected_target=TARGET,
+            )
+            is None
+        )
+        assert fetched == []
 
     def test_other_download_errors_propagate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("HOL_GUARD_DESKTOP_VERSION", "3.0.113")
