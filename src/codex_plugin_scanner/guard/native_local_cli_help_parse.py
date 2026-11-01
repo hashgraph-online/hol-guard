@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal, NamedTuple
+from typing import Literal, NamedTuple, TypeGuard
 from uuid import uuid4
 
 from .native_context import ensure_resident_prerequisite
@@ -155,7 +155,7 @@ def native_local_cli_source_read(
     )
 
 
-def _is_module_name(value: object) -> bool:
+def _is_module_name(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and len(value) <= 200 and _MODULE_NAME.fullmatch(value) is not None
 
 
