@@ -1491,6 +1491,14 @@
    "body": "4fbf180853ce"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The daemon process queries are POSIX-only, as before the move: Windows reads its process table through `windows-process-command-lines`, and the Python wrapper returns `None` on Windows before it asks. With no trusted `ps` and no procfs root off Unix, every query answers `null`, which callers read as \"cannot be proven\"; `without_ps_or_procfs_nothing_is_proven` pins that answer on every platform.",
+   "file": "rust/crates/guard-runtime/src/posix_processes.rs",
+   "item": "fn trusted_ps_path() -> Option<PathBuf>",
+   "cfg": "not(unix)",
+   "body": "3a781c167585"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private`, so no error code needs classifying there.",
    "file": "rust/crates/guard-runtime/src/user_health_state.rs",

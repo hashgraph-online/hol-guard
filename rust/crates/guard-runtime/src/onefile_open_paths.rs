@@ -301,7 +301,11 @@ fn system_lsof() -> Option<Vec<u8>> {
 /// Stdout of `command` when it exits cleanly within `timeout` and writes at
 /// most `limit` bytes. Output past the limit kills the child at once rather
 /// than leaving it blocked on a full pipe until the timeout.
-fn bounded_stdout(mut command: Command, limit: u64, timeout: Duration) -> Option<Vec<u8>> {
+pub(crate) fn bounded_stdout(
+    mut command: Command,
+    limit: u64,
+    timeout: Duration,
+) -> Option<Vec<u8>> {
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
