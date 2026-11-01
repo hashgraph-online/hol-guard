@@ -779,6 +779,7 @@ mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
 mod policy_store;
 mod policy_verifier_key_provision;
+mod posix_processes;
 mod pre_tool_extension_evidence_op;
 mod process_identity;
 mod project_identity;

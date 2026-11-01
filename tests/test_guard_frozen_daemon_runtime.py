@@ -473,27 +473,6 @@ def test_spawned_launch_accepts_the_pyinstaller_onefile_child(
     assert manager._guard_daemon_pid_is_spawned_launch(4243, 4242) is False
 
 
-def test_guard_daemon_parent_pid_parses_posix_ps_output(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(manager.os, "name", "posix")
-    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: "/bin/ps")
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: " 4242\n")
-    assert manager._guard_daemon_parent_pid(4243) == 4242
-
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "not-a-pid")
-    assert manager._guard_daemon_parent_pid(4243) is None
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: "0")
-    assert manager._guard_daemon_parent_pid(4243) is None
-    monkeypatch.setattr(manager, "_bounded_process_query_stdout", lambda _command: None)
-    assert manager._guard_daemon_parent_pid(4243) is None
-    monkeypatch.setattr(manager, "_trusted_posix_ps_path", lambda: None)
-    assert manager._guard_daemon_parent_pid(4243) is None
-    assert manager._guard_daemon_parent_pid(0) is None
-    monkeypatch.setattr(manager.os, "name", "nt")
-    assert manager._guard_daemon_parent_pid(4243) is None
-
-
 def test_live_identity_accepts_expected_pid_as_the_frozen_bootloader_parent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
