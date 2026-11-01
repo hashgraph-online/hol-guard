@@ -323,7 +323,9 @@ fn the_real_runner_stops_at_the_deadline() {
     for script in ["sleep 5", "(sleep 5 &); exit 0"] {
         let started = std::time::Instant::now();
 
-        let error = shell(script, budget).expect_err("a timeout");
+        let Err(error) = shell(script, budget) else {
+            panic!("{script}: expected a timeout");
+        };
 
         assert_eq!(error.kind(), io::ErrorKind::TimedOut, "{script}");
         let elapsed = started.elapsed();
