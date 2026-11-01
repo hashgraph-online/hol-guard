@@ -5,13 +5,16 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import platform
 import re
 import ssl
 import subprocess
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from typing import cast
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -19,7 +22,6 @@ from urllib3.poolmanager import ProxyManager
 
 from ...no_redirect import RejectRedirects
 from .contracts import ManagedNetworkPolicy
-from .network_credentials import read_proxy_credential_record
 from .network_trust import ManagedTrustError, build_default_ssl_context, build_managed_ssl_context
 from .network_urlopen import ManagedOpener, ManagedResponse, ManagedUrlOpener
 from .policy import load_managed_policy
@@ -40,7 +42,10 @@ _PUBLIC_REGISTRIES = frozenset(
         "goproxy.io",
     }
 )
-_MAX_PROXY_CREDENTIAL_BYTES = 16 * 1024
+_PROXY_CREDENTIALS_FEATURE = "native-proxy-credentials-v1"
+_NATIVE_TIMEOUT_SECONDS = 30.0
+_MAX_NATIVE_OUTPUT_BYTES = 64 * 1024
+_SESSION_BUS_VARIABLES = ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "DISPLAY")
 
 
 class ManagedNetworkError(RuntimeError):
@@ -194,39 +199,65 @@ def proxy_map(policy: ManagedNetworkPolicy) -> dict[str, str]:
     return proxies
 
 
-def proxy_credential_key(proxy_url: str) -> str:
-    return hashlib.sha256(proxy_url.encode("utf-8")).hexdigest()
-
-
 def load_proxy_credentials(proxy_url: str) -> ProxyCredentials | None:
     """Load optional proxy auth from the native OS credential store without policy secrets."""
 
-    raw = read_proxy_credential_record(proxy_credential_key(proxy_url))
-    if raw is None:
+    answer = _native_proxy_credentials(proxy_url)
+    if answer is None:
         return None
-    if len(raw.encode("utf-8")) > _MAX_PROXY_CREDENTIAL_BYTES:
+    if answer.get("ok") is not True:
         raise ManagedNetworkError("managed_proxy_credentials_invalid")
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ManagedNetworkError("managed_proxy_credentials_invalid") from exc
-    if not isinstance(payload, dict) or set(payload) != {"username", "password"}:
+    credentials = answer.get("credentials")
+    if credentials is None:
+        return None
+    if not isinstance(credentials, dict):
         raise ManagedNetworkError("managed_proxy_credentials_invalid")
-    username = payload.get("username")
-    password = payload.get("password")
-    if (
-        not isinstance(username, str)
-        or not username
-        or ":" in username
-        or "\r" in username
-        or "\n" in username
-        or not isinstance(password, str)
-        or not password
-        or "\r" in password
-        or "\n" in password
-    ):
+    fields = cast(dict[str, object], credentials)
+    username, password = fields.get("username"), fields.get("password")
+    if not isinstance(username, str) or not username or not isinstance(password, str) or not password:
         raise ManagedNetworkError("managed_proxy_credentials_invalid")
     return ProxyCredentials(username=username, password=password)
+
+
+def _native_proxy_credentials(proxy_url: str) -> dict[str, object] | None:
+    """The runtime's answer for one proxy's stored credential, or ``None`` when it cannot answer."""
+
+    from ..codex_hook_launch_runtime import run_isolated_hook_process
+    from ..native_runtime import _isolated_environment, native_runtime_status
+
+    deadline = time.monotonic() + _NATIVE_TIMEOUT_SECONDS
+    status = native_runtime_status(deadline_monotonic=deadline)
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or _PROXY_CREDENTIALS_FEATURE not in status.capabilities.features
+    ):
+        return None
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None
+    # The Linux credential store is reached over the user's session bus, so
+    # the runtime keeps the variables that locate it on top of the usual
+    # isolated environment.
+    environment = _isolated_environment()
+    environment.update({name: os.environ[name] for name in _SESSION_BUS_VARIABLES if name in os.environ})
+    result = run_isolated_hook_process(
+        (str(status.identity.path), "proxy-credentials", "--stdin"),
+        input_text=json.dumps({"schema": "proxy-credentials.v1", "proxy_url": proxy_url}),
+        cwd=status.identity.path.parent,
+        environment=environment,
+        timeout_seconds=remaining,
+        output_limit=_MAX_NATIVE_OUTPUT_BYTES,
+    )
+    if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
+        return None
+    try:
+        answer = cast(object, json.loads(result.stdout))
+    except ValueError:
+        return None
+    return cast(dict[str, object], answer) if isinstance(answer, dict) else None
 
 
 def basic_proxy_authorization(credentials: ProxyCredentials) -> str:

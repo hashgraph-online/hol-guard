@@ -314,7 +314,6 @@ _SERVICE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
         "src/codex_plugin_scanner/guard/live_process_identity.py",
         "src/codex_plugin_scanner/guard/mdm/acl.py",
-        "src/codex_plugin_scanner/guard/mdm/network_credentials.py",
         "src/codex_plugin_scanner/guard/mdm/network_transport.py",
         "src/codex_plugin_scanner/guard/mdm/network_trust.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_key.py",
