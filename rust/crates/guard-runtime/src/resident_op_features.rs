@@ -265,6 +265,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-windows-trusted-directories-v1",
     "native-managed-policy-load-v1",
     "native-health-lease-state-v1",
+    "native-runtime-fingerprint-v1",
     "native-user-health-state-v1",
     "native-device-key-helper-v1",
     "native-windows-process-command-lines-v1",

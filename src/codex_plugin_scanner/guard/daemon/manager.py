@@ -41,6 +41,7 @@ from ..live_process_identity import process_owner_marker
 from ..mdm.file_lock import release_file_lock
 from ..native_daemon_lifecycle import (
     NativeDaemonLifecycleError,
+    await_native_runtime,
     bind_daemon_lifecycle_deadline,
     native_daemon_lifecycle,
     reset_daemon_lifecycle_deadline,
@@ -2663,49 +2664,48 @@ def _current_guard_daemon_source_root() -> str:
     return str(Path(__file__).resolve().parents[3])
 
 
-def _runtime_identity_paths(source_root: Path) -> list[Path]:
-    package_root = source_root / "codex_plugin_scanner"
-    static_root = package_root / "guard" / "daemon" / "static"
-    paths = [*package_root.rglob("*.py")]
-    native_manifest = package_root / "_native" / "runtime-manifest.json"
-    if native_manifest.is_file():
-        paths.append(native_manifest)
-    if static_root.is_dir():
-        paths.extend(path for path in static_root.rglob("*") if path.is_file())
-    return paths
+def _measure_runtime_fingerprint(source_root: Path, cached: tuple[str, str] | None) -> tuple[str, str, bool]:
+    """The native runtime's (tree signature, fingerprint, reused) for `source_root`.
 
+    `runtime_fingerprint.rs` walks the tree and hashes it; a cached pair whose
+    tree signature still matches comes back unchanged without reading a file.
+    """
 
-def _runtime_tree_signature(source_root: Path, paths: list[Path]) -> str:
-    digest = hashlib.sha256()
-    digest.update(__version__.encode("utf-8"))
-    for path in sorted(paths):
-        try:
-            stat_result = path.stat()
-        except OSError:
-            continue
-        digest.update(str(path.relative_to(source_root)).encode("utf-8"))
-        digest.update(str(stat_result.st_size).encode("utf-8"))
-        digest.update(str(stat_result.st_mtime_ns).encode("utf-8"))
-    return digest.hexdigest()
+    from ..mdm.runtime_request import runtime_answer
 
+    request: dict[str, object] = {
+        "schema": "runtime-fingerprint.v1",
+        "source_root": str(source_root),
+        "version": __version__,
+    }
+    if cached is not None:
+        request["cached"] = {"tree_sig": cached[0], "fingerprint": cached[1]}
 
-def _hash_runtime_contents(source_root: Path, paths: list[Path]) -> str:
-    digest = hashlib.sha256()
-    digest.update(__version__.encode("utf-8"))
-    for path in sorted(paths):
-        try:
-            stat_result = path.stat()
-        except OSError:
-            continue
-        digest.update(str(path.relative_to(source_root)).encode("utf-8"))
-        digest.update(str(stat_result.st_size).encode("utf-8"))
-        try:
-            with path.open("rb") as handle:
-                while chunk := handle.read(65536):
-                    digest.update(chunk)
-        except OSError:
-            continue
-    return digest.hexdigest()
+    def ask() -> dict[str, object] | None:
+        return runtime_answer(
+            "native-runtime-fingerprint-v1",
+            "runtime-fingerprint",
+            request,
+            output_limit=4096,
+            timeout_seconds=60.0,
+        )
+
+    answer = ask()
+    # A freshly installed runtime can miss its first capability probe; wait
+    # that out once rather than failing the daemon start.
+    if answer is None and await_native_runtime(60.0) > 0.0:
+        answer = ask()
+    tree_sig = None if answer is None else answer.get("tree_sig")
+    fingerprint = None if answer is None else answer.get("fingerprint")
+    reused = None if answer is None else answer.get("reused")
+    if (
+        not isinstance(tree_sig, str)
+        or not isinstance(fingerprint, str)
+        or not _is_sha256_hex(fingerprint)
+        or type(reused) is not bool
+    ):
+        raise RuntimeError("Guard daemon runtime identity requires the native runtime.")
+    return tree_sig, fingerprint, reused
 
 
 def _runtime_fingerprint_cache_path(source_root: Path) -> Path:
@@ -2721,7 +2721,7 @@ def _is_sha256_hex(value: object) -> bool:
     )
 
 
-def _load_runtime_fingerprint_cache(source_root: Path, tree_sig: str) -> str | None:
+def _load_runtime_fingerprint_cache(source_root: Path) -> tuple[str, str] | None:
     raw_payload = read_private_regular_text(
         _runtime_fingerprint_cache_path(source_root),
         max_bytes=_RUNTIME_FINGERPRINT_CACHE_MAX_BYTES,
@@ -2739,11 +2739,11 @@ def _load_runtime_fingerprint_cache(source_root: Path, tree_sig: str) -> str | N
         return None
     cached_tree_sig = payload.get("tree_sig")
     cached_fingerprint = payload.get("content_fingerprint")
-    if cached_tree_sig != tree_sig or not isinstance(cached_fingerprint, str):
+    if not isinstance(cached_tree_sig, str) or not isinstance(cached_fingerprint, str):
         return None
     if not _is_sha256_hex(cached_fingerprint):
         return None
-    return cached_fingerprint
+    return cached_tree_sig, cached_fingerprint
 
 
 def _store_runtime_fingerprint_cache(source_root: Path, tree_sig: str, fingerprint: str) -> None:
@@ -2770,14 +2770,11 @@ def _current_guard_daemon_runtime_fingerprint() -> str:
     if _runtime_fingerprint_cache is not None:
         return _runtime_fingerprint_cache[1]
     source_root = Path(_current_guard_daemon_source_root())
-    paths = _runtime_identity_paths(source_root)
-    tree_sig = _runtime_tree_signature(source_root, paths)
-    cached = _load_runtime_fingerprint_cache(source_root, tree_sig)
-    if cached is not None:
-        _runtime_fingerprint_cache = (tree_sig, cached)
-        return cached
-    fingerprint = _hash_runtime_contents(source_root, paths)
-    _store_runtime_fingerprint_cache(source_root, tree_sig, fingerprint)
+    tree_sig, fingerprint, reused = _measure_runtime_fingerprint(
+        source_root, _load_runtime_fingerprint_cache(source_root)
+    )
+    if not reused:
+        _store_runtime_fingerprint_cache(source_root, tree_sig, fingerprint)
     _runtime_fingerprint_cache = (tree_sig, fingerprint)
     return fingerprint
 
