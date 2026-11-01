@@ -98,7 +98,9 @@ fn resolved(
     let local_run = super::manager_local_bin_arguments(manager, arguments).is_some();
     if matches!(manager, "npm" | "pnpm" | "bun" | "yarn")
         && !local_run
-        && (arguments.first().is_some_and(|word| word == "run")
+        && (arguments
+            .first()
+            .is_some_and(|word| crate::contained_argv::names_script_run_verb(manager, word))
             || super::manager_script_task(manager, arguments).is_some())
     {
         return None;
