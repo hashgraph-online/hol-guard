@@ -472,17 +472,44 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     Some(rest)
 }
 
-pub(crate) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
+/// The script a manager run names, with the words the run passes on to it.
+///
+/// `npm run lint -- --fix` hands `--fix` to the script's own command, so the
+/// tail belongs to the run the manifest body spells and is gated with it. A
+/// tail that is not introduced by `--` is not a package script run.
+pub(crate) fn manager_script_task<'a>(
+    manager: &str,
+    arguments: &'a [String],
+) -> Option<(&'a str, &'a [String])> {
+    let bare = matches!(manager, "pnpm" | "yarn");
     match arguments {
-        [run, task] if run == "run" => Some(task.as_str()),
-        [task]
-            if matches!(manager, "pnpm" | "yarn")
-                && !MANAGER_SUBCOMMANDS.contains(&task.as_str()) =>
+        [run, task] if run == "run" => Some((task.as_str(), &arguments[2..])),
+        [run, task, separator, tail @ ..] if run == "run" && separator == "--" => {
+            Some((task.as_str(), tail))
+        }
+        [task] if bare && !MANAGER_SUBCOMMANDS.contains(&task.as_str()) => {
+            Some((task.as_str(), &arguments[1..]))
+        }
+        [task, separator, tail @ ..]
+            if bare && separator == "--" && !MANAGER_SUBCOMMANDS.contains(&task.as_str()) =>
         {
-            Some(task.as_str())
+            Some((task.as_str(), tail))
         }
         _ => None,
     }
+}
+
+/// The workspace's own installed test runner, launched by its entry path and
+/// taking one contained pass.
+///
+/// Node and Bun both execute a JavaScript entry, and the sink relaunches the
+/// resolved entry under Node whichever runtime the call named, so the two
+/// spellings of one run are admitted together. The entry alone is not the
+/// answer: the tail still has to read as a single contained pass.
+fn local_runner_entry_call(arguments: &[String]) -> bool {
+    matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
+        || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
 }
 
 /// The mode the supported tool behind this command runs in, read through the
@@ -651,7 +678,8 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     // one is left to ordinary review rather than sent to a route that would
     // only turn it away.
     if (mode == Some(ToolMode::Build)
-        || (manager && manager_script_task(executable, arguments) == Some("build")))
+        || (manager
+            && manager_script_task(executable, arguments).is_some_and(|(task, _)| task == "build")))
         && !writes_or_chains(arguments)
     {
         return Some("native_node_build_output_containment_required");
@@ -660,7 +688,15 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     // `format:check` and `ci:lint` are the work `lint` is. The route below
     // reads the manifest and keeps this only for a body the sink runs.
     let read_only_node_tool = if manager {
-        manager_script_task(executable, arguments).is_some()
+        // The tail is the agent's own text, and the manifest that names the
+        // tool behind the task is only read at the sink. The admission can
+        // therefore ask no more than whether some supported tool could take
+        // these words; the sink reads them again against the one tool the
+        // body spells. A tail no tool could take is left to ordinary review
+        // instead of being handed a read-only routing receipt.
+        manager_script_task(executable, arguments).is_some_and(|(_, tail)| {
+            crate::contained_node_tool::passed_tail_reports_only_for_some_tool(tail)
+        })
     } else {
         mode == Some(ToolMode::Report)
     };
@@ -677,7 +713,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let runner = match super::executable_basename(executable) {
         "bun" => {
-            let arguments = match arguments {
+            let wrapped = match arguments {
                 [flag, directory, rest @ ..]
                     if flag == "--cwd" && !directory.is_empty() && !directory.starts_with('-') =>
                 {
@@ -686,8 +722,13 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
                 [flag, rest @ ..] if flag.starts_with("--cwd=") && flag.len() > 6 => rest,
                 rest => rest,
             };
-            matches!(arguments, [wrapper, rest @ ..] if wrapper == "x" && contained_runner_call(rest))
-                || matches!(arguments, [wrapper, flag, rest @ ..] if wrapper == "x" && flag == "--no-install" && contained_runner_call(rest))
+            matches!(wrapped, [wrapper, rest @ ..] if wrapper == "x" && contained_runner_call(rest))
+                || matches!(wrapped, [wrapper, flag, rest @ ..] if wrapper == "x" && flag == "--no-install" && contained_runner_call(rest))
+                // Bun runs a JavaScript entry the way Node does, so the entry
+                // launch is read off the call as given: `--cwd` names no entry
+                // at that position, and the sink refuses it for the same
+                // reason rather than running a file the call never spelled.
+                || local_runner_entry_call(arguments)
         }
         "bunx" | "npx" => {
             let arguments = match arguments {
@@ -712,11 +753,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         "vitest" => crate::contained_argv::vitest_runs_once(arguments),
         "jest" => jest_contained_call(arguments),
         "mocha" => mocha_contained_call(arguments),
-        "node" | "nodejs" => {
-            matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
-                || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
-                || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
-        }
+        "node" | "nodejs" => local_runner_entry_call(arguments),
         _ => false,
     };
     if runner {

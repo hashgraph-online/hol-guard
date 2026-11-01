@@ -39,6 +39,10 @@ WORKSPACE_MOCHA_CASE = "omp-native-workspace-npx-mocha"
 # `test:types` and so on, and npm runs whatever the entry holds, so the named
 # entry has to be read the way the plain `test` entry is.
 WORKSPACE_NAMED_TEST_SCRIPT_CASE = "omp-native-workspace-named-test-script"
+# A checking script run with one more option of its own: the manager hands the
+# words after `--` to the script, so the run is the tool the manifest names
+# holding them.
+WORKSPACE_SCRIPT_PASSED_OPTION_CASE = "omp-native-workspace-script-passed-option"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -47,6 +51,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_HEAP_PREFIX_CASE,
         WORKSPACE_MOCHA_CASE,
         WORKSPACE_NAMED_TEST_SCRIPT_CASE,
+        WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -121,6 +126,45 @@ _MOCHA_FILES = {
 }
 
 
+_ESLINT_VERSION = "9.33.0"
+# The option the case's script forwards to the linter. The scenario spells it on
+# the command line, and the installed executable below answers only to it.
+ESLINT_PASSED_OPTION = "--max-warnings=0"
+# The one line the workspace's own ESLint prints, which only a real launch
+# carrying the forwarded option produces.
+ESLINT_MARKER = f"eslint {_ESLINT_VERSION}"
+_ESLINT_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "lint": "eslint ."\n  },\n'
+        f'  "devDependencies": {{\n    "eslint": "{_ESLINT_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "eslint": "{_ESLINT_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/eslint": {\n'
+        f'      "version": "{_ESLINT_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "eslint": "bin/eslint.js"\n      }\n    }\n  }\n}\n'
+    ),
+    "eslint.config.js": "export default [];\n",
+    "src/settings.ts": "export const settings = { retries: 3 };\n",
+    "node_modules/eslint/package.json": (
+        f'{{"name": "eslint", "version": "{_ESLINT_VERSION}", "bin": {{"eslint": "bin/eslint.js"}}}}\n'
+    ),
+    # A launch that dropped the forwarded tail would still start this file, so
+    # the version line is printed only when the option actually arrives. The
+    # oracle reads that line, which makes the case fail when the tail is lost
+    # instead of passing on the launch alone.
+    "node_modules/eslint/bin/eslint.js": (
+        "#!/usr/bin/env node\n"
+        f"const strict = process.argv.slice(2).includes('{ESLINT_PASSED_OPTION}');\n"
+        f"console.log(strict ? '{ESLINT_MARKER}' : 'eslint: {ESLINT_PASSED_OPTION} was not forwarded');\n"
+    ),
+}
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
@@ -130,7 +174,10 @@ class _Install(NamedTuple):
 
 
 _JEST_INSTALL = _Install("jest", _FILES, RUNNER_MARKER)
-_INSTALLS = {WORKSPACE_MOCHA_CASE: _Install("mocha", _MOCHA_FILES, MOCHA_MARKER)}
+_INSTALLS = {
+    WORKSPACE_MOCHA_CASE: _Install("mocha", _MOCHA_FILES, MOCHA_MARKER),
+    WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
+}
 
 
 def runner_marker(scenario_id: str | None) -> str:

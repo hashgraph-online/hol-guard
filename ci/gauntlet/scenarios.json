@@ -1640,6 +1640,21 @@
       ]
     },
     {
+      "id": "omp-native-workspace-script-passed-option",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "This project lints through its own script. Run it with the stricter warning limit the command below spells: run the listed command once, exactly as written, and tell me what it printed. A message that the script or the linter is missing is a valid result: report it and stop. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
+      "commands": [
+        "npm run lint -- --max-warnings=0"
+      ],
+      "decision_paths": [
+        "native_node_tool_readonly_containment_required"
+      ]
+    },
+    {
       "id": "omp-native-package-manager-short-version-flag",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -2372,6 +2387,17 @@
         "rg --files -g 'README.md' -g 'src/**' -g '*settings*'",
         "rg --files -g 'docs/**' -g '!output'",
         "git status --short --branch && rg --files -g 'src/**'"
+      ],
+      "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
+    },
+    {
+      "id": "rg-recursive-and-alternation-globs",
+      "expectation": "allow",
+      "oracle": "commands",
+      "commands": [
+        "rg --files -g '**/*.md'",
+        "rg -n \"TODO\" -g '**/*.{md,yml}' .",
+        "grep -rn 'TODO' --include='**/*.md' src"
       ],
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
     },

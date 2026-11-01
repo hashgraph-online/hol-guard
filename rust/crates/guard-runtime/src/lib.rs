@@ -273,6 +273,7 @@ mod decision_authority_op;
 #[cfg(test)]
 mod decision_authority_vectors_tests;
 mod delivery_object;
+mod desktop_notification;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
 mod device_key_helper;
@@ -497,6 +498,7 @@ mod health_lease_state;
 mod health_snapshot_binding;
 #[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
+mod hermes_file_inspect;
 mod hermes_inspect;
 mod hermes_printable;
 mod hermes_skills;
@@ -556,6 +558,7 @@ mod hook_direct_evidence;
 mod hook_env_stamp;
 mod hook_removal_prune;
 mod hook_removal_sweep;
+mod html_unescape;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
 #[path = "adapters/detection/muse_detect.rs"]
@@ -860,6 +863,7 @@ mod skill_identity_walk;
 mod skill_workflow_preflight_op;
 #[cfg(unix)]
 mod state_directory_lock;
+mod storage_retention;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;
