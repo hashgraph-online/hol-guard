@@ -9,8 +9,8 @@
 //! working tree walk, the bounded history walk and the staged scan all reach
 //! the same `scan_blob`, so all three missed it.
 //!
-//! This module reads the members of the archive formats whose readers the
-//! workspace already carries: gzip, tar, and the two of them together. A
+//! This module reads the members of the archive formats a repository actually
+//! carries: gzip, tar, the two of them together, and zip. A
 //! member is reported under the name `backup.tar.gz!/etc/config.env`, which
 //! says both which archive held it and where inside. The separator opens a
 //! fresh path segment instead of running the two names together, so a member
@@ -25,14 +25,23 @@
 //! back is inflated bytes rather than the compressed length the caller weighed
 //! before handing the blob over.
 //!
-//! `zip` is still unread: no zip reader is in the dependency graph, and adding
-//! one moves `Cargo.lock`, so it is left to a change that can carry that.
+//! The container reading is split by shape: a tar is a stream of headers, read
+//! here; a zip is a directory of records, read in `repository_scanner_zip`.
+//! Both end in the same place, a member's bytes handed to the same text decode
+//! and the same detector the rest of the scan uses.
 
 use std::collections::HashSet;
 use std::io::{Cursor, Read};
 
 use super::{decode_text, scan_secret_text, SecretFinding};
 use crate::secret_detection::{candidate_digest, CandidateDigest};
+
+// The zip container is a directory of fixed-width records rather than a
+// stream, so reading it shares none of the tar walk's code. It lives in its
+// own file to keep this one readable, and as a child module so it can use the
+// bounds and the member-path spelling here without widening either.
+#[path = "repository_scanner_zip.rs"]
+mod zip;
 
 /// Most members read from one archive. A credential-bearing archive in a
 /// repository is a backup or a bundle, not a thousand-file corpus.
@@ -120,7 +129,7 @@ pub(super) fn scan_archive_members(
     };
     let payload = if is_gzip(data) {
         Payload::Owned(inflate_gzip(data, caps.total)?)
-    } else if is_tar(data) {
+    } else if is_tar(data) || zip::is_zip(data) {
         Payload::Borrowed(data)
     } else {
         return None;
@@ -128,6 +137,19 @@ pub(super) fn scan_archive_members(
     let bytes = payload.as_slice();
     if is_tar(bytes) {
         return Some(scan_tar(bytes, path, source, commit, finding_budget, caps));
+    }
+    // Recognised after inflation as well as before it, so a `.zip.gz` — which
+    // a mail gateway or a backup script produces without meaning to — is read
+    // rather than handed to the single-member path as one opaque blob.
+    if zip::is_zip(bytes) {
+        return Some(zip::scan_members(
+            bytes,
+            path,
+            source,
+            commit,
+            finding_budget,
+            caps,
+        ));
     }
     // A plain `.gz`: one file compressed on its own, named for the archive
     // without the suffix that says it was compressed. It is still reported
