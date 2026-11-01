@@ -8,7 +8,6 @@ unchanged machine is not reread, and builds the contract dataclasses.
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import threading
@@ -27,6 +26,7 @@ from .contracts import (
     canonical_payload_hash,
     default_machine_paths,
 )
+from .runtime_request import runtime_answer
 
 MANAGED_POLICY_LOAD_COMMAND = "managed-policy-load"
 MANAGED_POLICY_LOAD_FEATURE = "native-managed-policy-load-v1"
@@ -53,35 +53,14 @@ class _NativeUnavailableError(Exception):
 
 
 def _call_native(request: Mapping[str, object]) -> dict[str, Any]:
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    deadline = time.monotonic() + _TIMEOUT_SECONDS
-    status = native_runtime_status(deadline_monotonic=deadline)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or MANAGED_POLICY_LOAD_FEATURE not in status.capabilities.features
-    ):
-        raise _NativeUnavailableError
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise _NativeUnavailableError
-    output = _run_native_process(
-        status.identity.path,
-        (MANAGED_POLICY_LOAD_COMMAND, "--stdin"),
-        input_text=json.dumps({"schema": MANAGED_POLICY_LOAD_SCHEMA, **request}, sort_keys=True),
-        timeout_seconds=remaining,
+    response = runtime_answer(
+        MANAGED_POLICY_LOAD_FEATURE,
+        MANAGED_POLICY_LOAD_COMMAND,
+        {"schema": MANAGED_POLICY_LOAD_SCHEMA, **request},
+        deadline=time.monotonic() + _TIMEOUT_SECONDS,
         output_limit=_OUTPUT_LIMIT_BYTES,
     )
-    if output is None:
-        raise _NativeUnavailableError
-    try:
-        response = json.loads(output)
-    except ValueError as error:
-        raise _NativeUnavailableError from error
-    if not isinstance(response, dict):
+    if response is None:
         raise _NativeUnavailableError
     return cast("dict[str, Any]", response)
 

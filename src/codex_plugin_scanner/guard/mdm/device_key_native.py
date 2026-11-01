@@ -6,16 +6,15 @@ import base64
 import json
 import os
 import re
-import time
 from dataclasses import dataclass
 from typing import Literal, cast
 
 from .contracts import KeyProtectionLevel, MachinePaths
 from .device_key_windows_api import load_windows_token_api
+from .runtime_request import runtime_answer
 
 DEVICE_KEY_HELPER_FEATURE = "native-device-key-helper-v1"
 _MAX_HEALTH_LEASE_CLAIMS_BYTES = 4096
-_STATUS_TIMEOUT_SECONDS = 10.0
 # The runtime gives the helper 15 seconds.
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _MAX_ANSWER_BYTES = 64 * 1024
@@ -148,20 +147,9 @@ def _native_helper(
 ) -> dict[str, object]:
     """The runtime's checked answer from the platform helper for one operation."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
     platform_name = _PLATFORMS.get(system_name)
     if platform_name is None:
         raise OSError("device_key_platform_unsupported")
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or DEVICE_KEY_HELPER_FEATURE not in status.capabilities.features
-    ):
-        raise OSError("device_key_native_unavailable")
     request: dict[str, object] = {
         "schema": "device-key-helper.v1",
         "platform": platform_name,
@@ -171,18 +159,14 @@ def _native_helper(
     }
     if payload is not None:
         request["payload"] = payload
-    output = _run_native_process(
-        status.identity.path,
-        ("device-key-helper", "--stdin"),
-        input_text=json.dumps(request),
+    answer = runtime_answer(
+        DEVICE_KEY_HELPER_FEATURE,
+        "device-key-helper",
+        request,
         timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
         output_limit=_MAX_ANSWER_BYTES,
     )
-    try:
-        answer = cast(object, json.loads(output)) if output is not None else None
-    except ValueError:
-        answer = None
-    if not isinstance(answer, dict):
+    if answer is None:
         raise OSError("device_key_native_unavailable")
     fields = cast(dict[str, object], answer)
     if fields.get("ok") is not True:

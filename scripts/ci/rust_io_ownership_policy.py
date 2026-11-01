@@ -240,6 +240,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/json_safe_copy.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
+        # Encodes one MDM request and decodes the runtime's JSON object answer;
+        # the runtime command owns every check and verdict.
+        "src/codex_plugin_scanner/guard/mdm/runtime_request.py",
     }
 )
 _ASYNC_POLICY_PATHS: Final = frozenset(
