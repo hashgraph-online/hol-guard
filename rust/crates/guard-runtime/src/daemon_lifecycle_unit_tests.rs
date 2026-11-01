@@ -256,7 +256,7 @@ fn a_windows_start_waits_for_the_runtime_it_has_to_unpack() {
 fn a_plain_windows_start_keeps_the_post_update_budget_for_an_update() {
     let query = json!({"check": "start_timeouts", "desktop": false, "worker_ready_floor": 14.0});
     let windows = decide(&request_on("nt", query.clone(), json!({})));
-    assert_eq!(windows, json!({"default": 40.0, "post_update": 75.0}));
+    assert_eq!(windows, json!({"default": 60.0, "post_update": 75.0}));
     let posix = decide(&request(query, json!({})));
     assert_eq!(posix, json!({"default": 19.0, "post_update": 30.0}));
 }

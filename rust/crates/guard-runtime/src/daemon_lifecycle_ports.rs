@@ -21,7 +21,15 @@ const POST_UPDATE_START_TIMEOUT_SECONDS: f64 = 30.0;
 // start timeline puts `daemon_ready` between 30 and 36 seconds after its first
 // import, so the POSIX budgets left the client waiting about 27 seconds for a
 // daemon that had not finished and was never going to within them.
-const NT_START_TIMEOUT_SECONDS: f64 = 40.0;
+//
+// That timeline is measured from the daemon's first import, and the clock the
+// client runs against starts earlier: it begins before the child is spawned,
+// and it stops a few seconds short of the deadline so there is still time to
+// classify the child it is waiting on. The interpreter boot and runtime unpack
+// that happen before the first import fall in that gap, so a plain start is
+// given room for them on top of the readiness time itself rather than the one
+// second a 40-second budget would have left.
+const NT_START_TIMEOUT_SECONDS: f64 = 60.0;
 const NT_POST_UPDATE_START_TIMEOUT_SECONDS: f64 = 75.0;
 const START_TIMEOUT_MARGIN_SECONDS: f64 = 5.0;
 

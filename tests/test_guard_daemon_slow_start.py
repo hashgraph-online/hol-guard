@@ -377,6 +377,28 @@ def test_a_windows_start_outlasts_the_packaged_runtime_it_waits_on(native_hook_f
     assert posix_deadline - started < _PACKAGED_WINDOWS_READY_SECONDS
 
 
+def test_a_plain_windows_start_leaves_room_for_the_work_before_the_first_import(
+    native_hook_force: Path, tmp_path: Path
+) -> None:
+    """The plain Windows budget covers more than the readiness time it was read from."""
+
+    query = {"desktop": False, "worker_ready_floor": 14.0}
+    windows = native_daemon_lifecycle("start_timeouts", query, platform="nt", guard_home=tmp_path)
+
+    # A start that is not a Desktop or post-update one runs the same packaged
+    # runtime, so it waits out the same work. The measured readiness time is
+    # taken from the daemon's first import, while the client's clock starts
+    # before the child is spawned and stops early to classify it, so the budget
+    # has to cover the interpreter boot and runtime unpack in between as well.
+    started = time.monotonic()
+    deadline = daemon_manager_module._spawned_daemon_wait_deadline(started + windows["default"])
+    poll_window = deadline - started
+
+    assert poll_window > _PACKAGED_WINDOWS_READY_SECONDS + 10.0
+    # Still its own budget: an update is allowed longer than a plain start.
+    assert windows["default"] < windows["post_update"]
+
+
 def test_a_windows_start_record_stays_live_as_long_as_the_client_waits(native_hook_force: Path, tmp_path: Path) -> None:
     """The start-progress gate and the client read one budget, not two."""
 
