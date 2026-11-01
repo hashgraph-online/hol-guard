@@ -5,8 +5,8 @@ use base64ct::{Base64, Encoding};
 use serde_json::{json, Value};
 
 use super::{
-    run_command, ACK_NAME, CONTINUITY_NAME, DEVICE_KEY_NAME, MAX_ACK_BYTES, MAX_RECORD_BYTES,
-    OUTBOX_NAME,
+    run_command, ACK_NAME, CONTINUITY_NAME, DEVICE_KEY_NAME, MAX_ACK_BYTES, MAX_OUTBOX_BYTES,
+    MAX_RECORD_BYTES, OUTBOX_NAME,
 };
 
 fn state_root() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -200,12 +200,23 @@ fn a_record_write_names_its_own_missing_state_root() {
     );
 }
 
+/// Fill `kind` to its bound through the runtime, then grow it by one byte
+/// behind the runtime's back.
+fn grow_past_bound(root: &Path, kind: &str, name: &str, bound: u64) {
+    let full = vec![b'a'; usize::try_from(bound).unwrap()];
+    assert_eq!(write(root, "replace", kind, &full), json!({"ok": true}));
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(root.join(name))
+        .unwrap();
+    std::io::Write::write_all(&mut file, b"a").unwrap();
+}
+
 #[test]
 fn a_record_past_its_bound_is_refused() {
     let (_directory, root) = state_root();
-    let oversized = vec![b'a'; usize::try_from(MAX_RECORD_BYTES).unwrap() + 1];
-    write(&root, "replace", "continuity", &oversized);
-    write(&root, "replace", "device_key", &oversized);
+    grow_past_bound(&root, "continuity", CONTINUITY_NAME, MAX_RECORD_BYTES);
+    grow_past_bound(&root, "device_key", DEVICE_KEY_NAME, MAX_RECORD_BYTES);
 
     assert_eq!(
         read(&root, "continuity"),
@@ -220,13 +231,60 @@ fn a_record_past_its_bound_is_refused() {
 #[test]
 fn an_acknowledgement_past_its_bound_is_refused() {
     let (_directory, root) = state_root();
-    let oversized = vec![b'a'; usize::try_from(MAX_ACK_BYTES).unwrap() + 1];
-    write(&root, "replace", "ack", &oversized);
+    grow_past_bound(&root, "ack", ACK_NAME, MAX_ACK_BYTES);
 
     assert_eq!(
         read(&root, "ack"),
         refused("permission", "health_lease_ack_acl_invalid")
     );
+}
+
+#[test]
+fn a_write_past_its_bound_is_refused_and_keeps_the_file() {
+    let (_directory, root) = state_root();
+    for (op, kind, bound, reason_code) in [
+        (
+            "create",
+            "outbox",
+            MAX_OUTBOX_BYTES,
+            "health_lease_outbox_too_large",
+        ),
+        (
+            "replace",
+            "ack",
+            MAX_ACK_BYTES,
+            "health_lease_ack_too_large",
+        ),
+        (
+            "replace",
+            "continuity",
+            MAX_RECORD_BYTES,
+            "installation_identity_too_large",
+        ),
+        (
+            "replace",
+            "device_key",
+            MAX_RECORD_BYTES,
+            "device_key_metadata_too_large",
+        ),
+    ] {
+        if op == "replace" {
+            assert_eq!(write(&root, op, kind, b"{}"), json!({"ok": true}));
+        }
+        let oversized = vec![b'a'; usize::try_from(bound).unwrap() + 1];
+
+        assert_eq!(
+            write(&root, op, kind, &oversized),
+            refused("os", reason_code)
+        );
+        let expected = if op == "replace" {
+            content(b"{}")
+        } else {
+            json!({"ok": true, "content": null})
+        };
+        assert_eq!(read(&root, kind), expected, "{kind}");
+    }
+    assert!(names(&root).iter().all(|name| !name.ends_with(".tmp")));
 }
 
 #[test]

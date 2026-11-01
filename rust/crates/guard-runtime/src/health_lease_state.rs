@@ -105,6 +105,17 @@ impl Kind {
         }
     }
 
+    /// A write larger than the file's read bound, which would leave a file
+    /// no later read accepts.
+    fn too_large(self) -> &'static str {
+        match self {
+            Self::Outbox => "health_lease_outbox_too_large",
+            Self::Ack => "health_lease_ack_too_large",
+            Self::Continuity => "installation_identity_too_large",
+            Self::DeviceKey => "device_key_metadata_too_large",
+        }
+    }
+
     fn state_root_invalid(self) -> &'static str {
         match self {
             Self::Outbox | Self::Ack => STATE_ROOT_INVALID,
@@ -251,13 +262,17 @@ fn require_state_root(root: &Path, kind: Kind) -> Result<(), StateError> {
 
 /// Write `payload` to a fresh private file beside the target, sync it, let
 /// `commit` give it the target's name, then sync the directory. The temporary
-/// name is removed whatever happens.
+/// name is removed whatever happens. A payload past the file's read bound is
+/// refused before anything is written.
 fn with_private_temporary(
     root: &Path,
     kind: Kind,
     payload: &[u8],
     commit: impl FnOnce(&Path) -> Result<(), StateError>,
 ) -> Result<(), StateError> {
+    if payload.len() as u64 > kind.maximum() {
+        return Err(refused("os", kind.too_large()));
+    }
     let suffix: String = crate::encrypted_secret_store::random_bytes(16)
         .iter()
         .map(|byte| format!("{byte:02x}"))
