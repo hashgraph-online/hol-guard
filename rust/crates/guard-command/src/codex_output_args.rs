@@ -288,7 +288,43 @@ fn sed_print_command_is_bounded(command: &str) -> bool {
 fn sed_address_is_bounded(value: &str) -> bool {
     static CELL: OnceLock<Regex> = OnceLock::new();
     let address = py_strip(value);
-    address == "$" || full(&CELL, r"\d{1,6}", address)
+    address == "$" || full(&CELL, r"\d{1,6}", address) || sed_context_address_is_bounded(address)
+}
+
+/// A `/regex/` address: the spelling a reader uses to print the region around
+/// a line it can name but has not counted, as in `sed -n '/fn main/,/^}/p'`.
+///
+/// Only the slash pair is read. An alternative `\%...%` delimiter, a negated
+/// address, a second unescaped slash (which would end the address and leave
+/// the rest a command of its own) and an empty pattern (sed's "reuse the last
+/// regex", which this reading never saw) all stay unread, so a script that
+/// spells one keeps its review.
+fn sed_context_address_is_bounded(address: &str) -> bool {
+    let Some(body) = address.strip_prefix('/') else {
+        return false;
+    };
+    let body = body.strip_suffix(['I', 'M']).unwrap_or(body);
+    let Some(pattern) = body.strip_suffix('/') else {
+        return false;
+    };
+    if pattern.is_empty() {
+        return false;
+    }
+    let mut escaped = false;
+    for character in pattern.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' => escaped = true,
+            '/' => return false,
+            _ => {}
+        }
+    }
+    // A trailing backslash escaped the closing delimiter, so the address the
+    // line spells is not the one read here.
+    !escaped
 }
 
 #[cfg(test)]
@@ -320,5 +356,41 @@ mod tests {
         assert_eq!(sed.scripts, v(&["1,5p"]));
         assert!(sed.saw_print_suppression);
         assert!(parse_sed_args(&v(&["-i", "s/a/b/", "a"])).is_none());
+    }
+
+    #[test]
+    fn a_slash_delimited_address_prints_a_named_region() {
+        // The region a reader names rather than counts: both ends of the range
+        // may be regexes, and either end may be a line number instead.
+        assert!(sed_script_is_bounded_print("/fn main/,/^}/p"));
+        assert!(sed_script_is_bounded_print("/needle/p"));
+        assert!(sed_script_is_bounded_print("0,/needle/p"));
+        assert!(sed_script_is_bounded_print("/needle/,$p"));
+        assert!(sed_script_is_bounded_print("/needle/,20p"));
+        // A pattern may hold an escaped delimiter, and may carry sed's own
+        // case-insensitive and multiline flags.
+        assert!(sed_script_is_bounded_print(r"/guard\/plugins/p"));
+        assert!(sed_script_is_bounded_print("/needle/Ip"));
+        assert!(sed_script_is_bounded_print("/needle/Mp"));
+    }
+
+    #[test]
+    fn an_address_that_leaves_a_command_unread_keeps_its_review() {
+        // A second unescaped slash ends the address, so `d` here is a delete
+        // this reading never saw.
+        assert!(!sed_script_is_bounded_print("/a/d/p"));
+        // A trailing backslash escapes the closing delimiter, so the address
+        // runs on past the text read above.
+        assert!(!sed_script_is_bounded_print(r"/a\/p"));
+        // An empty pattern reuses sed's last regex, which this reading never
+        // saw either.
+        assert!(!sed_script_is_bounded_print("//p"));
+        // A negated address and an alternative delimiter are both unread.
+        assert!(!sed_script_is_bounded_print("/a/!p"));
+        assert!(!sed_script_is_bounded_print(r"\%a%p"));
+        // A substitution still ends in `p` but is not an address at all.
+        assert!(!sed_script_is_bounded_print("s/a/b/p"));
+        // Three addresses are not a range.
+        assert!(!sed_script_is_bounded_print("/a/,/b/,/c/p"));
     }
 }
