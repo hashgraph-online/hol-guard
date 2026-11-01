@@ -1,6 +1,7 @@
 mod activation;
 mod bindings;
 mod canonical;
+mod catalog;
 mod consent;
 mod intake;
 mod policy;
