@@ -282,7 +282,7 @@ def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, mo
     ca_bundle.write_bytes(b"first-managed-ca")
     ca_bundle.chmod(0o600)
     policy = ManagedNetworkPolicy(proxy_mode="none", ca_bundle_path=str(ca_bundle))
-    monkeypatch.setattr(github_reads, "active_network_policy", lambda: policy)
+    monkeypatch.setattr(github_reads, "resolved_network_policy", lambda _policy: (policy, True))
     monkeypatch.setattr(github_reads, "managed_opener", lambda *_args, **_kwargs: object())
 
     def read_once() -> github_reads.VerifiedGitHubReadResult:
@@ -302,3 +302,26 @@ def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, mo
     second = read_once()
 
     assert first.proof.binding_digest != second.proof.binding_digest
+
+
+def test_github_verified_read_keeps_the_direct_fallback_without_a_managed_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    openers: list[object] = []
+    monkeypatch.setattr(github_reads, "resolved_network_policy", lambda _policy: (ManagedNetworkPolicy(), False))
+    monkeypatch.setattr(
+        github_reads,
+        "managed_opener",
+        lambda policy, **_kwargs: openers.append(policy) or object(),
+    )
+    responses = iter(_github_payloads())
+
+    def public_get(_url: str, *, timeout_seconds: float, opener: object) -> dict[str, object]:
+        del timeout_seconds, opener
+        return next(responses)
+
+    monkeypatch.setattr(github_reads, "_public_get_json", public_get)
+    try_read_verified_public_github_pull_request("public-owner", "public-repo", 17)
+
+    # An unmanaged default policy is not passed on, so a failed proxy lookup still goes direct.
+    assert openers == [None]

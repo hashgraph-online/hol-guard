@@ -148,7 +148,6 @@ def test_windows_acl_verification_asks_the_runtime_to_probe(monkeypatch: pytest.
         }
 
     monkeypatch.setattr(acl, "_native_answer", answer)
-    monkeypatch.setattr(acl, "_windows_directory", lambda: r"D:\Windows")
     paths = _windows_paths()
 
     result = acl.verify_protected_ownership_and_acl(paths, system_name="Windows")
@@ -163,7 +162,6 @@ def test_windows_acl_verification_asks_the_runtime_to_probe(monkeypatch: pytest.
                 "state_root": str(paths.state_root),
                 "log_root": str(paths.log_root),
             },
-            "windows_directory": r"D:\Windows",
         }
     ]
 
@@ -172,28 +170,12 @@ def test_windows_acl_verification_asks_the_runtime_to_probe(monkeypatch: pytest.
 def test_windows_acl_verification_fails_closed_without_a_native_verdict(
     monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
 ) -> None:
-    monkeypatch.setattr(acl, "_windows_directory", lambda: r"D:\Windows")
     monkeypatch.setattr(acl, "_native_answer", lambda _request, **_kwargs: answer)
 
     result = acl.verify_protected_ownership_and_acl(_windows_paths(), system_name="Windows")
 
     assert not result.healthy
     assert result.reason_code == "ownership_acl_probe_failed"
-
-
-def _no_windows_directory() -> str:
-    raise OSError("windows_system_directory_unavailable")
-
-
-def test_windows_acl_verification_without_a_windows_directory_never_asks(monkeypatch: pytest.MonkeyPatch) -> None:
-    ask = Mock(side_effect=AssertionError("runtime asked without a Windows directory"))
-    monkeypatch.setattr(acl, "_windows_directory", _no_windows_directory)
-    monkeypatch.setattr(acl, "_native_answer", ask)
-
-    result = acl.verify_protected_ownership_and_acl(_windows_paths(), system_name="Windows")
-
-    assert result.reason_code == "ownership_acl_probe_failed"
-    ask.assert_not_called()
 
 
 @pytest.mark.parametrize(("status", "trusted"), [("healthy", True), ("tampered", False), (None, False)])
@@ -208,22 +190,10 @@ def test_windows_managed_file_trust_asks_the_runtime_to_probe(
         return None if status is None else {"ok": True, "status": status}
 
     monkeypatch.setattr(managed_file_trust, "_native_answer", answer)
-    monkeypatch.setattr(managed_file_trust, "windows_directory", lambda: r"D:\Windows")
     managed = tmp_path / "policy.json"
 
     assert managed_file_trust.machine_controlled_file_is_trusted(managed, system_name="Windows") is trusted
-    assert requests == [{"op": "windows-file-probe", "managed_file": str(managed), "windows_directory": r"D:\Windows"}]
-
-
-def test_windows_managed_file_trust_without_a_windows_directory_never_asks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    ask = Mock(side_effect=AssertionError("runtime asked without a Windows directory"))
-    monkeypatch.setattr(managed_file_trust, "windows_directory", _no_windows_directory)
-    monkeypatch.setattr(managed_file_trust, "_native_answer", ask)
-
-    assert not managed_file_trust.machine_controlled_file_is_trusted(tmp_path / "policy.json", system_name="Windows")
-    ask.assert_not_called()
+    assert requests == [{"op": "windows-file-probe", "managed_file": str(managed)}]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires a Windows MDM installation")

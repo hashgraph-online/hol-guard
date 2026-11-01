@@ -219,7 +219,6 @@ _PAIN_SIGNAL_EVENTS = frozenset(
         "approval_gate/remote_policy_sync_blocked",
     }
 )
-_EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 _LOGGER = logging.getLogger(__name__)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
@@ -752,7 +751,6 @@ def sync_receipts(
     # response, but they are not covered by the pinned policy-bundle signature
     # and therefore cannot be persisted or materialized as local authority.
     # Only decisions and exceptions inside a validated signed bundle are used.
-    deduped_exceptions: list[dict[str, object]] = []
     advisories_stored = 0
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
@@ -1148,7 +1146,6 @@ def sync_receipts(
         store=store,
         advisories=deduped_advisories,
         alert_preferences=alert_preferences_payload,
-        exceptions=deduped_exceptions,
         now=now,
     )
     try:
@@ -1163,7 +1160,7 @@ def sync_receipts(
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
-        "exceptions_stored": len(deduped_exceptions),
+        "exceptions_stored": 0,
         "cloud_exceptions_stored": len(cloud_exception_items),
         "remote_policies_stored": remote_policies_stored,
         "pain_signals_uploaded": pain_signals_uploaded,
@@ -4400,52 +4397,15 @@ def _cloud_package_manager_coverage(
         ),
         generated_at=generated_at,
     )
-    synced_at = None
-    next_refresh_at = None
-    synced_timestamp = None
-    for source_name, summary in (
-        ("sync", store.get_sync_payload("sync_summary")),
-        ("runtime", store.get_sync_payload("runtime_session_summary")),
-        ("bundle", store.get_sync_payload("supply_chain_bundle_summary")),
-    ):
-        if not isinstance(summary, dict):
-            continue
-        candidate_synced_at = _optional_string(
-            summary.get("synced_at")
-            or summary.get("syncedAt")
-            or summary.get("runtime_session_synced_at")
-            or summary.get("runtimeSessionSyncedAt")
-            or summary.get("local_guard_online_at"),
-        )
-        candidate_timestamp = _parse_iso_timestamp(candidate_synced_at) if candidate_synced_at is not None else None
-        if candidate_timestamp is None:
-            continue
-        if synced_timestamp is not None and candidate_timestamp <= synced_timestamp:
-            continue
-        synced_at = candidate_synced_at
-        synced_timestamp = candidate_timestamp
-        next_refresh_at = (
-            _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
-            if source_name == "bundle"
-            else None
-        )
-    reference_timestamp = _parse_iso_timestamp(generated_at) or datetime.now(timezone.utc)
-    stale_status = "unknown"
-    if synced_at is not None:
-        stale_status = "fresh"
-    next_refresh_timestamp = _parse_iso_timestamp(next_refresh_at) if next_refresh_at is not None else None
-    if next_refresh_timestamp is None and synced_at is not None:
-        next_refresh_timestamp = _parse_iso_timestamp(synced_at)
-        if next_refresh_timestamp is not None:
-            next_refresh_timestamp += timedelta(minutes=15)
-            next_refresh_at = next_refresh_timestamp.isoformat()
-    if next_refresh_timestamp is not None and next_refresh_timestamp <= reference_timestamp:
-        stale_status = "stale"
-    coverage["staleIntel"] = {
-        "status": stale_status,
-        "lastSyncedAt": synced_at,
-        "nextRefreshAt": next_refresh_at,
-    }
+    coverage["staleIntel"] = _sync.stale_intel(
+        (
+            store.get_sync_payload("sync_summary"),
+            store.get_sync_payload("runtime_session_summary"),
+            store.get_sync_payload("supply_chain_bundle_summary"),
+        ),
+        generated_at=generated_at,
+        now=_now(),
+    )
     return coverage
 
 
@@ -4459,7 +4419,6 @@ def _record_synced_alert_events(
     store: GuardStore,
     advisories: Sequence[dict[str, object]],
     alert_preferences: dict[str, object] | None,
-    exceptions: Sequence[dict[str, object]],
     now: str,
 ) -> None:
     advisories_enabled = not (
@@ -4480,31 +4439,6 @@ def _record_synced_alert_events(
                 },
                 now,
             )
-    current_time = _parse_iso_timestamp(now)
-    for item in exceptions:
-        artifact_id = _optional_string(item.get("artifactId"))
-        expires_at = _optional_string(item.get("expiresAt"))
-        if artifact_id is None or expires_at is None:
-            continue
-        expiry_time = _parse_iso_timestamp(expires_at)
-        if expiry_time is None or current_time is None:
-            continue
-        if (
-            expiry_time <= current_time
-            or (expiry_time - current_time).total_seconds() > _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS * 60 * 60
-        ):
-            continue
-        store.add_event(
-            "exception_expiring",
-            {
-                "artifact_id": artifact_id,
-                "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
-                "expires_at": expires_at,
-                "reason": _optional_string(item.get("reason")),
-                "owner": _optional_string(item.get("owner")),
-            },
-            now,
-        )
 
 
 def _sync_timestamp(payload: dict[str, object]) -> str:

@@ -70,7 +70,6 @@ def test_macos_supervisor_asks_the_runtime_to_read_and_probe_the_registration(
 def test_windows_supervisor_asks_the_runtime_to_query_the_task(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = _paths(tmp_path)
     process = _native_runtime(monkeypatch, '{"ok": true, "state": "absent", "reason_code": "supervisor_absent"}')
-    monkeypatch.setattr(supervisor, "_windows_directory", lambda: r"D:\Windows")
     run = Mock(side_effect=AssertionError("Python ran schtasks"))
     monkeypatch.setattr(supervisor.subprocess, "run", run)
 
@@ -81,7 +80,6 @@ def test_windows_supervisor_asks_the_runtime_to_query_the_task(tmp_path: Path, m
         "schema": "supervisor-verdict.v1",
         "op": "windows-verify",
         "executable": str(paths.runtime_root / "hol-guard" / "hol-guard.exe"),
-        "windows_directory": r"D:\Windows",
     }
     run.assert_not_called()
 
@@ -94,7 +92,6 @@ def _windows_installer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Machi
     monkeypatch.setattr(supervisor.platform, "system", lambda: "Windows")
     monkeypatch.setattr(supervisor, "_windows_is_administrator", lambda: True)
     monkeypatch.setattr(supervisor, "default_machine_paths", lambda **_kwargs: paths)
-    monkeypatch.setattr(supervisor, "_windows_directory", lambda: r"D:\Windows")
     return paths
 
 
@@ -116,7 +113,6 @@ def test_windows_supervisor_install_asks_the_runtime_to_register_the_task(
         "schema": "supervisor-verdict.v1",
         "op": "windows-install",
         "executable": str(paths.runtime_root / "hol-guard" / "hol-guard.exe"),
-        "windows_directory": r"D:\Windows",
         "state_root": str(paths.state_root),
     }
     run.assert_not_called()
@@ -135,7 +131,6 @@ def test_windows_supervisor_remove_asks_the_runtime_to_delete_the_task(
         "schema": "supervisor-verdict.v1",
         "op": "windows-remove",
         "executable": str(paths.runtime_root / "hol-guard" / "hol-guard.exe"),
-        "windows_directory": r"D:\Windows",
     }
 
 
@@ -222,26 +217,12 @@ def test_supervisor_health_is_unknown_without_a_runtime_that_probes(
     process = _native_runtime(
         monkeypatch, '{"ok": true, "state": "running", "reason_code": "supervisor_running"}', features
     )
-    monkeypatch.setattr(supervisor, "_windows_directory", lambda: r"C:\Windows")
 
     result = supervisor.verify_machine_supervisor(
         _paths(tmp_path),
         system_name=system_name,
         macos_plist_path=tmp_path / "org.hol.guard.machine-health.plist",
     )
-
-    assert (result.state, result.reason_code) == ("unknown", "supervisor_probe_failed")
-    process.assert_not_called()
-
-
-def test_an_unreadable_windows_directory_is_a_failed_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def unavailable() -> str:
-        raise OSError("windows_directory_unavailable")
-
-    process = _native_runtime(monkeypatch, None)
-    monkeypatch.setattr(supervisor, "_windows_directory", unavailable)
-
-    result = supervisor.verify_machine_supervisor(_paths(tmp_path), system_name="Windows")
 
     assert (result.state, result.reason_code) == ("unknown", "supervisor_probe_failed")
     process.assert_not_called()

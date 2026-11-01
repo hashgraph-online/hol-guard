@@ -433,10 +433,6 @@ fn malformed_requests_are_refused() {
         );
     }
     assert_eq!(
-        run(json!({"schema": SCHEMA, "op": "windows-probe", "windows_paths": default_paths()})),
-        invalid
-    );
-    assert_eq!(
         run(json!({"schema": SCHEMA, "op": "aggregate", "surfaces": [], "extra": 1})),
         invalid
     );

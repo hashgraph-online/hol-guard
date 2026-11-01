@@ -404,10 +404,10 @@ fn written_with_a_scheme(raw: &str) -> bool {
     })
 }
 
-/// An `http(s)` URL naming `127.0.0.1` or `localhost` itself, on a dev-server
-/// port that no local admin service or Guard daemon listens on.
+/// An `http(s)` URL naming `127.0.0.1`, `localhost` or `[::1]` itself, on a
+/// dev-server port that no local admin service or Guard daemon listens on.
 pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> bool {
-    if raw.contains(['{', '}', '[', ']', '\\', ' ']) {
+    if raw.contains(['{', '}', '\\', ' ']) {
         return false;
     }
     let Ok(url) = url::Url::parse(raw) else {
@@ -415,10 +415,12 @@ pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> boo
     };
     let loopback = match url.host() {
         Some(url::Host::Ipv4(address)) => address == std::net::Ipv4Addr::LOCALHOST,
+        Some(url::Host::Ipv6(address)) => address == std::net::Ipv6Addr::LOCALHOST,
         Some(url::Host::Domain(name)) => name == "localhost",
-        _ => false,
+        None => false,
     };
     loopback
+        && one_url(raw, url.host())
         && matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
         && url.password().is_none()
@@ -426,6 +428,16 @@ pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> boo
             .port_or_known_default()
             .is_some_and(|port| reachable_loopback_port(port, home_dir))
         && !url_secrets::carries_secret(&url)
+}
+
+/// Whether the brackets in the URL, if any, are the pair that wraps the host,
+/// so curl reads one address rather than a range of them. curl's glob parser
+/// skips a bracketed span holding at least two colons and no hyphen, which an
+/// IPv6 literal always is and a range never is; every other bracket is that
+/// range syntax, which names several URLs from one word.
+fn one_url(raw: &str, host: Option<url::Host<&str>>) -> bool {
+    let bracket_pairs = usize::from(matches!(host, Some(url::Host::Ipv6(_))));
+    raw.matches('[').count() == bracket_pairs && raw.matches(']').count() == bracket_pairs
 }
 
 /// A loopback port this request may reach: a conventional dev-server port, or

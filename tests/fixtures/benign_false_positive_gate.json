@@ -8511,6 +8511,54 @@
       "expect": "allow"
     },
     {
+      "id": "queue-curl-loopback-ipv6-literal",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s http://[::1]:8080/health"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-curl-loopback-ipv6-expanded",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s http://[0:0:0:0:0:0:0:1]:3000/api/items"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-curl-loopback-ipv6-range-glob",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s 'http://[::1]:8080/item[1-9].json'"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-curl-schemeless-guard-port",
       "fix_area": "negative",
       "harnesses": [
@@ -34648,6 +34696,91 @@
         "command": "while read line; do echo hi; done < README.md"
       },
       "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "control-flow-while-read-body-expansion",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do echo \"$line\"; done < README.md"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-control-flow-while-read-expansion-command-word",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do \"$line\" --version; done < README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-control-flow-while-read-foreign-expansion",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do cat \"$HOME/.ssh/id_rsa\"; done < README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-control-flow-while-read-braced-name-glued",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "while read -r line; do echo \"${line}_backup\"; done < README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "control-flow-for-loop-braced-name-glued",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in README.md AGENTS.md; do echo \"${f}_backup\"; done"
+      },
+      "cwd": "worktree",
       "expect": "allow"
     },
     {

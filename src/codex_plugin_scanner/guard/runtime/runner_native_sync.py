@@ -205,6 +205,33 @@ def completed_guard_event_ids(payload: Mapping[str, object]) -> list[str]:
     return ids
 
 
+_STALE_INTEL_KEYS = (
+    "synced_at",
+    "syncedAt",
+    "runtime_session_synced_at",
+    "runtimeSessionSyncedAt",
+    "local_guard_online_at",
+    "next_refresh_at",
+    "nextRefreshAt",
+)
+
+
+def stale_intel(summaries: Sequence[object], *, generated_at: str, now: str) -> dict[str, object]:
+    """The ``staleIntel`` block for the stored sync, runtime-session and bundle summaries."""
+
+    slim = [
+        {key: summary[key] for key in _STALE_INTEL_KEYS if key in summary} if isinstance(summary, dict) else None
+        for summary in summaries
+    ]
+    answer = native_runner_authority("stale_intel", {"summaries": slim, "generated_at": generated_at, "now": now})
+    status = _field(answer, "status", str)
+    last_synced_at = answer.get("lastSyncedAt")
+    next_refresh_at = answer.get("nextRefreshAt")
+    if not all(value is None or isinstance(value, str) for value in (last_synced_at, next_refresh_at)):
+        raise _malformed()
+    return {"status": status, "lastSyncedAt": last_synced_at, "nextRefreshAt": next_refresh_at}
+
+
 _BUNDLE_KEYS = ("issuedAt", "bundleVersion", "payloadHash", "workspaceId")
 
 

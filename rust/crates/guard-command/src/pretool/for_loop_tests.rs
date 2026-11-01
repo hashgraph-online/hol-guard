@@ -245,6 +245,38 @@ fn a_flag_named_like_the_loop_variable_is_not_a_rebinding() {
     );
 }
 
+/// A braced loop name glued to a word character is still the loop's own name.
+///
+/// The unroller replaces the reference with the header word it stands for, so
+/// `${f}_backup` is written out as `a_backup` -- the word the body would have
+/// built. Nothing is rewritten as an expansion here, so the brace spelling
+/// never has to survive the rewrite, and `for f in a b; do cp "$f" "${f}.bak"`
+/// -- a loop that names each copy after the file it came from -- reads as the
+/// copies it makes.
+#[test]
+fn a_braced_loop_name_glued_to_a_word_is_substituted() {
+    for (looped, unrolled) in [
+        (
+            "for f in a b; do echo \"${f}_backup\"; done",
+            "echo \"a_backup\"; echo \"b_backup\"",
+        ),
+        (
+            "for f in a b; do wc -l \"${f}.txt\"; done",
+            "wc -l \"a.txt\"; wc -l \"b.txt\"",
+        ),
+        (
+            "for n in 1 2; do cat \"report${n}\"; done",
+            "cat \"report1\"; cat \"report2\"",
+        ),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            Some(unrolled),
+            "{looped} lost the word its braced name stands for"
+        );
+    }
+}
+
 #[test]
 fn a_leading_cd_stays_in_front_of_the_unrolled_list() {
     let looped =
