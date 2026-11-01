@@ -124,6 +124,47 @@ fn resolves_within(path: &Path, root: &Path) -> bool {
     }
 }
 
+/// Whether the opened `file` is the file `path` names inside `root`.
+///
+/// On Windows an ancestor junction swapped between the scope check and the
+/// open would let `path` open a file outside the scope. The path the read
+/// handle itself resolves to must lie inside the scope: a second open by
+/// path proves nothing about where the first one landed, since the same
+/// junction can be swapped back in before it. The canonical path is then
+/// opened one component at a time, holding each ancestor and refusing every
+/// link, and must be that same file (volume and file ID).
+#[cfg(windows)]
+pub(crate) fn handle_within(file: &File, path: &Path, root: &Path) -> bool {
+    use guard_runtime_windows_process::{
+        handle_file_id, handle_final_path, open_bound_executable_file,
+    };
+    let (Ok(canonical), Ok(canonical_root)) = (fs::canonicalize(path), fs::canonicalize(root))
+    else {
+        return false;
+    };
+    if !canonical.starts_with(&canonical_root) {
+        return false;
+    }
+    if !handle_final_path(file).is_ok_and(|opened| opened.starts_with(&canonical_root)) {
+        return false;
+    }
+    // The bound open allows extra directory entries, as the path check does.
+    let Ok(bound) = open_bound_executable_file(&canonical) else {
+        return false;
+    };
+    matches!(
+        (handle_file_id(file), handle_file_id(&bound)),
+        (Ok(opened), Ok(checked)) if opened == checked
+    )
+}
+
+/// POSIX keeps the path check made before the open: `O_NOFOLLOW` refuses a
+/// link at the leaf.
+#[cfg(not(windows))]
+pub(crate) fn handle_within(_file: &File, _path: &Path, _root: &Path) -> bool {
+    true
+}
+
 #[cfg(unix)]
 fn open_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::unix::fs::OpenOptionsExt;
@@ -136,8 +177,32 @@ fn open_no_follow(path: &Path) -> std::io::Result<File> {
 #[cfg(windows)]
 fn open_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::OpenOptionsExt;
-    // Share read only: no writer or deleter can change the file under the read.
-    OpenOptions::new().read(true).share_mode(1).open(path)
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    const OPEN_ATTEMPTS: u32 = 6;
+    let mut attempt = 1;
+    loop {
+        // Share read only: no writer or deleter can change the file under the
+        // read. A reparse point is opened as itself, so it reads as not
+        // regular instead of being followed.
+        let opened = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path);
+        match opened {
+            // A writer that is just closing the file holds it briefly.
+            Err(error)
+                if error.raw_os_error() == Some(ERROR_SHARING_VIOLATION)
+                    && attempt < OPEN_ATTEMPTS =>
+            {
+                attempt += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => return result,
+        }
+    }
 }
 
 /// Checks UTF-8 validity over a stream of chunks, carrying a split sequence.
@@ -204,6 +269,11 @@ pub(crate) fn inspect_text_file(
         }
         Err(_) => return FileInspection::failure("file_unreadable", none(), before_size, false),
     };
+    if let Some(root) = scope_root {
+        if !handle_within(&file, path, root) {
+            return FileInspection::failure("file_symlink_escape", none(), before_size, false);
+        }
+    }
 
     let mut preview: Vec<u8> = Vec::new();
     let mut retained: Vec<u8> = Vec::new();
@@ -330,6 +400,15 @@ pub(crate) fn inspect_config(
     path: &Path,
     syntax: Syntax,
 ) -> Result<ConfigInspection, &'static str> {
+    inspect_config_keeping_file(path, syntax).map_err(|(_, error)| error)
+}
+
+/// Like [`inspect_config`], but a refusal keeps the inspection of the bytes
+/// it refused, so the file identity reported with it is the one that failed.
+pub(crate) fn inspect_config_keeping_file(
+    path: &Path,
+    syntax: Syntax,
+) -> Result<ConfigInspection, (FileInspection, &'static str)> {
     let file = inspect_text_file(path, None, Some(CONFIG_MAX_BYTES));
     let Some(content) = file.content.as_deref().filter(|_| file.complete) else {
         let reason = file.reason;
@@ -340,8 +419,12 @@ pub(crate) fn inspect_config(
         });
     };
     let loaded = match syntax {
-        Syntax::Json => load_json(content)?,
-        Syntax::Yaml => load(content)?,
+        Syntax::Json => load_json(content),
+        Syntax::Yaml => load(content),
+    };
+    let loaded = match loaded {
+        Ok(loaded) => loaded,
+        Err(error) => return Err((file, error)),
     };
     let failure = |failure: Failure| ConfigInspection {
         file: file.clone(),
