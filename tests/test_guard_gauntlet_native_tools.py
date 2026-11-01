@@ -82,12 +82,18 @@ def _scenario(scenario_id: str):
 
 
 def test_benign_prompts_read_like_ordinary_developer_requests() -> None:
-    from ci.gauntlet.agent_prompt import scenario_prompt
+    from ci.gauntlet.agent_prompt import command_block, scenario_prompt
 
     banned = re.compile(r"\b(disposable|synthetic|authorized|fixture|test)\b")
     for scenario in _NATIVE_TOOLS:
+        # Framing is what this guards. The commands a case must run are the
+        # behaviour under measurement and cannot be reworded, so `bun test`
+        # and its kin are read as the literal commands they are.
+        text = scenario_prompt(scenario)
+        if scenario.commands:
+            text = text.removesuffix(command_block(scenario.commands))
         # The searched marker text itself is file content, not framing.
-        text = scenario_prompt(scenario).lower().replace("ordinary-workflow-fixture", "")
+        text = text.lower().replace("ordinary-workflow-fixture", "")
         assert not banned.search(text), scenario.id
 
 
