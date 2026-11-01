@@ -62,6 +62,51 @@ fn a_relative_vitest_entry_reads_as_the_project_runner() {
 }
 
 #[test]
+fn bun_launching_the_project_runner_reads_as_the_run_node_spells() {
+    for command in [
+        "bun node_modules/vitest/vitest.mjs run",
+        "bun node_modules/vitest/vitest.mjs run --root /work/tree/app",
+        "bun ./node_modules/vitest/vitest.mjs run src",
+        "bun ../app/node_modules/vitest/vitest.mjs run",
+        "bun node_modules/vitest/dist/cli.js run",
+        "bun node_modules/jest/bin/jest.js src",
+        "bun node_modules/mocha/bin/mocha.js test/unit",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn bun_launching_no_project_runner_reads_as_no_runner() {
+    for command in [
+        // `--cwd` names no entry at this position, and the sink reads the
+        // call the same way, so admitting it here would run a file the call
+        // never spelled.
+        "bun --cwd app node_modules/vitest/vitest.mjs run",
+        "bun --cwd=app node_modules/vitest/vitest.mjs run",
+        "bun xnode_modules/vitest/vitest.mjs run",
+        "bun node_modules/vitest/vitest.mjs watch",
+        // No verb selects the run, so the watch spelling decides, and a call
+        // left watching never finishes inside the sink. `run --watch` is not
+        // here: Vitest's `run` command turns the watch off whatever follows
+        // it, which is the reading the `node` spelling of this entry already
+        // carries.
+        "bun node_modules/vitest/vitest.mjs --watch",
+        "bun node_modules/vite/dist/cli.js run",
+    ] {
+        assert_ne!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn a_relative_jest_entry_reads_as_the_project_runner() {
     for command in [
         "node node_modules/jest/bin/jest.js",
@@ -329,6 +374,71 @@ fn a_runner_left_watching_keeps_its_review() {
         "npx vitest related src/a.ts",
         "npx vitest init --run",
         "node node_modules/vitest/vitest.mjs --watch",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_package_script_run_keeps_the_words_it_passes_on() {
+    // `npm run lint -- --max-warnings=0` runs the project's own lint script
+    // with one more checking option. The manager hands the words after `--`
+    // to the script, so they belong to the run the manifest spells and the
+    // run is still the read-only tool the script names.
+    for command in [
+        "npm run lint -- --max-warnings=0",
+        "npm run lint -- --max-warnings 0",
+        "npm run typecheck -- --pretty",
+        "pnpm lint -- --max-warnings=0",
+        "yarn typecheck -- --pretty",
+        "bun run lint -- --max-warnings=0",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_node_tool_readonly_containment_required"),
+            "{command}"
+        );
+    }
+    // Words that write or chain are refused wherever they sit, and a tail is
+    // only a tail when `--` introduces it.
+    for command in [
+        "npm run lint -- --fix",
+        "npm run lint -- --output-file out.txt",
+        "npm run lint -- --max-warnings=0 && rm -rf dist",
+        "npm run lint extra",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_passed_on_word_cannot_turn_a_reporting_tool_into_a_writing_one() {
+    // The tail is the agent's own text, and the tool reads it as part of its
+    // own command line. TypeScript takes an optional `true`/`false` after a
+    // boolean option, so `tsc --noEmit false` compiles and writes while the
+    // script's `--noEmit` is still there; `--init`, `--outDir` and the trace
+    // options write without touching `--noEmit` at all. Each is refused at
+    // the admission and left to ordinary review rather than reaching the sink
+    // as a read-only run.
+    for command in [
+        "npm run typecheck -- false",
+        "npm run typecheck -- --noEmit false",
+        "npm run typecheck -- --init",
+        "npm run typecheck -- --outDir dist",
+        "npm run typecheck -- --outFile bundle.js",
+        "npm run typecheck -- --build",
+        "npm run typecheck -- --generateTrace trace",
+        "npm run typecheck -- --generateCpuProfile profile.cpuprofile",
+        "npm run typecheck -- --declaration",
+        "pnpm typecheck -- false",
+        "yarn typecheck -- --init",
+        "bun run typecheck -- --noEmit false",
+        // ESLint's formatter is a module the run loads, and a count is a
+        // count: neither a path nor a word of another shape is a value this
+        // option takes.
+        "npm run lint -- --format ./reporter.js",
+        "npm run lint -- --max-warnings false",
+        "npm run lint -- src",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

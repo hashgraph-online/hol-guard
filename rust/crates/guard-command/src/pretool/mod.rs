@@ -197,6 +197,7 @@ mod search;
 mod search_pattern_clearance;
 mod search_pattern_text;
 mod search_scope;
+mod search_scope_budget;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
@@ -914,7 +915,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     // nesting, so a projection joins the submission already open instead of
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
-    let _budget = search_scope_walk::begin_include_scope_budget();
+    let _budget = search_scope_budget::begin_include_scope_budget();
     evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
 }
 
