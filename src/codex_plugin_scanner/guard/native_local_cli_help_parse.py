@@ -55,6 +55,9 @@ class SourceRead(NamedTuple):
     # Whether the code imports an MCP server library or answers tools/list.
     # Read only when the request asked for it; False otherwise.
     mcp_server: bool = False
+    # Whether the whole script is a generated wrapper for an installed
+    # package's entry point. Read with mcp_server; False otherwise.
+    entry_point: bool = False
 
 
 def resident_reads_sources_first() -> bool | None:
@@ -118,8 +121,9 @@ def native_local_cli_source_read(
 
     Besides the commands, the answer says whether the script handles --help
     and which local modules it imports, and with ``mcp_evidence`` whether it
-    serves MCP. Each decides what Guard runs next, so a reply whose fields are
-    missing or malformed is discarded whole.
+    serves MCP or is an installed package's entry-point wrapper. Each decides
+    what Guard runs next, so a reply whose fields are missing or malformed is
+    discarded whole.
     """
 
     home = Path(guard_home)
@@ -137,9 +141,16 @@ def native_local_cli_source_read(
     if any(not isinstance(entry, str) or not entry.startswith("./") for entry in imports):
         return _unusable(home)
     mcp_server = payload.get("mcp_server") if mcp_evidence else False
-    if not isinstance(mcp_server, bool):
+    entry_point = payload.get("entry_point") if mcp_evidence else False
+    if not isinstance(mcp_server, bool) or not isinstance(entry_point, bool):
         return _unusable(home)
-    return SourceRead(rows=rows, help_handler=handler, imports=tuple(imports), mcp_server=mcp_server)
+    return SourceRead(
+        rows=rows,
+        help_handler=handler,
+        imports=tuple(imports),
+        mcp_server=mcp_server,
+        entry_point=entry_point,
+    )
 
 
 def _request(

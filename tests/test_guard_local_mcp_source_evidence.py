@@ -51,8 +51,10 @@ def _resident(
     *,
     reads_evidence: bool | None = True,
     unreadable: bool = False,
+    wrappers: frozenset[str] = frozenset(),
 ) -> list[str]:
-    """Stand in a resident; ``serving`` holds the source texts it calls MCP servers."""
+    """Stand in a resident; ``serving`` holds the source texts it calls MCP servers
+    and ``wrappers`` the ones it calls entry-point wrappers."""
 
     read: list[str] = []
 
@@ -67,6 +69,7 @@ def _resident(
             help_handler="none",
             imports=imports,
             mcp_server=bool(kwargs.get("mcp_evidence")) and text in serving,
+            entry_point=bool(kwargs.get("mcp_evidence")) and text in wrappers,
         )
 
     monkeypatch.setattr(f"{BRIDGE}.resident_reads_mcp_evidence", lambda: reads_evidence)
@@ -130,6 +133,25 @@ def test_a_failed_lookup_or_unreadable_script_never_launches(tmp_path: Path, mon
     monkeypatch.setattr(f"{EVIDENCE}.identify_unlisted_cli", lambda *_args, **_kwargs: None)
     assert not _serves(f"python3 {ship} deploy", tmp_path)
     assert read == []
+
+
+def test_an_installed_entry_point_keeps_the_launch(tmp_path: Path, monkeypatch) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    wrapper = _script(
+        bin_dir,
+        "mcp-server-demo",
+        "#!/usr/bin/python3\nimport sys\nfrom mcp_server_demo import main\n"
+        "if __name__ == '__main__':\n    sys.exit(main())\n",
+    )
+    wrapper.chmod(0o755)
+    local = _script(bin_dir, "ship-it", "#!/usr/bin/python3\n#import ./ship.py\nfrom ship import main\n")
+    local.chmod(0o755)
+    _script(bin_dir, "ship.py", "def main():\n    deploy()\n")
+    monkeypatch.setenv("PATH", os.pathsep.join((str(bin_dir), "/usr/bin", "/bin")))
+    _resident(monkeypatch, set(), wrappers=frozenset({wrapper.read_text(), local.read_text()}))
+    assert _serves("mcp-server-demo --repository .", tmp_path)
+    assert not _serves("ship-it deploy", tmp_path)
 
 
 def test_an_older_resident_keeps_the_launch(tmp_path: Path, monkeypatch) -> None:

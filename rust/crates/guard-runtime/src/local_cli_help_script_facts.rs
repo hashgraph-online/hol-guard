@@ -1,6 +1,7 @@
 //! What a script's code says about how it may be read and run, before Guard
 //! runs it: whether it answers `--help` itself, which command-line frameworks
-//! it builds on, whether it serves MCP, and the local modules it imports.
+//! it builds on, whether it serves MCP or is an installed package's
+//! entry-point wrapper, and the local modules it imports.
 //!
 //! Guard runs `script --help` only for a script whose own code shows that it
 //! answers `--help`. A script that never looks for `--help` treats it as an
@@ -53,6 +54,10 @@ pub(crate) struct Facts {
     /// The code imports an MCP server library or answers `tools/list`, so
     /// launching it with its own arguments starts a server, not a command.
     pub(crate) mcp_server: bool,
+    /// The whole script is the console-script wrapper pip, uv or Poetry writes
+    /// for a package's entry point: it imports one function and exits with
+    /// its result, so the code that runs lives in that package.
+    pub(crate) entry_point: bool,
     /// Local modules the script imports, as `./`-relative paths.
     pub(crate) imports: Vec<String>,
     /// Commander, yargs, cac or sade: `.command('name')` names a subcommand.
@@ -156,6 +161,28 @@ static MCP_SERVER: LazyLock<Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
+/// The one import of an entry-point wrapper, `from package import function`.
+static WRAPPER_IMPORT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^from\s+[A-Za-z_][\w.]*\s+import\s+(\w+)$").unwrap());
+
+/// The wrapper's last line, `sys.exit(function())` or `sys.exit(object.attr())`.
+static WRAPPER_EXIT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^sys\.exit\(\s*([A-Za-z_]\w*)(?:\.\w+)*\(\)\s*\)$").unwrap());
+
+/// Every other code line a generated wrapper holds: its two imports, the
+/// `__main__` guard, and the fix-ups that drop `-script.pyw` or `.exe` from
+/// `sys.argv[0]`.
+static WRAPPER_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"^(?:import\s+(?:re|sys)",
+        r#"|if\s+__name__\s*==\s*["']__main__["']\s*:"#,
+        r#"|(?:if|elif)\s+sys\.argv\[0\]\.endswith\(\s*["'][\w.-]+["']\s*\)\s*:"#,
+        r"|sys\.argv\[0\]\s*=\s*sys\.argv\[0\]\[:-\d+\]",
+        r#"|sys\.argv\[0\]\s*=\s*re\.sub\(\s*r?["'][^"']*["']\s*,\s*(?:""|'')\s*,\s*sys\.argv\[0\]\s*\))$"#,
+    ))
+    .unwrap()
+});
+
 static JS_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["'](\./[^"'\s]+)["']"#).unwrap()
 });
@@ -176,6 +203,7 @@ static PY_MODULE: LazyLock<Regex> =
 pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
     let mut facts = Facts::default();
     let mut seen: HashSet<String> = HashSet::new();
+    let mut code_lines: Vec<&str> = Vec::new();
     for (index, line) in raw.iter().enumerate() {
         if lines.get(index).is_some_and(Option::is_some) {
             continue;
@@ -186,13 +214,39 @@ pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
         }
         read_help(line, &raw[index..], &mut facts);
         facts.mcp_server |= MCP_SERVER.is_match(code(line));
+        code_lines.push(py_strip(code(line)));
         for import in imports(line) {
             if facts.imports.len() < MAX_IMPORTS && seen.insert(import.clone()) {
                 facts.imports.push(import);
             }
         }
     }
+    facts.entry_point = entry_point(&code_lines);
     facts
+}
+
+/// Whether `code` is a generated entry-point wrapper and nothing else: one
+/// `from package import function`, a `sys.exit` that calls that function,
+/// and only wrapper boilerplate around them.
+fn entry_point(code: &[&str]) -> bool {
+    let mut imported: Option<&str> = None;
+    let mut called: Option<&str> = None;
+    for &line in code {
+        if let Some(found) = WRAPPER_IMPORT.captures(line) {
+            let name = found.get(1).map_or("", |name| name.as_str());
+            if imported.replace(name).is_some() {
+                return false;
+            }
+        } else if let Some(found) = WRAPPER_EXIT.captures(line) {
+            let name = found.get(1).map_or("", |name| name.as_str());
+            if called.replace(name).is_some() {
+                return false;
+            }
+        } else if !WRAPPER_LINE.is_match(line) {
+            return false;
+        }
+    }
+    imported.is_some() && imported == called
 }
 
 /// The code before a trailing `#` or `//` comment, outside any quotes. Cutting

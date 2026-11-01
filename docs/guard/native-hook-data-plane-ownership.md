@@ -564,13 +564,19 @@ an MCP library (`@modelcontextprotocol/sdk/server/*`,
 `mcp.server`, `fastmcp` or `FastMCP`/`Server` from `mcp` in Python, `mcp` or
 `fast_mcp` from Ruby) or dispatches on `tools/list` (a comparison, `case` or
 `when` label, or handler-table key). A client that imports the SDK or sends
-`tools/list` does not count. Python (`local_mcp_source_evidence.py`) takes the
+`tools/list` does not count. The same read adds `entry_point`, true only when
+every code line belongs to the console-script wrapper pip, uv or Poetry writes
+for an installed package: one `from package import function`, `sys.exit` of
+that function, and the `__main__` guard and `sys.argv[0]` fix-ups around them.
+Python (`local_mcp_source_evidence.py`) takes the
 script from the launch identity, so `bash ship.sh` reads `ship.sh`, not the
 shell, and launches it only when the script or one of its followed `./`
 modules (a sibling package's `__init__.py` included) has that fact. A selected
 server, a stored observation recorded for this same launch, a package MCP
 launcher (`npx`, `uvx` and the like), a package bin run through a runner, and
-a compiled program keep the launch without a read. A failed identity lookup, a
+a compiled program keep the launch without a read. An entry-point wrapper keeps
+the launch, as `uvx` would for the same package, unless its import resolves to
+a `./` module beside it, which then needs the evidence itself. A failed identity lookup, a
 script whose source or answer cannot be read, or a runtime whose status cannot
 be read, is not launched. A resident without the
 feature keeps the launch, as before.

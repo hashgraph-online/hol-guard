@@ -77,6 +77,7 @@ pub(crate) fn evaluate_local_cli_help_parse_request(
             "commands": commands,
             "help_handler": help.as_str(),
             "mcp_server": facts.mcp_server,
+            "entry_point": facts.entry_point,
             "imports": facts.imports,
         })
     } else {

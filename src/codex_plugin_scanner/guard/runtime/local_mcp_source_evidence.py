@@ -3,7 +3,9 @@
 Recognizing a pasted command as MCP launches it with its real arguments, so a
 script that is not a server would do its normal work. For a readable script
 the resident reads the source first, without running it, and only a script
-that imports an MCP server library or answers ``tools/list`` is launched.
+that imports an MCP server library or answers ``tools/list`` is launched. The
+wrapper pip or uv writes for an installed package's command is launched like
+the package itself, as ``uvx`` would run it.
 """
 
 from __future__ import annotations
@@ -24,11 +26,12 @@ from .local_cli_script_source import (
 def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guard_home: Path) -> bool:
     """Whether Guard may launch ``command`` to ask it for MCP tools.
 
-    True for a compiled program and a project bin run through a package
-    launcher. A script is launched only when its source, or a local module it
-    imports, shows an MCP server. A lookup that fails, a script whose source
-    cannot be read, or a resident that cannot be asked never launches; an
-    older resident that cannot read MCP evidence keeps the launch.
+    True for a compiled program, a project bin run through a package launcher,
+    and an installed package's generated entry-point wrapper. Any other script
+    is launched only when its source, or a local module it imports, shows an
+    MCP server. A lookup that fails, a script whose source cannot be read, or
+    a resident that cannot be asked never launches; an older resident that
+    cannot read MCP evidence keeps the launch.
     """
 
     identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
@@ -55,7 +58,10 @@ def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guar
         return False
     if read.mcp_server:
         return True
-    for module in local_import_paths(launched, read.imports):
+    modules = local_import_paths(launched, read.imports)
+    if read.entry_point and not modules:
+        return True
+    for module in modules:
         module_text = read_local_module(module, launched)
         if module_text is None:
             continue

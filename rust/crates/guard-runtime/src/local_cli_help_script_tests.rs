@@ -442,3 +442,31 @@ fn mcp_server_libraries_and_tools_list_handlers_are_evidence() {
         assert!(!serves(source), "{source}");
     }
 }
+
+/// What pip writes for `mcp-server-git = "mcp_server_git:main"`.
+const PIP_WRAPPER: &str = "#!/opt/tools/bin/python3\n# -*- coding: utf-8 -*-\nimport re\nimport sys\nfrom mcp_server_git import main\nif __name__ == '__main__':\n    sys.argv[0] = re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])\n    sys.exit(main())\n";
+
+/// What uv writes for an entry point named `pkg.cli:app.run`.
+const UV_WRAPPER: &str = "#!/opt/tools/bin/python\nimport sys\nfrom pkg.cli import app\nif __name__ == \"__main__\":\n    if sys.argv[0].endswith(\"-script.pyw\"):\n        sys.argv[0] = sys.argv[0][:-11]\n    elif sys.argv[0].endswith(\".exe\"):\n        sys.argv[0] = sys.argv[0][:-4]\n    sys.exit(app.run())\n";
+
+#[test]
+fn only_a_generated_wrapper_is_an_entry_point() {
+    let wraps = |source: &str| script_facts(source, &["tool".to_owned()]).entry_point;
+    assert!(wraps(PIP_WRAPPER));
+    assert!(wraps(UV_WRAPPER));
+    for source in [
+        PIP_WRAPPER.replace("sys.exit(main())", "main()\n    sys.exit(main())"),
+        PIP_WRAPPER.replace("sys.exit(main())", "sys.exit(other())"),
+        PIP_WRAPPER.replace("import re\n", "import re\nimport os\n"),
+        PIP_WRAPPER.replace("import main\n", "import main\nfrom shutil import rmtree\n"),
+        PIP_WRAPPER.replace(
+            "re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])",
+            "os.system('deploy')",
+        ),
+        PIP_WRAPPER.replace("from mcp_server_git import main\n", ""),
+        "from ship import deploy\ndeploy()\n".to_owned(),
+        "import sys\nprint(sys.argv)\n".to_owned(),
+    ] {
+        assert!(!wraps(&source), "{source}");
+    }
+}
