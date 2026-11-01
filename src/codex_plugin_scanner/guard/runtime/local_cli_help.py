@@ -163,13 +163,18 @@ def discover_local_cli_commands(
     """
 
     probe: Callable[[Sequence[str]], str] = runner if runner is not None else run_cli_help
+    empty: tuple[LocalCliCommand, ...] = ()
     source = script_source_path(identity, argv)
-    if source is not None and _resident_reads_sources_first():
-        text = read_script_source(source[0], shebang_only=source[1])
-        if text is not None:
+    text = read_script_source(source[0], shebang_only=source[1]) if source is not None else None
+    if source is not None and text is not None:
+        reads_first = _resident_reads_sources_first()
+        if reads_first is None:
+            # Without the resident's word on what the script does with --help,
+            # running it could do its normal work.
+            return merge_discovered_commands(identity.name, empty), "failed"
+        if reads_first:
             return _discover_from_source(identity, argv, source[0], text, probe, guard_home=guard_home)
     output = str(probe(tuple(argv)))
-    empty: tuple[LocalCliCommand, ...] = ()
     # The probe printed nothing, so there is no help to send anywhere.
     discovered = (
         parse_cli_help_text(output, invocation=(identity.name,), guard_home=guard_home) if output.strip() else None
@@ -266,13 +271,13 @@ def _discover_from_source(
     return merge_discovered_commands(identity.name, empty), "failed" if discovered is None else "empty"
 
 
-def _resident_reads_sources_first() -> bool:
+def _resident_reads_sources_first() -> bool | None:
     from ..native_local_cli_help_parse import resident_reads_sources_first
 
     try:
         return resident_reads_sources_first()
     except Exception:
-        return False
+        return None
 
 
 def _source_read(text: str, invocation: Sequence[str], guard_home: Path | None) -> SourceRead | None:

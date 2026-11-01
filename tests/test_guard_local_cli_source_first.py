@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -115,6 +116,51 @@ def test_a_resident_that_cannot_read_the_source_runs_nothing(monkeypatch: pytest
         _identity("pin.mjs"), ("/usr/bin/node", str(script), "--help"), runner=probe
     )
     assert (ran, status) == ([], "failed")
+
+
+def test_a_runtime_whose_status_cannot_be_read_runs_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A busy or missing resident is not an older one: the script is never run unread."""
+
+    script = _script(tmp_path, "pin.mjs", PIN_SCRIPT)
+    monkeypatch.setattr(f"{BRIDGE}.resident_reads_sources_first", lambda: None)
+    ran, probe = _probe()
+    _, status = discover_local_cli_commands(
+        _identity("pin.mjs"), ("/usr/bin/node", str(script), "--help"), runner=probe
+    )
+    assert (ran, status) == ([], "failed")
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        RuntimeError("native_runtime_status_deadline"),
+        SimpleNamespace(available=False, compatible=True, capabilities=SimpleNamespace(features=())),
+        SimpleNamespace(available=True, compatible=False, capabilities=SimpleNamespace(features=())),
+        SimpleNamespace(available=True, compatible=True, capabilities=None),
+    ],
+)
+def test_an_unreadable_runtime_status_is_unknown_not_older(monkeypatch: pytest.MonkeyPatch, status: object) -> None:
+    from codex_plugin_scanner.guard import native_local_cli_help_parse as bridge
+
+    def _status() -> object:
+        if isinstance(status, Exception):
+            raise status
+        return status
+
+    monkeypatch.setattr(bridge, "native_runtime_status", _status)
+    assert bridge.resident_reads_sources_first() is None
+
+
+def test_only_a_runtime_that_lists_its_features_can_be_older(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_local_cli_help_parse as bridge
+
+    def _listing(*features: str) -> object:
+        return SimpleNamespace(available=True, compatible=True, capabilities=SimpleNamespace(features=features))
+
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: _listing("local-cli-help-parse-v1"))
+    assert bridge.resident_reads_sources_first() is False
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: _listing(bridge.LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE))
+    assert bridge.resident_reads_sources_first() is True
 
 
 def test_a_script_that_answers_help_itself_runs_once_and_never_per_command(

@@ -543,8 +543,10 @@ at most four imported modules that resolve, through symlinks, to script files
 inside the script's own folder. On the answer it runs nothing for `none`, only
 the top-level `--help` for `script`, and nested `<command> --help` probes only
 for `framework`. A resident that cannot read the source leaves the CLI with no
-commands and runs nothing. A resident without the feature, or a file that is
-not a readable script, takes the help-first path above.
+commands and runs nothing, and so does a runtime whose status cannot be read:
+a busy or missing resident is never taken for an older one. Only a resident
+whose capabilities list lacks the feature, or a file that is not a readable
+script, takes the help-first path above.
 
 Two consequences are worth naming. Discovery fails closed: a resident that
 cannot answer leaves the CLI with no commands found, and the grant falls back

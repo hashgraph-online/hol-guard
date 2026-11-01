@@ -51,16 +51,21 @@ class SourceRead(NamedTuple):
     imports: tuple[str, ...]
 
 
-def resident_reads_sources_first() -> bool:
-    """Whether the resident can say what a script does with --help."""
+def resident_reads_sources_first() -> bool | None:
+    """Whether the resident can say what a script does with --help.
+
+    None when the runtime's status cannot be read: a resident that is busy or
+    unavailable says nothing about what it lacks, so it is never taken for an
+    older one that would let Guard run the script unread.
+    """
 
     try:
         status = native_runtime_status()
     except Exception:
-        return False
+        return None
     capabilities = status.capabilities
     if not status.available or not status.compatible or capabilities is None:
-        return False
+        return None
     return LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE in capabilities.features
 
 
