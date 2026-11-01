@@ -106,6 +106,82 @@ pub(super) fn is_zip(data: &[u8]) -> bool {
     data.starts_with(LOCAL_SIGNATURE) || data.starts_with(EOCD_SIGNATURE)
 }
 
+/// Where a zip begins inside `data` when something else is written in front of
+/// it, or `None` when there is no archive behind those bytes.
+///
+/// A self-extracting archive is an executable with a zip appended to it, and
+/// it is the common way a secret leaves a repository in a shape no reader
+/// looks inside. Two things keep the walk above from reading one. The bytes at
+/// offset zero belong to the stub, so the signature check says this is not an
+/// archive; and every offset the archive records is counted from where the zip
+/// itself begins rather than from the start of the file, so following them
+/// against the whole file lands in the stub.
+///
+/// Both are answered by finding where the archive starts and reading from
+/// there, which is the rebase the format asks for and nothing more. The end
+/// record is found from the tail the way it always is. The prefix is what lies
+/// between the directory that record names and where the directory actually
+/// sits: the record states the directory's size and its offset within the
+/// archive, and the directory ends where the record begins, so the archive
+/// begins at the record's own position less the two.
+///
+/// That arithmetic rests on the directory being written immediately before the
+/// end record, which is how every archiver writes one. An archive with slack
+/// between them is left unread rather than rebased wrongly, because the result
+/// is checked against the archive before it is returned: a prefix that does not
+/// land on both a central record and a member's local header is no prefix, and
+/// the searching this does over a binary that holds no archive at all ends
+/// there.
+pub(super) fn embedded_start(data: &[u8]) -> Option<usize> {
+    let window = data.len().min(EOCD_FIXED + MAX_COMMENT);
+    let start = data.len() - window;
+    let mut candidate = data.len().checked_sub(EOCD_FIXED)?;
+    loop {
+        if data[candidate..].starts_with(EOCD_SIGNATURE) {
+            if let Some(prefix) = prefix_at(data, candidate) {
+                return Some(prefix);
+            }
+        }
+        if candidate == start {
+            return None;
+        }
+        candidate -= 1;
+    }
+}
+
+/// The prefix an end record at `candidate` implies, when the archive it names
+/// is really behind it.
+fn prefix_at(data: &[u8], candidate: usize) -> Option<usize> {
+    let comment = u16_at(data, candidate + 20)? as usize;
+    if candidate + EOCD_FIXED + comment != data.len() {
+        return None;
+    }
+    let size = u32_at(data, candidate + 12)? as usize;
+    let offset = u32_at(data, candidate + 16)? as usize;
+    // An empty directory names no member, so there is nothing behind the stub
+    // for this to reach. A zip64 archive states both figures as sentinels,
+    // which the subtraction below refuses rather than acts on.
+    if size == 0 {
+        return None;
+    }
+    let prefix = candidate.checked_sub(size)?.checked_sub(offset)?;
+    // No prefix at all is the ordinary archive the signature check already
+    // recognised, and it is read there rather than twice.
+    if prefix == 0 {
+        return None;
+    }
+    // Two agreements make this an archive rather than an end record that
+    // happened to fall inside a binary: the directory has to begin where the
+    // rebase puts it, and the archive has to begin with a member's own local
+    // header.
+    if !data.get(prefix + offset..)?.starts_with(CENTRAL_SIGNATURE) {
+        return None;
+    }
+    data.get(prefix..)?
+        .starts_with(LOCAL_SIGNATURE)
+        .then_some(prefix)
+}
+
 /// Findings from the members of a zip archive, with the number of member bytes
 /// read, on the same terms as the tar walk beside it.
 pub(super) fn scan_members(

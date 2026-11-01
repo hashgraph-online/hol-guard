@@ -129,7 +129,7 @@ pub(super) fn scan_archive_members(
     };
     let payload = if is_gzip(data) {
         Payload::Owned(inflate_gzip(data, caps.total)?)
-    } else if is_tar(data) || zip::is_zip(data) {
+    } else if is_tar(data) || zip_start(data).is_some() {
         Payload::Borrowed(data)
     } else {
         return None;
@@ -141,9 +141,9 @@ pub(super) fn scan_archive_members(
     // Recognised after inflation as well as before it, so a `.zip.gz` — which
     // a mail gateway or a backup script produces without meaning to — is read
     // rather than handed to the single-member path as one opaque blob.
-    if zip::is_zip(bytes) {
+    if let Some(start) = zip_start(bytes) {
         return Some(zip::scan_members(
-            bytes,
+            &bytes[start..],
             path,
             source,
             commit,
@@ -167,6 +167,20 @@ pub(super) fn scan_archive_members(
         commit,
         finding_budget,
     ))
+}
+
+/// Where the zip in `bytes` begins, which is byte zero for an archive sent as
+/// itself and further in for one with a stub in front of it.
+///
+/// A self-extracting archive is an executable carrying a zip, and it reached
+/// this module as a binary blob with nothing in it to read. It is read as the
+/// archive it is now, from where the archive starts; the stub itself is not a
+/// member and is not reported as one.
+fn zip_start(bytes: &[u8]) -> Option<usize> {
+    if zip::is_zip(bytes) {
+        return Some(0);
+    }
+    zip::embedded_start(bytes)
 }
 
 /// Inflated bytes either own their buffer or point at the caller's.
