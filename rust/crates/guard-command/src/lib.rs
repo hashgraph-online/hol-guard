@@ -210,6 +210,11 @@ mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
 pub mod protection_health;
+pub mod protection_health_facts;
+#[cfg(test)]
+mod protection_health_facts_containment_tests;
+#[cfg(test)]
+mod protection_health_facts_tests;
 #[cfg(test)]
 mod protection_health_tests;
 pub mod pytest_argv;
@@ -494,6 +499,7 @@ mod contained_prefix;
 mod contained_run_prefix;
 #[cfg(unix)]
 pub mod contained_runner;
+mod containment_compatibility;
 pub mod credential_patterns;
 pub mod data_flow_request_artifact;
 pub mod data_flow_rules;

@@ -213,3 +213,66 @@ fn a_bad_row_past_the_reported_hundred_still_refuses_the_request() {
         Err("native_protection_health_report_invalid".to_owned())
     );
 }
+
+fn facts(now: &str) -> ProtectionHealthFactsRequestV1 {
+    serde_json::from_value(serde_json::json!({
+        "schema": PROTECTION_HEALTH_FACTS_REQUEST_SCHEMA,
+        "request_id": "req-2",
+        "now": now,
+        "managed_installs": [
+            {"harness": "codex", "active": true},
+            {"harness": "../../private", "active": true},
+        ],
+        "hook_verification": {"codex": true},
+        "daemon": null,
+        "remembered_rules": "enforced",
+        "runtime_protection": "protected",
+        "decision_stream": {"active_error_count": 0, "activity_count": 3},
+    }))
+    .unwrap()
+}
+
+#[test]
+fn facts_reply_with_the_report_their_signals_add_up_to() {
+    let wire = facts("2026-07-19T15:00:00+00:00");
+    let result: ProtectionHealthReportResultV1 =
+        serde_json::from_slice(&evaluate_protection_health_facts(&wire).unwrap()).unwrap();
+    assert_eq!(result.schema, PROTECTION_HEALTH_REPORT_RESULT_SCHEMA);
+    assert_eq!(result.request_id, "req-2");
+    assert_eq!(
+        result.request_sha256,
+        request_digest_with_limit(&wire, PROTECTION_HEALTH_REPORT_MAX_REQUEST_BYTES).unwrap()
+    );
+    let report = result.payload.expect("payload");
+    // No daemon row, so neither the daemon nor containment is proven.
+    assert_eq!(report["state"], "degraded");
+    let apps = report["apps"].as_array().expect("apps");
+    assert_eq!(apps.len(), 1);
+    assert_eq!(apps[0]["harness"], "codex");
+    let checks = report["checks"].as_array().expect("checks");
+    let daemon = checks
+        .iter()
+        .find(|check| check["check_id"] == "daemon")
+        .expect("daemon check");
+    assert_eq!(daemon["reason_code"], "daemon_runtime_unavailable");
+}
+
+#[test]
+fn facts_read_at_no_instant_or_under_another_schema_are_refused() {
+    assert_eq!(
+        evaluate_protection_health_facts(&facts("2026-07-19T15:00:00")),
+        Err("native_protection_health_report_invalid".to_owned())
+    );
+    let mut wire = facts("2026-07-19T15:00:00+00:00");
+    wire.request_id = String::new();
+    assert_eq!(
+        evaluate_protection_health_facts(&wire),
+        Err("native_protection_health_report_invalid".to_owned())
+    );
+    wire.request_id = "req-2".to_owned();
+    wire.schema = PROTECTION_HEALTH_REPORT_REQUEST_SCHEMA.to_owned();
+    assert_eq!(
+        evaluate_protection_health_facts(&wire),
+        Err("native_protection_health_report_schema_mismatch".to_owned())
+    );
+}

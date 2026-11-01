@@ -65,6 +65,7 @@ _NODE_TOOLS = {
     "jest": ("30.0.5", ("jest",)),
     "tsx": ("4.20.3", ("tsx",)),
     "turbo": ("2.5.5", ("turbo",)),
+    "lint-staged": ("16.1.2", ("lint-staged",)),
 }
 _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "prettier --check ."}
 # The suite split into named parts, which is how a project with more than one

@@ -1646,6 +1646,30 @@
       ]
     },
     {
+      "id": "omp-native-workspace-npx-lint-staged",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Run this project's own staged-file check: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "commands": [
+        "npx lint-staged"
+      ]
+    },
+    {
+      "id": "omp-native-workspace-pnpm-npx-tsc",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Type-check this project with its own TypeScript: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "commands": [
+        "npx tsc -p tsconfig.json"
+      ]
+    },
+    {
       "id": "omp-native-workspace-node-options-heap-prefix",
       "expectation": "allow",
       "oracle": "native-tools",

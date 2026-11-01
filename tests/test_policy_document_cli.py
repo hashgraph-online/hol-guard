@@ -306,3 +306,32 @@ def test_policy_import_reports_authority_errors(
     assert result == 4
     assert payload["error"] == "PolicyAuthorityError"
     assert payload["message"] == "remote_policy_source_requires_validated_sync_path"
+
+
+@pytest.mark.parametrize("subcommand", ["show", "export"])
+def test_policy_show_explains_how_to_include_workspace_rules(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    subcommand: str,
+) -> None:
+    workspace_row = {
+        "decision_id": 63,
+        "harness": "codex",
+        "scope": "workspace",
+        "workspace": "/workspace/repository",
+        "action": "allow",
+    }
+    monkeypatch.setattr(GuardStore, "list_policy_decisions", lambda self: [workspace_row])
+
+    text_rc = main(["guard", "policy", subcommand, "--home", str(tmp_path / "home")])
+    text = capsys.readouterr().out
+    json_rc = main(["guard", "policy", subcommand, "--home", str(tmp_path / "home"), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert text_rc == json_rc == 4
+    assert f"hol-guard policy {subcommand} --include-provenance" in text
+    assert "local-63" in text
+    assert "/workspace/repository" not in text
+    assert payload["error"] == "sensitive_local_policy_requires_provenance"
+    assert "--include-provenance" in payload["message"]

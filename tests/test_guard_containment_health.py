@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 import codex_plugin_scanner.guard.native_execution as native_execution
+import codex_plugin_scanner.guard.native_protection_health as native_protection_health
 import codex_plugin_scanner.guard.runtime.containment_health as containment_health_module
-from codex_plugin_scanner.guard.runtime import protection_health_runtime
 from codex_plugin_scanner.guard.runtime.containment_contract import ContainmentBackend
 from codex_plugin_scanner.guard.runtime.containment_health import (
     CONTAINMENT_POLICY_CONTRACT_DIGEST,
@@ -18,22 +17,9 @@ from codex_plugin_scanner.guard.runtime.containment_health import (
     containment_health_signals,
     probe_containment_health,
 )
-from codex_plugin_scanner.guard.runtime.protection_health import ProtectionSignal
+from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus, ProtectionSignal
 
 _NOW = datetime(2026, 7, 19, 15, 0, tzinfo=timezone.utc)
-
-
-class _Health:
-    dropped_event_count: int = 0
-    persistence_error_count: int = 0
-
-
-class _Store:
-    def count_command_activities(self) -> int:
-        return 1
-
-    def get_command_activity_persistence_health(self) -> _Health:
-        return _Health()
 
 
 def _evidence(**overrides: object) -> ContainmentHealthEvidence:
@@ -59,63 +45,6 @@ def _evidence(**overrides: object) -> ContainmentHealthEvidence:
     )
 
 
-def _runtime_signals(evidence: object) -> dict[str, ProtectionSignal]:
-    """The signals the runtime produced for this evidence.
-
-    Whether they add up to a protected machine is the native runtime's answer,
-    pinned in `rust/crates/guard-command/tests/`, so the transport is stood in
-    for here rather than evaluated a second time.
-    """
-
-    recorded: dict[str, ProtectionSignal] = {}
-
-    def _record(
-        signals: Mapping[str, ProtectionSignal],
-        *,
-        harness_signals: Mapping[str, ProtectionSignal],
-        guard_home: Path,
-    ) -> dict[str, object]:
-        recorded.update(signals)
-        return {}
-
-    original = protection_health_runtime.protection_health_report
-    protection_health_runtime.protection_health_report = _record
-    try:
-        protection_health_runtime.build_runtime_protection_health(
-            store=_Store(),
-            # Never read: the resident the path would reach is stood in for.
-            guard_home=Path("guard-home"),
-            runtime_state={"last_heartbeat_at": _NOW.isoformat(), "containment_health": evidence},
-            managed_installs=[{"harness": "codex", "active": True}],
-            trust_status={},
-            now=_NOW,
-        )
-    finally:
-        protection_health_runtime.protection_health_report = original
-    return recorded
-
-
-def test_compatible_health_proves_only_the_containment_owned_checks() -> None:
-    evidence = _evidence()
-    signals = containment_health_signals(evidence.to_dict(), now=_NOW)
-
-    assert set(signals) == {
-        "policy_engine",
-        "decision_plane_compatibility",
-        "containment_compatibility",
-        "sandbox",
-    }
-    assert all(signal.status.value == "pass" for signal in signals.values())
-
-    produced = _runtime_signals(evidence.to_dict())
-    assert produced["daemon"].status.value == "pass"
-    assert produced["containment_compatibility"].status.value == "pass"
-    assert produced["sandbox"].reason_code == "containment_backend_enforced"
-    # No managed hook is attested here, so the grammar cannot call this
-    # protected; `guard_protection_health_truth_table.rs` pins that.
-    assert produced["harness_hooks"].status.value != "pass"
-
-
 def test_unsupported_platform_probe_returns_explicit_fail_closed_health(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -127,59 +56,87 @@ def test_unsupported_platform_probe_returns_explicit_fail_closed_health(
         daemon_fingerprint=daemon_fingerprint,
         guard_home=tmp_path / "guard-home",
     )
-    signals = containment_health_signals(evidence.to_dict(), now=datetime.now(timezone.utc))
 
     assert evidence.backend is ContainmentBackend.UNSUPPORTED
     assert evidence.backend_digest == hashlib.sha256(b"unavailable:unsupported").hexdigest()
     assert evidence.probe_enforced is False
-    assert {signal.reason_code for signal in signals.values()} == {"unsupported_platform"}
+    # What unsupported evidence proves is the resident's, pinned in
+    # `guard_command::protection_health_facts`.
 
 
-def test_unsupported_reason_takes_precedence_over_probe_failure() -> None:
-    evidence = _evidence(backend=ContainmentBackend.UNSUPPORTED, probe_enforced=False)
-
-    signals = containment_health_signals(evidence.to_dict(), now=_NOW)
-
-    assert {signal.reason_code for signal in signals.values()} == {"unsupported_platform"}
-
-
-@pytest.mark.parametrize(
-    ("overrides", "reason"),
-    (
-        ({"backend": ContainmentBackend.UNSUPPORTED}, "unsupported_platform"),
-        ({"probe_enforced": False}, "containment_probe_failed"),
-        ({"probe_at": (_NOW - timedelta(minutes=6)).isoformat()}, "containment_probe_stale"),
-        ({"probe_at": (_NOW + timedelta(seconds=6)).isoformat()}, "containment_probe_future"),
-        ({"policy_contract_digest": hashlib.sha256(b"other").hexdigest()}, "policy_version_mismatch"),
-        ({"runtime_fingerprint": hashlib.sha256(b"drift").hexdigest()}, "daemon_runtime_drift"),
-    ),
-)
-def test_faults_fail_closed_and_surface_degraded(
-    overrides: dict[str, object],
-    reason: str,
+def test_containment_signals_are_the_resident_report_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    evidence = _evidence(**overrides)
-    signals = containment_health_signals(evidence.to_dict(), now=_NOW)
-    produced = _runtime_signals(evidence.to_dict())
+    sent: list[dict[str, object]] = []
 
-    assert all(signal.status.value == "fail" for signal in signals.values())
-    assert {signal.reason_code for signal in signals.values()} == {reason}
-    # Each containment check reaches the report as the failure it is.
-    for check_id, signal in signals.items():
-        assert produced[check_id] == signal
+    def report(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        sent.append({**facts, "guard_home": guard_home})
+        return {
+            "checks": [
+                {"check_id": "harness_hooks", "status": "fail", "reason_code": "no_managed_harness"},
+                {"check_id": "daemon", "status": "unknown", "reason_code": "daemon_heartbeat_unavailable"},
+                {"check_id": "policy_engine", "status": "pass", "reason_code": "policy_engine_compatible"},
+                {"check_id": "sandbox", "status": "fail", "reason_code": "containment_probe_failed"},
+            ]
+        }
+
+    monkeypatch.setattr(native_protection_health, "protection_health_report", report)
+    evidence = _evidence().to_dict()
+
+    signals = containment_health_signals(evidence, now=_NOW, guard_home=tmp_path)
+
+    assert signals == {
+        "policy_engine": ProtectionSignal(ProtectionCheckStatus.PASS, "policy_engine_compatible"),
+        "sandbox": ProtectionSignal(ProtectionCheckStatus.FAIL, "containment_probe_failed"),
+    }
+    assert sent == [
+        {
+            "now": _NOW.isoformat(),
+            "managed_installs": [],
+            "hook_verification": None,
+            "daemon": {"registration_status": None, "last_heartbeat_at": None, "containment_health": evidence},
+            "remembered_rules": None,
+            "runtime_protection": None,
+            "decision_stream": None,
+            "guard_home": tmp_path,
+        }
+    ]
 
 
-def test_daemon_drift_has_an_explicit_daemon_failure() -> None:
-    evidence = _evidence(runtime_fingerprint=hashlib.sha256(b"drift").hexdigest())
-    daemon = _runtime_signals(evidence.to_dict())["daemon"]
+def test_unsupported_platform_survives_an_unreachable_resident_but_never_overrides_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def unreachable(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        raise native_protection_health.NativeProtectionHealthError("native_protection_health_unavailable")
 
-    assert (daemon.status.value, daemon.reason_code) == ("fail", "daemon_runtime_drift")
+    monkeypatch.setattr(native_protection_health, "protection_health_report", unreachable)
+    evidence = _evidence(
+        backend=ContainmentBackend.UNSUPPORTED,
+        backend_digest=hashlib.sha256(b"unavailable:unsupported").hexdigest(),
+        probe_enforced=False,
+    ).to_dict()
 
+    signals = containment_health_signals(evidence, now=_NOW, guard_home=tmp_path)
 
-def test_missing_or_malformed_health_is_blocking_not_unknown() -> None:
-    for value in (None, {}, {"schema_version": "future"}, ["not", "a", "mapping"]):
-        signals = containment_health_signals(value, now=_NOW)
-        assert all(signal.status.value == "fail" for signal in signals.values())
+    unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
+    assert signals == dict.fromkeys(
+        ("containment_compatibility", "decision_plane_compatibility", "policy_engine", "sandbox"), unsupported
+    )
+    with pytest.raises(native_protection_health.NativeProtectionHealthError):
+        _ = containment_health_signals({**evidence, "backend": "macos-sandbox"}, now=_NOW, guard_home=tmp_path)
+
+    def answered(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        rows = [
+            {"check_id": check_id, "status": "fail", "reason_code": "containment_health_invalid"} for check_id in ids
+        ]
+        return {"checks": rows}
+
+    ids = ("containment_compatibility", "decision_plane_compatibility", "policy_engine", "sandbox")
+    monkeypatch.setattr(native_protection_health, "protection_health_report", answered)
+    invalid = ProtectionSignal(ProtectionCheckStatus.FAIL, "containment_health_invalid")
+    assert containment_health_signals(evidence, now=_NOW, guard_home=tmp_path) == dict.fromkeys(ids, invalid)
 
 
 def test_health_mapping_is_strict_and_privacy_safe(tmp_path: Path) -> None:
