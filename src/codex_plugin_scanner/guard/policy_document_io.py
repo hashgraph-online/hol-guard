@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Final, final
 
@@ -53,7 +54,15 @@ def _policy_file_io(op: str, path: Path, content: str | None = None) -> dict[str
     from .mdm.runtime_request import runtime_answer
 
     candidate = path.expanduser().absolute()
-    request: dict[str, object] = {"schema": _SCHEMA, "op": op, "path": str(candidate)}
+    request: dict[str, object] = {"schema": _SCHEMA, "op": op}
+    text = str(candidate)
+    try:
+        _ = text.encode("utf-8")
+    except UnicodeEncodeError:
+        # A Unix name that is not UTF-8 cannot travel as a JSON string.
+        request["path_bytes"] = list(os.fsencode(candidate))
+    else:
+        request["path"] = text
     if content is not None:
         request["content"] = content
     answer = runtime_answer(

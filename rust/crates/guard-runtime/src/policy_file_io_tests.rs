@@ -18,6 +18,9 @@ fn malformed_requests_fail_the_command() {
         json!({"schema": "policy-file-io.v1", "op": "read", "path": absolute, "content": ""}),
         json!({"schema": "policy-file-io.v1", "op": "write", "path": absolute}),
         json!({"schema": "policy-file-io.v1", "op": "read", "path": absolute, "extra": 1}),
+        json!({"schema": "policy-file-io.v1", "op": "read"}),
+        json!({"schema": "policy-file-io.v1", "op": "read", "path": absolute, "path_bytes": [47]}),
+        json!({"schema": "policy-file-io.v1", "op": "read", "path_bytes": [112]}),
     ];
     for request in requests {
         assert_eq!(
@@ -30,7 +33,9 @@ fn malformed_requests_fail_the_command() {
 
 #[cfg(unix)]
 mod unix {
+    use std::ffi::OsStr;
     use std::fs;
+    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
     use std::path::{Path, PathBuf};
 
@@ -98,6 +103,37 @@ mod unix {
         assert_eq!(read(&policy), json!({"text": "rules: []\n"}));
         assert_eq!(write(&policy, "rules: [1]\n"), json!({"written": true}));
         assert_eq!(read(&policy), json!({"text": "rules: [1]\n"}));
+        assert!(leftover_temporaries(&folder.path).is_empty());
+    }
+
+    #[test]
+    fn reads_and_writes_a_file_whose_name_is_not_utf8() {
+        let folder = private_folder();
+        let policy = folder.path.join(OsStr::from_bytes(b"policy-\xff.yaml"));
+        if fs::write(&policy, b"rules: []\n").is_err() {
+            return; // This filesystem only allows UTF-8 names.
+        }
+        fs::set_permissions(&policy, fs::Permissions::from_mode(0o600)).expect("chmod");
+        let bytes = policy.as_os_str().as_bytes();
+        let request =
+            |op: &str| json!({"schema": "policy-file-io.v1", "op": op, "path_bytes": bytes});
+        assert_eq!(
+            run(&request("read")).expect("answer"),
+            json!({"text": "rules: []\n"})
+        );
+        let mut replace = request("write");
+        replace["content"] = json!("rules: [1]\n");
+        assert_eq!(run(&replace).expect("answer"), json!({"written": true}));
+        assert_eq!(fs::read(&policy).expect("read"), b"rules: [1]\n");
+        assert!(leftover_temporaries(&folder.path).is_empty());
+    }
+
+    #[test]
+    fn writes_a_file_whose_name_fills_the_name_limit() {
+        let folder = private_folder();
+        let policy = folder.path.join(format!("{}.yaml", "p".repeat(250)));
+        assert_eq!(write(&policy, "rules: []\n"), json!({"written": true}));
+        assert_eq!(read(&policy), json!({"text": "rules: []\n"}));
         assert!(leftover_temporaries(&folder.path).is_empty());
     }
 

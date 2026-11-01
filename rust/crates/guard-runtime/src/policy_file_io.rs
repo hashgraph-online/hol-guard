@@ -39,7 +39,12 @@ type Failure = &'static str;
 struct Request {
     schema: String,
     op: String,
-    path: PathBuf,
+    #[serde(default)]
+    path: Option<PathBuf>,
+    /// The path's raw bytes, for a Unix path that is not UTF-8 and so
+    /// cannot travel as a JSON string.
+    #[serde(default)]
+    path_bytes: Option<Vec<u8>>,
     #[serde(default)]
     content: Option<String>,
 }
@@ -58,12 +63,17 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         return Err("policy_file_io_request_too_large".to_owned());
     }
     let request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    if request.schema != SCHEMA || !request.path.is_absolute() {
+    let path = match (request.path, request.path_bytes) {
+        (Some(path), None) => path,
+        (None, Some(bytes)) => platform::path_from_bytes(bytes).ok_or_else(invalid)?,
+        _ => return Err(invalid()),
+    };
+    if request.schema != SCHEMA || !path.is_absolute() {
         return Err(invalid());
     }
     let answer = match (request.op.as_str(), request.content.as_deref()) {
-        ("read", None) => answer_read(&request.path),
-        ("write", Some(content)) => answer_write(&request.path, content),
+        ("read", None) => answer_read(&path),
+        ("write", Some(content)) => answer_write(&path, content),
         _ => return Err(invalid()),
     };
     serde_json::to_vec(&answer).map_err(|_| "policy_file_io_response_unencodable".to_owned())

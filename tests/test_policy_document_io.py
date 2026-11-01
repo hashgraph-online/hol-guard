@@ -439,6 +439,21 @@ def test_trusted_read_rejects_oversized_file(tmp_path: Path) -> None:
         read_trusted_policy_text(source)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows names are never raw bytes")
+def test_trusted_round_trip_through_a_name_that_is_not_utf8(tmp_path: Path) -> None:
+    directory = _private_directory(tmp_path / "private")
+    source = Path(os.fsdecode(os.fsencode(directory) + b"/policy-\xff.yaml"))
+    try:
+        source.write_text("rules: []\n", encoding="utf-8")
+    except (OSError, UnicodeEncodeError):
+        pytest.skip("this filesystem only allows UTF-8 names")
+    source.chmod(0o600)
+
+    assert read_trusted_policy_text(source) == "rules: []\n"
+    write_private_policy_text(source, "rules: [1]\n")
+    assert source.read_bytes() == b"rules: [1]\n"
+
+
 def test_private_output_rejects_oversized_content(tmp_path: Path) -> None:
     directory = _private_directory(tmp_path / "private")
     destination = directory / "policy.yaml"

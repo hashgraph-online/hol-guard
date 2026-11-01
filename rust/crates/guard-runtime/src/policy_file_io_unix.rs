@@ -2,11 +2,12 @@
 //! `/` without following a link, and every file operation is relative to
 //! that folder's descriptor.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::fd::OwnedFd;
-use std::path::Path;
+use std::os::unix::ffi::OsStringExt;
+use std::path::{Path, PathBuf};
 
 use nix::errno::Errno;
 use nix::fcntl::{open, openat, renameat, AtFlags, OFlag};
@@ -17,6 +18,10 @@ use super::Failure;
 
 /// Replaces the temporary file with the policy file inside one folder.
 pub(super) type Rename<'a> = &'a dyn Fn(&OwnedFd, &OsStr, &OsStr) -> nix::Result<()>;
+
+pub(super) fn path_from_bytes(bytes: Vec<u8>) -> Option<PathBuf> {
+    Some(PathBuf::from(OsString::from_vec(bytes)))
+}
 
 pub(super) fn read_trusted(path: &Path, limit: usize) -> Result<Vec<u8>, Failure> {
     let parent = open_trusted_parent(path)?;
@@ -67,7 +72,7 @@ pub(super) fn write_private_with(
         Err(Errno::ENOENT) => {}
         Err(_) => return Err("policy_output_unavailable"),
     }
-    let temporary = temporary_name(name)?;
+    let temporary = temporary_name()?;
     let written = publish(&parent, OsStr::new(&temporary), name, payload, rename);
     let _ = unlinkat(&parent, temporary.as_str(), UnlinkatFlags::NoRemoveDir);
     written.map_err(|_| "policy_output_write_failed")
@@ -92,11 +97,12 @@ fn publish(
     fsync(parent).map_err(std::io::Error::from)
 }
 
-fn temporary_name(name: &OsStr) -> Result<String, Failure> {
+/// An opaque name, so the temporary file fits wherever the policy file does
+/// whatever the policy file's name is.
+fn temporary_name() -> Result<String, Failure> {
     let mut token = [0_u8; 12];
     getrandom::fill(&mut token).map_err(|_| "policy_output_write_failed")?;
-    let name = name.to_str().ok_or("policy_output_unavailable")?;
-    Ok(format!(".{name}.{}.tmp", hex::encode(token)))
+    Ok(format!(".policy-{}.tmp", hex::encode(token)))
 }
 
 /// Open the folder holding `path` without following a link at any step,
