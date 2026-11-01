@@ -6,7 +6,7 @@ use super::*;
 
 pub(super) struct Signer {
     pair: Ed25519KeyPair,
-    public: [u8; 32],
+    pub(super) public: [u8; 32],
 }
 
 pub(super) fn signer() -> Signer {
@@ -216,7 +216,7 @@ fn a_malformed_signed_activation_is_rejected() {
     );
 }
 
-fn activation_with_controls(controls: Value) -> (Signer, SignedActivation) {
+pub(super) fn activation_with_controls(controls: Value) -> (Signer, SignedActivation) {
     let signer = signer();
     let mut body = payload("ws-synthetic-1");
     body["controls"] = controls;
@@ -224,7 +224,7 @@ fn activation_with_controls(controls: Value) -> (Signer, SignedActivation) {
     (signer, signed)
 }
 
-fn verify(
+pub(super) fn verify(
     signed: &SignedActivation,
     key: &[u8; 32],
 ) -> Result<crate::cloud_action_activation::VerifiedActivation, &'static str> {
