@@ -24957,6 +24957,37 @@
       "expect": "allow"
     },
     {
+      "id": "quiet-npm-run-silent-lint",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run --silent lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "quiet-npm-silent-run-typecheck",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --silent run typecheck"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },    {
       "id": "toolchain-npm-run-typecheck-passed-option",
       "fix_area": "shell",
       "harnesses": [
@@ -25006,6 +25037,73 @@
       "requires_sandbox": true
     },
     {
+      "id": "quiet-npm-silent-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --silent test"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "quiet-npm-run-silent-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run --silent test"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "quiet-npm-loglevel-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --loglevel error test"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "quiet-yarn-silent-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn --silent test"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },    {
       "id": "named-test-script-pnpm-run-unit",
       "fix_area": "shell",
       "harnesses": [
