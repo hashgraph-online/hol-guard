@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -216,11 +217,17 @@ def test_a_line_only_chain_keeps_the_streams_own_encoding(monkeypatch: pytest.Mo
     assert stream.buffer.getvalue() == "héllo\n".encode("latin-1")
 
 
-def _answer_with(monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None) -> list[dict[str, object]]:
+def _answer_with(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None, *, offered: bool = True
+) -> list[dict[str, object]]:
     sent: list[dict[str, object]] = []
 
-    def _runtime_answer(_feature: str, _command: str, request: dict[str, object], **_options: object) -> object:
-        sent.append(request)
+    def _runtime_answer(
+        _feature: str, _command: str, request: Callable[[], dict[str, object]], **_options: object
+    ) -> object:
+        if not offered:
+            return None
+        sent.append(request())
         return answer
 
     monkeypatch.setattr(runtime_request, "runtime_answer", _runtime_answer)
@@ -250,10 +257,29 @@ def test_an_rg_stage_filters_captured_output(capsys: pytest.CaptureFixture[str])
 
 
 def test_a_missing_runtime_reports_the_status_a_shell_gives(monkeypatch: pytest.MonkeyPatch) -> None:
-    _ = _answer_with(monkeypatch, None)
+    sent = _answer_with(monkeypatch, None, offered=False)
     text, diagnostics, status = filters.apply_filters("x\n", (("rg", "x"),))
     assert (text, status) == ("", 127)
     assert "rg: native runtime unavailable" in diagnostics
+    assert sent == []
+
+
+def test_a_runtime_that_fails_after_offering_the_matcher_is_not_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A runtime that ran and gave no answer (a timeout, an oversized answer) exits 2, not 127."""
+    sent = _answer_with(monkeypatch, None)
+    text, diagnostics, status = filters.apply_filters("x\n", (("grep", "x"),))
+    assert (text, status) == ("", 2)
+    assert "did not finish" in diagnostics
+    assert len(sent) == 1
+
+
+def test_a_capture_too_large_for_the_runtime_is_refused_before_sending(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent = _answer_with(monkeypatch, {"stdout": "", "stderr": "", "status": 0})
+    monkeypatch.setattr(filters, "_MATCH_INPUT_LIMIT", 4)
+    text, diagnostics, status = filters.apply_filters("hello\n", (("grep", "h"),))
+    assert (text, status) == ("", 2)
+    assert "too large to filter" in diagnostics
+    assert sent == []
 
 
 def test_a_matcher_the_runtime_could_not_finish_prints_nothing(monkeypatch: pytest.MonkeyPatch) -> None:

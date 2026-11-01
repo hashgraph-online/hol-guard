@@ -57,6 +57,13 @@ pub use contained_wrapper_plan::{
     contained_wrapper_plan, ContainedOutput, ContainedWorktreeAdd, ContainedWrapperCore,
     ContainedWrapperPlan, CONTAINED_WORKTREE_ADD_REASON, CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
 };
+
+/// Whether `program <arguments>` is a matcher stage the contained sink may
+/// run: it reads only standard input and names no file, pattern file or
+/// other output.
+pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
+    contained_wrapper::output_filters::matcher_stage(program, arguments)
+}
 pub(crate) mod curl_reads;
 pub use curl_reads::bound_curl_read_destinations;
 #[cfg(unix)]

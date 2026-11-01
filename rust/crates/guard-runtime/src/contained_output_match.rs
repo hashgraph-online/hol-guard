@@ -7,6 +7,10 @@
 //! installed binary located by ownership, an environment built here, and the
 //! captured text alone on its standard input. A host with no matcher, and
 //! every host without the Unix sink, answers as a shell's missing program.
+//!
+//! The arguments are checked against the same stdin-only grammar native
+//! authority applied to the chain, so a request can never make the matcher
+//! read a file, a pattern file or recurse.
 
 use std::io::Read;
 
@@ -42,7 +46,10 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         return Err("contained_output_match_request_too_large".to_owned());
     }
     let request: Request = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    if request.schema != SCHEMA || !MATCHERS.contains(&request.program.as_str()) {
+    if request.schema != SCHEMA
+        || !MATCHERS.contains(&request.program.as_str())
+        || !guard_command::pretool::contained_matcher_stage(&request.program, &request.arguments)
+    {
         return Err(invalid());
     }
     let input = Base64::decode_vec(&request.input).map_err(|_| invalid())?;

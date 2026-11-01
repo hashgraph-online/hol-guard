@@ -43,6 +43,30 @@ fn requests_are_validated() {
     }
 }
 
+/// A request is held to the stdin-only grammar native authority applied:
+/// a file operand, a pattern file, recursion or standard input named as a
+/// file is refused before any matcher runs.
+#[test]
+fn arguments_outside_the_filter_grammar_are_refused() {
+    for (program, arguments) in [
+        ("grep", &["", "/etc/hosts"][..]),
+        ("grep", &["-e", "a", "/etc/hosts"][..]),
+        ("grep", &["-f", "/etc/hosts"][..]),
+        ("grep", &["-r", "a"][..]),
+        ("grep", &["a", "-"][..]),
+        ("egrep", &["-l", "a"][..]),
+        ("rg", &["a", "/etc"][..]),
+        ("rg", &["-g", "*.rs", "a"][..]),
+        ("grep", &[][..]),
+    ] {
+        assert_eq!(
+            run(&request(program, arguments, b"a\n")).expect_err("refused"),
+            "contained_output_match_request_invalid",
+            "{program} {arguments:?}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn a_matcher_prints_back_the_pipeline_bytes() {
