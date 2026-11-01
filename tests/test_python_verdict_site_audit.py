@@ -83,10 +83,14 @@ def test_check_fails_when_a_site_gains_an_action(monkeypatch: pytest.MonkeyPatch
     assert _check_against(baseline, monkeypatch, tmp_path) == 1
 
 
-def test_check_fails_on_an_unrecorded_unparsed_template(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    baseline = _baseline()
-    baseline["unparsed_templates"] = []
-    assert _check_against(baseline, monkeypatch, tmp_path) == 1
+def test_check_fails_when_the_unparsed_templates_drift(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    template = {"file": "src/codex_plugin_scanner/guard/example.py", "label": "literal#0", "line": 1, "reason": "x"}
+    stale = _baseline()
+    stale["unparsed_templates"] = [*stale["unparsed_templates"], template]
+    assert _check_against(stale, monkeypatch, tmp_path) == 1
+
+    monkeypatch.setattr(audit, "unparsed_templates", lambda: [template])
+    assert _check_against(_baseline(), monkeypatch, tmp_path) == 1
 
 
 def test_a_verdict_behind_a_conditional_or_a_constant_is_found() -> None:

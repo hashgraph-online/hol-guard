@@ -161,14 +161,16 @@ pub(crate) fn run(config_path: &str) -> i32 {
     0
 }
 
-/// The worker's whole answer for one payload. `review` runs the Guard argv
-/// with one payload and returns its stdout, or `None` when it could not run
-/// or answer in time.
+/// Runs the Guard argv with one payload and returns its stdout, or `None`
+/// when it could not run or answer in time.
+pub(crate) type Review<'a> = dyn FnMut(&[String], &str) -> Option<Vec<u8>> + 'a;
+
+/// The worker's whole answer for one payload.
 pub(crate) fn answer(
     config: &Config,
     input: &[u8],
     canary: bool,
-    review: &mut dyn FnMut(&[String], &str) -> Option<Vec<u8>>,
+    review: &mut Review<'_>,
 ) -> String {
     let blocking = config.blocking();
     if input.len() as u64 > MAX_BYTES {
