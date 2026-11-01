@@ -143,6 +143,28 @@ def test_non_ascii_forged_integrity_metadata_fails_closed_without_raising() -> N
     assert result.message == "local_authority_integrity_payload_hash_mismatch"
 
 
+def test_no_runtime_signs_nothing_and_verifies_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    with pytest.raises(RuntimeError, match="requires the native runtime"):
+        _ = sign_local_authority_payload(
+            {"action": "allow"},
+            key=b"k" * 32,
+            key_id="key-1",
+            purpose="guard-local-once-approval",
+            signed_at=_CREATED_AT,
+        )
+    result = verify_local_authority_payload(
+        {"action": "allow"},
+        {"integrity_version": 1},
+        key=b"k" * 32,
+        key_id="key-1",
+        purpose="guard-local-once-approval",
+    )
+    assert result.status != "valid"
+
+
 def test_authentic_local_once_row_resolves_and_claims(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     approval_id = _record_local_once(store)
