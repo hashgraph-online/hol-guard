@@ -8,6 +8,7 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
 
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::shared::ntdef::HANDLE;
+use winapi::shared::winerror::ERROR_NO_MORE_FILES;
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use winapi::um::tlhelp32::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
@@ -41,7 +42,8 @@ extern "system" {
 }
 
 /// Every process id in one snapshot of the process table, the idle
-/// process's id 0 included.
+/// process's id 0 included. An error when the walk ends before the table
+/// does.
 pub fn process_ids() -> io::Result<Vec<u32>> {
     // SAFETY: Plain flag values; the returned handle is wrapped exactly once.
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
@@ -60,6 +62,12 @@ pub fn process_ids() -> io::Result<Vec<u32>> {
         ids.push(entry.th32ProcessID);
         // SAFETY: As above.
         more = unsafe { Process32NextW(snapshot.as_raw_handle() as HANDLE, &mut entry) };
+    }
+    // A walk that stops for any reason but the end of the table would hide
+    // the processes it never reached.
+    let stopped = io::Error::last_os_error();
+    if stopped.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
+        return Err(stopped);
     }
     Ok(ids)
 }
