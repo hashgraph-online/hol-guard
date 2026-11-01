@@ -3,7 +3,10 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
+from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.sqlite_recovery import salvage_quarantined_state
@@ -161,3 +164,31 @@ def test_fatal_recovery_salvages_grants_when_full_restore_fails(
     granted = store.read_local_cli_grant(_identity().cli_id)
     assert granted is not None
     assert granted["state"] == "allowed"
+
+
+def _lose_the_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    answer = runtime_request.runtime_answer
+
+    def lost(*args: object, **kwargs: object) -> None:
+        assert answer(*args, **kwargs) is not None  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lost)
+
+
+def test_a_lost_answer_after_a_committed_grant_restore_still_reports_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _grant_store(tmp_path / "src", with_commands=True)
+    destination = GuardStore(tmp_path / "dst", prime_policy_integrity=False)
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (False, True)
+    assert destination.read_local_cli_grant(_identity().cli_id) is not None
+
+
+def test_a_lost_answer_never_reports_grants_the_store_already_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _grant_store(tmp_path / "src")
+    destination = _grant_store(tmp_path / "dst")
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (False, False)

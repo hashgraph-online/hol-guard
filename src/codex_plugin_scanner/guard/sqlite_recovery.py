@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from collections.abc import Callable
 from contextlib import closing, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -174,10 +175,11 @@ def salvage_quarantined_state(*, source: Path, destination: Path) -> tuple[bool,
     """Carry Cloud Review and custom-extension state into the new store.
 
     ``sqlite_store_salvage.rs`` restores each atomically within its own
-    authority boundary and answers ``(cloud_review, local_cli)``. A runtime
-    that cannot answer salvages nothing, which leaves the fresh store as an
-    empty reinitialization. Normal OAuth, DPoP, capability-signature,
-    revocation and request-binding checks still apply afterwards.
+    authority boundary and answers ``(cloud_review, local_cli)``. When the
+    answer is lost, each half is read back from the destination: the fresh
+    store holds no credentials or custom-extension grants until a restore
+    commits them. Normal OAuth, DPoP, capability-signature, revocation and
+    request-binding checks still apply afterwards.
     """
 
     if source.is_symlink() or destination.is_symlink() or not destination.is_file():
@@ -189,10 +191,13 @@ def salvage_quarantined_state(*, source: Path, destination: Path) -> tuple[bool,
     # The native copy fills tables this store owns the schema of; a store
     # that cannot take them leaves the local CLI copy to fail on its own.
     restorable = True
+    cli_restorable = True
     with suppress(sqlite3.Error), closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst, dst:
         with suppress(sqlite3.Error):
             restorable = not _holds_cloud_credentials(dst)
         ensure_local_cli_schema(dst)
+        with suppress(sqlite3.Error):
+            cli_restorable = not _holds_local_cli_grants(dst)
     deadline = time.monotonic() + _SALVAGE_TIMEOUT_SECONDS
     operation_deadline = sqlite_operation_deadline_monotonic()
     answer = runtime_answer(
@@ -207,11 +212,11 @@ def salvage_quarantined_state(*, source: Path, destination: Path) -> tuple[bool,
         deadline=deadline if operation_deadline is None else min(deadline, operation_deadline),
     )
     if answer is None:
-        # The native command commits Cloud Review before it copies
-        # custom-extension state and answers, so a lost answer can follow a
-        # completed restore. The fresh store holds credentials only then.
-        cloud_review = restorable and _restored_cloud_credentials(destination)
-        local_cli = False
+        # The native command commits Cloud Review, then custom-extension
+        # state, before it answers, so a lost answer can follow a completed
+        # restore of either. The fresh store holds their rows only then.
+        cloud_review = restorable and _restored(destination, _holds_cloud_credentials)
+        local_cli = cli_restorable and _restored(destination, _holds_local_cli_grants)
     else:
         cloud_review = answer.get("cloud_review") is True
         local_cli = answer.get("local_cli") is True
@@ -220,10 +225,14 @@ def salvage_quarantined_state(*, source: Path, destination: Path) -> tuple[bool,
     return cloud_review, local_cli
 
 
-def _restored_cloud_credentials(destination: Path) -> bool:
+def _restored(destination: Path, holds: Callable[[sqlite3.Connection], bool]) -> bool:
     with suppress(sqlite3.Error), closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst:
-        return _holds_cloud_credentials(dst)
+        return holds(dst)
     return False
+
+
+def _holds_local_cli_grants(connection: sqlite3.Connection) -> bool:
+    return connection.execute("select 1 from local_cli_grant limit 1").fetchone() is not None
 
 
 def _holds_cloud_credentials(connection: sqlite3.Connection) -> bool:
