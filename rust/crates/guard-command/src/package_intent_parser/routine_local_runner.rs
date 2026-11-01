@@ -309,30 +309,72 @@ fn json_locked_versions(lock: &Value, dependency_name: &str) -> Option<BTreeSet<
     Some(versions)
 }
 
+/// What one `pnpm-lock.yaml` entry has said so far about the release it pins.
+struct PnpmEntry {
+    version: String,
+    resolution: Option<String>,
+}
+
+impl PnpmEntry {
+    /// The release the entry pins, or `None` when it named a source outside
+    /// the registry or never finished saying what it resolved to.
+    ///
+    /// Every release the registry served carries an integrity digest, while a
+    /// checkout, a local directory or a linked package names its source in
+    /// the same mapping and says nothing about what the declared range would
+    /// have installed. The key alone cannot be trusted for this: lockfile 5
+    /// and 6 wrote a plain `name/version` key for a git dependency and left
+    /// the git remote to the entry body.
+    fn finish(self) -> Option<String> {
+        let resolution = self.resolution?;
+        let names_a_source = ["type:", "repo:", "directory:", "path:"]
+            .iter()
+            .any(|field| resolution.contains(field));
+        (resolution.contains("integrity:") && !names_a_source).then_some(self.version)
+    }
+}
+
 /// The versions `pnpm-lock.yaml` pins for `dependency_name`.
 ///
 /// pnpm writes one key per resolved package under a top-level `packages`
-/// mapping, two spaces in. Three spellings have shipped: `name@version` in
-/// lockfile 9, `/name@version` in lockfile 6 and `/name/version` in lockfile
-/// 5. A key may also carry the peers it was resolved against in parentheses,
-/// which still names that release.
+/// mapping, two spaces in, with the entry's own body four spaces in. Three
+/// key spellings have shipped: `name@version` in lockfile 9, `/name@version`
+/// in lockfile 6 and `/name/version` in lockfile 5. A key may also carry the
+/// peers it was resolved against in parentheses, which still names that
+/// release.
 fn pnpm_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<String>> {
     let mut versions = BTreeSet::new();
     let mut inside_packages = false;
+    let mut entry: Option<PnpmEntry> = None;
     for line in text.lines() {
         let line = line.trim_end();
         if line.is_empty() {
             continue;
         }
-        let Some(entry) = line.strip_prefix("  ") else {
+        let Some(indented) = line.strip_prefix("  ") else {
             // Anything else at column zero opens the next top-level block.
+            if let Some(entry) = entry.take() {
+                versions.insert(entry.finish()?);
+            }
             inside_packages = line == "packages:";
             continue;
         };
-        if !inside_packages || entry.starts_with(' ') {
+        if !inside_packages {
             continue;
         }
-        let Some(key) = entry.strip_suffix(':') else {
+        if let Some(body) = indented.strip_prefix(' ') {
+            if let (Some(entry), Some(value)) = (
+                entry.as_mut(),
+                body.trim_start().strip_prefix("resolution:"),
+            ) {
+                entry.resolution = Some(value.trim().to_owned());
+            }
+            continue;
+        }
+        if let Some(entry) = entry.take() {
+            versions.insert(entry.finish()?);
+        }
+        let Some(key) = indented.strip_suffix(':') else {
             continue;
         };
         let key = key.trim_matches(['\'', '"']);
@@ -343,8 +385,21 @@ fn pnpm_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<St
         let Some(spec) = rest.strip_prefix('@').or_else(|| rest.strip_prefix('/')) else {
             continue;
         };
+        // A patch rewrites the package's own files after the registry served
+        // them, so the version it carries no longer describes what is on
+        // disk. pnpm marks that in the key, in parentheses since lockfile 9
+        // and after an underscore before it.
+        if spec.contains("patch_hash=") {
+            return None;
+        }
         let spec = spec.split('(').next().unwrap_or(spec);
-        versions.insert(registry_version(spec)?.to_owned());
+        entry = Some(PnpmEntry {
+            version: registry_version(spec)?.to_owned(),
+            resolution: None,
+        });
+    }
+    if let Some(entry) = entry {
+        versions.insert(entry.finish()?);
     }
     Some(versions)
 }
@@ -385,19 +440,54 @@ fn unquote(value: &str) -> &str {
     value.trim().trim_matches(['"', '\''])
 }
 
-/// Whether a `yarn.lock` block header answers for `dependency_name`. A header
-/// lists the specifiers the block resolves, each a package name followed by
-/// the range it came from, and either dialect may quote them.
-fn yarn_header_binds(header: &str, dependency_name: &str) -> bool {
-    let Some(header) = header.strip_suffix(':') else {
-        return false;
-    };
-    header.split(',').any(|spec| {
+/// What a `yarn.lock` block header says about the package being looked for.
+enum YarnHeader {
+    /// The block answers for some other package.
+    Other,
+    /// The block answers for this package, resolved from the npm registry.
+    Registry,
+    /// The block answers for this package from somewhere else: a patch, a
+    /// tarball URL, a checkout, a workspace or a local directory.
+    Foreign,
+}
+
+/// The package name a `yarn.lock` specifier opens with, or `None` when it
+/// carries no range at all. A scoped name opens with its own `@`, so the
+/// separator is the next one rather than the last: a Berry `patch:` range
+/// holds further `@`s of its own.
+fn yarn_specifier_name(spec: &str) -> Option<&str> {
+    let index = spec.get(1..)?.find('@')? + 1;
+    Some(&spec[..index])
+}
+
+/// What a `yarn.lock` block header, the column-zero line opening a block,
+/// says about `dependency_name`, or `None` when the line is not a header at
+/// all and the file is therefore one Guard cannot read.
+///
+/// A header lists the specifiers the block resolves, each a package name
+/// followed by the range it was requested at, and either dialect may quote
+/// them. Yarn 1 writes a bare range and Berry prefixes it with the protocol
+/// it resolved through, so a range naming anything but `npm:` is a copy the
+/// registry never served.
+fn yarn_header(header: &str, dependency_name: &str) -> Option<YarnHeader> {
+    let header = header.strip_suffix(':')?;
+    let mut answer = YarnHeader::Other;
+    for spec in header.split(',') {
         let spec = unquote(spec);
-        spec.rfind('@')
-            .filter(|index| *index > 0)
-            .is_some_and(|index| &spec[..index] == dependency_name)
-    })
+        let Some(name) = yarn_specifier_name(spec) else {
+            continue;
+        };
+        if name != dependency_name {
+            continue;
+        }
+        let range = &spec[name.len() + 1..];
+        if range.starts_with("npm:") || !range.contains([':', '/']) {
+            answer = YarnHeader::Registry;
+            continue;
+        }
+        return Some(YarnHeader::Foreign);
+    }
+    Some(answer)
 }
 
 /// The versions `yarn.lock` pins for `dependency_name`.
@@ -418,7 +508,14 @@ fn yarn_locked_versions(text: &str, dependency_name: &str) -> Option<BTreeSet<St
             if let Some(block) = block.take() {
                 versions.insert(block.finish()?);
             }
-            block = yarn_header_binds(line, dependency_name).then(YarnBlock::default);
+            block = match yarn_header(line, dependency_name)? {
+                YarnHeader::Registry => Some(YarnBlock::default()),
+                // Skipping the block would not withdraw the verdict: a
+                // sibling block resolving the same package from the registry
+                // would still answer, for a copy nobody installed from it.
+                YarnHeader::Foreign => return None,
+                YarnHeader::Other => None,
+            };
             continue;
         }
         let Some(block) = block.as_mut() else {

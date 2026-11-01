@@ -346,3 +346,102 @@ fn a_binary_bun_lockfile_gives_no_verdict() {
     let value = only_lockfile(root, "bun.lockb", "#!/usr/bin/env bun\nnot a lockfile\n");
     assert!(!routine_local_runner(&value));
 }
+
+#[test]
+fn a_patched_pnpm_entry_is_not_the_release_it_names() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // A patch rewrites the package's files after the registry served them,
+    // so the version in the key no longer describes what is installed.
+    let value = only_lockfile(
+        root,
+        "pnpm-lock.yaml",
+        &format!(
+            "packages:\n\n  eslint@{INSTALLED_VERSION}(patch_hash=abc123):\n    resolution: {{integrity: sha512-x}}\n"
+        ),
+    );
+    assert!(!routine_local_runner(&value));
+}
+
+#[test]
+fn a_pnpm_entry_resolved_from_a_checkout_is_not_a_release() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // Lockfile 5 wrote a plain `name/version` key for a git dependency and
+    // left the remote to the entry body, so the key alone proves nothing.
+    let value = only_lockfile(
+        root,
+        "pnpm-lock.yaml",
+        &format!(
+            "packages:\n\n  /eslint/{INSTALLED_VERSION}:\n    resolution: {{type: git, repo: git@example.test:demo/eslint.git, commit: abc}}\n"
+        ),
+    );
+    assert!(!routine_local_runner(&value));
+}
+
+#[test]
+fn a_pnpm_entry_that_never_resolves_pins_nothing() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // A truncated lockfile holds the key but never says what it resolved to.
+    let value = only_lockfile(
+        root,
+        "pnpm-lock.yaml",
+        &format!("packages:\n\n  eslint@{INSTALLED_VERSION}:\n"),
+    );
+    assert!(!routine_local_runner(&value));
+}
+
+#[test]
+fn a_yarn_classic_header_naming_a_tarball_proves_nothing() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // Yarn 1 keeps the requested source in the header and still writes a
+    // `resolved` URL for it, so only the header says this is not a release.
+    let value = only_lockfile(
+        root,
+        "yarn.lock",
+        &format!(
+            "eslint@https://example.test/eslint.tgz:\n  version \"{INSTALLED_VERSION}\"\n  resolved \"https://example.test/eslint.tgz#abc\"\n"
+        ),
+    );
+    assert!(!routine_local_runner(&value));
+}
+
+#[test]
+fn a_yarn_berry_patch_block_fails_the_whole_lockfile() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // Berry keeps the npm block the patch was taken from. Skipping the patch
+    // block would leave that one answering for a copy nobody installed.
+    let value = only_lockfile(
+        root,
+        "yarn.lock",
+        &format!(
+            "\"eslint@npm:^9.0.0\":\n  version: {INSTALLED_VERSION}\n  resolution: \"eslint@npm:{INSTALLED_VERSION}\"\n\n\"eslint@patch:eslint@npm%3A{INSTALLED_VERSION}#./.yarn/patch.diff\":\n  version: {INSTALLED_VERSION}\n  resolution: \"eslint@patch:eslint@npm%3A{INSTALLED_VERSION}#./.yarn/patch.diff\"\n"
+        ),
+    );
+    assert!(!routine_local_runner(&value));
+}
+
+#[test]
+fn a_yarn_line_that_opens_no_block_fails_the_whole_lockfile() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // A column-zero line that is not a header is a file Guard cannot read,
+    // whatever the blocks before it said.
+    let value = only_lockfile(
+        root,
+        "yarn.lock",
+        &format!(
+            "eslint@^9.0.0:\n  version \"{INSTALLED_VERSION}\"\n  resolved \"https://registry.yarnpkg.com/eslint/-/eslint-{INSTALLED_VERSION}.tgz#abc\"\n\nnot a header\n"
+        ),
+    );
+    assert!(!routine_local_runner(&value));
+}
