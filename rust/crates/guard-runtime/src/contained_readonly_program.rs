@@ -157,7 +157,10 @@ pub(super) fn package_test(argv: &[String], workspace: &Path) -> Outcome<(Vec<St
     )?;
     let words = strings(words).ok_or_else(|| unavailable("invalid_reply"))?;
     match kind(&words) {
-        Some(kind @ (Kind::NodeTest | Kind::Vitest)) => Ok((words, kind)),
+        // A script named for tests may hold a read-only tool run rather than a
+        // runner, and the resolved words are that tool call, so it takes the
+        // tool route its own words spell.
+        Some(kind @ (Kind::NodeTest | Kind::Vitest | Kind::NodeTool)) => Ok((words, kind)),
         _ => Err(Failure::unauthorized()),
     }
 }

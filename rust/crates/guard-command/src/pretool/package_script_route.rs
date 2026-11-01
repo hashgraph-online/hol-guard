@@ -200,10 +200,15 @@ fn resolved(
             .as_ref()
             .and_then(|manifest| manifest.get("scripts")),
     );
+    let scripts = scripts?;
     if test {
-        return test_script(scripts?, arguments).then_some(PACKAGE_TEST);
+        // The sink reads the same manifest and runs whatever the body spells,
+        // so a test-named entry keeps the package route even when the body is
+        // a read-only tool rather than a runner. A body the sink refuses
+        // leaves the command on the generic route.
+        return test_script(scripts, arguments).then_some(PACKAGE_TEST);
     }
-    tool_script(scripts?, task?, &directory, &workspace)
+    tool_script(scripts, task?, &directory, &workspace)
 }
 
 #[cfg(unix)]
