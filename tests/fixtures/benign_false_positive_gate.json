@@ -35222,6 +35222,57 @@
       "expect": "allow"
     },
     {
+      "id": "rg-recursive-glob-markdown",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g '**/*.md'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-recursive-alternation-glob",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"TODO\" -g '**/*.{md,yml}' ."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-recursive-include-markdown",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn 'TODO' --include='**/*.md' src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "control-flow-conditional-read",
       "fix_area": "shell",
       "harnesses": [
