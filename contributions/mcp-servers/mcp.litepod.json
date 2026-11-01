@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.litepod",
+  "version": "1.0.0",
+  "name": "Litepod MCP",
+  "description": "Reviews Litepod exec calls that start or stop applications, change environment variables, domains, compose files or source, redeploy, roll back, delete projects and applications, or deploy code from a repository, ZIP or Compose file. Reads through get stay on Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "litepod.sh",
+    "displayName": "Litepod",
+    "url": "https://litepod.sh"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCloud", "background": "#111827" },
+  "homepage": "https://litepod.sh",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://app.litepod.sh",
+    "serverNames": ["litepod"]
+  },
+  "riskClasses": [
+    "external-content-deletion",
+    "external-shared-state-write",
+    "external-script-execution",
+    "external-network-read"
+  ],
+  "tools": [
+    { "name": "get", "state": "inherit" },
+    { "name": "exec", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://litepod.sh",
+    "https://docs.litepod.sh"
+  ],
+  "saferAlternatives": [
+    "Use get to read projects, applications, deployments, logs and domains, which does not change anything.",
+    "Prefer exec proposals that Litepod asks a person to confirm over start and stop, which run immediately."
+  ]
+}
