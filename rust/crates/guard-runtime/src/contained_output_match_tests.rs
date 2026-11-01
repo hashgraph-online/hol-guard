@@ -62,7 +62,8 @@ fn a_matcher_prints_back_the_pipeline_bytes() {
     assert_eq!(answer["stderr"], "");
     // A byte bound earlier in the chain can cut a character in half; the
     // matcher's bytes come back as they were, not as a replacement character.
-    let answer = run(&request("grep", &["h"], b"h\xc3\n")).expect("answer");
+    // `-a` keeps GNU grep from reporting the line as a binary match.
+    let answer = run(&request("grep", &["-a", "h"], b"h\xc3\n")).expect("answer");
     assert_eq!(stdout(&answer), b"h\xc3\n");
     let answer = run(&request("fgrep", &["b"], b"a\n")).expect("answer");
     assert_eq!(
