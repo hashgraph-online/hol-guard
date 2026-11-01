@@ -106,6 +106,7 @@ def test_rollout_reads_the_environment_value_it_is_given(monkeypatch: pytest.Mon
         "canonical_rollout",
         "downgrade_reference",
         "policy_simulation",
+        "runtime_session_payload",
     ],
 )
 def test_malformed_arguments_fail_closed(kind: str) -> None:

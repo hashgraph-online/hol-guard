@@ -4236,60 +4236,23 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
 
 def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
     device_id, device_name = _guard_device_metadata(store)
-    workspace = _optional_string(session.get("workspace")) or os.getcwd()
-    session_id = (
-        _optional_string(session.get("session_id") or session.get("sessionId"))
-        or hashlib.sha256(f"{device_id}:{workspace}".encode()).hexdigest()[:24]
+    payload = _sync.runtime_session_payload(
+        session,
+        device_id=device_id,
+        device_name=device_name,
+        cwd=os.getcwd(),
+        now=_now(),
+        version=__version__,
     )
-    created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
-    updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
-    capabilities = list(_string_items(session.get("capabilities")))
-    policy_document_versions = list(
-        _string_items(session.get("policy_document_versions") or session.get("policyDocumentVersions"))
-    )
-    policy_bundle_versions = list(
-        _string_items(session.get("policy_bundle_versions") or session.get("policyBundleVersions"))
-    )
-    policy_contracts = list(_string_items(session.get("policy_contracts") or session.get("policyContracts")))
-    yaml_import = session.get("yaml_import") is True or session.get("yamlImport") is True
-    canonical_policy_enforcement = (
-        session.get("canonical_policy_enforcement") is True or session.get("canonicalPolicyEnforcement") is True
-    )
-    package_manager_coverage = _cloud_package_manager_coverage(
+    updated_at = str(payload["updatedAt"])
+    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
+    payload["localIdentity"] = local_identity
+    payload["localIdentitySource"] = _cloud_local_identity_source_payload(local_identity)
+    payload["packageManagerCoverage"] = _cloud_package_manager_coverage(
         store,
-        workspace=workspace,
+        workspace=str(payload["workspace"]),
         generated_at=updated_at,
     )
-    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
-    payload: dict[str, object] = {
-        "sessionId": session_id,
-        "harness": _optional_string(session.get("harness")) or "hol-guard",
-        "surface": _optional_string(session.get("surface")) or "cli",
-        "status": _optional_string(session.get("status")) or "active",
-        "clientName": _optional_string(session.get("client_name") or session.get("clientName")) or "hol-guard",
-        "clientTitle": _optional_string(session.get("client_title") or session.get("clientTitle"))
-        or f"HOL Guard on {device_name}",
-        "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
-        "deviceId": device_id,
-        "deviceName": device_name,
-        "localIdentity": local_identity,
-        "localIdentitySource": _cloud_local_identity_source_payload(local_identity),
-        "packageManagerCoverage": package_manager_coverage,
-        "workspace": workspace,
-        "capabilities": capabilities,
-        "operations": [],
-        "createdAt": created_at,
-        "updatedAt": updated_at,
-    }
-    if policy_document_versions:
-        payload["policyDocumentVersions"] = policy_document_versions
-    if policy_bundle_versions:
-        payload["policyBundleVersions"] = policy_bundle_versions
-    if policy_contracts:
-        payload["policyContracts"] = policy_contracts
-    payload["yamlImport"] = yaml_import
-    if canonical_policy_enforcement:
-        payload["canonicalPolicyEnforcement"] = True
     payload.update(_managed_controls_runtime_sync_posture(store, generated_at=updated_at))
     return payload
 

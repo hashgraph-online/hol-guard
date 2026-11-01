@@ -176,6 +176,33 @@ def completed_guard_event_ids(payload: Mapping[str, object]) -> list[str]:
     return ids
 
 
+def runtime_session_payload(
+    session: Mapping[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    cwd: str,
+    now: str,
+    version: str,
+) -> dict[str, object]:
+    """The runtime session the Cloud handshake sends, before the store-read fields."""
+
+    payload = native_runner_authority(
+        "runtime_session_payload",
+        {
+            "session": dict(session),
+            "device_id": device_id,
+            "device_name": device_name,
+            "cwd": cwd,
+            "now": now,
+            "version": version,
+        },
+    )
+    for key in ("sessionId", "harness", "surface", "workspace", "deviceId", "updatedAt"):
+        _field(payload, key, str)
+    return dict(payload)
+
+
 _BUNDLE_KEYS = ("issuedAt", "bundleVersion", "payloadHash", "workspaceId")
 
 
