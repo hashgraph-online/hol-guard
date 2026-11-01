@@ -43,16 +43,27 @@ const MAX_CONFIG_BYTES: u64 = 256 * 1024;
 const MAX_EXTENDS_DEPTH: usize = 4;
 
 /// Command-line options that make tsc write whatever the config says.
-/// `-b` runs a build, and the three build-info options write a
-/// `.tsbuildinfo` beside the project even under `--noEmit`.
+/// `-b` runs a build, the three build-info options write a `.tsbuildinfo`
+/// beside the project even under `--noEmit`, and the two diagnostic options
+/// write their trace and profile wherever they are pointed.
+///
+/// tsc reads an option's name without regard to case, so this reading does
+/// too: an option that reaches the compiler under any spelling has to reach
+/// this check under the same one.
 fn emitting_argument(arguments: &[String]) -> bool {
     arguments.iter().any(|word| {
+        let lowered = word.to_ascii_lowercase();
+        let name = lowered.split('=').next().unwrap_or(lowered.as_str());
         matches!(
-            word.as_str(),
-            "-b" | "--build" | "--incremental" | "--composite" | "--tsBuildInfoFile"
-        ) || word.starts_with("--incremental=")
-            || word.starts_with("--composite=")
-            || word.starts_with("--tsBuildInfoFile=")
+            name,
+            "-b" | "--build"
+                | "-i"
+                | "--incremental"
+                | "--composite"
+                | "--tsbuildinfofile"
+                | "--generatetrace"
+                | "--generatecpuprofile"
+        )
     })
 }
 
@@ -80,10 +91,16 @@ fn config_path(arguments: &[String], directory: &Path) -> Option<PathBuf> {
     }
     let named = named.unwrap_or_else(|| "tsconfig.json".to_owned());
     let relative = Path::new(&named);
+    // A run naming its own directory writes `.` or `./name`, which Rust keeps
+    // as a leading component. Only a step out of the run directory, or a name
+    // rooted elsewhere, is one this reading refuses.
     if relative.is_absolute()
-        || relative
-            .components()
-            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+        || relative.components().any(|part| {
+            !matches!(
+                part,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
     {
         return None;
     }
@@ -141,15 +158,19 @@ fn extends_path(from: &Path, specifier: &str, root: &Path) -> Option<PathBuf> {
     if !(specifier.starts_with("./") || specifier.starts_with("../")) {
         return None;
     }
-    // tsc appends `.json` to a base whose name does not already carry it.
-    let named = if specifier.ends_with(".json") {
-        specifier.to_owned()
-    } else {
-        format!("{specifier}.json")
-    };
-    // `contained_file` follows the links the containment check needs to see,
-    // so the base is opened under the name that survived them.
-    contained_file(&from.parent()?.join(named), root)
+    // tsc opens the name as written and appends `.json` only when no file is
+    // there, so a directory holding both `base` and `base.json` is read in
+    // that order here too. `contained_file` follows the links the containment
+    // check needs to see, so the base is opened under the name that survived
+    // them.
+    let directory = from.parent()?;
+    if let Some(base) = contained_file(&directory.join(specifier), root) {
+        return Some(base);
+    }
+    if specifier.ends_with(".json") {
+        return None;
+    }
+    contained_file(&directory.join(format!("{specifier}.json")), root)
 }
 
 /// Records a declared boolean, keeping the first answer seen. The chain is

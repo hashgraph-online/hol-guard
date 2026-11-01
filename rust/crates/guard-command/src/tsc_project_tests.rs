@@ -177,9 +177,66 @@ fn a_build_info_option_on_the_command_line_gives_no_verdict() {
         "--incremental=true",
         "--composite=true",
         "--tsBuildInfoFile=out.tsbuildinfo",
+        // tsc reads an option's name without regard to case, and `-i` is its
+        // own short spelling of `--incremental`.
+        "-i",
+        "--Incremental",
+        "--TSBUILDINFOFILE",
+        "--BUILD",
+        // Both diagnostic options write where they are pointed, whatever the
+        // project says about emitting.
+        "--generateTrace",
+        "--generateCpuProfile",
     ] {
         assert!(!reads_no_emit(&[argument], &directory), "{argument}");
     }
+}
+
+/// A script naming the project it is already in writes `.` or `./name`, and
+/// tsc reads both as the directory's own project.
+#[test]
+fn a_project_named_from_the_run_directory_is_read() {
+    let (_root, directory) = project();
+    plant(
+        &directory,
+        "tsconfig.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+    plant(
+        &directory,
+        "tsconfig.check.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+
+    assert!(reads_no_emit(&["-p", "."], &directory));
+    assert!(reads_no_emit(&["-p", "./tsconfig.check.json"], &directory));
+    assert!(reads_no_emit(
+        &["--project=./tsconfig.check.json"],
+        &directory
+    ));
+}
+
+/// tsc opens an `extends` name as written before it appends `.json`, so a
+/// directory holding both spellings is read in that order here too.
+#[test]
+fn a_base_named_without_json_prefers_the_file_of_that_name() {
+    let (_root, directory) = project();
+    // The name as written declares a build-info option; only the `.json`
+    // fallback declares a clean no-emit project. A reading that appended the
+    // suffix first would answer from the file tsc never opens.
+    plant(
+        &directory,
+        "base",
+        r#"{"compilerOptions":{"noEmit":true,"incremental":true}}"#,
+    );
+    plant(
+        &directory,
+        "base.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+    plant(&directory, "tsconfig.json", r#"{"extends":"./base"}"#);
+
+    assert!(!reads_no_emit(&[], &directory));
 }
 
 #[test]
