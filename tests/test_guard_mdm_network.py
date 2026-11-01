@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import ssl
-import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -447,33 +446,72 @@ def test_http_error_still_proves_endpoint_and_tls_reachability(monkeypatch: pyte
     assert result.reachability == "reachable"
 
 
-def test_windows_system_proxy_falls_back_to_machine_scope(monkeypatch: pytest.MonkeyPatch) -> None:
-    class FakeKey:
-        def __enter__(self) -> FakeKey:
-            return self
+def test_system_proxies_come_from_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
 
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-    def open_key(hive: object, _path: str) -> FakeKey:
-        if hive == "current-user":
-            raise OSError
-        return FakeKey()
-
-    values = iter(((1, 0), ("proxy.example:8080", 0)))
-    fake_winreg = SimpleNamespace(
-        HKEY_CURRENT_USER="current-user",
-        HKEY_LOCAL_MACHINE="local-machine",
-        OpenKey=open_key,
-        QueryValueEx=lambda _key, _name: next(values),
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("hol-guard-runtime")),
+        capabilities=SimpleNamespace(features=("native-system-proxies-v1",)),
     )
-    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
-    monkeypatch.setattr(transport_module.platform, "system", lambda: "Windows")
+    calls: list[tuple[object, ...]] = []
 
-    assert platform_system_proxies() == {
-        "http": "http://proxy.example:8080",
-        "https": "http://proxy.example:8080",
-    }
+    def spawn(_path: Path, arguments: tuple[str, ...], **kwargs: object) -> str:
+        calls.append((arguments, kwargs["input_text"]))
+        return json.dumps(
+            {
+                "ok": True,
+                "proxies": {"http": "http://proxy.example:8080", "https": 443, "ftp": "http://other:21"},
+            }
+        )
+
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", spawn)
+
+    assert platform_system_proxies() == {"http": "http://proxy.example:8080"}
+    assert calls == [(("system-proxies", "--stdin"), json.dumps({"schema": "system-proxies.v1"}))]
+
+    status.capabilities = SimpleNamespace(features=())
+    with pytest.raises(ManagedNetworkError, match="managed_system_proxy_unavailable"):
+        platform_system_proxies()
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("output", [None, "not json", json.dumps({"ok": False}), json.dumps({"ok": True})])
+def test_a_failed_native_proxy_lookup_refuses_instead_of_going_direct(
+    monkeypatch: pytest.MonkeyPatch, output: str | None
+) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("hol-guard-runtime")),
+        capabilities=SimpleNamespace(features=("native-system-proxies-v1",)),
+    )
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", lambda *_args, **_kwargs: output)
+
+    with pytest.raises(ManagedNetworkError, match="managed_system_proxy_unavailable"):
+        transport_module.proxy_map(ManagedNetworkPolicy(proxy_mode="system"))
+    # Without a managed policy the old direct-connection fallback still applies.
+    assert transport_module.available_system_proxies(managed=False) == {}
+
+
+def test_diagnostics_without_a_managed_policy_keep_the_direct_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.mdm import network_diagnostics
+
+    def unavailable() -> dict[str, str]:
+        raise ManagedNetworkError("managed_system_proxy_unavailable")
+
+    monkeypatch.setattr(transport_module, "platform_system_proxies", unavailable)
+    policy = ManagedNetworkPolicy(proxy_mode="system")
+
+    proxy, error = network_diagnostics._proxy_diagnostic(policy, "https", managed=False)  # pyright: ignore[reportPrivateUsage]
+    assert (proxy.selected, error) == (False, None)
+    _proxy, error = network_diagnostics._proxy_diagnostic(policy, "https", managed=True)  # pyright: ignore[reportPrivateUsage]
+    assert error == "managed_system_proxy_unavailable"
 
 
 def test_proxy_credentials_come_from_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:

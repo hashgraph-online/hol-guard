@@ -28,7 +28,10 @@ use crate::restricted_archive_transport::PUBLIC_REGISTRIES;
 /// read of OS configuration that did not answer, which is "no proxy".
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 /// A proxy configuration larger than this is malformed, not a configuration.
-const MAX_PROBE_OUTPUT_BYTES: usize = 64 * 1024;
+/// `scutil --proxy` also prints the bypass `ExceptionsList`, which managed
+/// Macs can fill with thousands of hosts, so the bound leaves room for one
+/// well past 64 KiB.
+const MAX_PROBE_OUTPUT_BYTES: usize = 1024 * 1024;
 /// `export_managed_trust_roots` bounds the export at 1024 roots.
 const MAX_TRUST_ROOTS: usize = 1024;
 /// Those roots bounded at 16 KiB each, with PEM armour over the DER.

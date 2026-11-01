@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import IO, Final, cast
 
 from ..mdm.contracts import ManagedNetworkPolicy
-from ..mdm.network import active_network_policy, managed_opener
+from ..mdm.network import managed_opener, resolved_network_policy
 from ..mdm.network_urlopen import ManagedOpener
 from ..native_verified_read_decision import NativeVerifiedReadDecisionError, github_public_read_decision
 from .effect_contract import ProofRequirement, ProofRoute
@@ -73,13 +73,14 @@ def try_read_verified_public_github_pull_request(
             return None
         normalized_fields = _validate_request(owner, repository, pull_number, fields)
         source_digest = _source_digest()
-        network_policy = active_network_policy()
+        network_policy, managed = resolved_network_policy(None)
         ca_bundle_digest = _ca_bundle_digest(network_policy)
         network_policy_identity = network_policy.to_dict()
         if ca_bundle_digest is not None:
             network_policy_identity["caBundleSha256"] = ca_bundle_digest
         network_policy_digest = verified_read_digest(network_policy_identity)
-        opener = managed_opener(network_policy, redirect_handler=_RejectRedirects())
+        # Without a managed policy the opener keeps its direct-connection fallback.
+        opener = managed_opener(network_policy if managed else None, redirect_handler=_RejectRedirects())
         full_name = f"{owner}/{repository}"
         repository_url = f"{_API_ORIGIN}/repos/{owner}/{repository}"
         pull_url = f"{repository_url}/pulls/{pull_number}"
