@@ -22,7 +22,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -94,8 +94,15 @@ fn answer(request: &Request, runner: &mut impl Runner) -> Result<Value, String> 
 
 /// R1–R4 over the archive's central directory; `None` refuses it.
 fn admitted(archive: &Path) -> Option<()> {
-    let mut zipped = ZipArchive::new(fs::File::open(archive).ok()?).ok()?;
-    if zipped.len() > MAX_ENTRIES || zipped.has_overlapping_entries().ok()? {
+    let mut file = fs::File::open(archive).ok()?;
+    let recorded = recorded_entries(&mut file)?;
+    let mut zipped = ZipArchive::new(file).ok()?;
+    // The reader keeps one entry per name, so a central directory that
+    // records more entries than it lists carries a duplicate name.
+    if zipped.len() > MAX_ENTRIES
+        || recorded != zipped.len() as u64
+        || zipped.has_overlapping_entries().ok()?
+    {
         return None;
     }
     let mut names = BTreeSet::new();
@@ -142,6 +149,42 @@ fn admitted(archive: &Path) -> Option<()> {
         .all(|member| names.contains(*member) && !links.contains(*member));
     let internal = names.iter().any(|name| name.starts_with(INTERNAL_PREFIX));
     (anchored && internal).then_some(())
+}
+
+/// The entry count the end-of-central-directory record (or its Zip64
+/// record) declares; `None` when neither can be read.
+fn recorded_entries(file: &mut fs::File) -> Option<u64> {
+    const END_SIGNATURE: [u8; 4] = [0x50, 0x4b, 0x05, 0x06];
+    const LOCATOR_SIGNATURE: [u8; 4] = [0x50, 0x4b, 0x06, 0x07];
+    const ZIP64_END_SIGNATURE: [u8; 4] = [0x50, 0x4b, 0x06, 0x06];
+    const END_LENGTH: usize = 22;
+    const LOCATOR_LENGTH: usize = 20;
+    let length = file.metadata().ok()?.len();
+    let tail_length = length.min((END_LENGTH + usize::from(u16::MAX)) as u64);
+    file.seek(SeekFrom::Start(length - tail_length)).ok()?;
+    let mut tail = Vec::new();
+    Read::take(&mut *file, tail_length)
+        .read_to_end(&mut tail)
+        .ok()?;
+    let end = (0..=tail.len().checked_sub(END_LENGTH)?)
+        .rev()
+        .find(|index| tail[*index..*index + 4] == END_SIGNATURE)?;
+    let entries = u16::from_le_bytes([tail[end + 10], tail[end + 11]]);
+    if entries != u16::MAX {
+        return Some(u64::from(entries));
+    }
+    let locator = tail.get(end.checked_sub(LOCATOR_LENGTH)?..end)?;
+    if locator[..4] != LOCATOR_SIGNATURE {
+        return None;
+    }
+    let zip64_end = u64::from_le_bytes(locator[8..16].try_into().ok()?);
+    file.seek(SeekFrom::Start(zip64_end)).ok()?;
+    let mut record = [0u8; 40];
+    file.read_exact(&mut record).ok()?;
+    if record[..4] != ZIP64_END_SIGNATURE {
+        return None;
+    }
+    Some(u64::from_le_bytes(record[32..40].try_into().ok()?))
 }
 
 /// R1 for one member name.
