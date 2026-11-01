@@ -100,9 +100,31 @@ fn write(request: &UpdateRequest, value: &PyVal) -> Result<Value, Failure> {
     if request.kind == "channel" {
         channel(value)?;
     }
-    fs::create_dir_all(&request.guard_home)
-        .map_err(|_| Failure::Error("config_file_unavailable".to_owned()))?;
+    prepare_home(&request.guard_home).map_err(|reason| Failure::Error(reason.to_owned()))?;
     assistance_preflight::write(request, value)
+}
+
+/// Creates the Guard home and removes group and world write from a home this
+/// user owns, as the daemon does on start. The config write lock refuses a
+/// group-writable home, and a save can run before the daemon ever has, under
+/// a umask such as 0002 that leaves a new directory group-writable.
+fn prepare_home(home: &Path) -> Result<(), &'static str> {
+    fs::create_dir_all(home).map_err(|_| "config_file_unavailable")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let canonical = fs::canonicalize(home).map_err(|_| "config_directory_unavailable")?;
+        let metadata = fs::metadata(&canonical).map_err(|_| "config_directory_unavailable")?;
+        if metadata.is_dir()
+            && metadata.uid() == nix::unistd::geteuid().as_raw()
+            && metadata.mode() & 0o022 != 0
+        {
+            let mode = metadata.mode() & 0o7777 & !0o022;
+            fs::set_permissions(&canonical, fs::Permissions::from_mode(mode))
+                .map_err(|_| "config_directory_unsafe")?;
+        }
+    }
+    Ok(())
 }
 
 fn write_locked(
@@ -136,7 +158,7 @@ fn write_locked(
 /// Opting out is always allowed, including when an administrator locked other
 /// preferences. This only narrows local consent and preserves base settings.
 pub(crate) fn disable_context_assistance(home: &Path) -> Result<(), String> {
-    fs::create_dir_all(home).map_err(|_| "native_context_assistance_settings_unavailable")?;
+    prepare_home(home).map_err(|_| "native_context_assistance_settings_unavailable")?;
     let lock = io::WriteLock::acquire(home)
         .map_err(|_| "native_context_assistance_settings_write_busy")?;
     let stored =
