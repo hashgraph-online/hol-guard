@@ -119,6 +119,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-windows-process-lifecycle-v1".into(),
         "native-local-skill-index-v1".into(),
         "native-store-quarantine-forensics-v1".into(),
+        "native-network-status-validation-v1".into(),
         "native-hermes-file-inspect-v1".into(),
         "native-windows-trusted-directories-v1".into(),
         "native-managed-policy-load-v1".into(),
