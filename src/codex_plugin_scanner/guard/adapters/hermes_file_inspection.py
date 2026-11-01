@@ -245,19 +245,6 @@ def inspect_hermes_config(path: Path, *, syntax: Literal["json", "yaml"]) -> Her
     return HermesConfigInspection(file=file, payload=parsed, complete=True, reason=None)
 
 
-def parse_hermes_yaml_mapping(content: str) -> dict[str, object] | None:
-    """Safely parse bounded in-memory YAML used for skill frontmatter."""
-
-    if len(content.encode("utf-8")) > HERMES_PREVIEW_BYTES:
-        return None
-    try:
-        parsed = _load_yaml(content)
-        _validate_config_value(parsed)
-    except (TypeError, ValueError, _HermesConfigLimitError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def _load_yaml(content: str) -> object:
     alias_count = 0
     depth = 0
@@ -393,5 +380,4 @@ __all__ = [
     "HermesFileInspectionReason",
     "inspect_hermes_config",
     "inspect_hermes_text_file",
-    "parse_hermes_yaml_mapping",
 ]
