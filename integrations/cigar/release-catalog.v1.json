@@ -1,6 +1,6 @@
 {
   "schema": "guard-cigar-release-catalog.v1",
-  "revision": 5,
+  "revision": 6,
   "issued_at": 1793053757,
   "expires_at": 1824589757,
   "profiles": [
@@ -64,7 +64,7 @@
           ],
           "qualification": "upstream_only",
           "qualification_receipt_sha256": null,
-          "features": []
+          "features": ["graph", "sharing", "persistence", "execution_context"]
         }
       ]
     }

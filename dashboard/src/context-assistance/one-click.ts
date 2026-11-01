@@ -69,16 +69,13 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
     if (!catalog.catalog.fresh_for_preparation) {
       return blocked("Guard needs a fresh version list", "Guard's list of CIGAR versions is out of date. Open Updates to refresh it.", "versions");
     }
-    if (forHost.every((item) => item.platforms.some((p) => p.platform === host && p.qualification !== "guard_qualified"))) {
-      return blocked("Waiting for Guard's safety check", "A CIGAR version exists for this computer, but Guard has not finished checking it. This button will work as soon as it has.");
-    }
     return blocked("No version can be installed right now", "Open Updates to see which CIGAR versions are available and why.", "versions");
   }
   const interpreter = data.interpreters.find((item) => item.platform === host && python314(item.python_version)
     && item.implementation.toLowerCase() === "cpython");
   const pythonBuild = interpreter ? null : catalog.interpreter_builds.find((item) => python314(item.python_version) && cigarPythonBlock(catalog, item) === null);
   if (!interpreter && !pythonBuild) {
-    return blocked("Waiting for Guard's safety check", "CIGAR needs its own copy of Python 3.14, and Guard has not approved one for this computer yet.");
+    return blocked("Not available for this computer yet", "CIGAR needs its own copy of Python 3.14, and Guard does not have one for this kind of computer yet. Guard keeps protecting you without it.");
   }
   return { kind: "run", runtime_id: null, build_id: build.identity.build_id, interpreter_id: interpreter?.interpreter_id ?? null,
     python_build_id: pythonBuild?.build_id ?? null, stages: [...(pythonBuild ? ["python" as const] : []), "download", "check", "start"],

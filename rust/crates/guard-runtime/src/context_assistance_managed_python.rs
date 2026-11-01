@@ -159,7 +159,7 @@ pub(super) fn publish(
     worker::policy(home)?;
     let build = bundle.build();
     if !build.setup_qualified() {
-        return Err(error("cigar_guard_qualification_required"));
+        return Err(error("interpreter_invalid"));
     }
     let selection = PrivatePythonSelection {
         root: bundle.root().into(),

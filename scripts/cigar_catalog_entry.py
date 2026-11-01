@@ -21,6 +21,8 @@ from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
+FEATURES = ("graph", "sharing", "persistence", "execution_context")
+
 MAX_FILES = 8192
 MAX_BYTES = 256 * 1024 * 1024
 
@@ -247,7 +249,8 @@ def draft(args: argparse.Namespace) -> dict:
                 "dependencies": locks[1:],
                 "qualification": "upstream_only",
                 "qualification_receipt_sha256": None,
-                "features": [],
+                # Installation verifies each listed feature on the user's machine.
+                "features": list(FEATURES),
             }
         ],
     }

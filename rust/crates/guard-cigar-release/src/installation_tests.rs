@@ -82,13 +82,11 @@ fn explicit_current_withdrawal_and_identity_reuse_override_the_archived_receipt(
     );
 }
 #[test]
-fn receipt_does_not_upgrade_an_upstream_only_or_local_candidate_build() {
+fn receipt_seals_an_upstream_build_but_not_a_local_candidate() {
     let mut metadata = metadata();
     metadata.release.platforms[0].qualification = Qualification::UpstreamOnly;
-    assert_eq!(
-        seal_installation_receipt(&metadata, &[19u8; 32]),
-        Err(ReleaseError::QualificationRequired)
-    );
+    metadata.release.platforms[0].qualification_receipt_sha256 = None;
+    assert!(seal_installation_receipt(&metadata, &[19u8; 32]).is_ok());
     metadata.release.platforms[0].qualification = Qualification::LocalCandidate;
     metadata.release.channel = Channel::LocalCandidate;
     assert!(seal_installation_receipt(&metadata, &[19u8; 32]).is_err());

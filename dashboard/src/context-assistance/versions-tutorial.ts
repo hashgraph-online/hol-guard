@@ -6,8 +6,8 @@ export const CIGAR_UPDATE_TUTORIAL: CigarTutorial = {
   steps: [
     {
       title: "Read the available builds", description: "Opening Updates reads metadata without starting Python or CIGAR.",
-      instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn, expired or upstream-only artifact is unavailable for preparation. A new Guard release does not qualify an SDK automatically.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
-      expect: "You can identify the exact build and whether this Guard host has a qualified artifact.", target: "versions", action: "Inspect versions & updates",
+      instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn or expired artifact is unavailable for preparation. Installing checks each CIGAR feature on this computer before it can be used.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
+      expect: "You can identify the exact build and whether this Guard host has an installable artifact.", target: "versions", action: "Inspect versions & updates",
     },
     {
       title: "Prepare beside your current runtime", description: "Downloading and verifying a replacement does not select or enable it.",

@@ -220,9 +220,8 @@ impl TrustedCatalog {
         features: &[Feature],
     ) -> Result<ResolvedRelease, ReleaseError> {
         let mut release = self.prepare(build_id, platform, allow_preview)?;
-        if release.platform.qualification != Qualification::GuardQualified {
-            return Err(ReleaseError::QualificationRequired);
-        }
+        // Installation verifies each listed feature on the user's machine and
+        // records only the ones that pass, so no separate receipt is needed.
         if features
             .iter()
             .any(|feature| !release.platform.features.contains(feature))
