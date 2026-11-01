@@ -31,8 +31,7 @@ from codex_plugin_scanner.guard.harness_versions.compatibility import (
 )
 from codex_plugin_scanner.guard.harness_versions.discovery import VersionObservation
 from codex_plugin_scanner.guard.harness_versions.service import _manifest_path
-from codex_plugin_scanner.guard.harness_versions.versions import parse_version, parse_version_banner
-from scripts.ci.harness_version_manifest import ManifestError, bundled_manifest_path, parse_manifest
+from scripts.ci.harness_version_manifest import ManifestError, bundled_manifest_path, parse_manifest, parse_version
 
 GUARD = "9.9.9"
 PLATFORM = "darwin-arm64"
@@ -78,7 +77,7 @@ FIXTURE = _manifest(_record("18.4.12"), _record("18.8.3"))
 def _observed(version: str, *, at: float = NOW, installation: str | None = "install-a") -> VersionObservation:
     parsed = parse_version(version)
     assert parsed is not None
-    return VersionObservation("omp", "observed", parsed, "package-metadata", installation, None, at)
+    return VersionObservation("omp", "observed", parsed.canonical, "package-metadata", installation, None, at)
 
 
 @pytest.fixture
@@ -112,20 +111,6 @@ class TestVersions:
     @pytest.mark.parametrize("text", ["18.x", "^18.4.12", ">=18", "18.4", "18.4.*", "", "018.4.1", "1" * 70, None, 18])
     def test_rejects_ranges_and_malformed(self, text: object) -> None:
         assert parse_version(text) is None
-
-    @pytest.mark.parametrize(
-        "banner", ["18.8.3\n", "omp 18.8.3", "oh-my-pi v18.8.3", "@oh-my-pi/pi-coding-agent 18.8.3"]
-    )
-    def test_banner_accepts_known_prefixes(self, banner: str) -> None:
-        version = parse_version_banner("omp", banner)
-        assert version is not None and version.canonical == "18.8.3"
-
-    @pytest.mark.parametrize(
-        "banner",
-        ["", "18.8.3 18.8.4", "omp 18.8.3\nsecond line", "other-tool 18.8.3", "omp 18.8.3 (beta)", "x" * 5000],
-    )
-    def test_banner_rejects_ambiguous_output(self, banner: str) -> None:
-        assert parse_version_banner("omp", banner) is None
 
 
 class TestManifestValidation:

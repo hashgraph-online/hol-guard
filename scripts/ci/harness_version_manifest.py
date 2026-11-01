@@ -12,18 +12,73 @@ not covered, however close it is to a listed one.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
-from codex_plugin_scanner.guard.harness_versions.versions import HarnessVersion, parse_version
 
 SCHEMA_VERSION = "hol-guard-harness-version-coverage.v1"
 MANIFEST_FILENAME = "harness_version_coverage_v1.json"
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_RECORDS_PER_HARNESS = 128
+
+MAX_VERSION_TEXT = 64
+
+_IDENTIFIER = r"[0-9A-Za-z-]+"
+_VERSION_PATTERN = re.compile(
+    r"^v?(?P<major>0|[1-9]\d{0,5})\.(?P<minor>0|[1-9]\d{0,5})\.(?P<patch>0|[1-9]\d{0,5})"
+    rf"(?:-(?P<prerelease>{_IDENTIFIER}(?:\.{_IDENTIFIER})*))?"
+    rf"(?:\+(?P<build>{_IDENTIFIER}(?:\.{_IDENTIFIER})*))?$"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class HarnessVersion:
+    """One exact semantic version, including prerelease and build identity.
+
+    A prerelease is never coerced to its stable release and a build identifier
+    stays part of the identity, so evidence for ``18.4.12`` says nothing about
+    ``18.4.12-rc.1`` or ``18.4.12+abc``.
+    """
+
+    major: int
+    minor: int
+    patch: int
+    prerelease: str | None = None
+    build: str | None = None
+
+    @property
+    def canonical(self) -> str:
+        text = f"{self.major}.{self.minor}.{self.patch}"
+        if self.prerelease:
+            text += f"-{self.prerelease}"
+        if self.build:
+            text += f"+{self.build}"
+        return text
+
+
+def parse_version(value: object) -> HarnessVersion | None:
+    """Parse one exact version string; anything else is ``None``."""
+
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > MAX_VERSION_TEXT:
+        return None
+    match = _VERSION_PATTERN.fullmatch(text)
+    if match is None:
+        return None
+    return HarnessVersion(
+        major=int(match["major"]),
+        minor=int(match["minor"]),
+        patch=int(match["patch"]),
+        prerelease=match["prerelease"],
+        build=match["build"],
+    )
+
 
 SUPPORTED_PLATFORMS = frozenset(
     {"darwin-arm64", "darwin-x86_64", "linux-arm64", "linux-x86_64", "windows-arm64", "windows-x86_64"}
