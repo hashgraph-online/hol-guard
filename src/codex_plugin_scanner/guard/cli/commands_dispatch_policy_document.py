@@ -440,7 +440,7 @@ def _workspace_rule_redaction_message(command: str, rule_id: str) -> str:
     return (
         f"Rule {rule_id} applies to a workspace, and Guard keeps workspace paths out of policy {command} "
         f"by default. Run `hol-guard policy {command} --include-provenance` to include them; "
-        "Guard asks for your approval first."
+        "Guard asks for your approval first when your approval gate requires it."
     )
 
 
