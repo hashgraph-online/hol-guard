@@ -41,7 +41,9 @@ _ENVIRONMENT_NAMES = (
 )
 # Each removal step that can block: the venv and link deletions, then per
 # ``pip --user`` interpreter its 30-second probe and 120-second uninstall.
+_REMOVAL_FEATURE = "native-desktop-foreign-remove-v1"
 _REMOVAL_BASE_TIMEOUT_SECONDS = 30.0
+_REMOVAL_VENV_TIMEOUT_SECONDS = 60.0
 _REMOVAL_USER_SITE_TIMEOUT_SECONDS = 150.0
 # The variables a ``pip --user`` interpreter needs to find its user site.
 _REMOVAL_ENVIRONMENT_NAMES = (
@@ -166,6 +168,14 @@ def _paths(value: object) -> tuple[Path, ...]:
     return tuple(Path(item) for item in cast("list[str]", value))
 
 
+def foreign_removal_available() -> bool:
+    """Whether the native runtime can remove superseded installs."""
+
+    from .mdm.runtime_request import runtime_offers
+
+    return runtime_offers(_REMOVAL_FEATURE)
+
+
 def remove_foreign_installs(
     inventory: ForeignInventory,
     *,
@@ -174,8 +184,8 @@ def remove_foreign_installs(
     """Remove each inventoried install, keeping any whose resident will not stop.
 
     ``desktop_foreign_remove.rs`` deletes the venvs and links and uninstalls
-    each confirmed ``pip --user`` copy. Without a native runtime nothing is
-    removed.
+    each confirmed ``pip --user`` copy. Residents stop only once a runtime that
+    can remove them answers; without one nothing is removed.
     """
 
     from .mdm.runtime_request import runtime_answer
@@ -183,41 +193,68 @@ def remove_foreign_installs(
     if inventory.empty:
         return RemovalResult(removed=(), removed_entry_dirs=frozenset(), notes=())
     answer = runtime_answer(
-        "native-desktop-foreign-remove-v1",
+        _REMOVAL_FEATURE,
         "desktop-foreign-remove",
-        {
-            "schema": "desktop-foreign-remove.v1",
-            "venvs": [
-                {
-                    "kind": venv.kind,
-                    "root": str(venv.root),
-                    "entries": [str(entry) for entry in venv.entries],
-                    "retired": all(_retire(retire_runtime, runtime) for runtime in venv.runtimes),
-                }
-                for venv in inventory.venvs
-            ],
-            "stale_entries": [str(entry) for entry in inventory.stale_entries],
-            "user_site": [
-                {"interpreter": str(interpreter), "entries": [str(entry) for entry in entries]}
-                for interpreter, entries in inventory.user_site
-            ],
-            "running_module": str(_resolve(Path(__file__))),
-            "environment": {
-                name: value for name in _REMOVAL_ENVIRONMENT_NAMES if (value := os.environ.get(name)) is not None
-            },
-        },
+        lambda: _removal_request(inventory, retire_runtime),
         output_limit=_INVENTORY_OUTPUT_LIMIT,
-        timeout_seconds=_REMOVAL_BASE_TIMEOUT_SECONDS + _REMOVAL_USER_SITE_TIMEOUT_SECONDS * len(inventory.user_site),
+        timeout_seconds=_REMOVAL_BASE_TIMEOUT_SECONDS
+        + _REMOVAL_VENV_TIMEOUT_SECONDS * len(inventory.venvs)
+        + _REMOVAL_USER_SITE_TIMEOUT_SECONDS * len(inventory.user_site),
     )
     try:
-        return _removal_from_answer(answer)
+        return _removal_from_answer(answer) if answer is not None else _unanswered_removal(inventory)
     except (KeyError, TypeError, ValueError):
-        return _NOTHING_REMOVED
+        return _unanswered_removal(inventory)
 
 
-def _removal_from_answer(answer: dict[str, object] | None) -> RemovalResult:
-    if answer is None:
+def _removal_request(inventory: ForeignInventory, retire_runtime: Callable[[Path], bool]) -> dict[str, object]:
+    return {
+        "schema": "desktop-foreign-remove.v1",
+        "venvs": [
+            {
+                "kind": venv.kind,
+                "root": str(venv.root),
+                "entries": [str(entry) for entry in venv.entries],
+                "retired": all(_retire(retire_runtime, runtime) for runtime in venv.runtimes),
+            }
+            for venv in inventory.venvs
+        ],
+        "stale_entries": [str(entry) for entry in inventory.stale_entries],
+        "user_site": [
+            {"interpreter": str(interpreter), "entries": [str(entry) for entry in entries]}
+            for interpreter, entries in inventory.user_site
+        ],
+        "running_module": str(_resolve(Path(__file__))),
+        "environment": {
+            name: value for name in _REMOVAL_ENVIRONMENT_NAMES if (value := os.environ.get(name)) is not None
+        },
+    }
+
+
+def _unanswered_removal(inventory: ForeignInventory) -> RemovalResult:
+    """What a removal the runtime did not finish left behind, read from disk."""
+
+    if not foreign_removal_available():
         return _NOTHING_REMOVED
+    removed = [{"kind": venv.kind, "path": str(venv.root)} for venv in inventory.venvs if not _lexists(venv.root)]
+    removed += [{"kind": "stale_link", "path": str(entry)} for entry in inventory.stale_entries if not _lexists(entry)]
+    entries = [
+        *(entry for venv in inventory.venvs for entry in venv.entries),
+        *inventory.stale_entries,
+        *(entry for _interpreter, site_entries in inventory.user_site for entry in site_entries),
+    ]
+    return RemovalResult(
+        removed=tuple(removed),
+        removed_entry_dirs=frozenset(entry.parent for entry in entries if not _lexists(entry)),
+        notes=("Guard's native runtime did not finish removing the superseded installs; some may remain.",),
+    )
+
+
+def _lexists(path: Path) -> bool:
+    return os.path.lexists(path)
+
+
+def _removal_from_answer(answer: dict[str, object]) -> RemovalResult:
     removed = cast("list[dict[str, object]]", answer["removed"])
     notes = answer["notes"]
     if not isinstance(notes, list):

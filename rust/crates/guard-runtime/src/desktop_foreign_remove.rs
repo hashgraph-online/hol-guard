@@ -24,7 +24,8 @@ use serde_json::json;
 
 const COMMAND: &str = "desktop-foreign-remove";
 const SCHEMA: &str = "desktop-foreign-remove.v1";
-const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
+/// Above the 4 MiB inventory answer the request is built from.
+const MAX_REQUEST_BYTES: u64 = 16 * 1024 * 1024;
 const PIP_UNINSTALL_TIMEOUT: Duration = Duration::from_secs(120);
 const USER_SITE_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 const PROBE_OUTPUT_LIMIT: u64 = 64 * 1024;

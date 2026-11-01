@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use super::{run_command, strerror};
+use super::{run_command, strerror, MAX_REQUEST_BYTES};
 
 struct Fixture {
     _dir: tempfile::TempDir,
@@ -346,6 +346,27 @@ fn strerror_drops_the_os_error_number() {
     let error = std::io::Error::from_raw_os_error(2);
     assert!(!strerror(&error).contains("os error"));
     assert_eq!(strerror(&std::io::Error::other("plain")), "plain");
+}
+
+#[test]
+fn accepts_a_request_larger_than_the_inventory_answer() {
+    let fixture = fixture();
+    let stale: Vec<String> = (0..25_000)
+        .map(|index| text(&fixture.root.join(format!("{index:0>200}"))))
+        .collect();
+    let request = request(json!([]), json!(stale), json!([]));
+    assert!(request.to_string().len() > 4 * 1024 * 1024);
+
+    assert_eq!(answer(&request)["removed"], json!([]));
+}
+
+#[test]
+fn refuses_a_request_over_the_cap() {
+    let oversized = vec![b' '; usize::try_from(MAX_REQUEST_BYTES).unwrap_or(usize::MAX) + 1];
+    assert_eq!(
+        run_command(oversized.as_slice()),
+        Err("desktop_foreign_remove_request_too_large".to_owned())
+    );
 }
 
 #[test]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -130,14 +131,52 @@ def test_keeps_installs_when_the_native_runtime_is_unavailable(
     inventory = inventory_foreign_installs(home, path_env=str(home / ".local" / "bin"))
     assert inventory.venvs
     monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
-    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: False)
 
     payload = _converge(home, tmp_path)
 
     assert payload["status"] == "partial"
     assert payload["removed"] == []
     assert venv.exists()
+    assert payload["_retired"] == []
     assert "Guard's native runtime is unavailable" in str(payload["notes"])
+
+
+def test_reports_what_an_unfinished_removal_already_deleted(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _launcher(home)
+    gone = _pipx_venv(home)
+    kept = _pipx_venv(home, "hol-guard-old")
+    stale = home / ".local" / "bin" / "plugin-guard"
+    stale.symlink_to(home / "gone" / "plugin-guard")
+    inventory = desktop_foreign_installs.ForeignInventory(
+        venvs=(
+            desktop_foreign_installs.ToolVenv("pipx", gone, (), ()),
+            desktop_foreign_installs.ToolVenv("pipx", kept, (), ()),
+        ),
+        stale_entries=(stale,),
+        user_site=(),
+    )
+    monkeypatch.setattr(desktop_converge, "inventory_foreign_installs", lambda *_args, **_kwargs: inventory)
+    monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
+
+    def interrupted(_feature: str, _command: str, request: object, **_kwargs: object) -> None:
+        assert callable(request)
+        _ = request()
+        shutil.rmtree(gone)
+        stale.unlink()
+        return None
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", interrupted)
+
+    payload = _converge(home, tmp_path)
+
+    assert payload["status"] == "partial"
+    assert kept.exists()
+    assert payload["removed"] == [{"kind": "pipx", "path": str(gone)}, {"kind": "stale_link", "path": str(stale)}]
+    assert "did not finish removing" in str(payload["notes"])
+    assert payload["_package_refreshes"] == 1
 
 
 def test_leaves_everything_when_desktop_has_no_core(home: Path, tmp_path: Path) -> None:
