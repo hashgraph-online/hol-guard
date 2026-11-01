@@ -1016,55 +1016,113 @@ def test_windows_daemon_pid_probe_never_uses_os_kill(monkeypatch) -> None:
     probe.assert_called_once_with(4321)
 
 
-@pytest.mark.parametrize(
-    ("last_error", "expected"),
-    [(87, False), (5, None), (1234, None)],
-)
-def test_windows_process_liveness_only_treats_invalid_pid_as_proven_dead(
-    monkeypatch,
-    last_error,
-    expected,
-) -> None:
-    class FakeFunction:
-        def __init__(self, result: object) -> None:
-            self.result = result
-            self.argtypes: list[object] = []
-            self.restype: object | None = None
+def _fake_lifecycle_runtime(monkeypatch, answer: dict[str, object] | None) -> list[dict[str, object]]:
+    requests: list[dict[str, object]] = []
 
-        def __call__(self, *_args: object) -> object:
-            return self.result
+    def fake_answer(
+        request: dict[str, object],
+        *,
+        output_limit: int,
+        deadline: float | None = None,
+    ) -> dict[str, object] | None:
+        assert output_limit > 0
+        requests.append(request if deadline is None else {**request, "deadline": deadline})
+        return answer
 
-    kernel32 = SimpleNamespace(
-        OpenProcess=FakeFunction(None),
-        WaitForSingleObject=FakeFunction(daemon_manager_module._WINDOWS_CREATE_NEW_PROCESS_GROUP),
-        CloseHandle=FakeFunction(True),
-    )
     monkeypatch.setattr(windows_paths_module, "os", _WindowsOSProxy())
-    monkeypatch.setattr(windows_paths_module.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32, raising=False)
-    monkeypatch.setattr(windows_paths_module.ctypes, "get_last_error", lambda: last_error, raising=False)
+    monkeypatch.setattr(windows_paths_module, "_lifecycle_answer", fake_answer)
+    return requests
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ({"liveness": [False]}, False),
+        ({"liveness": [True]}, True),
+        ({"liveness": [None]}, None),
+        ({"liveness": [0]}, None),
+        ({"liveness": [False, False]}, None),
+        ({}, None),
+        (None, None),
+    ],
+)
+def test_windows_process_liveness_is_dead_only_when_the_runtime_proves_it(
+    monkeypatch,
+    answer: dict[str, object] | None,
+    expected: bool | None,
+) -> None:
+    requests = _fake_lifecycle_runtime(monkeypatch, answer)
 
     assert windows_paths_module.windows_process_liveness(4321) is expected
+    assert windows_paths_module.windows_process_is_running(4321) is (expected is not False)
+    assert requests[0] == {"op": "liveness", "pids": [4321]}
 
 
-def test_windows_process_liveness_wait_failure_is_unknown(monkeypatch) -> None:
-    class FakeFunction:
-        def __init__(self, result: object) -> None:
-            self.result = result
-            self.argtypes: list[object] = []
-            self.restype: object | None = None
-
-        def __call__(self, *_args: object) -> object:
-            return self.result
-
-    kernel32 = SimpleNamespace(
-        OpenProcess=FakeFunction(1),
-        WaitForSingleObject=FakeFunction(0xFFFFFFFF),
-        CloseHandle=FakeFunction(True),
+def test_windows_process_facts_refuse_malformed_runtime_answers(monkeypatch) -> None:
+    _fake_lifecycle_runtime(
+        monkeypatch,
+        {"creation_times": [133_000_000_000_000_000], "owner_sids": ["sid:S-1-5-21-1"]},
     )
-    monkeypatch.setattr(windows_paths_module, "os", _WindowsOSProxy())
-    monkeypatch.setattr(windows_paths_module.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32, raising=False)
+    assert windows_paths_module.windows_process_creation_time(4321) == 133_000_000_000_000_000
+    assert windows_paths_module.windows_process_owner_sid(4321) == "sid:S-1-5-21-1"
 
-    assert windows_paths_module.windows_process_liveness(4321) is None
+    for creation_time in (0, -1, True, "133", None):
+        _fake_lifecycle_runtime(monkeypatch, {"creation_times": [creation_time]})
+        assert windows_paths_module.windows_process_creation_time(4321) is None
+    for owner_sid in ("S-1-5-21-1", "sid:", 7, None):
+        _fake_lifecycle_runtime(monkeypatch, {"owner_sids": [owner_sid]})
+        assert windows_paths_module.windows_process_owner_sid(4321) is None
+
+
+def test_windows_process_lifecycle_never_asks_the_runtime_about_invalid_pids(monkeypatch) -> None:
+    requests = _fake_lifecycle_runtime(monkeypatch, {"terminated": True})
+
+    assert windows_paths_module.windows_process_liveness(0) is False
+    assert windows_paths_module.windows_process_creation_time(-1) is None
+    assert windows_paths_module.windows_process_owner_sid(0) is None
+    assert windows_paths_module.windows_terminate_process_if_creation_time(0, 77) is False
+    assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 0) is False
+    assert windows_paths_module.windows_command_line_to_argv("") is None
+    assert requests == []
+
+
+def test_windows_exact_termination_sends_the_generation_and_bounded_timeout(monkeypatch) -> None:
+    requests = _fake_lifecycle_runtime(monkeypatch, {"terminated": True})
+    monkeypatch.setattr(windows_paths_module, "time", SimpleNamespace(monotonic=lambda: 100.0))
+
+    assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77)
+    assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77, timeout=0.25)
+    assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77, timeout=-3.0)
+    assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77, timeout=10_000.0)
+    assert requests == [
+        {"op": "terminate_if_creation_time", "pid": 4321, "expected_creation_time": 77},
+        {
+            "op": "terminate_if_creation_time",
+            "pid": 4321,
+            "expected_creation_time": 77,
+            "timeout_ms": 250,
+            "deadline": 101.25,
+        },
+        {
+            "op": "terminate_if_creation_time",
+            "pid": 4321,
+            "expected_creation_time": 77,
+            "timeout_ms": 0,
+            "deadline": 101.0,
+        },
+        {
+            "op": "terminate_if_creation_time",
+            "pid": 4321,
+            "expected_creation_time": 77,
+            "timeout_ms": 600_000,
+            "deadline": 701.0,
+        },
+    ]
+
+    refused: list[dict[str, object] | None] = [{"terminated": False}, {"terminated": 1}, {}, None]
+    for answer in refused:
+        _fake_lifecycle_runtime(monkeypatch, answer)
+        assert windows_paths_module.windows_terminate_process_if_creation_time(4321, 77) is False
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows process liveness regression")
@@ -3281,49 +3339,26 @@ def test_windows_command_line_to_argv_round_trips_native_quoting() -> None:
     assert parsed == arguments
 
 
-@pytest.mark.parametrize("argument_count", [0, -1])
-def test_windows_command_line_to_argv_frees_non_null_allocation_for_invalid_count(
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ({"argv": ["guard.exe", "--status"]}, ["guard.exe", "--status"]),
+        ({"argv": []}, None),
+        ({"argv": None}, None),
+        ({"argv": ["guard.exe", 7]}, None),
+        ({}, None),
+        (None, None),
+    ],
+)
+def test_windows_command_line_to_argv_keeps_only_a_split_the_runtime_made(
     monkeypatch: pytest.MonkeyPatch,
-    argument_count: int,
+    answer: dict[str, object] | None,
+    expected: list[str] | None,
 ) -> None:
-    class FakeFunction:
-        def __init__(self, callback) -> None:
-            self.callback = callback
-            self.argtypes: list[object] = []
-            self.restype: object | None = None
+    requests = _fake_lifecycle_runtime(monkeypatch, answer)
 
-        def __call__(self, *args: object) -> object:
-            return self.callback(*args)
-
-    native_arguments = (windows_paths_module.wintypes.LPWSTR * 1)("unused")
-    allocated_arguments = windows_paths_module.ctypes.cast(
-        native_arguments,
-        windows_paths_module.ctypes.POINTER(windows_paths_module.wintypes.LPWSTR),
-    )
-    freed_addresses: list[int | None] = []
-
-    def fake_command_line_to_argv(_command: object, count_pointer: Any) -> object:
-        native_count_pointer = windows_paths_module.ctypes.cast(
-            count_pointer,
-            windows_paths_module.ctypes.POINTER(windows_paths_module.ctypes.c_int),
-        )
-        native_count_pointer[0] = argument_count
-        return allocated_arguments
-
-    def fake_local_free(address: Any) -> None:
-        freed_addresses.append(address.value)
-
-    shell32 = SimpleNamespace(CommandLineToArgvW=FakeFunction(fake_command_line_to_argv))
-    kernel32 = SimpleNamespace(LocalFree=FakeFunction(fake_local_free))
-
-    def fake_win_dll(name: str, **_kwargs: object) -> object:
-        return shell32 if name == "shell32" else kernel32
-
-    monkeypatch.setattr(windows_paths_module, "os", _WindowsOSProxy())
-    monkeypatch.setattr(windows_paths_module.ctypes, "WinDLL", fake_win_dll, raising=False)
-
-    assert windows_paths_module.windows_command_line_to_argv("guard.exe --status") is None
-    assert freed_addresses == [windows_paths_module.ctypes.addressof(native_arguments)]
+    assert windows_paths_module.windows_command_line_to_argv("guard.exe --status") == expected
+    assert requests == [{"op": "command_line_to_argv", "command": "guard.exe --status"}]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires native Windows process handles")

@@ -14,6 +14,8 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use std::sync::atomic::AtomicBool;
 
+#[path = "bash_context_tests.rs"]
+mod context_execution_tests;
 #[path = "bash_grant_journal_tests.rs"]
 mod journal_tests;
 #[path = "bash_grant_lifecycle_tests.rs"]

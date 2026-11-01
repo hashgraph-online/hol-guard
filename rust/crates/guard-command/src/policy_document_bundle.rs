@@ -92,9 +92,10 @@ pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> 
     spec.insert("rules".to_owned(), Value::Array(local));
     let mut document = payload.clone();
     document.insert("spec".to_owned(), Value::Object(spec));
-    let rows = compiler::compile(
+    let rows = compiler::compile_effects(
         &mapping::parse("GuardPolicyDocument", &Value::Object(document))?.mapping,
         deadline,
+        compiler::Effects::WithReview,
     )?;
     Ok(if evaluating {
         Value::Array(Vec::new())

@@ -28,6 +28,7 @@ from .native_runtime_process_cache import (
 )
 from .native_runtime_request_scope import (
     _resolved_candidate_path,
+    primary_candidates,
     remember_scoped_status,
     scoped_candidates,
     scoped_status,
@@ -87,14 +88,7 @@ def _runtime_candidates() -> tuple[Path, ...]:
 
 def _discover_runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
-    candidates: list[Path] = []
-    override = os.environ.get(_NATIVE_BINARY_ENV)
-    if override and mode == "force":
-        candidate = Path(override).expanduser()
-        if candidate.is_absolute():
-            candidates.append(candidate)
-
-    candidates.append(_bundled_runtime_candidate())
+    candidates = list(primary_candidates(mode, os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate()))
 
     # Developer compatibility: a separately installed runtime distribution is
     # validation-only. Automatic production selection must use the runtime
@@ -233,9 +227,11 @@ def _isolated_environment() -> dict[str, str]:
         "USERPROFILE",
         "WINDIR",
     }
-    environment = {
-        key: value for key, value in os.environ.items() if key.upper() in allowed or key.upper().startswith("LC_")
-    }
+    environment = {}
+    for key in os.environ:
+        upper = key.upper()
+        if upper in allowed or upper.startswith("LC_"):
+            environment[key] = os.environ[key]
     if os.name == "nt":
         dll_path = os.pathsep.join(_windows_native_dll_directories())
         if dll_path:
@@ -387,6 +383,30 @@ def _status_request_key(candidates: tuple[Path, ...]) -> tuple[str, tuple[str, .
 
 
 def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
+    preferred = preferred_key = None
+    if native_mode() == "force":
+        preferred = primary_candidates("force", os.environ.get(_NATIVE_BINARY_ENV), _bundled_runtime_candidate())
+        preferred_key = _status_request_key(preferred)
+        expired = deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+        # A publisher can seed this request before capability lookup. Preserve
+        # the ordinary scoped binary/manifest checks without unused discovery.
+        if (
+            not expired
+            and (shared := scoped_status(preferred_key)) is not None
+            and shared.available
+            and shared.compatible
+            and shared.mode == preferred_key[0]
+            and shared.identity is not None
+            and shared.identity.path == _resolved_candidate_path(preferred[0])
+            and _scoped_manifest_still_valid(shared)
+        ):
+            return shared
+        # A fully witnessed first choice cannot be displaced by a later,
+        # lower-priority distribution. The existing cache still checks the
+        # complete binary/manifest identities and refuses fresh or moved files.
+        if not expired and (cached := process_status(preferred_key, preferred)) is not None:
+            remember_scoped_status(preferred_key, cached)
+            return cached
     candidates = _runtime_candidates()
     key = _status_request_key(candidates)
     if (cached := scoped_status(key)) is not None:
@@ -405,6 +425,14 @@ def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeR
     status = _compute_runtime_status(candidates, deadline_monotonic=deadline_monotonic)
     remember_scoped_status(key, status)
     remember_process_status(key, status, before)
+    if (
+        preferred is not None
+        and preferred_key is not None
+        and preferred_key != key
+        and candidates[: len(preferred)] == preferred
+        and status.mode == preferred_key[0]
+    ):
+        remember_process_status(preferred_key, status, before)
     return status
 
 

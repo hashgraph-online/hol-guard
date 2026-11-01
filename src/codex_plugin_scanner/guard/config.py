@@ -148,6 +148,11 @@ class GuardConfig:
     sync: bool = False
     receipt_redaction_level: str = "full"
     billing: bool = False
+    context_assistance: dict[str, object] | None = None
+    context_assistance_diagnostic: str | None = None
+    context_assistance_export: dict[str, object] | None = None
+    context_assistance_requested: dict[str, object] | None = None
+    context_assistance_requested_available: bool = False
     runtime_detector_registry: bool = False
     runtime_detector_timeout_ms: int = 50
     runtime_detector_debug_trace: bool = False
@@ -205,6 +210,16 @@ _NATIVE_LOADED_FIELDS = frozenset(field.name for field in fields(GuardConfig)) -
         "managed_locked_settings",
         "install_owner",
         "managed_policy",
+        "context_assistance_requested_available",
+    }
+)
+
+_OPTIONAL_ASSISTANCE_FIELDS = frozenset(
+    {
+        "context_assistance",
+        "context_assistance_diagnostic",
+        "context_assistance_export",
+        "context_assistance_requested",
     }
 )
 
@@ -269,12 +284,13 @@ def load_guard_config(
         require_canonical_workspace=require_canonical_workspace,
         managed=_native_managed_input(effective_managed_policy),
     )
-    if set(loaded) != _NATIVE_LOADED_FIELDS:
+    if not _NATIVE_LOADED_FIELDS - _OPTIONAL_ASSISTANCE_FIELDS <= set(loaded) <= _NATIVE_LOADED_FIELDS:
         raise ConfigFileTrustError("native_guard_config_invalid")
     loaded["runtime_detector_disabled_ids"] = tuple(cast("list[str]", loaded["runtime_detector_disabled_ids"]))
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
+        context_assistance_requested_available="context_assistance_requested" in loaded,
         **loaded,  # type: ignore[arg-type]
         managed_policy_status=managed_state.status,
         managed_policy_hash=effective_managed_policy.content_hash if effective_managed_policy is not None else None,
@@ -289,7 +305,7 @@ def load_guard_config(
 def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
     """Return Guard config values that are safe to edit from the local dashboard."""
 
-    return {
+    settings: dict[str, object] = {
         "mode": config.mode,
         "presentation_mode": config.presentation_mode,
         "presentation_mode_explicit": config.presentation_mode_explicit,
@@ -334,11 +350,18 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "receipt_redaction_level": config.receipt_redaction_level,
         "billing": config.billing,
         "approval_gate": public_config(config.guard_home).to_dict(),
+        "context_assistance": config.context_assistance_requested
+        if config.context_assistance_requested_available
+        else config.context_assistance,
+        "context_assistance_diagnostic": config.context_assistance_diagnostic,
         "managed_policy_status": config.managed_policy_status,
         "managed_policy_hash": config.managed_policy_hash,
         "managed_locked_settings": list(config.managed_locked_settings),
         "install_owner": config.install_owner,
     }
+    if config.context_assistance_requested_available:
+        settings["context_assistance_requested"] = config.context_assistance_requested
+    return settings
 
 
 # The daemon serves settings writes from a bounded threading HTTP server, so

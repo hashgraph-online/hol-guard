@@ -39,7 +39,11 @@ _CANONICAL_COMPILE_REMEDIATION = {
         "artifacts, tools or publishers."
     ),
     "invalid_policy_match_selector": "Every match field needs at least one non-empty value.",
-    "unsupported_policy_effect": "Guard enforces only allow and block rules.",
+    "unsupported_policy_effect": "Guard enforces allow, block and review rules.",
+    "unsupported_exact_command_review": (
+        "Guard cannot ask for review on an exact command; it enforces only allow and block there. Block "
+        "the command, or ask for review on its tool instead."
+    ),
     "unsupported_policy_lifetime": ("Guard enforces lifetime.mode permanent, or until with an expiresAt time."),
     "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
     "command_expression_requires_guard_3_1_runtime": (

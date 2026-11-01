@@ -20,7 +20,7 @@ pub(super) fn start(
     let (sender, receiver) = sync_channel(capacity());
     let workers = spawn_workers(WORKERS, receiver, move |pending| {
         crate::resident_health_counters::leave_queue(QueueLane::Control);
-        handle_pending_request(pending, policy_store.clone(), None);
+        handle_pending_request(pending, policy_store.clone(), None, None);
     });
     (sender, workers)
 }

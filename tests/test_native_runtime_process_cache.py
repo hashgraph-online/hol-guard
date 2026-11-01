@@ -178,6 +178,23 @@ def test_an_expired_deadline_ignores_a_cached_status(probe: tuple[Path, Path, li
     assert len(calls) == 1
 
 
+def test_discovery_that_consumes_the_deadline_cannot_reuse_a_cached_status(
+    probe: tuple[Path, Path, list[Path]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary, _manifest, _calls = probe
+    assert native_runtime_status().compatible
+    now = [time.monotonic()]
+    deadline = now[0] + 1
+
+    def slow_discovery() -> tuple[Path, ...]:
+        now[0] = deadline + 1
+        return (binary,)
+
+    monkeypatch.setattr(native_runtime_module, "_runtime_candidates", slow_discovery)
+    monkeypatch.setattr(native_runtime_module.time, "monotonic", lambda: now[0])
+    assert not native_runtime_status(deadline_monotonic=deadline).available
+
+
 def test_a_file_swapped_while_the_status_is_computed_is_not_cached(
     probe: tuple[Path, Path, list[Path]], monkeypatch: pytest.MonkeyPatch
 ) -> None:

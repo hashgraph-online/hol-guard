@@ -224,7 +224,7 @@ function renderViewContent(props: LayoutProps): ReactNode {
   if (props.view === "protection-repair") {
     return props.protectionRepairContent ?? null;
   }
-  if (props.view === "settings") {
+  if (props.view === "settings" || props.view === "cigar") {
     return props.settingsContent;
   }
   if (props.view === "about") {

@@ -139,7 +139,7 @@ def test_daemon_routes_require_dashboard_auth_and_admit_a_worktree(tmp_path: Pat
     assert worktree["worktree_key"] == admitted["worktree_key"]
 
 
-def test_findings_route_resolves_the_suggested_folder_like_a_tracked_root(tmp_path: Path, native_binary: None) -> None:
+def test_findings_route_matches_lexical_suggestion_without_following_alias(tmp_path: Path, native_binary: None) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "package.json").write_text('{"dependencies":{}}', encoding="utf-8")
@@ -164,7 +164,7 @@ def test_findings_route_resolves_the_suggested_folder_like_a_tracked_root(tmp_pa
 
         assert tracked(None) == "absent"
         assert tracked(str(workspace)) is True
-        assert tracked(str(alias) + "/") is True
+        assert tracked(str(alias) + "/") is False
         assert tracked(f"{workspace}/../workspace") is True
         assert tracked(str(other)) is False
         assert tracked("relative/path") is False

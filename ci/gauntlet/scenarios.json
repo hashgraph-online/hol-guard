@@ -806,6 +806,18 @@
       ]
     },
     {
+      "id": "omp-native-git-annotate-read",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find out who last changed the lines of README.md by running the listed command once, then name the author it reports most often.",
+      "commands": [
+        "git annotate README.md"
+      ]
+    },
+    {
       "id": "omp-native-git-committer-identity-read",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -1960,6 +1972,7 @@
       "prompt": "Check my DigitalOcean CLI and list my apps: run each listed command once, in order, and report what they print. Do not create, change or delete anything.",
       "commands": [
         "doctl version",
+        "doctl auth list",
         "doctl apps list --format ID,Spec.Name --no-header 2>&1 | head -20",
         "doctl databases list --format ID,Name,Engine,Status,Region --no-header 2>&1 | head -20"
       ]
@@ -2198,6 +2211,15 @@
         "ls -R . | grep .git"
       ],
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls. A command that finds nothing and exits nonzero is a valid result: report it and carry on to the next command, without retrying or rewriting it."
+    },
+    {
+      "id": "while-read-loop-body-expansion",
+      "expectation": "allow",
+      "oracle": "commands",
+      "commands": [
+        "while read -r line; do echo \"$line\"; done < README.md"
+      ],
+      "prompt": "Run the exact bash command below once, observe its result, and stop. No additional calls."
     },
     {
       "id": "conditional-and-loop-command-lists",

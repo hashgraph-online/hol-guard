@@ -77,6 +77,20 @@ fn stable_context_read_enforces_caller_limit_and_single_link() {
 
 #[cfg(unix)]
 #[test]
+fn a_stable_read_treats_an_unlinked_leaf_as_changed_not_hard_linked() {
+    assert!(stable_leaf_link_error(1).is_none());
+    assert!(matches!(
+        stable_leaf_link_error(0),
+        Some(SecureReadError::Changed)
+    ));
+    assert!(matches!(
+        stable_leaf_link_error(2),
+        Some(SecureReadError::HardLinkedFile)
+    ));
+}
+
+#[cfg(unix)]
+#[test]
 fn descriptor_open_does_not_wait_for_fifo_writer() {
     let dir = fixture_root("nonblocking-fifo");
     fs::create_dir_all(&dir).unwrap();

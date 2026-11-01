@@ -167,7 +167,7 @@ pub(super) fn safe_git_arguments(
         return allow_helper_context
             && super::git_object_reads::read_form(subcommand, &arguments[1..]);
     }
-    if matches!(subcommand, "blame" | "describe" | "reflog") {
+    if matches!(subcommand, "blame" | "annotate" | "describe" | "reflog") {
         // History reads page (pager.blame, pager.reflog, core.pager) and
         // blame converts blobs, so the configuration probe clears them first.
         return allow_helper_context

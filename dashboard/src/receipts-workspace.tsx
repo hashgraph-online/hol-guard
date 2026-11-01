@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiMiniArrowDownTray, HiMiniDocumentText, HiMiniXMark } from "react-icons/hi2";
 
 import { EmptyState, ActionButton, SectionLabel, IconActionButton } from "./approval-center-primitives";
-import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
+import { isDisplayableHarness } from "./approval-center-utils";
 import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { useReceiptAnalytics, invalidateReceiptAnalyticsCache } from "./evidence/use-receipt-analytics";
 import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
@@ -32,7 +32,8 @@ import { AppTab } from "./evidence/app-tab";
 import { CategoryTab } from "./evidence/category-tab";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { CommandActivityWorkspace } from "./command-activity/command-activity-workspace";
-import { guardActionDisposition } from "./guard-action";
+import { ContextHistoryPanel } from "./context-assistance/history-panel";
+export { filterReceiptItems } from "./evidence/filter-receipt-items";
 
 export type ReceiptsState =
   | { kind: "loading" }
@@ -233,16 +234,6 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  if (receiptItems.length === 0 && filters.view !== "commands") {
-    return (
-      <EmptyState
-        title="No evidence yet"
-        body="Saved choices appear here after HOL Guard reviews or blocks an action."
-        tone="teach"
-      />
-    );
-  }
-
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
 
   const totalReceiptCount = analytics.kind === "ready" ? analytics.data.total : receiptItems.length;
@@ -277,6 +268,16 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     ),
     [handleOpenExport, handleOpenClear, onClearEvidence, receiptItems.length],
   );
+
+  if (receiptItems.length === 0 && filters.view !== "commands") {
+    return (
+      <div className="space-y-6"><EmptyState
+        title="No evidence yet"
+        body="Saved choices appear here after HOL Guard reviews or blocks an action."
+        tone="teach"
+      /><ContextHistoryPanel /></div>
+    );
+  }
 
   return (
     <div className="min-w-0 max-w-full space-y-6">
@@ -322,6 +323,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
                 pageSize={PAGE_SIZE}
                 onLoadMore={handleLoadMore}
               />
+              {!selectedReceipt ? <ContextHistoryPanel /> : null}
             </div>
             {selectedReceipt && (
               <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -459,46 +461,4 @@ export function ReceiptsWorkspace(props: {
       onNavigate={props.onNavigate}
     />
   );
-}
-
-export function filterReceiptItems(
-  items: GuardReceipt[],
-  searchTerm: string,
-  harnessFilter: string,
-  decisionFilter: string,
-  dateRange: string
-): GuardReceipt[] {
-  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-  const activeHarnessFilter = normalizeHarnessFilter(harnessFilter);
-  const now = Date.now();
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartMs = todayStart.getTime();
-  const last7Start = now - 7 * 24 * 60 * 60 * 1000;
-  return items.filter((receipt) => {
-    const matchesHarness = activeHarnessFilter === "all" || receipt.harness === activeHarnessFilter;
-    const disposition = guardActionDisposition(receipt.policy_decision);
-    const matchesDecision =
-      decisionFilter === "all" ||
-      (decisionFilter === "allow" && disposition === "allowed") ||
-      ((decisionFilter === "ask" || decisionFilter === "review") && disposition === "reviewed") ||
-      (decisionFilter === "block" && disposition === "blocked") ||
-      receipt.policy_decision === decisionFilter;
-    if (!matchesHarness || !matchesDecision) {
-      return false;
-    }
-    if (dateRange === "today" || dateRange === "last7") {
-      const ts = new Date(receipt.timestamp).getTime();
-      if (dateRange === "today" && ts < todayStartMs) {
-        return false;
-      } else if (dateRange === "last7" && ts < last7Start) {
-        return false;
-      }
-    }
-    if (normalizedSearchTerm.length === 0) {
-      return true;
-    }
-    const name = (receipt.artifact_name ?? receipt.artifact_id).toLowerCase();
-    return name.includes(normalizedSearchTerm);
-  });
 }

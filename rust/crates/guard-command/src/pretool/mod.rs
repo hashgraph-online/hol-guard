@@ -903,6 +903,18 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<PreToolDecisionV1, String> {
+    // One submission is read again for every spelling a rewrite reaches, and
+    // each reading may ask the include walk about a recursive root. The walk
+    // is the one proof here that spends its own wall clock, so the clock is
+    // started here, where the submission starts, and shared by every walk
+    // below rather than handed out afresh to each one.
+    //
+    // This function is also where each of those readings arrives: an envelope
+    // evaluates its projections by calling back in. The guard counts that
+    // nesting, so a projection joins the submission already open instead of
+    // starting one of its own, and the budget ends when the outermost
+    // reading returns.
+    let _budget = search_scope_walk::begin_include_scope_budget();
     evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
 }
 

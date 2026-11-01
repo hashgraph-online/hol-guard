@@ -54,11 +54,23 @@ def compile_policy_bundle_document(
         policy_query(
             "compile_bundle",
             {"bundle": dict(policy_bundle), "device_id": device_id, "device_name": device_name},
-        )
+        ),
+        actions=_BUNDLE_ACTIONS,
     )
 
 
-def _compiled_rows(items: object) -> tuple[CompiledPolicyRow, ...]:
+# A local policy document allows or blocks. A signed Cloud bundle may also ask a
+# person, so its review rules reach the hook as the same ``review`` rows a v1
+# bundle materializes.
+_DOCUMENT_ACTIONS = frozenset({"allow", "block"})
+_BUNDLE_ACTIONS = frozenset({"allow", "block", "review"})
+
+
+def _compiled_rows(
+    items: object,
+    *,
+    actions: frozenset[str] = _DOCUMENT_ACTIONS,
+) -> tuple[CompiledPolicyRow, ...]:
     if not isinstance(items, list) or len(items) > 10_000:
         raise NativePolicyDocumentError("native_policy_document_rows_malformed")
     compiled = []
@@ -69,7 +81,7 @@ def _compiled_rows(items: object) -> tuple[CompiledPolicyRow, ...]:
             or not isinstance(item["rule_id"], str)
             or not isinstance(item["provenance_json"], str)
             or not isinstance(item["decision"], dict)
-            or item["decision"].get("action") not in {"allow", "block"}
+            or item["decision"].get("action") not in actions
             or item["decision"].get("scope") not in {"artifact", "workspace", "publisher", "harness", "global"}
             or not isinstance(item["decision"].get("harness"), str)
             or any(value is not None and not isinstance(value, str) for value in item["decision"].values())
