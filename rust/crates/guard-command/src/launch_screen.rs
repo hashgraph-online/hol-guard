@@ -25,7 +25,7 @@ pub struct LaunchRisk {
 }
 
 const SHELLS: &[&str] = &["ash", "bash", "dash", "fish", "ksh", "mksh", "sh", "zsh"];
-const PRIVILEGE_WRAPPERS: &[&str] = &["doas", "gsudo", "pkexec", "run0", "sudo"];
+pub(crate) const PRIVILEGE_WRAPPERS: &[&str] = &["doas", "gsudo", "pkexec", "run0", "sudo"];
 const PRIVILEGE_VALUE_OPTIONS: &[&str] = &[
     "-C", "-D", "-U", "-g", "-h", "-p", "-r", "-t", "-u", "--chdir", "--group", "--user",
 ];

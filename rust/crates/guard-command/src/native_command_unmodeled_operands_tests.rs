@@ -23,9 +23,8 @@ fn an_interpreter_named_in_an_operand_keeps_its_approval() {
         "foo parallel | xargs basename",
         "foo deno | xargs wc -l",
         "foo expect | xargs wc -l",
-        // A path spelling and an option in front of it are still operands.
+        // A path spelling is still an operand.
         "foo ./node | xargs wc -l",
-        "foo -n node | xargs wc -l",
     ] {
         assert_eq!(decision(&controls, command), plain, "{command}");
     }
@@ -43,6 +42,10 @@ fn a_word_that_may_still_name_a_program_keeps_its_evaluation_failure() {
         "foo 'node' | xargs head -n 1",
         "foo $NODE | xargs wc -l",
         "foo --exec=node | xargs wc -w",
+        // The word after an option is the value that option names, and an
+        // option this reader does not know may name a program.
+        "foo -n node | xargs wc -l",
+        "foo --pre node PATTERN | xargs wc -l",
         // The piece's own program runs what it is given, so none of its words
         // are operands.
         "sudo foo node | xargs wc -c",
@@ -57,17 +60,31 @@ fn a_word_that_may_still_name_a_program_keeps_its_evaluation_failure() {
 fn only_a_bare_operand_leaves_the_command_positions() {
     for (command, kept) in [
         ("rg env src", "rg"),
-        ("rg -n env src", "rg -n"),
+        // The word after an option is the value that option names.
+        ("rg -n env src", "rg -n env"),
+        ("foo --pre node PATTERN README.md", "foo --pre node"),
         ("foo ./node", "foo"),
         // A piece whose own program runs what it is handed keeps every word.
         ("sh -c node", "sh -c node"),
         ("xargs rm", "xargs rm"),
+        // A privilege wrapper and a launcher run their first operand too, and
+        // neither stands among the interpreters.
+        ("pkexec bash -c wc", "pkexec bash -c wc"),
+        ("run0 node app.js", "run0 node app.js"),
+        ("coproc node app.js", "coproc node app.js"),
+        (
+            "runuser -u build node app.js",
+            "runuser -u build node app.js",
+        ),
         ("rg $NODE src", "rg $NODE"),
         ("rg FOO=node src", "rg FOO=node"),
         ("rg 'node' src", "rg 'node'"),
         // The option word is what tells the scan a nested executor is there at
         // all; the body's own words are operands the `-exec` reader bounds.
-        (r"find src -exec sh -c cat", "find -exec -c"),
+        (r"find src -exec sh -c cat", "find -exec sh -c cat"),
+        // `xargs` is the program `-exec` runs; dropping it would hide the
+        // unbounded `xargs` the piece is refused for.
+        (r"find . -exec xargs wc", "find -exec xargs wc"),
     ] {
         assert_eq!(text_in_command_positions(command), kept, "{command}");
     }
