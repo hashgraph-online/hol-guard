@@ -1,4 +1,10 @@
 //! The branch a one-word `checkout`/`switch` names, `-` among them.
+//!
+//! The cases answer the proof's probes with a real temporary checkout, and
+//! the proof reads every path it is handed as a `PurePosixPath`, so a
+//! Windows temp root is not absolute to it and the hook and git-dir
+//! comparisons never line up. `lib.rs` builds this module on unix only, the
+//! way it already does for the other proofs that question a real tree.
 
 use std::path::{Path, PathBuf};
 

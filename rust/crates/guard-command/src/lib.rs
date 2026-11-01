@@ -277,7 +277,7 @@ mod sfrs_git_cached_diff_tests;
 mod sfrs_git_fetch;
 mod sfrs_git_index;
 mod sfrs_git_routines;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod sfrs_git_routines_tests;
 #[cfg(all(test, unix))]
 mod sfrs_github_body_vectors;
