@@ -89,8 +89,9 @@ def reclaim_orphaned_extraction_dirs(
 ) -> ExtractionReclaimResult:
     """Reclaim ``_MEI*`` dirs under ``temp_root`` that are provably dead.
 
-    Setting ``stop_event`` kills the sweep. A directory it was deleting is
-    left partial, which the next sweep reclaims. Raises
+    Setting ``stop_event`` kills the sweep. A directory it was deleting
+    keeps its owner marker and package directory until last, so the next
+    sweep still recognises and reclaims it. Raises
     ``ExtractionReclaimUnavailableError`` when the runtime gives no answer.
     """
 

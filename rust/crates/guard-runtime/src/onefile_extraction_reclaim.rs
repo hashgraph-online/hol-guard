@@ -14,7 +14,7 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::onefile_open_paths;
+use crate::{onefile_extraction_removal, onefile_open_paths};
 
 const SCHEMA: &str = "onefile-extraction-reclaim.v1";
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
@@ -135,7 +135,7 @@ impl Host for SystemHost {
     }
 
     fn remove_dir_all(&mut self, path: &Path) -> io::Result<()> {
-        fs::remove_dir_all(path)
+        onefile_extraction_removal::remove_extraction_dir(path, OWNER_MARKER_NAME, PACKAGE_DIR_NAME)
     }
 
     fn owned_by_current_user(&mut self, metadata: &Metadata) -> bool {
