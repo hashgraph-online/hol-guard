@@ -146,6 +146,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = system_proxies::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if proxy_credentials::is_command(command) && flag == "--stdin" => {
+            let response = proxy_credentials::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if native_install_verdict::is_command(command) && flag == "--stdin" => {
             let response = native_install_verdict::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

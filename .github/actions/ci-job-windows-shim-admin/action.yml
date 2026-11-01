@@ -142,6 +142,14 @@ runs:
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib user_health_state
+    - name: Read the managed proxy credential natively on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --lib egress_proxy_credentials
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib proxy_credentials
     - name: Contain MCP server process trees in a JobObject on Windows
       if: inputs.shim-gate == 'mcp'
       shell: pwsh

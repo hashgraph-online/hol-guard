@@ -10,6 +10,7 @@ from email.message import Message
 from email.utils import format_datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from requests import Request
@@ -29,6 +30,8 @@ from codex_plugin_scanner.guard.mdm.network import (
     platform_system_proxies,
 )
 from codex_plugin_scanner.guard.mdm.network_diagnostics import diagnose_endpoint
+
+_NO_PROXY_RECORD: dict[str, object] = {"ok": True, "credentials": None}
 
 
 class _FakeResponse:
@@ -51,7 +54,7 @@ def test_tls_verification_cannot_be_disabled() -> None:
 
 
 def test_explicit_proxy_is_applied_without_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(transport_module, "read_proxy_credential_record", lambda _key: None)
+    monkeypatch.setattr(transport_module, "_native_proxy_credentials", lambda _url: _NO_PROXY_RECORD)
     policy = ManagedNetworkPolicy(proxy_mode="explicit", proxy_url="https://proxy.example:8443")
     session = managed_requests_session(policy)
     assert session.proxies == {
@@ -91,8 +94,8 @@ def test_authenticated_proxy_uses_os_keyring_without_secret_leakage(monkeypatch:
     password = "synthetic-proxy-password"
     monkeypatch.setattr(
         transport_module,
-        "read_proxy_credential_record",
-        lambda _key: json.dumps({"username": username, "password": password}),
+        "_native_proxy_credentials",
+        lambda _url: {"ok": True, "credentials": {"username": username, "password": password}},
     )
     monkeypatch.setattr(diagnostics_module.socket, "getaddrinfo", lambda *_args, **_kwargs: [(object(),)])
     monkeypatch.setattr(transport_module, "managed_urlopen", lambda *_args, **_kwargs: _FakeResponse())
@@ -123,7 +126,11 @@ def test_authenticated_proxy_uses_os_keyring_without_secret_leakage(monkeypatch:
 
 def test_invalid_keyring_proxy_credentials_fail_with_redacted_reason(monkeypatch: pytest.MonkeyPatch) -> None:
     secret = "synthetic-secret-material"
-    monkeypatch.setattr(transport_module, "read_proxy_credential_record", lambda _key: f"not-json-{secret}")
+    monkeypatch.setattr(
+        transport_module,
+        "_native_proxy_credentials",
+        lambda _url: {"ok": False, "reason_code": f"not-a-code-{secret}"},
+    )
     policy = ManagedNetworkPolicy(proxy_mode="explicit", proxy_url="https://proxy.example:8443")
 
     with pytest.raises(ManagedNetworkError) as error:
@@ -347,7 +354,7 @@ def test_proxy_routing_can_succeed_when_destination_dns_is_unavailable_locally(
             return [(object(),)]
         raise AssertionError(host)
 
-    monkeypatch.setattr(transport_module, "read_proxy_credential_record", lambda _key: None)
+    monkeypatch.setattr(transport_module, "_native_proxy_credentials", lambda _url: _NO_PROXY_RECORD)
     monkeypatch.setattr(diagnostics_module.socket, "getaddrinfo", resolve)
     monkeypatch.setattr(transport_module, "managed_urlopen", lambda *_args, **_kwargs: _FakeResponse())
     result = diagnose_endpoint(
@@ -371,7 +378,7 @@ def test_diagnostic_reports_proxy_resolution_failure(monkeypatch: pytest.MonkeyP
             raise diagnostics_module.socket.gaierror("proxy detail")
         raise AssertionError(host)
 
-    monkeypatch.setattr(transport_module, "read_proxy_credential_record", lambda _key: None)
+    monkeypatch.setattr(transport_module, "_native_proxy_credentials", lambda _url: _NO_PROXY_RECORD)
     monkeypatch.setattr(diagnostics_module.socket, "getaddrinfo", resolve)
     result = diagnose_endpoint(
         "https://guard.example",
@@ -468,3 +475,51 @@ def test_system_proxies_come_from_the_native_runtime(monkeypatch: pytest.MonkeyP
     status.capabilities = SimpleNamespace(features=())
     assert platform_system_proxies() == {}
     assert len(calls) == 1
+
+
+def test_proxy_credentials_come_from_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import codex_hook_launch_runtime, native_runtime
+
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("hol-guard-runtime")),
+        capabilities=SimpleNamespace(features=("native-proxy-credentials-v1",)),
+    )
+    calls: list[tuple[object, ...]] = []
+    answers = [
+        {"ok": True, "credentials": {"username": "proxy-user", "password": "synthetic-password"}},
+        {"ok": True, "credentials": None},
+        {"ok": True, "credentials": {"username": "proxy-user", "password": ""}},
+    ]
+
+    def spawn(argv: tuple[str, ...], **kwargs: object) -> SimpleNamespace:
+        calls.append((argv[1:], kwargs["input_text"]))
+        environment = cast(dict[str, str], kwargs["environment"])
+        assert environment.get("DBUS_SESSION_BUS_ADDRESS") == "unix:path=/run/user/1000/bus"
+        return SimpleNamespace(
+            returncode=0,
+            timed_out=False,
+            output_limit_exceeded=False,
+            containment_failed=False,
+            stdout=json.dumps(answers.pop(0)),
+        )
+
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(codex_hook_launch_runtime, "run_isolated_hook_process", spawn)
+    proxy_url = "https://proxy.example:8443"
+
+    credentials = transport_module.load_proxy_credentials(proxy_url)
+    assert credentials is not None
+    assert (credentials.username, credentials.password) == ("proxy-user", "synthetic-password")
+    assert calls == [
+        (("proxy-credentials", "--stdin"), json.dumps({"schema": "proxy-credentials.v1", "proxy_url": proxy_url}))
+    ]
+    assert transport_module.load_proxy_credentials(proxy_url) is None
+    with pytest.raises(ManagedNetworkError, match="managed_proxy_credentials_invalid"):
+        transport_module.load_proxy_credentials(proxy_url)
+
+    status.capabilities = SimpleNamespace(features=())
+    assert transport_module.load_proxy_credentials(proxy_url) is None
+    assert len(calls) == 3

@@ -119,6 +119,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-release-manifest-verify-v1".into(),
         "native-ownership-acl-v1".into(),
         "native-system-proxies-v1".into(),
+        "native-proxy-credentials-v1".into(),
         "native-install-verdict-v1".into(),
         "native-policy-verifier-key-provision-v1".into(),
         "native-business-source-codec-v1".into(),

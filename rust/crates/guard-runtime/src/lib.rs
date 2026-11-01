@@ -753,6 +753,7 @@ mod project_identity_op;
 mod prompt_analyze_op;
 mod protect_request_op;
 mod protection_health_report_op;
+mod proxy_credentials;
 use guard_runtime_pyjson as pyjson;
 #[cfg(test)]
 mod registry_vectors_tests;
