@@ -169,29 +169,31 @@ def containment_health_signals(
     The resident decides them exactly as it does inside the full report, so a
     repair confirmation can never disagree with the health the operator sees.
     A resident that cannot answer raises ``NativeProtectionHealthError``,
-    except for valid evidence from a platform with no backend: that fails all
-    four checks as ``unsupported_platform`` before any other check, so it is
-    answered here and stays a platform limit rather than an unreachable runtime.
+    except for evidence from a platform with no backend: that stays a
+    platform limit (``unsupported_platform``) rather than an unreachable
+    runtime. Whenever the resident answers, its answer is the one returned.
     """
 
-    if _unsupported_backend(value):
+    from ..native_protection_health import NativeProtectionHealthError, protection_health_report
+
+    try:
+        report = protection_health_report(
+            {
+                "now": now.isoformat(),
+                "managed_installs": [],
+                "hook_verification": None,
+                "daemon": {"registration_status": None, "last_heartbeat_at": None, "containment_health": value},
+                "remembered_rules": None,
+                "runtime_protection": None,
+                "decision_stream": None,
+            },
+            guard_home=guard_home,
+        )
+    except NativeProtectionHealthError:
+        if not _unsupported_backend(value):
+            raise
         unsupported = ProtectionSignal(ProtectionCheckStatus.FAIL, "unsupported_platform")
         return dict.fromkeys(sorted(_CONTAINMENT_CHECK_IDS), unsupported)
-
-    from ..native_protection_health import protection_health_report
-
-    report = protection_health_report(
-        {
-            "now": now.isoformat(),
-            "managed_installs": [],
-            "hook_verification": None,
-            "daemon": {"registration_status": None, "last_heartbeat_at": None, "containment_health": value},
-            "remembered_rules": None,
-            "runtime_protection": None,
-            "decision_stream": None,
-        },
-        guard_home=guard_home,
-    )
     checks = cast(list[dict[str, str]], report["checks"])
     return {
         row["check_id"]: ProtectionSignal(ProtectionCheckStatus(row["status"]), row["reason_code"])

@@ -104,7 +104,7 @@ def test_containment_signals_are_the_resident_report_rows(
     ]
 
 
-def test_unsupported_platform_signals_do_not_need_the_resident(
+def test_unsupported_platform_survives_an_unreachable_resident_but_never_overrides_it(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -126,6 +126,17 @@ def test_unsupported_platform_signals_do_not_need_the_resident(
     )
     with pytest.raises(native_protection_health.NativeProtectionHealthError):
         _ = containment_health_signals({**evidence, "backend": "macos-sandbox"}, now=_NOW, guard_home=tmp_path)
+
+    def answered(facts: dict[str, object], *, guard_home: Path) -> dict[str, object]:
+        rows = [
+            {"check_id": check_id, "status": "fail", "reason_code": "containment_health_invalid"} for check_id in ids
+        ]
+        return {"checks": rows}
+
+    ids = ("containment_compatibility", "decision_plane_compatibility", "policy_engine", "sandbox")
+    monkeypatch.setattr(native_protection_health, "protection_health_report", answered)
+    invalid = ProtectionSignal(ProtectionCheckStatus.FAIL, "containment_health_invalid")
+    assert containment_health_signals(evidence, now=_NOW, guard_home=tmp_path) == dict.fromkeys(ids, invalid)
 
 
 def test_health_mapping_is_strict_and_privacy_safe(tmp_path: Path) -> None:
