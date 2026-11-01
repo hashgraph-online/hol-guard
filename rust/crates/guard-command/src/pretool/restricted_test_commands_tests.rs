@@ -179,7 +179,6 @@ fn a_runner_told_not_to_watch_runs_once() {
         "npx vitest --run",
         "npx vitest --no-watch",
         "npx vitest --watch=false",
-        "npx vitest --watch false",
         "npx vitest related src/a.ts --run",
         "npx vitest bench --run",
         "vitest --run src",
@@ -195,10 +194,11 @@ fn a_runner_told_not_to_watch_runs_once() {
 
 #[test]
 fn a_runner_left_watching_keeps_its_review() {
-    // A watching run never finishes inside the sink, a value the parsers do
-    // not read as a boolean leaves the option at its default, and a first word
-    // that is neither a flag nor a run verb names something this reading does
-    // not model.
+    // A watching run never finishes inside the sink, and a line that asks for
+    // one pass only in a spelling the runner's own parser does not read is
+    // still a watching run: mri spends no word on a declared boolean, the last
+    // watch option on the line wins, nothing after `--` is an option at all,
+    // and the first operand picks the command however many options precede it.
     for command in [
         "npx jest --watch",
         "npx jest --watchAll=true",
@@ -207,6 +207,12 @@ fn a_runner_left_watching_keeps_its_review() {
         "npx vitest",
         "npx vitest --watch",
         "npx vitest --watch=true",
+        "npx vitest --watch false",
+        "npx vitest --watch=false --watch",
+        "npx vitest --no-watch -w",
+        "npx vitest -- --run",
+        "npx vitest --run init",
+        "npx vitest --run watch",
         "npx vitest related src/a.ts",
         "npx vitest init --run",
         "node node_modules/vitest/vitest.mjs --watch",
