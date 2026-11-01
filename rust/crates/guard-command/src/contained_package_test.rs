@@ -57,8 +57,24 @@ pub(crate) fn is_package_test(command: &[String]) -> bool {
     if !matches!(manager, "npm" | "pnpm" | "bun" | "yarn") {
         return false;
     }
-    (command.len() >= 2 && manager != "bun" && test_task(&command[1]))
-        || (command.len() >= 3 && command[1] == "run" && test_task(&command[2]))
+    let arguments = reporting_options_peeled(manager, &command[1..]);
+    match arguments {
+        [task, ..] if manager != "bun" && test_task(task) => true,
+        [run, tail @ ..] if run == "run" => {
+            matches!(reporting_options_peeled(manager, tail), [task, ..] if test_task(task))
+        }
+        _ => false,
+    }
+}
+
+/// The manager's words with its reporting options peeled off, before the
+/// `run` verb or after it.
+///
+/// `npm --silent test` and `npm run --silent test` are the run `npm test`
+/// names; the admission reads them the same way, so the sink has to resolve
+/// the same script rather than refusing the quiet spelling.
+fn reporting_options_peeled<'a>(manager: &str, arguments: &'a [String]) -> &'a [String] {
+    crate::contained_argv::manager_reporting_options_peeled(manager, arguments)
 }
 
 /// The words the declared `test` script runs, read from the manager's own
@@ -69,12 +85,19 @@ pub(crate) fn is_package_test(command: &[String]) -> bool {
 /// outside the supported set keep the alias unresolved, because the narrow
 /// receipt the sink holds is for the run this reading spells and nothing else.
 pub(crate) fn script_tokens(
+    manager: &str,
     arguments: &[String],
     scripts: Option<&Map<String, Value>>,
 ) -> Result<Vec<String>, RestrictedPytestError> {
-    let (task, trailing) = match arguments {
-        [run, task, rest @ ..] if run == "run" && test_task(task) => (task.as_str(), rest),
-        [task, rest @ ..] if test_task(task) => (task.as_str(), rest),
+    let arguments = reporting_options_peeled(manager, arguments);
+    let run_tail = match arguments {
+        [run, tail @ ..] if run == "run" => Some(reporting_options_peeled(manager, tail)),
+        _ => None,
+    };
+    let (task, trailing) = match (run_tail, arguments) {
+        (Some([task, rest @ ..]), _) if test_task(task) => (task.as_str(), rest),
+        (Some(_), _) => return Err(invalid("Only local package test scripts are supported.")),
+        (None, [task, rest @ ..]) if test_task(task) => (task.as_str(), rest),
         _ => return Err(invalid("Only local package test scripts are supported.")),
     };
     if trailing.first().is_some_and(|word| word != "--") {
@@ -148,10 +171,11 @@ pub(crate) fn script_tokens(
 /// question about a directory this module never sees, so the body comes back
 /// out for the route to answer.
 pub(crate) fn script_tool_body(
+    manager: &str,
     arguments: &[String],
     scripts: Option<&Map<String, Value>>,
 ) -> Option<(String, Vec<String>)> {
-    let tokens = script_tokens(arguments, scripts).ok()?;
+    let tokens = script_tokens(manager, arguments, scripts).ok()?;
     let (runner, rest) = tokens.split_first()?;
     crate::contained_node_tool::supported_tool(runner, rest)?;
     Some((runner.clone(), rest.to_vec()))
@@ -167,5 +191,5 @@ pub(crate) fn resolve(
     if !is_package_test(&argv) {
         return Err(invalid("Only local package test scripts are supported."));
     }
-    script_tokens(&argv[1..], scripts)
+    script_tokens(program_name(&argv[0]), &argv[1..], scripts)
 }
