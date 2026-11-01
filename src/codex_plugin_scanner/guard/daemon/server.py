@@ -108,7 +108,7 @@ from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime_artifact_reconciliation import (
     reconcile_runtime_artifacts,
 )
-from ..sqlite_recovery import quarantined_store_summary
+from ..storage_retention import quarantined_store_summary
 from ..store import GuardStore
 from ..store_evidence import (
     clear_evidence,
@@ -3818,16 +3818,18 @@ class GuardDaemonServer:
     def _reclaim_onefile_extraction_dirs_once(self) -> None:
         try:
             from ..onefile_extraction import reclaim_orphaned_extraction_dirs
-            from ..onefile_open_paths import scan_open_extraction_dirs
 
             result = reclaim_orphaned_extraction_dirs(
                 temp_root=Path(tempfile.gettempdir()),
                 current_meipass=getattr(sys, "_MEIPASS", None),
                 now=datetime.now(timezone.utc),
-                should_stop=self._shutdown_started.is_set,
-                open_path_scanner=scan_open_extraction_dirs,
+                scan_open_paths=True,
+                # Shutdown kills the sweep, so the stop join never waits it out.
+                stop_event=self._shutdown_started,
             )
         except Exception:
+            if self._shutdown_started.is_set():
+                return
             self._diagnostics.record_exception("onefile_extraction_reclaim_failed")
             self._server.onefile_extraction_status = {
                 "last_run_at": datetime.now(timezone.utc).isoformat(),

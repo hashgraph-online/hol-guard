@@ -151,6 +151,7 @@ mod codex_hook_identity;
 mod codex_hook_manifest_iso_time;
 mod codex_hook_manifest_verify_op;
 mod codex_hook_response;
+mod codex_hook_trust;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
@@ -700,6 +701,7 @@ mod native_runtime_admission;
 mod native_runtime_resilience;
 mod network_protection;
 mod network_protection_verify_op;
+mod network_status_validation;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oci_bundle_evidence;
@@ -709,6 +711,8 @@ mod oci_bundle_op;
 mod oci_bundle_vectors_tests;
 mod oci_path;
 mod omp_yield_input_scan;
+mod onefile_extraction_reclaim;
+mod onefile_extraction_removal;
 mod onefile_open_paths;
 mod oneshot;
 #[path = "adapters/detection/openclaw_detect.rs"]
@@ -773,6 +777,7 @@ mod policy_snapshot_build;
 mod policy_store;
 mod policy_verifier_key_provision;
 mod pre_tool_extension_evidence_op;
+mod process_identity;
 mod project_identity;
 mod project_identity_op;
 mod prompt_analyze_op;
@@ -863,6 +868,8 @@ mod skill_identity_walk;
 mod skill_workflow_preflight_op;
 #[cfg(unix)]
 mod state_directory_lock;
+mod storage_retention;
+mod store_quarantine_forensics;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;
