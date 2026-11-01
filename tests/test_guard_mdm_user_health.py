@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -250,6 +251,17 @@ def test_user_health_status_never_asks_the_native_runtime_without_a_state(
 
     monkeypatch.setattr(native_runtime, "native_runtime_status", unreachable)
     assert user_health.user_health_status(guard_home)["enabled"] is False
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0, reason="needs an unprivileged POSIX user")
+def test_user_health_status_never_reads_an_unreadable_home_as_unconfigured(guard_home: Path) -> None:
+    user_health.configure_user_health_leases(guard_home, enabled=True, now=NOW)
+    guard_home.chmod(0)
+    try:
+        with pytest.raises(OSError):
+            user_health.user_health_status(guard_home)
+    finally:
+        guard_home.chmod(0o700)
 
 
 def test_user_health_cli_exposes_explicit_status_surface(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

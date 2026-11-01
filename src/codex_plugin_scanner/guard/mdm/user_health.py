@@ -156,9 +156,14 @@ def _native_state(guard_home: Path, op: str, state: UserHealthState | None = Non
 
 def _read_state(guard_home: Path) -> UserHealthState | None:
     # Most installs never enable the user health lease; skip the native round
-    # trip so cloud sync never waits on it for a file that is not there.
-    if not os.path.lexists(guard_home / _STATE_NAME):
+    # trip so cloud sync never waits on it for a file that is not there. Only
+    # a missing file is absence; any other probe error goes to the runtime.
+    try:
+        os.lstat(guard_home / _STATE_NAME)
+    except FileNotFoundError:
         return None
+    except OSError:
+        pass
     raw = _native_state(guard_home, "read").get("state")
     if raw is None:
         return None
