@@ -48,7 +48,7 @@ pub use windows::{
 pub use windows::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     create_private_file, delete_private_file_handle, directory_file_id, handle_file_id,
-    is_single_link_file, is_single_link_handle, open_bound_executable_file,
+    handle_final_path, is_single_link_file, is_single_link_handle, open_bound_executable_file,
     open_bound_regular_file, open_bound_replaceable_file, open_private_directory,
     open_private_file, open_skill_directory, path_is_within, path_stat, process_ids,
     process_liveness, process_parent_ids, process_start_marker, regular_file_id,
