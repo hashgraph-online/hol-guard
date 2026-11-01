@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if desktop_notification::is_command(command) && flag == "--stdin" => {
+            let response = desktop_notification::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
             let response = hook_removal_sweep::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -228,6 +232,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if orphaned_worker_reap::is_command(command) && flag == "--stdin" => {
             let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if storage_retention::is_command(command) && flag == "--stdin" => {
+            let response = storage_retention::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

@@ -7,16 +7,16 @@
 //! itself as the blocker; a walk that cannot be bounded fails it outright.
 
 use super::search_pattern_clearance::PatternClearance;
+use super::search_scope_budget::charged_include_walk;
 use super::search_scope_filter::{Override, SearchFilter};
 use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
 use super::search_scope_tracked::TrackedFiles;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const MAX_SCOPE_ENTRIES: usize = 20_000;
 /// A names-only walk checks only entry metadata and links, never contents,
@@ -32,109 +32,6 @@ const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
 /// the evaluation on it. Withholding it only returns the answer the readings
 /// above already reached.
 const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
-/// The wall clock every include walk in one evaluation may spend between
-/// them.
-///
-/// The whole native evaluation runs inside half a second, and the entry count
-/// above does not bound the time those entries take: a directory read costs
-/// what the host's filesystem charges for it, which on a loaded machine is
-/// not what it costs on an idle one. Spending the evaluation's remaining
-/// budget there fails the evaluation, and a failed evaluation blocks, so this
-/// walk stops on the clock as well.
-///
-/// One evaluation asks this question once per recursive root, and a command
-/// is read again for every spelling a rewrite reaches, so a clock started
-/// afresh for each walk would bound no single evaluation. The clock below is
-/// started once where the evaluation begins and shared by every include walk
-/// inside it, which is what the evaluation's own budget can afford. The
-/// repeated spellings pay nothing, because a root and glob set already
-/// walked is answered from [`INCLUDE_SCOPE_ANSWERS`] rather than walked
-/// again, so the clock bounds the distinct trees a submission names.
-/// Expiring only withholds the narrowing and leaves the answer the readings
-/// above already reached.
-const INCLUDE_SCOPE_BUDGET: Duration = Duration::from_millis(75);
-
-thread_local! {
-    /// When the include walks of the evaluation running on this thread have
-    /// to stop. Unset outside an evaluation -- a test driving the walk
-    /// directly -- where each walk gets the budget to itself.
-    static INCLUDE_SCOPE_CLOCK: std::cell::Cell<Option<Instant>> =
-        const { std::cell::Cell::new(None) };
-    /// What the include walks of this evaluation have already answered.
-    ///
-    /// A rewrite hands the same command back under several spellings, and
-    /// each of them resolves the same operand to the same directory and the
-    /// same globs. Without this the evaluation pays for that tree once per
-    /// spelling and runs the shared clock out on work it has already done.
-    static INCLUDE_SCOPE_ANSWERS: std::cell::RefCell<HashMap<IncludeScopeKey, bool>> =
-        std::cell::RefCell::new(HashMap::new());
-    /// How many evaluations are open on this thread.
-    ///
-    /// One submission reaches the evaluation entry point many times over: the
-    /// command itself, then the envelope it is read inside once per
-    /// projection -- a git-config isolation, a virtualenv activation, an
-    /// environment prefix, each inner command of a process substitution, a
-    /// redirect rewrite. Those are not separate submissions and must not get
-    /// budgets of their own, so only the outermost starts the clock.
-    static INCLUDE_SCOPE_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
-/// What an include walk is decided by: the directory it starts at, the globs
-/// that select the files below it, and the home the sensitive-path readings
-/// are relative to. Two walks that agree on all three inspect the same
-/// entries and reach the same answer.
-type IncludeScopeKey = (PathBuf, String, Option<String>);
-
-/// Start the shared include-walk clock for the submission beginning now.
-///
-/// The returned guard ends the submission where it is dropped. A nested
-/// evaluation of the same submission takes a guard too, and that guard
-/// neither restarts the clock nor ends the submission: the outermost one
-/// does both, which is what makes the clock the submission's own.
-///
-/// The answers of the previous submission are dropped with it, because a
-/// tree is read again when the next one asks: what is in it may have changed
-/// since.
-#[must_use]
-pub(crate) fn begin_include_scope_budget() -> IncludeScopeBudget {
-    let depth = INCLUDE_SCOPE_DEPTH.with(|depth| {
-        let entered = depth.get() + 1;
-        depth.set(entered);
-        entered
-    });
-    if depth == 1 {
-        INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(Some(Instant::now() + INCLUDE_SCOPE_BUDGET)));
-        INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
-    }
-    IncludeScopeBudget
-}
-
-/// The open submission, which ends where this is dropped.
-pub(crate) struct IncludeScopeBudget;
-
-impl Drop for IncludeScopeBudget {
-    fn drop(&mut self) {
-        let left = INCLUDE_SCOPE_DEPTH.with(|depth| {
-            let left = depth.get().saturating_sub(1);
-            depth.set(left);
-            left
-        });
-        if left == 0 {
-            INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(None));
-            INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
-        }
-    }
-}
-
-/// Put the thread back where it is outside an evaluation, for a test that
-/// reads the unstarted clock on a thread an earlier test may have used.
-#[cfg(test)]
-fn clear_include_scope_budget() {
-    INCLUDE_SCOPE_DEPTH.with(|depth| depth.set(0));
-    INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(None));
-    INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
-}
-
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Ignores {
@@ -263,14 +160,6 @@ pub(super) fn walk_scope(
     walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
 }
 
-/// When an include walk starting now has to stop: the evaluation's shared
-/// clock, or a budget of its own outside one.
-pub(super) fn include_scope_deadline() -> Instant {
-    INCLUDE_SCOPE_CLOCK
-        .with(std::cell::Cell::get)
-        .unwrap_or_else(|| Instant::now() + INCLUDE_SCOPE_BUDGET)
-}
-
 /// [`walk_scope`] for a grep include, under the entry count and the wall
 /// clock such a reading is allowed. Nothing is ignored: `grep` reads no
 /// ignore file.
@@ -305,20 +194,14 @@ pub(super) fn include_scope_proven(
     filter: &SearchFilter,
     home: Option<&str>,
 ) -> bool {
-    let key: IncludeScopeKey = (
+    let key = (
         root.to_path_buf(),
         globs.join("\u{0}"),
         home.map(str::to_owned),
     );
-    if let Some(answer) = INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow().get(&key).copied())
-    {
-        return answer;
-    }
-    let answer = walk_include_scope(root, filter, home, include_scope_deadline()).is_ok();
-    INCLUDE_SCOPE_ANSWERS.with(|answers| {
-        answers.borrow_mut().insert(key, answer);
-    });
-    answer
+    charged_include_walk(key, |deadline| {
+        walk_include_scope(root, filter, home, deadline).is_ok()
+    })
 }
 
 /// A content walk where a sensitive file `clearance` proves the pattern
@@ -546,7 +429,3 @@ fn walk_scope_inner(
     }
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "search_scope_walk_tests.rs"]
-mod tests;

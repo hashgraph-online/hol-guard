@@ -13,6 +13,9 @@ from .schemas import REVIEW_SCHEMA, validate_document
 from .validation import https_reference, text
 
 DEFAULT_GUIDANCE = "Inspect the exact target and required permissions before running this operation."
+# The native fixture runner accepts at most 256 cases per request, and the kit's
+# portable fixture has to run as a single request after integration.
+MAX_FIXTURE_CASES = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +111,12 @@ def load_review(value: object, discovery: Discovery) -> Review:
     if len(safe_argv) > 256 or len(set(safe_argv)) != len(safe_argv):
         raise BuilderError("safe_variant_limit", "Safe invocations must be unique and stay within the aggregate limit.")
     if discovery.metadata.kind == "cli":
+        # One case per operation, plus two per reviewed literal: its own rule
+        # and the unclassified fallback that also carries it.
+        fixture_cases = len(discovery.operations) + 2 * len(safe_argv)
+        if fixture_cases > MAX_FIXTURE_CASES:
+            message = f"This review needs {fixture_cases} native fixture cases and the limit is {MAX_FIXTURE_CASES}."
+            raise BuilderError("fixture_case_limit", f"{message} Review fewer safe literals or split the inventory.")
         safe_rows = tuple(
             (operation, argv)
             for operation in discovery.operations
