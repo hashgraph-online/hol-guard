@@ -245,4 +245,14 @@ const plan = install;
   await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps),
     (cause: unknown) => cause instanceof CigarSetupError && cause.stage === "start" && /Try again/.test(cause.message));
 }
+{
+  // Guard did get the lost activate request and later turned it off: that is a stop, not a lost request.
+  const { deps } = fakeGuard({ initial: saved });
+  let polls = 0;
+  deps.activate = async () => { throw new ContextAssistanceApiError("context_assistance_unavailable", "Lost"); };
+  deps.status = async () => (++polls === 1
+    ? { ...saved, requested_enabled: true, job: { id: "1", operation: "activate", phase: "verifying" } }
+    : { ...saved, requested_enabled: false, job: null });
+  await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps), CigarSetupStopped);
+}
 console.log("CIGAR one-click planning, approval, stop, retry and live-readiness contracts passed.");

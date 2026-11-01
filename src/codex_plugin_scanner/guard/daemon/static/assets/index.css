@@ -11738,8 +11738,8 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 .cigar-setup-action { display: grid; justify-items: start; gap: .65rem; margin-top: 1.5rem; max-width: 32rem; }
 .cigar-note .cigar-setup-action { margin-top: .9rem; }
 .cigar-setup-action .cigar-button-primary { min-height: 3rem; padding: .75rem 1.3rem; font-size: .875rem; }
-.cigar-button-solid { background: #5599fe; border-color: #5599fe; color: #fff; }
-.cigar-button-solid:hover { background: #4a8ae6; }
+.cigar-button-solid { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.cigar-button-solid:hover { background: #1e40af; }
 .cigar-hero .cigar-button-primary:not(:disabled):hover { background: #eef2ff; }
 .cigar-setup-caption { font-size: .75rem; line-height: 1.6; color: #64748b; }
 .cigar-hero .cigar-setup-caption { color: #c8d1ec; }

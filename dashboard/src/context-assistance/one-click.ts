@@ -243,6 +243,8 @@ export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssista
     }
     await deps.sleep(POLL_MS);
     try { state = await deps.status(); fresh = true; } catch (cause) { if (!transient(cause)) failure("start", cause); fresh = false; continue; }
+    // Once Guard shows the request, a later off state is a real stop, not a lost request.
+    if (state.requested_enabled) unconfirmed = false;
     sawJob ||= state.job !== null;
     deps.onState(state);
   }

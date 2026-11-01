@@ -4066,6 +4066,7 @@ async function runCigarSetup(plan, initial2, deps, proof) {
       fresh = false;
       continue;
     }
+    if (state.requested_enabled) unconfirmed = false;
     sawJob ||= state.job !== null;
     deps.onState(state);
   }
