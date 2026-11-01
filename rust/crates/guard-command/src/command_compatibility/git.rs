@@ -191,6 +191,19 @@ fn bounded_cached_diff(arguments: &[String], directory: Option<&std::path::Path>
             .all(|operand| bounded_cached_diff_pathspec(operand, directory))
 }
 
+/// Whether a `symbolic-ref` form only reads the ref it names. The one-operand
+/// spelling prints where a symbolic ref points; a second operand makes Git
+/// write that ref instead, and `-d` deletes it.
+pub(super) fn symbolic_ref_read(rest: &[String]) -> bool {
+    let mut operands = rest
+        .iter()
+        .filter(|argument| !matches!(argument.as_str(), "-q" | "--quiet" | "--short"));
+    let Some(first) = operands.next() else {
+        return false;
+    };
+    !first.starts_with('-') && operands.next().is_none()
+}
+
 fn read_only_plumbing(arguments: &[String]) -> bool {
     let Some((command, rest)) = arguments.split_first() else {
         return false;
@@ -200,6 +213,12 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
     // drivers, touch the network, or write are excluded.
     match command.as_str() {
         "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
+        // `name-rev` prints the names a commit is reachable by, `show-branch`
+        // the commits two branches do not share, and `check-ref-format`
+        // answers about the spelling of a name without opening a repository
+        // at all. None of the three writes, reaches the network, or defines
+        // an option that names a program or an output file.
+        "name-rev" | "show-branch" | "check-ref-format" => true,
         "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
         // These listings only print, and their grammars already exclude the
         // forms that run a configured program; the read proof still decides.
@@ -209,13 +228,7 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
-        "symbolic-ref" => {
-            let operands: Vec<&String> = rest
-                .iter()
-                .filter(|argument| !matches!(argument.as_str(), "-q" | "--quiet" | "--short"))
-                .collect();
-            operands.len() == 1 && !operands[0].starts_with('-')
-        }
+        "symbolic-ref" => symbolic_ref_read(rest),
         "config" if crate::pretool::git_config_reads::read_form(rest).is_some() => true,
         "config" => {
             let mut reads = false;
@@ -250,8 +263,11 @@ pub(super) fn inspection_arguments<'a>(
             | "show" | "blame" | "describe" | "reflog" | "branch" | "hash-object" | "rev-parse"
             | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep" | "ls-tree"
             | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore"
-            | "count-objects" | "check-attr",
+            | "count-objects" | "check-attr" | "name-rev" | "show-branch" | "check-ref-format",
         ) => true,
+        // A second operand turns the ref read into a ref write, so the
+        // printing form is admitted on its own grammar.
+        Some("symbolic-ref") => symbolic_ref_read(&remaining[1..]),
         // A tag listing, a clean preview and a patch check only print, but the
         // same three subcommands also write a tag, remove a file and patch the
         // tree, so each is admitted only in the spelling its own grammar

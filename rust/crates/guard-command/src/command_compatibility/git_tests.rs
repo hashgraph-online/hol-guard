@@ -116,6 +116,13 @@ fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
         "git cat-file -t HEAD",
         "git cat-file blob HEAD:README.md",
         "git symbolic-ref --short HEAD",
+        "git symbolic-ref -q --short HEAD",
+        "git name-rev --name-only HEAD",
+        "git name-rev --all",
+        "git show-branch",
+        "git show-branch --reflog main",
+        "git check-ref-format --branch main",
+        "git check-ref-format refs/heads/release",
         "git config --get remote.origin.url",
         "git config --global --get user.email",
         "git config --list --show-origin",
@@ -203,6 +210,11 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         "git config --file /home/user/.aws/credentials --list",
         "git config --get --file other.cfg key",
         "git symbolic-ref HEAD refs/heads/other",
+        "git symbolic-ref -d refs/heads/other",
+        "git symbolic-ref -m rebase HEAD refs/heads/other",
+        "git -c core.pager=payload name-rev --all",
+        "git -c core.pager=payload show-branch",
+        "git -c core.pager=payload check-ref-format --branch main",
         "git cat-file --textconv HEAD:file",
         "git cat-file --filters HEAD:file",
         "git cat-file --path=file blob HEAD",
@@ -216,6 +228,43 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         "git apply --check --index change.patch",
     ] {
         let result = observations(command);
+        assert!(!result.rule_matches.is_empty(), "{command}");
+        assert!(
+            result.rule_matches.iter().all(|item| item.uncertainty),
+            "{command}"
+        );
+    }
+}
+
+/// The ref readings a routed form reaches. `inspection_arguments` is the list
+/// the pretool read proofs consult, so a verb recognised only by
+/// `read_only_plumbing` loses its exemption the moment a `-C` route precedes
+/// it and falls back to the uncertainty floor this rule exists to remove.
+#[test]
+fn routed_ref_readings_invent_no_unrelated_git_owners() {
+    let worktree = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(worktree.path().join(".git")).unwrap();
+    std::fs::create_dir_all(worktree.path().join("sub")).unwrap();
+    for command in [
+        "git -C sub symbolic-ref --short HEAD",
+        "git -C sub name-rev --name-only HEAD",
+        "git -C sub show-branch",
+        "git -C sub check-ref-format --branch main",
+    ] {
+        assert!(
+            observations_in(command, worktree.path())
+                .rule_matches
+                .is_empty(),
+            "{command}"
+        );
+    }
+    // Naming a second operand makes git write the ref instead, so the routed
+    // form keeps the review the unrouted one keeps.
+    for command in [
+        "git -C sub symbolic-ref HEAD refs/heads/other",
+        "git -C sub symbolic-ref -d refs/heads/other",
+    ] {
+        let result = observations_in(command, worktree.path());
         assert!(!result.rule_matches.is_empty(), "{command}");
         assert!(
             result.rule_matches.iter().all(|item| item.uncertainty),

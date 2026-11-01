@@ -398,3 +398,27 @@ fn the_unstaged_index_comparison_screens_what_the_diff_family_does() {
         assert!(read(&["git", "diff-files", refused]).is_none(), "{refused}");
     }
 }
+
+/// `name-rev`, `show-branch` and `check-ref-format` read refs and names. None
+/// of the three defines a diff option, so none carries a helper screen, and
+/// none has an `-o` of its own, so the letter that writes a file stays
+/// refused for them the way it is everywhere else.
+#[test]
+fn the_ref_readings_carry_no_helper_screens() {
+    for (verb, word) in [
+        ("name-rev", "--name-only"),
+        ("show-branch", "--reflog"),
+        ("check-ref-format", "--branch"),
+    ] {
+        assert_eq!(
+            read(&["git", verb, word]),
+            Some((verb.to_owned(), vector(&[word]))),
+            "{verb}"
+        );
+        assert!(read(&["git", verb, "-o", "out"]).is_none(), "{verb}");
+        assert!(read(&["git", verb, "--exec-path=/tmp"]).is_none(), "{verb}");
+    }
+    // `symbolic-ref` writes the ref it is given a second operand for, so the
+    // contained read route does not answer for it at all.
+    assert!(read(&["git", "symbolic-ref", "--short", "HEAD"]).is_none());
+}

@@ -806,6 +806,18 @@
       ]
     },
     {
+      "id": "omp-native-git-commit-name-read",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find out what name the current commit is reachable by running the listed command once, then tell me the name it printed.",
+      "commands": [
+        "git name-rev --name-only HEAD"
+      ]
+    },
+    {
       "id": "git-read-after-sibling-climb",
       "expectation": "allow",
       "oracle": "commands",
