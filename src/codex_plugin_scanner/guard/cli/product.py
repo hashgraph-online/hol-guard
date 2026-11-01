@@ -1,10 +1,16 @@
-"""Guard product-facing onboarding and status payloads."""
+"""Guard product-facing onboarding and status payloads.
+
+The store reads and harness detection stay here; the native runtime
+(`guard_product_copy`) decides the next actions, the recommended harness, the
+runtime status, the Guard Cloud copy and URLs and the next steps.
+"""
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from typing import Any
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext, _artifact_uses_guard
@@ -20,23 +26,22 @@ from .connect_flow import (
     CONNECT_COMMAND,
     CONNECT_REPAIR_COMMAND,
     CONNECT_STATUS_COMMAND,
-    _int_payload_value,
     connect_recovery_command,
     connect_retry_refresh_race_from_state,
     connect_retry_required_from_state,
     connect_state_requires_oauth,
     normalize_connect_state_for_missing_oauth,
-    resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
 from .status_review_count import count_review_artifacts
 
-HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
+_LOGGER = logging.getLogger(__name__)
 GUARD_COMMAND = "hol-guard"
-GUARD_DASHBOARD_URL = "https://hol.org/guard"
-GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
-GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
-GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/protect"
+_PRODUCT_COPY_UNAVAILABLE = (
+    "Guard could not load its status copy from the native runtime. Run `hol-guard doctor` to repair it."
+)
+_HARNESS_COPY_FIELDS = ("next_action", "install_command", "run_command", "review_command", "receipts_command")
+_URL_FIELDS = ("dashboard_url", "inbox_url", "fleet_url", "connect_url")
 
 
 def build_guard_start_payload(
@@ -77,14 +82,24 @@ def _build_guard_product_payload(
 ) -> dict[str, object]:
     if scan_installed_apps:
         detections = detect_all(context)
-        harnesses = [_summarize_harness(detection, store, config, context.home_dir) for detection in detections]
+        facts = [_summarize_harness(detection, store, context.home_dir) for detection in detections]
     else:
-        harnesses = _harnesses_from_managed_installs(store, context.home_dir)
-    recommended = _recommended_harness(harnesses)
+        facts = _harnesses_from_managed_installs(store, context.home_dir)
     receipt_count = store.count_receipts()
-    managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
     runtime_state = store.get_runtime_state()
     approval_center_url = load_guard_daemon_endpoint_url(context.guard_home)
+    cloud_facts, cloud_context = _build_cloud_context(store)
+    copy = _product_copy(
+        context,
+        facts,
+        cloud_facts,
+        approval_center_url=approval_center_url,
+        runtime_state_present=runtime_state is not None,
+        include_steps=include_steps,
+    )
+    harnesses = [_with_copy(item, item_copy) for item, item_copy in zip(facts, copy["harnesses"], strict=True)]
+    recommended = copy["recommended"]
+    managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
     from ..harness_posture import harness_posture_summary
     from ..protection_coverage import protection_is_in_effect
     from ..protection_posture import protection_status_fields
@@ -104,22 +119,94 @@ def _build_guard_product_payload(
         "pending_approvals": store.count_approval_requests(),
         "approval_center_url": approval_center_url,
         "runtime_state": runtime_state,
-        "runtime_status": _resolve_runtime_status(runtime_state, approval_center_url),
+        "runtime_status": copy["runtime_status"],
         "managed_harnesses": managed_harnesses,
-        "recommended_harness": recommended["harness"] if recommended is not None else None,
+        "recommended_harness": harnesses[recommended]["harness"] if isinstance(recommended, int) else None,
         "harnesses": harnesses,
         "connector_setup": connector_setup_status(store, approval_center_url),
+        "cloud_state": cloud_facts["cloud_state"],
+        "cloud_state_label": copy["cloud_state_label"],
+        "cloud_state_detail": copy["cloud_state_detail"],
+        "sync_url": cloud_facts["sync_url"],
+        **{field: copy[field] for field in _URL_FIELDS},
+        **cloud_context,
     }
-    payload.update(_build_cloud_context(store))
     if include_steps:
-        payload["next_steps"] = _build_next_steps(recommended, payload)
+        payload["next_steps"] = copy["next_steps"]
     return payload
+
+
+def _product_copy(
+    context: HarnessContext,
+    facts: list[dict[str, object]],
+    cloud_facts: dict[str, Any],
+    *,
+    approval_center_url: str | None,
+    runtime_state_present: bool,
+    include_steps: bool,
+) -> dict[str, Any]:
+    """Ask the native runtime for the product copy.
+
+    The copy is display only, so an unavailable runtime reports it as
+    unavailable rather than guessing the next action.
+    """
+    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    reply: object = None
+    try:
+        reply = native_runner_authority(
+            "guard_product_copy",
+            {
+                "harnesses": [
+                    {
+                        "harness": item["harness"],
+                        "installed": item["installed"],
+                        "command_available": item["command_available"],
+                        "managed": item["managed"],
+                        "scanned": item["artifacts_scanned"],
+                        "artifact_count": item["artifact_count"],
+                        "review_count": item["review_count"],
+                        "warning_count": item["warning_count"],
+                        "approval_flow": item["approval_flow"],
+                    }
+                    for item in facts
+                ],
+                **cloud_facts,
+                "approval_center_url": approval_center_url,
+                "runtime_state_present": runtime_state_present,
+                "include_steps": include_steps,
+            },
+            guard_home=context.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        _LOGGER.debug("guard product copy unavailable: %s", error)
+    if isinstance(reply, dict):
+        copies = reply.get("harnesses")
+        if isinstance(copies, list) and len(copies) == len(facts) and all(isinstance(item, dict) for item in copies):
+            return reply
+    return {
+        "harnesses": [dict.fromkeys(_HARNESS_COPY_FIELDS) for _ in facts],
+        "recommended": None,
+        "runtime_status": "unavailable",
+        "cloud_state_label": "Status unavailable",
+        "cloud_state_detail": _PRODUCT_COPY_UNAVAILABLE,
+        **dict.fromkeys(_URL_FIELDS),
+        "next_steps": [
+            {"title": "Repair Guard", "command": f"{GUARD_COMMAND} doctor", "detail": _PRODUCT_COPY_UNAVAILABLE}
+        ],
+    }
+
+
+def _with_copy(item: dict[str, object], item_copy: dict[str, Any]) -> dict[str, object]:
+    summary = {key: value for key, value in item.items() if key != "approval_flow"}
+    summary.update((field, item_copy.get(field)) for field in _HARNESS_COPY_FIELDS)
+    summary["approval_flow"] = item["approval_flow"]
+    return summary
 
 
 def _summarize_harness(
     detection: HarnessDetection,
     store: GuardStore,
-    config: GuardConfig,
     home_dir: Path,
 ) -> dict[str, object]:
     managed_install = store.get_managed_install(detection.harness)
@@ -132,7 +219,6 @@ def _summarize_harness(
         manifest = managed_install.get("manifest")
         if isinstance(manifest, dict):
             shim_path = manifest.get("shim_path")
-    next_action = _resolve_next_action(detection, managed, review_count)
     return {
         "harness": detection.harness,
         "installed": detection.installed,
@@ -145,11 +231,6 @@ def _summarize_harness(
         "managed": managed,
         "shim_path": _redacted_path(shim_path, home_dir) if isinstance(shim_path, str) else None,
         "config_paths": [_redacted_path(config_path, home_dir) for config_path in detection.config_paths],
-        "next_action": next_action,
-        "install_command": f"{GUARD_COMMAND} install {detection.harness}",
-        "run_command": f"{GUARD_COMMAND} run {detection.harness} --dry-run",
-        "review_command": f"{GUARD_COMMAND} diff {detection.harness}",
-        "receipts_command": f"{GUARD_COMMAND} receipts",
         "approval_flow": approval_flow,
     }
 
@@ -190,11 +271,6 @@ def _summarize_managed_install(install: dict[str, object], home_dir: Path) -> di
         "managed": managed,
         "shim_path": _redacted_path(shim_path, home_dir) if isinstance(shim_path, str) else None,
         "config_paths": [],
-        "next_action": "run" if managed and warning_count == 0 else "install" if not managed else "review",
-        "install_command": f"{GUARD_COMMAND} install {harness}",
-        "run_command": f"{GUARD_COMMAND} run {harness} --dry-run",
-        "review_command": f"{GUARD_COMMAND} diff {harness}",
-        "receipts_command": f"{GUARD_COMMAND} receipts",
         "approval_flow": approval_flow,
     }
 
@@ -227,89 +303,14 @@ def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
     return redact_local_path(str(path), home_dir=home_dir)
 
 
-def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object] | None:
-    if not harnesses:
-        return None
-    priority = {name: index for index, name in enumerate(HARNESS_PRIORITY)}
-    return min(
-        harnesses,
-        key=lambda item: (
-            0 if bool(item["installed"]) else 1,
-            0 if _int_payload_value(item, "artifact_count", 0) > 0 else 1,
-            _approval_experience_rank(item.get("approval_flow")),
-            priority.get(str(item["harness"]), len(HARNESS_PRIORITY)),
-            0 if bool(item["command_available"]) else 1,
-        ),
-    )
-
-
-def _approval_experience_rank(flow: object) -> int:
-    if not isinstance(flow, dict):
-        return 4
-    prompt_channel = str(flow.get("prompt_channel") or "browser")
-    tier = str(flow.get("tier") or "approval-center")
-    auto_open_browser = bool(flow.get("auto_open_browser", True))
-    if prompt_channel in {"native", "hook"} and tier in {"native-harness", "native-or-center", "mixed"}:
-        return 0
-    if prompt_channel in {"native", "hook"} and not auto_open_browser:
-        return 1
-    if not auto_open_browser:
-        return 2
-    if tier == "approval-center":
-        return 3
-    return 4
-
-
-def _resolve_next_action(detection: HarnessDetection, managed: bool, review_count: int) -> str:
-    if not managed:
-        if not detection.installed and not detection.command_available:
-            return "install-harness"
-        return "install"
-    if review_count > 0:
-        return "review"
-    return "run"
-
-
-def _build_next_steps(recommended: dict[str, object] | None, payload: dict[str, object]) -> list[dict[str, str]]:
-    if recommended is None:
-        return [
-            {
-                "title": "Install a supported harness",
-                "command": f"{GUARD_COMMAND} detect",
-                "detail": (
-                    "Guard did not find a local harness config yet. Start by installing "
-                    "Codex, Claude Code, Copilot CLI, Hermes, Cursor, Antigravity, Gemini, or OpenCode."
-                ),
-            }
-        ]
-    steps = [_install_or_review_step(recommended), _run_step(recommended), _receipts_step()]
-    steps.append(_approvals_step())
-    steps.append(
-        _connect_or_dashboard_step(
-            str(payload.get("cloud_state") or "local_only"),
-            str(payload.get("connect_url") or GUARD_CONNECT_URL),
-            str(payload.get("dashboard_url") or GUARD_DASHBOARD_URL),
-        )
-    )
-    return steps
-
-
-def _resolve_runtime_status(runtime_state: dict[str, object] | None, approval_center_url: str | None) -> str:
-    if approval_center_url:
-        return "active"
-    if runtime_state is not None:
-        return "stale"
-    return "offline"
-
-
-def _build_cloud_context(store: GuardStore) -> dict[str, object]:
+def _build_cloud_context(store: GuardStore) -> tuple[dict[str, Any], dict[str, object]]:
+    """Read the Guard Cloud facts the native copy needs and the rest of the cloud context."""
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
-    dashboard_url, connect_url, inbox_url, fleet_url = _resolve_guard_urls(sync_url)
     advisories = store.list_cached_advisories(limit=3)
     alert_preferences = _coerce_payload_dict(store.get_sync_payload("alert_preferences"))
     policy_bundle, cached_policy_bundle_error = synced_policy_bundle_validation(store)
@@ -337,7 +338,6 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         ),
     )
     connect_retry_required = connect_retry_required_from_state(latest_connect_state)
-    connect_retry_refresh_race = connect_retry_refresh_race_from_state(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy)
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -346,23 +346,15 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         oauth_repair_required=oauth_repair_required,
         connect_retry_required=connect_retry_required,
     )
-    return {
+    facts: dict[str, Any] = {
         "cloud_state": cloud_state,
-        "cloud_state_label": _cloud_state_label(cloud_state),
-        "cloud_state_detail": _cloud_state_detail(
-            cloud_state,
-            connect_url,
-            dashboard_url,
-            oauth_repair_required=oauth_repair_required,
-            connect_retry_required=connect_retry_required,
-            connect_retry_refresh_race=connect_retry_refresh_race,
-            shared_proof_recorded=bool(sync_summary) or remote_payload_active,
-        ),
-        "sync_url": sync_url,
-        "dashboard_url": dashboard_url,
-        "inbox_url": inbox_url,
-        "fleet_url": fleet_url,
-        "connect_url": connect_url,
+        "sync_url": sync_url if isinstance(sync_url, str) else None,
+        "oauth_repair_required": oauth_repair_required,
+        "connect_retry_required": connect_retry_required,
+        "connect_retry_refresh_race": connect_retry_refresh_race_from_state(latest_connect_state),
+        "shared_proof_recorded": bool(sync_summary) or remote_payload_active,
+    }
+    context: dict[str, object] = {
         "connect_command": CONNECT_COMMAND,
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
@@ -385,98 +377,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "team_policy_name": None,
         "team_policy_updated_at": None,
     }
-
-
-def _connect_or_dashboard_step(cloud_state: str, connect_url: str, dashboard_url: str) -> dict[str, str]:
-    if cloud_state == "local_only":
-        return {
-            "title": "Optional cloud connect",
-            "command": f"{GUARD_COMMAND} connect",
-            "detail": (
-                "Keep local protection free by default, then run one command when you want shared inbox state, "
-                "fleet continuity, evidence, or team policy."
-            ),
-        }
-    return {
-        "title": "Open Guard Home",
-        "command": dashboard_url,
-        "detail": (
-            "Guard Cloud is already paired. Use the signed-in command center for Home, Fleet, Evidence, and upgrades."
-        ),
-    }
-
-
-def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str, str, str]:
-    if not isinstance(sync_url, str) or not sync_url:
-        return GUARD_DASHBOARD_URL, GUARD_CONNECT_URL, GUARD_INBOX_URL, GUARD_FLEET_URL
-    parsed = urlparse(sync_url)
-    if not parsed.scheme or not parsed.netloc:
-        return GUARD_DASHBOARD_URL, GUARD_CONNECT_URL, GUARD_INBOX_URL, GUARD_FLEET_URL
-    origin = f"{parsed.scheme}://{parsed.netloc}"
-    return (
-        f"{origin}/guard",
-        f"{origin}/guard/connect",
-        f"{origin}/guard/inbox",
-        f"{origin}/guard/protect",
-    )
-
-
-def _cloud_state_label(cloud_state: str) -> str:
-    labels = {
-        "local_only": "Local only",
-        "paired_waiting": "Connected, waiting for first sync",
-        "paired_active": "Connected and active",
-    }
-    return labels.get(cloud_state, "Local only")
-
-
-def _cloud_state_detail(
-    cloud_state: str,
-    connect_url: str,
-    dashboard_url: str,
-    *,
-    oauth_repair_required: bool = False,
-    connect_retry_required: bool = False,
-    connect_retry_refresh_race: bool = False,
-    shared_proof_recorded: bool = False,
-) -> str:
-    if oauth_repair_required:
-        return (
-            "Guard Cloud sign-in on this machine is incomplete. "
-            f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair local authorization and resume sync."
-        )
-    if connect_retry_refresh_race:
-        return (
-            "Local Guard remains available. The first shared Guard Cloud proof stalled after a refresh-token "
-            f"race. Run `{GUARD_COMMAND} connect` or reopen {connect_url} when you want shared proof restored."
-        )
-    if connect_retry_required:
-        return resolve_guard_cloud_repair_detail(
-            shared_proof_recorded=shared_proof_recorded,
-            first_sync_message=(
-                "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
-                f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair the first sync."
-            ),
-            resume_message=(
-                "Guard Cloud connection on this machine needs repair before shared proof can resume. "
-                f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to restore sync."
-            ),
-        )
-    if cloud_state == "paired_waiting":
-        return (
-            "Guard Cloud credentials are saved, but this machine has not finished the first shared sync yet. "
-            f"Keep Local Guard running so it can retry automatically, or run "
-            f"`{GUARD_COMMAND} sync` to force a retry now."
-        )
-    if cloud_state == "paired_active":
-        return (
-            "Guard is paired with Guard Cloud. Use the local CLI for protection and the signed-in command center "
-            f"at {dashboard_url} for Home, Inbox, Fleet, Evidence, upgrades, and team workflows."
-        )
-    return (
-        "Local Guard is active and keeps receipts on this machine. Guard Cloud is optional; "
-        f"run `{GUARD_COMMAND} connect` when you want shared history, live advisories, or team policy."
-    )
+    return facts, context
 
 
 def _coerce_payload_dict(payload: dict[str, object] | list[object] | None) -> dict[str, object]:
@@ -492,53 +393,6 @@ def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:
 
 def _optional_string(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
-
-
-def _install_or_review_step(recommended: dict[str, object]) -> dict[str, str]:
-    harness = str(recommended["harness"])
-    next_action = str(recommended["next_action"])
-    if next_action == "review":
-        return {
-            "title": f"Review changed {harness} tools",
-            "command": str(recommended["review_command"]),
-            "detail": "Guard found changes since the last approval. Review them before the next launch.",
-        }
-    if next_action == "install-harness":
-        return {
-            "title": f"Install {harness}",
-            "command": f"{GUARD_COMMAND} detect",
-            "detail": "Guard needs a local harness install before it can protect launches.",
-        }
-    return {
-        "title": f"Install Guard for {harness}",
-        "command": str(recommended["install_command"]),
-        "detail": "Create a local launcher shim so Guard runs before the harness starts.",
-    }
-
-
-def _run_step(recommended: dict[str, object]) -> dict[str, str]:
-    harness = str(recommended["harness"])
-    return {
-        "title": "Run Guard before launch",
-        "command": str(recommended["run_command"]),
-        "detail": f"Dry-run {harness} once so Guard records the current tool state before you rely on it.",
-    }
-
-
-def _receipts_step() -> dict[str, str]:
-    return {
-        "title": "Inspect receipts",
-        "command": f"{GUARD_COMMAND} receipts",
-        "detail": "See what Guard approved, blocked, or flagged after local runs.",
-    }
-
-
-def _approvals_step() -> dict[str, str]:
-    return {
-        "title": "Resolve queued approvals",
-        "command": f"{GUARD_COMMAND} approvals",
-        "detail": "Use the local approval center or the approvals queue when a harness session cannot prompt inline.",
-    }
 
 
 def _now() -> str:
