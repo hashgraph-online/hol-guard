@@ -206,3 +206,55 @@ fn an_index_comparison_against_the_working_tree_keeps_the_filter_screen() {
         "--cached compares the index against a tree and opens no file"
     );
 }
+
+/// `git diff-files` compares the index against the working tree in every
+/// spelling it has, so both screens apply to all of them: the index load can
+/// start a configured file monitor, and re-examining the files on disk runs a
+/// configured clean filter. There is no `--cached` here to opt out of either.
+#[test]
+fn the_unstaged_index_comparison_keeps_both_screens() {
+    let fixture = Fixture::new();
+    let declared = fixture.declared.canonicalize().unwrap();
+    let declared_text = declared.to_str().unwrap();
+    let environment = environment(&declared);
+    let repo = declared.join("repo");
+    let repo_text = repo.to_str().unwrap();
+    let inside = PathContext {
+        home_dir: Some(declared_text),
+        cwd: Some(repo_text),
+        ..PathContext::default()
+    };
+    let compares = ["diff-files", "--name-only"].map(str::to_owned);
+    assert_eq!(
+        execution_free("git", &compares, inside, None, Some(&environment), false),
+        Some(true),
+        "a repository that configures nothing starts nothing"
+    );
+
+    let config = repo.join(".git/config");
+    let existing = fs::read_to_string(&config).unwrap();
+    fs::write(
+        &config,
+        format!("{existing}[core]\n\tfsmonitor = /bin/true\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        execution_free("git", &compares, inside, None, Some(&environment), false),
+        Some(false),
+        "loading the index can start the monitor"
+    );
+
+    fs::write(&config, existing).unwrap();
+    fs::write(repo.join(".gitattributes"), "* filter=payload\n").unwrap();
+    let existing = fs::read_to_string(&config).unwrap();
+    fs::write(
+        &config,
+        format!("{existing}[filter \"payload\"]\n\tclean = /bin/true\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        execution_free("git", &compares, inside, None, Some(&environment), false),
+        Some(false),
+        "re-examining a working-tree file runs its configured clean filter"
+    );
+}

@@ -101,12 +101,14 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         .unwrap_or(arguments.len());
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
-                        "diff" | "diff-index" | "diff-tree" | "log" | "show" => !(active_options
-                            .iter()
-                            .any(|argument| argument == "--no-ext-diff")
-                            && active_options
+                        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" => {
+                            !(active_options
                                 .iter()
-                                .any(|argument| argument == "--no-textconv")),
+                                .any(|argument| argument == "--no-ext-diff")
+                                && active_options
+                                    .iter()
+                                    .any(|argument| argument == "--no-textconv"))
+                        }
                         // A clean filter is the only helper hash-object runs.
                         "hash-object" => {
                             !super::git_hash_object::filters_disabled(&arguments[1..])

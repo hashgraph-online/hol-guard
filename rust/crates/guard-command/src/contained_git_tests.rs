@@ -15,7 +15,14 @@ fn routed(words: &[&str]) -> Option<(String, Vec<String>, Vec<String>)> {
 
 #[test]
 fn the_diff_family_carries_both_helper_screens() {
-    for verb in ["diff", "diff-index", "diff-tree", "log", "show"] {
+    for verb in [
+        "diff",
+        "diff-files",
+        "diff-index",
+        "diff-tree",
+        "log",
+        "show",
+    ] {
         assert_eq!(
             read(&["git", verb, "--stat"]),
             Some((
@@ -115,6 +122,7 @@ fn an_everyday_read_authority_contains_is_planned_here_too() {
         "check-ignore",
         "count-objects",
         "describe",
+        "diff-files",
         "diff-index",
         "for-each-ref",
         "ls-tree",
@@ -362,5 +370,31 @@ fn the_scripted_index_comparison_screens_what_the_diff_family_does() {
             read(&["git", "diff-index", refused, "HEAD"]).is_none(),
             "{refused}"
         );
+    }
+}
+
+/// `git diff-files` compares the index against the working tree, which is the
+/// unstaged half of what `git diff` prints. It defines the same diff options,
+/// so the helper screens, the refused output options and the letters that
+/// swallow a value all have to read the way the rest of the family does.
+#[test]
+fn the_unstaged_index_comparison_screens_what_the_diff_family_does() {
+    assert_eq!(
+        read(&["git", "diff-files", "--name-only"]),
+        Some((
+            "diff-files".to_owned(),
+            vector(&["--no-ext-diff", "--no-textconv", "--name-only"])
+        ))
+    );
+    // A value written against the letter is that value, not the pager switch.
+    assert!(read(&["git", "diff-files", "-SOPENSSL"]).is_some());
+    assert!(read(&["git", "diff-files", "--text"]).is_some());
+    for refused in [
+        "--output=/tmp/unstaged.patch",
+        "--outp=/tmp/x",
+        "-o",
+        "--ext",
+    ] {
+        assert!(read(&["git", "diff-files", refused]).is_none(), "{refused}");
     }
 }
