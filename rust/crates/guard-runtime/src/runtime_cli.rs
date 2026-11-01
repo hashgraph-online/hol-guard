@@ -111,6 +111,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = desktop_notification::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if harness_version_compat::is_command(command) && flag == "--stdin" => {
+            let response = harness_version_compat::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
             let response = hook_removal_sweep::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

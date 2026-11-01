@@ -15,7 +15,6 @@ import pytest
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.harness_versions import service
 from codex_plugin_scanner.guard.harness_versions.discovery import current_platform
-from codex_plugin_scanner.guard.harness_versions.manifest import ManifestLoad, parse_manifest
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.version import __version__
@@ -80,21 +79,27 @@ def _omp(items: object) -> dict[str, object]:
     return next(item for item in items if item["harness"] == "omp")
 
 
-def _without_records(monkeypatch: pytest.MonkeyPatch) -> None:
+def _use_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: dict[str, object]) -> None:
+    path = tmp_path / "coverage.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(service, "_manifest_path", path)
+
+
+def _without_records(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # Bundled records are bound to one Guard release and platform, so a build
     # of that release would judge the fixture's 18.11.2 against them. These
     # checks are about a manifest with no OMP evidence at all.
     empty = copy.deepcopy(FIXTURE)
     for harness in empty["harnesses"]:  # type: ignore[union-attr]
         harness["records"] = []
-    monkeypatch.setattr(service, "_manifest", ManifestLoad(parse_manifest(empty), None))
+    _use_manifest(monkeypatch, tmp_path, empty)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlinked bun shim fixture")
 def test_harness_list_carries_additive_version_compatibility(
-    daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch
+    daemon: GuardDaemonServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _without_records(monkeypatch)
+    _without_records(monkeypatch, tmp_path)
     status, payload = _call(daemon, "/v1/harnesses", token=daemon._server.auth_token)
     assert status == 200
     omp = _omp(payload["items"])
@@ -121,8 +126,10 @@ def test_version_writes_require_authentication(daemon: GuardDaemonServer, path: 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlinked bun shim fixture")
-def test_version_writes_with_dashboard_session(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) -> None:
-    _without_records(monkeypatch)
+def test_version_writes_with_dashboard_session(
+    daemon: GuardDaemonServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _without_records(monkeypatch, tmp_path)
     session = _session(daemon)
     status, payload = _call(daemon, "/v1/harness-versions/refresh", {"harness": "omp"}, dashboard_session=session)
     assert status == 200
@@ -168,7 +175,7 @@ def test_untested_acknowledge_then_version_change_flow(
         for record in harness["records"]:
             record["guard_version"] = __version__
             record["platforms"] = [current_platform()]
-    monkeypatch.setattr(service, "_manifest", ManifestLoad(parse_manifest(fixture), None))
+    _use_manifest(monkeypatch, tmp_path, fixture)
     session = _session(daemon)
     bun_root = Path.home() / ".bun" / "install" / "global" / "node_modules" / "@oh-my-pi" / "pi-coding-agent"
 

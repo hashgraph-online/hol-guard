@@ -1,5 +1,8 @@
 """Bundled tested-version coverage manifest: model, eligibility, validation.
 
+This is the CI-side validator the promotion and release scripts use. The
+native runtime validates the same manifest again before the dashboard reads it.
+
 The manifest ships inside the Guard build and is the only coverage authority.
 Every record names one exact harness version, the Guard version it was tested
 against, the platforms, transport, and events it exercised, and the passing
@@ -9,19 +12,23 @@ not covered, however close it is to a listed one.
 
 from __future__ import annotations
 
-import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ..adapters.contracts import contract_for
-from .versions import HarnessVersion, parse_version
+from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.harness_versions.versions import HarnessVersion, parse_version
 
 SCHEMA_VERSION = "hol-guard-harness-version-coverage.v1"
 MANIFEST_FILENAME = "harness_version_coverage_v1.json"
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_RECORDS_PER_HARNESS = 128
+
+_ZONED_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]{1,6})?)?(?:Z|[+-][0-9]{2}:[0-9]{2})"
+)
 
 SUPPORTED_PLATFORMS = frozenset(
     {"darwin-arm64", "darwin-x86_64", "linux-arm64", "linux-x86_64", "windows-arm64", "windows-x86_64"}
@@ -200,12 +207,13 @@ def _record(harness: str, value: object, field: str) -> CoverageRecord:
     if not reference.startswith(EVIDENCE_REFERENCE_PREFIX) or any(ch.isspace() for ch in reference):
         raise ManifestError(f"{field}.evidence_reference must point at this repository's retained evidence")
     observed_at = _text(entry["observed_at"], f"{field}.observed_at", limit=40)
+    # The native loader accepts only this form; anything else would hide the whole manifest at runtime.
+    if _ZONED_TIMESTAMP.fullmatch(observed_at) is None:
+        raise ManifestError(f"{field}.observed_at must be an ISO-8601 timestamp with a timezone (Z or +HH:MM)")
     try:
-        parsed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
     except ValueError as error:
         raise ManifestError(f"{field}.observed_at must be an ISO-8601 timestamp") from error
-    if parsed.tzinfo is None:
-        raise ManifestError(f"{field}.observed_at must include a timezone")
     return CoverageRecord(
         harness_version=version,
         guard_version=guard_version.canonical,
@@ -272,26 +280,4 @@ def parse_manifest(payload: object) -> CoverageManifest:
 
 
 def bundled_manifest_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "schemas" / MANIFEST_FILENAME
-
-
-@dataclass(frozen=True, slots=True)
-class ManifestLoad:
-    manifest: CoverageManifest | None
-    error: str | None
-
-
-def load_manifest(path: Path | None = None) -> ManifestLoad:
-    """Load the manifest; any defect yields ``manifest=None`` and a reason code."""
-
-    target = path or bundled_manifest_path()
-    try:
-        raw = target.read_bytes()
-    except OSError:
-        return ManifestLoad(None, "manifest_missing")
-    if len(raw) > MAX_MANIFEST_BYTES:
-        return ManifestLoad(None, "manifest_invalid")
-    try:
-        return ManifestLoad(parse_manifest(json.loads(raw.decode("utf-8"))), None)
-    except (UnicodeDecodeError, json.JSONDecodeError, ManifestError):
-        return ManifestLoad(None, "manifest_invalid")
+    return Path(__file__).resolve().parents[2] / "src/codex_plugin_scanner/guard/schemas" / MANIFEST_FILENAME

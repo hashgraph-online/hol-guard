@@ -1,5 +1,8 @@
 """Harness version coverage: manifest validation and the compatibility decision.
 
+The native runtime owns the decision; its Rust tests hold the full state table.
+These tests pin the Python shim, the CI validator, and the bundled manifest.
+
 The 18.4.12 and 18.8.3 records below are regression fixtures for exact-version
 matching. They are not production coverage claims.
 """
@@ -8,10 +11,16 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.harness_versions import compatibility
+from codex_plugin_scanner.guard.harness_versions.acknowledgements import (
+    clear_acknowledgements,
+    record_acknowledgement,
+)
 from codex_plugin_scanner.guard.harness_versions.compatibility import (
     OBSERVATION_MAX_AGE_SECONDS,
     STATE_COVERAGE_UNAVAILABLE,
@@ -21,14 +30,10 @@ from codex_plugin_scanner.guard.harness_versions.compatibility import (
     decide_compatibility,
 )
 from codex_plugin_scanner.guard.harness_versions.discovery import VersionObservation
-from codex_plugin_scanner.guard.harness_versions.manifest import (
-    ManifestError,
-    ManifestLoad,
-    bundled_manifest_path,
-    load_manifest,
-    parse_manifest,
-)
+from codex_plugin_scanner.guard.harness_versions.service import _manifest_path
 from codex_plugin_scanner.guard.harness_versions.versions import parse_version, parse_version_banner
+from codex_plugin_scanner.guard.mdm import runtime_request
+from scripts.ci.harness_version_manifest import ManifestError, bundled_manifest_path, parse_manifest
 
 GUARD = "9.9.9"
 PLATFORM = "darwin-arm64"
@@ -71,25 +76,33 @@ def _manifest(*records: dict[str, object], version_source: str = "package-metada
 FIXTURE = _manifest(_record("18.4.12"), _record("18.8.3"))
 
 
-def _load(payload: dict[str, object] = FIXTURE) -> ManifestLoad:
-    return ManifestLoad(parse_manifest(payload), None)
-
-
 def _observed(version: str, *, at: float = NOW, installation: str | None = "install-a") -> VersionObservation:
     parsed = parse_version(version)
     assert parsed is not None
     return VersionObservation("omp", "observed", parsed, "package-metadata", installation, None, at)
 
 
-def _decide(observation: VersionObservation, load: ManifestLoad | None = None, **kwargs: object) -> dict[str, object]:
-    options: dict[str, object] = {"guard_version": GUARD, "platform": PLATFORM, "now": NOW}
-    options.update(kwargs)
-    return decide_compatibility(
-        harness="omp",
-        observation=observation,
-        manifest_load=load or _load(),
-        **options,  # type: ignore[arg-type]
-    )
+@pytest.fixture
+def decide(tmp_path: Path) -> Callable[..., dict[str, object]]:
+    def run(
+        observation: VersionObservation, manifest: dict[str, object] | None = FIXTURE, **kwargs: object
+    ) -> dict[str, object]:
+        path = tmp_path / "manifest.json"
+        if manifest is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+        options: dict[str, object] = {"guard_version": GUARD, "platform": PLATFORM, "now": NOW}
+        options.update(kwargs)
+        return decide_compatibility(
+            harness="omp",
+            observation=observation,
+            manifest_path=path,
+            guard_home=tmp_path / "guard",
+            **options,  # type: ignore[arg-type]
+        )
+
+    return run
 
 
 class TestVersions:
@@ -119,18 +132,48 @@ class TestVersions:
 class TestManifestValidation:
     def test_bundled_manifest_loads_with_an_omp_entry(self) -> None:
         # Records are promoted per release, so what they claim is not pinned here.
-        load = load_manifest()
-        assert load.error is None and load.manifest is not None
-        assert "omp" in load.manifest.harnesses
+        manifest = parse_manifest(json.loads(bundled_manifest_path().read_text(encoding="utf-8")))
+        assert "omp" in manifest.harnesses
+        assert bundled_manifest_path() == _manifest_path
 
     def test_bundled_manifest_links_to_how_coverage_works(self) -> None:
         # Where no record applies, the card's links are the only guidance it gives.
-        load = load_manifest()
-        assert load.manifest is not None
-        link = load.manifest.harnesses["omp"].remediation[0]
+        manifest = parse_manifest(json.loads(bundled_manifest_path().read_text(encoding="utf-8")))
+        link = manifest.harnesses["omp"].remediation[0]
         prefix = "https://github.com/hashgraph-online/hol-guard/blob/main/"
         assert link.url.startswith(prefix)
         assert (Path(__file__).resolve().parents[1] / link.url.removeprefix(prefix)).is_file()
+
+    def test_native_runtime_accepts_the_bundled_manifest(self, decide: Callable[..., dict[str, object]]) -> None:
+        bundled = json.loads(bundled_manifest_path().read_text(encoding="utf-8"))
+        payload = decide(_observed("0.0.1"), bundled)
+        assert payload["reason"] != "manifest_invalid"
+        assert payload["coverage_revision"] == bundled["revision"]
+
+    @pytest.mark.parametrize(
+        ("observed_at", "accepted"),
+        [
+            ("2026-10-16T00:00:00Z", True),
+            ("2026-10-16 00:00+05:30", True),
+            ("2026-10-16T00:00:00.123456-07:00", True),
+            ("2026-10-16T00:00:00+0000", False),
+            ("20261016T000000Z", False),
+            ("2026-10-16T00:00:00.1234567Z", False),
+            ("2026-02-30T00:00:00Z", False),
+        ],
+    )
+    def test_ci_and_native_validators_agree_on_timestamps(
+        self, decide: Callable[..., dict[str, object]], observed_at: str, accepted: bool
+    ) -> None:
+        manifest = _manifest(_record("18.4.12", observed_at=observed_at))
+        native = decide(_observed("18.4.12"), manifest)
+        assert (native["state"] == STATE_TESTED) is accepted
+        if accepted:
+            parse_manifest(manifest)
+        else:
+            assert native["state"] == STATE_COVERAGE_UNAVAILABLE
+            with pytest.raises(ManifestError, match="observed_at"):
+                parse_manifest(manifest)
 
     @pytest.mark.parametrize("version", ["18.x", "^18.4.12", ">=18.4.12 <19", "18.4.12 - 18.8.3", "*"])
     def test_rejects_ranges(self, version: str) -> None:
@@ -188,18 +231,11 @@ class TestManifestValidation:
         with pytest.raises(ManifestError, match="schema_version"):
             parse_manifest({**FIXTURE, "schema_version": "v0"})
 
-    def test_load_reports_missing_and_invalid(self, tmp_path: Path) -> None:
-        assert load_manifest(tmp_path / "absent.json").error == "manifest_missing"
-        broken = tmp_path / "broken.json"
-        broken.write_text(json.dumps(_manifest(_record("18.x"))), encoding="utf-8")
-        load = load_manifest(broken)
-        assert load.manifest is None and load.error == "manifest_invalid"
-
 
 class TestDecision:
     @pytest.mark.parametrize("version", ["18.4.12", "18.8.3"])
-    def test_exact_match_is_tested(self, version: str) -> None:
-        payload = _decide(_observed(version))
+    def test_exact_match_is_tested(self, decide: Callable[..., dict[str, object]], version: str) -> None:
+        payload = decide(_observed(version))
         assert payload["state"] == STATE_TESTED
         assert payload["tested_scope"] == "all_declared_events"
         assert payload["enforcement_effect"] == "none"
@@ -208,79 +244,65 @@ class TestDecision:
         assert isinstance(evidence, list) and evidence
         assert all(item["suite"] == {"id": item["suite"]["id"], "result": "passed"} for item in evidence)
 
-    @pytest.mark.parametrize("version", ["18.11.2", "18.4.11", "18.6.0", "18.8.3-rc.1", "19.0.0"])
-    def test_newer_lower_and_intermediate_versions_are_untested(self, version: str) -> None:
-        payload = _decide(_observed(version))
+    @pytest.mark.parametrize("version", ["18.11.2", "18.4.11", "18.8.3-rc.1", "18.8.3+build.7"])
+    def test_neighbouring_versions_are_untested(self, decide: Callable[..., dict[str, object]], version: str) -> None:
+        payload = decide(_observed(version))
         assert payload["state"] == STATE_UNTESTED
         assert payload["reason"] == "version_not_in_evidence"
         assert payload["tested_versions"] == ["18.4.12", "18.8.3"]
         assert payload["acknowledgement"]["eligible"] is True  # type: ignore[index]
 
-    def test_build_metadata_does_not_match_plain_version(self) -> None:
-        assert _decide(_observed("18.8.3+build.7"))["state"] == STATE_UNTESTED
-
-    def test_prerelease_flag_is_reported(self) -> None:
-        assert _decide(_observed("18.9.0-beta.2"))["version_is_prerelease"] is True
-
-    def test_other_guard_build_or_platform_has_no_coverage(self) -> None:
-        assert _decide(_observed("18.8.3"), guard_version="9.9.10")["state"] == STATE_COVERAGE_UNAVAILABLE
-        payload = _decide(_observed("18.8.3"), platform="linux-x86_64")
-        assert payload["state"] == STATE_COVERAGE_UNAVAILABLE
-        assert payload["reason"] == "no_evidence_for_this_build"
-
-    def test_partial_event_scope_is_partial(self) -> None:
-        record = _record(
-            "18.4.12",
-            suite={"id": "pi-exact-continuation", "result": "passed"},
-            evidence_level="unit_test",
-            events=["PreToolUse"],
-        )
-        payload = _decide(_observed("18.4.12"), _load(_manifest(record)))
-        assert payload["state"] == STATE_TESTED
-        assert payload["tested_scope"] == "partial"
-        assert payload["tested_events"] == ["PreToolUse"]
-
-    def test_unknown_and_ambiguous_versions_are_unknown_and_not_acknowledgeable(self) -> None:
-        for observation in (
-            VersionObservation("omp", "unavailable", None, "none", None, "executable_missing", NOW),
-            VersionObservation("omp", "ambiguous", None, "none", "install-a", "multiple_installations", NOW),
-        ):
-            payload = _decide(observation)
-            assert payload["state"] == STATE_VERSION_UNKNOWN
-            assert payload["reason"] == observation.reason
-            assert payload["acknowledgement"]["eligible"] is False  # type: ignore[index]
-
-    def test_stale_observation_is_unknown(self) -> None:
-        payload = _decide(_observed("18.8.3", at=NOW - OBSERVATION_MAX_AGE_SECONDS - 1))
-        assert payload["state"] == STATE_VERSION_UNKNOWN
-        assert payload["reason"] == "observation_stale"
-
-    def test_missing_manifest_and_empty_records_are_unavailable(self) -> None:
-        missing = _decide(_observed("18.8.3"), ManifestLoad(None, "manifest_missing"))
+    def test_uncertain_inputs_are_never_tested(self, decide: Callable[..., dict[str, object]]) -> None:
+        unknown = decide(VersionObservation("omp", "unavailable", None, "none", None, "executable_missing", NOW))
+        assert (unknown["state"], unknown["reason"]) == (STATE_VERSION_UNKNOWN, "executable_missing")
+        stale = decide(_observed("18.8.3", at=NOW - OBSERVATION_MAX_AGE_SECONDS - 1))
+        assert (stale["state"], stale["reason"]) == (STATE_VERSION_UNKNOWN, "observation_stale")
+        missing = decide(_observed("18.8.3"), None)
         assert (missing["state"], missing["reason"]) == (STATE_COVERAGE_UNAVAILABLE, "manifest_missing")
-        empty = _decide(_observed("18.8.3"), _load(_manifest()))
-        assert (empty["state"], empty["reason"]) == (STATE_COVERAGE_UNAVAILABLE, "harness_not_covered")
+        broken = decide(_observed("18.8.3"), _manifest(_record("18.x")))
+        assert (broken["state"], broken["reason"]) == (STATE_COVERAGE_UNAVAILABLE, "manifest_invalid")
+        other = decide(_observed("18.8.3"), platform="linux-x86_64")
+        assert (other["state"], other["reason"]) == (STATE_COVERAGE_UNAVAILABLE, "no_evidence_for_this_build")
 
-    def test_acknowledgement_key_changes_with_every_binding(self) -> None:
-        base = _decide(_observed("18.11.2"))["acknowledgement"]["key"]  # type: ignore[index]
-        other_version = _decide(_observed("18.11.3"))["acknowledgement"]["key"]  # type: ignore[index]
-        other_install = _decide(_observed("18.11.2", installation="install-b"))["acknowledgement"]["key"]  # type: ignore[index]
-        revised = copy.deepcopy(FIXTURE)
-        revised["revision"] = "fixture.2"
-        other_revision = _decide(_observed("18.11.2"), _load(revised))["acknowledgement"]["key"]  # type: ignore[index]
-        assert len({base, other_version, other_install, other_revision}) == 4
-
-    def test_acknowledged_key_collapses_only_matching_warning(self) -> None:
-        key = _decide(_observed("18.11.2"))["acknowledgement"]["key"]  # type: ignore[index]
-        acked = _decide(_observed("18.11.2"), acknowledged_keys=frozenset({key}))
+    def test_acknowledgement_round_trips_through_the_store(
+        self, decide: Callable[..., dict[str, object]], tmp_path: Path
+    ) -> None:
+        key = decide(_observed("18.11.2"))["acknowledgement"]["key"]  # type: ignore[index]
+        assert isinstance(key, str)
+        entry = record_acknowledgement(tmp_path / "guard", harness="omp", key=key)
+        assert entry["key"] == key
+        acked = decide(_observed("18.11.2"))
         assert acked["state"] == STATE_UNTESTED
         assert acked["acknowledgement"]["acknowledged"] is True  # type: ignore[index]
-        moved = _decide(_observed("18.11.3"), acknowledged_keys=frozenset({key}))
-        assert moved["acknowledgement"]["acknowledged"] is False  # type: ignore[index]
+        assert decide(_observed("18.11.3"))["acknowledgement"]["acknowledged"] is False  # type: ignore[index]
+        assert clear_acknowledgements(tmp_path / "guard", harness="omp") == 1
+        assert decide(_observed("18.11.2"))["acknowledgement"]["acknowledged"] is False  # type: ignore[index]
 
-    def test_payload_never_exposes_paths(self, tmp_path: Path) -> None:
-        payload = json.dumps(_decide(_observed("18.11.2")))
+    def test_store_rejects_a_malformed_key(self, tmp_path: Path) -> None:
+        with pytest.raises(OSError):
+            record_acknowledgement(tmp_path / "guard", harness="omp", key="../../etc")
+
+    def test_payload_never_exposes_paths(self, decide: Callable[..., dict[str, object]], tmp_path: Path) -> None:
+        payload = json.dumps(decide(_observed("18.11.2")))
         assert str(Path.home()) not in payload and str(tmp_path) not in payload
+
+    def test_without_a_runtime_the_version_is_unknown(
+        self, decide: Callable[..., dict[str, object]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(compatibility, "runtime_request", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: False)
+        payload = decide(_observed("18.8.3"))
+        assert (payload["state"], payload["reason"]) == (STATE_VERSION_UNKNOWN, "runtime_unavailable")
+        assert payload["enforcement_effect"] == "none"
+
+    def test_a_runtime_that_offers_the_decision_but_fails_reports_an_error(
+        self, decide: Callable[..., dict[str, object]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(compatibility, "runtime_request", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(runtime_request, "runtime_offers", lambda _feature: True)
+        payload = decide(_observed("18.8.3"))
+        assert (payload["state"], payload["reason"]) == (STATE_VERSION_UNKNOWN, "runtime_error")
+        assert payload["enforcement_effect"] == "none"
 
 
 def test_documented_schema_accepts_bundled_and_fixture_manifests() -> None:
