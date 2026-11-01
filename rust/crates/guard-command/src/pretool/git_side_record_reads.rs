@@ -139,6 +139,33 @@ fn replace_format(value: &str) -> bool {
     matches!(value, "short" | "medium" | "long")
 }
 
+/// Index in `arguments`, the tokens after `git`, of the pattern a
+/// replacement listing matches its refs against, or `None` when the command
+/// is not that listing.
+///
+/// The read screen refuses an argument a wide glob could aim at a
+/// credential, because a glob written on a command line is expanded by the
+/// shell over the files that are there. This pattern names no file. Git
+/// walks the refs under `refs/replace/` and matches what it finds there, so
+/// `refs/replace/*` names every replacement and reaches nothing else.
+pub(super) fn listing_pattern_position(
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> Option<usize> {
+    let inspected = crate::command_compatibility::git_inspection_arguments(arguments, context)?;
+    let offset = arguments.len() - inspected.len();
+    let (subcommand, rest) = inspected.split_first()?;
+    if subcommand != "replace" || !replace_read_form(rest) {
+        return None;
+    }
+    let listed = rest
+        .iter()
+        .position(|argument| matches!(argument.as_str(), "-l" | "--list"))?;
+    rest.get(listed + 1)
+        .filter(|pattern| !pattern.starts_with('-'))
+        .map(|_| offset + 1 + listed + 1)
+}
+
 /// A `git replace -l` pattern: a ref name's characters plus the wildcards
 /// Git matches them with, and nothing a shell or a path traversal needs.
 fn ref_pattern(value: &str) -> bool {
@@ -167,7 +194,7 @@ fn object_name(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::super::safe_git_arguments;
-    use super::{read_form, shows_a_note};
+    use super::{listing_pattern_position, read_form, shows_a_note};
     use crate::pretool::PathContext;
 
     fn words(command: &str) -> Vec<String> {
@@ -311,6 +338,31 @@ mod tests {
         ] {
             assert!(!read_form("replace", &words(arguments)), "{arguments}");
         }
+    }
+
+    /// The pattern a listing matches its refs against is read as a ref
+    /// pattern, not as a path a wide glob could aim at a credential.
+    #[test]
+    fn the_listing_pattern_is_not_screened_as_a_path() {
+        for command in ["git replace -l *", "git replace --list refs/replace/*"] {
+            assert!(
+                safe_git_arguments(&words(command)[1..], true, PathContext::default()),
+                "{command}"
+            );
+        }
+        // That one operand and nothing else: a listing without a pattern
+        // exempts no word at all.
+        assert_eq!(
+            listing_pattern_position(&words("git replace -l")[1..], PathContext::default()),
+            None
+        );
+        assert_eq!(
+            listing_pattern_position(
+                &words("git replace --list refs/replace/*")[1..],
+                PathContext::default()
+            ),
+            Some(2)
+        );
     }
 
     #[test]

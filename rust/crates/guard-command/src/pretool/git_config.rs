@@ -109,6 +109,7 @@ pub(super) fn execution_free_paging(
             | "apply"
             | "bisect"
             | "notes"
+            | "replace"
             | "submodule"
     ) {
         return None;
