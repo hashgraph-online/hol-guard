@@ -88,8 +88,8 @@ def record_guard_hook_trust(payload: dict[str, object], config_path: Path) -> li
     explicit, user-invoked install, so recording trust claims no authority the
     install did not already exercise. Only Guard's own live handlers are touched,
     only with the hash of the entry being written, and a handler the user switched
-    off in ``/hooks`` keeps that choice. Without the runtime nothing is recorded,
-    and doctor reports the hooks as untrusted.
+    off in ``/hooks`` keeps that choice. Raises ``RuntimeError`` when the runtime
+    cannot answer, so an install never writes hooks Codex would skip.
     """
 
     hooks = payload.get("hooks")
@@ -99,8 +99,10 @@ def record_guard_hook_trust(payload: dict[str, object], config_path: Path) -> li
     state_map: dict[str, object] = state if isinstance(state, dict) else {}
     answer = _ask(_table_request("record", hooks, config_path))
     recorded = answer.get("recorded") if answer is not None else None
+    if not isinstance(recorded, list):
+        raise RuntimeError("codex_hook_trust_unavailable")
     keys: list[str] = []
-    for key, source, digest in recorded if isinstance(recorded, list) else []:
+    for key, source, digest in recorded:
         existing = state_map.get(source) if isinstance(source, str) else None
         entry: dict[str, object] = {**existing} if isinstance(existing, Mapping) else {}
         entry["trusted_hash"] = digest
