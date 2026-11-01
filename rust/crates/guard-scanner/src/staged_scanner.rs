@@ -21,8 +21,10 @@ use crate::repository_scanner::{
 };
 use crate::secret_detection::SecretFinding;
 use crate::secret_detection::{candidate_digest, CandidateDigest};
+
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
+use zeroize::Zeroizing;
 
 /// Keyword options mirroring `scan_staged_secrets(root, *, max_files=...,
 /// max_file_bytes=..., max_total_bytes=..., max_findings=...)`.
@@ -156,7 +158,11 @@ fn run_git_blob(
 /// Returns `(Option<bytes>, incomplete)`. Every failure (spawn error, non-zero
 /// exit, unparsable size, oversized object) is `(None, true)`, so the caller
 /// marks the scan partial and records `git_staged_blob_unavailable_or_oversized`.
-fn git_staged_blob(root: &Path, path: &[u8], max_file_bytes: usize) -> (Option<Vec<u8>>, bool) {
+fn git_staged_blob(
+    root: &Path,
+    path: &[u8],
+    max_file_bytes: usize,
+) -> (Option<Zeroizing<Vec<u8>>>, bool) {
     let Ok(size_result) = run_git_blob(root, &staged_blob_args(path, "-s")) else {
         return (None, true);
     };
