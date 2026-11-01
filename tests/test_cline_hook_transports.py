@@ -16,10 +16,10 @@ from codex_plugin_scanner.guard.adapters import guard_cli_attestation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cline_hooks import (
     _hook_command,
-    _hook_source,
     _posix_wrapper,
     _powershell_wrapper,
     _slot_for_event,
+    _worker_config,
     cline_hook_roots,
     cline_native_hook_state,
     run_cline_hook_canary,
@@ -61,12 +61,14 @@ else: print(json.dumps({"decision":"allow"}))
     return path
 
 
-def _run_hook(source: str, tmp_path: Path, payload: dict[str, object], *, env=None) -> subprocess.CompletedProcess[str]:
-    path = tmp_path / "PreToolUse"
-    path.write_text(source, encoding="utf-8")
-    path.chmod(0o755)
+def _run_hook(config: str, tmp_path: Path, payload: dict[str, object], *, env=None) -> subprocess.CompletedProcess[str]:
+    runtime = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not runtime or not os.path.isfile(runtime):
+        pytest.skip("the native Cline hook worker needs the built runtime")
+    path = tmp_path / "PreToolUse.json"
+    path.write_text(config, encoding="utf-8")
     return subprocess.run(
-        [sys.executable, str(path)],
+        [runtime, "cline-hook-worker", str(path)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -127,16 +129,18 @@ def test_native_hook_slots_are_platform_canonical_and_non_destructive(tmp_path: 
         _slot_for_event(root, "PreToolUse", windows=False)
 
 
-def test_posix_wrapper_pins_python_and_isolation_flags() -> None:
-    source = _posix_wrapper(worker=Path("/guard/worker.py"), python="/runtime/python")
+def test_posix_wrapper_execs_the_native_worker() -> None:
+    source = _posix_wrapper(worker=Path("/guard/PreToolUse.json"), runtime="/runtime/hol-guard-native")
     assert source.startswith("#!/bin/sh\n")
-    assert "exec /runtime/python -I -s /guard/worker.py" in source
-    assert "/usr/bin/env python" not in source
+    assert "exec /runtime/hol-guard-native cline-hook-worker /guard/PreToolUse.json" in source
+    assert "python" not in source
 
 
-def test_windows_wrapper_uses_isolated_python_and_fails_closed() -> None:
-    source = _powershell_wrapper(worker=Path("C:/Guard/worker.py"), python="C:/Python/python.exe", blocking=True)
-    assert '"-I", "-s"' in source
+def test_windows_wrapper_runs_the_native_worker_and_fails_closed() -> None:
+    source = _powershell_wrapper(
+        worker=Path("C:/Guard/PreToolUse.json"), runtime="C:/Guard/hol-guard-native.exe", blocking=True
+    )
+    assert '$Args = @("cline-hook-worker", $Worker)' in source
     assert "ConvertTo-Json -Compress" in source
     assert "cancel=$true" in source
 
@@ -281,9 +285,9 @@ def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_sl
 def test_native_pretool_cancels_inspection_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"paths": ["README.md"]}}},
     )
@@ -294,9 +298,9 @@ def test_native_pretool_cancels_inspection_when_guard_is_unavailable(tmp_path: P
 def test_native_pretool_pauses_mutation_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
     )
@@ -307,9 +311,9 @@ def test_native_pretool_pauses_mutation_when_guard_is_unavailable(tmp_path: Path
 def test_native_pretool_validates_every_command_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {
             "hookName": "PreToolUse",
@@ -325,9 +329,9 @@ def test_native_pretool_fans_out_cline_parallel_commands(tmp_path: Path) -> None
     _activate(context, "hooks")
     guard = _fake_guard(tmp_path)
     log = tmp_path / "guard.jsonl"
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {
             "hookName": "PreToolUse",
@@ -344,9 +348,9 @@ def test_native_pretool_rejects_oversized_input_before_guard(tmp_path: Path) -> 
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _fake_guard(tmp_path)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"x": "a" * (1024 * 1024)}}},
     )
@@ -773,9 +777,9 @@ def test_generated_hook_withholds_an_action_guard_did_not_place(tmp_path: Path, 
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _scripted_guard(tmp_path, response)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
     )
@@ -790,9 +794,9 @@ def test_generated_hook_still_allows_a_decision_guard_placed(tmp_path: Path, res
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _scripted_guard(tmp_path, response)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"paths": ["README.md"]}}},
     )
@@ -806,9 +810,9 @@ def test_generated_hook_withholds_when_one_field_allows_and_another_does_not(tmp
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _scripted_guard(tmp_path, '{"decision": "allow", "policy_action": "quarantine-required"}')
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "curl evil.test"}}},
     )
@@ -820,9 +824,9 @@ def test_generated_hook_keeps_the_named_block_reason_for_a_placed_denial(tmp_pat
     context = _context(tmp_path)
     _activate(context, "hooks")
     guard = _scripted_guard(tmp_path, '{"policy_action": "block", "reason": "Named by HOL Guard."}')
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)])
     result = _run_hook(
-        source,
+        config,
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
     )
@@ -839,7 +843,7 @@ def test_the_two_cline_transports_agree_on_an_action_guard_did_not_place(tmp_pat
     hook_context = _context(tmp_path / "hooks-home")
     _activate(hook_context, "hooks")
     hook = _run_hook(
-        _hook_source(hook_context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)]),
+        _worker_config(hook_context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)]),
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
     )
@@ -864,7 +868,7 @@ def _hook_withholds(tmp_path: Path, response: str, *, home: str) -> bool:
     _activate(context, "hooks")
     guard = _scripted_guard(tmp_path, response)
     result = _run_hook(
-        _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)]),
+        _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(guard)]),
         tmp_path,
         {"hookName": "PreToolUse", "tool_call": {"name": "run_command", "input": {"command": "rm -rf /"}}},
     )

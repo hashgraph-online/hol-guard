@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,7 +12,6 @@ import pytest
 
 from codex_plugin_scanner.guard import runtime_artifact_reconciliation as reconciliation
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import _posix_wrapper
 from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.runtime_transition import TransitionFile
 
@@ -42,8 +42,14 @@ def _worker(guard_home: Path) -> Path:
 
 
 def _write_launcher(launcher: Path, guard_home: Path, python: str) -> None:
+    """Write the Python-worker launcher earlier Cline installs left behind."""
+
     launcher.parent.mkdir(parents=True, exist_ok=True)
-    launcher.write_text(_posix_wrapper(worker=_worker(guard_home), python=python), encoding="utf-8")
+    launcher.write_text(
+        f"#!/bin/sh\n# HOL_GUARD_MANAGED_CLINE_HOOK_V1\nexec {shlex.quote(python)} -I -s "
+        f"{shlex.quote(_worker(guard_home).as_posix())}\n",
+        encoding="utf-8",
+    )
 
 
 def _cline_store(tmp_path: Path, python: str) -> tuple[_Store, Path]:
