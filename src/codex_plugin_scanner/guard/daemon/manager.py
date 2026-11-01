@@ -41,6 +41,7 @@ from ..live_process_identity import process_owner_marker
 from ..mdm.file_lock import release_file_lock
 from ..native_daemon_lifecycle import (
     NativeDaemonLifecycleError,
+    await_native_runtime,
     bind_daemon_lifecycle_deadline,
     native_daemon_lifecycle,
     reset_daemon_lifecycle_deadline,
@@ -2679,13 +2680,21 @@ def _measure_runtime_fingerprint(source_root: Path, cached: tuple[str, str] | No
     }
     if cached is not None:
         request["cached"] = {"tree_sig": cached[0], "fingerprint": cached[1]}
-    answer = runtime_answer(
-        "native-runtime-fingerprint-v1",
-        "runtime-fingerprint",
-        request,
-        output_limit=4096,
-        timeout_seconds=60.0,
-    )
+
+    def ask() -> dict[str, object] | None:
+        return runtime_answer(
+            "native-runtime-fingerprint-v1",
+            "runtime-fingerprint",
+            request,
+            output_limit=4096,
+            timeout_seconds=60.0,
+        )
+
+    answer = ask()
+    # A freshly installed runtime can miss its first capability probe; wait
+    # that out once rather than failing the daemon start.
+    if answer is None and await_native_runtime(60.0) > 0.0:
+        answer = ask()
     tree_sig = None if answer is None else answer.get("tree_sig")
     fingerprint = None if answer is None else answer.get("fingerprint")
     reused = None if answer is None else answer.get("reused")

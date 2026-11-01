@@ -17,7 +17,7 @@
 //! hash.
 
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -221,11 +221,14 @@ fn content_fingerprint(source_root: &Path, version: &str, paths: &[PathBuf]) -> 
         let Ok(mut file) = File::open(path) else {
             continue;
         };
-        while let Ok(read) = file.read(&mut chunk) {
-            if read == 0 {
-                break;
+        loop {
+            match file.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(read) => digest.update(&chunk[..read]),
+                // A signal mid-read is not the end of the file.
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(_) => break,
             }
-            digest.update(&chunk[..read]);
         }
     }
     hex::encode(digest.finalize())
