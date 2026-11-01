@@ -6,6 +6,8 @@ import type { ContextAssistanceStatus, ContextControlAction, ContextInstallation
 import { ContextWorkspacesPanel } from "./workspaces-panel";
 import { CigarWorkspace } from "./workspace";
 import { CigarVersionsPanel } from "./versions-panel";
+import { CigarSetupProof } from "./one-click-setup";
+import { useCigarOneClick } from "./use-one-click";
 import { commitDashboardLocation } from "../dashboard-location";
 import { sameCigarPreferences } from "./selection-settings";
 
@@ -108,7 +110,23 @@ export function ContextAssistanceSettings(props: Props) {
     };
   }, [onBusyChange]);
 
+  const value = props.value ?? status?.preferences ?? null;
+  const saved = props.savedValue ?? status?.preferences ?? null;
+  const dirty = value && saved ? !sameCigarPreferences(value, saved) : value !== saved;
+  const setup = useCigarOneClick({
+    active: workspace, status, dirty, locked: props.locked, disabled: props.disabled || busy, gate: props.gate ?? null,
+    publish: (state) => captureVersionStatus()(state),
+    onSaved: (config, previous) => props.onSelectionChanged?.(config, previous),
+  });
+  useEffect(() => {
+    if (!setup.busy) return;
+    onBusyChange(true);
+    return () => onBusyChange(false);
+  }, [setup.busy, onBusyChange]);
+
   async function perform(action: ContextControlAction | "installations") {
+    // Stop always wins over a one-click setup that is still running.
+    if (action === "stop") setup.stop();
     if (pending.current || props.disabled) return;
     pending.current = true;
     const current = ++revision.current;
@@ -144,9 +162,6 @@ export function ContextAssistanceSettings(props: Props) {
     }
   }
 
-  const value = props.value ?? status?.preferences ?? null;
-  const saved = props.savedValue ?? status?.preferences ?? null;
-  const dirty = value && saved ? !sameCigarPreferences(value, saved) : value !== saved;
   const controls = <ContextSettingsControls value={value} status={status} installations={installations}
     loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}
     dirty={dirty} error={workspace ? null : error}
@@ -163,12 +178,12 @@ export function ContextAssistanceSettings(props: Props) {
         && status?.capabilities?.execution_context === true}
       sharingAllowed={status?.effective_preferences.features.shared_agents === true && status?.runtime?.shared_compile_verified === true}
       gate={props.gate ?? null} />;
-  return workspace ? <CigarWorkspace status={status} installations={installations} loading={loading}
-    busy={busy} disabled={props.disabled} dirty={dirty} error={error}
+  return workspace ? <><CigarWorkspace status={status} installations={installations} loading={loading}
+    busy={busy} disabled={props.disabled} dirty={dirty} error={error} setup={setup}
     stopAvailable={Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error)}
     controls={controls} access={access} data={props.data}
     versions={<CigarVersionsPanel status={status} disabled={props.disabled || busy} locked={props.locked}
       dirty={dirty} gate={props.gate ?? null} captureStatus={captureVersionStatus} />}
-    onRefresh={() => void refresh()} onStart={() => void perform("activate")}
-    onStop={() => void perform("stop")} /> : <>{controls}{access}</>;
+    onRefresh={() => { void refresh(); void setup.refresh(); }}
+    onStop={() => void perform("stop")} /><CigarSetupProof setup={setup} gate={props.gate ?? null} /></> : <>{controls}{access}</>;
 }

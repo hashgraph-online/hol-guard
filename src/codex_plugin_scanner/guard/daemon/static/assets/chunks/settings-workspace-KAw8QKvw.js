@@ -1,8 +1,8 @@
-import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, S as SectionLabel, ab as useFocusTrap, aZ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a_ as ApprovalProofFieldInputs, a$ as isApprovalProofSubmitDisabled, b0 as buildApprovalProofCredentials, b1 as changeCloudReviewSettings, b2 as shellHref, c as contextStatusCopy, b3 as listContextAgentSessions, h as harnessDisplayName, b4 as revokeContextAgentSession, b5 as authorizeContextAgentSession, b6 as ContextAssistanceApiError, b7 as ask, b8 as parseContextScope, b9 as validContextBrokerRevision, ba as listContextWorkspaces, bb as manageContextWorkspace, bc as grantContextWorkspace, bd as compileWorkspaceContext, w as HiMiniArrowRight, u as HiMiniDocumentText, v as HiMiniCheckCircle, be as HiMiniDocumentMagnifyingGlass, bf as HiMiniLink, s as HiMiniCommandLine, k as HiMiniCheck, M as HiMiniClipboardDocument, bg as HiMiniArrowLeft, bh as HiMiniAcademicCap, bi as subscribeDashboardLocation, bj as HiMiniCpuChip, bk as isGuardDemoMode, bl as fetchWithGuardAuth, bm as parseContextAssistanceStatus, bn as isCigarBuildIdentity, bo as isCigarProducerVersion, bp as isCigarCoreLabel, bq as fetchContextInstallations, f as fetchContextAssistance, br as commitDashboardLocation, a as controlContextAssistance, bs as savedEvidenceCopy, bt as downloadBlob, bu as guardAwareHref, bv as fetchContextData, bw as forgetContextHistory, bx as forgetSavedEvidence, by as resolveProtectionLevelCopy, aA as fetchSettings, bz as fetchRuntimeSnapshot, bA as clearHarnessWatchOverrides, bB as withHarnessPosturePatch, P as updateSettings, bC as clearPolicy, bD as clearReviewQueue, bE as revokeApprovalGateCooldown, bF as disableApprovalGateTotp, bG as importSettings, bH as resetSettings, bI as enrollApprovalGateTotp, bJ as verifyApprovalGateTotp, bK as clearEvidence, bL as exportDiagnostics, bM as repairApprovalCenter, bN as exportSettings, bO as setupDesktopNotifications, a7 as EmptyState, bP as settingsWatchBannerModel, bQ as WorkspacePageHeader, Z as WatchProtectionBanner, t as HiMiniMagnifyingGlass, bR as navigateFromAnchor, g as HiMiniChevronDown, ad as HiMiniExclamationTriangle, bS as humanizeList, bT as isProtectionPosture, bU as deriveProtectionPosture, bV as normalizeHarnessPostures, bW as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-CJfd7bMi.js";
+import { r as reactExports, aP as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aQ as ApprovalProofModal, T as Tag, aF as PROTECTION_POSTURE_COPY, aR as POSTURE_OUTCOME_COLUMNS, aS as getDefaultExportFromCjs, aT as React, a0 as HiMiniShieldCheck, aU as HiMiniSquares2X2, y as HiMiniLockClosed, aV as HiMiniBellAlert, aW as HiMiniAdjustmentsHorizontal, aX as HiMiniCircleStack, aY as TabBar, H as HiMiniChevronRight, S as SectionLabel, ab as useFocusTrap, aZ as fetchCloudReviewSettings, a9 as HiMiniCloud, i as HiMiniArrowPath, a6 as HiMiniXMark, a_ as ApprovalProofFieldInputs, a$ as isApprovalProofSubmitDisabled, b0 as buildApprovalProofCredentials, b1 as changeCloudReviewSettings, b2 as shellHref, c as contextStatusCopy, b3 as listContextAgentSessions, h as harnessDisplayName, b4 as revokeContextAgentSession, b5 as authorizeContextAgentSession, b6 as ContextAssistanceApiError, b7 as ask, b8 as parseContextScope, b9 as validContextBrokerRevision, ba as listContextWorkspaces, bb as manageContextWorkspace, bc as grantContextWorkspace, bd as compileWorkspaceContext, be as isCigarProducerVersion, bf as isCigarCoreLabel, w as HiMiniArrowRight, k as HiMiniCheck, m as HiMiniHandRaised, bg as HiMiniBookOpen, u as HiMiniDocumentText, v as HiMiniCheckCircle, M as HiMiniClipboardDocument, bh as HiMiniArrowLeft, bi as HiMiniAcademicCap, bj as subscribeDashboardLocation, bk as isGuardDemoMode, bl as fetchWithGuardAuth, bm as parseContextAssistanceStatus, bn as isCigarBuildIdentity, bo as fetchContextInstallations, f as fetchContextAssistance, a as controlContextAssistance, bp as commitDashboardLocation, bq as savedEvidenceCopy, br as downloadBlob, bs as guardAwareHref, bt as fetchContextData, bu as forgetContextHistory, bv as forgetSavedEvidence, bw as resolveProtectionLevelCopy, aA as fetchSettings, bx as fetchRuntimeSnapshot, by as clearHarnessWatchOverrides, bz as withHarnessPosturePatch, P as updateSettings, bA as clearPolicy, bB as clearReviewQueue, bC as revokeApprovalGateCooldown, bD as disableApprovalGateTotp, bE as importSettings, bF as resetSettings, bG as enrollApprovalGateTotp, bH as verifyApprovalGateTotp, bI as clearEvidence, bJ as exportDiagnostics, bK as repairApprovalCenter, bL as exportSettings, bM as setupDesktopNotifications, a7 as EmptyState, bN as settingsWatchBannerModel, bO as WorkspacePageHeader, Z as WatchProtectionBanner, t as HiMiniMagnifyingGlass, bP as navigateFromAnchor, g as HiMiniChevronDown, ad as HiMiniExclamationTriangle, bQ as humanizeList, bR as isProtectionPosture, bS as deriveProtectionPosture, bT as normalizeHarnessPostures, bU as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, S as SettingsSaveProofModal, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-D4TJjc9y.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-NIjTMm3y.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CjnpnUTg.js";
+import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-Cs5DC4oq.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-sWNubUNf.js";
 function describeAffectedHarness(item) {
   const count2 = item.hook_count ?? item.swept_hook_count;
   if (typeof count2 === "number" && count2 > 0) {
@@ -2734,12 +2734,12 @@ function CigarRuntimeSelection(props) {
       " · ",
       selected.qualification.replaceAll("_", " ")
     ] }) : null,
-    props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Versions & updates to inspect approved builds and registration options." }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Choose, prepare and switch runtimes in Versions & updates. A separate selection job protects your current runtime and data." }),
+    props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Updates to inspect approved builds and registration options." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data." }),
     props.onManage ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onManage, children: "Choose or switch runtime" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: versionButton + " inline-flex items-center", href: shellHref("/cigar?section=versions"), children: "Choose or switch runtime" }),
     props.installations !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRefresh, children: "Refresh runtime list" }) : null,
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "text-sm text-amber-800", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Versions & updates." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A pending runtime choice is in this form. Use the current selection before preparing a different runtime in Updates." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled, onClick: props.onRestore, children: "Use current selection" })
     ] }) : null
   ] });
@@ -2779,7 +2779,7 @@ function ContextSettingsControls(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: buttonClass, disabled: checkDisabled, onClick: () => props.onControl("recheck"), children: "Check selected runtime" }),
       !stopped ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: buttonClass, disabled, onClick: () => props.onControl("stop"), children: "Turn off now" }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Requires a verified final CPython 3.14 runtime on this machine. A separate Python 3.14 environment works even when Guard uses an older supported Python." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "CIGAR uses its own copy of Python 3.14. Guard sets it up for you when you click Turn on CIGAR." }),
     props.locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Your organization manages these preferences. You can still turn context assistance off." }) : null,
     status?.restriction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Policy restrictions apply. Your saved choices are retained; effective limits are shown below." }) : null,
     value ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -2788,7 +2788,7 @@ function ContextSettingsControls(props) {
         {
           label: "Use CIGAR on this machine",
           checked: value.enabled,
-          description: "Save your preferences, then click Start CIGAR at the top of this page to verify and run the runtime.",
+          description: "Lets CIGAR run on this computer. The Turn on CIGAR button sets this for you.",
           disabled: editingDisabled || !value.enabled && !selected,
           onChange: (enabled) => props.onChange({ ...value, enabled })
         }
@@ -3096,8 +3096,8 @@ function ContextAgentsPanel({ ready, enabled, dirty, generation, scopes, gate })
       if (revoke) await revokeContextAgentSession(session.session_id, controller.signal);
       else await authorizeContextAgentSession(session.session_id, scope.scope_id, credentials, controller.signal);
       if (revision.current === id2) setConfirm(null);
-    } catch (failure) {
-      if (revision.current === id2) setError(failure instanceof ContextAssistanceApiError ? failure.message : "The connection change did not return a verified result. Refresh its status before trying again.");
+    } catch (failure2) {
+      if (revision.current === id2) setError(failure2 instanceof ContextAssistanceApiError ? failure2.message : "The connection change did not return a verified result. Refresh its status before trying again.");
     } finally {
       pending.current = false;
       if (revision.current === id2) {
@@ -3673,6 +3673,528 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
     )
   ] });
 }
+const cigarVersionJobId = () => "dashboard:" + crypto.randomUUID();
+function canCommitCigarJob(job, status) {
+  return status !== null && job.can_commit && !job.cleanup_pending && job.expected_generation === status.generation && (job.initial_selection ? status.preferences.runtime_id === "" : job.source_runtime_id === status.preferences.runtime_id);
+}
+function cigarJobPending(job) {
+  return job.worker_live === true || !job.recovery_available && !["ready", "completed", "cancelled", "failed", "recovery_required"].includes(job.phase);
+}
+function cigarBuildBlock(catalog, build, updates) {
+  if (build.withdrawn) return "This build has been withdrawn.";
+  if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing a build.";
+  const host = build.platforms.find((p) => p.platform === catalog.host_platform);
+  if (!host) return "No artifact is available for this Guard host.";
+  if (host.qualification !== "guard_qualified") return "This artifact still needs Guard qualification.";
+  if (!host.has_wheel) return "This entry has no installable SDK package.";
+  if (build.channel !== "stable") return "Preview and local candidate installation is unavailable in this Guard build.";
+  if (updates.effective.pinned_build && updates.effective.pinned_build !== build.identity.build_id) return "Update preferences pin another build.";
+  return null;
+}
+function cigarPythonBlock(catalog, build) {
+  if (build.withdrawn) return "This Python build has been withdrawn.";
+  if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing Python.";
+  if (build.platform !== catalog.host_platform) return "This Python build is for another Guard host.";
+  if (build.qualification !== "guard_qualified") return "This Python build still needs Guard qualification.";
+  return null;
+}
+const object$5 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const id$3 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
+const word = (v) => typeof v === "string" && /^[a-z0-9_]{1,128}$/.test(v);
+const count$1 = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+const isCigarGeneration = (v) => typeof v === "string" && /^[1-9][0-9]{0,19}$/.test(v) && (v.length < 20 || v <= "18446744073709551615");
+function invalid$3() {
+  throw new ContextAssistanceApiError("versions_job_invalid", "Guard returned incompatible CIGAR job data. Refresh jobs.");
+}
+function recovery(v) {
+  if (v === void 0 || v === null) return null;
+  if (!object$5(v) || typeof v.id !== "string" || !/^[a-f0-9]{32}$/.test(v.id) || !isCigarGeneration(v.expected_generation) || !count$1(v.started_at_ms) || !count$1(v.deadline_at_ms) || v.deadline_at_ms < v.started_at_ms) invalid$3();
+  return { id: v.id, expected_generation: v.expected_generation, started_at_ms: v.started_at_ms, deadline_at_ms: v.deadline_at_ms };
+}
+function parseCigarVersionJob(value) {
+  if (!object$5(value) || !id$3(value.job_id) || !word(value.phase) || !word(value.code) || !count$1(value.created_at_ms) || !count$1(value.updated_at_ms) || value.updated_at_ms < value.created_at_ms || !count$1(value.deadline_at_ms) || value.deadline_at_ms < value.created_at_ms || !(value.worker_live === null || typeof value.worker_live === "boolean") || typeof value.cancel_requested !== "boolean" || typeof value.recovery_available !== "boolean" || value.worker_live === true && value.recovery_available) invalid$3();
+  const base = {
+    schema: String(value.schema),
+    job_id: value.job_id,
+    phase: value.phase,
+    code: value.code,
+    created_at_ms: value.created_at_ms,
+    updated_at_ms: value.updated_at_ms,
+    deadline_at_ms: value.deadline_at_ms,
+    worker_live: value.worker_live,
+    cancel_requested: value.cancel_requested,
+    recovery_available: value.recovery_available
+  };
+  if (value.schema === "guard-cigar-switch-job.v1") {
+    if (!["switch", "rollback", "select", "recover"].includes(String(value.operation)) || !id$3(value.target_runtime_id) || !(value.source_runtime_id === null || id$3(value.source_runtime_id)) || !isCigarGeneration(value.expected_generation) || value.authority_restored !== false || ["can_commit", "keeps_disabled", "reconnect_required", "initial_selection", "cleanup_pending"].some((key2) => typeof value[key2] !== "boolean") || value.keeps_disabled === value.reconnect_required || (value.initial_selection ? value.source_runtime_id !== null || !value.keeps_disabled : !id$3(value.source_runtime_id) || value.source_runtime_id === value.target_runtime_id) || value.operation === "select" && !value.initial_selection || ["switch", "rollback"].includes(String(value.operation)) && value.initial_selection || value.can_commit && (value.phase !== "ready" || value.worker_live !== true || value.cancel_requested)) invalid$3();
+    const attempt = recovery(value.recovery_attempt);
+    if (value.operation === "recover" ? !attempt || attempt.expected_generation !== value.expected_generation || value.can_commit : attempt !== null) invalid$3();
+    return {
+      ...base,
+      family: "selection",
+      operation: value.operation,
+      target_runtime_id: value.target_runtime_id,
+      source_runtime_id: value.source_runtime_id,
+      expected_generation: value.expected_generation,
+      can_commit: value.can_commit,
+      keeps_disabled: value.keeps_disabled,
+      reconnect_required: value.reconnect_required,
+      initial_selection: value.initial_selection,
+      cleanup_pending: value.cleanup_pending,
+      recovery_attempt: attempt
+    };
+  }
+  const schemas = {
+    "guard-cigar-install-job.v1": ["install", "verify"],
+    "guard-cigar-python-setup-job.v1": ["setup_interpreter"],
+    "guard-cigar-catalog-refresh-job.v1": ["refresh_catalog"]
+  };
+  if (!Object.hasOwn(schemas, String(value.schema)) || !schemas[String(value.schema)].includes(String(value.operation)) || value.activation_granted !== false) invalid$3();
+  if (value.operation === "refresh_catalog") return { ...base, family: "preparation", operation: "refresh_catalog", can_commit: false };
+  if (!id$3(value.build_id)) invalid$3();
+  if (value.operation === "setup_interpreter") {
+    if (!(value.interpreter_id === null || id$3(value.interpreter_id)) || value.phase === "ready" && value.interpreter_id === null) invalid$3();
+    return {
+      ...base,
+      family: "preparation",
+      operation: "setup_interpreter",
+      build_id: value.build_id,
+      interpreter_id: value.interpreter_id,
+      can_commit: false
+    };
+  }
+  if (!id$3(value.interpreter_id)) invalid$3();
+  if (!id$3(value.runtime_id) || !isCigarProducerVersion(value.sdk_version) || !isCigarCoreLabel(value.core_version)) invalid$3();
+  return {
+    ...base,
+    family: "preparation",
+    operation: value.operation,
+    build_id: value.build_id,
+    interpreter_id: value.interpreter_id,
+    runtime_id: value.runtime_id,
+    sdk_version: value.sdk_version,
+    core_version: value.core_version,
+    can_commit: false
+  };
+}
+function parseCigarVersionJobs(value) {
+  if (!object$5(value) || !Array.isArray(value.jobs) || value.jobs.length > 32) invalid$3();
+  const jobs = value.jobs.map(parseCigarVersionJob);
+  if (new Set(jobs.map((job) => job.job_id)).size !== jobs.length) invalid$3();
+  return jobs;
+}
+const CIGAR_TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "runtime", label: "Settings" },
+  { value: "versions", label: "Updates" },
+  { value: "access", label: "Projects & AI apps" },
+  { value: "data", label: "Privacy" },
+  { value: "tutorials", label: "Tutorials" },
+  { value: "guide", label: "How it works" }
+];
+function canStartCigar(status, dirty) {
+  return !dirty && status !== null && status.requested_enabled && status.preferences.enabled && status.effective_preferences.enabled && status.verification_permitted && Boolean(status.preferences.runtime_id) && !status.effective_enabled && status.job === null;
+}
+function cigarTabFromSearch(search) {
+  const value = new URLSearchParams(search).get("section");
+  return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
+}
+function cigarSetupSteps(status) {
+  const on = status?.effective_enabled === true;
+  return [
+    {
+      title: "Turn on CIGAR",
+      description: on ? "CIGAR is running on this computer." : "One click. Guard gets everything ready and checks it first.",
+      complete: on,
+      action: null,
+      tab: "overview"
+    },
+    {
+      title: "Pick a project folder",
+      description: "Choose the folder CIGAR may read. It reads nothing else.",
+      complete: false,
+      action: on ? "Pick a folder" : null,
+      tab: "access"
+    },
+    {
+      title: "Connect an AI app (optional)",
+      description: "Let an AI app ask CIGAR for the parts of your project it needs. You approve each app.",
+      complete: false,
+      action: on ? "Connect an app" : null,
+      tab: "access"
+    }
+  ];
+}
+const CIGAR_SETUP_STAGE_LABELS = {
+  python: "Get Python ready",
+  download: "Download CIGAR",
+  check: "Check it is the approved copy",
+  start: "Start CIGAR"
+};
+const python314 = (version) => version[0] === 3 && version[1] === 14;
+const blocked = (title, detail, tab) => ({ kind: "blocked", block: { title, detail, tab } });
+function planCigarSetup(data, options) {
+  const { state, catalog } = data;
+  if (state.effective_enabled) return { kind: "ready" };
+  if (options.dirty) return blocked("Save your changes first", "You have unsaved settings on this page. Save or undo them, then turn CIGAR on.");
+  if (options.locked || state.restriction && !state.effective_preferences.enabled) {
+    return blocked("Your organization manages CIGAR", "An administrator controls CIGAR on this computer. Ask them if you need it turned on.");
+  }
+  if (state.job || data.jobs.some(cigarJobPending)) return blocked("CIGAR is busy", "Another CIGAR task is still finishing. Try again in a moment.", "versions");
+  if (data.jobs.some((job) => job.phase === "recovery_required")) {
+    return blocked("An earlier setup did not finish", "Guard paused an earlier CIGAR task so nothing breaks. Open Updates to finish or undo it.", "versions");
+  }
+  const selected = state.preferences.runtime_id;
+  const installed = data.installations;
+  const current = selected && installed.some((item) => item.runtime_id === selected) ? selected : null;
+  const reusable = current ?? (installed.find((item) => item.qualification === "guard_qualified") ?? installed[0])?.runtime_id ?? null;
+  const tail = reusable === current && current !== null ? ["start"] : ["check", "start"];
+  if (reusable) {
+    return {
+      kind: "run",
+      runtime_id: reusable,
+      build_id: null,
+      interpreter_id: null,
+      python_build_id: null,
+      stages: tail,
+      approval: tail.length > 1 || !state.preferences.enabled
+    };
+  }
+  const host = catalog.host_platform;
+  if (!host) return blocked("Not available for this computer yet", "CIGAR does not have a version for this kind of computer yet. Guard keeps protecting you without it.");
+  const build = catalog.builds.find((item) => cigarBuildBlock(catalog, item, data.updates) === null);
+  if (!build) {
+    const forHost = catalog.builds.filter((item) => !item.withdrawn && item.platforms.some((p) => p.platform === host));
+    if (forHost.length === 0) {
+      return blocked("Not available for this computer yet", "CIGAR does not have a version for this kind of computer yet. Guard keeps protecting you without it.");
+    }
+    if (!catalog.catalog.fresh_for_preparation) {
+      return blocked("Guard needs a fresh version list", "Guard's list of CIGAR versions is out of date. Open Updates to refresh it.", "versions");
+    }
+    if (forHost.every((item) => item.platforms.some((p) => p.platform === host && p.qualification !== "guard_qualified"))) {
+      return blocked("Waiting for Guard's safety check", "A CIGAR version exists for this computer, but Guard has not finished checking it. This button will work as soon as it has.");
+    }
+    return blocked("No version can be installed right now", "Open Updates to see which CIGAR versions are available and why.", "versions");
+  }
+  const interpreter = data.interpreters.find((item) => item.platform === host && python314(item.python_version) && item.implementation.toLowerCase() === "cpython");
+  const pythonBuild = interpreter ? null : catalog.interpreter_builds.find((item) => python314(item.python_version) && cigarPythonBlock(catalog, item) === null);
+  if (!interpreter && !pythonBuild) {
+    return blocked("Waiting for Guard's safety check", "CIGAR needs its own copy of Python 3.14, and Guard has not approved one for this computer yet.");
+  }
+  return {
+    kind: "run",
+    runtime_id: null,
+    build_id: build.identity.build_id,
+    interpreter_id: interpreter?.interpreter_id ?? null,
+    python_build_id: pythonBuild?.build_id ?? null,
+    stages: [...pythonBuild ? ["python"] : [], "download", "check", "start"],
+    approval: true
+  };
+}
+function planCigarStart(status, dirty) {
+  return status && canStartCigar(status, dirty) ? {
+    kind: "run",
+    runtime_id: status.preferences.runtime_id,
+    build_id: null,
+    interpreter_id: null,
+    python_build_id: null,
+    stages: ["start"],
+    approval: false
+  } : null;
+}
+class CigarSetupError extends Error {
+  constructor(stage, message2, needsProof = false) {
+    super(message2);
+    this.stage = stage;
+    this.needsProof = needsProof;
+    this.name = "CigarSetupError";
+  }
+  stage;
+  needsProof;
+}
+class CigarSetupStopped extends Error {
+  constructor() {
+    super("CIGAR setup stopped.");
+    this.name = "CigarSetupStopped";
+  }
+}
+const JOB_LIMIT_MS = 18e4, START_LIMIT_MS = 12e4, POLL_MS = 800;
+const failedPhases = /* @__PURE__ */ new Set(["failed", "cancelled", "recovery_required"]);
+const isCigarProofError = (cause) => cause instanceof ContextAssistanceApiError && (cause.code.startsWith("approval_gate") || cause.code === "approval_required");
+const transient = (cause) => !(cause instanceof ContextAssistanceApiError) || cause.code.endsWith("context_stale") || cause.code.endsWith("outcome_unknown") || cause.code === "context_assistance_unavailable";
+function guard(deps) {
+  if (deps.stopped()) throw new CigarSetupStopped();
+}
+function failure(stage, cause) {
+  if (cause instanceof CigarSetupStopped || cause instanceof CigarSetupError) throw cause;
+  if (isCigarProofError(cause)) throw new CigarSetupError(stage, "Guard needs your approval password to continue.", true);
+  throw new CigarSetupError(stage, cause instanceof Error ? cause.message : "Guard did not confirm this step.");
+}
+async function follow(deps, stage, input, proof, done) {
+  guard(deps);
+  deps.onJob(input.job_id);
+  try {
+    deps.onState((await deps.versions(input, proof)).state);
+  } catch (cause) {
+    if (!transient(cause)) failure(stage, cause);
+  }
+  const started = deps.now();
+  let misses = 0;
+  for (; ; ) {
+    guard(deps);
+    let reply = null;
+    try {
+      reply = await deps.versions({ action: "job", job_id: input.job_id });
+      misses = 0;
+    } catch (cause) {
+      if (!transient(cause) || ++misses > 5) failure(stage, cause);
+    }
+    if (reply) {
+      deps.onState(reply.state);
+      const job = parseCigarVersionJob(reply.result);
+      if (done(job, reply.state)) {
+        deps.onJob(null);
+        return { job, state: reply.state };
+      }
+      if (failedPhases.has(job.phase)) {
+        throw new CigarSetupError(stage, job.phase === "recovery_required" ? "Guard paused this step so nothing breaks. Open Updates to finish or undo it." : "This step did not finish (" + job.code.replace(/_/g, " ") + "). Nothing was turned on.");
+      }
+    }
+    if (deps.now() - started > JOB_LIMIT_MS) throw new CigarSetupError(stage, "This is taking longer than expected. Guard is still working; check Updates in a minute.");
+    await deps.sleep(POLL_MS);
+  }
+}
+async function runCigarSetup(plan, initial2, deps, proof) {
+  let state = initial2;
+  let interpreter = plan.interpreter_id;
+  let runtime = plan.runtime_id;
+  if (plan.python_build_id) {
+    deps.onStage("python");
+    const { job } = await follow(
+      deps,
+      "python",
+      { action: "setup_interpreter", job_id: cigarVersionJobId(), build_id: plan.python_build_id },
+      proof,
+      (item) => (item.phase === "ready" || item.phase === "completed") && item.family === "preparation" && Boolean(item.interpreter_id)
+    );
+    interpreter = job.family === "preparation" ? job.interpreter_id ?? null : null;
+  }
+  if (plan.build_id) {
+    if (!interpreter) throw new CigarSetupError("download", "Guard did not report a Python 3.14 copy for CIGAR.");
+    deps.onStage("download");
+    const { job, state: next } = await follow(
+      deps,
+      "download",
+      { action: "install", job_id: cigarVersionJobId(), build_id: plan.build_id, interpreter_id: interpreter },
+      proof,
+      (item) => (item.phase === "ready" || item.phase === "completed") && item.family === "preparation" && Boolean(item.runtime_id)
+    );
+    runtime = job.family === "preparation" ? job.runtime_id ?? null : null;
+    state = next;
+  }
+  if (!runtime) throw new CigarSetupError("download", "Guard did not report an installed CIGAR copy.");
+  if (state.preferences.runtime_id !== runtime) {
+    deps.onStage("check");
+    const id2 = cigarVersionJobId();
+    const ready = await follow(
+      deps,
+      "check",
+      { action: "prepare_switch", job_id: id2, target_runtime_id: runtime, expected_generation: state.generation },
+      proof,
+      (item, current) => item.family === "selection" && canCommitCigarJob(item, current)
+    );
+    const job = ready.job;
+    if (job.family !== "selection") throw new CigarSetupError("check", "Guard returned an unexpected job.");
+    const committed = await follow(
+      deps,
+      "check",
+      { action: "commit", job_id: id2, expected_generation: job.expected_generation, reconnect: job.reconnect_required },
+      proof,
+      (item) => item.phase === "completed"
+    );
+    state = committed.state;
+  }
+  guard(deps);
+  deps.onStage("start");
+  if (!state.preferences.enabled || state.preferences.runtime_id !== runtime) {
+    const previous = state.preferences;
+    let saved;
+    try {
+      saved = await deps.saveSettings({ ...previous, enabled: true, runtime_id: runtime }, proof);
+    } catch (cause) {
+      failure("start", cause);
+    }
+    deps.onSaved(saved, previous);
+  }
+  guard(deps);
+  try {
+    state = await deps.activate();
+  } catch (cause) {
+    failure("start", cause);
+  }
+  deps.onState(state);
+  const started = deps.now();
+  let sawJob = state.job !== null;
+  for (; ; ) {
+    if (state.effective_enabled) return state;
+    guard(deps);
+    if (!state.requested_enabled) throw new CigarSetupStopped();
+    if (state.job === null && (sawJob || deps.now() - started > 3e3)) throw new CigarSetupError("start", contextStatusCopy(state).detail);
+    if (deps.now() - started > START_LIMIT_MS) throw new CigarSetupError("start", "CIGAR is taking longer than expected to start. Refresh status in a minute.");
+    await deps.sleep(POLL_MS);
+    try {
+      state = await deps.status();
+    } catch (cause) {
+      if (!transient(cause)) failure("start", cause);
+      continue;
+    }
+    sawJob ||= state.job !== null;
+    deps.onState(state);
+  }
+}
+const ALL_STAGES = ["python", "download", "check", "start"];
+const STAGE_DETAIL = {
+  python: "A private copy, kept apart from any Python you already use.",
+  download: "Only the version Guard approved for this computer.",
+  check: "Guard compares its fingerprint before trusting it.",
+  start: "CIGAR runs here. It reads no files until you pick a project."
+};
+const CIGAR_WHY = [
+  {
+    icon: HiMiniHandRaised,
+    title: "Know why Guard paused",
+    body: "When Guard stops your AI, you get a short note explaining why, with links to the exact lines it read."
+  },
+  {
+    icon: HiMiniBookOpen,
+    title: "Just the parts that matter",
+    body: "Instead of whole files, your AI gets the few pieces that answer the question, inside a size limit you set."
+  },
+  {
+    icon: HiMiniLockClosed,
+    title: "Private by default",
+    body: "It runs on your computer, reads only the folders you pick, and forgets everything when you turn it off."
+  }
+];
+function CigarWhy() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "cigar-why", "aria-label": "What CIGAR does for you", children: CIGAR_WHY.map(({ icon: Icon, title, body }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: body })
+    ] })
+  ] }, title)) });
+}
+function CigarSetupAction({ setup, status, disabled, tone = "plain", onOpen }) {
+  const primary = "cigar-button cigar-button-primary" + (tone === "plain" ? " cigar-button-solid" : "");
+  if (status?.effective_enabled) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: primary, onClick: () => onOpen("access"), children: [
+        "Pick a project folder",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: "CIGAR is on. It reads nothing until you choose what it may use." })
+    ] });
+  }
+  if (setup.run.phase === "running") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", onClick: setup.stop, children: "Stop setup" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-setup-caption", role: "status", children: [
+        CIGAR_SETUP_STAGE_LABELS[setup.run.stage],
+        "…"
+      ] })
+    ] });
+  }
+  const plan = setup.plan;
+  const block = plan?.kind === "blocked" ? plan.block : null;
+  const checking = plan === null && setup.loadError === null;
+  const failed = setup.run.phase === "failed" ? setup.run : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-action", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        className: primary,
+        disabled: disabled || checking || block !== null || setup.run.phase === "proof",
+        onClick: setup.start,
+        children: [
+          failed ? "Try again" : "Turn on CIGAR",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+        ]
+      }
+    ),
+    block ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: block.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: block.detail }),
+      block.tab ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onOpen(block.tab), children: [
+        "Open ",
+        block.tab === "versions" ? "Updates" : "details",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
+      ] }) : null
+    ] }) : failed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "alert", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR did not turn on" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: failed.message })
+    ] }) : setup.loadError ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-setup-block", role: "alert", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Guard did not answer" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: setup.loadError })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-setup-caption", children: checking ? "Checking this computer…" : "About a minute · Runs on this computer · Off with one click" })
+  ] });
+}
+function CigarSetupProgress({ setup, status, loading }) {
+  const run = setup.run;
+  const on = status?.effective_enabled === true;
+  const stages = run.phase === "running" || run.phase === "failed" ? run.stages : setup.plan?.kind === "run" ? setup.plan.stages : ALL_STAGES;
+  const current = run.phase === "running" ? run.stage : run.phase === "failed" ? run.stage : null;
+  const at = current ? stages.indexOf(current) : -1;
+  const heading = on ? "CIGAR is on" : run.phase === "running" ? "Turning on CIGAR" : run.phase === "failed" ? "Setup stopped" : loading ? "Checking…" : "What happens when you click";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-runtime-card cigar-setup-progress", "aria-live": "polite", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-runtime-top", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: heading }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-status", "data-ready": on, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
+        run.phase === "running" ? "Working" : status ? contextStatusCopy(status).label : "Checking"
+      ] })
+    ] }),
+    on && status?.runtime ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+      "Python ",
+      status.runtime.interpreter.version.join("."),
+      " · CIGAR ",
+      status.runtime.package_version,
+      " · on this computer"
+    ] }) : null,
+    !on ? /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-setup-stages", children: stages.map((stage, index) => {
+      const state = run.phase === "running" ? index < at ? "done" : index === at ? "active" : "next" : run.phase === "failed" ? index < at ? "done" : index === at ? "failed" : "next" : "next";
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "data-state": state, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-setup-mark", "aria-hidden": "true", children: state === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, {}) : state === "active" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "motion-safe:animate-spin" }) : state === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, {}) : index + 1 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+            CIGAR_SETUP_STAGE_LABELS[stage],
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: state === "done" ? " (done)" : state === "active" ? " (in progress)" : state === "failed" ? " (stopped)" : "" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: STAGE_DETAIL[stage] })
+        ] })
+      ] }, stage);
+    }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-runtime-note", children: "Next: pick a project folder, then connect an AI app if you want. Each one asks you first." })
+  ] });
+}
+function CigarSetupProof({ setup, gate }) {
+  const run = setup.run;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    SettingsSaveProofModal,
+    {
+      open: run.phase === "proof",
+      mode: "verify-save",
+      gate,
+      title: "Approve turning on CIGAR",
+      detail: "Guard will get Python ready if needed, download the approved CIGAR copy, check it and start it. One approval covers every step.",
+      confirmLabel: "Turn on CIGAR",
+      error: run.phase === "proof" ? run.error : null,
+      pending: false,
+      onCancel: setup.cancelProof,
+      onConfirm: (proof) => setup.confirm({ currentPassword: proof.currentPassword, totpCode: proof.totpCode })
+    }
+  );
+}
 const CIGAR_UPDATE_TUTORIAL = {
   id: "cigar-updates",
   title: "Update CIGAR with less interruption",
@@ -3682,7 +4204,7 @@ const CIGAR_UPDATE_TUTORIAL = {
   steps: [
     {
       title: "Read the available builds",
-      description: "Opening Versions & updates reads metadata without starting Python or CIGAR.",
+      description: "Opening Updates reads metadata without starting Python or CIGAR.",
       instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn, expired or upstream-only artifact is unavailable for preparation. A new Guard release does not qualify an SDK automatically.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
       expect: "You can identify the exact build and whether this Guard host has a qualified artifact.",
       target: "versions",
@@ -3715,15 +4237,15 @@ const CIGAR_UPDATE_TUTORIAL = {
     {
       title: "Reconnect the scopes you need",
       description: "Saved evidence does not restore source or app permission.",
-      instructions: ["If you selected while off, return to Runtime & preferences, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
+      instructions: ["If you selected while off, return to Settings, choose your enabled preference, save and explicitly start CIGAR.", "Use the live runtime status to confirm readiness before granting workspace access.", "Grant only the intended workspace sources and pair the current app connection again when needed."],
       expect: "Your intended sources and apps have fresh access to the selected runtime.",
       target: "access",
-      action: "Review sources & AI apps"
+      action: "Review projects & AI apps"
     },
     {
       title: "Use the last good build deliberately",
       description: "Rollback prepares current compatible data for the previous verified installation.",
-      instructions: ["In Versions & updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
+      instructions: ["In Updates, choose Prepare last good build when you need to return to the retained installation.", "Wait for the rollback selection job, then commit it explicitly with the same reconnect acknowledgement when live.", "Use Recover job for interrupted work. Recovery does not re-grant context access. Your Guard approvals remain in place."],
       expect: "You know where to inspect a rollback or interrupted job before taking another action.",
       target: "versions",
       action: "Inspect rollback & recovery"
@@ -3740,18 +4262,18 @@ const CIGAR_TUTORIALS = [
     outcome: "A context brief whose sources and revisions you can inspect.",
     steps: [
       {
-        title: "Start your saved runtime",
-        description: "Ready means the selected Python, CIGAR package, and worker passed Guard's checks.",
-        instructions: ["If no runtime is selected, use Versions & updates to prepare and select a registered installation while CIGAR stays off. Then return to Runtime & preferences and turn on Use CIGAR on this machine.", "Keep Review briefs on. Smaller context and Memory only are useful starting choices for a single workspace.", "Save CIGAR preferences, then click Start CIGAR at the top. Wait for the live status to say Ready."],
-        expect: "The live status says Ready. Saving alone shows Not started.",
+        title: "Turn on CIGAR",
+        description: "One click. Guard gets Python ready, downloads the approved CIGAR copy, checks it and starts it.",
+        instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on.", "Later, if you want to switch versions yourself, use Updates."],
+        expect: "The status says Ready.",
         target: "runtime",
-        action: "Open runtime & preferences",
-        tip: "Final CPython 3.14 is required for CIGAR. Guard itself can use another supported Python version."
+        action: "Open Settings",
+        tip: "CIGAR uses its own copy of Python 3.14. Guard can keep using the Python it already has."
       },
       {
         title: "Choose a small evidence set",
         description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open Sources, limits and runtime details in Runtime & preferences. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        instructions: ["Open Sources, limits and runtime details in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
         expect: "Your intended source preferences are saved and the runtime is Ready.",
         target: "runtime",
         action: "Choose source preferences",
@@ -3760,10 +4282,10 @@ const CIGAR_TUTORIALS = [
       {
         title: "Grant one workspace access",
         description: "A grant connects a workspace and a consumer to the evidence you explicitly select.",
-        instructions: ["In Sources & AI apps, choose Guard dashboard as the Context consumer.", "Enter the absolute Workspace folder. Add individual files relative to that folder, one per line, if document context is enabled. Leave the file list empty for native facts only.", "Click Grant review source access. Confirm the exact workspace, consumer, and sources when Guard asks for approval proof."],
+        instructions: ["In Projects & AI apps, choose Guard dashboard as the Context consumer.", "Enter the absolute Workspace folder. Add individual files relative to that folder, one per line, if document context is enabled. Leave the file list empty for native facts only.", "Click Grant review source access. Confirm the exact workspace, consumer, and sources when Guard asks for approval proof."],
         expect: "A Context access section appears for your chosen workspace.",
         target: "access",
-        action: "Open sources & AI apps",
+        action: "Open Projects & AI apps",
         tip: "Choose only relevant sources. Environment files and credential stores are not valid context sources."
       },
       {
@@ -3791,7 +4313,7 @@ const CIGAR_TUTORIALS = [
         expect: "You know how to prepare a fresh brief and remove its source access.",
         target: "access",
         action: "Review workspace access",
-        tip: "Use Data & privacy to inspect or remove saved evidence. Memory is the default and ends with the runtime."
+        tip: "Use Privacy to inspect or remove saved evidence. Memory is the default and ends with the runtime."
       }
     ]
   },
@@ -3805,7 +4327,7 @@ const CIGAR_TUTORIALS = [
       {
         title: "Enable app context deliberately",
         description: "App access is a separate feature choice from review briefs.",
-        instructions: ["In Runtime & preferences, enable Context for AI apps. Choose source preferences before granting access.", "Keep Share context between paired AI connections off while you try a single connection.", "Save preferences and click Start CIGAR if needed. Confirm the live status is Ready."],
+        instructions: ["In Settings, enable Context for AI apps. Choose source preferences before granting access.", "Keep Share context between paired AI connections off while you try a single connection.", "Save your changes. If CIGAR is off, click Turn on CIGAR. Confirm the status says Ready."],
         expect: "Context for AI apps is saved and the runtime is Ready.",
         target: "runtime",
         action: "Choose AI app preferences"
@@ -3813,7 +4335,7 @@ const CIGAR_TUTORIALS = [
       {
         title: "Grant sources for that app",
         description: "A dashboard grant and an app grant have different consumers.",
-        instructions: ["In Sources & AI apps, choose your app in Context consumer: Codex, Claude Code, or Cursor.", "Choose the workspace and individual source files it needs. Enable document context first if you want to add files.", "Click Grant review source access and review the app and workspace in the confirmation."],
+        instructions: ["In Projects & AI apps, choose your app in Context consumer: Codex, Claude Code, or Cursor.", "Choose the workspace and individual source files it needs. Enable document context first if you want to add files.", "Click Grant review source access and review the app and workspace in the confirmation."],
         expect: "A workspace grant names the app you chose.",
         target: "access",
         action: "Choose the app's sources"
@@ -3857,7 +4379,7 @@ const CIGAR_TUTORIALS = [
       {
         title: "Check the route first",
         description: "Execution context has a narrower scope than general review briefs.",
-        instructions: ["Use an existing supported native captured-Bash route for Pi or Oh My Pi on macOS.", "Check the execution capability and Native execution context panel in Runtime & preferences.", "This candidate has local native preparation checks. Full delivery from external apps has not yet been qualified."],
+        instructions: ["Use an existing supported native captured-Bash route for Pi or Oh My Pi on macOS.", "Check the execution capability and Native execution context panel in Settings.", "This candidate has local native preparation checks. Full delivery from external apps has not yet been qualified."],
         expect: "You know whether the preparation route is available in this build.",
         target: "runtime",
         action: "Inspect execution availability",
@@ -3874,7 +4396,7 @@ const CIGAR_TUTORIALS = [
       {
         title: "Scope the executor's workspace",
         description: "Choose the app and workspace for the native route you use.",
-        instructions: ["In Sources & AI apps, choose Pi or Oh My Pi as Context consumer when offered.", "Enter the workspace, review its native facts and any separately selected documents, and grant only that scope.", "A workspace grant does not install an app adapter or approve a command."],
+        instructions: ["In Projects & AI apps, choose Pi or Oh My Pi as Context consumer when offered.", "Enter the workspace, review its native facts and any separately selected documents, and grant only that scope.", "A workspace grant does not install an app adapter or approve a command."],
         expect: "The workspace grant names the intended executor consumer.",
         target: "access",
         action: "Inspect executor workspace access"
@@ -3931,7 +4453,6 @@ function CigarGuide({ onSelect }) {
   const stage = flow[active];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-guide", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-explained-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Meet CIGAR" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-explained-heading", children: CIGAR_FULL_NAME }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR" }),
@@ -3943,10 +4464,7 @@ function CigarGuide({ onSelect }) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-flow-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-section-heading", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "How it works" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-flow-heading", children: "From your sources to a better informed action" })
-      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-flow-heading", children: "From your folders to a better answer" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "cigar-section-description", children: "Select a stage to explore this conceptual flow. These examples explain the process; they do not represent a graph or source grant from your workspace." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-concept-flow", children: flow.map(({ icon: Icon, title, detail }, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
@@ -3975,26 +4493,23 @@ function CigarGuide({ onSelect }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview-grid", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-runtime-guide-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Runtime setup" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-runtime-guide-heading", children: "Python installed? Here is what comes next." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Final CPython 3.14 is required for the selected CIGAR runtime. Python 3.14.7 qualifies. Guard itself can use another supported Python version." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A registered runtime includes the CIGAR package and its matching worker as well as Python. Guard checks their identities and runs a compilation check before activation." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-runtime-guide-heading", children: "Do I need to install anything?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. When you click Turn on CIGAR, Guard gets its own copy of Python 3.14 ready, downloads the CIGAR version it approved for this computer, checks its fingerprint and starts it. The Python you already use stays as it is." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "An empty list means no bundle is registered." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "It does not establish which Python versions are installed. Refreshing the list reads registrations; it does not scan your machine or install packages." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "If the button says it is waiting for Guard's safety check" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A CIGAR version exists for your computer, but Guard has not approved it yet. Guard never installs a version it has not checked." })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Use Versions & updates to inspect registered installations and catalog builds. Preparation requires a qualified artifact for this Guard host; a listed upstream release alone does not authorize installation." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Want to pick a specific version, roll back, or see what is installed? Use Updates." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("versions"), children: [
-          "Choose a runtime in Versions & updates",
+          "Choose a version in Updates",
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-first-use-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Try it first" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-first-use-heading", children: "Start with one workspace." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "cigar-simple-list", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Prepare and select a runtime in Versions & updates. Then enable review briefs in Runtime & preferences, save, and start CIGAR." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Open Sources & AI apps and grant context access for one workspace. Add individual files only if you want document context." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Click Turn on CIGAR at the top of this page." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Open Projects & AI apps and grant context access for one workspace. Add individual files only if you want document context." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "For an available Guard review, request its context brief and inspect the cited evidence." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "When you want app context, enable that feature, save, and explicitly authorize a paired connection." })
         ] }),
@@ -4003,13 +4518,12 @@ function CigarGuide({ onSelect }) {
           "You can keep app sharing and saved evidence off while trying review briefs."
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("access"), children: [
-          "Open sources & AI apps",
+          "Open Projects & AI apps",
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
         ] })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-tuning-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Build a useful habit" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-tuning-heading", children: "Start focused, then adjust what you need" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-effective-grid", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
@@ -4031,15 +4545,14 @@ function CigarGuide({ onSelect }) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-faq", "aria-labelledby": "cigar-faq-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Good to know" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-faq-heading", children: "Common questions" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does turning on CIGAR give it access to all my files?" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No. Workspace documents require the document preference and explicit access to selected sources. Starting a runtime grants no document access." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What is the difference between saving and starting?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Saving records your preferences. Starting verifies and activates the selected runtime. A saved on preference can still be unavailable; use the live status to confirm Ready." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Does CIGAR save me tokens or make my AI faster?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR does not promise either. It hands over the few pieces that answer a question, inside a size limit you set, instead of whole files, and shows where each piece came from." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Why did I get an empty or unhelpful brief?" }),
@@ -4059,147 +4572,56 @@ function CigarGuide({ onSelect }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "What is saved on disk?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Memory is the default. Optional saved evidence uses private local SQLite files without Guard encryption and can outlive a runtime. Data & privacy provides retention, diagnostics, and removal controls. Restoring evidence never restores app access or approvals." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Memory is the default. Optional saved evidence uses private local SQLite files without Guard encryption and can outlive a runtime. Privacy provides retention, diagnostics, and removal controls. Restoring evidence never restores app access or approvals." })
       ] })
     ] })
   ] });
 }
-const CIGAR_TABS = [
-  { value: "overview", label: "Overview" },
-  { value: "runtime", label: "Runtime & preferences" },
-  { value: "versions", label: "Versions & updates" },
-  { value: "access", label: "Sources & AI apps" },
-  { value: "data", label: "Data & privacy" },
-  { value: "tutorials", label: "Tutorials" },
-  { value: "guide", label: "How it works" }
-];
-function canStartCigar(status, dirty) {
-  return !dirty && status !== null && status.requested_enabled && status.preferences.enabled && status.effective_preferences.enabled && status.verification_permitted && Boolean(status.preferences.runtime_id) && !status.effective_enabled && status.job === null;
-}
-function cigarTabFromSearch(search) {
-  const value = new URLSearchParams(search).get("section");
-  return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
-}
-function cigarSetupSteps(status, installations) {
-  const registered = (installations?.length ?? 0) > 0 || status?.runtime !== null && status?.runtime !== void 0;
-  const selected = Boolean(status?.preferences.runtime_id) && (installations?.some((item) => item.runtime_id === status?.preferences.runtime_id) === true || status?.runtime !== null && status?.runtime !== void 0);
-  return [
-    {
-      title: "Connect a local runtime",
-      description: registered ? "A registered CIGAR bundle with Python 3.14 is available on this machine." : "Register an approved CIGAR bundle that uses final CPython 3.14, then refresh the runtime list.",
-      complete: registered,
-      action: registered ? "View runtimes" : "Set up runtime",
-      tab: "runtime"
-    },
-    {
-      title: "Choose your preferences",
-      description: "Select the runtime, turn on CIGAR, choose the features you want, and save your preferences.",
-      complete: selected && status?.requested_enabled === true,
-      action: "Choose preferences",
-      tab: "runtime"
-    },
-    {
-      title: "Start context assistance",
-      description: "Start the saved runtime. Guard verifies Python, the CIGAR package, and its worker before reporting Ready.",
-      complete: status?.effective_enabled === true,
-      action: status?.effective_enabled ? "Manage runtime" : "Check & start",
-      tab: "runtime"
-    }
-  ];
-}
-function cigarRuntimeSummary(status, installations) {
-  if (status?.runtime && status.effective_enabled) return {
-    label: "Python " + status.runtime.interpreter.version.join("."),
-    detail: "CIGAR " + status.runtime.package_version + " · running locally"
-  };
-  const selected = installations?.find((item) => item.runtime_id === status?.preferences.runtime_id);
-  if (selected) return {
-    label: "Python " + selected.python_version.join("."),
-    detail: "Selected · activation verifies this bundle again"
-  };
-  if (installations?.length) return {
-    label: "Python " + installations[0].python_version.join("."),
-    detail: installations.length === 1 ? "Registered · choose it to get started" : String(installations.length) + " registered runtimes · choose one"
-  };
-  return {
-    label: installations === null ? "Runtime status pending" : "Runtime setup needed",
-    detail: "Requires a registered CIGAR bundle with CPython 3.14"
-  };
-}
-function CigarOverview({ status, installations, loading, onSelect }) {
-  const steps = cigarSetupSteps(status, installations);
-  const completed = steps.filter((step) => step.complete).length;
+function CigarOverview({ status, onSelect }) {
+  const steps = cigarSetupSteps(status);
   const current = steps.findIndex((step) => !step.complete);
-  const features = [
-    { icon: HiMiniDocumentMagnifyingGlass, title: "Understand a review", description: "Read a cited brief from the context you allow before deciding what a command can do.", preference: status?.preferences.features.review_briefs },
-    { icon: HiMiniLink, title: "Give AI apps useful context", description: "Pair an app with a workspace so it can request scoped context. You choose each connection's access.", preference: status?.preferences.features.agent_context },
-    { icon: HiMiniCommandLine, title: "Connect context to execution", description: "Add native facts to supported captured-Bash actions. Availability and access checks still apply.", preference: status?.preferences.features.execution_context }
-  ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-benefits", children: features.map(({ icon: Icon, title, description, preference }) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "cigar-card cigar-benefit", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: description }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("runtime"), children: [
-        preference ? "Preference on" : "Choose this feature",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-      ] })
-    ] }, title)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cigar-why-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-why-heading", className: "cigar-overview-title", children: "What CIGAR does for you" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CigarWhy, {})
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-overview-grid", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-setup", "aria-labelledby": "cigar-setup-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-heading", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Get started" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-setup-heading", children: "Your path to useful context" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-count", children: loading || !status ? "Checking setup" : String(completed) + " of 3 complete" })
-        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-setup-heading", children: "Three steps, and only the first is needed" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "cigar-steps", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "data-complete": step.complete, "aria-current": index === current && status ? "step" : void 0, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-step-number", children: step.complete ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Complete: " })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Done: " })
           ] }) : index + 1 }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: step.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: step.description }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect(step.tab), children: [
+            step.action ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect(step.tab), children: [
               step.action,
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-            ] })
+            ] }) : null
           ] })
-        ] }, step.title)) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-next-step", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLink, { "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Next, choose sources and app access" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Workspace files, AI app connections, and sharing each need your permission." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("access"), children: [
-              "Manage sources & AI apps",
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-            ] })
-          ] })
-        ] })
+        ] }, step.title)) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-card cigar-boundaries", "aria-labelledby": "cigar-boundaries-heading", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { "aria-hidden": "true" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-boundaries-heading", children: "You choose the context." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Start with native Guard facts. Add workspace files and app access when they help your work." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-boundaries-heading", children: "You stay in charge." }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Optional, with a visible off switch"
+            "Off until you turn it on, and off again with one click"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Memory storage by default"
+            "Reads only the folders you pick"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Separate choices for app sharing and saved evidence"
+            "Keeps notes in memory unless you choose to save them"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { "aria-hidden": "true" }),
-            "Guard keeps authority over approvals and execution"
+            "Guard still decides what your AI may do"
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => onSelect("guide"), children: [
@@ -4252,7 +4674,6 @@ function CigarTutorials(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card cigar-learning-intro", "aria-labelledby": "cigar-tutorials-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-icon", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAcademicCap, { "aria-hidden": "true" }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Learn by doing" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-tutorials-heading", children: "Make CIGAR useful for your next task" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR" }),
@@ -4285,7 +4706,6 @@ function CigarTutorials(props) {
       ] })
     ] }, tutorial.id)) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-card", "aria-labelledby": "cigar-effective-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Use context effectively" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cigar-effective-heading", children: "A useful brief starts with a focused question" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-effective-grid", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
@@ -4328,10 +4748,7 @@ function CigarWalkthrough(props) {
     }
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-card cigar-walkthrough", "aria-labelledby": id2 + "-title", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-heading", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Guided walkthrough" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-walkthrough-close", onClick: props.onExit, "aria-label": "Exit walkthrough", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { "aria-hidden": "true" }) })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-walkthrough-close", onClick: props.onExit, "aria-label": "Exit walkthrough", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { "aria-hidden": "true" }) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: id2 + "-title", children: props.tutorial.title }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "cigar-learning-caption", children: [
       "Step ",
@@ -4400,12 +4817,8 @@ function CigarWorkspace(props) {
   const walkthroughAnchor = reactExports.useRef(null);
   const lesson = useCigarTutorial();
   const status = props.status;
-  const copy = props.loading ? { label: "Checking status", detail: "Reading the local runtime registration and availability." } : status ? contextStatusCopy(status) : { label: "Status unavailable", detail: "Reconnect to the local Guard service, then refresh. Your Python version has not been checked here." };
-  const runtime = cigarRuntimeSummary(status, props.installations);
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
-  const startRequested = status?.requested_enabled === true && !status.effective_enabled;
-  const primaryLabel = status?.job ? status.job.phase === "cancelling" ? "Stopping…" : "Checking runtime…" : props.dirty ? "Save preferences first" : status?.effective_enabled ? "Use CIGAR" : startRequested ? "Start CIGAR" : "Get started";
-  const primaryDisabled = props.disabled || props.busy || props.loading || Boolean(status?.job) || !props.dirty && startRequested && !canStartCigar(status, props.dirty);
+  const actionDisabled = props.disabled || props.busy || props.loading;
   reactExports.useEffect(() => {
     const sync = () => setTab(cigarTabFromSearch(window.location.search));
     return subscribeDashboardLocation(sync);
@@ -4447,12 +4860,11 @@ function CigarWorkspace(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-workspace", "data-testid": "cigar-workspace", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "cigar-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Local context assistance" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h1", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { "aria-hidden": "true" }),
           "CIGAR"
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: CIGAR_FULL_NAME })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "A context helper for your AI that runs on your computer." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-heading-actions", children: [
         canStop ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "cigar-button", disabled: props.disabled || props.busy, onClick: props.onStop, children: "Turn off CIGAR" }) : null,
@@ -4464,33 +4876,14 @@ function CigarWorkspace(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-hero", "aria-labelledby": "cigar-hero-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-copy", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-hero-kicker", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
-          "Optional. Local. Yours to control."
-        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "cigar-hero-heading", children: [
-          "Bring the right context",
+          "Give your AI the right pages,",
           /* @__PURE__ */ jsxRuntimeExports.jsx("br", { className: "hidden sm:block" }),
-          " to your next action."
+          " not the whole book."
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Turn the sources you trust into useful context for command reviews, connected AI apps, and supported execution flows." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Think of CIGAR as a librarian on your computer. You choose the books. When your AI or Guard has a question, CIGAR finds the few pages that answer it and shows where each one came from." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, tone: "hero", onOpen: select }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-actions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              className: "cigar-button cigar-button-primary",
-              disabled: primaryDisabled,
-              onClick: () => {
-                if (canStartCigar(status, props.dirty)) props.onStart();
-                else select(!props.dirty && status?.effective_enabled ? "access" : "runtime");
-              },
-              children: [
-                primaryLabel,
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-              ]
-            }
-          ),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-hero-link", onClick: () => select("guide"), children: [
             "How it works",
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
@@ -4499,22 +4892,9 @@ function CigarWorkspace(props) {
             "Take a walkthrough",
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
           ] })
-        ] }),
-        props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-200", children: "Save your changes before starting CIGAR or granting context access." }) : null
+        ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-runtime-card", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-runtime-top", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "On this machine" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "cigar-status", "data-ready": status?.effective_enabled === true, role: "status", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
-            copy.label
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCpuChip, { className: "cigar-runtime-symbol", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: props.loading ? "Reading runtime…" : runtime.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.loading ? "No runtime is started by opening this page." : runtime.detail }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "cigar-runtime-note", children: copy.detail })
-      ] })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProgress, { setup: props.setup, status, loading: props.loading })
     ] }),
     props.error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", role: "alert", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR needs attention" }),
@@ -4552,45 +4932,36 @@ function CigarWorkspace(props) {
         }
       ) }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: panel, id: id2 + "-panel", role: "tabpanel", "aria-labelledby": id2 + "-tab-" + tab, tabIndex: -1, className: "cigar-panel", children: [
-        tab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarOverview, { status, installations: props.installations, loading: props.loading, onSelect: select }) : null,
+        tab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CigarOverview, { status, onSelect: select }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: tab !== "runtime", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Make it yours" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Runtime & preferences" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Manage runtime selection in Versions & updates, choose the features you want here, and save. Start the runtime when you are ready to use context." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Settings" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR works well with the recommended settings. Change these only if you want to." })
           ] }),
-          props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "No CIGAR bundle is registered in this Guard profile." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Python 3.14 may already be installed. Guard also needs the approved CIGAR package and worker registered together; an empty list does not mean your Python is incompatible." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => select("guide"), children: [
-              "Read the runtime setup guide",
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-            ] })
+          !props.loading && !status?.effective_enabled && props.setup.run.phase !== "running" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "CIGAR is off" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Turn it on first. Guard sets everything up for you." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, onOpen: select })
           ] }) : null,
           props.controls
         ] }),
         tab === "versions" ? props.versions : null,
         tab === "access" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Give context a scope" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Sources & AI apps" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Grant access to one workspace at a time. Choose documents and app connections explicitly; sharing requires its own preference." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Projects & AI apps" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Pick the project folders CIGAR may read, one at a time. Then connect an AI app if you want. Each step asks you first." })
           ] }),
           !status?.effective_enabled ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-note", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Start CIGAR before granting context access." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Save your runtime and feature preferences, then start context assistance. Sources and app access become available when the runtime is Ready." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "cigar-text-button", onClick: () => select("runtime"), children: [
-              "Open runtime & preferences",
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { "aria-hidden": "true" })
-            ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Turn on CIGAR first" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Projects and AI apps open up as soon as CIGAR is on." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupAction, { setup: props.setup, status, disabled: actionDisabled, onOpen: select })
           ] }) : null,
           props.access
         ] }) : null,
         tab === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Stay in control" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Data & privacy" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review context storage, revoke access, clear saved evidence, or stop the runtime. Storage and retention preferences live in Runtime & preferences." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Privacy" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes." })
           ] }),
           props.data
         ] }) : null,
@@ -4600,35 +4971,10 @@ function CigarWorkspace(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "cigar-footer", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Guard makes and enforces security decisions. CIGAR supplies context from the sources you authorize." }),
-      props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Unsaved preferences" }) : null
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Guard still decides what your AI may do. CIGAR only helps explain, using the folders you pick." }),
+      props.dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Unsaved changes" }) : null
     ] })
   ] });
-}
-const cigarVersionJobId = () => "dashboard:" + crypto.randomUUID();
-function canCommitCigarJob(job, status) {
-  return status !== null && job.can_commit && !job.cleanup_pending && job.expected_generation === status.generation && (job.initial_selection ? status.preferences.runtime_id === "" : job.source_runtime_id === status.preferences.runtime_id);
-}
-function cigarJobPending(job) {
-  return job.worker_live === true || !job.recovery_available && !["ready", "completed", "cancelled", "failed", "recovery_required"].includes(job.phase);
-}
-function cigarBuildBlock(catalog, build, updates) {
-  if (build.withdrawn) return "This build has been withdrawn.";
-  if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing a build.";
-  const host = build.platforms.find((p) => p.platform === catalog.host_platform);
-  if (!host) return "No artifact is available for this Guard host.";
-  if (host.qualification !== "guard_qualified") return "This artifact still needs Guard qualification.";
-  if (!host.has_wheel) return "This entry has no installable SDK package.";
-  if (build.channel !== "stable") return "Preview and local candidate installation is unavailable in this Guard build.";
-  if (updates.effective.pinned_build && updates.effective.pinned_build !== build.identity.build_id) return "Update preferences pin another build.";
-  return null;
-}
-function cigarPythonBlock(catalog, build) {
-  if (build.withdrawn) return "This Python build has been withdrawn.";
-  if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing Python.";
-  if (build.platform !== catalog.host_platform) return "This Python build is for another Guard host.";
-  if (build.qualification !== "guard_qualified") return "This Python build still needs Guard qualification.";
-  return null;
 }
 function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, onAction }) {
   const [python, setPython] = reactExports.useState("");
@@ -5072,33 +5418,33 @@ async function requestCigarVersions(input, proof, signal) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const code = object$4(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
+    const code = object$4(body) && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : object$4(body) && typeof body.error === "string" && /^approval_gate_[a-z0-9_]{1,140}$/.test(body.error) ? body.error : "context_assistance_unavailable";
     throw new ContextAssistanceApiError(code, errorMessage(code, response.status));
   }
   return parseCigarVersionsReply(body);
 }
 const object$3 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-const id$3 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
+const id$2 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const digest = (v) => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
-const count$1 = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+const count = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 const platform = (v) => typeof v === "string" && ["darwin-arm64", "darwin-x64", "linux-x64-gnu", "linux-arm64-gnu", "linux-x64-musl", "linux-arm64-musl", "win32-x64"].includes(v);
 const qualification = (v) => typeof v === "string" && ["local_candidate", "upstream_only", "guard_qualified"].includes(v);
 const diagnostic = (v) => v === null || typeof v === "string" && /^[a-z0-9_]{1,160}$/.test(v);
-function invalid$3() {
+function invalid$2() {
   throw new ContextAssistanceApiError("versions_catalog_invalid", "Guard returned incompatible CIGAR catalog data. Refresh the catalog.");
 }
 function pythonVersion(v) {
-  return Array.isArray(v) && v.length === 3 && v.every((n) => count$1(n) && n <= 65535);
+  return Array.isArray(v) && v.length === 3 && v.every((n) => count(n) && n <= 65535);
 }
 function wheelBytes(v) {
-  if (!object$3(v) || !count$1(v.bytes) || v.bytes === 0 || !digest(v.sha256)) invalid$3();
+  if (!object$3(v) || !count(v.bytes) || v.bytes === 0 || !digest(v.sha256)) invalid$2();
   return v.bytes;
 }
 function parsePlatform(v) {
-  if (!object$3(v) || !platform(v.platform) || !qualification(v.qualification) || !digest(v.worker_sha256) || !(v.package_tree_sha256 === null || digest(v.package_tree_sha256)) || !(v.qualification_receipt_sha256 === null || digest(v.qualification_receipt_sha256)) || v.qualification === "guard_qualified" && v.qualification_receipt_sha256 === null || !Array.isArray(v.features) || v.features.length > 16 || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f)) || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid$3();
+  if (!object$3(v) || !platform(v.platform) || !qualification(v.qualification) || !digest(v.worker_sha256) || !(v.package_tree_sha256 === null || digest(v.package_tree_sha256)) || !(v.qualification_receipt_sha256 === null || digest(v.qualification_receipt_sha256)) || v.qualification === "guard_qualified" && v.qualification_receipt_sha256 === null || !Array.isArray(v.features) || v.features.length > 16 || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f)) || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid$2();
   const hasWheel = v.wheel !== null;
   const bytes = (hasWheel ? wheelBytes(v.wheel) : 0) + v.dependencies.reduce((n, w) => n + wheelBytes(w), 0);
-  if (!count$1(bytes)) invalid$3();
+  if (!count(bytes)) invalid$2();
   return {
     platform: v.platform,
     qualification: v.qualification,
@@ -5111,9 +5457,9 @@ function parsePlatform(v) {
   };
 }
 function parseBuild(v) {
-  if (!object$3(v) || !isCigarBuildIdentity(v.identity) || !id$3(v.profile_id) || !["stable", "preview", "local_candidate"].includes(String(v.channel)) || typeof v.withdrawn !== "boolean" || !Array.isArray(v.platforms) || v.platforms.length === 0 || v.platforms.length > 7) invalid$3();
+  if (!object$3(v) || !isCigarBuildIdentity(v.identity) || !id$2(v.profile_id) || !["stable", "preview", "local_candidate"].includes(String(v.channel)) || typeof v.withdrawn !== "boolean" || !Array.isArray(v.platforms) || v.platforms.length === 0 || v.platforms.length > 7) invalid$2();
   const platforms = v.platforms.map(parsePlatform);
-  if (new Set(platforms.map((p) => p.platform)).size !== platforms.length) invalid$3();
+  if (new Set(platforms.map((p) => p.platform)).size !== platforms.length) invalid$2();
   return { identity: {
     build_id: v.identity.build_id,
     sdk_version: v.identity.sdk_version,
@@ -5123,7 +5469,7 @@ function parseBuild(v) {
   }, profile_id: v.profile_id, channel: v.channel, withdrawn: v.withdrawn, platforms };
 }
 function parseInterpreter(v) {
-  if (!object$3(v) || !id$3(v.build_id) || !pythonVersion(v.python_version) || !platform(v.platform) || !qualification(v.qualification) || typeof v.withdrawn !== "boolean" || !count$1(v.archive_bytes) || v.archive_bytes === 0) invalid$3();
+  if (!object$3(v) || !id$2(v.build_id) || !pythonVersion(v.python_version) || !platform(v.platform) || !qualification(v.qualification) || typeof v.withdrawn !== "boolean" || !count(v.archive_bytes) || v.archive_bytes === 0) invalid$2();
   return {
     build_id: v.build_id,
     python_version: [...v.python_version],
@@ -5134,7 +5480,7 @@ function parseInterpreter(v) {
   };
 }
 function parseCigarCatalogMetadata(v) {
-  if (!object$3(v) || !["bundled", "cached"].includes(String(v.source)) || typeof v.fresh_for_preparation !== "boolean" || !diagnostic(v.diagnostic) || !diagnostic(v.trust_diagnostic) || !diagnostic(v.feed_diagnostic) || typeof v.trust_configured !== "boolean" || typeof v.remote_feed_configured !== "boolean" || v.activation_granted !== false || v.fresh_for_preparation && v.diagnostic !== null) invalid$3();
+  if (!object$3(v) || !["bundled", "cached"].includes(String(v.source)) || typeof v.fresh_for_preparation !== "boolean" || !diagnostic(v.diagnostic) || !diagnostic(v.trust_diagnostic) || !diagnostic(v.feed_diagnostic) || typeof v.trust_configured !== "boolean" || typeof v.remote_feed_configured !== "boolean" || v.activation_granted !== false || v.fresh_for_preparation && v.diagnostic !== null) invalid$2();
   return {
     source: v.source,
     fresh_for_preparation: v.fresh_for_preparation,
@@ -5146,20 +5492,20 @@ function parseCigarCatalogMetadata(v) {
   };
 }
 function parseCigarCatalog(v) {
-  if (!object$3(v) || v.schema !== "guard-cigar-releases.v1" || !(v.host_platform === void 0 || v.host_platform === null || platform(v.host_platform)) || !Array.isArray(v.builds) || v.builds.length > 128 || !Array.isArray(v.interpreter_builds) || v.interpreter_builds.length > 128) invalid$3();
+  if (!object$3(v) || v.schema !== "guard-cigar-releases.v1" || !(v.host_platform === void 0 || v.host_platform === null || platform(v.host_platform)) || !Array.isArray(v.builds) || v.builds.length > 128 || !Array.isArray(v.interpreter_builds) || v.interpreter_builds.length > 128) invalid$2();
   const builds = v.builds.map(parseBuild), interpreters = v.interpreter_builds.map(parseInterpreter);
-  if (new Set(builds.map((b) => b.identity.build_id)).size !== builds.length || new Set(interpreters.map((b) => b.build_id)).size !== interpreters.length) invalid$3();
+  if (new Set(builds.map((b) => b.identity.build_id)).size !== builds.length || new Set(interpreters.map((b) => b.build_id)).size !== interpreters.length) invalid$2();
   return { host_platform: v.host_platform ?? null, builds, interpreter_builds: interpreters, catalog: parseCigarCatalogMetadata(v.catalog) };
 }
 const object$2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-const id$2 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
-function invalid$2() {
+const id$1 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
+function invalid$1() {
   throw new ContextAssistanceApiError("versions_interpreters_invalid", "Guard returned incompatible Python registration data. Refresh updates.");
 }
 function parseCigarInterpreters(value) {
-  if (!object$2(value) || !Array.isArray(value.interpreters) || value.interpreters.length > 16) invalid$2();
+  if (!object$2(value) || !Array.isArray(value.interpreters) || value.interpreters.length > 16) invalid$1();
   const values = value.interpreters.map((v) => {
-    if (!object$2(v) || !id$2(v.interpreter_id) || !Array.isArray(v.python_version) || v.python_version.length !== 3 || !v.python_version.every((n) => Number.isSafeInteger(n) && n >= 0 && n <= 65535) || !id$2(v.platform) || !id$2(v.implementation) || !id$2(v.abi) || typeof v.managed !== "boolean" || !(v.build_id === null || id$2(v.build_id)) || v.managed !== (v.build_id !== null)) invalid$2();
+    if (!object$2(v) || !id$1(v.interpreter_id) || !Array.isArray(v.python_version) || v.python_version.length !== 3 || !v.python_version.every((n) => Number.isSafeInteger(n) && n >= 0 && n <= 65535) || !id$1(v.platform) || !id$1(v.implementation) || !id$1(v.abi) || typeof v.managed !== "boolean" || !(v.build_id === null || id$1(v.build_id)) || v.managed !== (v.build_id !== null)) invalid$1();
     return {
       interpreter_id: v.interpreter_id,
       python_version: [...v.python_version],
@@ -5170,102 +5516,17 @@ function parseCigarInterpreters(value) {
       build_id: v.build_id
     };
   });
-  if (new Set(values.map((v) => v.interpreter_id)).size !== values.length) invalid$2();
+  if (new Set(values.map((v) => v.interpreter_id)).size !== values.length) invalid$1();
   return values;
 }
 const object$1 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-const id$1 = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
-const word = (v) => typeof v === "string" && /^[a-z0-9_]{1,128}$/.test(v);
-const count = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
-const isCigarGeneration = (v) => typeof v === "string" && /^[1-9][0-9]{0,19}$/.test(v) && (v.length < 20 || v <= "18446744073709551615");
-function invalid$1() {
-  throw new ContextAssistanceApiError("versions_job_invalid", "Guard returned incompatible CIGAR job data. Refresh jobs.");
-}
-function recovery(v) {
-  if (v === void 0 || v === null) return null;
-  if (!object$1(v) || typeof v.id !== "string" || !/^[a-f0-9]{32}$/.test(v.id) || !isCigarGeneration(v.expected_generation) || !count(v.started_at_ms) || !count(v.deadline_at_ms) || v.deadline_at_ms < v.started_at_ms) invalid$1();
-  return { id: v.id, expected_generation: v.expected_generation, started_at_ms: v.started_at_ms, deadline_at_ms: v.deadline_at_ms };
-}
-function parseCigarVersionJob(value) {
-  if (!object$1(value) || !id$1(value.job_id) || !word(value.phase) || !word(value.code) || !count(value.created_at_ms) || !count(value.updated_at_ms) || value.updated_at_ms < value.created_at_ms || !count(value.deadline_at_ms) || value.deadline_at_ms < value.created_at_ms || !(value.worker_live === null || typeof value.worker_live === "boolean") || typeof value.cancel_requested !== "boolean" || typeof value.recovery_available !== "boolean" || value.worker_live === true && value.recovery_available) invalid$1();
-  const base = {
-    schema: String(value.schema),
-    job_id: value.job_id,
-    phase: value.phase,
-    code: value.code,
-    created_at_ms: value.created_at_ms,
-    updated_at_ms: value.updated_at_ms,
-    deadline_at_ms: value.deadline_at_ms,
-    worker_live: value.worker_live,
-    cancel_requested: value.cancel_requested,
-    recovery_available: value.recovery_available
-  };
-  if (value.schema === "guard-cigar-switch-job.v1") {
-    if (!["switch", "rollback", "select", "recover"].includes(String(value.operation)) || !id$1(value.target_runtime_id) || !(value.source_runtime_id === null || id$1(value.source_runtime_id)) || !isCigarGeneration(value.expected_generation) || value.authority_restored !== false || ["can_commit", "keeps_disabled", "reconnect_required", "initial_selection", "cleanup_pending"].some((key2) => typeof value[key2] !== "boolean") || value.keeps_disabled === value.reconnect_required || (value.initial_selection ? value.source_runtime_id !== null || !value.keeps_disabled : !id$1(value.source_runtime_id) || value.source_runtime_id === value.target_runtime_id) || value.operation === "select" && !value.initial_selection || ["switch", "rollback"].includes(String(value.operation)) && value.initial_selection || value.can_commit && (value.phase !== "ready" || value.worker_live !== true || value.cancel_requested)) invalid$1();
-    const attempt = recovery(value.recovery_attempt);
-    if (value.operation === "recover" ? !attempt || attempt.expected_generation !== value.expected_generation || value.can_commit : attempt !== null) invalid$1();
-    return {
-      ...base,
-      family: "selection",
-      operation: value.operation,
-      target_runtime_id: value.target_runtime_id,
-      source_runtime_id: value.source_runtime_id,
-      expected_generation: value.expected_generation,
-      can_commit: value.can_commit,
-      keeps_disabled: value.keeps_disabled,
-      reconnect_required: value.reconnect_required,
-      initial_selection: value.initial_selection,
-      cleanup_pending: value.cleanup_pending,
-      recovery_attempt: attempt
-    };
-  }
-  const schemas = {
-    "guard-cigar-install-job.v1": ["install", "verify"],
-    "guard-cigar-python-setup-job.v1": ["setup_interpreter"],
-    "guard-cigar-catalog-refresh-job.v1": ["refresh_catalog"]
-  };
-  if (!Object.hasOwn(schemas, String(value.schema)) || !schemas[String(value.schema)].includes(String(value.operation)) || value.activation_granted !== false) invalid$1();
-  if (value.operation === "refresh_catalog") return { ...base, family: "preparation", operation: "refresh_catalog", can_commit: false };
-  if (!id$1(value.build_id)) invalid$1();
-  if (value.operation === "setup_interpreter") {
-    if (!(value.interpreter_id === null || id$1(value.interpreter_id)) || value.phase === "ready" && value.interpreter_id === null) invalid$1();
-    return {
-      ...base,
-      family: "preparation",
-      operation: "setup_interpreter",
-      build_id: value.build_id,
-      interpreter_id: value.interpreter_id,
-      can_commit: false
-    };
-  }
-  if (!id$1(value.interpreter_id)) invalid$1();
-  if (!id$1(value.runtime_id) || !isCigarProducerVersion(value.sdk_version) || !isCigarCoreLabel(value.core_version)) invalid$1();
-  return {
-    ...base,
-    family: "preparation",
-    operation: value.operation,
-    build_id: value.build_id,
-    interpreter_id: value.interpreter_id,
-    runtime_id: value.runtime_id,
-    sdk_version: value.sdk_version,
-    core_version: value.core_version,
-    can_commit: false
-  };
-}
-function parseCigarVersionJobs(value) {
-  if (!object$1(value) || !Array.isArray(value.jobs) || value.jobs.length > 32) invalid$1();
-  const jobs = value.jobs.map(parseCigarVersionJob);
-  if (new Set(jobs.map((job) => job.job_id)).size !== jobs.length) invalid$1();
-  return jobs;
-}
-const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const id = (v) => typeof v === "string" && /^[a-z0-9_:-]{1,128}$/i.test(v);
 const mode = (v) => typeof v === "string" && ["manual", "notify", "prepare"].includes(v);
 function invalid() {
   throw new ContextAssistanceApiError("versions_preferences_invalid", "Guard returned incompatible CIGAR update preferences. Refresh preferences.");
 }
 function preferences(v) {
-  if (!object(v) || !mode(v.mode) || typeof v.allow_preview !== "boolean" || typeof v.retain_last_good !== "boolean" || !(v.pinned_build === void 0 || v.pinned_build === null || id(v.pinned_build))) invalid();
+  if (!object$1(v) || !mode(v.mode) || typeof v.allow_preview !== "boolean" || typeof v.retain_last_good !== "boolean" || !(v.pinned_build === void 0 || v.pinned_build === null || id(v.pinned_build))) invalid();
   return {
     mode: v.mode,
     allow_preview: v.allow_preview,
@@ -5274,7 +5535,7 @@ function preferences(v) {
   };
 }
 function parseCigarUpdateSettings(v) {
-  if (!object(v) || v.schema !== "guard-cigar-update-preferences.v1" || typeof v.revision !== "string" || !/^sha256:[a-f0-9]{64}$/.test(v.revision) || !(v.diagnostic === null || typeof v.diagnostic === "string" && /^[a-z0-9_]{1,160}$/.test(v.diagnostic)) || !Array.isArray(v.locked_settings) || v.locked_settings.length > 64 || !v.locked_settings.every((k) => typeof k === "string" && k.length <= 256 && /^context_assistance_updates(?:\.[a-z_]+)?$/.test(k)) || !object(v.capabilities) || !Array.isArray(v.capabilities.modes) || v.capabilities.modes.length > 3 || !v.capabilities.modes.every(mode) || new Set(v.capabilities.modes).size !== v.capabilities.modes.length || typeof v.capabilities.automatic_preparation !== "boolean" || typeof v.capabilities.automatic_selection !== "boolean" || typeof v.capabilities.retention_reduction !== "boolean") invalid();
+  if (!object$1(v) || v.schema !== "guard-cigar-update-preferences.v1" || typeof v.revision !== "string" || !/^sha256:[a-f0-9]{64}$/.test(v.revision) || !(v.diagnostic === null || typeof v.diagnostic === "string" && /^[a-z0-9_]{1,160}$/.test(v.diagnostic)) || !Array.isArray(v.locked_settings) || v.locked_settings.length > 64 || !v.locked_settings.every((k) => typeof k === "string" && k.length <= 256 && /^context_assistance_updates(?:\.[a-z_]+)?$/.test(k)) || !object$1(v.capabilities) || !Array.isArray(v.capabilities.modes) || v.capabilities.modes.length > 3 || !v.capabilities.modes.every(mode) || new Set(v.capabilities.modes).size !== v.capabilities.modes.length || typeof v.capabilities.automatic_preparation !== "boolean" || typeof v.capabilities.automatic_selection !== "boolean" || typeof v.capabilities.retention_reduction !== "boolean") invalid();
   return {
     requested: preferences(v.requested),
     effective: preferences(v.effective),
@@ -5413,9 +5674,8 @@ function CigarVersionsPanel(props) {
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", "data-testid": "cigar-versions", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-section-intro", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-eyebrow", children: "Keep your workflow moving" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Versions & updates" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Prepare CIGAR beside your current runtime, then choose when to switch. Opening this page only reads registration and update metadata." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Updates" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Guard handles this for you when you turn CIGAR on. Come here only to pick a specific version, check for new ones, or go back to an earlier one. Opening this page changes nothing." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: versionButton, disabled: props.disabled || versions.busy || versions.loading, onClick: () => void versions.refresh(), children: "Refresh versions & jobs" }),
@@ -5527,6 +5787,179 @@ function CigarVersionsPanel(props) {
     )
   ] });
 }
+const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+async function saveCigarPreference(config, proof, signal) {
+  if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Turning on CIGAR requires a local Guard installation.");
+  const timeout = AbortSignal.timeout(12e3);
+  const response = await fetchWithGuardAuth("/v1/settings", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    body: JSON.stringify({
+      settings: { context_assistance: config },
+      ...proof?.currentPassword ? { approval_password: proof.currentPassword } : {},
+      ...proof?.totpCode ? { approval_totp_code: proof.totpCode } : {}
+    })
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    const code = object(body) && typeof body.error === "string" && /^[a-z0-9_]{1,160}$/.test(body.error) ? body.error : "settings_unavailable";
+    throw new ContextAssistanceApiError(code, response.status === 400 && object(body) && typeof body.message === "string" ? "Guard could not save this setting: " + body.message.slice(0, 200) : response.status === 403 ? "Guard needs your approval before this change." : "Guard did not confirm the saved setting. Refresh status before trying again.");
+  }
+  const saved = object(body) && object(body.settings) ? body.settings.context_assistance : null;
+  if (!object(saved) || saved.schema_version !== 1 || typeof saved.enabled !== "boolean" || typeof saved.runtime_id !== "string") {
+    throw new ContextAssistanceApiError("settings_payload_invalid", "Guard returned settings this page does not understand. Refresh status.");
+  }
+  return saved;
+}
+const wait = (ms, signal) => new Promise((resolve) => {
+  const timer = setTimeout(resolve, ms);
+  signal.addEventListener("abort", () => {
+    clearTimeout(timer);
+    resolve();
+  }, { once: true });
+});
+function useCigarOneClick(options) {
+  const [data, setData] = reactExports.useState(null);
+  const [loadError, setLoadError] = reactExports.useState(null);
+  const [run, setRun] = reactExports.useState({ phase: "idle" });
+  const controller = reactExports.useRef(null);
+  const activeJob = reactExports.useRef(null);
+  const running = reactExports.useRef(false), mounted = reactExports.useRef(false), revision = reactExports.useRef(0);
+  const latest = reactExports.useRef(options);
+  latest.current = options;
+  const refresh = reactExports.useCallback(async () => {
+    if (running.current || !latest.current.active) return;
+    const current = ++revision.current;
+    try {
+      const value = await loadCigarVersionsData(AbortSignal.timeout(15e3));
+      if (!mounted.current || current !== revision.current) return;
+      setData(value);
+      setLoadError(null);
+    } catch (cause) {
+      if (!mounted.current || current !== revision.current) return;
+      setLoadError(cause instanceof Error ? cause.message : "Guard did not report CIGAR setup details.");
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    void refresh();
+    return () => {
+      mounted.current = false;
+      ++revision.current;
+      controller.current?.abort();
+    };
+  }, [refresh]);
+  const plan = reactExports.useMemo(
+    () => data ? planCigarSetup({ ...data, state: options.status ?? data.state }, { locked: options.locked, dirty: options.dirty }) : planCigarStart(options.status, options.dirty),
+    [data, options.status, options.locked, options.dirty]
+  );
+  async function execute(proof) {
+    if (running.current || latest.current.disabled || !latest.current.active) return;
+    running.current = true;
+    ++revision.current;
+    const abort = new AbortController();
+    controller.current = abort;
+    let stages = [];
+    let stage = null;
+    let planned = null;
+    try {
+      const fresh = await loadCigarVersionsData(abort.signal).catch((cause) => {
+        if (planCigarStart(latest.current.status, latest.current.dirty)) return null;
+        throw cause;
+      });
+      if (abort.signal.aborted) throw new CigarSetupStopped();
+      if (fresh) {
+        setData(fresh);
+        latest.current.publish(fresh.state);
+      }
+      const initial2 = fresh?.state ?? latest.current.status;
+      const next = fresh ? planCigarSetup(fresh, { locked: latest.current.locked, dirty: latest.current.dirty }) : planCigarStart(latest.current.status, latest.current.dirty);
+      if (!next || next.kind !== "run" || !initial2) {
+        setRun({ phase: "idle" });
+        return;
+      }
+      if (latest.current.gate?.enabled && next.approval && !proof) {
+        setRun({ phase: "proof", plan: next, error: null });
+        return;
+      }
+      planned = next;
+      stages = next.stages;
+      setRun({ phase: "running", stages, stage: stages[0] });
+      let credentials = proof;
+      const spend = () => {
+        if (credentials?.totpCode) credentials = credentials.currentPassword ? { currentPassword: credentials.currentPassword } : void 0;
+      };
+      await runCigarSetup(next, initial2, {
+        versions: async (input) => {
+          const reply = await requestCigarVersions(input, credentials, abort.signal);
+          if (input.action !== "job") spend();
+          return reply;
+        },
+        saveSettings: async (config) => {
+          const saved = await saveCigarPreference(config, credentials, abort.signal);
+          spend();
+          return saved;
+        },
+        activate: () => controlContextAssistance("activate", abort.signal),
+        status: () => fetchContextAssistance(abort.signal),
+        sleep: (ms) => wait(ms, abort.signal),
+        now: () => Date.now(),
+        stopped: () => abort.signal.aborted,
+        onJob: (id2) => {
+          activeJob.current = id2;
+        },
+        onStage: (value) => {
+          stage = value;
+          if (mounted.current) setRun({ phase: "running", stages, stage: value });
+        },
+        onState: (state) => {
+          if (mounted.current && !abort.signal.aborted) latest.current.publish(state);
+        },
+        onSaved: (config, previous) => {
+          if (mounted.current) latest.current.onSaved(config, previous);
+        }
+      });
+      if (mounted.current) setRun({ phase: "idle" });
+    } catch (cause) {
+      if (!mounted.current) return;
+      if (cause instanceof CigarSetupStopped || abort.signal.aborted) setRun({ phase: "idle" });
+      else if (cause instanceof CigarSetupError && cause.needsProof) {
+        setRun(planned ? { phase: "proof", plan: planned, error: proof ? "That approval did not work. Try again." : null } : { phase: "failed", stages, stage, message: cause.message });
+      } else {
+        setRun({
+          phase: "failed",
+          stages,
+          stage: cause instanceof CigarSetupError ? cause.stage : stage,
+          message: cause instanceof Error ? cause.message : "CIGAR did not finish turning on. Nothing else changed."
+        });
+      }
+    } finally {
+      running.current = false;
+      activeJob.current = null;
+      if (controller.current === abort) controller.current = null;
+      if (mounted.current) void refresh();
+    }
+  }
+  return {
+    plan,
+    loadError,
+    run,
+    busy: run.phase === "running",
+    start: () => void execute(),
+    confirm: (proof) => void execute(proof),
+    cancelProof: () => setRun({ phase: "idle" }),
+    dismiss: () => setRun({ phase: "idle" }),
+    /** Stop always wins: abort in-flight polling so no later step runs. */
+    stop: () => {
+      const job = activeJob.current;
+      controller.current?.abort();
+      if (job) void requestCigarVersions({ action: "cancel", job_id: job }, void 0, AbortSignal.timeout(1e4)).catch(() => void 0);
+    },
+    refresh
+  };
+}
 function ordered(value) {
   if (Array.isArray(value)) return value.map(ordered);
   if (value !== null && typeof value === "object") {
@@ -5636,7 +6069,26 @@ function ContextAssistanceSettings(props) {
       onBusyChange(false);
     };
   }, [onBusyChange]);
+  const value = props.value ?? status?.preferences ?? null;
+  const saved = props.savedValue ?? status?.preferences ?? null;
+  const dirty = value && saved ? !sameCigarPreferences(value, saved) : value !== saved;
+  const setup = useCigarOneClick({
+    active: workspace,
+    status,
+    dirty,
+    locked: props.locked,
+    disabled: props.disabled || busy,
+    gate: props.gate ?? null,
+    publish: (state) => captureVersionStatus()(state),
+    onSaved: (config, previous) => props.onSelectionChanged?.(config, previous)
+  });
+  reactExports.useEffect(() => {
+    if (!setup.busy) return;
+    onBusyChange(true);
+    return () => onBusyChange(false);
+  }, [setup.busy, onBusyChange]);
   async function perform(action) {
+    if (action === "stop") setup.stop();
     if (pending.current || props.disabled) return;
     pending.current = true;
     const current = ++revision.current;
@@ -5667,9 +6119,6 @@ function ContextAssistanceSettings(props) {
       }
     }
   }
-  const value = props.value ?? status?.preferences ?? null;
-  const saved = props.savedValue ?? status?.preferences ?? null;
-  const dirty = value && saved ? !sameCigarPreferences(value, saved) : value !== saved;
   const controls = /* @__PURE__ */ jsxRuntimeExports.jsx(
     ContextSettingsControls,
     {
@@ -5706,36 +6155,42 @@ function ContextAssistanceSettings(props) {
       gate: props.gate ?? null
     }
   );
-  return workspace ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CigarWorkspace,
-    {
-      status,
-      installations,
-      loading,
-      busy,
-      disabled: props.disabled,
-      dirty,
-      error,
-      stopAvailable: Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error),
-      controls,
-      access,
-      data: props.data,
-      versions: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CigarVersionsPanel,
-        {
-          status,
-          disabled: props.disabled || busy,
-          locked: props.locked,
-          dirty,
-          gate: props.gate ?? null,
-          captureStatus: captureVersionStatus
-        }
-      ),
-      onRefresh: () => void refresh(),
-      onStart: () => void perform("activate"),
-      onStop: () => void perform("stop")
-    }
-  ) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+  return workspace ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CigarWorkspace,
+      {
+        status,
+        installations,
+        loading,
+        busy,
+        disabled: props.disabled,
+        dirty,
+        error,
+        setup,
+        stopAvailable: Boolean(value?.enabled || saved?.enabled || status?.job || status?.effective_enabled || error),
+        controls,
+        access,
+        data: props.data,
+        versions: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CigarVersionsPanel,
+          {
+            status,
+            disabled: props.disabled || busy,
+            locked: props.locked,
+            dirty,
+            gate: props.gate ?? null,
+            captureStatus: captureVersionStatus
+          }
+        ),
+        onRefresh: () => {
+          void refresh();
+          void setup.refresh();
+        },
+        onStop: () => void perform("stop")
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CigarSetupProof, { setup, gate: props.gate ?? null })
+  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     controls,
     access
   ] });
