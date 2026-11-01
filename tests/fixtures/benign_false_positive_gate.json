@@ -4536,6 +4536,91 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-var-committer-ident",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git var GIT_COMMITTER_IDENT"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-patch-id-stable",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git patch-id --stable"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-stripspace-comments",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git stripspace --strip-comments"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-check-mailmap-stdin",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-mailmap --stdin"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-interpret-trailers-parse",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git interpret-trailers --parse"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-git-symbolic-ref-write",
       "fix_area": "negative",
       "harnesses": [
@@ -4548,6 +4633,60 @@
       "tool": "shell",
       "tool_input": {
         "command": "git symbolic-ref HEAD refs/heads/other"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-check-mailmap-other-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-mailmap --mailmap-file /tmp/other.mailmap contact"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-interpret-trailers-applies-config",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git interpret-trailers --trailer 'Fixes: #1' --where after"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-interpret-trailers-in-place",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git interpret-trailers --in-place message.txt"
       },
       "cwd": "worktree",
       "contained_ok": true,

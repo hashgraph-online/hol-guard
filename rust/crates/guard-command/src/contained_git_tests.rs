@@ -439,3 +439,37 @@ fn the_ref_readings_carry_no_helper_screens() {
     // contained read route does not answer for it at all.
     assert!(read(&["git", "symbolic-ref", "--short", "HEAD"]).is_none());
 }
+
+/// `var` prints a logical variable and the rest filter the text on their
+/// stdin. None defines a diff option, so none carries a helper screen, and
+/// none has an `-o` of its own, so the letter that writes a file stays
+/// refused for them the way it is everywhere else.
+#[test]
+fn the_stdin_filters_carry_no_helper_screens() {
+    for (verb, word) in [
+        ("var", "-l"),
+        ("patch-id", "--stable"),
+        ("stripspace", "--strip-comments"),
+        ("check-mailmap", "--stdin"),
+    ] {
+        assert_eq!(
+            read(&["git", verb, word]),
+            Some((verb.to_owned(), vector(&[word]))),
+            "{verb}"
+        );
+        assert!(read(&["git", verb, "-o", "out"]).is_none(), "{verb}");
+        assert!(read(&["git", verb, "--exec-path=/tmp"]).is_none(), "{verb}");
+    }
+    // A mailmap the caller names is a read of that path rather than of the
+    // repository's own, so the contained route holds both spellings back
+    // the way the inspection grammar does.
+    for word in ["--mailmap-file", "--mailmap-blob", "--mailmap"] {
+        assert!(
+            read(&["git", "check-mailmap", word, "other", "contact"]).is_none(),
+            "{word}"
+        );
+    }
+    // `interpret-trailers` edits the files `--in-place` names, so the
+    // contained read route does not answer for it at all.
+    assert!(read(&["git", "interpret-trailers", "--parse"]).is_none());
+}

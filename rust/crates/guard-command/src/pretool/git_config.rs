@@ -120,6 +120,11 @@ pub(super) fn execution_free_paging(
             | "show-branch"
             | "check-ref-format"
             | "symbolic-ref"
+            | "var"
+            | "patch-id"
+            | "stripspace"
+            | "check-mailmap"
+            | "interpret-trailers"
     ) {
         return None;
     }
@@ -445,7 +450,8 @@ fn probe(
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
         | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
         | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
-        | "symbolic-ref" => false,
+        | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
+        | "interpret-trailers" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };

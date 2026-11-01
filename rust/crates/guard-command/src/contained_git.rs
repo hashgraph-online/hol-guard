@@ -59,6 +59,7 @@ const READ_ONLY_VERBS: &[&str] = &[
     "cat-file",
     "check-attr",
     "check-ignore",
+    "check-mailmap",
     "check-ref-format",
     "cherry",
     "count-objects",
@@ -73,11 +74,14 @@ const READ_ONLY_VERBS: &[&str] = &[
     "ls-tree",
     "merge-base",
     "name-rev",
+    "patch-id",
     "rev-list",
     "shortlog",
     "show",
     "show-branch",
     "show-ref",
+    "stripspace",
+    "var",
 ];
 
 /// Verbs that both read and write, with the subcommands that only read. An
@@ -123,6 +127,10 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
         // `git annotate` is `git blame` in another output format and takes
         // the same options, this one included.
         ("blame" | "annotate", _) => &["--textconv"],
+        // Both of these name a file or an object the caller chose rather
+        // than the repository's own mailmap, so the contained route holds
+        // them back the same way the inspection grammar does.
+        ("check-mailmap", _) => &["--mailmap-file", "--mailmap-blob"],
         ("grep", _) => &["--open-files-in-pager", "--textconv"],
         // `--filters` runs the repository's smudge filter over the blob it
         // prints, which is the same program `--textconv` would have named.
