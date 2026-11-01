@@ -252,3 +252,22 @@ fn the_hand_off_marker_is_never_stamped_as_a_harness_variable() {
 
     assert_eq!(kept, [(OsString::from("PATH"), OsString::from("/bin"))]);
 }
+
+#[test]
+fn only_a_default_cargo_home_is_marked() {
+    let marked = |home: &str, cargo_home: &str| {
+        let environment =
+            environment_of(&[("PATH", "/bin"), ("HOME", home), ("CARGO_HOME", cargo_home)]);
+        match collect_hook_execution_environment(&environment) {
+            PyVal::Dict(entries) => entries
+                .iter()
+                .any(|entry| entry == &("cargo_home_default".to_owned(), PyVal::Bool(true))),
+            _ => panic!("stamp must be an object"),
+        }
+    };
+    assert!(marked("/Users/dev", "/Users/dev/.cargo"));
+    assert!(marked("/Users/dev", "/Users/dev/.cargo/"));
+    for cargo_home in ["/opt/cargo", ".cargo", "", "/Users/dev/.cargo/vendor"] {
+        assert!(!marked("/Users/dev", cargo_home), "{cargo_home:?}");
+    }
+}

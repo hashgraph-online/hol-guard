@@ -206,8 +206,9 @@ fn registry_is_official(context: super::PathContext<'_>) -> bool {
     let Ok(physical) = fs::canonicalize(cwd) else {
         return false;
     };
-    // `CARGO_HOME` is unset -- the context flag proves that -- so Cargo's
-    // own configuration lives at its default place under the home directory.
+    // `CARGO_HOME` is either unset or names `<home>/.cargo` -- the context
+    // flag proves that -- so Cargo's own configuration lives at its default
+    // place under the home directory either way.
     let Some(home) = context.home_dir.map(Path::new) else {
         return false;
     };

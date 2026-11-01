@@ -275,6 +275,12 @@ pub(crate) fn collect_hook_execution_environment(environment: &DecodedEnvironmen
     if lookup(environment, "NODE_OPTIONS").is_some_and(guard_contracts::node_options_inert) {
         stamp.push(("node_options_inert".to_owned(), PyVal::Bool(true)));
     }
+    if guard_contracts::cargo_home_default(
+        lookup(environment, "HOME"),
+        lookup(environment, "CARGO_HOME"),
+    ) {
+        stamp.push(("cargo_home_default".to_owned(), PyVal::Bool(true)));
+    }
     PyVal::Dict(stamp)
 }
 

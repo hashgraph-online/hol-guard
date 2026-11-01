@@ -145,8 +145,34 @@ fn rust_version_queries_are_allowed_unless_a_toolchain_file_selects_a_binary() {
                     "{harness} {name}"
                 );
             }
+            // Continuous-integration images and devcontainers export
+            // `CARGO_HOME` at the place Cargo reads anyway. The hook compares
+            // it with HOME and stamps the verdict, and a value that moves
+            // nothing leaves the query where the proof can still read it.
+            assert_eq!(
+                decide_with_default_cargo_home(harness, "cargo search serde", &home, &plain),
+                "allow",
+                "{harness} default CARGO_HOME"
+            );
         }
     }
+}
+
+/// The stamp a hook writes on a host whose `CARGO_HOME` names `<home>/.cargo`.
+fn decide_with_default_cargo_home(
+    harness: &str,
+    command: &str,
+    home: &std::path::Path,
+    cwd: &std::path::Path,
+) -> String {
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        cargo_home_default: guard_contracts::cargo_home_default(
+            home.to_str(),
+            home.join(".cargo").to_str(),
+        ),
+        ..stamp(&["CARGO_HOME"])
+    };
+    decide_environment(harness, command, home, cwd, &environment)
 }
 
 fn decide_with(
@@ -156,7 +182,11 @@ fn decide_with(
     home: &std::path::Path,
     cwd: &std::path::Path,
 ) -> String {
-    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+    decide_environment(harness, command, home, cwd, &stamp(environment_names))
+}
+
+fn stamp(environment_names: &[&str]) -> guard_contracts::GuardExecutionEnvironmentV1 {
+    guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap_or_default(),
         environment_names: environment_names
             .iter()
@@ -169,7 +199,16 @@ fn decide_with(
         xdg_config_home: None,
         git_config_no_system: false,
         ..Default::default()
-    };
+    }
+}
+
+fn decide_environment(
+    harness: &str,
+    command: &str,
+    home: &std::path::Path,
+    cwd: &std::path::Path,
+    environment: &guard_contracts::GuardExecutionEnvironmentV1,
+) -> String {
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         harness,
         "PreToolUse",
@@ -190,7 +229,7 @@ fn decide_with(
             psql_environment: Default::default(),
             creates_nothing: false,
         },
-        Some(&environment),
+        Some(environment),
     )
     .decision
 }
