@@ -88,6 +88,9 @@ def local_policy_status(store: GuardStore) -> dict[str, object]:
         "local": _local_policy(store),
         "live": {
             "version": live_version,
+            # Version-two bundles carry an integer; a legacy id can be digits too.
+            "numbered": isinstance(bundle.get("bundleVersion"), int)
+            and not isinstance(bundle.get("bundleVersion"), bool),
             "bundleHash": _text(bundle.get("bundleHash")),
             "mode": mode,
             "rolloutState": _text(bundle.get("rolloutState")),
@@ -190,7 +193,7 @@ def policy_status_payload(store: GuardStore, *, offline: bool) -> dict[str, obje
     return payload
 
 
-def _live_version_text(version: object, delivery: dict[str, object]) -> str:
+def _live_version_text(version: object, delivery: dict[str, object], *, numbered: bool) -> str:
     """A v1 bundle names its publication by id; show Cloud's number once Cloud says this device applied it.
 
     A version-two bundle already carries a number, so it is shown as it is.
@@ -202,7 +205,7 @@ def _live_version_text(version: object, delivery: dict[str, object]) -> str:
     mine = delivery.get("thisDevice")
     if (
         isinstance(cloud_version, int)
-        and not str(version).isdigit()
+        and not numbered
         and str(version) != str(cloud_version)
         and isinstance(mine, dict)
         and mine.get("state") == "applied"
@@ -219,7 +222,7 @@ def format_policy_status(payload: dict[str, object]) -> str:
     local = local_value if isinstance(local_value, dict) else None
     lines = [
         f"Local policy: {local['documentId']} ({local['rules']} rules)" if local else "Local policy: none",
-        f"Live version: {_live_version_text(live.get('version'), delivery)}",
+        f"Live version: {_live_version_text(live.get('version'), delivery, numbered=live.get('numbered') is True)}",
         f"Mode: {live.get('mode') or 'unknown'}",
         f"Last sync: {payload.get('lastSync') or 'never'}",
         f"Last ACK: {ack.get('status') or 'none'}"
