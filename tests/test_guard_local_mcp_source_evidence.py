@@ -14,11 +14,14 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.native_local_cli_help_parse import SourceRead
+from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_source_evidence import script_may_serve_mcp
 from codex_plugin_scanner.guard.store import GuardStore
 
 BRIDGE = "codex_plugin_scanner.guard.native_local_cli_help_parse"
+EVIDENCE = "codex_plugin_scanner.guard.runtime.local_mcp_source_evidence"
 
 _FAKE_MCP = """import json
 import sys
@@ -98,6 +101,37 @@ def test_a_followed_local_module_can_carry_the_evidence(tmp_path: Path, monkeypa
     assert _serves(f"python3 {entry}", tmp_path)
 
 
+def test_a_local_package_initializer_can_carry_the_evidence(tmp_path: Path, monkeypatch) -> None:
+    package = tmp_path / "server"
+    package.mkdir()
+    initializer = _script(package, "__init__.py", "from fastmcp import FastMCP\n")
+    entry = _script(tmp_path, "entry.py", "#import ./server.py\nfrom server import mcp\n")
+    _resident(monkeypatch, {initializer.read_text()})
+    assert _serves(f"python3 {entry}", tmp_path)
+
+
+def test_a_script_run_through_a_shell_is_read_not_the_shell(tmp_path: Path, monkeypatch) -> None:
+    ship = _script(tmp_path, "ship.sh", "#!/bin/bash\necho deploy\n")
+    ship.chmod(0o755)
+    read = _resident(monkeypatch, set())
+    assert not _serves(f"bash {ship} deploy", tmp_path)
+    assert not _serves(f"{ship} deploy", tmp_path)
+    assert read == [ship.read_text(), ship.read_text()]
+
+
+def test_a_failed_lookup_or_unreadable_script_never_launches(tmp_path: Path, monkeypatch) -> None:
+    ship = _script(tmp_path, "ship.py", "import sys\n")
+    read = _resident(monkeypatch, {ship.read_text()})
+    ship.chmod(0)
+    try:
+        assert not _serves(f"python3 {ship} deploy", tmp_path)
+    finally:
+        ship.chmod(0o644)
+    monkeypatch.setattr(f"{EVIDENCE}.identify_unlisted_cli", lambda *_args, **_kwargs: None)
+    assert not _serves(f"python3 {ship} deploy", tmp_path)
+    assert read == []
+
+
 def test_an_older_resident_keeps_the_launch(tmp_path: Path, monkeypatch) -> None:
     ship = _script(tmp_path, "ship.py", "import sys\n")
     read = _resident(monkeypatch, set(), reads_evidence=False)
@@ -139,6 +173,29 @@ def test_recognize_never_launches_a_script_without_evidence(tmp_path: Path, monk
     script = _script(home, "ship.py", f"from pathlib import Path\nPath({str(ran)!r}).write_text('ran')\n")
     _resident(monkeypatch, set())
     service.recognize({"command": f"python3 {script} deploy"})
+    assert not ran.exists()
+
+
+def test_a_stored_connection_exempts_only_its_own_launch(tmp_path: Path, monkeypatch) -> None:
+    home, service = _recognizer(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.discover_harness_mcp_servers", lambda **_kwargs: []
+    )
+    identity = UnlistedCliIdentity(
+        cli_id="local-cli.mcp-stored",
+        name="Stored connector",
+        kind="executable",
+        identity_hash="d" * 64,
+        example_label="Observed through a host",
+        interpreter_name=None,
+    )
+    service._store.record_local_cli_observation(
+        identity, seen_at=utc_now(), surface="mcp", server_command="other-server", server_args_hash="e" * 64
+    )
+    ran = tmp_path / "ran"
+    script = _script(home, "ship.py", f"from pathlib import Path\nPath({str(ran)!r}).write_text('ran')\n")
+    _resident(monkeypatch, set())
+    service.recognize({"cli_id": identity.cli_id, "command": f"python3 {script} deploy"})
     assert not ran.exists()
 
 

@@ -141,14 +141,17 @@ static OTHER_FRAMEWORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\brequire\s+["'](?:optparse|thor|slop)["']|\bpod2usage\b|\bThor\b"#).unwrap()
 });
 
-/// An MCP server library, imported from JavaScript, Python or Ruby, or a
-/// handler for the `tools/list` method every MCP server answers.
+/// The server side of an MCP library, imported from JavaScript, Python or
+/// Ruby, or a handler that dispatches on the `tools/list` method. A client
+/// imports the same SDK and sends `tools/list`, so neither the bare SDK nor a
+/// quoted method name counts.
 static MCP_SERVER: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r#"(?:\brequire\s*\(\s*|\bfrom\s*|\bimport\s*\(?\s*)["'](?:@modelcontextprotocol/|fastmcp["'/]|mcp-framework["'/])"#,
-        r"|^(?:import|from)\s+(?:mcp|fastmcp|modelcontextprotocol)\b",
-        r#"|\brequire\s+["'](?:mcp|model_context_protocol|fast_mcp|fast-mcp)["'/]"#,
-        r#"|["']tools/list["']"#,
+        r#"(?:\brequire\s*\(\s*|\bfrom\s*|\bimport\s*\(?\s*)["'](?:@modelcontextprotocol/sdk/server/|@modelcontextprotocol/server["'/]|fastmcp["'/]|mcp-framework["'/])"#,
+        r"|^from\s+(?:mcp\.server|fastmcp)\b|^from\s+mcp\s+import\b.*\b(?:FastMCP|Server)\b",
+        r"|^import\s+(?:[\w.]+(?:\s+as\s+\w+)?\s*,\s*)*(?:mcp\.server|fastmcp)\b",
+        r#"|\brequire\s*\(?\s*["'](?:mcp|fast_mcp|fast-mcp)["']"#,
+        r#"|(?:===?|\bcase|\bwhen)\s*["']tools/list["']|["']tools/list["']\s*(?:===?|:|=>)"#,
     ))
     .unwrap()
 });
@@ -182,7 +185,7 @@ pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
             continue;
         }
         read_help(line, &raw[index..], &mut facts);
-        facts.mcp_server |= MCP_SERVER.is_match(line);
+        facts.mcp_server |= MCP_SERVER.is_match(code(line));
         for import in imports(line) {
             if facts.imports.len() < MAX_IMPORTS && seen.insert(import.clone()) {
                 facts.imports.push(import);
@@ -190,6 +193,29 @@ pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
         }
     }
     facts
+}
+
+/// The code before a trailing `#` or `//` comment, outside any quotes. Cutting
+/// at a `#` or `//` that was not a comment only loses evidence.
+fn code(line: &str) -> &str {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for (at, ch) in line.char_indices() {
+        if let Some(open) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == open {
+                quote = None;
+            }
+        } else if matches!(ch, '"' | '\'' | '`') {
+            quote = Some(ch);
+        } else if ch == '#' || line[at..].starts_with("//") {
+            return &line[..at];
+        }
+    }
+    line
 }
 
 fn read_help(line: &str, rest: &[&str], facts: &mut Facts) {

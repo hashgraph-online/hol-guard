@@ -409,10 +409,16 @@ fn mcp_server_libraries_and_tools_list_handlers_are_evidence() {
         "import { FastMCP } from 'fastmcp';\n",
         "from mcp.server.fastmcp import FastMCP\n",
         "try:\n    import fastmcp\nexcept ImportError:\n    pass\n",
-        "import modelcontextprotocol\n",
+        "import sys, fastmcp\n",
+        "from mcp import FastMCP\n",
+        "import { McpServer } from \"@modelcontextprotocol/server\";\n",
         "require 'mcp'\n",
+        "require('mcp')\n",
         "if (request.method === 'tools/list') { reply(tools); }\n",
         "if message[\"method\"] == \"tools/list\":\n    send(tools)\n",
+        "match method:\n    case \"tools/list\":\n        send(tools)\n",
+        "when 'tools/list' then reply(tools)\n",
+        "HANDLERS = {\"tools/list\": list_tools}\n",
     ] {
         assert!(serves(source), "{source}");
     }
@@ -424,6 +430,14 @@ fn mcp_server_libraries_and_tools_list_handlers_are_evidence() {
         "# from mcp.server import Server\n",
         "console.log('ship tools to the list');\n",
         "import sys\nprint(sys.argv)\n",
+        "from mcp import ClientSession, StdioServerParameters\n",
+        "import mcp\n",
+        "const { Client } = require('@modelcontextprotocol/sdk/client/index.js');\n",
+        "await session.send({\"method\": \"tools/list\"})\n",
+        "client.request({ method: 'tools/list' });\n",
+        "print('tools/list')\n",
+        "deploy()  # if method == 'tools/list'\n",
+        "deploy(); // case 'tools/list':\n",
     ] {
         assert!(!serves(source), "{source}");
     }

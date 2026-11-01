@@ -558,16 +558,21 @@ a script, takes the help-first path above.
 A pasted command is tried as a stdio MCP server before help discovery, and
 that launch passes the script its real arguments. A resident that advertises
 `local-cli-help-mcp-evidence-v1` adds `mcp_server` to the same source read:
-true when a code line imports an MCP server library (`@modelcontextprotocol/*`,
-`fastmcp` or `mcp-framework` from JavaScript, `mcp`, `fastmcp` or
-`modelcontextprotocol` from Python, `mcp` or `fast_mcp` from Ruby) or names
-the `tools/list` method. Python (`local_mcp_source_evidence.py`) launches a
-readable interpreter script, or a `#!` script run directly, only when the
-script or one of its followed `./` modules has that fact. A selected or stored
-server, a stored observation, a package MCP launcher (`npx`, `uvx` and the
-like), a package bin run through a runner, and a compiled program keep the
-launch without a read. A script whose source or answer cannot be read, or a
-runtime whose status cannot be read, is not launched. A resident without the
+true when a code line, outside a trailing comment, imports the server side of
+an MCP library (`@modelcontextprotocol/sdk/server/*`,
+`@modelcontextprotocol/server`, `fastmcp` or `mcp-framework` from JavaScript,
+`mcp.server`, `fastmcp` or `FastMCP`/`Server` from `mcp` in Python, `mcp` or
+`fast_mcp` from Ruby) or dispatches on `tools/list` (a comparison, `case` or
+`when` label, or handler-table key). A client that imports the SDK or sends
+`tools/list` does not count. Python (`local_mcp_source_evidence.py`) takes the
+script from the launch identity, so `bash ship.sh` reads `ship.sh`, not the
+shell, and launches it only when the script or one of its followed `./`
+modules (a sibling package's `__init__.py` included) has that fact. A selected
+server, a stored observation recorded for this same launch, a package MCP
+launcher (`npx`, `uvx` and the like), a package bin run through a runner, and
+a compiled program keep the launch without a read. A failed identity lookup, a
+script whose source or answer cannot be read, or a runtime whose status cannot
+be read, is not launched. A resident without the
 feature keeps the launch, as before.
 
 Two consequences are worth naming. Discovery fails closed: a resident that

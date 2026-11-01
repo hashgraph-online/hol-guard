@@ -779,10 +779,15 @@ class LocalCliApiService:
         ):
             return None
         # A pasted script runs with its own arguments, so only its source can
-        # say it is a server; a known connection or package launcher can.
+        # say it is a server; a known connection or package launcher can, and a
+        # stored one only for the launch it recorded.
+        stored_launch = isinstance(stored_observation, dict) and (
+            stored_observation.get("server_command"),
+            stored_observation.get("server_args_hash"),
+        ) == (launch_identity.command, launch_identity.args_hash)
         if (
             selected_server is None
-            and stored_observation is None
+            and not stored_launch
             and not is_package_mcp_launcher(tokens)
             and not script_may_serve_mcp(command, cwd=home_dir, home_dir=home_dir, guard_home=self._store.guard_home)
         ):
