@@ -1622,6 +1622,18 @@
       ]
     },
     {
+      "id": "omp-native-workspace-npx-tsc",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Type-check this project with its own TypeScript: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "commands": [
+        "npx tsc -p tsconfig.json"
+      ]
+    },
+    {
       "id": "omp-native-workspace-node-options-heap-prefix",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -1665,7 +1677,8 @@
       "decision_paths": [
         "native_node_tool_readonly_containment_required"
       ]
-    },    {
+    },
+    {
       "id": "omp-native-workspace-named-test-script",
       "expectation": "allow",
       "oracle": "native-tools",
