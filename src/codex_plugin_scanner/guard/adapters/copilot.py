@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import ast
 import json
-import re
 import shlex
 import subprocess
 import sys
@@ -56,13 +54,8 @@ if TYPE_CHECKING:
 _MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
-_LEGACY_MANAGED_HOOK_PATTERNS = (
-    re.compile(r'(^|["\s])-m["\s]+codex_plugin_scanner\.cli(["\s]|$)'),
-    re.compile(r'(^|["\s])guard(["\s]|$)'),
-    re.compile(r'(^|["\s])hook(["\s]|$)'),
-    re.compile(r'--harness(?:["\s=]+)copilot(["\s]|$)'),
-)
-_INLINE_GUARD_ARGS_PATTERN = re.compile(r"json\.loads\((?P<payload>'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\)")
+_HOOK_COMMANDS_FEATURE = "native-copilot-hook-commands-v1"
+_HOOK_COMMANDS_TIMEOUT_SECONDS = 10.0
 
 
 class _ManagedHookPayload(TypedDict):
@@ -161,109 +154,52 @@ def _hook_entry(
     return entry
 
 
-def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) -> bool:
-    normalized_command = command.lower()
-    if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
-        return True
-    try:
-        split_tokens = shlex.split(command)
-    except ValueError:
-        return False
-    from .bounded_cli_hook_native import bounded_python_argv
+def _managed_hook_commands(commands: list[str], *, guard_home: Path | None) -> set[str]:
+    """The commands in *commands* that Guard wrote, as the native runtime reads them.
 
-    # A native launcher prefix wraps the same Python bridge argv.
-    tokens = [str(token) for token in bounded_python_argv(split_tokens)]
-    if len(tokens) == 3 and tokens[1] == "__guard-bounded-hook":
-        if Path(tokens[0]).name.lower() not in {"hol guard", "hol-guard", "hol-guard.exe"}:
-            return False
-        try:
-            raw_config: object = json.loads(tokens[2])
-        except json.JSONDecodeError:
-            return False
-        if not isinstance(raw_config, dict) or raw_config.get("harness") != "copilot":
-            return False
-        cli_args = raw_config.get("cli_args")
-        if not isinstance(cli_args, list):
-            return False
-        normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
-        return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
-    if len(tokens) == 3 and tokens[1] == "-I":
-        if guard_home is None:
-            return False
+    Without a runtime that offers the classifier only exact matches of the
+    current hook entry count as Guard's, so a user's entry is never dropped.
+    """
+
+    if not commands:
+        return set()
+    from ..mdm.runtime_request import runtime_answer
+
+    interpreter: str | None = None
+    script: str | None = None
+    if guard_home is not None:
         from .bounded_cli_hook_bridge import bounded_hook_script_path
         from .cursor_hook_config import isolated_cursor_hook_python
 
-        expected_script = bounded_hook_script_path(guard_home, "copilot")
+        bridge_script = bounded_hook_script_path(guard_home, "copilot")
         interpreter = isolated_cursor_hook_python()
-        if expected_script is None or interpreter is None:
-            return False
-        try:
-            return (
-                Path(tokens[0]).resolve() == Path(interpreter).resolve()
-                and Path(tokens[2]).resolve() == expected_script.resolve()
-            )
-        except OSError:
-            return False
-    if len(tokens) < 3:
-        return False
-    executable = Path(tokens[0]).name.lower()
-    if not executable.startswith("python"):
-        return False
-    try:
-        inline_code_index = tokens.index("-c", 1)
-    except ValueError:
-        return False
-    supported_interpreter_flags = {"-B", "-E", "-I", "-P", "-S", "-s", "-u"}
-    if any(flag not in supported_interpreter_flags for flag in tokens[1:inline_code_index]):
-        return False
-    if inline_code_index + 1 >= len(tokens):
-        return False
-    inline_code = tokens[inline_code_index + 1]
-    if "bounded_cli_hook_bridge" in inline_code and len(tokens) == inline_code_index + 3:
-        try:
-            raw_config: object = json.loads(tokens[inline_code_index + 2])
-        except json.JSONDecodeError:
-            return False
-        if not isinstance(raw_config, dict):
-            return False
-        config: dict[str, object] = {key: value for key, value in raw_config.items() if isinstance(key, str)}
-        if config.get("harness") != "copilot":
-            return False
-        cli_args = config.get("cli_args")
-        if not isinstance(cli_args, list):
-            return False
-        normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
-        return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
-    inline_args = _inline_guard_args(inline_code)
-    return "codex_plugin_scanner.cli" in inline_code and _argv_targets_copilot(inline_args)
+        script = None if bridge_script is None else str(bridge_script)
+    answer = runtime_answer(
+        _HOOK_COMMANDS_FEATURE,
+        "copilot-hook-commands",
+        {
+            "schema": "copilot-hook-commands.v1",
+            "commands": commands,
+            "interpreter": interpreter,
+            "script": script,
+        },
+        output_limit=64 * 1024,
+        timeout_seconds=_HOOK_COMMANDS_TIMEOUT_SECONDS,
+    )
+    flags = None if answer is None else answer.get("managed")
+    if not isinstance(flags, list) or len(flags) != len(commands):
+        return set()
+    return {command for command, flag in zip(commands, flags, strict=True) if flag is True}
 
 
-def _inline_guard_args(inline_code: str) -> tuple[str, ...]:
-    match = _INLINE_GUARD_ARGS_PATTERN.search(inline_code)
-    if match is None:
-        return ()
-    try:
-        payload = ast.literal_eval(match.group("payload"))
-    except (SyntaxError, ValueError):
-        return ()
-    if not isinstance(payload, str):
-        return ()
-    try:
-        guard_args = json.loads(payload)
-    except json.JSONDecodeError:
-        return ()
-    if not isinstance(guard_args, list) or any(not isinstance(item, str) for item in guard_args):
-        return ()
-    return tuple(item.lower() for item in guard_args)
+def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) -> bool:
+    return command in _managed_hook_commands([command], guard_home=guard_home)
 
 
-def _argv_targets_copilot(argv: tuple[str, ...]) -> bool:
-    for index, token in enumerate(argv):
-        if token == "--harness" and index + 1 < len(argv) and argv[index + 1] == "copilot":
-            return "guard" in argv and "hook" in argv
-        if token.startswith("--harness=") and token.split("=", 1)[1] == "copilot":
-            return "guard" in argv and "hook" in argv
-    return False
+def _entry_commands(entry: object) -> list[str]:
+    if not isinstance(entry, dict):
+        return []
+    return [command for key in ("command", "bash", "powershell") if isinstance(command := entry.get(key), str)]
 
 
 def _is_managed_hook_entry(
@@ -271,20 +207,31 @@ def _is_managed_hook_entry(
     bash_command: str,
     powershell_command: str,
     *,
-    guard_home: Path | None = None,
+    managed: set[str],
 ) -> bool:
     if not isinstance(entry, dict):
         return False
     if entry.get("bash") == bash_command and entry.get("powershell") == powershell_command:
         return True
-    for command in (entry.get("command"), entry.get("bash"), entry.get("powershell")):
-        if not isinstance(command, str):
-            continue
-        if command in {bash_command, powershell_command}:
-            return True
-        if _is_managed_hook_command(command, guard_home=guard_home):
-            return True
-    return False
+    return any(
+        command in {bash_command, powershell_command} or command in managed for command in _entry_commands(entry)
+    )
+
+
+def _unmanaged_hook_entries(
+    entries: list[object],
+    bash_command: str,
+    powershell_command: str,
+    *,
+    guard_home: Path | None,
+) -> list[object]:
+    commands = list(dict.fromkeys(command for entry in entries for command in _entry_commands(entry)))
+    managed = _managed_hook_commands(commands, guard_home=guard_home)
+    return [
+        entry
+        for entry in entries
+        if not _is_managed_hook_entry(entry, bash_command, powershell_command, managed=managed)
+    ]
 
 
 def _merge_hook_entries(
@@ -294,13 +241,9 @@ def _merge_hook_entries(
     guard_home: Path | None = None,
 ) -> list[object]:
     normalized = list(entries) if isinstance(entries, list) else []
-    bash_command = str(hook_entry["bash"])
-    powershell_command = str(hook_entry["powershell"])
-    preserved_entries = [
-        entry
-        for entry in normalized
-        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
-    ]
+    preserved_entries = _unmanaged_hook_entries(
+        normalized, str(hook_entry["bash"]), str(hook_entry["powershell"]), guard_home=guard_home
+    )
     return [*preserved_entries, hook_entry]
 
 
@@ -313,11 +256,7 @@ def _remove_hook_entries(
 ) -> list[object]:
     if not isinstance(entries, list):
         return []
-    return [
-        entry
-        for entry in entries
-        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
-    ]
+    return _unmanaged_hook_entries(entries, bash_command, powershell_command, guard_home=guard_home)
 
 
 _inline_hooks_payload = inline_hooks_payload

@@ -146,7 +146,6 @@ def test_native_copilot_devin_and_hermes_commands_stay_managed(tmp_path: Path, m
     devin_command = shlex.join(_command(tmp_path, "devin"))
 
     assert NATIVE_BOUNDED_HOOK_COMMAND in copilot_command
-    assert copilot._is_managed_hook_command(copilot_command)
     assert devin_config.is_guard_managed_hook_command(devin_command)
     hermes_command = hermes_runtime_hooks.hermes_hook_command_string(_command(tmp_path, "hermes"))
     assert hermes_runtime_hooks._legacy_guard_pretool_command(hermes_command)

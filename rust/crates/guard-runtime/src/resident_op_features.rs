@@ -296,6 +296,7 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-business-source-current-fence-v2",
     "native-guard-home-resolve-v1",
     "native-hook-launch-scan-v1",
+    "native-copilot-hook-commands-v1",
     "native-posix-processes-v1",
     "native-desktop-foreign-inventory-v1",
     "native-desktop-foreign-remove-v1",
