@@ -104,6 +104,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = macos_code_signing::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if policy_file_io::is_command(command) && flag == "--stdin" => {
+            let response = policy_file_io::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
             let response = removal_evidence::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

@@ -760,6 +760,7 @@ mod policy_document_decide_op;
 mod policy_document_op;
 mod policy_effective;
 mod policy_enforcement;
+mod policy_file_io;
 mod policy_integrity_generation;
 mod policy_integrity_resolver;
 mod policy_integrity_rows_op;

@@ -1515,6 +1515,14 @@
    "body": "4fbf180853ce"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The Python reader and writer needed `os.geteuid` and directory descriptors (`dir_fd`), neither of which exists on Windows, so local policy files were never readable there. This arm refuses with `policy_parent_unavailable`, the code Python's folder walk raised for an unopenable folder, rather than reading a file whose owner and link count it cannot check.",
+   "file": "rust/crates/guard-runtime/src/policy_file_io.rs",
+   "item": "mod platform",
+   "cfg": "not(unix)",
+   "body": "0e244582f000"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private`, so no error code needs classifying there.",
    "file": "rust/crates/guard-runtime/src/user_health_state.rs",
