@@ -1337,7 +1337,6 @@
         "symbols": [
           "DEVICE_KEY_HELPER_FEATURE",
           "_MAX_HEALTH_LEASE_CLAIMS_BYTES",
-          "_STATUS_TIMEOUT_SECONDS",
           "_COMMAND_TIMEOUT_SECONDS",
           "_MAX_ANSWER_BYTES",
           "_SYSTEM_SID",

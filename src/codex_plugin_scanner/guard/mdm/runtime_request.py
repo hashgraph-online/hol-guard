@@ -15,27 +15,38 @@ def runtime_answer(
     command: str,
     request: Mapping[str, object] | str,
     *,
-    timeout_seconds: float,
     output_limit: int,
+    timeout_seconds: float | None = None,
+    deadline: float | None = None,
+    extra_features: tuple[str, ...] = (),
 ) -> dict[str, object] | None:
     """The runtime's JSON object answer to one request.
 
     `None` when no compatible runtime offers `feature` or its answer is not a
     JSON object. A caller that maps an unencodable request to its own error
-    passes the encoded text, so runtime faults never read as bad input.
+    passes the encoded text, so runtime faults never read as bad input. A
+    `deadline` bounds the status check and the command together; without one
+    the command gets `timeout_seconds` of its own.
     """
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
     input_text = request if isinstance(request, str) else json.dumps(request, sort_keys=True)
-    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
+    status_deadline = time.monotonic() + _STATUS_TIMEOUT_SECONDS
+    status = native_runtime_status(
+        deadline_monotonic=status_deadline if deadline is None else min(deadline, status_deadline)
+    )
     if (
         not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
-        or feature not in status.capabilities.features
+        or any(name not in status.capabilities.features for name in (feature, *extra_features))
     ):
+        return None
+    if deadline is not None:
+        timeout_seconds = deadline - time.monotonic()
+    if timeout_seconds is None or timeout_seconds <= 0:
         return None
     output = _run_native_process(
         status.identity.path,

@@ -8,7 +8,6 @@ reports health.
 
 from __future__ import annotations
 
-import json
 import platform
 import time
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from .contracts import MachinePaths
+from .runtime_request import runtime_answer
 from .windows_support import windows_directory
 
 AclState = Literal["healthy", "absent", "tampered", "unsupported", "unknown"]
@@ -24,7 +24,6 @@ _MAX_ACL_OUTPUT_BYTES = 1024 * 1024
 OWNERSHIP_ACL_FEATURE = "native-ownership-acl-v1"
 OWNERSHIP_ACL_COMMAND = "ownership-acl"
 OWNERSHIP_ACL_SCHEMA = "ownership-acl.v1"
-_STATUS_TIMEOUT_SECONDS = 10.0
 _COMMAND_TIMEOUT_SECONDS = 30.0
 _ACL_STATES: frozenset[str] = frozenset({"healthy", "absent", "tampered", "unsupported", "unknown"})
 
@@ -76,36 +75,14 @@ def _native_deadline() -> float:
 def _native_answer(request: dict[str, object], *, deadline: float) -> dict[str, object] | None:
     """The runtime's answer to one ownership-acl request, or ``None`` when it cannot answer."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    status = native_runtime_status(deadline_monotonic=min(deadline, time.monotonic() + _STATUS_TIMEOUT_SECONDS))
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or OWNERSHIP_ACL_FEATURE not in status.capabilities.features
-    ):
-        return None
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        return None
-    output = _run_native_process(
-        status.identity.path,
-        (OWNERSHIP_ACL_COMMAND, "--stdin"),
-        input_text=json.dumps({"schema": OWNERSHIP_ACL_SCHEMA, **request}, sort_keys=True),
-        timeout_seconds=remaining,
+    answer = runtime_answer(
+        OWNERSHIP_ACL_FEATURE,
+        OWNERSHIP_ACL_COMMAND,
+        {"schema": OWNERSHIP_ACL_SCHEMA, **request},
+        deadline=deadline,
         output_limit=_MAX_ACL_OUTPUT_BYTES,
     )
-    if output is None:
-        return None
-    try:
-        answer = cast(object, json.loads(output))
-    except ValueError:
-        return None
-    if not isinstance(answer, dict) or answer.get("ok") is not True:
-        return None
-    return cast(dict[str, object], answer)
+    return answer if answer is not None and answer.get("ok") is True else None
 
 
 def _native_verdict(request: dict[str, object], *, deadline: float) -> OwnershipAclVerification | None:

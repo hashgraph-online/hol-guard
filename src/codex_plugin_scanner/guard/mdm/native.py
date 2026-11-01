@@ -7,13 +7,13 @@ runtime the install never reports health.
 
 from __future__ import annotations
 
-import json
 import platform
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .runtime_request import runtime_answer
 from .windows_support import windows_directory
 
 NATIVE_INSTALL_FEATURE = "native-install-verdict-v1"
@@ -86,37 +86,14 @@ def verify_native_install(
 def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
     """The runtime's verdict for one install, or ``None`` when it cannot answer."""
 
-    from ..native_runtime import _run_native_process, native_runtime_status
-
-    deadline = time.monotonic() + _COMMAND_TIMEOUT_SECONDS
-    status = native_runtime_status(deadline_monotonic=deadline)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or NATIVE_INSTALL_FEATURE not in status.capabilities.features
-    ):
-        return None
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        return None
-    output = _run_native_process(
-        status.identity.path,
-        (NATIVE_INSTALL_COMMAND, "--stdin"),
-        input_text=json.dumps({"schema": NATIVE_INSTALL_SCHEMA, **request}, sort_keys=True),
-        timeout_seconds=remaining,
+    answer = runtime_answer(
+        NATIVE_INSTALL_FEATURE,
+        NATIVE_INSTALL_COMMAND,
+        {"schema": NATIVE_INSTALL_SCHEMA, **request},
+        deadline=time.monotonic() + _COMMAND_TIMEOUT_SECONDS,
         output_limit=_MAX_OUTPUT_BYTES,
     )
-    if output is None:
-        return None
-    try:
-        answer = cast(object, json.loads(output))
-    except ValueError:
-        return None
-    if not isinstance(answer, dict) or answer.get("ok") is not True:
-        return None
-    return cast(dict[str, object], answer)
+    return answer if answer is not None and answer.get("ok") is True else None
 
 
 __all__ = ["NativeInstallVerification", "verify_native_install"]
