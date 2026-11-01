@@ -1013,14 +1013,14 @@ def sync_receipts(
             policy_bundle_ack = {}
         if effective_policy_bundle is not None:
             remote_decisions.update(selected_policy_decisions)
-            cloud_exception_items = _policy_bundle_cloud_exception_items(
-                store,
-                device_id=device_id,
-                sync_exceptions=[],
-                policy_bundle=effective_policy_bundle,
-                policy_bundle_ack=policy_bundle_ack,
-            )
             try:
+                cloud_exception_items = _policy_bundle_cloud_exception_items(
+                    store,
+                    device_id=device_id,
+                    sync_exceptions=[],
+                    policy_bundle=effective_policy_bundle,
+                    policy_bundle_ack=policy_bundle_ack,
+                )
                 custom_extension_continuity = apply_custom_extension_continuity_from_sync(
                     store,
                     effective_policy_bundle,
@@ -2046,7 +2046,12 @@ def _policy_bundle_cloud_exception_items(
     del sync_exceptions
     if not isinstance(policy_bundle, dict):
         return []
-    return _sync.cloud_exceptions(policy_bundle, device_id=resolved_device_id, policy_bundle_ack=bundle_ack)
+    try:
+        return _sync.cloud_exceptions(policy_bundle, device_id=resolved_device_id, policy_bundle_ack=bundle_ack)
+    except NativeRunnerAuthorityError as error:
+        # Without the runtime's listing the bundle cannot be activated with
+        # the exceptions it grants: an outage, not a verdict on the bundle.
+        raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION) from error
 
 
 def _sign_guard_dpop_proof(

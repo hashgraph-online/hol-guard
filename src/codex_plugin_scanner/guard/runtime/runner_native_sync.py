@@ -10,6 +10,7 @@ unchanged; a transport or shape failure raises ``NativeRunnerAuthorityError``.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
@@ -285,7 +286,11 @@ def cloud_exceptions(
     """
 
     args: dict[str, object] = {
-        "policy_bundle": {key: policy_bundle[key] for key in _CLOUD_EXCEPTION_BUNDLE_KEYS if key in policy_bundle},
+        # As JSON text: the transport refuses arrays wider than 4,096 items.
+        "policy_bundle": json.dumps(
+            {key: policy_bundle[key] for key in _CLOUD_EXCEPTION_BUNDLE_KEYS if key in policy_bundle},
+            sort_keys=True,
+        ),
         "device_id": device_id,
         "policy_bundle_ack": (
             {key: policy_bundle_ack[key] for key in _CLOUD_EXCEPTION_ACK_KEYS if key in policy_bundle_ack}

@@ -45,3 +45,31 @@ fn malformed_sync_arguments_are_typed_errors() {
         assert!(dispatch(kind, &serde_json::json!({})).is_err(), "{kind}");
     }
 }
+
+#[test]
+fn cloud_exceptions_read_a_bundle_wider_than_the_transport_allows() {
+    let entries: Vec<Value> = (0..5_000)
+        .map(|index| {
+            serde_json::json!({
+                "exceptionId": format!("artifact:npm/pkg-{index}"),
+                "scope": "artifact",
+                "owner": "sec@example.test",
+                "expiresAt": "2099-01-01T00:00:00Z",
+            })
+        })
+        .collect();
+    let bundle = serde_json::json!({ "bundleHash": "sha256:abc", "cloudExceptions": entries });
+    let answer = dispatch(
+        "cloud_exceptions",
+        &serde_json::json!({ "policy_bundle": bundle.to_string(), "device_id": null }),
+    )
+    .unwrap();
+    assert_eq!(answer["items"].as_array().unwrap().len(), 5_000);
+    for text in ["[]", "{", "\"bundle\""] {
+        assert!(dispatch(
+            "cloud_exceptions",
+            &serde_json::json!({ "policy_bundle": text, "device_id": null }),
+        )
+        .is_err());
+    }
+}

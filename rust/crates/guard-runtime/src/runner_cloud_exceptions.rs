@@ -1,10 +1,13 @@
 //! The Cloud exceptions a signed policy bundle carries, for `RunnerAuthority`.
 //!
-//! Python hands over the bundle, the device and its stored acknowledgement.
+//! Python hands over the bundle as its JSON text, the device and its stored
+//! acknowledgement.
 //! The answer is the deduplicated exception records the sync stores and the
 //! dashboard lists. With `active_at` the records are narrowed to exceptions
 //! still in force at that instant, and with `harness` to the ones that apply
 //! to that harness.
+
+use std::collections::HashMap;
 
 use serde_json::{json, Map, Value};
 
@@ -18,8 +21,20 @@ const ACK_STATUSES: [&str; 4] = ["pending", "synced", "failed", "offline"];
 
 pub(crate) fn cloud_exceptions(args: &Value) -> KindResult {
     let args = args_object(args)?;
-    let Some(Value::Object(bundle)) = args.get("policy_bundle") else {
-        return Err(ERR_INVALID);
+    let parsed: Map<String, Value>;
+    let bundle = match args.get("policy_bundle") {
+        Some(Value::Object(bundle)) => bundle,
+        // Python sends the bundle as its JSON text: the resident transport
+        // refuses arrays wider than 4,096 items, and a signed bundle may carry
+        // more exceptions than that.
+        Some(Value::String(text)) => {
+            parsed = match serde_json::from_str(text) {
+                Ok(Value::Object(bundle)) => bundle,
+                _ => return Err(ERR_INVALID),
+            };
+            &parsed
+        }
+        _ => return Err(ERR_INVALID),
     };
     let device_id = optional_text(args, "device_id")?;
     let harness = optional_text(args, "harness")?;
@@ -37,6 +52,7 @@ pub(crate) fn cloud_exceptions(args: &Value) -> KindResult {
     // `dict[item.id] = item`: a later duplicate replaces the record but keeps
     // the position the first one took.
     let mut records: Vec<Map<String, Value>> = Vec::new();
+    let mut positions: HashMap<String, usize> = HashMap::new();
     for entry in entries {
         let Value::Object(entry) = entry else {
             continue;
@@ -44,9 +60,13 @@ pub(crate) fn cloud_exceptions(args: &Value) -> KindResult {
         let Some(record) = exception_record(entry, bundle_hash, ack_status) else {
             continue;
         };
-        match records.iter_mut().find(|kept| kept["id"] == record["id"]) {
-            Some(kept) => *kept = record,
-            None => records.push(record),
+        let id = record["id"].as_str().unwrap_or_default().to_owned();
+        match positions.get(&id) {
+            Some(&position) => records[position] = record,
+            None => {
+                positions.insert(id, records.len());
+                records.push(record);
+            }
         }
     }
     if let Some(active_at) = active_at {

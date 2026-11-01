@@ -248,13 +248,17 @@ class _ControlSyncRoutes:
                 previous=stored_ack if isinstance(stored_ack, dict) else None,
                 delivery=validated_policy_bundle_delivery,
             )
-            cloud_exception_items = _policy_bundle_cloud_exception_items(
-                self.server.store,  # type: ignore[attr-defined]
-                sync_exceptions=[],
-                policy_bundle=validated_policy_bundle,
-                policy_bundle_ack=policy_bundle_ack,
-                device_id=device_id,
-            )
+            try:
+                cloud_exception_items = _policy_bundle_cloud_exception_items(
+                    self.server.store,  # type: ignore[attr-defined]
+                    sync_exceptions=[],
+                    policy_bundle=validated_policy_bundle,
+                    policy_bundle_ack=policy_bundle_ack,
+                    device_id=device_id,
+                )
+            except PolicyBundleNativeUnavailableError:
+                self._write_native_policy_bundle_unavailable()
+                return
             try:
                 activated, activation_rejection_reason = activate_with_reason(
                     self.server.store.apply_policy_bundle_authority,  # type: ignore[attr-defined]

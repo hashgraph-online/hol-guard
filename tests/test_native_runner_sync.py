@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -164,3 +164,36 @@ def test_url_derivation_is_reused_for_the_same_inputs(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(sync, "native_runner_authority", refuse)
     assert sync.normalized_runtime_sessions_sync_url(url) == first
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_cloud_exceptions_list_a_bundle_wider_than_the_transport_allows() -> None:
+    entries = [
+        {
+            "exceptionId": f"artifact:npm/pkg-{index}",
+            "scope": "artifact",
+            "owner": "sec@example.test",
+            "expiresAt": "2099-01-01T00:00:00Z",
+        }
+        for index in range(5_000)
+    ]
+    items = sync.cloud_exceptions({"bundleHash": "sha256:abc", "cloudExceptions": entries}, device_id=None)
+    assert len(items) == 5_000
+    assert items[-1]["id"] == "artifact:npm/pkg-4999"
+
+
+def test_a_refused_cloud_exception_listing_is_a_native_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_policy_bundle import PolicyBundleNativeUnavailableError
+    from codex_plugin_scanner.guard.runtime import runner
+
+    def refuse(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(runner._sync, "cloud_exceptions", refuse)
+    with pytest.raises(PolicyBundleNativeUnavailableError):
+        runner._policy_bundle_cloud_exception_items(
+            cast(Any, None),
+            device_id="device-1",
+            policy_bundle={"cloudExceptions": []},
+            policy_bundle_ack={},
+        )
