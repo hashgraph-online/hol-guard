@@ -20,7 +20,6 @@ import pytest
 
 from codex_plugin_scanner.guard.shims import (
     _is_transient_path,
-    _strip_managed_marker_blocks,
     ensure_guard_shim_path_in_shell_profile,
     ensure_package_shim_path_in_shell_profile,
     prepare_guard_shim_shell_profile,
@@ -90,6 +89,22 @@ def test_shell_profile_preparation_rejects_parent_outside_home_before_reading(tm
     assert list(outside.iterdir()) == []
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX shell profiles")
+def test_shell_profile_without_the_runtime_asks_for_a_manual_path(tmp_path, monkeypatch):
+    from codex_plugin_scanner.guard import shims
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    ctx = _context(tmp_path / "home", tmp_path / "guard")
+    ctx.home_dir.mkdir()
+    monkeypatch.setattr(shims, "_is_transient_path", lambda path: False)
+    monkeypatch.setattr(runtime_request, "runtime_answer", lambda *args, **kwargs: None)
+    prepared = prepare_guard_shim_shell_profile(ctx)
+    assert prepared.files == ()
+    assert prepared.manifest["manual_path_required"] is True
+    assert ensure_guard_shim_path_in_shell_profile(ctx) == prepared.manifest
+    assert not (ctx.home_dir / ".zshrc").exists()
+
+
 @pytest.fixture(autouse=True)
 def _force_zsh(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SHELL", "/bin/zsh")
@@ -157,20 +172,6 @@ class TestEnsureSkipsTransientShimDir:
         assert result["changed"] is False
         assert result["manual_path_required"] is True
         assert not (home / ".zshrc").exists()
-
-
-class TestStripManagedMarkerBlocks:
-    def test_preserves_unrelated_marker_free_content(self) -> None:
-        content = "a=1\nb=2\n"
-        assert _strip_managed_marker_blocks(content, _PACKAGE_PROFILE_MARKER) == content
-
-    def test_empty_content_stays_empty(self) -> None:
-        assert _strip_managed_marker_blocks("", _PACKAGE_PROFILE_MARKER) == ""
-
-    def test_user_triple_blank_lines_preserved(self) -> None:
-        """Stripping must only drop blank lines adjacent to a removed block; user blanks stay intact."""
-        content = "a=1\n\n\n\nb=2\n"  # 3 blank lines between user content
-        assert _strip_managed_marker_blocks(content, _PACKAGE_PROFILE_MARKER) == content
 
 
 class TestEnsureSkipsOnWindows:

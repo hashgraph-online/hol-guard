@@ -124,6 +124,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = removal_evidence::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if guard_shim_profile::is_command(command) && flag == "--stdin" => {
+            let response = guard_shim_profile::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if agent_safety_guidance::is_command(command) && flag == "--stdin" => {
             let response = agent_safety_guidance::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
