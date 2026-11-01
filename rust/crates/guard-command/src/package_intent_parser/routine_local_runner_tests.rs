@@ -442,3 +442,69 @@ fn a_file_past_the_read_limit_gives_no_text() {
         super::routine_local_runner::read_bounded(&dir.path().join("missing"), length).is_none()
     );
 }
+
+#[test]
+fn a_lockfile_that_omits_the_runner_binds_nothing() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // The second lockfile parses and names other packages, but never this
+    // runner. The first one must not answer for it.
+    write(
+        &root.join("npm-shrinkwrap.json"),
+        r#"{"packages": {"node_modules/other": {"version": "1.0.0"}}}"#,
+    );
+    let mut value = intent(root);
+    value.local_executions[0]
+        .lockfiles
+        .push(evidence(&root.join("npm-shrinkwrap.json")));
+    assert!(!routine_local_runner(&value));
+}
+
+#[test]
+fn a_lock_entry_outside_the_registry_proves_nothing() {
+    let dir = workspace();
+    let root = dir.path();
+
+    // A linked workspace package is whatever that directory holds today.
+    write(
+        &root.join("package-lock.json"),
+        &format!(
+            r#"{{"packages": {{"node_modules/eslint": {{"version": "{INSTALLED_VERSION}", "link": true}}}}}}"#
+        ),
+    );
+    assert!(!routine_local_runner(&intent(root)));
+
+    // So is a checkout resolved from a git remote.
+    write(
+        &root.join("package-lock.json"),
+        &format!(
+            r#"{{"packages": {{"node_modules/eslint": {{"version": "{INSTALLED_VERSION}", "resolved": "git+ssh://git@example.test/eslint.git#abc"}}}}}}"#
+        ),
+    );
+    assert!(!routine_local_runner(&intent(root)));
+
+    // A registry tarball is the shape the declared pin actually describes.
+    write(
+        &root.join("package-lock.json"),
+        &format!(
+            r#"{{"packages": {{"node_modules/eslint": {{"version": "{INSTALLED_VERSION}", "resolved": "https://registry.example.test/eslint.tgz"}}}}}}"#
+        ),
+    );
+    assert!(routine_local_runner(&intent(root)));
+}
+
+#[test]
+fn a_bun_entry_naming_a_checkout_is_not_a_release() {
+    let dir = workspace();
+    let root = dir.path();
+    fs::remove_file(root.join("package-lock.json")).unwrap();
+    write(
+        &root.join("bun.lock"),
+        "{\"packages\": {\"eslint\": [\"eslint@github:example/eslint#abc\", {}, \"\"]}}",
+    );
+
+    let mut value = intent(root);
+    value.local_executions[0].lockfiles = vec![evidence(&root.join("bun.lock"))];
+    assert!(!routine_local_runner(&value));
+}
