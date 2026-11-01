@@ -225,15 +225,18 @@ export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssista
   }
   guard(deps);
   // A lost activate reply is followed through live status; only a check that never appears allows another try.
-  let fresh = true;
-  try { state = await deps.activate(); } catch (cause) { if (!transient(cause)) failure("start", cause); fresh = false; }
+  let fresh = true, unconfirmed = false;
+  try { state = await deps.activate(); } catch (cause) { if (!transient(cause)) failure("start", cause); fresh = false; unconfirmed = true; }
   if (fresh) deps.onState(state);
   const started = deps.now();
   let sawJob = fresh && state.job !== null;
   for (;;) {
     if (fresh && state.effective_enabled) return state;
     guard(deps);
-    if (fresh && !state.requested_enabled) throw new CigarSetupStopped();
+    if (fresh && !state.requested_enabled) {
+      if (unconfirmed) throw new CigarSetupError("start", "Guard did not get the request to start CIGAR. Try again.");
+      throw new CigarSetupStopped();
+    }
     if (fresh && state.job === null && (sawJob || deps.now() - started > 3_000)) throw new CigarSetupError("start", contextStatusCopy(state).detail);
     if (deps.now() - started > START_LIMIT_MS) {
       throw new CigarSetupError("start", "CIGAR is taking longer than expected to start. Refresh status in a minute.");

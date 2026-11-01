@@ -237,4 +237,12 @@ const plan = install;
   await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps),
     (cause: unknown) => cause instanceof CigarSetupError && /longer than expected/.test(cause.message), "status outages still end at the start deadline");
 }
+{
+  // The activate request never reached Guard: say so instead of quietly resetting the button.
+  const { deps } = fakeGuard({ initial: saved });
+  deps.activate = async () => { throw new ContextAssistanceApiError("context_assistance_unavailable", "Lost"); };
+  deps.status = async () => ({ ...saved, requested_enabled: false, job: null });
+  await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps),
+    (cause: unknown) => cause instanceof CigarSetupError && cause.stage === "start" && /Try again/.test(cause.message));
+}
 console.log("CIGAR one-click planning, approval, stop, retry and live-readiness contracts passed.");
