@@ -91,6 +91,8 @@ def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
         NATIVE_INSTALL_COMMAND,
         {"schema": NATIVE_INSTALL_SCHEMA, **request},
         deadline=time.monotonic() + _COMMAND_TIMEOUT_SECONDS,
+        # A freshly installed runtime may need most of the budget for its first status probe.
+        status_timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
         output_limit=_MAX_OUTPUT_BYTES,
     )
     return answer if answer is not None and answer.get("ok") is True else None

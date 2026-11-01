@@ -18,6 +18,7 @@ def runtime_answer(
     output_limit: int,
     timeout_seconds: float | None = None,
     deadline: float | None = None,
+    status_timeout_seconds: float = _STATUS_TIMEOUT_SECONDS,
     extra_features: tuple[str, ...] = (),
 ) -> dict[str, object] | None:
     """The runtime's JSON object answer to one request.
@@ -26,13 +27,14 @@ def runtime_answer(
     JSON object. A caller that maps an unencodable request to its own error
     passes the encoded text, so runtime faults never read as bad input. A
     `deadline` bounds the status check and the command together; without one
-    the command gets `timeout_seconds` of its own.
+    the command gets `timeout_seconds` of its own. The status check alone
+    never takes longer than `status_timeout_seconds`.
     """
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
     input_text = request if isinstance(request, str) else json.dumps(request, sort_keys=True)
-    status_deadline = time.monotonic() + _STATUS_TIMEOUT_SECONDS
+    status_deadline = time.monotonic() + status_timeout_seconds
     status = native_runtime_status(
         deadline_monotonic=status_deadline if deadline is None else min(deadline, status_deadline)
     )
