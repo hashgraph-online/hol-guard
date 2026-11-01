@@ -331,10 +331,15 @@ fn store(connection: &Connection, activity_id: &str, key_id: &str, row: &Row) {
 }
 
 fn read(home: &Path, since: &str) -> Value {
+    read_within(home, since, 5_000)
+}
+
+fn read_within(home: &Path, since: &str, budget_ms: i64) -> Value {
     let mut args = Map::new();
     args.insert("key_id".to_owned(), json!(KEY_ID));
     args.insert("digest".to_owned(), json!(DIGEST));
     args.insert("since".to_owned(), json!(since));
+    args.insert("budget_ms".to_owned(), json!(budget_ms));
     let request = GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "legacy-probe".to_owned(),
@@ -376,5 +381,18 @@ fn the_store_op_reads_the_request_from_writer_shaped_rows() {
     let naive = read(&home, "2026-10-01T12:00:00");
     assert_eq!(naive["code"], "native_guard_store_value_error", "{naive}");
     assert_eq!(naive["payload"]["message"], "legacy_probe_identity_invalid");
+
+    // A spent or unbounded admission budget never starts the lookup.
+    for budget_ms in [0, 60_001] {
+        let refused = read_within(&home, SINCE, budget_ms);
+        assert_eq!(
+            refused["code"], "native_guard_store_value_error",
+            "{refused}"
+        );
+        assert_eq!(
+            refused["payload"]["message"],
+            "legacy_probe_identity_invalid"
+        );
+    }
     let _ = std::fs::remove_dir_all(&home);
 }

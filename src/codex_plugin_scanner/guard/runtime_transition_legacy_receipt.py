@@ -23,12 +23,15 @@ if TYPE_CHECKING:
 
 _LOOKUP_FAILURES = frozenset(
     {
+        "admission_deadline_expired",
         "legacy_probe_identity_invalid",
         "legacy_probe_receipt_ambiguous",
         "legacy_probe_receipt_capacity",
         "legacy_probe_receipt_invalid",
     }
 )
+
+_MAX_BUDGET_MS = 60_000
 
 
 def read_legacy_codex_probe_receipt(
@@ -53,6 +56,8 @@ def read_legacy_codex_probe_receipt(
         "key_id": correlation.key_id,
         "digest": correlation.digest,
         "since": since.astimezone(timezone.utc).isoformat(),
+        # The native lookup interrupts its statement when this runs out.
+        "budget_ms": min(_MAX_BUDGET_MS, max(1, math.ceil(remaining * 1000))),
     }
     try:
         # Lock-wait floor 0.5s: 100ms trips on real contention under coverage

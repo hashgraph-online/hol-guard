@@ -422,7 +422,6 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_receipts_since_rowid"
         | "latest_receipt_rowid"
         | "get_receipt"
-        | "read_legacy_codex_probe_receipt"
         | "get_receipt_for_approval_request"
         | "get_latest_receipt"
         | "receipt_decision_counts"
@@ -473,6 +472,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at" => Kind::Snapshot,
+        // Admission evidence only: a deferred read that never finalizes the
+        // outbox, so it cannot wait on the write lock.
+        "read_legacy_codex_probe_receipt" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"

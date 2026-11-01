@@ -8,7 +8,8 @@
 //! caller's launch boundary, and a request's matches must be unique. No
 //! shared last-receipt slot, command text or newest-row heuristic is read.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::mpsc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use serde_json::{Map, Value};
@@ -22,6 +23,8 @@ const MAX_ROWS: usize = 128;
 /// `_MAX_COMMAND_BINDING_CHARACTERS` in `store_native_decision_receipts.py`.
 const MAX_BINDING_CHARACTERS: usize = 2_048;
 const MAX_TIMESTAMP_CHARACTERS: usize = 64;
+const MAX_BUDGET_MS: i64 = 60_000;
+const DEADLINE_EXPIRED: &str = "admission_deadline_expired";
 const BOOL_FIELDS: [&str; 3] = [
     "workspace_bound",
     "source_ref_external_allowed",
@@ -40,9 +43,10 @@ const QUERY: &str = "select r.*, a.occurred_at as activity_occurred_at, \
      and a.receipt_link_status = 'linked' and a.occurred_at >= ? \
      order by a.occurred_at desc, a.activity_id limit ?";
 
-/// Args: `key_id` and `digest` of the request correlation, and `since`, the
-/// aware launch boundary in UTC as `datetime.isoformat` spells it. Answers
-/// the one matching receipt or null.
+/// Args: `key_id` and `digest` of the request correlation, `since`, the
+/// aware launch boundary in UTC as `datetime.isoformat` spells it, and
+/// `budget_ms`, the admission time left. Answers the one matching receipt or
+/// null.
 pub(crate) fn read_legacy_codex_probe_receipt(
     connection: &Connection,
     args: &Args<'_>,
@@ -50,19 +54,56 @@ pub(crate) fn read_legacy_codex_probe_receipt(
     let key_id = args.str("key_id")?;
     let digest = args.str("digest")?;
     let since_text = args.str("since")?;
+    let budget_ms = args.int("budget_ms")?;
     let Some(since) = aware_epoch_micros(since_text) else {
         return value_error("legacy_probe_identity_invalid");
     };
-    let rows = query_all(
-        connection,
-        QUERY,
-        &[
-            Value::from(key_id),
-            Value::from(since_text),
-            Value::from(MAX_ROWS as i64 + 1),
-        ],
-    )?;
-    matching_receipt(rows, digest, since, now_micros())
+    if !(1..=MAX_BUDGET_MS).contains(&budget_ms) {
+        return value_error("legacy_probe_identity_invalid");
+    }
+    let budget = Duration::from_millis(budget_ms.unsigned_abs());
+    let started = Instant::now();
+    let rows = interrupted_after(connection, budget, || {
+        query_all(
+            connection,
+            QUERY,
+            &[
+                Value::from(key_id),
+                Value::from(since_text),
+                Value::from(MAX_ROWS as i64 + 1),
+            ],
+        )
+    });
+    if started.elapsed() >= budget {
+        return value_error(DEADLINE_EXPIRED);
+    }
+    matching_receipt(rows?, digest, since, now_micros())
+}
+
+/// Runs `lookup`, interrupting its SQLite statement once `budget` runs out,
+/// so a slow join answers the admission deadline instead of outlasting it.
+fn interrupted_after<T>(
+    connection: &Connection,
+    budget: Duration,
+    lookup: impl FnOnce() -> T,
+) -> T {
+    let handle = connection.get_interrupt_handle();
+    let (done, finished) = mpsc::channel::<()>();
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            if matches!(
+                finished.recv_timeout(budget),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
+                // With no statement running, SQLite clears this before the
+                // next one starts.
+                handle.interrupt();
+            }
+        });
+        let answer = lookup();
+        drop(done);
+        answer
+    })
 }
 
 fn matching_receipt(rows: Vec<Row>, digest: &str, since: i128, now: i128) -> StoreResult<Value> {
