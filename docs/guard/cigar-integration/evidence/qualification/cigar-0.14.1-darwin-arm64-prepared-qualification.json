@@ -34,7 +34,7 @@
     "payload_sha256": "5eacb9ae75fe573475e9876499e510bb7736b555d90fa989796d628aa45b6efd",
     "revision": 5
   },
-  "elapsed_ms": 7777,
+  "elapsed_ms": 6857,
   "enabled": false,
   "files": 124,
   "installed": false,
@@ -43,9 +43,9 @@
   "scope": "local-macos-arm64-source-build",
   "selected": false,
   "selection": {
-    "python": "/private/tmp/claude-501/hgq-homes/python-home/python/bin/python3.14",
-    "site_packages": "/private/tmp/claude-501/hgq-homes/sdk-home/site-packages",
-    "work_dir": "/private/tmp/claude-501/hgq-homes/sdk-home/work"
+    "python": "/private/tmp/cigar-qualify/python-home/python/bin/python3.14",
+    "site_packages": "/private/tmp/cigar-qualify/sdk-home/site-packages",
+    "work_dir": "/private/tmp/cigar-qualify/sdk-home/work"
   },
   "status": {
     "active": false,

@@ -38,7 +38,7 @@
     "schema": "guard-cigar-bundle-approval.v3",
     "worker_sha256": "4650473529f0dc14e596b5cd0ca9d66e2d3bcd8ae11418b87ad971ac51ca78b8"
   },
-  "elapsed_ms": 20239,
+  "elapsed_ms": 19301,
   "enabled": false,
   "interpreter": {
     "abi": "cpython-314-darwin",
@@ -93,7 +93,7 @@
   "sdk_tree": "5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4",
   "selected": false,
   "selection": {
-    "python": "/private/tmp/claude-501/hgq-homes/python-home/python/bin/python3.14",
+    "python": "/private/tmp/cigar-qualify/python-home/python/bin/python3.14",
     "python_bundle": {
       "binding": {
         "archive_bytes": 26753457,
@@ -111,10 +111,10 @@
         "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
         "tree_sha256": "1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375"
       },
-      "root": "/private/tmp/claude-501/hgq-homes/python-home/python"
+      "root": "/private/tmp/cigar-qualify/python-home/python"
     },
-    "site_packages": "/private/tmp/claude-501/hgq-homes/python-home/site-packages",
-    "work_dir": "/private/tmp/claude-501/hgq-homes/python-home/work"
+    "site_packages": "/private/tmp/cigar-qualify/python-home/site-packages",
+    "work_dir": "/private/tmp/cigar-qualify/python-home/work"
   },
   "status": {
     "active": false,

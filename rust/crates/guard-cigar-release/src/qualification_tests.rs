@@ -161,3 +161,17 @@ fn bundled_qualification_is_scoped_to_darwin_arm64_and_resolves_for_activation_a
         );
     }
 }
+
+#[test]
+fn committed_receipts_embed_no_user_home_directory() {
+    for (name, bytes) in [("sdk", SDK_RECEIPT), ("python", PYTHON_RECEIPT)] {
+        let text = std::str::from_utf8(bytes).unwrap();
+        for private in [concat!("/Us", "ers/"), "/home/", "C:\\Us\u{65}rs"] {
+            assert!(!text.contains(private), "{name} receipt embeds {private}");
+        }
+        assert!(
+            !bytes.ends_with(b"\n"),
+            "{name} receipt bytes must stay exact"
+        );
+    }
+}
