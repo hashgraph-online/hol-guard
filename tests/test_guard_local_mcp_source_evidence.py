@@ -146,18 +146,25 @@ def _wrapper(bin_dir: Path, name: str, module: str) -> Path:
     return path
 
 
-def test_an_entry_point_launches_only_when_its_installed_package_serves_mcp(tmp_path: Path, monkeypatch) -> None:
+def test_an_entry_point_launches_only_when_its_installed_module_serves_mcp(tmp_path: Path, monkeypatch) -> None:
     venv = tmp_path / "venv"
     bin_dir = venv / "bin"
     bin_dir.mkdir(parents=True)
     site = venv / "lib" / "python3.12" / "site-packages"
-    package = site / "mcp_server_demo"
-    package.mkdir(parents=True)
-    _script(package, "__init__.py", "from .server import main\n")
-    server = _script(package, "server.py", "from mcp.server import Server\n")
-    (site / "twine").mkdir()
+    for name in ("mcp_server_demo", "kit", "mytool", "twine"):
+        (site / name).mkdir(parents=True)
+    _script(site / "mcp_server_demo", "__init__.py", "#import ./server.py\nfrom .server import main\n")
+    demo_server = _script(site / "mcp_server_demo", "server.py", "from mcp.server import Server\n")
+    _script(site / "kit", "__init__.py", "")
+    _script(site / "kit", "cli.py", "#import ./kit/serve.py\nfrom kit.serve import main\n")
+    kit_server = _script(site / "kit", "serve.py", "import fastmcp\n")
+    _script(site / "mytool", "__init__.py", "")
+    _script(site / "mytool", "cli.py", "def main():\n    deploy()\n")
+    optional_server = _script(site / "mytool", "mcp_server.py", "from fastmcp import FastMCP\n")
     _script(site / "twine", "__init__.py", "import sys\n")
     demo = _wrapper(bin_dir, "mcp-server-demo", "mcp_server_demo")
+    kit = _wrapper(bin_dir, "kit-mcp", "kit.cli")
+    mytool = _wrapper(bin_dir, "mytool", "mytool.cli")
     twine = _wrapper(bin_dir, "twine", "twine.__main__")
     missing = _wrapper(bin_dir, "gone", "gone")
     local = _script(bin_dir, "ship-it", "#!/usr/bin/python3\n#import ./ship.py\nfrom ship import main\n")
@@ -166,12 +173,17 @@ def test_an_entry_point_launches_only_when_its_installed_package_serves_mcp(tmp_
     monkeypatch.setenv("PATH", os.pathsep.join((str(bin_dir), "/usr/bin", "/bin")))
     wrappers = {
         demo.read_text(): "mcp_server_demo",
+        kit.read_text(): "kit.cli",
+        mytool.read_text(): "mytool.cli",
         twine.read_text(): "twine.__main__",
         missing.read_text(): "gone",
         local.read_text(): "ship",
     }
-    _resident(monkeypatch, {server.read_text()}, wrappers=wrappers)
+    serving = {demo_server.read_text(), kit_server.read_text(), optional_server.read_text()}
+    _resident(monkeypatch, serving, wrappers=wrappers)
     assert _serves("mcp-server-demo --repository .", tmp_path)
+    assert _serves("kit-mcp", tmp_path)
+    assert not _serves("mytool deploy --prod", tmp_path)
     assert not _serves("twine upload dist/*", tmp_path)
     assert not _serves("gone --force", tmp_path)
     assert not _serves("ship-it deploy", tmp_path)

@@ -76,34 +76,60 @@ def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guar
 
 
 def _package_serves_mcp(module: str, wrapper: str, text: str, invocation: tuple[str, ...], guard_home: Path) -> bool:
-    """Whether the installed package an entry-point wrapper runs shows an MCP server.
+    """Whether the module an entry-point wrapper runs shows an MCP server.
 
-    The package is looked up in the ``site-packages`` of the environment that
+    The module is looked up in the ``site-packages`` of the environment that
     holds the wrapper or its ``#!`` interpreter, as pip, pipx and ``uv tool``
-    lay them out, and up to ``MAX_PACKAGE_FILES`` of its Python files are read.
-    A package Guard cannot find is not launched.
+    lay them out. Its own file is read, then the modules of the same package it
+    imports, up to ``MAX_PACKAGE_FILES`` in all. Another module in the package,
+    such as an optional MCP server beside a CLI's commands, does not count. A
+    module Guard cannot find is not launched.
     """
 
-    top = module.split(".", 1)[0]
+    parts = module.split(".")
     for site in _site_packages(wrapper, text):
-        package = site / top
-        if (package / "__init__.py").is_file():
-            anchor = package / "__init__.py"
-            files = sorted(package.glob("*.py")) + sorted(package.glob("*/*.py"))
-        elif (site / f"{top}.py").is_file():
-            anchor = site / f"{top}.py"
-            files = [anchor]
-        else:
+        base = site.joinpath(*parts)
+        entry = next((path for path in (base / "__init__.py", base.with_suffix(".py")) if path.is_file()), None)
+        if entry is None:
             continue
-        for path in files[:MAX_PACKAGE_FILES]:
-            source = read_local_module(str(path), str(anchor))
-            if source is None:
+        package = site / parts[0] / "__init__.py"
+        anchor = package if package.is_file() else entry
+        queue, seen = [str(entry)], {str(entry)}
+        while queue:
+            path = queue.pop(0)
+            source = read_local_module(path, str(anchor))
+            read = _source_read(source, invocation, guard_home) if source is not None else None
+            if read is None:
                 continue
-            read = _source_read(source, invocation, guard_home)
-            if read is not None and read.mcp_server:
+            if read.mcp_server:
                 return True
+            for imported in _package_imports(path, read.imports, site, parts[0]):
+                if imported not in seen and len(seen) < MAX_PACKAGE_FILES:
+                    seen.add(imported)
+                    queue.append(imported)
         return False
     return False
+
+
+def _package_imports(path: str, imports: tuple[str, ...], site: Path, top: str) -> tuple[str, ...]:
+    """The modules of package ``top`` that the file at ``path`` imports.
+
+    The resident reports ``from .server import serve`` as ``./server.py``,
+    beside ``path``, and ``from top.server import serve`` as
+    ``./top/server.py``, under ``site``. Both are read only inside the package.
+    """
+
+    initializer = site / top / "__init__.py"
+    try:
+        package = initializer.resolve(strict=True).parent
+        folder = Path(path).resolve(strict=True).parent.relative_to(package)
+    except (OSError, RuntimeError, ValueError):
+        return ()
+    entries = [
+        f"./{entry[len(top) + 3 :]}" if entry.startswith(f"./{top}/") else f"./{(folder / entry[2:]).as_posix()}"
+        for entry in imports
+    ]
+    return local_import_paths(str(initializer), entries)
 
 
 def _site_packages(wrapper: str, text: str) -> list[Path]:

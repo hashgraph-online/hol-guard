@@ -313,10 +313,13 @@ fn only_imports_inside_the_scripts_folder_are_local() {
         "// import './commented.mjs';\n",
     );
     assert_eq!(imports(node), vec!["./lib/run.mjs", "./lazy.mjs"]);
-    let python = "from helpers import usage\nimport os, tools.cli as cli\nfrom . import nope\n";
+    let python = concat!(
+        "from helpers import usage\nimport os, tools.cli as cli\nfrom . import nope\n",
+        "from .server import serve\nfrom ..up import nope\n",
+    );
     assert_eq!(
         imports(python),
-        vec!["./helpers.py", "./os.py", "./tools/cli.py"]
+        vec!["./helpers.py", "./os.py", "./tools/cli.py", "./server.py"]
     );
     let ruby = "require_relative 'lib/cmd'\nrequire_relative \"../up\"\n";
     assert_eq!(imports(ruby), vec!["./lib/cmd.rb"]);

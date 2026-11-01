@@ -191,7 +191,7 @@ static RUBY_IMPORT: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\brequire_relative\s*\(?\s*["']([^"'\s]+)["']"#).unwrap());
 
 static PY_FROM_IMPORT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^from\s+([A-Za-z_][\w.]*)\s+import\b").unwrap());
+    LazyLock::new(|| Regex::new(r"^from\s+(\.?[A-Za-z_][\w.]*)\s+import\b").unwrap());
 
 static PY_IMPORT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^import\s+(.+)$").unwrap());
 
@@ -336,7 +336,10 @@ fn imports(line: &str) -> Vec<String> {
         };
         found.push(file);
     }
-    let python_module = |module: &str| format!("./{}.py", module.replace('.', "/"));
+    // `from .server import serve` names a module beside this one, as a
+    // package's own modules import each other.
+    let python_module =
+        |module: &str| format!("./{}.py", module.trim_start_matches('.').replace('.', "/"));
     if let Some(captures) = PY_FROM_IMPORT.captures(line) {
         found.push(python_module(&captures[1]));
     } else if let Some(captures) = PY_IMPORT.captures(line) {
