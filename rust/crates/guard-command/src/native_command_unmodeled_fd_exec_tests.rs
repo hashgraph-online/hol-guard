@@ -184,3 +184,48 @@ fn the_read_programs_are_basenames() {
         Some(expected)
     );
 }
+
+/// A brace is a placeholder only where there is a child to build arguments
+/// for. A search runs nothing and substitutes nothing, so a brace in its own
+/// regex or glob is ordinary text.
+#[test]
+fn a_brace_in_a_walk_that_runs_nothing_is_ordinary_text() {
+    for text in [
+        "fd '[0-9]{4}' src",
+        "fd -g '*.{ts,js}'",
+        "fd '[0-9]{4}' src | xargs wc -l",
+    ] {
+        assert_eq!(programs(text), Some(Vec::new()), "{text}");
+    }
+}
+
+/// `\;` ends one body and starts whatever fd reads after it. The split this
+/// reader walks over cuts the piece at that terminator, so a second walk lands
+/// where nothing reads it as fd's: naming only the first program would call
+/// `fd -x echo \; -x gh pr merge` bounded while `gh` runs unseen.
+#[test]
+fn a_body_that_ends_at_an_escaped_terminator_stays_unbounded() {
+    for text in [
+        r"fd -e ts -x echo \; -x gh pr merge",
+        r"fd -e ts -x wc -l \;",
+    ] {
+        assert_eq!(programs(text), None, "{text}");
+    }
+}
+
+/// The shell joins adjacent literals and drops their quotes before fd reads
+/// the word, so an option reaches it in a spelling this walk does not find.
+/// Missing the `-x` in `''-x` would call the walk bounded while fd runs `rm`.
+#[test]
+fn an_option_the_shell_joins_leaves_the_walk_unbounded() {
+    for text in [
+        "fd -e ts ''-x rm",
+        "fd -e ts \"\"-x rm",
+        "fd -e ts -'x' rm",
+        r"fd -e ts \-x rm",
+    ] {
+        assert_eq!(programs(text), None, "{text}");
+    }
+    // A quote inside an option's value is fd's own text, not another option.
+    assert_eq!(programs("fd --exclude='*.ts' -e ts"), Some(Vec::new()));
+}

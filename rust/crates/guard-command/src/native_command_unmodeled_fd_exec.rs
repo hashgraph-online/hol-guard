@@ -57,6 +57,24 @@ fn unquote(word: &str) -> &str {
     }
 }
 
+/// Whether the word may carry an option this walk has not read.
+///
+/// The shell joins adjacent literals and drops their quotes before fd sees the
+/// word, so `''-x`, `-'x'` and `\-x` all reach fd as `-x`. Reading the raw
+/// token finds no option in any of them, and a walk that misses an `--exec`
+/// would be called bounded while fd runs whatever that option names. A quote
+/// inside an option's value is fd's to read, not an option of its own, so
+/// `--exclude='*.ts'` stays readable.
+fn hides_an_option(word: &str) -> bool {
+    if word.starts_with('-') {
+        let name = word.split('=').next().unwrap_or(word);
+        return name.contains(['\'', '"', '\\']);
+    }
+    word.chars()
+        .find(|character| !matches!(character, '\'' | '"' | '\\'))
+        .is_some_and(|character| character == '-')
+}
+
 /// Every `--exec` body one `fd` piece runs, or `None` when a word leaves the
 /// walk unreadable.
 ///
@@ -75,6 +93,11 @@ fn fd_exec_sites(words: &[&str], start: usize) -> Option<Vec<FdExecSite>> {
     while index < words.len() {
         let word = unquote(words[index]);
         index += 1;
+        if hides_an_option(word) {
+            // An option this walk cannot read may be the `-x` that makes the
+            // walk run something, so the piece stays unbounded.
+            return None;
+        }
         if word == "--" {
             // Every remaining word is a pattern or a path: `fd -- -x src`
             // searches for the text `-x`.
@@ -191,20 +214,30 @@ pub(super) fn fd_exec_programs(shell: &str) -> Option<BTreeSet<String>> {
         // name, and an `--exec` operand spelling `fd` is refused below with
         // every other interpreter.
         //
-        // A placeholder anywhere in the walk keeps it unbounded, the rule
-        // `read_only_fanout_fd` already reads the same shape by: `{}`, `{/}`,
+        // A placeholder anywhere in a walk that execs keeps it unbounded, the
+        // rule `read_only_fanout_fd` already reads the same shape by: `{}`, `{/}`,
         // `{//}`, `{.}` and `{/.}` make fd build the child's arguments by
         // substitution instead of appending the path it found, so the command
         // a review would show is not the command that runs. `fd -X rm {}` and
         // `fd -a SKILL.md ~/.codex/skills -d 1 -x sed -i '1,180p' {}` keep
-        // their evaluation failure under this reader.
-        if words[command + 1..]
-            .iter()
-            .any(|word| word.contains(['{', '}']))
+        // their evaluation failure under this reader. A walk that runs nothing
+        // substitutes nothing, so a brace in its pattern is ordinary text:
+        // `fd '[0-9]{4}' src` and `fd -g '*.{ts,js}'` search and stop.
+        let sites = fd_exec_sites(&words, command + 1)?;
+        if !sites.is_empty()
+            && words[command + 1..]
+                .iter()
+                .any(|word| word.contains(['{', '}']))
         {
             return None;
         }
-        for site in fd_exec_sites(&words, command + 1)? {
+        for site in sites {
+            if site.body_end < words.len() {
+                // A `\;` ended this body, and the split above moved whatever
+                // fd runs next into a piece this walk never reads as fd's:
+                // `fd -x echo \; -x gh pr merge` would name only `echo`.
+                return None;
+            }
             let operand = unquote(words[site.program]);
             // `\;` and `+` end a body rather than naming a program.
             if matches!(operand, "+" | "\\") {
