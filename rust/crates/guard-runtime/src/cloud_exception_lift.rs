@@ -29,8 +29,8 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
-/// `_CLOUD_EXCEPTION_SCOPES` (`cloud_exceptions.py`).
-const SCOPES: [&str; 5] = ["artifact", "publisher", "harness", "workspace", "global"];
+/// The scopes a Cloud exception can name.
+pub(crate) const SCOPES: [&str; 5] = ["artifact", "publisher", "harness", "workspace", "global"];
 
 /// The evaluated target of one lookup.
 pub(crate) struct LiftTarget<'a> {

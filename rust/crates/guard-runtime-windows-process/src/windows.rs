@@ -49,6 +49,8 @@ mod file_identity;
 mod job_guard;
 #[path = "private_files.rs"]
 mod private_files;
+#[path = "process_command_line.rs"]
+mod process_command_line;
 #[path = "process_identity.rs"]
 mod process_identity;
 #[path = "process_lifecycle.rs"]
@@ -72,6 +74,7 @@ pub use job_guard::{attach_suspended_process, ChildJobGuard, ResourceLimits};
 pub use private_files::{
     create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
 };
+pub use process_command_line::{process_ids, ProcessQuery};
 pub use process_identity::{
     command_line_to_argv, process_creation_time, process_owner_sid, terminate_if_creation_time,
 };

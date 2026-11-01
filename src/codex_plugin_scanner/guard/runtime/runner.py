@@ -29,11 +29,6 @@ from ..cli.oauth_client import (
     resolve_guard_oauth_client_config,
     validate_guard_sync_endpoint,
 )
-from ..cloud_exceptions import (
-    build_cloud_exceptions_from_policy_bundle,
-    cloud_exception_to_dict,
-    dedupe_cloud_exceptions,
-)
 from ..config import VALID_RECEIPT_REDACTION_LEVELS
 from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
@@ -162,6 +157,10 @@ _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
 # exact-shell-command rows the hook looks up, so Guard Cloud may deliver exact
 # command rules in a v2 bundle to a device that advertises this.
 POLICY_EXACT_COMMAND_RULES_CAPABILITY = "policy-document-exact-commands.v1"
+# The canonical compiler turns a signed bundle's `review` rule into the same
+# review row a v1 bundle materializes, so Guard Cloud may deliver review rules
+# in a v2 bundle to a device that advertises this.
+POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY = "policy-document-review-rules.v1"
 # Accepts Cloud exceptions signed into a v2 bundle (``cloudExceptions``).
 POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY = "policy-bundle-v2-cloud-exceptions.v1"
 # Re-exported for the supply-chain services; the resident derives the endpoint.
@@ -1018,14 +1017,14 @@ def sync_receipts(
             policy_bundle_ack = {}
         if effective_policy_bundle is not None:
             remote_decisions.update(selected_policy_decisions)
-            cloud_exception_items = _policy_bundle_cloud_exception_items(
-                store,
-                device_id=device_id,
-                sync_exceptions=[],
-                policy_bundle=effective_policy_bundle,
-                policy_bundle_ack=policy_bundle_ack,
-            )
             try:
+                cloud_exception_items = _policy_bundle_cloud_exception_items(
+                    store,
+                    device_id=device_id,
+                    sync_exceptions=[],
+                    policy_bundle=effective_policy_bundle,
+                    policy_bundle_ack=policy_bundle_ack,
+                )
                 custom_extension_continuity = apply_custom_extension_continuity_from_sync(
                     store,
                     effective_policy_bundle,
@@ -1883,6 +1882,7 @@ def _local_guard_runtime_session(
         # Exact command rules reach the hook through canonical decisions,
         # which every device activates from a verified v2 bundle.
         POLICY_EXACT_COMMAND_RULES_CAPABILITY,
+        POLICY_DOCUMENT_REVIEW_RULES_CAPABILITY,
     ]
     session: dict[str, object] = {
         "harness": "hol-guard",
@@ -2045,21 +2045,18 @@ def _policy_bundle_cloud_exception_items(
     if bundle_ack is None:
         bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
         bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
-    items = []
     # ``sync_exceptions`` is retained as an explicit compatibility boundary so
     # callers can demonstrate that legacy unsigned siblings were considered
     # and rejected. It must never contribute enforcement authority.
     del sync_exceptions
-    if isinstance(policy_bundle, dict):
-        items.extend(
-            build_cloud_exceptions_from_policy_bundle(
-                policy_bundle,
-                device_id=resolved_device_id,
-                policy_bundle_ack=bundle_ack,
-            )
-        )
-    serialized = [cloud_exception_to_dict(item) for item in dedupe_cloud_exceptions(items)]
-    return serialized
+    if not isinstance(policy_bundle, dict):
+        return []
+    try:
+        return _sync.cloud_exceptions(policy_bundle, device_id=resolved_device_id, policy_bundle_ack=bundle_ack)
+    except NativeRunnerAuthorityError as error:
+        # Without the runtime's listing the bundle cannot be activated with
+        # the exceptions it grants: an outage, not a verdict on the bundle.
+        raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION) from error
 
 
 def _sign_guard_dpop_proof(

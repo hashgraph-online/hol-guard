@@ -339,3 +339,18 @@ fn a_command_expression_still_needs_a_newer_runtime() {
         "{output}"
     );
 }
+
+#[test]
+fn a_local_policy_document_still_refuses_a_review_rule() {
+    // Review rules arrive only in signed Cloud bundles (`compile_bundle`); a
+    // local policy file or import keeps allowing or blocking.
+    let output = run(
+        "compile",
+        &document_with_rule_match("review", json!({"tools":["mcp-tool"]})),
+    );
+
+    assert_eq!(
+        output["error"]["code"], "unsupported_policy_effect",
+        "{output}"
+    );
+}

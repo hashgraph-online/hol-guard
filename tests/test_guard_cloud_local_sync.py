@@ -1081,6 +1081,7 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     assert session_payload["yamlImport"] is False
     assert "canonicalPolicyEnforcement" not in session_payload
     assert "policy-document-exact-commands.v1" in session_payload["capabilities"]
+    assert "policy-document-review-rules.v1" in session_payload["capabilities"]
 
 
 def test_local_runtime_session_advertises_enabled_policy_capabilities(
@@ -1103,6 +1104,7 @@ def test_local_runtime_session_advertises_enabled_policy_capabilities(
     assert session["yaml_import"] is True
     assert session["canonical_policy_enforcement"] is True
     assert "policy-document-exact-commands.v1" in session["capabilities"]
+    assert "policy-document-review-rules.v1" in session["capabilities"]
 
 
 def test_local_runtime_session_applies_stable_policy_rollout_cohorts(

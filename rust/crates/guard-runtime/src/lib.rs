@@ -284,6 +284,7 @@ mod direct_tool_managed_bun;
 mod directory_trust;
 mod discovery_placement_op;
 mod edge;
+mod edge_exact_command_review;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
@@ -804,6 +805,7 @@ mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
 mod runner_authority_signature;
+mod runner_cloud_exceptions;
 mod runner_cloud_http_error;
 mod runner_runtime_session;
 mod runner_sync_policy;
@@ -877,11 +879,13 @@ mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
 mod windows_private_state;
+mod windows_process_command_lines;
 mod windows_process_lifecycle;
 #[cfg(windows)]
 mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
+mod windows_trusted_directories;
 mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;

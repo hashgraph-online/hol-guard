@@ -76,6 +76,7 @@ const INERT_KEYS: &[&str] = &[
 /// scheduler jobs), and `git <name>` resolving to a `git-<name>` on `PATH`.
 const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "add",
+    "annotate",
     "am",
     "apply",
     "archive",
@@ -84,6 +85,7 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "branch",
     "cat-file",
     "check-attr",
+    "check-mailmap",
     "check-ref-format",
     "checkout",
     "cherry-pick",
@@ -100,6 +102,7 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "gc",
     "grep",
     "init",
+    "interpret-trailers",
     "log",
     "ls-files",
     "ls-remote",
@@ -108,6 +111,7 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "mv",
     "name-rev",
     "notes",
+    "patch-id",
     "pull",
     "push",
     "range-diff",
@@ -128,10 +132,12 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "sparse-checkout",
     "stash",
     "status",
+    "stripspace",
     "submodule",
     "switch",
     "symbolic-ref",
     "tag",
+    "var",
     "worktree",
 ];
 

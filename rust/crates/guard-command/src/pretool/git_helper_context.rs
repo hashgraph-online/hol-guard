@@ -123,7 +123,7 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         | "for-each-ref" | "rev-list" => true,
                         // blame and reflog page by default; describe honors
                         // pager.describe when it is set.
-                        "blame" | "describe" | "reflog" => true,
+                        "blame" | "annotate" | "describe" | "reflog" => true,
                         // grep pages by default through pager.grep or core.pager.
                         "grep" => true,
                         // None of these starts a pager of its own, runs a
@@ -133,6 +133,15 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // `symbolic-ref` spellings that write a ref never
                         // reach here: the inspection proof screens them.
                         "name-rev" | "show-branch" | "check-ref-format" | "symbolic-ref" => true,
+                        // The stdin filters and `var` print without opening a
+                        // working-tree file, but an explicit `pager.<name>`
+                        // key can still name a program, so the probe clears
+                        // that first. The `check-mailmap` and
+                        // `interpret-trailers` spellings that open a file the
+                        // caller names never reach here: the inspection proof
+                        // screens them.
+                        "var" | "patch-id" | "stripspace" | "check-mailmap"
+                        | "interpret-trailers" => true,
                         // A stash listing is a log that pages under
                         // pager.stash, and `stash show` runs the diff drivers.
                         "stash" => true,

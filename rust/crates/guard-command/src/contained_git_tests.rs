@@ -44,6 +44,23 @@ fn a_verb_that_reads_its_own_blobs_screens_only_the_filter_it_knows() {
         ))
     );
     assert_eq!(
+        read(&["git", "annotate", "src/main.rs"]),
+        Some((
+            "annotate".to_owned(),
+            vector(&["--no-textconv", "src/main.rs"])
+        ))
+    );
+    assert!(read(&["git", "annotate", "--textconv", "src/main.rs"]).is_none());
+    // `-S` carries its value against the letter for both spellings, so the
+    // scan stops there the way Git's own parse does.
+    assert_eq!(
+        read(&["git", "annotate", "-S.git-blame-ignore-revs", "src/main.rs"]),
+        Some((
+            "annotate".to_owned(),
+            vector(&["--no-textconv", "-S.git-blame-ignore-revs", "src/main.rs"])
+        ))
+    );
+    assert_eq!(
         read(&["git", "grep", "-n", "todo"]),
         Some(("grep".to_owned(), vector(&["--no-textconv", "-n", "todo"])))
     );
@@ -421,4 +438,38 @@ fn the_ref_readings_carry_no_helper_screens() {
     // `symbolic-ref` writes the ref it is given a second operand for, so the
     // contained read route does not answer for it at all.
     assert!(read(&["git", "symbolic-ref", "--short", "HEAD"]).is_none());
+}
+
+/// `var` prints a logical variable and the rest filter the text on their
+/// stdin. None defines a diff option, so none carries a helper screen, and
+/// none has an `-o` of its own, so the letter that writes a file stays
+/// refused for them the way it is everywhere else.
+#[test]
+fn the_stdin_filters_carry_no_helper_screens() {
+    for (verb, word) in [
+        ("var", "-l"),
+        ("patch-id", "--stable"),
+        ("stripspace", "--strip-comments"),
+        ("check-mailmap", "--stdin"),
+    ] {
+        assert_eq!(
+            read(&["git", verb, word]),
+            Some((verb.to_owned(), vector(&[word]))),
+            "{verb}"
+        );
+        assert!(read(&["git", verb, "-o", "out"]).is_none(), "{verb}");
+        assert!(read(&["git", verb, "--exec-path=/tmp"]).is_none(), "{verb}");
+    }
+    // A mailmap the caller names is a read of that path rather than of the
+    // repository's own, so the contained route holds both spellings back
+    // the way the inspection grammar does.
+    for word in ["--mailmap-file", "--mailmap-blob", "--mailmap"] {
+        assert!(
+            read(&["git", "check-mailmap", word, "other", "contact"]).is_none(),
+            "{word}"
+        );
+    }
+    // `interpret-trailers` edits the files `--in-place` names, so the
+    // contained read route does not answer for it at all.
+    assert!(read(&["git", "interpret-trailers", "--parse"]).is_none());
 }

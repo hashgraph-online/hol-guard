@@ -196,8 +196,8 @@ fn display_pager_setting(key: &str) -> bool {
 /// checkout runs. Any other `pager.<command>` key stays reviewed.
 fn display_pager_key(key: &str) -> bool {
     const DISPLAY: &[&str] = &[
-        "diff", "log", "show", "blame", "status", "grep", "stash", "tag", "branch", "shortlog",
-        "reflog",
+        "diff", "log", "show", "blame", "annotate", "status", "grep", "stash", "tag", "branch",
+        "shortlog", "reflog",
     ];
     key == "core.pager"
         || key

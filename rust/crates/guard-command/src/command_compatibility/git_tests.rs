@@ -124,6 +124,14 @@ fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
         "git show-branch --reflog main",
         "git check-ref-format --branch main",
         "git check-ref-format refs/heads/release",
+        "git var GIT_COMMITTER_IDENT",
+        "git var -l",
+        "git patch-id --stable",
+        "git stripspace --strip-comments",
+        "git check-mailmap 'Name <name@example.test>'",
+        "git check-mailmap --stdin",
+        "git interpret-trailers --parse",
+        "git interpret-trailers --only-input --only-trailers --unfold",
         "git config --get remote.origin.url",
         "git config --global --get user.email",
         "git config --list --show-origin",
@@ -216,6 +224,17 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         "git -c core.pager=payload name-rev --all",
         "git -c core.pager=payload show-branch",
         "git -c core.pager=payload check-ref-format --branch main",
+        "git -c core.pager=payload var -l",
+        "git check-mailmap --mailmap-file /home/user/.ssh/config contact",
+        "git check-mailmap --mailmap-blob HEAD:other contact",
+        "git interpret-trailers --in-place message.txt",
+        "git interpret-trailers message.txt",
+        "git interpret-trailers --trailer",
+        // Without `--only-input`, Git applies the repository's
+        // `trailer.*` configuration, and a `trailer.<token>.command`
+        // there runs its program on every invocation.
+        "git interpret-trailers --trailer 'Fixes: #1' --where after",
+        "git interpret-trailers --only-trailers --unfold",
         "git cat-file --textconv HEAD:file",
         "git cat-file --filters HEAD:file",
         "git cat-file --path=file blob HEAD",
@@ -251,6 +270,11 @@ fn routed_ref_readings_invent_no_unrelated_git_owners() {
         "git -C sub name-rev --name-only HEAD",
         "git -C sub show-branch",
         "git -C sub check-ref-format --branch main",
+        "git -C sub var -l",
+        "git -C sub patch-id --stable",
+        "git -C sub stripspace --strip-comments",
+        "git -C sub check-mailmap --stdin",
+        "git -C sub interpret-trailers --parse",
     ] {
         assert!(
             observations_in(command, worktree.path())
@@ -366,6 +390,36 @@ fn read_plumbing_answers_to_the_porcelain_owner_it_belongs_to() {
         assert_eq!(matches[0].rule_id, rule_id, "{command}");
         assert!(!matches[0].uncertainty, "{command}");
     }
+}
+
+/// `git annotate` is `git blame` printed in another format: the same walk,
+/// the same options and the same `blame.*` settings. Without an owner it fell
+/// to the blanket attribution every unnamed subcommand reaches, which reports
+/// each git rule as uncertain and leaves an everyday read with a floor no
+/// approval and no contained workspace can settle.
+#[test]
+fn the_other_spelling_of_blame_answers_to_the_blame_owner() {
+    for (annotate, blame) in [
+        ("git annotate src/index.ts", "git blame src/index.ts"),
+        (
+            "git annotate -L 1,20 src/index.ts",
+            "git blame -L 1,20 src/index.ts",
+        ),
+        (
+            "git annotate --textconv src/index.ts",
+            "git blame --textconv src/index.ts",
+        ),
+    ] {
+        let read = |command: &str| -> Vec<(String, bool)> {
+            observations(command)
+                .rule_matches
+                .iter()
+                .map(|entry| (entry.rule_id.to_string(), entry.uncertainty))
+                .collect()
+        };
+        assert_eq!(read(annotate), read(blame), "{annotate}");
+    }
+    assert!(settles("git annotate src/index.ts"));
 }
 
 /// A bisect session moves `HEAD` across the history it is searching, so it
