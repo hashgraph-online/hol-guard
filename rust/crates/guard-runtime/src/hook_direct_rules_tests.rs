@@ -93,14 +93,16 @@ fn a_saved_block_on_the_exact_command_defers_a_command_the_edge_allows() {
             .execute_batch(
                 "create table if not exists policy_decisions (
                      harness text not null, scope text not null,
-                     artifact_id text, action text not null
+                     artifact_id text, workspace text, action text not null,
+                     source text not null default 'local', expires_at text
                  );
                  delete from policy_decisions;",
             )
             .unwrap();
         connection
             .execute(
-                "insert into policy_decisions values (?1, 'artifact', ?2, ?3)",
+                "insert into policy_decisions (harness, scope, artifact_id, action) \
+                 values (?1, 'artifact', ?2, ?3)",
                 rusqlite::params![harness, exact_id(command), action],
             )
             .unwrap();

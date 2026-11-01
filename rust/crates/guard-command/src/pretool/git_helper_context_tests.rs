@@ -34,6 +34,37 @@ fn the_ref_readings_ask_for_the_configuration_probe() {
     }
 }
 
+/// The stdin filters ask for the probe too, on the spelling that only reads.
+#[test]
+fn the_stdin_filters_ask_for_the_configuration_probe() {
+    for command in [
+        "git var GIT_COMMITTER_IDENT",
+        "git var -l",
+        "git patch-id --stable",
+        "git stripspace --strip-comments",
+        "git check-mailmap --stdin",
+        "git interpret-trailers --parse",
+        "git interpret-trailers --only-input --only-trailers --unfold",
+    ] {
+        assert!(probes(command), "{command}");
+    }
+}
+
+/// The spellings that open a file the caller names never reach the probe.
+#[test]
+fn the_file_spellings_never_reach_the_probe() {
+    for command in [
+        "git check-mailmap --mailmap-file /home/user/.ssh/config contact",
+        "git check-mailmap --mailmap-blob HEAD:other contact",
+        "git interpret-trailers --in-place message.txt",
+        "git interpret-trailers message.txt",
+        "git interpret-trailers --trailer 'Fixes: #1' --where after",
+        "git interpret-trailers --only-trailers --unfold",
+    ] {
+        assert!(!probes(command), "{command}");
+    }
+}
+
 /// The write spellings never reach the probe, because the inspection proof
 /// refuses them first.
 #[test]

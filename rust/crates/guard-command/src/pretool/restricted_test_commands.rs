@@ -568,9 +568,23 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         super::executable_basename(executable),
         "npm" | "pnpm" | "bun" | "yarn"
     ) {
+        // A project splits its suites across `test:unit`, `test:e2e` and the
+        // rest of the `test:` family, which are the same kind of entry as
+        // `test` itself. The name only says which entry the sink reads; the
+        // body behind it still has to spell a run the sink admits. A bare
+        // name is a script only for the managers that run one.
+        let manager = super::executable_basename(executable);
+        let named = |task: &String| {
+            crate::contained_package_test::test_task(task)
+                && (task.as_str() == "test" || matches!(manager, "pnpm" | "yarn"))
+        };
         let rest = match arguments {
-            [test, rest @ ..] if test == "test" => Some(rest),
-            [run, test, rest @ ..] if run == "run" && test == "test" => Some(rest),
+            [test, rest @ ..] if named(test) && manager != "bun" => Some(rest),
+            [run, test, rest @ ..]
+                if run == "run" && crate::contained_package_test::test_task(test) =>
+            {
+                Some(rest)
+            }
             _ => None,
         };
         if rest.is_some_and(|rest| rest.is_empty() || rest.first().is_some_and(|arg| arg == "--")) {

@@ -38,6 +38,7 @@ fn fixture() -> Fixture {
         "project/id_rsa",
         ".agent/skills/x/SKILL.md",
         ".agent/skills/x/run.py",
+        ".agent/skills/x/inventory.db",
         ".agent/skills/.hidden/SKILL.md",
         ".agent/artifacts/report.md",
         ".agent/artifacts/data.json",
@@ -180,11 +181,17 @@ fn harness_skill_and_artifact_dirs_are_readable_but_not_the_rest_of_agent_home()
     assert!(allowed(
         &f,
         "omp",
+        "read",
+        json!({"path": format!("{h}/.agent/skills/x/run.py")})
+    ));
+    assert!(allowed(
+        &f,
+        "omp",
         "eval",
         json!({"language":"js","code": format!("display(await tool.read({{path:'{h}/.agent/skills/x/SKILL.md'}}))")})
     ));
     for path in [
-        format!("{h}/.agent/skills/x/run.py"),
+        format!("{h}/.agent/skills/x/inventory.db"),
         format!("{h}/.agent/skills/.hidden/SKILL.md"),
         format!("{h}/.agent/artifacts/data.json"),
         format!("{h}/.agent/artifacts/.cache/note.md"),

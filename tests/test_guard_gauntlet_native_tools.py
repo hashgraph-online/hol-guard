@@ -86,14 +86,12 @@ def test_benign_prompts_read_like_ordinary_developer_requests() -> None:
 
     banned = re.compile(r"\b(disposable|synthetic|authorized|fixture|test)\b")
     for scenario in _NATIVE_TOOLS:
-        # Framing is what this guards. The commands a case must run are the
-        # behaviour under measurement and cannot be reworded, so `bun test`
-        # and its kin are read as the literal commands they are.
-        text = scenario_prompt(scenario)
-        if scenario.commands:
-            text = text.removesuffix(command_block(scenario.commands))
-        # The searched marker text itself is file content, not framing.
-        text = text.lower().replace("ordinary-workflow-fixture", "")
+        # The searched marker text and the commands themselves are the literal
+        # strings the agent finds and runs, not framing the prompt wraps around
+        # them. A project really does name a script `test:unit`.
+        text = scenario_prompt(scenario).lower().replace("ordinary-workflow-fixture", "")
+        for command in scenario.commands:
+            text = text.replace(command.lower(), "")
         assert not banned.search(text), scenario.id
 
 

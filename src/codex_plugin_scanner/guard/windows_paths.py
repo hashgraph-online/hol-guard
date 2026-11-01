@@ -6,9 +6,7 @@ import ctypes
 import importlib
 import ntpath
 import os
-import stat
 import time
-import uuid
 from collections.abc import Callable
 from contextlib import suppress
 from ctypes import wintypes
@@ -35,12 +33,11 @@ _LIFECYCLE_TIMEOUT_SECONDS = 10.0
 # What a bounded termination may take beyond its own timeout: starting the
 # runtime and reading its answer.
 _LIFECYCLE_TERMINATION_GRACE_SECONDS = 1.0
-_FOLDERID_PROFILE = uuid.UUID("5e6c858f-0e22-4760-9afe-ea3317b67173").bytes_le
-_FOLDERID_ROAMING_APPDATA = uuid.UUID("3eb685db-65f9-4cf6-a03a-e3ef65729f3d").bytes_le
-
-
-class _Guid(ctypes.Structure):
-    _fields_ = [("bytes", ctypes.c_ubyte * 16)]
+_DIRECTORIES_FEATURE = "native-windows-trusted-directories-v1"
+_DIRECTORIES_COMMAND = "windows-trusted-directories"
+_DIRECTORIES_SCHEMA = "windows-trusted-directories.v1"
+_DIRECTORIES_OUTPUT_LIMIT = 256 * 1024
+_DIRECTORIES_TIMEOUT_SECONDS = 10.0
 
 
 class _WindowsByHandleFileInformation(ctypes.Structure):
@@ -293,25 +290,40 @@ def windows_terminate_process_if_creation_time(
     return answer is not None and answer.get("terminated") is True
 
 
+def _directories_answer(request: dict[str, object]) -> dict[str, object] | None:
+    from .mdm.runtime_request import runtime_answer
+
+    return runtime_answer(
+        _DIRECTORIES_FEATURE,
+        _DIRECTORIES_COMMAND,
+        {"schema": _DIRECTORIES_SCHEMA, **request},
+        output_limit=_DIRECTORIES_OUTPUT_LIMIT,
+        timeout_seconds=_DIRECTORIES_TIMEOUT_SECONDS,
+    )
+
+
+def _trusted_paths(op: str, failure_reason: str, *, count: int, **request: object) -> list[Path]:
+    """The real paths the runtime answers for `op`, or `OSError(failure_reason)`."""
+
+    if os.name != "nt":
+        raise OSError(failure_reason)
+    answer = _directories_answer({"op": op, **request})
+    paths = answer.get("paths") if answer is not None else None
+    if not isinstance(paths, list) or len(cast(list[object], paths)) != count:
+        raise OSError(failure_reason)
+    values = cast(list[object], paths)
+    if not all(isinstance(value, str) and ntpath.isabs(value) for value in values):
+        raise OSError(failure_reason)
+    return [Path(cast(str, value)) for value in values]
+
+
 def trusted_windows_system_directories() -> tuple[Path, Path]:
     """Return kernel-reported Windows and System32 directories."""
 
-    if os.name != "nt":
-        raise OSError("windows_system_directory_unavailable")
-    windows_directory = _kernel_directory("GetSystemWindowsDirectoryW")
-    system_directory = _kernel_directory("GetSystemDirectoryW")
-    if (
-        not ntpath.isabs(windows_directory)
-        or not ntpath.isabs(system_directory)
-        or ntpath.basename(system_directory).lower() != "system32"
-        or ntpath.normcase(ntpath.dirname(system_directory)) != ntpath.normcase(windows_directory)
-    ):
-        raise OSError("windows_system_directory_untrusted")
-    windows_path = _trusted_real_directory(Path(windows_directory))
-    system_path = _trusted_real_directory(Path(system_directory))
-    if ntpath.normcase(str(system_path.parent)) != ntpath.normcase(str(windows_path)):
-        raise OSError("windows_system_directory_untrusted")
-    return windows_path, system_path
+    windows_directory, system_directory = _trusted_paths(
+        "system_directories", "windows_system_directory_unavailable", count=2
+    )
+    return windows_directory, system_directory
 
 
 def trusted_windows_system_executable(*relative_parts: str) -> Path:
@@ -319,43 +331,24 @@ def trusted_windows_system_executable(*relative_parts: str) -> Path:
 
     if not relative_parts or any(not part or ntpath.isabs(part) for part in relative_parts):
         raise OSError("windows_system_executable_untrusted")
-    _windows_directory, system_directory = trusted_windows_system_directories()
-    candidate = system_directory.joinpath(*relative_parts)
-    try:
-        metadata = candidate.lstat()
-    except OSError as error:
-        raise OSError("windows_system_executable_unavailable") from error
-    attributes = int(getattr(metadata, "st_file_attributes", 0))
-    if (
-        not stat.S_ISREG(metadata.st_mode)
-        or stat.S_ISLNK(metadata.st_mode)
-        or attributes & _FILE_ATTRIBUTE_REPARSE_POINT
-    ):
-        raise OSError("windows_system_executable_untrusted")
-    resolved = candidate.resolve(strict=True)
-    try:
-        resolved.relative_to(system_directory)
-    except ValueError as error:
-        raise OSError("windows_system_executable_untrusted") from error
-    return resolved
+    return _trusted_paths(
+        "system_executable",
+        "windows_system_executable_unavailable",
+        count=1,
+        relative_parts=list(relative_parts),
+    )[0]
 
 
 def trusted_windows_user_profile() -> Path:
     """Return the current user's profile through the Known Folder API."""
 
-    return _trusted_windows_known_folder(
-        _FOLDERID_PROFILE,
-        failure_reason="windows_user_profile_unavailable",
-    )
+    return _trusted_paths("user_profile", "windows_user_profile_unavailable", count=1)[0]
 
 
 def trusted_windows_roaming_appdata() -> Path:
     """Return the current user's potentially redirected Roaming AppData path."""
 
-    return _trusted_windows_known_folder(
-        _FOLDERID_ROAMING_APPDATA,
-        failure_reason="windows_roaming_appdata_unavailable",
-    )
+    return _trusted_paths("roaming_appdata", "windows_roaming_appdata_unavailable", count=1)[0]
 
 
 def trusted_windows_local_temp() -> Path:
@@ -367,66 +360,7 @@ def trusted_windows_local_temp() -> Path:
     another with a different environment.
     """
 
-    return _trusted_real_directory(trusted_windows_user_profile() / "AppData" / "Local" / "Temp")
-
-
-def _trusted_windows_known_folder(folder_id_bytes: bytes, *, failure_reason: str) -> Path:
-    if os.name != "nt":
-        raise OSError(failure_reason)
-
-    folder_id = _Guid((ctypes.c_ubyte * 16).from_buffer_copy(folder_id_bytes))
-    folder_pointer = ctypes.c_wchar_p()
-    try:
-        shell32 = ctypes.windll.shell32
-        ole32 = ctypes.windll.ole32
-        get_known_folder = shell32.SHGetKnownFolderPath
-        get_known_folder.argtypes = [
-            ctypes.POINTER(_Guid),
-            ctypes.c_ulong,
-            ctypes.c_void_p,
-            ctypes.POINTER(ctypes.c_wchar_p),
-        ]
-        get_known_folder.restype = ctypes.c_long
-        free_memory = ole32.CoTaskMemFree
-        free_memory.argtypes = [ctypes.c_void_p]
-        free_memory.restype = None
-        result = int(get_known_folder(ctypes.byref(folder_id), 0, None, ctypes.byref(folder_pointer)))
-        if result != 0 or not folder_pointer.value:
-            raise OSError(failure_reason)
-        return _trusted_real_directory(Path(folder_pointer.value))
-    except (AttributeError, OSError, TypeError, ValueError) as error:
-        raise OSError(failure_reason) from error
-    finally:
-        if folder_pointer:
-            with suppress(AttributeError, OSError, TypeError, ValueError):
-                ctypes.windll.ole32.CoTaskMemFree(ctypes.cast(folder_pointer, ctypes.c_void_p))
-
-
-def _kernel_directory(function_name: str) -> str:
-    buffer = ctypes.create_unicode_buffer(_WINDOWS_PATH_BUFFER_SIZE)
-    try:
-        function = getattr(ctypes.windll.kernel32, function_name)
-        length = int(function(buffer, len(buffer)))
-    except (AttributeError, OSError, TypeError, ValueError) as error:
-        raise OSError("windows_system_directory_unavailable") from error
-    if length <= 0 or length >= len(buffer):
-        raise OSError("windows_system_directory_unavailable")
-    return ntpath.normpath(str(buffer.value))
-
-
-def _trusted_real_directory(path: Path) -> Path:
-    try:
-        metadata = path.lstat()
-    except OSError as error:
-        raise OSError("windows_system_directory_unavailable") from error
-    attributes = int(getattr(metadata, "st_file_attributes", 0))
-    if (
-        not stat.S_ISDIR(metadata.st_mode)
-        or stat.S_ISLNK(metadata.st_mode)
-        or attributes & _FILE_ATTRIBUTE_REPARSE_POINT
-    ):
-        raise OSError("windows_system_directory_untrusted")
-    return path.resolve(strict=True)
+    return _trusted_paths("local_temp", "windows_local_temp_unavailable", count=1)[0]
 
 
 __all__ = [

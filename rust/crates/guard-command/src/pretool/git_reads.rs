@@ -250,6 +250,26 @@ pub(super) fn safe_git_arguments(
         // that first.
         return allow_helper_context;
     }
+    if matches!(subcommand, "var" | "patch-id" | "stripspace") {
+        // `var` prints a logical variable, and the other two filter the text
+        // on their stdin. None opens a working-tree file or runs a configured
+        // driver, but an explicit `pager.<verb>` key can still name a
+        // program, so the configuration probe clears that first.
+        return allow_helper_context;
+    }
+    if subcommand == "check-mailmap" {
+        // Translating contacts reads the repository's own mailmap. The
+        // options that name another file or object keep their review.
+        return allow_helper_context
+            && crate::command_compatibility::git_mailmap_read(&arguments[1..]);
+    }
+    if subcommand == "interpret-trailers" {
+        // The pipe-only spelling prints the message it was handed.
+        // `--in-place` and a file operand open the path instead and keep
+        // their review.
+        return allow_helper_context
+            && crate::command_compatibility::git_trailers_read(&arguments[1..]);
+    }
     if subcommand == "symbolic-ref" {
         // Printing where a symbolic ref points reads one loose file. A second
         // operand writes that ref instead and keeps its own review; the
@@ -381,6 +401,11 @@ pub(super) fn inspection_writes_nothing(
             | "show-branch"
             | "check-ref-format"
             | "symbolic-ref"
+            | "var"
+            | "patch-id"
+            | "stripspace"
+            | "check-mailmap"
+            | "interpret-trailers"
     ) {
         return false;
     }

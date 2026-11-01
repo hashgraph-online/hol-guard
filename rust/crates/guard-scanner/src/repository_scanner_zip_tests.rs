@@ -6,7 +6,7 @@ use crate::repository_scanner::scan_blob;
 
 /// Assembled rather than written out, so no whole provider-shaped token is a
 /// literal in this file.
-fn credential_line() -> String {
+pub(super) fn credential_line() -> String {
     format!(
         "GH_TOKEN = {}{}",
         "ghp_", "Jd2RmVe9XtB4kPdW7LcZsY6JhG3uA1oF5rT8"
@@ -14,7 +14,7 @@ fn credential_line() -> String {
 }
 
 /// A second, different token, for the cases that need two findings told apart.
-fn other_credential_line() -> String {
+pub(super) fn other_credential_line() -> String {
     format!(
         "GH_TOKEN = {}{}",
         "ghp_", "Ks4TcJx6ZbQ1nK8vD3mYpL9gH5rE7uA2fN0i"
@@ -28,7 +28,7 @@ const DEFLATE: u16 = 8;
 /// One member, as the builder below will write it. The fields a well-formed
 /// archive derives are separate from the ones a malformed archive lies about,
 /// so a test can set either on its own.
-struct Entry {
+pub(super) struct Entry {
     name: String,
     /// The bytes written into the file, already in whatever codec `method`
     /// names.
@@ -52,7 +52,7 @@ fn crc32(body: &[u8]) -> u32 {
     crc.sum()
 }
 
-fn stored(name: &str, body: &[u8]) -> Entry {
+pub(super) fn stored(name: &str, body: &[u8]) -> Entry {
     Entry {
         name: name.to_string(),
         stored: body.to_vec(),
@@ -64,7 +64,7 @@ fn stored(name: &str, body: &[u8]) -> Entry {
     }
 }
 
-fn deflated(name: &str, body: &[u8]) -> Entry {
+pub(super) fn deflated(name: &str, body: &[u8]) -> Entry {
     Entry {
         name: name.to_string(),
         stored: deflate(body),
@@ -83,11 +83,11 @@ fn deflate(body: &[u8]) -> Vec<u8> {
     encoder.finish().unwrap()
 }
 
-fn zip_bytes(entries: &[Entry]) -> Vec<u8> {
+pub(super) fn zip_bytes(entries: &[Entry]) -> Vec<u8> {
     zip_bytes_with_comment(entries, b"")
 }
 
-fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
+pub(super) fn zip_bytes_with_comment(entries: &[Entry], comment: &[u8]) -> Vec<u8> {
     let named: Vec<usize> = (0..entries.len()).collect();
     zip_bytes_naming(entries, &named, comment)
 }
@@ -183,13 +183,13 @@ fn claim_encrypted_in_the_directory(archive: &mut [u8], name: &str) {
     }
 }
 
-fn gzip_bytes(data: &[u8]) -> Vec<u8> {
+pub(super) fn gzip_bytes(data: &[u8]) -> Vec<u8> {
     let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(data).unwrap();
     encoder.finish().unwrap()
 }
 
-fn scan(archive: &[u8], path: &str) -> (Vec<String>, usize) {
+pub(super) fn scan(archive: &[u8], path: &str) -> (Vec<String>, usize) {
     let (findings, scanned) = scan_blob(
         archive,
         path,

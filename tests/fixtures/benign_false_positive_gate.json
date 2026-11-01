@@ -4536,6 +4536,91 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-var-committer-ident",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git var GIT_COMMITTER_IDENT"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-patch-id-stable",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git patch-id --stable"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-stripspace-comments",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git stripspace --strip-comments"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-check-mailmap-stdin",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-mailmap --stdin"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-interpret-trailers-parse",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git interpret-trailers --parse"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-git-symbolic-ref-write",
       "fix_area": "negative",
       "harnesses": [
@@ -4548,6 +4633,60 @@
       "tool": "shell",
       "tool_input": {
         "command": "git symbolic-ref HEAD refs/heads/other"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-check-mailmap-other-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-mailmap --mailmap-file /tmp/other.mailmap contact"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-interpret-trailers-applies-config",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git interpret-trailers --trailer 'Fixes: #1' --where after"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-interpret-trailers-in-place",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git interpret-trailers --in-place message.txt"
       },
       "cwd": "worktree",
       "contained_ok": true,
@@ -24685,6 +24824,57 @@
       "expect": "allow"
     },
     {
+      "id": "named-test-script-npm-run-unit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run test:unit"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "named-test-script-pnpm-run-unit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm run test:unit"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "named-test-script-npm-run-unit-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run test:unit 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "toolchain-npx-tsc-version",
       "fix_area": "shell",
       "harnesses": [
@@ -27718,6 +27908,54 @@
       "expect": "not_allow"
     },
     {
+      "id": "read-skill-helper-script-before-running-it",
+      "fix_area": "skill-helper-script-read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/.agents/skills/x/scripts/run.sh"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cat-skill-helper-script-before-running-it",
+      "fix_area": "skill-helper-script-read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.agents/skills/x/scripts/run.sh"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-read-non-script-file-in-skill-scripts-folder",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/.agents/skills/x/scripts/backup.db"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-read-token-named-file-in-skill-tree",
       "fix_area": "negative",
       "harnesses": [
@@ -27729,6 +27967,38 @@
       "tool": "read",
       "tool_input": {
         "path": "${HOME}/.agents/skills/x/credentials.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-script-in-skill-tree-credential-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/.agents/skills/x/secrets/export.sh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cat-script-in-skill-tree-credential-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.agents/skills/x/secrets/export.sh"
       },
       "cwd": "worktree",
       "expect": "not_allow"

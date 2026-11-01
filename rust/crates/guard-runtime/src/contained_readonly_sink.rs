@@ -235,7 +235,12 @@ pub(super) fn run(
         Kind::NodeTest => ("prepare_node", Some(NODE_TEST_PROFILE)),
         Kind::Git => ("prepare_git", Some(GIT_PROFILE)),
         Kind::Pytest => ("prepare", Some(PYTEST_PROFILE)),
-        Kind::NodeTool => ("prepare_node_tool", Some(route.1)),
+        // A package test resolves its own kind, so a tool body needs the tool
+        // profile rather than the package route's.
+        Kind::NodeTool => (
+            "prepare_node_tool",
+            Some(if package { NODE_TOOL_PROFILE } else { route.1 }),
+        ),
         Kind::Package => return Err(Failure::unauthorized()),
     };
     let mut plan = prepare(operation, &argv, workspace, home)?;
@@ -247,10 +252,13 @@ pub(super) fn run(
     let (payload, route) = if package {
         authorize_route(authority, payload, route)?;
         underlying = with_command(payload, &argv, None);
-        let route = if kind == Kind::Vitest {
-            VITEST_ROUTE
-        } else {
-            ROUTES[4]
+        let route = match kind {
+            Kind::Vitest => VITEST_ROUTE,
+            // A test script holding a read-only tool run resolves to that
+            // tool's own call, so it runs under the tool route, not a
+            // runner's.
+            Kind::NodeTool => ROUTES[7],
+            _ => ROUTES[4],
         };
         (&underlying, route)
     } else {

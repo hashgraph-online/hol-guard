@@ -207,6 +207,45 @@ pub(super) fn symbolic_ref_read(rest: &[String]) -> bool {
     !first.starts_with('-') && operands.next().is_none()
 }
 
+/// Whether a `check-mailmap` form reads only the repository's own mailmap.
+/// The contacts it translates are plain text, and `--stdin` reads them from
+/// the pipe, but `--mailmap-file` names any file on disk and `--mailmap-blob`
+/// any object, so neither spelling is this read.
+pub(super) fn mailmap_read(rest: &[String]) -> bool {
+    rest.iter().all(|argument| {
+        let option = argument.split('=').next().unwrap_or(argument);
+        match option {
+            "--stdin" => true,
+            _ => !option.starts_with('-'),
+        }
+    })
+}
+
+/// Whether an `interpret-trailers` form only filters the message it was
+/// handed. Git applies the repository's `trailer.*` configuration unless it
+/// is told not to, and a `trailer.<token>.command` runs its program on every
+/// invocation while a `trailer.<token>.cmd` runs on the token a `--trailer`
+/// names, so any spelling that applies that configuration can run a program
+/// the repository chose. `--only-input` turns the whole of it off and
+/// `--parse` implies `--only-input`, so the read is the spelling that carries
+/// one of them. `--in-place` and a file operand open a path besides, and both
+/// keep their review for that reason too.
+pub(super) fn trailers_read(rest: &[String]) -> bool {
+    let mut applies_configuration = true;
+    for argument in rest {
+        match argument.as_str() {
+            "--only-input" | "--parse" => applies_configuration = false,
+            // These shape the printed message, name neither a file nor a
+            // program, and take no value.
+            "--only-trailers" | "--unfold" | "--trim-empty" | "--divider" | "--no-divider" => {}
+            // `--in-place`, a file operand, `--`, `--no-only-input` and any
+            // option this grammar does not know keep their review.
+            _ => return false,
+        }
+    }
+    !applies_configuration
+}
+
 fn read_only_plumbing(arguments: &[String]) -> bool {
     let Some((command, rest)) = arguments.split_first() else {
         return false;
@@ -222,6 +261,13 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
         // at all. None of the three writes, reaches the network, or defines
         // an option that names a program or an output file.
         "name-rev" | "show-branch" | "check-ref-format" => true,
+        // `var` prints a logical variable, `patch-id` an id for the diff on
+        // its stdin and `stripspace` the cleaned-up message on its stdin.
+        // None opens a working-tree file, writes, or defines an option that
+        // names a program.
+        "var" | "patch-id" | "stripspace" => true,
+        "check-mailmap" => mailmap_read(rest),
+        "interpret-trailers" => trailers_read(rest),
         "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
         // These listings only print, and their grammars already exclude the
         // forms that run a configured program; the read proof still decides.
@@ -267,8 +313,12 @@ pub(super) fn inspection_arguments<'a>(
             | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep"
             | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog"
             | "check-ignore" | "count-objects" | "check-attr" | "name-rev" | "show-branch"
-            | "check-ref-format",
+            | "check-ref-format" | "var" | "patch-id" | "stripspace",
         ) => true,
+        // Both also have a spelling that opens a file the caller names, so
+        // each is admitted only on the grammar that reads its own pipe.
+        Some("check-mailmap") => mailmap_read(&remaining[1..]),
+        Some("interpret-trailers") => trailers_read(&remaining[1..]),
         // A second operand turns the ref read into a ref write, so the
         // printing form is admitted on its own grammar.
         Some("symbolic-ref") => symbolic_ref_read(&remaining[1..]),

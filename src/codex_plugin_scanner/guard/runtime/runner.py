@@ -29,11 +29,6 @@ from ..cli.oauth_client import (
     resolve_guard_oauth_client_config,
     validate_guard_sync_endpoint,
 )
-from ..cloud_exceptions import (
-    build_cloud_exceptions_from_policy_bundle,
-    cloud_exception_to_dict,
-    dedupe_cloud_exceptions,
-)
 from ..config import VALID_RECEIPT_REDACTION_LEVELS
 from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
@@ -412,6 +407,19 @@ def _build_policy_bundle_decisions(
     )
 
 
+def _legacy_shadow_predates_candidate(legacy: Mapping[str, object], candidate: Mapping[str, object]) -> bool:
+    """Whether the stored v1 bundle was issued for an older publication than the candidate.
+
+    Cloud issues a publication's v1 bundle at or after the publication itself,
+    so one issued earlier carries a different policy and cannot show whether
+    the candidate's compiler agrees. Unreadable times keep the comparison.
+    """
+
+    legacy_issued = _parse_iso_timestamp(str(legacy.get("issuedAt") or ""))
+    candidate_issued = _parse_iso_timestamp(str(candidate.get("issuedAt") or ""))
+    return legacy_issued is not None and candidate_issued is not None and legacy_issued < candidate_issued
+
+
 def policy_bundle_candidate_decisions(
     store: GuardStore,
     policy_bundle: dict[str, object],
@@ -463,6 +471,8 @@ def policy_bundle_candidate_decisions(
             and existing_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT
             else None
         )
+    if isinstance(legacy_payload, dict) and _legacy_shadow_predates_candidate(legacy_payload, policy_bundle):
+        legacy_payload = None
     try:
         legacy_decisions = (
             _build_policy_bundle_decisions(
@@ -1022,14 +1032,14 @@ def sync_receipts(
             policy_bundle_ack = {}
         if effective_policy_bundle is not None:
             remote_decisions.update(selected_policy_decisions)
-            cloud_exception_items = _policy_bundle_cloud_exception_items(
-                store,
-                device_id=device_id,
-                sync_exceptions=[],
-                policy_bundle=effective_policy_bundle,
-                policy_bundle_ack=policy_bundle_ack,
-            )
             try:
+                cloud_exception_items = _policy_bundle_cloud_exception_items(
+                    store,
+                    device_id=device_id,
+                    sync_exceptions=[],
+                    policy_bundle=effective_policy_bundle,
+                    policy_bundle_ack=policy_bundle_ack,
+                )
                 custom_extension_continuity = apply_custom_extension_continuity_from_sync(
                     store,
                     effective_policy_bundle,
@@ -2050,21 +2060,18 @@ def _policy_bundle_cloud_exception_items(
     if bundle_ack is None:
         bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
         bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
-    items = []
     # ``sync_exceptions`` is retained as an explicit compatibility boundary so
     # callers can demonstrate that legacy unsigned siblings were considered
     # and rejected. It must never contribute enforcement authority.
     del sync_exceptions
-    if isinstance(policy_bundle, dict):
-        items.extend(
-            build_cloud_exceptions_from_policy_bundle(
-                policy_bundle,
-                device_id=resolved_device_id,
-                policy_bundle_ack=bundle_ack,
-            )
-        )
-    serialized = [cloud_exception_to_dict(item) for item in dedupe_cloud_exceptions(items)]
-    return serialized
+    if not isinstance(policy_bundle, dict):
+        return []
+    try:
+        return _sync.cloud_exceptions(policy_bundle, device_id=resolved_device_id, policy_bundle_ack=bundle_ack)
+    except NativeRunnerAuthorityError as error:
+        # Without the runtime's listing the bundle cannot be activated with
+        # the exceptions it grants: an outage, not a verdict on the bundle.
+        raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION) from error
 
 
 def _sign_guard_dpop_proof(

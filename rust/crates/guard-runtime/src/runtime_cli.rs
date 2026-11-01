@@ -140,8 +140,22 @@ pub(super) fn run() -> Result<(), String> {
             let response = user_health_state::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if windows_private_state::is_command(command) && flag == "--stdin" => {
+            let response = windows_private_state::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if onefile_open_paths::is_command(command) && flag == "--stdin" => {
+            let response = onefile_open_paths::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
             let response = device_key_helper::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if windows_process_command_lines::is_command(command) && flag == "--stdin" =>
+        {
+            let response = windows_process_command_lines::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
@@ -150,6 +164,12 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if windows_process_lifecycle::is_command(command) && flag == "--stdin" => {
             let response = windows_process_lifecycle::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if windows_trusted_directories::is_command(command) && flag == "--stdin" =>
+        {
+            let response = windows_trusted_directories::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag]
@@ -180,6 +200,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if mdm_integrity_snapshot::is_command(command) && flag == "--stdin" => {
             let response = mdm_integrity_snapshot::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if orphaned_worker_reap::is_command(command) && flag == "--stdin" => {
+            let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

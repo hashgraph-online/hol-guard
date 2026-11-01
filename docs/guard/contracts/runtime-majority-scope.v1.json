@@ -419,7 +419,6 @@
           "src/codex_plugin_scanner/guard/daemon/policy_authority_api.py",
           "src/codex_plugin_scanner/guard/daemon/dashboard_reconnect.py",
           "src/codex_plugin_scanner/guard/daemon/diagnostics.py",
-          "src/codex_plugin_scanner/guard/daemon/orphaned_daemon_workers.py",
           "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
           "src/codex_plugin_scanner/guard/daemon/approval_connector_recommendation.py",
           "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
@@ -571,6 +570,10 @@
       }
     ],
     "reviewed_runtime": [
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime/runner_native_sync.py",
+        "reason": "Reviewed native runner-authority projections: store_cloud_events lazily imports cloud_exceptions from this module, alongside the sync URL, pain-signal, value-metric and policy-bundle projections the cloud sync transport uses. Every function ships a minimal projection to the resident and returns its answer unchanged; count the complete module in runtime scope. No runtime behavior is excluded."
+      },
       {
         "path": "src/codex_plugin_scanner/guard/runtime/extension_control_proof.py",
         "reason": "Retained conservatively in runtime scope: installed-upgrade recovery imports the existing authority phase and error contracts from this proof module. Count the complete module, including its proof helpers, rather than exclude code reached by startup recovery. Installed-upgrade authorization remains native."
@@ -750,10 +753,9 @@
           "src/codex_plugin_scanner/guard/store_policy_list.py",
           "src/codex_plugin_scanner/guard/text.py",
           "src/codex_plugin_scanner/guard/trust_metadata_boundary.py",
-          "src/codex_plugin_scanner/guard/cloud_exceptions.py",
           "src/codex_plugin_scanner/guard/policy_bundle_decisions.py"
         ],
-        "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_* trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server), cloud_exceptions (store_cloud_events) and policy_bundle_decisions (local_supply_chain policy-bundle handling)."
+        "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_* trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server) and policy_bundle_decisions (local_supply_chain policy-bundle handling)."
       },
       {
         "path": [

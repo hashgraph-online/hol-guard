@@ -26,6 +26,7 @@ fn home(name: &str) -> PathBuf {
     let home = root.join("home");
     for directory in [
         ".agents/skills/release-check/scripts",
+        ".agents/skills/release-check/secrets",
         ".cargo/registry/src/index.crates.io/serde-1.0.0/src/bin",
         ".bun/install/global/node_modules/pkg/bin",
         ".certs",
@@ -61,6 +62,14 @@ fn home(name: &str) -> PathBuf {
         (".hol-support/SAFETY.md", "# Safety\n"),
         (".agents/skills/release-check/config.json", "{}\n"),
         (".agents/skills/release-check/scripts/run.sh", "#!/bin/sh\n"),
+        (
+            ".agents/skills/release-check/scripts/inventory.db",
+            "rows\n",
+        ),
+        (
+            ".agents/skills/release-check/secrets/export.sh",
+            "export TOKEN=redacted\n",
+        ),
         (
             ".cargo/registry/src/index.crates.io/serde-1.0.0/src/lib.rs",
             "pub fn parse() {}\n",
@@ -368,20 +377,25 @@ fn a_nested_program_directory_keeps_review() {
 /// A narrower rule owns the agent guidance documents: the skill-document rule
 /// answers a `SKILL.md`, and the safety-document rule answers
 /// `~/.hol-support/SAFETY.md` with bounds a target screen cannot see. This
-/// screen stands aside rather than giving those paths a second answer, so the
-/// script beside a skill document stays outside the read rules as before.
+/// screen stands aside rather than giving those paths a second answer. The
+/// skill rules reach the document and the helper script the document names;
+/// the data file beside them is left to the review this screen would have
+/// given it.
 #[test]
 fn narrower_document_rules_keep_their_paths() {
     let home = home("guidance");
     for command in [
         "cat ~/.agents/skills/release-check/SKILL.md",
         "cat ~/.hol-support/SAFETY.md",
+        "cat ~/.agents/skills/release-check/scripts/run.sh",
     ] {
         assert_eq!(action(&home, "codex", command), "allow", "{command}");
     }
     for command in [
-        "cat ~/.agents/skills/release-check/scripts/run.sh",
         "cat ~/.agents/skills/release-check/config.json",
+        "cat ~/.agents/skills/release-check/scripts/inventory.db",
+        // A credential store inside a skill tree is still a credential store.
+        "cat ~/.agents/skills/release-check/secrets/export.sh",
     ] {
         assert_ne!(action(&home, "codex", command), "allow", "{command}");
     }
@@ -422,6 +436,7 @@ fn the_native_read_tool_answers_as_the_shell_does() {
             ".nvm/versions/node/v25.2.1/lib/node_modules/pkg/package.json",
             ".cargo/registry/src/index.crates.io/serde-1.0.0/src/lib.rs",
             ".codex/plans/order-intake/todo.md",
+            ".agents/skills/release-check/scripts/run.sh",
         ] {
             assert_eq!(
                 native_action(&home, harness, tool, target),
@@ -430,7 +445,7 @@ fn the_native_read_tool_answers_as_the_shell_does() {
             );
         }
         for target in [
-            ".agents/skills/release-check/scripts/run.sh",
+            ".agents/skills/release-check/secrets/export.sh",
             ".ssh/config",
             ".config/gh/hosts.yml",
             ".config/gcloud/credentials.db",

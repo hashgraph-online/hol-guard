@@ -73,6 +73,7 @@ mod binding_capture_record;
 #[cfg(all(test, unix))]
 mod binding_capture_vectors_tests;
 mod blocked_request_mode;
+mod boot_observation;
 mod bounded_hook_bridge;
 mod bounded_hook_bridge_grok;
 mod bounded_hook_bridge_grok_render;
@@ -284,6 +285,7 @@ mod direct_tool_managed_bun;
 mod directory_trust;
 mod discovery_placement_op;
 mod edge;
+mod edge_exact_command_review;
 mod edge_git_push;
 mod edge_receipt;
 mod edge_review_evidence;
@@ -697,6 +699,7 @@ mod oci_bundle_op;
 mod oci_bundle_vectors_tests;
 mod oci_path;
 mod omp_yield_input_scan;
+mod onefile_open_paths;
 mod oneshot;
 #[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
@@ -707,6 +710,7 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
@@ -804,6 +808,7 @@ mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
 mod runner_authority_signature;
+mod runner_cloud_exceptions;
 mod runner_cloud_http_error;
 mod runner_runtime_session;
 mod runner_sync_policy;
@@ -876,11 +881,14 @@ mod verified_read_execute_op;
 mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
+mod windows_private_state;
+mod windows_process_command_lines;
 mod windows_process_lifecycle;
 #[cfg(windows)]
 mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
+mod windows_trusted_directories;
 mod workspace_fix;
 mod workspace_fix_diff;
 mod workspace_fix_fs;

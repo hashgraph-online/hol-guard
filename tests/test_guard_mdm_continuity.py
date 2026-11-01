@@ -4,7 +4,6 @@ import base64
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -272,66 +271,73 @@ def test_continuity_rejects_symlink_and_oversized_state(tmp_path: Path, monkeypa
     assert oversized.identity_reason_code == "installation_identity_acl_invalid"
 
 
-def test_linux_boot_observation_is_boot_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(continuity.time, "monotonic_ns", lambda: 123)
-    monkeypatch.setattr(Path, "read_text", lambda _self, **_kwargs: "boot-id\n")
+def _fake_boot_runtime(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
+) -> list[tuple[dict[str, object], tuple[str, ...]]]:
+    requests: list[tuple[dict[str, object], tuple[str, ...]]] = []
 
-    assert continuity.observe_boot(system_name="Linux") == continuity.BootObservation("boot-id", 123)
+    def fake_answer(
+        _feature: str, _command: str, request: dict[str, object], *, extra_features: tuple[str, ...], **_kwargs: object
+    ) -> dict[str, object] | None:
+        requests.append((request, extra_features))
+        return answer
+
+    monkeypatch.setattr(continuity, "runtime_answer", fake_answer)
+    return requests
 
 
-def test_macos_boot_observation_rejects_empty_kernel_identifier(monkeypatch: pytest.MonkeyPatch) -> None:
-    class EmptyBootLib:
-        def sysctlbyname(self, _name: object, output: object, size: object, *_args: object) -> int:
-            if output is None:
-                size_pointer = continuity.ctypes.cast(size, continuity.ctypes.POINTER(continuity.ctypes.c_size_t))
-                size_pointer.contents.value = 1
-            return 0
+def test_the_runtime_observes_the_boot(monkeypatch: pytest.MonkeyPatch) -> None:
+    boot = {"boot_session_id": "boot-id", "monotonic_uptime_ns": 3_000_000_000_000_000}
+    requests = _fake_boot_runtime(monkeypatch, {"ok": True, "boot": boot})
 
-    monkeypatch.setattr(continuity.ctypes, "CDLL", lambda *_args, **_kwargs: EmptyBootLib())
+    assert continuity.observe_boot(system_name="Windows") == continuity.BootObservation(
+        "boot-id", 3_000_000_000_000_000
+    )
+    assert requests == [
+        (
+            {"schema": continuity.INSTALLATION_CONTINUITY_SCHEMA, "op": "observe-boot"},
+            (continuity.BOOT_OBSERVATION_FEATURE,),
+        )
+    ]
 
-    with pytest.raises(OSError, match="lease_continuity_boot_probe_failed"):
+
+def test_an_unsupported_platform_never_asks_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests = _fake_boot_runtime(monkeypatch, {"ok": True})
+
+    with pytest.raises(OSError, match="lease_continuity_platform_unsupported"):
+        continuity.observe_boot(system_name="Plan9")
+    assert requests == []
+
+
+@pytest.mark.parametrize(
+    ("answer", "code"),
+    [
+        ({"ok": False, "error": "lease_continuity_boot_probe_failed"}, "lease_continuity_boot_probe_failed"),
+        ({"ok": False, "error": "lease_continuity_monotonic_probe_failed"}, "lease_continuity_monotonic_probe_failed"),
+        ({"ok": False, "error": "something_else"}, "lease_continuity_probe_failed"),
+        ({"ok": True, "boot": None}, "lease_continuity_probe_failed"),
+        ({"ok": True, "boot": {"boot_session_id": "", "monotonic_uptime_ns": 1}}, "lease_continuity_probe_failed"),
+        ({"ok": True, "boot": {"boot_session_id": "b", "monotonic_uptime_ns": True}}, "lease_continuity_probe_failed"),
+        ({"ok": True, "boot": {"boot_session_id": "b", "monotonic_uptime_ns": -1}}, "lease_continuity_probe_failed"),
+        (None, "installation_identity_native_unavailable"),
+    ],
+)
+def test_a_failed_or_malformed_boot_answer_raises_its_code(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None, code: str
+) -> None:
+    _fake_boot_runtime(monkeypatch, answer)
+
+    with pytest.raises(OSError, match=code):
         continuity.observe_boot(system_name="Darwin")
 
 
-def test_windows_boot_observation_rejects_zero_identifier(monkeypatch: pytest.MonkeyPatch) -> None:
-    class TickCount:
-        restype: object | None = None
+def test_the_native_runtime_observes_this_boot() -> None:
+    first = continuity.observe_boot()
+    second = continuity.observe_boot()
 
-        def __call__(self) -> int:
-            return 3_000_000_000
-
-    windll = SimpleNamespace(
-        ntdll=SimpleNamespace(NtQuerySystemInformation=lambda *_args: 0),
-        kernel32=SimpleNamespace(GetTickCount64=TickCount()),
-    )
-    monkeypatch.setattr(continuity.ctypes, "windll", windll, raising=False)
-
-    with pytest.raises(OSError, match="lease_continuity_boot_probe_failed"):
-        continuity.observe_boot(system_name="Windows")
-
-
-def test_windows_boot_observation_preserves_64_bit_uptime(monkeypatch: pytest.MonkeyPatch) -> None:
-    class QueryBoot:
-        def __call__(self, _kind: object, target: object, *_args: object) -> int:
-            continuity.ctypes.memmove(target, b"\x01" + b"\x00" * 15, 16)
-            return 0
-
-    class TickCount:
-        restype: object | None = None
-
-        def __call__(self) -> int:
-            return 3_000_000_000
-
-    windll = SimpleNamespace(
-        ntdll=SimpleNamespace(NtQuerySystemInformation=QueryBoot()),
-        kernel32=SimpleNamespace(GetTickCount64=TickCount()),
-    )
-    monkeypatch.setattr(continuity.ctypes, "windll", windll, raising=False)
-
-    result = continuity.observe_boot(system_name="Windows")
-
-    assert result.boot_session_id == "00000001-0000-0000-0000-000000000000"
-    assert result.monotonic_uptime_ns == 3_000_000_000_000_000
+    assert first.boot_session_id
+    assert first.boot_session_id == second.boot_session_id
+    assert second.monotonic_uptime_ns >= first.monotonic_uptime_ns
 
 
 def test_state_file_mode_is_private(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
