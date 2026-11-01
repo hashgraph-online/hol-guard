@@ -27,9 +27,13 @@ use serde_json::{json, Value};
 
 use crate::guard_store_json::dumps_sorted;
 
+#[path = "sqlite_store_salvage_local_cli.rs"]
+mod local_cli;
 #[cfg(test)]
 #[path = "sqlite_store_salvage_tests.rs"]
 mod tests;
+
+use local_cli::salvage_local_cli;
 
 const SCHEMA: &str = "sqlite-store-salvage.v1";
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
@@ -90,34 +94,6 @@ const RECEIPT_DIGESTS: [&str; 14] = [
     "envelope_digest",
     "authority_record_digest",
 ];
-
-const LOCAL_CLI_TABLES: [&str; 6] = [
-    "local_cli_authority",
-    "local_cli_observation",
-    "local_cli_grant",
-    "local_cli_command",
-    "local_cli_command_grant",
-    "local_cli_grant_capability",
-];
-const REQUIRED_LOCAL_CLI_TABLES: [&str; 3] = [
-    "local_cli_grant",
-    "local_cli_command",
-    "local_cli_command_grant",
-];
-/// Tables a partial copy cannot widen. A partial command or command-grant
-/// copy could drop block rows and widen an allowed grant.
-const PARTIAL_COPY_OK_TABLES: [&str; 4] = [
-    "local_cli_authority",
-    "local_cli_observation",
-    "local_cli_grant",
-    "local_cli_grant_capability",
-];
-/// A capability row rides along only with an allowed grant and a restored
-/// cli-surface observation, the two facts the apply required to write it.
-const ORPHAN_CAPABILITIES: &str = "delete from local_cli_grant_capability where cli_id not in \
-     (select grant_row.cli_id from local_cli_grant as grant_row \
-     join local_cli_observation as observed on observed.cli_id = grant_row.cli_id \
-     where grant_row.state = 'allowed' and observed.surface = 'cli')";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -433,84 +409,6 @@ fn copy_complete_table(src: &Connection, dst: &Connection, table: &str) -> rusql
         insert.execute(rusqlite::params_from_iter(values))?;
     }
     Ok(true)
-}
-
-pub(super) fn salvage_local_cli(source: &Path, destination: &Path) -> bool {
-    let Some((src, mut dst)) = open_pair(source, destination) else {
-        return false;
-    };
-    copy_local_cli(&src, &mut dst).unwrap_or(false)
-}
-
-fn copy_local_cli(src: &Connection, dst: &mut Connection) -> rusqlite::Result<bool> {
-    let transaction = dst.transaction()?;
-    let mut copied = Vec::new();
-    for table in LOCAL_CLI_TABLES {
-        if copy_allowlisted_table(src, &transaction, table) {
-            copied.push(table);
-        }
-    }
-    if !REQUIRED_LOCAL_CLI_TABLES
-        .iter()
-        .all(|table| copied.contains(table))
-    {
-        return Ok(false);
-    }
-    // An observation that failed to copy leaves its capability an orphan.
-    transaction.execute(ORPHAN_CAPABILITIES, [])?;
-    transaction.commit()?;
-    Ok(true)
-}
-
-/// `_copy_allowlisted_table`: the columns both stores share, row by row.
-/// True when every row copied, or for a partial-copy table when any did.
-fn copy_allowlisted_table(src: &Connection, dst: &Connection, table: &str) -> bool {
-    let partial_ok = PARTIAL_COPY_OK_TABLES.contains(&table);
-    let (Ok(source), Ok(destination)) = (table_info(src, table), table_info(dst, table)) else {
-        return false;
-    };
-    let shared: Vec<&str> = destination
-        .iter()
-        .map(|column| column.name.as_str())
-        .filter(|name| source.iter().any(|known| known.name == *name))
-        .collect();
-    if shared.is_empty() {
-        return false;
-    }
-    let quoted = quote_columns(&shared, ",");
-    let Ok(mut select) = src.prepare(&format!("select {quoted} from \"{table}\"")) else {
-        return false;
-    };
-    let Ok(mut rows) = select.query([]) else {
-        return false;
-    };
-    let statement = format!(
-        "insert or replace into \"{table}\" ({quoted}) values ({})",
-        placeholders(shared.len())
-    );
-    let mut inserted = false;
-    let mut saw_rows = false;
-    loop {
-        let row = match rows.next() {
-            Ok(Some(row)) => row,
-            Ok(None) => break,
-            Err(_) => return partial_ok && inserted,
-        };
-        saw_rows = true;
-        let values = match (0..shared.len())
-            .map(|index| row.get::<_, SqlValue>(index))
-            .collect::<rusqlite::Result<Vec<_>>>()
-        {
-            Ok(values) => values,
-            Err(_) => return partial_ok && inserted,
-        };
-        match dst.execute(&statement, rusqlite::params_from_iter(values)) {
-            Ok(_) => inserted = true,
-            Err(_) if partial_ok => {}
-            Err(_) => return false,
-        }
-    }
-    inserted || !saw_rows
 }
 
 struct Column {

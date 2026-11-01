@@ -190,6 +190,7 @@ def salvage_quarantined_state(*, source: Path, destination: Path) -> tuple[bool,
     # that cannot take them leaves the local CLI copy to fail on its own.
     with suppress(sqlite3.Error), closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst, dst:
         ensure_local_cli_schema(dst)
+    restorable = not _holds_cloud_credentials(destination)
     deadline = time.monotonic() + _SALVAGE_TIMEOUT_SECONDS
     operation_deadline = sqlite_operation_deadline_monotonic()
     answer = runtime_answer(
@@ -203,8 +204,22 @@ def salvage_quarantined_state(*, source: Path, destination: Path) -> tuple[bool,
         output_limit=4096,
         deadline=deadline if operation_deadline is None else min(deadline, operation_deadline),
     )
-    cloud_review = answer is not None and answer.get("cloud_review") is True
-    local_cli = answer is not None and answer.get("local_cli") is True
+    if answer is None:
+        # The native command commits Cloud Review before it copies
+        # custom-extension state and answers, so a lost answer can follow a
+        # completed restore. The fresh store holds credentials only then.
+        cloud_review = restorable and _holds_cloud_credentials(destination)
+        local_cli = False
+    else:
+        cloud_review = answer.get("cloud_review") is True
+        local_cli = answer.get("local_cli") is True
     if cloud_review:
         review_event_wake_signal(destination).notify()
     return cloud_review, local_cli
+
+
+def _holds_cloud_credentials(destination: Path) -> bool:
+    with suppress(sqlite3.Error), closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst:
+        found = dst.execute("select 1 from sync_state where state_key = 'oauth_local_credentials'").fetchone()
+        return found is not None
+    return False

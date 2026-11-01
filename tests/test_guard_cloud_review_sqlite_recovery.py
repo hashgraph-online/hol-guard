@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import store_connection_schema
+from codex_plugin_scanner.guard.mdm import runtime_request
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
 from codex_plugin_scanner.guard.review_policy_attribution import ATTRIBUTION_STATE_PREFIX
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
@@ -211,6 +212,34 @@ def test_partial_replay_copy_rolls_back_everything(tmp_path: Path) -> None:
     with sqlite3.connect(destination.path) as connection:
         connection.execute("drop trigger reject_replay")
     assert not destination.has_exact_cloud_review_receipt("consumed-receipt")
+
+
+def _lose_the_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    answer = runtime_request.runtime_answer
+
+    def lost(*args: object, **kwargs: object) -> None:
+        assert answer(*args, **kwargs) is not None  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", lost)
+
+
+def test_a_lost_answer_after_a_committed_restore_still_reports_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _prepare(tmp_path)
+    destination = GuardStore(tmp_path / "new")
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (True, False)
+    assert destination.get_sync_payload("oauth_local_credentials") is not None
+
+
+def test_a_lost_answer_never_reports_credentials_the_store_already_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _prepare(tmp_path)
+    destination = connected_exact_review_store(tmp_path / "different")
+    _lose_the_answer(monkeypatch)
+    assert salvage_quarantined_state(source=source.path, destination=destination.path) == (False, False)
 
 
 def test_recovery_refuses_nonempty_destination(tmp_path: Path) -> None:
