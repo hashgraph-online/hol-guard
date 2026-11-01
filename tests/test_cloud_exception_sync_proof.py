@@ -7,10 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cloud_exceptions import (
-    build_cloud_exceptions_from_policy_bundle,
-    list_active_cloud_exceptions,
-)
+from codex_plugin_scanner.guard.runtime.runner_native_sync import cloud_exceptions
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import (
     build_cloud_exception_bundle_entry,
@@ -131,8 +128,9 @@ def test_hglp139_expired_cloud_exception_is_not_active_after_bundle_load() -> No
             )
         ]
     )
-    items = build_cloud_exceptions_from_policy_bundle(bundle, device_id="device-sync-proof")
-    active = list_active_cloud_exceptions(items, now="2026-06-14T12:00:00+00:00")
+    loaded = cloud_exceptions(bundle, device_id="device-sync-proof")
+    assert [item["id"] for item in loaded] == ["artifact:codex:expired"]
+    active = cloud_exceptions(bundle, device_id="device-sync-proof", active_at="2026-06-14T12:00:00+00:00")
     assert active == []
 
 

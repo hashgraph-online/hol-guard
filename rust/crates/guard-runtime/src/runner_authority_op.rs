@@ -110,6 +110,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "pain_signal_batch" => signals::pain_signal_batch(args),
         "value_metrics" => signals::value_metrics(args),
         "completed_event_ids" => signals::completed_event_ids(args),
+        "cloud_exceptions" => crate::runner_cloud_exceptions::cloud_exceptions(args),
         "canonical_rollout" => policy::canonical_rollout(args),
         "downgrade_reference" => policy::downgrade_reference(args),
         "policy_simulation" => policy::policy_simulation(args),

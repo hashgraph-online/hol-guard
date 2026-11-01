@@ -29,11 +29,6 @@ from ..cli.oauth_client import (
     resolve_guard_oauth_client_config,
     validate_guard_sync_endpoint,
 )
-from ..cloud_exceptions import (
-    build_cloud_exceptions_from_policy_bundle,
-    cloud_exception_to_dict,
-    dedupe_cloud_exceptions,
-)
 from ..config import VALID_RECEIPT_REDACTION_LEVELS
 from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
@@ -2072,21 +2067,13 @@ def _policy_bundle_cloud_exception_items(
     if bundle_ack is None:
         bundle_ack_payload = store.get_sync_payload("policy_bundle_ack")
         bundle_ack = bundle_ack_payload if isinstance(bundle_ack_payload, dict) else None
-    items = []
     # ``sync_exceptions`` is retained as an explicit compatibility boundary so
     # callers can demonstrate that legacy unsigned siblings were considered
     # and rejected. It must never contribute enforcement authority.
     del sync_exceptions
-    if isinstance(policy_bundle, dict):
-        items.extend(
-            build_cloud_exceptions_from_policy_bundle(
-                policy_bundle,
-                device_id=resolved_device_id,
-                policy_bundle_ack=bundle_ack,
-            )
-        )
-    serialized = [cloud_exception_to_dict(item) for item in dedupe_cloud_exceptions(items)]
-    return serialized
+    if not isinstance(policy_bundle, dict):
+        return []
+    return _sync.cloud_exceptions(policy_bundle, device_id=resolved_device_id, policy_bundle_ack=bundle_ack)
 
 
 def _sign_guard_dpop_proof(

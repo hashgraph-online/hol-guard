@@ -207,7 +207,7 @@ Do not rewrite Review/Inbox components to implement Policy features.
 ## Phase 0 completion
 
 Phase 0 delivers this boundary doc, audit notes, and automated boundary tests.
-Phase 3 adds the local Cloud exception DTO (`cloud_exceptions.py`), separate sync
+Phase 3 adds the local Cloud exception DTO (now the runtime's `cloud_exceptions` kind), separate sync
 storage, and `/v1/policy` + `/v1/policy/cloud-exceptions` API fields.
 
 ## Final architecture (2026-06-14)

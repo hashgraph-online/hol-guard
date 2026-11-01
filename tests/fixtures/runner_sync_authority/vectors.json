@@ -14818,6 +14818,1667 @@
      "stale": false
     }
    }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "plain artifact",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "device_id": null
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "publisher legacy field",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "publisher:acme",
+       "scope": "publisher",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "publisher:acme",
+      "effect": "allow",
+      "scope": "publisher",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "publisher": "acme"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "blank legacy remainder",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:  ",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:  ",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "id without scope prefix",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "x-1",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "x-1",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "id fallback",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "id": "artifact:a"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:a",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "a"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "blank id dropped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "  ",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "unknown scope dropped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "team",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "deny effect dropped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "effect": "deny"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "falsy effect is allow",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "effect": ""
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "non-string effect dropped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "effect": 1
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "missing owner dropped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": " ",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "bad expiry dropped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "soon",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "expiry fallback and offset",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "approver": "lead@example.test",
+       "expiry": "2099-01-01T05:30:00.250+05:30"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00.250000+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00.250000+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "naive expiry is utc",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "date-only expiry",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "harness scope needs harness",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "harness:x",
+       "scope": "harness",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "harness scope kept",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "harness:x",
+       "scope": "harness",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "harness": "codex"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "harness:x",
+      "effect": "allow",
+      "scope": "harness",
+      "harness": "codex",
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "blank harness is none",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "harness": "  "
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "snake case fields",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "source_receipt_id": "r1",
+       "last_used_at": "2026-05-01T00:00:00Z",
+       "ack_status": "pending",
+       "bundle_hash": "sha256:own",
+       "rejection_reason": "stale"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": "r1",
+      "bundle_hash": "sha256:own",
+      "ack_status": "pending",
+      "last_used_at": "2026-05-01T00:00:00+00:00",
+      "rejection_reason": "stale",
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "camel case fields",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "sourceReceiptId": "r2",
+       "lastUsedAt": "bad",
+       "ackStatus": "bogus",
+       "bundleHash": "sha256:item",
+       "rejectionReason": " "
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": "r2",
+      "bundle_hash": "sha256:item",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "dedupe keeps first slot",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "a",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      },
+      {
+       "exceptionId": "global:1",
+       "scope": "global",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      },
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "b",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "b",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     },
+     {
+      "id": "global:1",
+      "effect": "allow",
+      "scope": "global",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "non-list exceptions",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": {
+      "a": 1
+     }
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "missing exceptions",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "h"
+    }
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "non-object entries skipped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      "x",
+      null,
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "no bundle hash",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": " ",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": null,
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "stored ack applies",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "ackStatus": "failed"
+      }
+     ]
+    },
+    "device_id": "dev-1",
+    "policy_bundle_ack": {
+     "status": "synced",
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "deviceId": "dev-1",
+     "appliedAt": "2026-06-01T00:00:00Z"
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": "synced",
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "stored ack other device",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "device_id": "dev-2",
+    "policy_bundle_ack": {
+     "status": "synced",
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "deviceId": "dev-1",
+     "appliedAt": "2026-06-01T00:00:00Z"
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "stored ack other version",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "8",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "device_id": "dev-1",
+    "policy_bundle_ack": {
+     "status": "synced",
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "deviceId": "dev-1",
+     "appliedAt": "2026-06-01T00:00:00Z"
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "stored ack bad applied",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "device_id": "dev-1",
+    "policy_bundle_ack": {
+     "status": "synced",
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "deviceId": "dev-1",
+     "appliedAt": "x"
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "stored ack unknown status",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "device_id": "dev-1",
+    "policy_bundle_ack": {
+     "status": "done",
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "deviceId": "dev-1",
+     "appliedAt": "2026-06-01T00:00:00Z"
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "stored ack without device",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "device_id": null,
+    "policy_bundle_ack": {
+     "status": "synced",
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "deviceId": "dev-1",
+     "appliedAt": "2026-06-01T00:00:00Z"
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "bundle acknowledgements",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ],
+     "acknowledgements": [
+      "x",
+      {
+       "deviceId": "dev-1",
+       "status": "nope"
+      },
+      {
+       "deviceId": "dev-1",
+       "status": "offline"
+      }
+     ]
+    },
+    "device_id": "dev-1"
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": "offline",
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "numeric ack device",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ],
+     "acknowledgements": [
+      {
+       "deviceId": 42,
+       "status": "pending"
+      }
+     ]
+    },
+    "device_id": "42"
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": "pending",
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "null ack device",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ],
+     "acknowledgements": [
+      {
+       "status": "pending"
+      }
+     ]
+    },
+    "device_id": "None"
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": "pending",
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "bool ack device",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ],
+     "acknowledgements": [
+      {
+       "deviceId": true,
+       "status": "failed"
+      }
+     ]
+    },
+    "device_id": "True"
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": "failed",
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "ack fallback after stored mismatch",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ],
+     "acknowledgements": [
+      {
+       "deviceId": "dev-2",
+       "status": "pending"
+      }
+     ]
+    },
+    "device_id": "dev-2",
+    "policy_bundle_ack": {
+     "status": "synced",
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "deviceId": "dev-1",
+     "appliedAt": "2026-06-01T00:00:00Z"
+    }
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": "pending",
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "non-object stored ack",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "device_id": "dev-1",
+    "policy_bundle_ack": [
+     "x"
+    ]
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "active filter drops expired",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      },
+      {
+       "exceptionId": "artifact:old",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2020-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "active_at": "2026-01-01T00:00:00+00:00"
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "artifact:npm/left-pad",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00",
+      "artifact_id": "npm/left-pad"
+     }
+    ]
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "active equal expiry dropped",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2026-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "active_at": "2026-01-01T00:00:00+00:00"
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "active offset now",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2026-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "active_at": "2026-01-01T04:59:59-05:00"
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "active unparseable now",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "artifact:npm/left-pad",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      }
+     ]
+    },
+    "active_at": "later"
+   },
+   "expected": {
+    "items": []
+   }
+  },
+  {
+   "kind": "cloud_exceptions",
+   "name": "active harness filter",
+   "args": {
+    "policy_bundle": {
+     "bundleHash": "sha256:abc",
+     "bundleVersion": "7",
+     "cloudExceptions": [
+      {
+       "exceptionId": "a1",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test"
+      },
+      {
+       "exceptionId": "a2",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "harness": "codex"
+      },
+      {
+       "exceptionId": "a3",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "harness": "*"
+      },
+      {
+       "exceptionId": "a4",
+       "scope": "artifact",
+       "owner": "sec@example.test",
+       "expiresAt": "2099-01-01T00:00:00Z",
+       "approver": "lead@example.test",
+       "harness": "claude-code"
+      }
+     ]
+    },
+    "active_at": "2026-01-01T00:00:00+00:00",
+    "harness": "claude-code"
+   },
+   "expected": {
+    "items": [
+     {
+      "id": "a1",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": null,
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00"
+     },
+     {
+      "id": "a3",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": "*",
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00"
+     },
+     {
+      "id": "a4",
+      "effect": "allow",
+      "scope": "artifact",
+      "harness": "claude-code",
+      "owner": "sec@example.test",
+      "approver": "lead@example.test",
+      "expiry": "2099-01-01T00:00:00+00:00",
+      "source_receipt_id": null,
+      "bundle_hash": "sha256:abc",
+      "ack_status": null,
+      "last_used_at": null,
+      "rejection_reason": null,
+      "provenance": "policy-bundle",
+      "expires_at": "2099-01-01T00:00:00+00:00"
+     }
+    ]
+   }
   }
  ]
 }
