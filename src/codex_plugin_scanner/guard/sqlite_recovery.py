@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import sqlite3
-import time
 from contextlib import closing, suppress
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
 from .sqlite_deadline_connection import connect_sqlite_with_deadline
 from .sqlite_errors import sqlite_error_is_fatal, sqlite_error_is_io
-from .sqlite_quarantine_forensics import QUARANTINE_FORENSICS_SUFFIX
 
 SQLiteStoreProbe = Literal["fatal", "healthy", "io", "unknown"]
 SQLiteFileIdentity = tuple[int, int, int, int, int]
@@ -135,168 +132,6 @@ def sqlite_store_probe_detail(
         guard_home_accepts_write=guard_home_accepts_write,
         identity_stable=identity_stable and final_stable,
     )
-
-
-def _quarantine_event_sort_key(base: str, fallback_mtime: float) -> tuple[str, str, float]:
-    """Order quarantine events by the timestamp encoded in their id.
-
-    ``Path.replace`` preserves the moved file's mtime, which is the source
-    database's last write — not the moment of quarantine — so a newly
-    quarantined long-idle database must not sort as older than an earlier
-    event. The ``...-<stamp>Z-<uuid>`` suffix encodes the event time; names
-    without a parseable stamp fall back to mtime and sort oldest.
-    """
-
-    name = base
-    stamp = ""
-    if name.startswith("guard.db.corrupt-"):
-        stamp = name[len("guard.db.corrupt-") :]
-    # Only the exact `%Y%m%dT%H%M%S%fZ` quarantine shape ranks as stamped;
-    # a digit-led but malformed name must not outrank real event ids.
-    if (
-        len(stamp) >= 22
-        and stamp[:8].isdigit()
-        and stamp[8] == "T"
-        and stamp[9:15].isdigit()
-        and stamp[15:21].isdigit()
-        and stamp[21] == "Z"
-    ):
-        return ("1", stamp, fallback_mtime)
-    return ("0", "", fallback_mtime)
-
-
-def _quarantine_event_base(name: str) -> str:
-    """Map a quarantine artifact name to the base database name of its event."""
-
-    for ending in ("-wal", "-shm", QUARANTINE_FORENSICS_SUFFIX):
-        if name.endswith(ending):
-            return name[: -len(ending)]
-    return name
-
-
-def _quarantine_event_epoch_seconds(base: str, fallback_mtime: float) -> float:
-    """Event time from the encoded stamp, or file mtime for legacy names."""
-
-    rank, stamp, _mtime = _quarantine_event_sort_key(base, fallback_mtime)
-    if rank != "1":
-        return fallback_mtime
-    with suppress(ValueError):
-        return datetime.strptime(stamp[:22], "%Y%m%dT%H%M%S%fZ").replace(tzinfo=timezone.utc).timestamp()
-    return fallback_mtime
-
-
-@dataclass(slots=True)
-class _QuarantineEvent:
-    sort_key: tuple[str, str, float] | None = None
-    bytes: int = 0
-    mtime: float = 0.0
-    has_snapshot: bool = False
-
-
-def prune_quarantined_store_snapshots(
-    guard_home: Path,
-    *,
-    now: float | None = None,
-    min_keep: int = 2,
-    max_age: timedelta = timedelta(days=7),
-    max_total_bytes: int = 2 * 1024**3,
-) -> int:
-    """Prune quarantined store snapshots by recency, age, and size budget.
-
-    Every quarantine preserves a full copy of an unusable database, which on
-    long-lived installs reaches multiple gigabytes per event. Events are
-    ordered newest first by the encoded quarantine stamp; the newest
-    ``min_keep`` events always stay, and older events stay only while they
-    are within ``max_age`` and the running byte budget. The forensic record
-    (``*.forensics.json``) belongs to its event but is never deleted — it is
-    tiny and is the only record of why the store was quarantined.
-    """
-
-    min_keep = max(0, int(min_keep))
-    now_epoch = time.time() if now is None else float(now)
-    max_age_seconds = max_age.total_seconds()
-    events: dict[str, _QuarantineEvent] = {}
-    with suppress(OSError):
-        for entry in guard_home.glob("guard.db.corrupt-*"):
-            if entry.is_symlink() or not entry.is_file():
-                continue
-            base = _quarantine_event_base(entry.name)
-            try:
-                metadata = entry.stat()
-            except OSError:
-                continue
-            event = events.setdefault(base, _QuarantineEvent())
-            key = _quarantine_event_sort_key(base, metadata.st_mtime)
-            if event.sort_key is None or key > event.sort_key:
-                event.sort_key = key
-            if not entry.name.endswith(QUARANTINE_FORENSICS_SUFFIX):
-                event.bytes += metadata.st_size
-                event.has_snapshot = True
-            event.mtime = max(event.mtime, metadata.st_mtime)
-    ordered = sorted(
-        ((base, event) for base, event in events.items() if event.has_snapshot),
-        key=lambda item: item[1].sort_key or ("0", "", 0.0),
-        reverse=True,
-    )
-    removed = 0
-    kept_bytes = 0
-    for index, (base, event) in enumerate(ordered):
-        if index < min_keep:
-            keep_event = True
-        else:
-            age_seconds = now_epoch - _quarantine_event_epoch_seconds(base, event.mtime)
-            keep_event = age_seconds <= max_age_seconds and kept_bytes + event.bytes <= max_total_bytes
-        if keep_event:
-            kept_bytes += event.bytes
-            continue
-        for ending in ("", "-wal", "-shm"):
-            candidate = guard_home / f"{base}{ending}"
-            with suppress(OSError):
-                # Recheck before unlinking: a sidecar may have been swapped
-                # for a symlink since the grouping pass, and a dangling link
-                # must never be followed or counted as a removed snapshot.
-                if candidate.is_symlink() or not candidate.is_file():
-                    continue
-                candidate.unlink()
-                removed += 1
-    return removed
-
-
-def quarantined_store_summary(guard_home: Path) -> dict[str, object]:
-    """Compact summary of quarantined store snapshots for diagnostics."""
-
-    count = 0
-    total_bytes = 0
-    forensic_record_count = 0
-    newest_epoch: float | None = None
-    events: dict[str, float] = {}
-    with suppress(OSError):
-        for entry in guard_home.glob("guard.db.corrupt-*"):
-            if entry.is_symlink() or not entry.is_file():
-                continue
-            try:
-                metadata = entry.stat()
-            except OSError:
-                continue
-            total_bytes += metadata.st_size
-            if entry.name.endswith(QUARANTINE_FORENSICS_SUFFIX):
-                forensic_record_count += 1
-            if not entry.name.endswith(QUARANTINE_FORENSICS_SUFFIX):
-                base = _quarantine_event_base(entry.name)
-                epoch = _quarantine_event_epoch_seconds(base, metadata.st_mtime)
-                previous = events.get(base)
-                events[base] = epoch if previous is None else max(previous, epoch)
-    count = len(events)
-    if events:
-        newest_epoch = max(events.values())
-    return {
-        "count": count,
-        "total_bytes": total_bytes,
-        "newest_quarantined_at": (
-            datetime.fromtimestamp(newest_epoch, tz=timezone.utc).isoformat() if newest_epoch is not None else None
-        ),
-        "forensic_record_count": forensic_record_count,
-    }
 
 
 def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bool:

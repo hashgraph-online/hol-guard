@@ -23,6 +23,8 @@ _METADATA_FLAGS = (
     "executable",
     "launcher",
     "package",
+    "license",
+    "description",
 )
 _HANDOFF_TIMEOUT_SECONDS = 1_500
 
@@ -103,6 +105,8 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
             executable=args.executable or "",
             launcher=args.launcher or "",
             package=args.package or "",
+            license=args.license or "",
+            description=args.description or "",
         )
     discovery = discover(args.source_adapter, args.input, metadata, topic_separator=args.topic_separator)
     review = load_review(read_json(args.review), discovery) if args.review is not None else default_review(discovery)

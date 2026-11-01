@@ -139,6 +139,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-integrity-snapshot-v1".into(),
         "native-orphaned-worker-reap-v1".into(),
         "native-contained-output-match-v1".into(),
+        "native-storage-retention-v1".into(),
         "native-desktop-notification-v1".into(),
         "native-grok-executable-v1".into(),
         "native-macos-code-signing-v1".into(),
