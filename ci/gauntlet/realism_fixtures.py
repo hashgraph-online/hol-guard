@@ -117,6 +117,10 @@ DOCTL_STUB = (
     "# Read-only stand-in for doctl: it never reaches the network or reads a token.\n"
     'case "${1:-}" in\n'
     "  version) printf 'doctl version 1.110.0-release\\n' ;;\n"
+    # Only the account listing: `auth token` prints the stored credential,
+    # and a stand-in that answered it would stop looking like a read.
+    '  auth) [ "${2:-}" = list ] || { printf \'doctl stand-in: unsupported command\\n\' >&2; exit 2; }\n'
+    "        printf 'default (current)\\n' ;;\n"
     "  apps) printf 'fixture-app-id    web\\n' ;;\n"
     "  databases) printf 'fixture-db-id    fixture-db    pg    online    nyc3\\n' ;;\n"
     "  *) printf 'doctl stand-in: unsupported command\\n' >&2; exit 2 ;;\n"
@@ -128,6 +132,8 @@ DOCTL_STUB_PYTHON = (
     "command = sys.argv[1] if len(sys.argv) > 1 else ''\n"
     "if command == 'version':\n"
     "    sys.stdout.buffer.write(b'doctl version 1.110.0-release\\n')\n"
+    "elif command == 'auth' and sys.argv[2:3] == ['list']:\n"
+    "    sys.stdout.buffer.write(b'default (current)\\n')\n"
     "elif command == 'apps':\n"
     "    sys.stdout.buffer.write(b'fixture-app-id    web\\n')\n"
     "elif command == 'databases':\n"
