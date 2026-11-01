@@ -6,7 +6,9 @@
 //! question until it succeeds, whose body only sleeps. Every other loop keeps
 //! its review, and the reasons each shape is taken are written beside it.
 
-use super::super::for_loop_unroll::body::{body_items, redirect_tail};
+use super::super::for_loop_unroll::body::{
+    body_items, body_items_rewriting_references, redirect_tail,
+};
 use super::super::for_loop_unroll::{ordinary_loop_name, valid_identifier};
 use super::{assemble, collect};
 
@@ -42,7 +44,7 @@ fn flatten_read_loop(rest: &str) -> Option<String> {
     // two are read the same way and the flat list stands for the work the
     // loop did. The body grammar refuses any other expansion, because it
     // would name a value the loop never bound.
-    let (body, _, tail) = body_items(after_test, &name, &["done"])?;
+    let (body, _, tail) = body_items_rewriting_references(after_test, &name, &["done"])?;
     // A `read` that fills several names, or none, leaves no single name to
     // carry, so a body that expands anything at all keeps its review.
     if name.is_empty() && body.iter().any(|(text, _)| text.contains('$')) {

@@ -15,12 +15,29 @@ pub(crate) type CommandList<'a> = (Vec<(String, &'static str)>, &'static str, &'
 /// expansion is written back as it stood, because a list that binds no name
 /// reads the same values the construct around it read. Any construct outside
 /// the simple command list grammar returns `None`.
+///
+/// The caller here replaces the marker with a word of its own, so a reference
+/// glued into a larger word is written out as that word glued the same way.
 pub(crate) fn body_items<'a>(
     text: &'a str,
     name: &str,
     terminators: &[&'static str],
 ) -> Option<CommandList<'a>> {
-    body_items_at(text, name, terminators, 0)
+    body_items_at(text, name, terminators, 0, false)
+}
+
+/// [`body_items`] for a caller that writes the marker back as a `$NAME`
+/// expansion rather than replacing it with a word.
+///
+/// Braces come off in that spelling, so `${name}` glued to a word character
+/// would be written out as `$name` glued to it -- an expansion of a name the
+/// construct never bound. Such a reference keeps its review here.
+pub(crate) fn body_items_rewriting_references<'a>(
+    text: &'a str,
+    name: &str,
+    terminators: &[&'static str],
+) -> Option<CommandList<'a>> {
+    body_items_at(text, name, terminators, 0, true)
 }
 
 /// How deep a subshell group may nest inside a command list. A group holds a
@@ -36,6 +53,7 @@ fn body_items_at<'a>(
     name: &str,
     terminators: &[&'static str],
     depth: usize,
+    rewrites_references: bool,
 ) -> Option<CommandList<'a>> {
     let chars: Vec<(usize, char)> = text.char_indices().collect();
     let mut items: Vec<(String, &'static str)> = Vec::new();
@@ -148,7 +166,13 @@ fn body_items_at<'a>(
             // subshell, and arithmetic assigns without an `=` sign. It is not
             // a command list, so it keeps its review.
             '(' if command_position && depth < MAX_GROUP_DEPTH && !rest.starts_with("((") => {
-                let (inner, _, after) = body_items_at(&text[byte + 1..], name, &[")"], depth + 1)?;
+                let (inner, _, after) = body_items_at(
+                    &text[byte + 1..],
+                    name,
+                    &[")"],
+                    depth + 1,
+                    rewrites_references,
+                )?;
                 if inner.is_empty()
                     || !inner
                         .iter()
@@ -234,7 +258,13 @@ fn body_items_at<'a>(
                             item.push('\\');
                             item.push(escaped);
                         }
-                        '$' => item.push_str(&reference(&chars, &mut i, name, argument)?),
+                        '$' => item.push_str(&reference(
+                            &chars,
+                            &mut i,
+                            name,
+                            argument,
+                            rewrites_references,
+                        )?),
                         other => item.push(other),
                     }
                 }
@@ -245,7 +275,13 @@ fn body_items_at<'a>(
             '$' => {
                 let argument = !command_position && !redirect_target;
                 i += 1;
-                item.push_str(&reference(&chars, &mut i, name, argument)?);
+                item.push_str(&reference(
+                    &chars,
+                    &mut i,
+                    name,
+                    argument,
+                    rewrites_references,
+                )?);
                 at_word_start = false;
                 command_position = false;
                 redirect_target = false;
@@ -449,7 +485,13 @@ fn starts_with_keyword(text: &str, keyword: &str) -> bool {
 /// Consume a `$NAME` or `${NAME}` reference (the `$` is already consumed) and
 /// return a placeholder. A reference in command or redirect position, a
 /// different variable, or any other expansion rejects the loop.
-fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool) -> Option<String> {
+fn reference(
+    chars: &[(usize, char)],
+    i: &mut usize,
+    name: &str,
+    argument: bool,
+    rewrites_references: bool,
+) -> Option<String> {
     if !argument {
         return None;
     }
@@ -489,12 +531,15 @@ fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool)
         return None;
     }
     // Once the braces come off, `${name}` glued to a word character spells a
-    // different name: the rewritten list writes the reference back as
-    // `$name`, so `${line}_suffix` would become `$line_suffix`, an expansion
-    // of a name the construct never bound. Only the braced spelling can reach
-    // here glued -- an unbraced `$line_suffix` reads its whole identifier
-    // above and fails the name comparison -- so only it is checked.
-    if braced
+    // different name: a caller that writes the reference back as `$name`
+    // would turn `${line}_suffix` into `$line_suffix`, an expansion of a name
+    // the construct never bound. Only the braced spelling can reach here
+    // glued -- an unbraced `$line_suffix` reads its whole identifier above
+    // and fails the name comparison -- so only it is checked. A caller that
+    // substitutes a word of its own keeps the gluing it was given, so the
+    // check is its caller's to ask for.
+    if rewrites_references
+        && braced
         && chars
             .get(*i)
             .is_some_and(|(_, c)| c.is_ascii_alphanumeric() || *c == '_')
