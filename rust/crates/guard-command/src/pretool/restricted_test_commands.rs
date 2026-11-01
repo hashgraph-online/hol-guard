@@ -485,6 +485,19 @@ pub(crate) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) ->
     }
 }
 
+/// The workspace's own installed test runner, launched by its entry path and
+/// taking one contained pass.
+///
+/// Node and Bun both execute a JavaScript entry, and the sink relaunches the
+/// resolved entry under Node whichever runtime the call named, so the two
+/// spellings of one run are admitted together. The entry alone is not the
+/// answer: the tail still has to read as a single contained pass.
+fn local_runner_entry_call(arguments: &[String]) -> bool {
+    matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
+        || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
+        || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
+}
+
 /// The mode the supported tool behind this command runs in, read through the
 /// same table `contained_node_tool` routes with. The admission and the sink
 /// that executes the run share one reading of which tools are supported and
@@ -677,7 +690,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     let runner = match super::executable_basename(executable) {
         "bun" => {
-            let arguments = match arguments {
+            let wrapped = match arguments {
                 [flag, directory, rest @ ..]
                     if flag == "--cwd" && !directory.is_empty() && !directory.starts_with('-') =>
                 {
@@ -686,8 +699,13 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
                 [flag, rest @ ..] if flag.starts_with("--cwd=") && flag.len() > 6 => rest,
                 rest => rest,
             };
-            matches!(arguments, [wrapper, rest @ ..] if wrapper == "x" && contained_runner_call(rest))
-                || matches!(arguments, [wrapper, flag, rest @ ..] if wrapper == "x" && flag == "--no-install" && contained_runner_call(rest))
+            matches!(wrapped, [wrapper, rest @ ..] if wrapper == "x" && contained_runner_call(rest))
+                || matches!(wrapped, [wrapper, flag, rest @ ..] if wrapper == "x" && flag == "--no-install" && contained_runner_call(rest))
+                // Bun runs a JavaScript entry the way Node does, so the entry
+                // launch is read off the call as given: `--cwd` names no entry
+                // at that position, and the sink refuses it for the same
+                // reason rather than running a file the call never spelled.
+                || local_runner_entry_call(arguments)
         }
         "bunx" | "npx" => {
             let arguments = match arguments {
@@ -712,11 +730,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         "vitest" => crate::contained_argv::vitest_runs_once(arguments),
         "jest" => jest_contained_call(arguments),
         "mocha" => mocha_contained_call(arguments),
-        "node" | "nodejs" => {
-            matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && crate::contained_argv::vitest_runs_once(rest))
-                || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
-                || matches!(arguments, [entry, rest @ ..] if crate::contained_argv::local_mocha_entry(&entry.replace('\\', "/")) && mocha_contained_call(rest))
-        }
+        "node" | "nodejs" => local_runner_entry_call(arguments),
         _ => false,
     };
     if runner {
