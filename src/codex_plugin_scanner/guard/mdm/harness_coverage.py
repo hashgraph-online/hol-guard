@@ -7,6 +7,7 @@ runtime's answer back to the MDM contract.
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 from dataclasses import dataclass
@@ -68,15 +69,16 @@ def _native_request(op: str, paths: MachinePaths, **fields: object) -> dict[str,
         **fields,
     }
     try:
-        return runtime_answer(
-            HARNESS_COVERAGE_FEATURE,
-            HARNESS_COVERAGE_COMMAND,
-            request,
-            timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
-            output_limit=_OUTPUT_LIMIT_BYTES,
-        )
+        request_text = json.dumps(request, sort_keys=True)
     except (TypeError, ValueError) as error:
         raise ValueError("harness_coverage_registry_invalid") from error
+    return runtime_answer(
+        HARNESS_COVERAGE_FEATURE,
+        HARNESS_COVERAGE_COMMAND,
+        request_text,
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+    )
 
 
 def _apply_change(op: str, paths: MachinePaths, **fields: object) -> None:

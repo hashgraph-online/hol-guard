@@ -7,6 +7,7 @@ lifecycle surfaces report.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -95,15 +96,16 @@ def verify_release_manifest(
         "minimum_version": minimum_version,
     }
     try:
-        answer = runtime_answer(
-            RELEASE_MANIFEST_VERIFY_FEATURE,
-            RELEASE_MANIFEST_VERIFY_COMMAND,
-            request,
-            timeout_seconds=_VERIFY_TIMEOUT_SECONDS,
-            output_limit=_OUTPUT_LIMIT_BYTES,
-        )
+        request_text = json.dumps(request, sort_keys=True)
     except (TypeError, ValueError):
         return _INVALID
+    answer = runtime_answer(
+        RELEASE_MANIFEST_VERIFY_FEATURE,
+        RELEASE_MANIFEST_VERIFY_COMMAND,
+        request_text,
+        timeout_seconds=_VERIFY_TIMEOUT_SECONDS,
+        output_limit=_OUTPUT_LIMIT_BYTES,
+    )
     return _INVALID if answer is None else _verification_from_native(answer)
 
 

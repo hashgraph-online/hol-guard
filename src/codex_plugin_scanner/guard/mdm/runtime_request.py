@@ -13,7 +13,7 @@ _STATUS_TIMEOUT_SECONDS = 10.0
 def runtime_answer(
     feature: str,
     command: str,
-    request: Mapping[str, object],
+    request: Mapping[str, object] | str,
     *,
     timeout_seconds: float,
     output_limit: int,
@@ -21,12 +21,13 @@ def runtime_answer(
     """The runtime's JSON object answer to one request.
 
     `None` when no compatible runtime offers `feature` or its answer is not a
-    JSON object. A request that cannot be encoded raises, so each caller keeps
-    its own error for it.
+    JSON object. A caller that maps an unencodable request to its own error
+    passes the encoded text, so runtime faults never read as bad input.
     """
 
     from ..native_runtime import _run_native_process, native_runtime_status
 
+    input_text = request if isinstance(request, str) else json.dumps(request, sort_keys=True)
     status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
     if (
         not status.available
@@ -39,7 +40,7 @@ def runtime_answer(
     output = _run_native_process(
         status.identity.path,
         (command, "--stdin"),
-        input_text=json.dumps(request, sort_keys=True),
+        input_text=input_text,
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
     )
