@@ -1,4 +1,5 @@
 use std::os::unix::fs::{symlink, PermissionsExt};
+use std::time::Instant;
 
 use super::*;
 
