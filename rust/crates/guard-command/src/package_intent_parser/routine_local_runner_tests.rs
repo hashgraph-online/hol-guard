@@ -112,42 +112,92 @@ fn a_runner_bound_to_local_project_state_is_routine() {
     assert!(routine_local_runner(&intent(dir.path())));
 }
 
+/// A workspace that installs `name` the way its registry package does: the
+/// manifest, the installed tree and the lockfile all name the package, which
+/// is the executable's own name for every runner except `tsc`.
+fn runner_workspace(root: &Path, name: &str, package: &str) {
+    write(
+        &root.join("package.json"),
+        &format!(r#"{{"dependencies": {{"{package}": "{DECLARED_VERSION}"}}}}"#),
+    );
+    write(
+        &root.join(format!("node_modules/{package}/package.json")),
+        &format!(r#"{{"name": "{package}", "version": "{INSTALLED_VERSION}"}}"#),
+    );
+    write(
+        &root.join(format!("node_modules/{package}/bin/{name}")),
+        "\n",
+    );
+    write(
+        &root.join("package-lock.json"),
+        &format!(
+            r#"{{"packages": {{"node_modules/{package}": {{"version": "{INSTALLED_VERSION}"}}}}}}"#
+        ),
+    );
+}
+
+/// The intent for `npx <name>` in a workspace `runner_workspace` built.
+fn runner_intent(root: &Path, name: &str, package: &str) -> PackageIntent {
+    let mut value = intent(root);
+    value.targets[0].raw_spec = name.to_owned();
+    value.targets[0].package_name = Some(name.to_owned());
+    let execution = &mut value.local_executions[0];
+    execution.package_name = Some(name.to_owned());
+    execution.executable_name = Some(name.to_owned());
+    execution.local_executable = Some(evidence(
+        &root.join(format!("node_modules/{package}/bin/{name}")),
+    ));
+    value
+}
+
 #[test]
 fn every_routine_runner_name_qualifies_and_no_other_does() {
-    for name in ["eslint", "jest", "mocha", "tsc", "tsx", "vitest"] {
+    for name in ["eslint", "jest", "mocha", "tsx", "vitest"] {
         let dir = TempDir::new().unwrap();
         let root = dir.path();
-        write(
-            &root.join("package.json"),
-            &format!(r#"{{"dependencies": {{"{name}": "{DECLARED_VERSION}"}}}}"#),
-        );
-        write(
-            &root.join(format!("node_modules/{name}/package.json")),
-            &format!(r#"{{"name": "{name}", "version": "{INSTALLED_VERSION}"}}"#),
-        );
-        write(&root.join(format!("node_modules/{name}/bin/run.js")), "\n");
-        write(
-            &root.join("package-lock.json"),
-            &format!(
-                r#"{{"packages": {{"node_modules/{name}": {{"version": "{INSTALLED_VERSION}"}}}}}}"#
-            ),
-        );
+        runner_workspace(root, name, name);
 
-        let mut value = intent(root);
-        value.targets[0].raw_spec = name.to_owned();
-        value.targets[0].package_name = Some(name.to_owned());
-        let execution = &mut value.local_executions[0];
-        execution.package_name = Some(name.to_owned());
-        execution.executable_name = Some(name.to_owned());
-        execution.local_executable = Some(evidence(
-            &root.join(format!("node_modules/{name}/bin/run.js")),
-        ));
+        let mut value = runner_intent(root, name, name);
         assert!(routine_local_runner(&value), "{name}");
 
         value.targets[0].raw_spec = "prettier".to_owned();
         value.local_executions[0].package_name = Some("prettier".to_owned());
         assert!(!routine_local_runner(&value), "{name}");
     }
+}
+
+/// `tsc` is published inside `typescript`, so npm installs it at
+/// `node_modules/typescript` and the lockfile pins it under that name. A
+/// verdict that looked for `node_modules/tsc` found nothing and sent every
+/// `npx tsc -p tsconfig.json` to a package review it never needed.
+#[test]
+fn tsc_is_bound_through_its_typescript_package() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "tsc", "typescript");
+    assert!(routine_local_runner(&runner_intent(
+        root,
+        "tsc",
+        "typescript"
+    )));
+}
+
+/// The alias does not loosen the evidence: a `typescript` the lockfile pins at
+/// another version is still not the runner the project declared.
+#[test]
+fn a_typescript_lockfile_that_contradicts_the_install_is_not_routine() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "tsc", "typescript");
+    write(
+        &root.join("package-lock.json"),
+        r#"{"packages": {"node_modules/typescript": {"version": "4.0.0"}}}"#,
+    );
+    assert!(!routine_local_runner(&runner_intent(
+        root,
+        "tsc",
+        "typescript"
+    )));
 }
 
 #[test]
