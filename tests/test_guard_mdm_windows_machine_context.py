@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 import os
+import subprocess
 
 import pytest
 
@@ -99,5 +101,16 @@ def test_an_older_runtime_is_asked_for_this_process_by_id(monkeypatch: pytest.Mo
 
 
 @pytest.mark.skipif(os.name != "nt", reason="needs the Windows process-lifecycle runtime")
-def test_the_native_runtime_reads_this_process_token_user() -> None:
-    assert device_key_native.windows_current_user_sid().startswith("S-1-5-")
+def test_the_native_runtime_reads_this_process_token_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_fallback(_pid: int) -> str | None:
+        raise AssertionError("the native runtime must answer without the per-process fallback")
+
+    monkeypatch.setattr(windows_paths, "windows_process_owner_sid", no_fallback)
+    monkeypatch.setattr(device_key_native, "_CURRENT_USER_SID", [])
+    # `whoami` reports the SID from its own token, which is this user's.
+    listed = subprocess.run(
+        ["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, check=True, timeout=30
+    ).stdout
+    expected = next(csv.reader([listed.strip()]))[-1]
+
+    assert device_key_native.windows_current_user_sid() == expected
