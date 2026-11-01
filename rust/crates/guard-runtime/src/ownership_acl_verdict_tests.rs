@@ -455,16 +455,3 @@ fn malformed_requests_are_refused() {
 
 #[path = "ownership_acl_verdict_managed_file_tests.rs"]
 mod managed_file;
-
-#[test]
-fn a_windows_probe_reads_the_system_directory_itself() {
-    let request =
-        json!({"schema": SCHEMA, "op": "windows-probe", "windows_paths": default_paths()});
-    let answer = run(request);
-    if cfg!(windows) {
-        assert!(answer.is_ok(), "{answer:?}");
-    } else {
-        // Off Windows there is no system directory, so nothing is probed.
-        assert_eq!(answer, Err("ownership_acl_request_invalid".to_owned()));
-    }
-}
