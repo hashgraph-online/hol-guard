@@ -126,6 +126,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-windows-process-command-lines-v1".into(),
         "native-onefile-open-paths-v1".into(),
         "native-policy-effective-v1".into(),
+        "native-hook-removal-sweep-v1".into(),
         "native-release-manifest-verify-v1".into(),
         "native-ownership-acl-v1".into(),
         "native-system-proxies-v1".into(),

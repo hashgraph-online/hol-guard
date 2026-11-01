@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
+            let response = hook_removal_sweep::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if macos_code_signing::is_command(command) && flag == "--stdin" => {
             let response = macos_code_signing::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

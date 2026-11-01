@@ -554,6 +554,8 @@ mod hook_direct;
 mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
+mod hook_removal_prune;
+mod hook_removal_sweep;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
 #[path = "adapters/detection/muse_detect.rs"]
