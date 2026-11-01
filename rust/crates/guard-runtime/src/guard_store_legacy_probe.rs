@@ -65,12 +65,7 @@ pub(crate) fn read_legacy_codex_probe_receipt(
     matching_receipt(rows, digest, since, now_micros())
 }
 
-fn matching_receipt(
-    rows: Vec<Row>,
-    digest: &str,
-    since: i128,
-    now: i128,
-) -> StoreResult<Value> {
+fn matching_receipt(rows: Vec<Row>, digest: &str, since: i128, now: i128) -> StoreResult<Value> {
     if rows.len() > MAX_ROWS {
         return value_error("legacy_probe_receipt_capacity");
     }
