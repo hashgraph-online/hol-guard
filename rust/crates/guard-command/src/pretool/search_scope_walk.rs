@@ -31,16 +31,44 @@ const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
 /// the evaluation on it. Withholding it only returns the answer the readings
 /// above already reached.
 const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
-/// The wall clock an include walk may spend.
+/// The wall clock every include walk in one evaluation may spend between
+/// them.
 ///
 /// The whole native evaluation runs inside half a second, and the entry count
 /// above does not bound the time those entries take: a directory read costs
 /// what the host's filesystem charges for it, which on a loaded machine is
 /// not what it costs on an idle one. Spending the evaluation's remaining
 /// budget there fails the evaluation, and a failed evaluation blocks, so this
-/// walk stops on the clock as well. Stopping only withholds the narrowing and
-/// leaves the answer the readings above already reached.
-const INCLUDE_SCOPE_BUDGET: Duration = Duration::from_millis(50);
+/// walk stops on the clock as well.
+///
+/// One evaluation asks this question once per recursive root, and a command
+/// is read again for every spelling a rewrite reaches, so a clock started
+/// afresh for each walk would bound no single evaluation. The clock below is
+/// started once where the evaluation begins and shared by every include walk
+/// inside it, which is what the evaluation's own budget can afford.
+/// Expiring only withholds the narrowing and leaves the answer the readings
+/// above already reached.
+const INCLUDE_SCOPE_BUDGET: Duration = Duration::from_millis(25);
+
+thread_local! {
+    /// When the include walks of the evaluation running on this thread have
+    /// to stop. Unset outside an evaluation -- a test driving the walk
+    /// directly -- where each walk gets the budget to itself.
+    static INCLUDE_SCOPE_CLOCK: std::cell::Cell<Option<Instant>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Start the shared include-walk clock for the evaluation beginning now.
+pub(crate) fn begin_include_scope_budget() {
+    INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(Some(Instant::now() + INCLUDE_SCOPE_BUDGET)));
+}
+
+/// Put the thread back where it is outside an evaluation, for a test that
+/// reads the unstarted clock on a thread an earlier test may have used.
+#[cfg(test)]
+fn clear_include_scope_budget() {
+    INCLUDE_SCOPE_CLOCK.with(|clock| clock.set(None));
+}
 
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -170,9 +198,12 @@ pub(super) fn walk_scope(
     walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
 }
 
-/// When an include walk started now has to stop.
+/// When an include walk starting now has to stop: the evaluation's shared
+/// clock, or a budget of its own outside one.
 pub(super) fn include_scope_deadline() -> Instant {
-    Instant::now() + INCLUDE_SCOPE_BUDGET
+    INCLUDE_SCOPE_CLOCK
+        .with(std::cell::Cell::get)
+        .unwrap_or_else(|| Instant::now() + INCLUDE_SCOPE_BUDGET)
 }
 
 /// [`walk_scope`] for a grep include, under the entry count and the wall
@@ -423,3 +454,7 @@ fn walk_scope_inner(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "search_scope_walk_tests.rs"]
+mod tests;

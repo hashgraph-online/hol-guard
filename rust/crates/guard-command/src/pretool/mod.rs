@@ -892,6 +892,12 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
     deadline: Option<std::time::Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Result<PreToolDecisionV1, String> {
+    // One submission is read again for every spelling a rewrite reaches, and
+    // each reading may ask the include walk about a recursive root. The walk
+    // is the one proof here that spends its own wall clock, so the clock is
+    // started here, where the submission starts, and shared by every walk
+    // below rather than handed out afresh to each one.
+    search_scope_walk::begin_include_scope_budget();
     evaluate_rewritten(request, home_dir, cwd, deadline, execution_environment, 0)
 }
 
