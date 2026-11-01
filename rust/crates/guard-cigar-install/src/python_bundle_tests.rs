@@ -192,6 +192,10 @@ fn unsafe_paths_aliases_special_records_and_ambiguous_extensions_are_refused() {
         member("python/device", b'3', b"", ""),
         member("python/pax", b'x', b"", ""),
     ] {
+        // A case-only alias is a distinct path where the file system keeps case.
+        if extra.name == "python/BIN/alias" && !cfg!(any(target_os = "macos", windows)) {
+            continue;
+        }
         let mut entries = members();
         let name = extra.name.clone();
         entries.push(extra);
