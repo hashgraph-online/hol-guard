@@ -1,5 +1,8 @@
 """Bundled tested-version coverage manifest: model, eligibility, validation.
 
+This is the CI-side validator the promotion and release scripts use. The
+native runtime validates the same manifest again before the dashboard reads it.
+
 The manifest ships inside the Guard build and is the only coverage authority.
 Every record names one exact harness version, the Guard version it was tested
 against, the platforms, transport, and events it exercised, and the passing
@@ -9,14 +12,13 @@ not covered, however close it is to a listed one.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from ..adapters.contracts import contract_for
-from .versions import HarnessVersion, parse_version
+from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from codex_plugin_scanner.guard.harness_versions.versions import HarnessVersion, parse_version
 
 SCHEMA_VERSION = "hol-guard-harness-version-coverage.v1"
 MANIFEST_FILENAME = "harness_version_coverage_v1.json"
@@ -272,26 +274,4 @@ def parse_manifest(payload: object) -> CoverageManifest:
 
 
 def bundled_manifest_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "schemas" / MANIFEST_FILENAME
-
-
-@dataclass(frozen=True, slots=True)
-class ManifestLoad:
-    manifest: CoverageManifest | None
-    error: str | None
-
-
-def load_manifest(path: Path | None = None) -> ManifestLoad:
-    """Load the manifest; any defect yields ``manifest=None`` and a reason code."""
-
-    target = path or bundled_manifest_path()
-    try:
-        raw = target.read_bytes()
-    except OSError:
-        return ManifestLoad(None, "manifest_missing")
-    if len(raw) > MAX_MANIFEST_BYTES:
-        return ManifestLoad(None, "manifest_invalid")
-    try:
-        return ManifestLoad(parse_manifest(json.loads(raw.decode("utf-8"))), None)
-    except (UnicodeDecodeError, json.JSONDecodeError, ManifestError):
-        return ManifestLoad(None, "manifest_invalid")
+    return Path(__file__).resolve().parents[2] / "src/codex_plugin_scanner/guard/schemas" / MANIFEST_FILENAME

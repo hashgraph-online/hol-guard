@@ -1,4 +1,4 @@
-"""Harness version discovery, acknowledgement storage, and the cached service."""
+"""Harness version discovery and the cached service."""
 
 from __future__ import annotations
 
@@ -11,13 +11,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.harness_versions import acknowledgements, service
+from codex_plugin_scanner.guard.harness_versions import service
 from codex_plugin_scanner.guard.harness_versions.compatibility import STATE_UNTESTED, STATE_VERSION_UNKNOWN
 from codex_plugin_scanner.guard.harness_versions.discovery import (
     observation_identity_changed,
     observe_harness_version,
 )
-from codex_plugin_scanner.guard.harness_versions.manifest import ManifestLoad, parse_manifest
 from tests.test_guard_harness_version_coverage import FIXTURE, GUARD, PLATFORM
 
 PACKAGE = "@oh-my-pi/pi-coding-agent"
@@ -171,36 +170,16 @@ class TestDiscovery:
         assert observation_identity_changed(observation, context, which=lambda _name: str(second))
 
 
-class TestAcknowledgementStore:
-    KEY = "a" * 64
-
-    def test_record_and_clear(self, tmp_path: Path) -> None:
-        acknowledgements.record_acknowledgement(tmp_path, harness="omp", key=self.KEY)
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == {self.KEY}
-        if os.name != "nt":
-            assert (tmp_path / acknowledgements.ACKNOWLEDGEMENTS_FILENAME).stat().st_mode & 0o777 == 0o600
-        acknowledgements.record_acknowledgement(tmp_path, harness="omp", key="b" * 64)
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == {"b" * 64}
-        assert acknowledgements.clear_acknowledgements(tmp_path, harness="omp") == 1
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == frozenset()
-
-    @pytest.mark.parametrize(
-        "content",
-        [b"{not json", b'{"version": 2, "items": []}', b"\xff\xfe", b'{"version": 1, "items": {}}', b"x" * 20000],
-    )
-    def test_corrupt_store_acknowledges_nothing(self, tmp_path: Path, content: bytes) -> None:
-        (tmp_path / acknowledgements.ACKNOWLEDGEMENTS_FILENAME).write_bytes(content)
-        assert acknowledgements.acknowledged_keys(tmp_path, "omp") == frozenset()
-
-    def test_rejects_malformed_keys(self, tmp_path: Path) -> None:
-        with pytest.raises(ValueError):
-            acknowledgements.record_acknowledgement(tmp_path, harness="omp", key="../../etc")
+def _fixture_manifest(context: HarnessContext) -> Path:
+    path = context.home_dir / "coverage.json"
+    path.write_text(json.dumps(FIXTURE), encoding="utf-8")
+    return path
 
 
 class TestService:
     def _compat(self, context: HarnessContext, **kwargs: object) -> dict[str, object]:
         options: dict[str, object] = {
-            "manifest_load": ManifestLoad(parse_manifest(FIXTURE), None),
+            "manifest_path": _fixture_manifest(context),
             "guard_version": GUARD,
             "platform": PLATFORM,
             "observe": lambda harness, ctx, clock: _observe(ctx, clock=clock),
@@ -214,7 +193,7 @@ class TestService:
         cli = _install(tmp_path / "bun", "18.11.2")
         _link_bun(context, cli)
         options = {
-            "manifest_load": ManifestLoad(parse_manifest(FIXTURE), None),
+            "manifest_path": _fixture_manifest(context),
             "guard_version": GUARD,
             "platform": PLATFORM,
             "observe": lambda harness, ctx, clock: _observe(ctx, clock=clock),
@@ -248,12 +227,12 @@ class TestService:
                 "omp",
                 "a" * 64,
                 context,
-                manifest_load=ManifestLoad(parse_manifest(FIXTURE), None),
+                manifest_path=_fixture_manifest(context),
                 guard_version=GUARD,
                 platform=PLATFORM,
                 observe=lambda harness, ctx, clock: _observe(ctx, clock=clock),
             )
-        assert not (context.guard_home / acknowledgements.ACKNOWLEDGEMENTS_FILENAME).exists()
+        assert not (context.guard_home / "harness-version-acknowledgements.json").exists()
 
     def test_cache_expires_and_invalidates(self, tmp_path: Path) -> None:
         context = _context(tmp_path)

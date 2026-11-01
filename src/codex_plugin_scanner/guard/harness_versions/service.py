@@ -15,23 +15,16 @@ from pathlib import Path
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
-from .acknowledgements import acknowledged_keys, clear_acknowledgements, record_acknowledgement
+from .acknowledgements import clear_acknowledgements, record_acknowledgement
 from .compatibility import STATE_UNTESTED, decide_compatibility
 from .discovery import VersionObservation, current_platform, observation_identity_changed, observe_harness_version
-from .manifest import ManifestLoad, load_manifest
 
 CACHE_TTL_SECONDS = 5 * 60
+MANIFEST_FILENAME = "harness_version_coverage_v1.json"
 
 _lock = threading.Lock()
 _observations: dict[tuple[str, str], VersionObservation] = {}
-_manifest: ManifestLoad | None = None
-
-
-def _bundled_manifest() -> ManifestLoad:
-    global _manifest
-    if _manifest is None:
-        _manifest = load_manifest()
-    return _manifest
+_manifest_path = Path(__file__).resolve().parent.parent / "schemas" / MANIFEST_FILENAME
 
 
 def invalidate(guard_home: Path, harness: str | None = None) -> None:
@@ -76,7 +69,7 @@ def compatibility_for(
     force: bool = False,
     clock: Callable[[], float] = time.time,
     observe: Callable[..., VersionObservation] = observe_harness_version,
-    manifest_load: ManifestLoad | None = None,
+    manifest_path: Path | None = None,
     guard_version: str = __version__,
     platform: str | None = None,
 ) -> dict[str, object]:
@@ -84,11 +77,11 @@ def compatibility_for(
     return decide_compatibility(
         harness=harness,
         observation=observation,
-        manifest_load=manifest_load or _bundled_manifest(),
+        manifest_path=manifest_path or _manifest_path,
         guard_version=guard_version,
         platform=platform or current_platform(),
         now=clock(),
-        acknowledged_keys=acknowledged_keys(context.guard_home, harness),
+        guard_home=context.guard_home,
     )
 
 
@@ -103,7 +96,7 @@ def acknowledge(
     *,
     clock: Callable[[], float] = time.time,
     observe: Callable[..., VersionObservation] = observe_harness_version,
-    manifest_load: ManifestLoad | None = None,
+    manifest_path: Path | None = None,
     guard_version: str = __version__,
     platform: str | None = None,
 ) -> dict[str, object]:
@@ -119,16 +112,16 @@ def acknowledge(
             context,
             clock=clock,
             observe=observe,
-            manifest_load=manifest_load,
+            manifest_path=manifest_path,
             guard_version=guard_version,
             platform=platform,
         )
 
     payload = current()
-    ack = payload["acknowledgement"]
+    ack = payload.get("acknowledgement")
     if not isinstance(ack, dict):
         raise AcknowledgementRejectedError("acknowledgement_not_eligible")
-    if payload["state"] != STATE_UNTESTED or not ack.get("eligible") or not isinstance(key, str):
+    if payload.get("state") != STATE_UNTESTED or not ack.get("eligible") or not isinstance(key, str):
         raise AcknowledgementRejectedError("acknowledgement_not_eligible")
     if key != ack.get("key"):
         raise AcknowledgementRejectedError("acknowledgement_stale")
@@ -142,7 +135,7 @@ def clear_acknowledgement(
     *,
     clock: Callable[[], float] = time.time,
     observe: Callable[..., VersionObservation] = observe_harness_version,
-    manifest_load: ManifestLoad | None = None,
+    manifest_path: Path | None = None,
     guard_version: str = __version__,
     platform: str | None = None,
 ) -> dict[str, object]:
@@ -152,7 +145,7 @@ def clear_acknowledgement(
         context,
         clock=clock,
         observe=observe,
-        manifest_load=manifest_load,
+        manifest_path=manifest_path,
         guard_version=guard_version,
         platform=platform,
     )
