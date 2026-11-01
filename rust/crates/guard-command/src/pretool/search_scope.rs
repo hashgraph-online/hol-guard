@@ -11,7 +11,9 @@
 
 use super::search_pattern_clearance::PatternClearance;
 use super::search_scope_filter::SearchFilter;
-use super::search_scope_walk::{walk_scope, walk_scope_cleared, walk_scope_with, Ignores};
+use super::search_scope_walk::{
+    walk_include_scope, walk_scope, walk_scope_cleared, walk_scope_with, Ignores,
+};
 use serde_json::{Map, Value};
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -176,6 +178,11 @@ pub(super) fn grep_include_scope_proven(
 /// directory is still descended, but a file no glob selects is not read and
 /// so cannot be printed. The root must be a directory, because the caller
 /// asks this only for a recursive operand.
+///
+/// Every other reading of the same search answers first and walks the tree to
+/// do it, so this one walks under the smaller include budget: a tree too
+/// large for it stays unproven and the search keeps the answer those readings
+/// reached.
 pub(super) fn grep_include_walk_proven(
     root: &str,
     globs: &[&str],
@@ -185,8 +192,10 @@ pub(super) fn grep_include_walk_proven(
     let Some(filter) = include_filter(globs, root) else {
         return false;
     };
-    verified_directory_root(root, home_dir, cwd)
-        .is_some_and(|directory| directory_include_proven(&directory, &filter, home_dir))
+    verified_directory_root(root, home_dir, cwd).is_some_and(|directory| {
+        !super::read_paths::inside_agent_state_tree(&directory, home_dir)
+            && walk_include_scope(&directory, &filter, home_dir).is_ok()
+    })
 }
 
 /// The walk filter for a grep include, or nothing when the globs reach past

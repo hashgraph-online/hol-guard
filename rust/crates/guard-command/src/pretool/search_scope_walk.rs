@@ -20,6 +20,16 @@ const MAX_SCOPE_ENTRIES: usize = 20_000;
 /// A names-only walk checks only entry metadata and links, never contents,
 /// so it may cover an ordinary mid-size repository in full.
 const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
+/// The entries an include walk may inspect.
+///
+/// Every other reading of a recursive search answers before this one and
+/// walks the tree to do it, so an include walk spends what is left of a
+/// single evaluation's budget. A directory an include selects from -- the
+/// documentation or source tree the globs name -- fits well inside this
+/// count, and a larger tree leaves the reading unproven instead of spending
+/// the evaluation on it. Withholding it only returns the answer the readings
+/// above already reached.
+const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
 
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -149,6 +159,26 @@ pub(super) fn walk_scope(
     walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
 }
 
+/// [`walk_scope`] for a grep include, under the entry budget such a reading
+/// is allowed. Nothing is ignored: `grep` reads no ignore file.
+pub(super) fn walk_include_scope(
+    root: &Path,
+    filter: &SearchFilter,
+    home: Option<&str>,
+) -> Result<(), ScopeUnproven> {
+    walk_scope_inner(
+        root,
+        filter,
+        Ignores::None,
+        false,
+        &|_| false,
+        None,
+        home,
+        &mut None,
+        Some(MAX_INCLUDE_SCOPE_ENTRIES),
+    )
+}
+
 /// A content walk where a sensitive file `clearance` proves the pattern
 /// cannot match is not a blocker.
 pub(super) fn walk_scope_cleared(
@@ -168,6 +198,7 @@ pub(super) fn walk_scope_cleared(
         clearance,
         home,
         blocker,
+        None,
     )
 }
 
@@ -191,6 +222,7 @@ pub(super) fn walk_scope_with(
         None,
         home,
         blocker,
+        None,
     )
 }
 
@@ -204,6 +236,7 @@ fn walk_scope_inner(
     clearance: Option<&PatternClearance>,
     home: Option<&str>,
     blocker: &mut Option<PathBuf>,
+    entries: Option<usize>,
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
     let mut tiers = IgnoreTiers::default();
@@ -230,11 +263,12 @@ fn walk_scope_inner(
     let mut inspected = 0_usize;
     let mut tracked = TrackedFiles::default();
     let mut nested_repositories = 0_usize;
-    let mut entry_limit = if names {
+    let scope_entries = entries.unwrap_or(if names {
         MAX_NAME_SCOPE_ENTRIES
     } else {
         MAX_SCOPE_ENTRIES
-    };
+    });
+    let mut entry_limit = scope_entries;
     while let Some(directory) = pending.pop() {
         if directory.depth > MAX_SCOPE_DEPTH {
             return Err(ScopeUnproven);
@@ -253,11 +287,7 @@ fn walk_scope_inner(
                 if nested_repositories > MAX_NESTED_REPOSITORIES {
                     return Err(ScopeUnproven);
                 }
-                entry_limit += if names {
-                    MAX_NAME_SCOPE_ENTRIES
-                } else {
-                    MAX_SCOPE_ENTRIES
-                };
+                entry_limit += scope_entries;
             }
             load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
         }
