@@ -12,7 +12,6 @@ from codex_plugin_scanner.guard.runtime.local_skill_index import (
     index_local_skills,
     inspect_indexed_skill,
     public_skill_page,
-    read_skill_metadata,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -75,11 +74,38 @@ def test_symlink_roots_and_documents_are_explicit_gaps(tmp_path: Path):
         ("# " + "x" * 20_000 + "\n", "metadata-frontmatter-limit"),
     ],
 )
-def test_malformed_or_over_limit_metadata_is_not_loaded(tmp_path: Path, header: str, reason: str):
+def test_malformed_or_over_limit_metadata_is_an_issue(tmp_path: Path, header: str, reason: str):
     root = tmp_path / "skills"
-    document = _skill(root, frontmatter=header)
-    with pytest.raises(ValueError, match=reason):
-        read_skill_metadata(document, root=root)
+    _skill(root, frontmatter=header)
+    records, issues = index_local_skills({"root": root}, home=tmp_path, cancel=threading.Event())
+    assert not records
+    assert issues == [{"root_id": "root", "reason": reason}]
+
+
+def test_an_unavailable_runtime_reports_every_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from codex_plugin_scanner.guard.runtime import local_skill_index
+
+    monkeypatch.setattr(local_skill_index, "_skill_index_answer", lambda *_args, **_kwargs: None)
+    roots = {"a": tmp_path / "a", "b": tmp_path / "b"}
+    records, issues = index_local_skills(roots, home=tmp_path, cancel=threading.Event())
+    assert not records
+    assert issues == [
+        {"root_id": "a", "reason": "skill-index-unavailable"},
+        {"root_id": "b", "reason": "skill-index-unavailable"},
+    ]
+
+
+@pytest.mark.parametrize("relative", ["/etc/passwd", "../outside/SKILL.md", "a//SKILL.md", "./SKILL.md"])
+def test_runtime_records_outside_their_root_are_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str):
+    from codex_plugin_scanner.guard.runtime import local_skill_index
+
+    record = {"root_id": "root", "document_hex": relative.encode().hex(), "metadata": {"name": "report"}}
+    monkeypatch.setattr(
+        local_skill_index, "_skill_index_answer", lambda *_args, **_kwargs: {"records": [record], "issues": []}
+    )
+    records, issues = index_local_skills({"root": tmp_path}, home=tmp_path, cancel=threading.Event())
+    assert not records
+    assert issues == [{"root_id": "root", "reason": "metadata-unreadable"}]
 
 
 def test_lazy_directory_identity_changes_with_supporting_file_without_grants(tmp_path: Path):

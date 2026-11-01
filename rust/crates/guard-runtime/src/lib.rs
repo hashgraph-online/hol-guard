@@ -599,6 +599,7 @@ mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
+mod local_skill_index;
 mod local_store_read;
 mod local_tool_eligibility_op;
 mod local_tool_grant_op;
