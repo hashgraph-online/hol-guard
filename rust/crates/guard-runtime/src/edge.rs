@@ -5,7 +5,7 @@ use crate::native_hook_receipt::{
     receipt_from_post_tool, receipt_from_pre_tool, NativeReceiptIdentity,
 };
 use crate::policy_enforcement::AdmittedPolicySnapshot;
-use crate::runtime_known_vulnerable as runtime_risk;
+use crate::{edge_exact_command_review as exact_review, runtime_known_vulnerable as runtime_risk};
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
     HookSourceFileRefV1, NativeHookRequestV1, PreToolResultV1, GUARD_HOOK_EDGE_RESULT_V2_SCHEMA,
@@ -344,11 +344,7 @@ fn evaluate_validated_envelope(
             );
             let evaluated = crate::network_protection::apply_to_envelope(&envelope, evaluated);
             let evaluated = runtime_risk::apply_to_envelope(&envelope, policy_snapshot, evaluated);
-            let evaluated = crate::edge_exact_command_review::apply_to_envelope(
-                &envelope,
-                policy_snapshot,
-                evaluated,
-            );
+            let evaluated = exact_review::apply_to_envelope(&envelope, policy_snapshot, evaluated);
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             edge_result_check::validate_pre_tool_result(&value)?;
@@ -375,10 +371,9 @@ fn evaluate_validated_envelope(
                 home_dir: envelope.source.home_dir.clone(),
                 guard_home: envelope.source.guard_home.clone(),
                 source_ref_external_allowed: envelope.source.source_ref_external_allowed,
-                // Keep the intrinsic result intact. The authenticated policy
-                // join below owns observe-mode semantics and suppresses only
-                // policy-only escalation; passing observe here would erase a
-                // native source/content block before that join runs.
+                // Keep the intrinsic result intact. The authenticated policy join below owns
+                // observe-mode semantics and suppresses only policy-only escalation; passing
+                // observe here would erase a native source/content block before that join runs.
                 observe_mode: false,
                 deadline_budget_ms: envelope.deadline_budget_ms,
             };
