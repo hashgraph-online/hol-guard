@@ -18,7 +18,8 @@ CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY = "guard_codex_browser_wait_timeout_secon
 _FEATURE = "native-process-identity-v1"
 _SCHEMA = "process-identity.v1"
 _PS_TIMEOUT_SECONDS = 0.5
-_TIMEOUT_SECONDS = 5.0
+# One query, runtime discovery included, never outlasts this.
+_QUERY_SECONDS = 3.0
 
 
 def current_process_identity() -> dict[str, object] | None:
@@ -84,7 +85,10 @@ def _ask(
         body = request() if callable(request) else request
         return None if body is None else {"schema": _SCHEMA, **body}
 
-    if deadline is not None and time.monotonic() >= deadline:
+    query_deadline = time.monotonic() + _QUERY_SECONDS
+    if deadline is not None:
+        query_deadline = min(query_deadline, deadline)
+    if time.monotonic() >= query_deadline:
         return None
     from .mdm.runtime_request import runtime_answer
 
@@ -93,8 +97,7 @@ def _ask(
         "process-identity",
         built,
         output_limit=4096,
-        timeout_seconds=None if deadline is not None else _TIMEOUT_SECONDS,
-        deadline=deadline,
+        deadline=query_deadline,
     )
 
 

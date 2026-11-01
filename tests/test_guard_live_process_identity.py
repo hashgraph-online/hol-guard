@@ -39,6 +39,25 @@ def test_process_start_query_consumes_the_original_deadline(monkeypatch):
     assert len(requests) == 1, "an expired process query must not start another child"
 
 
+def test_a_query_without_a_deadline_is_bounded_end_to_end(monkeypatch):
+    from codex_plugin_scanner.guard import live_process_identity as module
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
+    seen = []
+
+    def answer(_feature, _command, _request, **kwargs):
+        seen.append(kwargs)
+        return None
+
+    monkeypatch.setattr(runtime_request, "runtime_answer", answer)
+    assert module.process_owner_marker(123) is None
+    assert module.process_start_token(123, deadline_monotonic=200.0) is None
+    assert module.process_start_token(123, deadline_monotonic=101.0) is None
+    assert [kwargs.get("deadline") for kwargs in seen] == [103.0, 103.0, 101.0]
+    assert all(kwargs.get("timeout_seconds") is None for kwargs in seen)
+
+
 def test_no_runtime_proves_no_identity(monkeypatch):
     from codex_plugin_scanner.guard import live_process_identity as module
     from codex_plugin_scanner.guard.mdm import runtime_request
