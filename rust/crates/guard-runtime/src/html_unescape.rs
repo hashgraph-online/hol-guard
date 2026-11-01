@@ -89,16 +89,16 @@ fn reference(text: &str) -> Option<(usize, String)> {
     }
     // Otherwise the longest defined name, of two characters or more, that
     // begins the reference; the rest is kept as written.
-    candidate
+    let cuts: Vec<usize> = candidate
         .char_indices()
         .map(|(index, _)| index)
         .skip(2)
-        .rev()
-        .find_map(|cut| {
-            table
-                .get(&candidate[..cut])
-                .map(|value| (end, format!("{value}{}", &candidate[cut..])))
-        })
+        .collect();
+    cuts.into_iter().rev().find_map(|cut| {
+        table
+            .get(&candidate[..cut])
+            .map(|value| (end, format!("{value}{}", &candidate[cut..])))
+    })
 }
 
 fn numeric(code: u32) -> String {

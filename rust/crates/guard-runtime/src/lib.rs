@@ -274,7 +274,6 @@ mod decision_authority_op;
 mod decision_authority_vectors_tests;
 mod delivery_object;
 mod desktop_notification;
-mod html_unescape;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
 mod device_key_helper;
@@ -558,6 +557,7 @@ mod hook_direct_evidence;
 mod hook_env_stamp;
 mod hook_removal_prune;
 mod hook_removal_sweep;
+mod html_unescape;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
 #[path = "adapters/detection/muse_detect.rs"]
