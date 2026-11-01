@@ -90,7 +90,12 @@ fn bun_launching_no_project_runner_reads_as_no_runner() {
         "bun --cwd=app node_modules/vitest/vitest.mjs run",
         "bun xnode_modules/vitest/vitest.mjs run",
         "bun node_modules/vitest/vitest.mjs watch",
-        "bun node_modules/vitest/vitest.mjs run --watch",
+        // No verb selects the run, so the watch spelling decides, and a call
+        // left watching never finishes inside the sink. `run --watch` is not
+        // here: Vitest's `run` command turns the watch off whatever follows
+        // it, which is the reading the `node` spelling of this entry already
+        // carries.
+        "bun node_modules/vitest/vitest.mjs --watch",
         "bun node_modules/vite/dist/cli.js run",
     ] {
         assert_ne!(
