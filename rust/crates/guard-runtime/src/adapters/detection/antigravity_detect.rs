@@ -50,14 +50,16 @@ const OWNED_SETTINGS: [(&[&str], &str); 4] = [
 const XDG_LOWER_SOURCE: &str = "settings:xdg-user-lower";
 
 /// Antigravity-owned skill roots. Home `.agents/skills` belongs to other
-/// harnesses, so it is not in this list.
+/// harnesses, so it is not in this list. Each prefix is one path segment.
+/// Discovery walks a root recursively, so a prefix of `skills/<dir>` would
+/// match a nested skill under the primary `skills` root.
 const SKILL_CANDIDATES: [(&[&str], &str); 3] = [
     (&[".gemini", "antigravity", "skills"], "skills"),
     (
         &[".gemini", "antigravity", "builtin", "skills"],
-        "skills/builtin",
+        "builtin-skills",
     ),
-    (&[".gemini", "config", "plugins"], "skills/plugins"),
+    (&[".gemini", "config", "plugins"], "plugin-skills"),
 ];
 
 fn under(base: &Path, parts: &[&str]) -> PathBuf {
@@ -265,7 +267,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
             &mut inventory,
             workspace,
             &[".agents", "skills"],
-            "skills/agents",
+            "agents-skills",
         )?;
     }
     inventory.finish()
@@ -322,7 +324,7 @@ mod tests {
             let Ok(right) = std::fs::metadata(right) else {
                 return false;
             };
-            return left.ino() == right.ino();
+            left.ino() == right.ino()
         }
         #[cfg(not(unix))]
         {
@@ -460,8 +462,59 @@ mod tests {
         );
         let found = ids(&detect_at(&home, Some(&workspace)));
         assert!(found.contains(&"antigravity:global:skill:skills/custom".to_owned()));
-        assert!(found.contains(&"antigravity:global:skill:skills/builtin/custom".to_owned()));
-        assert!(found.contains(&"antigravity:project:skill:skills/agents/team-helper".to_owned()));
+        assert!(found.contains(&"antigravity:global:skill:builtin-skills/custom".to_owned()));
+        assert!(found.contains(&"antigravity:project:skill:agents-skills/team-helper".to_owned()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn nested_primary_skills_do_not_reuse_other_root_ids() {
+        let root = std::env::temp_dir().join(format!("ag-nested-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let home = root.join("home");
+        let workspace = root.join("workspace");
+        write(
+            &home.join(".gemini/antigravity/skills/builtin/custom/SKILL.md"),
+            "---\nname: custom\n---\nNested.\n",
+        );
+        write(
+            &home.join(".gemini/antigravity/builtin/skills/custom/SKILL.md"),
+            "---\nname: custom\n---\nBuiltin.\n",
+        );
+        write(
+            &home.join(".gemini/antigravity/skills/plugins/my-plugin/skills/custom/SKILL.md"),
+            "---\nname: custom\n---\nNested plugin.\n",
+        );
+        write(
+            &home.join(".gemini/config/plugins/my-plugin/skills/custom/SKILL.md"),
+            "---\nname: custom\n---\nPlugin.\n",
+        );
+        write(
+            &workspace.join(".gemini/antigravity/skills/agents/team-helper/SKILL.md"),
+            "---\nname: team-helper\n---\nNested agent.\n",
+        );
+        write(
+            &workspace.join(".agents/skills/team-helper/SKILL.md"),
+            "---\nname: team-helper\n---\nTeam.\n",
+        );
+        let found = ids(&detect_at(&home, Some(&workspace)));
+        for (nested, owned) in [
+            (
+                "antigravity:global:skill:skills/builtin/custom",
+                "antigravity:global:skill:builtin-skills/custom",
+            ),
+            (
+                "antigravity:global:skill:skills/plugins/my-plugin/skills/custom",
+                "antigravity:global:skill:plugin-skills/my-plugin/skills/custom",
+            ),
+            (
+                "antigravity:project:skill:skills/agents/team-helper",
+                "antigravity:project:skill:agents-skills/team-helper",
+            ),
+        ] {
+            assert!(found.contains(&nested.to_owned()), "missing {nested}");
+            assert!(found.contains(&owned.to_owned()), "missing {owned}");
+        }
         let _ = std::fs::remove_dir_all(&root);
     }
 }

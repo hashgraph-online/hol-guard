@@ -161,7 +161,7 @@ def test_same_skill_name_in_two_roots_keeps_distinct_ids(tmp_path: Path) -> None
     detection = AntigravityHarnessAdapter().detect(context)
     skill_ids = {item.artifact_id for item in detection.artifacts if item.artifact_type == "skill"}
     assert "antigravity:global:skill:skills/custom" in skill_ids
-    assert "antigravity:global:skill:skills/builtin/custom" in skill_ids
+    assert "antigravity:global:skill:builtin-skills/custom" in skill_ids
 
 
 def test_home_agents_skills_are_not_antigravity(tmp_path: Path) -> None:
@@ -193,6 +193,7 @@ def test_antigravity_detect_plugin_skills(tmp_path: Path) -> None:
         None,
     )
     assert skill_artifact is not None
+    assert skill_artifact.artifact_id == "antigravity:global:skill:plugin-skills/my-plugin/skills/custom"
     assert skill_artifact.source_scope == "global"
     identity_metadata = skill_artifact.metadata.get("skillDirectoryIdentity")
     assert isinstance(identity_metadata, dict)
@@ -211,7 +212,7 @@ def test_antigravity_detect_workspace_agent_skills(tmp_path: Path) -> None:
         None,
     )
     assert skill_artifact is not None
-    assert skill_artifact.artifact_id == "antigravity:project:skill:skills/agents/team-helper"
+    assert skill_artifact.artifact_id == "antigravity:project:skill:agents-skills/team-helper"
     assert skill_artifact.source_scope == "project"
     identity_metadata = skill_artifact.metadata.get("skillDirectoryIdentity")
     assert isinstance(identity_metadata, dict)
