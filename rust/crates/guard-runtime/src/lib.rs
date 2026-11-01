@@ -273,6 +273,7 @@ mod decision_authority_op;
 #[cfg(test)]
 mod decision_authority_vectors_tests;
 mod delivery_object;
+mod desktop_core_onedir;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
 mod device_key_helper;
