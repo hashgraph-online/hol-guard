@@ -9,7 +9,15 @@ from jsonschema.exceptions import ValidationError
 
 from .errors import BuilderError
 from .io import object_value
-from .validation import COMMAND_TOKEN_PATTERN, LAUNCHERS, OPTION_PATTERN, RISKS, SHA_PATTERN, SLUG_PATTERN
+from .validation import (
+    COMMAND_TOKEN_PATTERN,
+    LAUNCHERS,
+    LICENSE_MAX_LENGTH,
+    OPTION_PATTERN,
+    RISKS,
+    SHA_PATTERN,
+    SLUG_PATTERN,
+)
 
 MAX_OPERATIONS = 256
 MAX_MCP_TOOLS = 79
@@ -78,7 +86,7 @@ DISCOVERY_JSON_SCHEMA = {
                     "executable": string_schema(64, minimum=0),
                     "launcher": {"enum": ["", *LAUNCHERS]},
                     "package": string_schema(256, minimum=0),
-                    "license": string_schema(128),
+                    "license": string_schema(LICENSE_MAX_LENGTH),
                     "description": string_schema(512),
                 },
                 optional=("license", "description"),

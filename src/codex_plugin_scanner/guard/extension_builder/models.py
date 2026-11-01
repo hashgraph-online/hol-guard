@@ -14,6 +14,7 @@ from .validation import (
     OPTION_PATTERN,
     TOOL_PATTERN,
     https_reference,
+    license_expression,
     normalized_tool_name,
     package_identity,
     slug,
@@ -22,8 +23,6 @@ from .validation import (
 )
 
 Kind = Literal["cli", "mcp"]
-# SPDX-style license expression tokens, e.g. "MIT" or "Apache-2.0 OR MIT".
-LICENSE_PATTERN = r"[A-Za-z0-9][A-Za-z0-9.+-]*(?: (?:AND|OR|WITH) [A-Za-z0-9][A-Za-z0-9.+-]*)*"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +77,7 @@ def validate_metadata(metadata: Metadata) -> Metadata:
     https_reference(metadata.homepage)
     text(metadata.upstream_version, maximum=64)
     if metadata.license:
-        token(metadata.license, pattern=LICENSE_PATTERN, maximum=128)
+        license_expression(metadata.license)
     text(metadata.description, maximum=512, empty=True)
     if metadata.kind == "cli":
         token(metadata.executable)

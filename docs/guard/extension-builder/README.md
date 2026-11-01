@@ -193,7 +193,8 @@ hol-guard extensions generate \
 hol-guard extensions validate samplectl-kit
 ```
 
-Optional `--license` (an SPDX expression such as `MIT`) and `--description`
+Optional `--license` (an SPDX expression such as `MIT` or
+`(MIT OR CC0-1.0)`, at most 64 characters) and `--description`
 (one line, at most 512 characters) record the upstream license and a specific
 summary in the discovery snapshot. CLI kits render them into the command
 source; without them the source keeps `license: null` and the generic
@@ -298,7 +299,9 @@ Changed source bytes, identity, or metadata invalidate the old review binding.
 `diff` exits 1 when valid kits differ. A safe literal removes review evidence
 only from its own generated rule and from the kit's unclassified fallback rule,
 which matches every invocation and therefore carries every reviewed literal
-(at most 64 per kit). It cannot suppress another rule, a required
+(at most 64 per kit). Each literal gets a fixture case on both rules, so a CLI
+review also needs operations plus twice its literals to stay within the native
+runner's 256 fixture cases. It cannot suppress another rule, a required
 floor, device policy, or executable-identity checks. Unknown CLI invocations
 retain review. Unknown and unreviewed MCP tools inherit existing handling.
 

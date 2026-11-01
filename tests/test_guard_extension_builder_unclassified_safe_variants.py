@@ -127,3 +127,79 @@ def test_optional_metadata_changes_the_binding(tmp_path: Path) -> None:
 def test_invalid_optional_metadata_is_rejected(field: str, value: str) -> None:
     with pytest.raises(BuilderError):
         validate_metadata(dataclasses.replace(metadata(), **{field: value}))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "MIT",
+        "GPL-2.0+",
+        "Apache-2.0 OR MIT",
+        "(MIT OR CC0-1.0)",
+        "MIT AND (LGPL-2.1-or-later OR BSD-3-Clause)",
+        "Apache-2.0 WITH LLVM-exception",
+        "((MIT))",
+        "LicenseRef-" + "a" * 53,
+    ],
+)
+def test_spdx_license_expressions_are_accepted(value: str) -> None:
+    assert validate_metadata(dataclasses.replace(metadata(), license=value)).license == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "(MIT OR CC0-1.0",
+        "MIT OR CC0-1.0)",
+        "()",
+        "MIT AND",
+        "AND MIT",
+        "MIT OR OR BSD-3-Clause",
+        "MIT WITH (Classpath-exception-2.0)",
+        "MIT WITH Classpath-exception-2.0+",
+        "LicenseRef-" + "a" * 54,
+    ],
+)
+def test_malformed_or_oversized_licenses_are_rejected(value: str) -> None:
+    with pytest.raises(BuilderError):
+        validate_metadata(dataclasses.replace(metadata(), license=value))
+
+
+def test_longest_accepted_license_compiles_natively(tmp_path: Path) -> None:
+    source = tmp_path / "cli-source.json"
+    source.write_text(canonical_json(cli_document()), encoding="utf-8")
+    longest = "LicenseRef-" + "a" * 53
+    discovery = discover("cli", source, dataclasses.replace(metadata(), license=longest))
+    assert _source(build_kit(discovery, default_review(discovery)))["extension"]["license"] == longest
+
+
+def _reviewed_inventory(tmp_path: Path, operation_count: int, literal_count: int):
+    base = make_kit(tmp_path).discovery
+    operations = tuple(
+        make_operation("cli", path=(f"operation{i}",), flags=("--json",), evidence={}) for i in range(operation_count)
+    )
+    discovery = make_discovery(base.metadata, "cli", "0" * 64, operations, base.limitations)
+    payload = default_review(discovery).to_dict()
+    for operation in discovery.operations[:literal_count]:
+        payload["entries"][operation.operation_id].update(
+            {
+                "reviewed": True,
+                "rationale": "Reviewed against the synthetic fixture implementation.",
+                "evidenceUrl": discovery.metadata.homepage,
+                "safeArgv": [[*operation.path, "--json"]],
+            }
+        )
+    return discovery, payload
+
+
+def test_review_rejects_inventories_past_the_native_fixture_limit(tmp_path: Path) -> None:
+    discovery, payload = _reviewed_inventory(tmp_path, 129, 64)
+    with pytest.raises(BuilderError) as error:
+        load_review(payload, discovery)
+    assert error.value.code == "fixture_case_limit"
+
+
+def test_inventory_at_the_native_fixture_limit_still_generates(tmp_path: Path) -> None:
+    discovery, payload = _reviewed_inventory(tmp_path, 128, 64)
+    kit = build_kit(discovery, load_review(payload, discovery))
+    assert len(_cases(kit)) == 256
