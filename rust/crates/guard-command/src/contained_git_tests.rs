@@ -44,6 +44,23 @@ fn a_verb_that_reads_its_own_blobs_screens_only_the_filter_it_knows() {
         ))
     );
     assert_eq!(
+        read(&["git", "annotate", "src/main.rs"]),
+        Some((
+            "annotate".to_owned(),
+            vector(&["--no-textconv", "src/main.rs"])
+        ))
+    );
+    assert!(read(&["git", "annotate", "--textconv", "src/main.rs"]).is_none());
+    // `-S` carries its value against the letter for both spellings, so the
+    // scan stops there the way Git's own parse does.
+    assert_eq!(
+        read(&["git", "annotate", "-S.git-blame-ignore-revs", "src/main.rs"]),
+        Some((
+            "annotate".to_owned(),
+            vector(&["--no-textconv", "-S.git-blame-ignore-revs", "src/main.rs"])
+        ))
+    );
+    assert_eq!(
         read(&["git", "grep", "-n", "todo"]),
         Some(("grep".to_owned(), vector(&["--no-textconv", "-n", "todo"])))
     );
