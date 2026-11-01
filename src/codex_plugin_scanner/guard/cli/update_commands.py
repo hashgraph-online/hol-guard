@@ -231,7 +231,16 @@ def _retire_native_resident_before_update(guard_home: Path) -> bool:
     return retire_native_resident_for_home(guard_home)
 
 
-_DAEMON_REFRESH_TIMEOUT_SECONDS = 75.0
+# The refresh program retires the running daemon, starts the updated one and
+# then holds a three second stability window before it reports success, so this
+# subprocess has to outlast the start it waits on rather than match it. A
+# packaged Windows start is allowed 75 seconds by the native budget
+# (`NT_POST_UPDATE_START_TIMEOUT_SECONDS`), and the retirement loop and the
+# stability window add eight more on top of the installed runtime's own import
+# cost. A subprocess that stops first kills a daemon that was still coming up
+# and reports the update as a refresh failure.
+# `tests/test_guard_daemon_slow_start.py` pins this against the native budget.
+_DAEMON_REFRESH_TIMEOUT_SECONDS = 150.0
 _DAEMON_REFRESH_CLEANUP_TIMEOUT_SECONDS = 15.0
 _DAEMON_REFRESH_SCRIPT = DAEMON_REFRESH_SCRIPT
 _DAEMON_REFRESH_BOOTSTRAP_SCRIPT = """

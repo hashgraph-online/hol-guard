@@ -21,6 +21,17 @@ pub(crate) fn local_vitest_entry(argument: &str) -> bool {
         || local_package_entry(argument, "vitest/dist/cli.js")
 }
 
+/// Mocha's installed entry points. `bin/mocha.js` is the package's declared
+/// `bin` shim from Mocha 10 on; Mocha 8 and 9 publish the same shim without
+/// the extension. Both name the installed package's own entry, and the sink
+/// runs whichever of them this workspace holds, so reading only the newer
+/// spelling would send a working `node node_modules/mocha/bin/mocha` to
+/// review while the `npx mocha` beside it runs.
+pub(crate) fn local_mocha_entry(argument: &str) -> bool {
+    local_package_entry(argument, "mocha/bin/mocha.js")
+        || local_package_entry(argument, "mocha/bin/mocha")
+}
+
 /// The program a word names; on Windows without `.exe`, as the pre-tool parser
 /// reads it, so `node.exe` and a resolved `C:\...\python.exe` name `node` and
 /// `python`. Every reading of a program name goes through here, so a
@@ -271,7 +282,7 @@ fn bun_runner_invocation(
 mod runner_calls;
 pub(crate) use runner_calls::{
     bun_test_runs_once, contained_runner_call, jest_contained_call, jest_runs_once,
-    vitest_runs_once,
+    mocha_contained_call, mocha_runs_once, vitest_runs_once,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
@@ -293,7 +304,11 @@ fn runner_tail(arguments: &[String]) -> Option<(&'static str, Vec<String>)> {
     };
     contained_runner_call(arguments).then(|| {
         (
-            if tool == "jest" { "jest" } else { "vitest" },
+            match tool.as_str() {
+                "jest" => "jest",
+                "mocha" => "mocha",
+                _ => "vitest",
+            },
             rest.to_vec(),
         )
     })
@@ -319,6 +334,14 @@ fn runner_tail_or_error(
             Some("jest") => Err(RestrictedPytestError::new(
                 VITEST_INVALID,
                 "Protected Jest reads its configuration and modules from this workspace.",
+            )),
+            Some("mocha") if !mocha_runs_once(&arguments[1..]) => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Mocha requires a run that does not watch.",
+            )),
+            Some("mocha") => Err(RestrictedPytestError::new(
+                VITEST_INVALID,
+                "Protected Mocha reads its configuration and modules from this workspace.",
             )),
             _ => invalid_vitest(),
         },
@@ -498,7 +521,7 @@ pub fn contained_runner_invocation(
             args.to_vec()
         } else if let Some(args) = manager_exec_tool(&argv) {
             args.to_vec()
-        } else if matches!(name, "vitest" | "jest") {
+        } else if matches!(name, "vitest" | "jest" | "mocha") {
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
             call
@@ -512,6 +535,8 @@ pub fn contained_runner_invocation(
                 "vitest"
             } else if local_package_entry(&entry, "jest/bin/jest.js") {
                 "jest"
+            } else if local_mocha_entry(&entry) {
+                "mocha"
             } else {
                 return invalid_vitest();
             };
@@ -748,14 +773,16 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let bun_test = bun_test_invocation(command);
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
-        && (matches!(name, "bunx" | "npx" | "vitest" | "jest")
+        && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
             || manager_exec_runner(command).is_some()
             || bun.is_some()
             || tsx_test_invocation(command)?.is_some()
             || (matches!(name, "node" | "nodejs")
                 && entries.clone().any(|v| {
                     let entry = v.replace('\\', "/");
-                    local_vitest_entry(&entry) || local_package_entry(&entry, "jest/bin/jest.js")
+                    local_vitest_entry(&entry)
+                        || local_package_entry(&entry, "jest/bin/jest.js")
+                        || local_mocha_entry(&entry)
                 })));
     let node_tool = bun.is_none()
         && !bun_test

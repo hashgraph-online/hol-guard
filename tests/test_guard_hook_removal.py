@@ -13,11 +13,7 @@ from codex_plugin_scanner.guard.codex_config import dump_toml, tomllib
 from codex_plugin_scanner.guard.harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from codex_plugin_scanner.guard.hook_removal import remove_all_guard_hooks
 from codex_plugin_scanner.guard.hook_removal_presence import CONFIRMATION_PHRASE, require_typed_presence
-from codex_plugin_scanner.guard.hook_removal_sweep import (
-    is_guard_hook_command,
-    prune_guard_hooks,
-    sweep_config_file,
-)
+from codex_plugin_scanner.guard.hook_removal_sweep import sweep_config_file
 from codex_plugin_scanner.guard.store import GuardStore
 
 GUARD_COMMAND = "hol-guard hook --harness claude-code --event PreToolUse"
@@ -35,81 +31,6 @@ def _claude_settings() -> dict[str, object]:
             "Stop": [{"hooks": [{"type": "command", "command": GUARD_COMMAND}]}],
         },
     }
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        GUARD_COMMAND,
-        "/Users/x/.local/bin/hol-guard hook --harness codex",
-        "python -m codex_plugin_scanner.cli guard hook --harness codex",
-        "bash -c '/home/x/.hol-guard/managed/bounded-hooks/run.sh'",
-        "HOL_GUARD_MANAGED=1 something",
-    ],
-)
-def test_guard_signature_matches(command: str) -> None:
-    assert is_guard_hook_command(command) or "HOL_GUARD_MANAGED" in command
-
-
-@pytest.mark.parametrize("command", [USER_COMMAND, "echo guard", "git diff", "", None, 5])
-def test_non_guard_commands_are_not_matched(command: object) -> None:
-    assert not is_guard_hook_command(command)
-
-
-def test_prune_removes_only_guard_handlers_and_empty_events() -> None:
-    pruned, removed = prune_guard_hooks(_claude_settings())
-    assert len(removed) == 2
-    hooks = pruned["hooks"]
-    assert isinstance(hooks, dict)
-    assert "Stop" not in hooks
-    remaining = hooks["PreToolUse"]
-    assert len(remaining) == 1
-    assert remaining[0]["hooks"][0]["command"] == USER_COMMAND
-    assert pruned["model"] == "opus"
-
-
-def test_prune_matches_claude_exec_form_args() -> None:
-    exec_handler = {
-        "type": "command",
-        "command": "/opt/python/bin/python3",
-        "args": ["-m", "codex_plugin_scanner.cli", "guard", "hook", "--harness", "claude-code"],
-    }
-    user_handler = {"type": "command", "command": "/usr/bin/python3", "args": ["-m", "my_audit"]}
-    settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [exec_handler, user_handler]}]}}
-    pruned, removed = prune_guard_hooks(settings)
-    assert removed == ["PreToolUse"]
-    hooks = pruned["hooks"]
-    assert isinstance(hooks, dict)
-    assert hooks["PreToolUse"][0]["hooks"] == [user_handler]
-
-
-@pytest.mark.parametrize(
-    "handler",
-    [
-        {"type": "command", "command": "/opt/guard bin/hol-guard", "args": ["hook", "--harness", "claude-code"]},
-        {"type": "command", "command": "/bin/sh", "args": ["-c", "HOL_GUARD_HOOK_ARGV=1 exec guard-shim"]},
-    ],
-)
-def test_prune_matches_exec_form_with_spaced_paths_and_markers(handler: dict[str, object]) -> None:
-    settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
-    _pruned, removed = prune_guard_hooks(settings)
-    assert removed == ["PreToolUse"]
-
-
-def test_prune_keeps_exec_form_handlers_whose_marker_only_spans_arguments() -> None:
-    for args in (["hol guard", "managed"], ["hol", "guard", "managed"]):
-        handler = {"type": "command", "command": "/bin/echo", "args": args}
-        settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
-        pruned, removed = prune_guard_hooks(settings)
-        assert removed == []
-        assert pruned == settings
-
-
-def test_prune_removes_an_exec_form_handler_with_the_marker_in_one_argument() -> None:
-    handler = {"type": "command", "command": "/bin/echo", "args": ["hol guard managed"]}
-    settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
-    _pruned, removed = prune_guard_hooks(settings)
-    assert removed == ["PreToolUse"]
 
 
 def test_sweep_dry_run_does_not_write_and_json_rewrite_preserves_other_keys(tmp_path: Path) -> None:
@@ -255,6 +176,37 @@ def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path, monkeypatch:
     assert claude_entry["adapter_uninstall"] == "skipped"
     assert "PermissionError" in str(claude_entry["backup_error"])
     assert report["backup_dir"] is None
+
+
+def test_remove_all_without_the_native_sweep_edits_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import hook_removal_sweep
+
+    context = _context(tmp_path)
+    claude = context.home_dir / ".claude"
+    claude.mkdir()
+    settings = claude / "settings.json"
+    settings.write_text(json.dumps(_claude_settings()))
+    original = settings.read_bytes()
+
+    def no_runtime(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(hook_removal_sweep, "runtime_answer", no_runtime)
+    store = GuardStore(context.guard_home)
+
+    planned = remove_all_guard_hooks(context=context, store=store, dry_run=True)
+    assert planned["status"] == "planned"
+    planned_harnesses = planned["harnesses"]
+    assert isinstance(planned_harnesses, list)
+    assert all("hook_scan_unavailable" in item["reasons"] for item in planned_harnesses)
+
+    report = remove_all_guard_hooks(context=context, store=store)
+    assert report["status"] == "partial"
+    assert report["removed_hook_count"] == 0
+    assert settings.read_bytes() == original
+    harnesses = report["harnesses"]
+    assert isinstance(harnesses, list)
+    assert {item["adapter_uninstall"] for item in harnesses} == {"skipped"}
 
 
 def test_typed_presence_refuses_non_interactive_and_wrong_phrase() -> None:

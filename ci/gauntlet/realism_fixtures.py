@@ -270,6 +270,26 @@ def venv_pytest_stub(venv: Path) -> str:
     )
 
 
+def venv_pytest_module(venv: Path) -> str:
+    """The importable ``pytest`` an install leaves in a virtualenv's site packages.
+
+    ``python -m pytest`` reads this module rather than the console script, and a
+    host that holds several Pythons is told which one to run by naming its
+    version, so both spellings have to find the same suite. It refuses to report
+    a pass unless the environment's own interpreter imported it.
+    """
+    return (
+        '"""Synthetic stand-in for the installed pytest: no network, no writes."""\n'
+        "import sys\n"
+        "\n"
+        f"if sys.prefix != {str(venv)!r}:\n"
+        '    sys.stderr.write("pytest stand-in: not the virtualenv interpreter\\n")\n'
+        "    raise SystemExit(1)\n"
+        'print(".....")\n'
+        'print("5 passed in 0.12s")\n'
+    )
+
+
 VENV_PYTEST_STUB_PYTHON = (
     "print('.....')\n"
     "print('5 passed in 0.12s')\n"
@@ -527,3 +547,5 @@ def add_worktree_venv(worktree: Path) -> None:
         _link(venv / "bin" / name, base)
     _write(venv / "bin/pytest", venv_pytest_stub(venv), 0o755)
     write_windows_launcher(venv / "bin", "pytest", VENV_PYTEST_STUB_PYTHON)
+    packages = venv / f"lib/python{sys.version_info[0]}.{sys.version_info[1]}/site-packages"
+    _write(packages / "pytest.py", venv_pytest_module(venv))
