@@ -15,7 +15,9 @@ def test_daemon_pins_runtime_fingerprint_at_construction(tmp_path: Path, monkeyp
     monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
     monkeypatch.setattr(manager, "_load_runtime_fingerprint_cache", lambda *_args: None)
     monkeypatch.setattr(manager, "_store_runtime_fingerprint_cache", lambda *_args: None)
-    monkeypatch.setattr(manager, "_hash_runtime_contents", lambda *_args: installed["generation"])
+    monkeypatch.setattr(
+        manager, "_measure_runtime_fingerprint", lambda *_args: ("tree", installed["generation"], False)
+    )
 
     daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
     try:
@@ -32,7 +34,9 @@ def test_upgraded_install_cannot_adopt_previous_generation_daemon(
     monkeypatch.setattr(manager, "_runtime_fingerprint_cache", None)
     monkeypatch.setattr(manager, "_load_runtime_fingerprint_cache", lambda *_args: None)
     monkeypatch.setattr(manager, "_store_runtime_fingerprint_cache", lambda *_args: None)
-    monkeypatch.setattr(manager, "_hash_runtime_contents", lambda *_args: installed["generation"])
+    monkeypatch.setattr(
+        manager, "_measure_runtime_fingerprint", lambda *_args: ("tree", installed["generation"], False)
+    )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

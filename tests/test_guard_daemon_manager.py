@@ -15,7 +15,6 @@ from contextlib import nullcontext, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -2265,63 +2264,70 @@ def test_guard_daemon_state_rejects_different_runtime_fingerprint():
     assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(payload)
 
 
-def test_runtime_fingerprint_ignores_mtime_and_tracks_content(tmp_path, monkeypatch):
-    package = tmp_path / "codex_plugin_scanner" / "guard" / "daemon"
-    package.mkdir(parents=True)
-    target = package / "runtime.py"
-    target.write_text("x = 1\n", encoding="utf-8")
-    monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_source_root", lambda: str(tmp_path))
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_runtime_fingerprint_cache_path",
-        lambda _source_root: tmp_path / "fp-cache" / "runtime-fingerprint-cache.json",
-    )
-    daemon_manager_module._runtime_fingerprint_cache = None
-    try:
-        first = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
-        os.utime(target, (1_700_000_000, 1_700_000_000))
-        daemon_manager_module._runtime_fingerprint_cache = None
-        second = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
-        assert first == second
-        target.write_text("x = 2\n", encoding="utf-8")
-        daemon_manager_module._runtime_fingerprint_cache = None
-        third = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
-        assert third != first
-    finally:
-        daemon_manager_module._runtime_fingerprint_cache = None
+class _FingerprintRuntime:
+    def __init__(self, answer: dict[str, object] | None) -> None:
+        self.answer_value = answer
+        self.requests: list[dict[str, object]] = []
+
+    def answer(self, feature: str, command: str, request: dict[str, object], **_options: object) -> object:
+        assert (feature, command) == ("native-runtime-fingerprint-v1", "runtime-fingerprint")
+        self.requests.append(request)
+        return self.answer_value
 
 
-def test_runtime_fingerprint_reuses_content_hash_when_tree_signature_matches(tmp_path, monkeypatch):
-    package = tmp_path / "codex_plugin_scanner" / "guard" / "daemon"
-    package.mkdir(parents=True)
-    target = package / "runtime.py"
-    target.write_text("x = 1\n", encoding="utf-8")
+def _fingerprint_runtime(tmp_path, monkeypatch, answer: dict[str, object] | None) -> tuple[_FingerprintRuntime, Path]:
+    fake = _FingerprintRuntime(answer)
     cache_path = tmp_path / "fp-cache" / "runtime-fingerprint-cache.json"
+    monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", fake.answer)
     monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_source_root", lambda: str(tmp_path))
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_runtime_fingerprint_cache_path",
-        lambda _source_root: cache_path,
+    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache_path", lambda _source_root: cache_path)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache", None)
+    return fake, cache_path
+
+
+def test_runtime_fingerprint_hands_the_cached_pair_to_the_native_runtime(tmp_path, monkeypatch):
+    """The walk and hashes are pinned in `runtime_fingerprint_tests.rs`; this pins the cache round trip."""
+    fake, cache_path = _fingerprint_runtime(
+        tmp_path, monkeypatch, {"tree_sig": "t" * 8, "fingerprint": "a" * 64, "reused": False}
     )
-    daemon_manager_module._runtime_fingerprint_cache = None
-    opened_python: list[Path] = []
-    real_open = Path.open
 
-    def counting_open(self: Path, *args: Any, **kwargs: Any) -> Any:
-        if self.suffix == ".py":
-            opened_python.append(self)
-        return real_open(self, *args, **kwargs)
+    assert daemon_manager_module._current_guard_daemon_runtime_fingerprint() == "a" * 64
+    assert json.loads(cache_path.read_text(encoding="utf-8")) == {
+        "content_fingerprint": "a" * 64,
+        "source_root": str(tmp_path),
+        "tree_sig": "t" * 8,
+    }
+    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache", None)
+    fake.answer_value = {"tree_sig": "t" * 8, "fingerprint": "a" * 64, "reused": True}
+    cache_path.write_text(
+        json.dumps({"content_fingerprint": "a" * 64, "source_root": str(tmp_path), "tree_sig": "t" * 8}),
+        encoding="utf-8",
+    )
+    assert daemon_manager_module._current_guard_daemon_runtime_fingerprint() == "a" * 64
 
-    try:
-        first = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
-        daemon_manager_module._runtime_fingerprint_cache = None
-        monkeypatch.setattr(Path, "open", counting_open)
-        second = daemon_manager_module._current_guard_daemon_runtime_fingerprint()
-        assert first == second
-        assert opened_python == []
-        assert cache_path.is_file()
-    finally:
-        daemon_manager_module._runtime_fingerprint_cache = None
+    request = {
+        "schema": "runtime-fingerprint.v1",
+        "source_root": str(tmp_path),
+        "version": daemon_manager_module.__version__,
+    }
+    assert fake.requests == [request, {**request, "cached": {"tree_sig": "t" * 8, "fingerprint": "a" * 64}}]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {},
+        {"tree_sig": "t", "fingerprint": "not-a-digest", "reused": False},
+        {"tree_sig": "t", "fingerprint": "a" * 64},
+    ],
+)
+def test_runtime_fingerprint_without_a_native_answer_is_refused(tmp_path, monkeypatch, answer):
+    _fingerprint_runtime(tmp_path, monkeypatch, answer)
+
+    with pytest.raises(RuntimeError, match="requires the native runtime"):
+        daemon_manager_module._current_guard_daemon_runtime_fingerprint()
+    assert daemon_manager_module._runtime_fingerprint_cache is None
 
 
 def test_same_install_native_upgrade_rejects_live_previous_generation(tmp_path, monkeypatch):

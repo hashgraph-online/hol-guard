@@ -2345,6 +2345,14 @@
    "item": "fn metadata_uid(_metadata: &fs::Metadata) -> Option<u32>",
    "cfg": "not(unix)",
    "body": "5efc5e13f499"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no `st_mtime_nsec`; the arm reads the modification time `Metadata::modified` reports, in nanoseconds from the epoch, as `os.stat().st_mtime_ns` gives it on Windows. The value only feeds the cache key, so a coarser clock can at worst recompute the content fingerprint. `the_fingerprint_ignores_mtime_and_tracks_content` is not Unix-only, so any Windows run of the crate's tests exercises this arm.",
+   "file": "rust/crates/guard-runtime/src/runtime_fingerprint.rs",
+   "item": "fn modified_ns(metadata: &fs::Metadata) -> i128",
+   "cfg": "not(unix)",
+   "body": "341845dc6c3c"
   }
  ]
 }
