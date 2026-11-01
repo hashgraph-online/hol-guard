@@ -20,9 +20,8 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use artifacts::{
-    artifact_digest, managed_manifest_paths, relative_text, resolve_lenient, Evidence,
-};
+pub(crate) use artifacts::resolve_lenient;
+use artifacts::{artifact_digest, managed_manifest_paths, relative_text, Evidence};
 use registry::{artifact_fields, read_registry, write_registry};
 pub(crate) use request::write_request;
 

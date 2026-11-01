@@ -6,8 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cline_hooks import _hook_source
+from codex_plugin_scanner.guard.adapters.cline_hooks import _worker_config
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -38,11 +40,14 @@ else:
 
 
 def _run(worker: Path, payload: dict[str, object], *, canary: bool = False) -> dict[str, object]:
+    runtime = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if not runtime or not os.path.isfile(runtime):
+        pytest.skip("the native Cline hook worker needs the built runtime")
     env = dict(os.environ)
     if canary:
         env["HOL_GUARD_CLINE_CANARY"] = "1"
     result = subprocess.run(
-        [sys.executable, str(worker)],
+        [runtime, "cline-hook-worker", str(worker)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -56,9 +61,9 @@ def _run(worker: Path, payload: dict[str, object], *, canary: bool = False) -> d
 
 def test_synthetic_canary_does_not_overwrite_live_block_proof(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    source = _hook_source(context, event_name="PreToolUse", guard_cli=[sys.executable, str(_guard(tmp_path))])
-    worker = tmp_path / "PreToolUse.py"
-    worker.write_text(source, encoding="utf-8")
+    config = _worker_config(context, event_name="PreToolUse", guard_cli=[sys.executable, str(_guard(tmp_path))])
+    worker = tmp_path / "PreToolUse.json"
+    worker.write_text(config, encoding="utf-8")
 
     blocked = _run(
         worker,

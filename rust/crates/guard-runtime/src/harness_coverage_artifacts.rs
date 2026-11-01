@@ -315,7 +315,7 @@ fn normalize_lexically(path: &Path) -> PathBuf {
 
 /// `Path.resolve(strict=False)`: every link along the path is followed while
 /// the path exists, and the rest is applied as spelled.
-pub(super) fn resolve_lenient(path: &Path) -> PathBuf {
+pub(crate) fn resolve_lenient(path: &Path) -> PathBuf {
     let mut resolved = PathBuf::new();
     let mut pending: Vec<OsString> = path
         .components()

@@ -151,6 +151,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     features.push(guard_contracts::SKILL_DOCUMENT_EVIDENCE_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
