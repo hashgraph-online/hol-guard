@@ -443,6 +443,15 @@ fn the_stdin_filters_carry_no_helper_screens() {
         assert!(read(&["git", verb, "-o", "out"]).is_none(), "{verb}");
         assert!(read(&["git", verb, "--exec-path=/tmp"]).is_none(), "{verb}");
     }
+    // A mailmap the caller names is a read of that path rather than of the
+    // repository's own, so the contained route holds both spellings back
+    // the way the inspection grammar does.
+    for word in ["--mailmap-file", "--mailmap-blob", "--mailmap"] {
+        assert!(
+            read(&["git", "check-mailmap", word, "other", "contact"]).is_none(),
+            "{word}"
+        );
+    }
     // `interpret-trailers` edits the files `--in-place` names, so the
     // contained read route does not answer for it at all.
     assert!(read(&["git", "interpret-trailers", "--parse"]).is_none());

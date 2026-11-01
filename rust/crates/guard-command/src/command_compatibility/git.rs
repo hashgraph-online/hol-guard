@@ -221,29 +221,29 @@ pub(super) fn mailmap_read(rest: &[String]) -> bool {
     })
 }
 
-/// Whether an `interpret-trailers` form only filters the message on its
-/// stdin. `--in-place` edits the files it is given, and a file operand makes
-/// Git open that path, so the read is the pipe-only spelling. The options
-/// below shape the printed message and name neither a file nor a program.
+/// Whether an `interpret-trailers` form only filters the message it was
+/// handed. Git applies the repository's `trailer.*` configuration unless it
+/// is told not to, and a `trailer.<token>.command` runs its program on every
+/// invocation while a `trailer.<token>.cmd` runs on the token a `--trailer`
+/// names, so any spelling that applies that configuration can run a program
+/// the repository chose. `--only-input` turns the whole of it off and
+/// `--parse` implies `--only-input`, so the read is the spelling that carries
+/// one of them. `--in-place` and a file operand open a path besides, and both
+/// keep their review for that reason too.
 pub(super) fn trailers_read(rest: &[String]) -> bool {
-    let mut arguments = rest.iter();
-    while let Some(argument) = arguments.next() {
-        let option = argument.split('=').next().unwrap_or(argument);
-        match option {
-            "--trailer" | "--where" | "--if-exists" | "--if-missing" => {
-                if !argument.contains('=') && arguments.next().is_none() {
-                    return false;
-                }
-            }
-            "--trim-empty" | "--only-trailers" | "--only-input" | "--unfold" | "--parse"
-            | "--divider" | "--no-divider" | "--no-where" | "--no-if-exists"
-            | "--no-if-missing" => {}
-            // `--in-place`, a file operand, `--` and any option this grammar
-            // does not know keep their review.
+    let mut applies_configuration = true;
+    for argument in rest {
+        match argument.as_str() {
+            "--only-input" | "--parse" => applies_configuration = false,
+            // These shape the printed message, name neither a file nor a
+            // program, and take no value.
+            "--only-trailers" | "--unfold" | "--trim-empty" | "--divider" | "--no-divider" => {}
+            // `--in-place`, a file operand, `--`, `--no-only-input` and any
+            // option this grammar does not know keep their review.
             _ => return false,
         }
     }
-    true
+    !applies_configuration
 }
 
 fn read_only_plumbing(arguments: &[String]) -> bool {

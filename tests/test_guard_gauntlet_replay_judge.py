@@ -182,6 +182,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # `--in-place` makes the trailer filter edit the file it names, and a
         # contained run keeps that edit inside the sandbox.
         "neg-git-interpret-trailers-in-place",
+        # Without `--only-input`, Git applies the repository's `trailer.*`
+        # configuration, and a `trailer.<token>.command` there runs its
+        # program; a contained run gives that program only the sandbox's
+        # reach, with no network and no home.
+        "neg-git-interpret-trailers-applies-config",
         # A pager named on the line for a ref reading: Git runs the program the
         # `core.pager` value names, so the reading keeps its review, and a
         # contained run gives that program only the sandbox's reach.

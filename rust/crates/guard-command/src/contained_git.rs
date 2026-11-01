@@ -124,6 +124,10 @@ fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str]
         ("diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog", _)
         | ("stash", "show" | "list") => &["--ext-diff", "--output", "--textconv"],
         ("blame", _) => &["--textconv"],
+        // Both of these name a file or an object the caller chose rather
+        // than the repository's own mailmap, so the contained route holds
+        // them back the same way the inspection grammar does.
+        ("check-mailmap", _) => &["--mailmap-file", "--mailmap-blob"],
         ("grep", _) => &["--open-files-in-pager", "--textconv"],
         // `--filters` runs the repository's smudge filter over the blob it
         // prints, which is the same program `--textconv` would have named.

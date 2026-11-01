@@ -44,7 +44,7 @@ fn the_stdin_filters_ask_for_the_configuration_probe() {
         "git stripspace --strip-comments",
         "git check-mailmap --stdin",
         "git interpret-trailers --parse",
-        "git interpret-trailers --trailer 'Fixes: #1' --where after",
+        "git interpret-trailers --only-input --only-trailers --unfold",
     ] {
         assert!(probes(command), "{command}");
     }
@@ -58,6 +58,8 @@ fn the_file_spellings_never_reach_the_probe() {
         "git check-mailmap --mailmap-blob HEAD:other contact",
         "git interpret-trailers --in-place message.txt",
         "git interpret-trailers message.txt",
+        "git interpret-trailers --trailer 'Fixes: #1' --where after",
+        "git interpret-trailers --only-trailers --unfold",
     ] {
         assert!(!probes(command), "{command}");
     }

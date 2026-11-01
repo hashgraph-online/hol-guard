@@ -131,8 +131,7 @@ fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
         "git check-mailmap 'Name <name@example.test>'",
         "git check-mailmap --stdin",
         "git interpret-trailers --parse",
-        "git interpret-trailers --trailer 'Fixes: #1' --where after",
-        "git interpret-trailers --only-trailers --unfold",
+        "git interpret-trailers --only-input --only-trailers --unfold",
         "git config --get remote.origin.url",
         "git config --global --get user.email",
         "git config --list --show-origin",
@@ -231,6 +230,11 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         "git interpret-trailers --in-place message.txt",
         "git interpret-trailers message.txt",
         "git interpret-trailers --trailer",
+        // Without `--only-input`, Git applies the repository's
+        // `trailer.*` configuration, and a `trailer.<token>.command`
+        // there runs its program on every invocation.
+        "git interpret-trailers --trailer 'Fixes: #1' --where after",
+        "git interpret-trailers --only-trailers --unfold",
         "git cat-file --textconv HEAD:file",
         "git cat-file --filters HEAD:file",
         "git cat-file --path=file blob HEAD",

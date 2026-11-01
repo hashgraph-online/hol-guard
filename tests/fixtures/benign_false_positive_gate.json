@@ -4640,6 +4640,24 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-git-interpret-trailers-applies-config",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git interpret-trailers --trailer 'Fixes: #1' --where after"
+      },
+      "cwd": "worktree",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-git-interpret-trailers-in-place",
       "fix_area": "negative",
       "harnesses": [
