@@ -55,6 +55,10 @@ WORKSPACE_SCRIPT_RUN_ALIAS_CASE = "omp-native-workspace-script-run-alias"
 # inside `typescript`, so the tree, the manifest and the lockfile all say
 # `typescript` while `node_modules/.bin` says `tsc`.
 WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
+# The same type checker in a workspace pnpm installed. pnpm writes its lockfile
+# in YAML rather than JSON, so the pin the verdict reads is the same fact
+# written in another dialect.
+WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -67,6 +71,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
         WORKSPACE_SCRIPT_RUN_ALIAS_CASE,
         WORKSPACE_TSC_CASE,
+        WORKSPACE_PNPM_TSC_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -239,6 +244,25 @@ _TYPESCRIPT_FILES = {
 }
 
 
+# pnpm resolves the same dependency and writes the same pin as YAML: one key
+# per release under a top-level `packages` mapping, repeated under `snapshots`.
+_PNPM_LOCK = (
+    "lockfileVersion: '9.0'\n\n"
+    "settings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\n\n"
+    "importers:\n\n  .:\n    devDependencies:\n      typescript:\n"
+    f"        specifier: {_TYPESCRIPT_VERSION}\n        version: {_TYPESCRIPT_VERSION}\n\n"
+    f"packages:\n\n  typescript@{_TYPESCRIPT_VERSION}:\n"
+    "    resolution: {tarball: https://registry.npmjs.org/typescript/-/"
+    f"typescript-{_TYPESCRIPT_VERSION}.tgz}}\n"
+    "    engines: {node: '>=14.17'}\n    hasBin: true\n\n"
+    f"snapshots:\n\n  typescript@{_TYPESCRIPT_VERSION}: {{}}\n"
+)
+_PNPM_TYPESCRIPT_FILES = {
+    name: text for name, text in _TYPESCRIPT_FILES.items() if name != "package-lock.json"
+}
+_PNPM_TYPESCRIPT_FILES["pnpm-lock.yaml"] = _PNPM_LOCK
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
@@ -267,6 +291,13 @@ _INSTALLS = {
     WORKSPACE_TSC_CASE: _Install(
         "tsc",
         _TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_PNPM_TSC_CASE: _Install(
+        "tsc",
+        _PNPM_TYPESCRIPT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",
