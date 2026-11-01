@@ -13,12 +13,10 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from .action_lattice import normalize_guard_action
 from .config import GuardConfig
 from .models import GuardReceipt
-from .native_protect_request import native_protect_request
+from .native_protect_request import native_protect_advisory_merge, native_protect_request
 from .redaction import redact_text
-from .runtime.decisions import decision_from_legacy_policy_action
 
 ProtectAction = Literal["allow", "review", "block"]
 _DEFAULT_PROTECT_TIMEOUT_SECONDS = 300
@@ -191,12 +189,7 @@ def build_protect_payload(
     )
     if package_payload is not None:
         current_cached_verdict = evaluate_protect_request(request, store, cwd=workspace_dir)
-        if (
-            not observe_mode
-            and current_cached_verdict.blocking
-            and package_payload[0].get("executed") is False
-            and not _package_payload_uses_saved_approval(package_payload[0])
-        ):
+        if not observe_mode and current_cached_verdict.blocking:
             return _merge_cached_advisory_into_package_payload(
                 package_payload,
                 cached_verdict=current_cached_verdict,
@@ -313,19 +306,6 @@ def _cached_advisory_policy_context(verdict: ProtectVerdict) -> dict[str, object
     }
 
 
-def _package_payload_uses_saved_approval(payload: dict[str, object]) -> bool:
-    evaluation = payload.get("supply_chain_evaluation")
-    verdict = payload.get("verdict")
-    if not isinstance(evaluation, dict) or not isinstance(verdict, dict):
-        return False
-    if verdict.get("action") != "allow":
-        return False
-    reasons = evaluation.get("reasons")
-    if not isinstance(reasons, list):
-        return False
-    return any(isinstance(reason, dict) and reason.get("code") == "saved_package_approval" for reason in reasons)
-
-
 def _merge_cached_advisory_into_package_payload(
     result: tuple[dict[str, object], int],
     *,
@@ -334,120 +314,33 @@ def _merge_cached_advisory_into_package_payload(
     store: Any,
     now: str,
 ) -> tuple[dict[str, object], int]:
-    """Apply locally cached advisory blocks/reviews to package protect results."""
+    """Apply locally cached advisory blocks/reviews to package protect results.
+
+    The native runtime decides the merge and leaves a saved package approval
+    honored; Python persists the receipt update and event it returns.
+    """
 
     payload, exit_code = result
-    verdict = payload.get("verdict")
-    if not isinstance(verdict, dict):
+    merged = native_protect_advisory_merge(
+        payload,
+        cached={
+            "action": cached_verdict.action,
+            "reason": cached_verdict.reason,
+            "risk_signals": list(cached_verdict.risk_signals),
+            "matched_advisories": [dict(advisory) for advisory in cached_verdict.matched_advisories],
+        },
+        requested_dry_run=requested_dry_run,
+        exit_code=exit_code,
+        guard_home=Path(store.guard_home).expanduser().resolve(strict=False),
+    )
+    if merged is None:
         return result
-    package_action = verdict.get("action")
-    if not isinstance(package_action, str):
-        package_action = "allow"
-
-    merged_action = package_action
-    merged_reason = verdict.get("reason")
-    if not isinstance(merged_reason, str):
-        merged_reason = cached_verdict.reason
-    merged_advisories = list(verdict.get("matched_advisories") or [])
-    risk_signals = list(verdict.get("risk_signals") or [])
-
-    if cached_verdict.action == "block":
-        merged_action = "block"
-        merged_reason = cached_verdict.reason
-    elif cached_verdict.action == "review" and package_action in {"allow", "warn"}:
-        merged_action = "review"
-        merged_reason = cached_verdict.reason
-
-    for item in cached_verdict.matched_advisories:
-        if item not in merged_advisories:
-            merged_advisories.append(item)
-    for signal in cached_verdict.risk_signals:
-        if signal not in risk_signals:
-            risk_signals.append(signal)
-
-    action_changed = merged_action != package_action
-    advisories_changed = merged_advisories != list(verdict.get("matched_advisories") or [])
-    if not action_changed and not advisories_changed:
-        return result
-
-    blocking = merged_action in {"block", "review"}
-    updated_verdict = {
-        **verdict,
-        "action": merged_action,
-        "reason": merged_reason,
-        "risk_signals": risk_signals,
-        "matched_advisories": merged_advisories,
-        "blocking": blocking,
-    }
-    updated_payload: dict[str, object] = {
-        **payload,
-        "verdict": updated_verdict,
-        "matched_advisories": merged_advisories,
-        "executed": False,
-        "dry_run": requested_dry_run or blocking,
-    }
-    exact_action = normalize_guard_action(merged_action, unknown_action="block")
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        canonical_copy = decision_from_legacy_policy_action(
-            exact_action,
-            reason=merged_reason,
-        )
-        existing_user_copy = supply_chain_evaluation.get("user_copy")
-        user_copy = dict(existing_user_copy) if isinstance(existing_user_copy, dict) else {}
-        user_copy.update(
-            {
-                "title": canonical_copy.user_title,
-                "summary": canonical_copy.user_body,
-                "next_step": canonical_copy.retry_instruction or canonical_copy.user_body,
-                "harness_message": canonical_copy.harness_message,
-            }
-        )
-        updated_payload["supply_chain_evaluation"] = {
-            **supply_chain_evaluation,
-            "decision": canonical_copy.action,
-            "policy_action": exact_action,
-            "risk_summary": merged_reason,
-            "user_copy": user_copy,
-        }
-    receipt = payload.get("receipt")
-    if isinstance(receipt, dict):
-        action_envelope = receipt.get("action_envelope_json")
-        updated_action_envelope = dict(action_envelope) if isinstance(action_envelope, dict) else None
-        if updated_action_envelope is not None:
-            for key in ("policy_action", "pre_execution_result"):
-                if key in updated_action_envelope:
-                    updated_action_envelope[key] = exact_action
-        updated_receipt = {
-            **receipt,
-            "policy_decision": exact_action,
-            **({"action_envelope_json": updated_action_envelope} if updated_action_envelope is not None else {}),
-        }
-        updated_payload["receipt"] = updated_receipt
-        if action_changed:
-            receipt_id = updated_receipt.get("receipt_id")
-            if isinstance(receipt_id, str) and receipt_id:
-                store.update_receipt_policy_decision(receipt_id, exact_action)
-        if action_changed:
-            request = payload.get("request")
-            executor = request.get("executor") if isinstance(request, dict) else None
-            install_kind = request.get("install_kind") if isinstance(request, dict) else None
-            store.add_event(
-                f"install_time_{merged_action}",
-                {
-                    "artifact_id": updated_receipt.get("artifact_id"),
-                    "artifact_name": updated_receipt.get("artifact_name"),
-                    "executor": executor,
-                    "install_kind": install_kind,
-                    "action": merged_action,
-                    "risk_signals": risk_signals,
-                    "cached_advisory_override": True,
-                },
-                now,
-            )
-    if blocking:
-        return (updated_payload, 2)
-    return (updated_payload, exit_code)
+    updated, merged_exit_code, receipt_update, event = merged
+    if receipt_update is not None:
+        store.update_receipt_policy_decision(*receipt_update)
+    if event is not None:
+        store.add_event(event[0], event[1], now)
+    return ({**payload, **updated}, merged_exit_code)
 
 
 def _protect_command_timeout_seconds() -> int:
