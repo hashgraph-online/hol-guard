@@ -349,10 +349,12 @@ fn bun_test_runs_contained_without_admitting_its_loading_options() {
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny", "{command}");
+        // Off macOS the command keeps the package-manager review `bun`
+        // invocations already take, the same way the vitest cases above do.
         let expected = if cfg!(target_os = "macos") {
             "native_node_test_readonly_containment_required"
         } else {
-            "native_command_review_required"
+            "native_package_review"
         };
         assert_eq!(result.reason_code, expected, "{command}");
     }
