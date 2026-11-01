@@ -25,8 +25,10 @@ use super::*;
 use crate::direct_vitest::semver_spec_matches;
 use crate::jsonc::loads_jsonc;
 
-/// The runners whose local identity is worth establishing.
-const ROUTINE_RUNNERS: [&str; 4] = ["eslint", "jest", "tsc", "vitest"];
+/// The runners whose local identity is worth establishing: the lint, test and
+/// TypeScript entry points a project pins in its own manifest and runs through
+/// `bunx` or `npx` on every change.
+const ROUTINE_RUNNERS: [&str; 6] = ["eslint", "jest", "mocha", "tsc", "tsx", "vitest"];
 
 /// Declared-version prefixes that name a source outside the registry, where a
 /// version string proves nothing about what is installed.
@@ -165,6 +167,22 @@ fn read_json_object(path: &Path) -> Option<Map<String, Value>> {
     }
 }
 
+/// Whether an npm lockfile entry describes a package the registry served.
+///
+/// A `link` entry points at another directory in the tree and a `resolved`
+/// value outside `http(s)` names a checkout or a tarball on disk, neither of
+/// which the declared version says anything about.
+fn registry_entry(entry: &Map<String, Value>) -> bool {
+    if entry.get("link").and_then(Value::as_bool) == Some(true) {
+        return false;
+    }
+    match entry.get("resolved").map(|value| value.as_str()) {
+        None => true,
+        Some(Some(resolved)) => resolved.starts_with("https://") || resolved.starts_with("http://"),
+        Some(None) => false,
+    }
+}
+
 /// The declared dependency pin, the installed manifest and every lockfile
 /// must name one version, and that version must satisfy the pin.
 fn versions_match(
@@ -226,13 +244,15 @@ fn versions_match(
         else {
             return false;
         };
-        if let Some(version) = packages
-            .get(&npm_key)
-            .and_then(Value::as_object)
-            .and_then(|entry| entry.get("version"))
-            .and_then(Value::as_str)
-        {
-            locked_versions.insert(version.to_owned());
+        let mut bound_here = false;
+        if let Some(entry) = packages.get(&npm_key).and_then(Value::as_object) {
+            if !registry_entry(entry) {
+                return false;
+            }
+            if let Some(version) = entry.get("version").and_then(Value::as_str) {
+                locked_versions.insert(version.to_owned());
+                bound_here = true;
+            }
         }
         if let Some(version) = packages
             .get(package_name)
@@ -241,7 +261,19 @@ fn versions_match(
             .and_then(Value::as_str)
             .and_then(|entry| entry.strip_prefix(&bun_prefix))
         {
+            // A Bun entry names its source inside the spec, so a version
+            // carrying a scheme or a path is a checkout rather than a release.
+            if version.contains([':', '/']) {
+                return false;
+            }
             locked_versions.insert(version.to_owned());
+            bound_here = true;
+        }
+        // Every lockfile Guard read has to bind this runner itself. A file
+        // that parses but never names the package would otherwise let the
+        // remaining lockfiles answer for it.
+        if !bound_here {
+            return false;
         }
     }
 

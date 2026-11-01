@@ -16,6 +16,7 @@ export function cigarBuildBlock(catalog: CigarCatalog, build: CigarCatalogBuild,
   const host = build.platforms.find((p) => p.platform === catalog.host_platform);
   if (!host) return "No artifact is available for this Guard host.";
   if (!host.has_wheel) return "This entry has no installable SDK package.";
+  if (!host.features.includes("graph") || !host.has_dependency_lock) return "This entry is missing pieces Guard needs to install it.";
   if (build.channel !== "stable") return "Preview and local candidate installation is unavailable in this Guard build.";
   if (updates.effective.pinned_build && updates.effective.pinned_build !== build.identity.build_id) return "Update preferences pin another build.";
   return null;

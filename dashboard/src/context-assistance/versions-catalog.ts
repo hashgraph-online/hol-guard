@@ -6,6 +6,8 @@ export type CigarPlatformBuild = {
   platform: string; qualification: CigarQualification; features: string[];
   worker_sha256: string; package_tree_sha256: string | null;
   qualification_receipt_sha256: string | null; has_wheel: boolean; download_bytes: number;
+  /** Native install also needs the package tree digest and the protobuf lock. */
+  has_dependency_lock: boolean;
 };
 export type CigarCatalogBuild = {
   identity: CigarBuildIdentity; profile_id: string; channel: "stable" | "preview" | "local_candidate";
@@ -50,11 +52,14 @@ function parsePlatform(v: unknown): CigarPlatformBuild {
     || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f))
     || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid();
   const hasWheel = v.wheel !== null;
+  const locked = v.package_tree_sha256 !== null
+    && v.dependencies.some((w) => object(w) && w.distribution === "protobuf");
   const bytes = (hasWheel ? wheelBytes(v.wheel) : 0) + v.dependencies.reduce((n, w) => n + wheelBytes(w), 0);
   if (!count(bytes)) invalid();
   return { platform: v.platform, qualification: v.qualification, features: v.features as string[],
     worker_sha256: v.worker_sha256, package_tree_sha256: v.package_tree_sha256,
-    qualification_receipt_sha256: v.qualification_receipt_sha256, has_wheel: hasWheel, download_bytes: bytes };
+    qualification_receipt_sha256: v.qualification_receipt_sha256, has_wheel: hasWheel, download_bytes: bytes,
+    has_dependency_lock: locked };
 }
 function parseBuild(v: unknown): CigarCatalogBuild {
   if (!object(v) || !isCigarBuildIdentity(v.identity) || !id(v.profile_id)

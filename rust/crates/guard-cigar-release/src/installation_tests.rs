@@ -104,6 +104,22 @@ fn feature_qualification_still_applies_after_offline_recovery() {
             .unwrap_err(),
         ReleaseError::FeatureUnqualified
     );
+    // The catalog listing a feature is not enough: the receipt must record it.
+    let metadata = self::metadata();
+    assert!(metadata.release.platforms[0]
+        .features
+        .contains(&Feature::Sharing));
+    let sealed = seal_installation_receipt(&metadata, &[19u8; 32]).unwrap();
+    let verified =
+        verify_installation_receipt(&sealed, &[19u8; 32], &metadata.context_sha256).unwrap();
+    let catalog = TrustedCatalog::bundled().unwrap();
+    assert_eq!(
+        verified
+            .resolve(&catalog, &[Feature::Graph, Feature::Sharing])
+            .unwrap_err(),
+        ReleaseError::FeatureUnqualified
+    );
+    assert!(verified.resolve(&catalog, &[Feature::Graph]).is_ok());
 }
 
 #[test]

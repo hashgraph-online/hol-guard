@@ -320,6 +320,15 @@ pub(super) fn is_encoded_stdin_shell(
 ///
 /// `zsh` is not one of them: it reads `~/.zshenv` whatever option it is given,
 /// so its script is never the whole command.
+/// Words that run their first operand with other credentials.
+///
+/// `sudo`, and the four spellings that stand in for it, pick who runs the
+/// program rather than which program runs, so the word after one is the
+/// command. Only `sudo` is also read as an interpreter, which is why the
+/// other four need naming here: every reader that walks past a wrapper to
+/// the program behind it reads this one list.
+pub(crate) const PRIVILEGE_WRAPPERS: &[&str] = &["doas", "gsudo", "pkexec", "run0", "sudo"];
+
 const INLINE_SHELLS: &[&str] = &["sh", "bash", "dash", "ash"];
 
 /// The script a shell carries in this same text, when the text is nothing but

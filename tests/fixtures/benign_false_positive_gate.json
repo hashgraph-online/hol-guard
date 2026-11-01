@@ -1217,6 +1217,261 @@
       "expect": "allow"
     },
     {
+      "id": "operand-named-env-is-not-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo env | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "operand-named-node-is-not-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo node | xargs cat"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "operand-named-watch-is-not-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo watch | xargs head -n 1"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "operand-named-fd-is-not-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo fd | xargs wc -c"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "operand-named-source-is-not-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo source | xargs wc -w"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "operand-named-parallel-is-not-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo parallel | xargs basename"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "operand-plain-literal-keeps-its-review",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo bar | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
+      "id": "neg-operand-glob-may-name-a-program",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo node* | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-operand-assignment-may-name-a-program",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo FOO=node | xargs cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-operand-quoted-word-may-name-a-program",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo 'node' | xargs head -n 1"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-operand-privilege-wrapper-runs-what-it-is-given",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pkexec foo node | xargs wc -c"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-operand-option-value-may-name-a-program",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo --pre node PATTERN | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-operand-short-option-value-may-name-a-program",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo -n node | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-operand-launcher-runs-what-it-is-given",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sudo foo node | xargs wc -c"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-operand-attached-option-may-name-a-program",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "foo --exec=node | xargs wc -w"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-cargo-search-alternate-registry",
       "fix_area": "negative",
       "harnesses": [
@@ -33156,6 +33411,150 @@
       "tool": "shell",
       "tool_input": {
         "command": "bundle exec rspec spec/models"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yarn-test-script-alias",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-test-script-alias",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yarn-test-script-alias-reporter-option",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn test --reporter=dot"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "node-test-runner-worktree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node --test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "go-test-run-filter",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go test -run TestFoo ./pkg"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "go-test-race-detector",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go test -race ./..."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "uv-run-python-module-pytest",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "uv run python -m pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "bundle-exec-rake-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bundle exec rake test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npx-turbo-run-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx turbo run test"
       },
       "cwd": "worktree",
       "expect": "allow"

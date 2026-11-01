@@ -1,20 +1,18 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
-from dataclasses import asdict, replace
+import io
+import json
+from pathlib import Path
+from typing import cast
 
-from codex_plugin_scanner.guard.local_risk_report import (
-    LocalRiskReport,
-    _canonical_report_payload,
-    build_local_risk_report,
-    local_risk_report_json,
-    render_local_risk_report_html,
-)
+import pytest
 
-
-def verify_local_risk_report(report: LocalRiskReport) -> bool:
-    payload = asdict(report)
-    return report.integrity_sha256 == hashlib.sha256(_canonical_report_payload(payload)).hexdigest()
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import commands_dispatch_risk_report
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _status_payload() -> dict[str, object]:
@@ -43,57 +41,62 @@ def _status_payload() -> dict[str, object]:
     }
 
 
-def test_report_is_coarse_and_integrity_bound() -> None:
-    report = build_local_risk_report(_status_payload(), guard_version="3.0.0a1")
-
-    assert report.risk_band == "low"
-    assert report.installed_harnesses == ("codex",)
-    assert report.sensitive_content_included is False
-    assert report.certification is False
-    assert verify_local_risk_report(report)
-    assert len(report.integrity_sha256) == 64
-
-
-def test_report_serialization_excludes_sensitive_local_content() -> None:
-    report = build_local_risk_report(_status_payload(), guard_version="3.0.0a1")
-    serialized = local_risk_report_json(report)
-
-    for forbidden in (
-        "SECRET_TOKEN",
-        "/Users/alice",
-        "private-project",
-        ".env",
-        "alice-macbook.local",
-        '"username"',
-        '"raw_prompt"',
-        '"config_paths"',
-        '"shim_path"',
-    ):
-        assert forbidden not in serialized
+def _report(monkeypatch: pytest.MonkeyPatch, report_format: str, output: str | None = None) -> tuple[int, str]:
+    monkeypatch.setattr(commands_dispatch_risk_report, "build_guard_status_payload", lambda *_: _status_payload())
+    stream = io.StringIO()
+    code = commands_dispatch_risk_report.run_guard_risk_report_command(
+        argparse.Namespace(format=report_format, output=output),
+        context=cast(HarnessContext, object()),
+        store=cast(GuardStore, object()),
+        config=cast(GuardConfig, object()),
+        output_stream=stream,
+    )
+    return code, stream.getvalue()
 
 
-def test_html_is_noindex_and_not_a_certification() -> None:
-    report = build_local_risk_report(_status_payload(), guard_version="3.0.0a1")
-    rendered = render_local_risk_report_html(report)
-
-    assert 'name="robots" content="noindex,nofollow"' in rendered
-    assert "not a certification" in rendered
-    assert "Sensitive local content included: no" in rendered
-    assert report.integrity_sha256 in rendered
-
-
-def test_risk_band_marks_offline_runtime_high() -> None:
-    payload = _status_payload()
-    payload["runtime_status"] = "offline"
-    report = build_local_risk_report(payload, guard_version="3.0.0a1")
-
-    assert report.risk_band == "high"
-    assert any(check.id == "runtime" and check.status == "fail" for check in report.checks)
+def test_only_coarse_status_fields_reach_the_runtime() -> None:
+    status = commands_dispatch_risk_report._report_status(_status_payload())  # pyright: ignore[reportPrivateUsage]
+    assert status == {
+        "generated_at": "2026-08-09T20:00:00Z",
+        "runtime_status": "active",
+        "managed_harnesses": 1,
+        "pending_approvals": 0,
+        "receipt_count": 7,
+        "sync_configured": False,
+        "harnesses": [{"harness": "codex", "installed": True, "review_count": 0}],
+    }
 
 
-def test_digest_verifier_rejects_tampered_sanitized_summary() -> None:
-    report = build_local_risk_report(_status_payload(), guard_version="3.0.0a1")
-    tampered = replace(report, managed_harness_count=999)
+def test_json_report_is_coarse_and_verifiable(monkeypatch: pytest.MonkeyPatch) -> None:
+    code, body = _report(monkeypatch, "json")
+    assert code == 0
+    report = json.loads(body)
+    assert report["risk_band"] == "low"
+    assert report["installed_harnesses"] == ["codex"]
+    assert report["sensitive_content_included"] is False
+    digest = report.pop("integrity_sha256")
+    canonical = json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+    assert digest == hashlib.sha256(canonical).hexdigest()
+    for leaked in ("alice", "SECRET_TOKEN", "private-project", "config.toml", "shim"):
+        assert leaked not in body
 
-    assert verify_local_risk_report(report)
-    assert not verify_local_risk_report(tampered)
+
+def test_html_report_is_written_noindex(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    destination = tmp_path / "out" / "guard-report.html"
+    code, message = _report(monkeypatch, "html", str(destination))
+    assert code == 0
+    assert str(destination) in message
+    rendered = destination.read_text(encoding="utf-8")
+    assert '<meta name="robots" content="noindex,nofollow">' in rendered
+    assert "Sensitive local content included: no." in rendered
+    assert "alice" not in rendered
+
+
+def test_unavailable_runtime_builds_no_report(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(commands_dispatch_risk_report, "runtime_answer", lambda *_, **__: None)
+    code, body = _report(monkeypatch, "json")
+    assert code == 1
+    assert body == ""
+    assert "native runtime is unavailable" in capsys.readouterr().err
