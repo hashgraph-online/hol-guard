@@ -12,7 +12,7 @@ export function CigarTutorials(props: {
   return <div className="cigar-guide">
     <section className="cigar-card cigar-learning-intro" aria-labelledby="cigar-tutorials-heading">
       <span className="cigar-icon"><HiMiniAcademicCap aria-hidden="true" /></span>
-      <div><span className="cigar-eyebrow">Learn by doing</span><h2 id="cigar-tutorials-heading">Make CIGAR useful for your next task</h2>
+      <div><h2 id="cigar-tutorials-heading">Make CIGAR useful for your next task</h2>
         <p><strong>CIGAR</strong> stands for <strong>{CIGAR_FULL_NAME}</strong>. Start with one question and one workspace, then add app access or execution context when you need it.</p>
         <p className="cigar-learning-caption">Guidance stays with your chosen step as you move between sections. It explains the steps; you choose every setting, start, and access grant.</p>
       </div>
@@ -29,7 +29,7 @@ export function CigarTutorials(props: {
       </article>)}
     </div>
     <section className="cigar-card" aria-labelledby="cigar-effective-heading">
-      <span className="cigar-eyebrow">Use context effectively</span><h2 id="cigar-effective-heading">A useful brief starts with a focused question</h2>
+      <h2 id="cigar-effective-heading">A useful brief starts with a focused question</h2>
       <div className="cigar-effective-grid">
         <article><h3>Name the decision</h3><p>Ask which release rules apply to a change, which documented steps to follow, or which native policy facts affect a workspace.</p></article>
         <article><h3>Choose evidence that can answer it</h3><p>Start with one or two relevant documents and the native facts you need. Add sources when a specific gap appears.</p></article>
@@ -68,7 +68,7 @@ export function CigarWalkthrough(props: {
   }
 
   return <aside className="cigar-card cigar-walkthrough" aria-labelledby={id + "-title"}>
-    <div className="cigar-section-heading"><span className="cigar-eyebrow">Guided walkthrough</span>
+    <div className="flex justify-end">
       <button type="button" className="cigar-walkthrough-close" onClick={props.onExit} aria-label="Exit walkthrough"><HiMiniXMark aria-hidden="true" /></button>
     </div>
     <h2 id={id + "-title"}>{props.tutorial.title}</h2>

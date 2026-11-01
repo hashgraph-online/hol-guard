@@ -29,21 +29,21 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
     outcome: "A context brief whose sources and revisions you can inspect.",
     steps: [
       {
-        title: "Start your saved runtime", description: "Ready means the selected Python, CIGAR package, and worker passed Guard's checks.",
-        instructions: ["If no runtime is selected, use Versions & updates to prepare and select a registered installation while CIGAR stays off. Then return to Runtime & preferences and turn on Use CIGAR on this machine.", "Keep Review briefs on. Smaller context and Memory only are useful starting choices for a single workspace.", "Save CIGAR preferences, then click Start CIGAR at the top. Wait for the live status to say Ready."],
-        expect: "The live status says Ready. Saving alone shows Not started.", target: "runtime", action: "Open runtime & preferences",
-        tip: "Final CPython 3.14 is required for CIGAR. Guard itself can use another supported Python version.",
+        title: "Turn on CIGAR", description: "One click. Guard gets Python ready, downloads the approved CIGAR copy, checks it and starts it.",
+        instructions: ["Click Turn on CIGAR at the top of this page. If Guard asks for your approval password, enter it once; it covers every step.", "Watch the steps tick off. You can stop at any point and nothing stays turned on.", "Later, if you want to switch versions yourself, use Updates."],
+        expect: "The status says Ready.", target: "runtime", action: "Open Settings",
+        tip: "CIGAR uses its own copy of Python 3.14. Guard can keep using the Python it already has.",
       },
       {
         title: "Choose a small evidence set", description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open Sources, limits and runtime details in Runtime & preferences. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        instructions: ["Open Sources, limits and runtime details in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
         expect: "Your intended source preferences are saved and the runtime is Ready.", target: "runtime", action: "Choose source preferences",
         tip: "A document preference allows you to choose files later. It does not grant access to the whole workspace.",
       },
       {
         title: "Grant one workspace access", description: "A grant connects a workspace and a consumer to the evidence you explicitly select.",
-        instructions: ["In Sources & AI apps, choose Guard dashboard as the Context consumer.", "Enter the absolute Workspace folder. Add individual files relative to that folder, one per line, if document context is enabled. Leave the file list empty for native facts only.", "Click Grant review source access. Confirm the exact workspace, consumer, and sources when Guard asks for approval proof."],
-        expect: "A Context access section appears for your chosen workspace.", target: "access", action: "Open sources & AI apps",
+        instructions: ["In Projects & AI apps, choose Guard dashboard as the Context consumer.", "Enter the absolute Workspace folder. Add individual files relative to that folder, one per line, if document context is enabled. Leave the file list empty for native facts only.", "Click Grant review source access. Confirm the exact workspace, consumer, and sources when Guard asks for approval proof."],
+        expect: "A Context access section appears for your chosen workspace.", target: "access", action: "Open Projects & AI apps",
         tip: "Choose only relevant sources. Environment files and credential stores are not valid context sources.",
       },
       {
@@ -62,7 +62,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
         title: "Keep context current", description: "Fresh sources make the next brief useful as your work changes.",
         instructions: ["After editing a selected document, click Refresh selected files, then Prepare cited context again.", "Use Withdraw beside a file or Revoke workspace access when it is no longer needed.", "Stopping or restarting the runtime ends active access. Grant the workspace again when needed; saved evidence never restores permission."],
         expect: "You know how to prepare a fresh brief and remove its source access.", target: "access", action: "Review workspace access",
-        tip: "Use Data & privacy to inspect or remove saved evidence. Memory is the default and ends with the runtime.",
+        tip: "Use Privacy to inspect or remove saved evidence. Memory is the default and ends with the runtime.",
       },
     ],
   },
@@ -73,12 +73,12 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
     steps: [
       {
         title: "Enable app context deliberately", description: "App access is a separate feature choice from review briefs.",
-        instructions: ["In Runtime & preferences, enable Context for AI apps. Choose source preferences before granting access.", "Keep Share context between paired AI connections off while you try a single connection.", "Save preferences and click Start CIGAR if needed. Confirm the live status is Ready."],
+        instructions: ["In Settings, enable Context for AI apps. Choose source preferences before granting access.", "Keep Share context between paired AI connections off while you try a single connection.", "Save your changes. If CIGAR is off, click Turn on CIGAR. Confirm the status says Ready."],
         expect: "Context for AI apps is saved and the runtime is Ready.", target: "runtime", action: "Choose AI app preferences",
       },
       {
         title: "Grant sources for that app", description: "A dashboard grant and an app grant have different consumers.",
-        instructions: ["In Sources & AI apps, choose your app in Context consumer: Codex, Claude Code, or Cursor.", "Choose the workspace and individual source files it needs. Enable document context first if you want to add files.", "Click Grant review source access and review the app and workspace in the confirmation."],
+        instructions: ["In Projects & AI apps, choose your app in Context consumer: Codex, Claude Code, or Cursor.", "Choose the workspace and individual source files it needs. Enable document context first if you want to add files.", "Click Grant review source access and review the app and workspace in the confirmation."],
         expect: "A workspace grant names the app you chose.", target: "access", action: "Choose the app's sources",
       },
       {
@@ -108,7 +108,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
     steps: [
       {
         title: "Check the route first", description: "Execution context has a narrower scope than general review briefs.",
-        instructions: ["Use an existing supported native captured-Bash route for Pi or Oh My Pi on macOS.", "Check the execution capability and Native execution context panel in Runtime & preferences.", "This candidate has local native preparation checks. Full delivery from external apps has not yet been qualified."],
+        instructions: ["Use an existing supported native captured-Bash route for Pi or Oh My Pi on macOS.", "Check the execution capability and Native execution context panel in Settings.", "This candidate has local native preparation checks. Full delivery from external apps has not yet been qualified."],
         expect: "You know whether the preparation route is available in this build.", target: "runtime", action: "Inspect execution availability",
         tip: "You can read this walkthrough even when the route is unavailable. Review briefs and paired app context have their own controls.",
       },
@@ -119,7 +119,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
       {
         title: "Scope the executor's workspace", description: "Choose the app and workspace for the native route you use.",
-        instructions: ["In Sources & AI apps, choose Pi or Oh My Pi as Context consumer when offered.", "Enter the workspace, review its native facts and any separately selected documents, and grant only that scope.", "A workspace grant does not install an app adapter or approve a command."],
+        instructions: ["In Projects & AI apps, choose Pi or Oh My Pi as Context consumer when offered.", "Enter the workspace, review its native facts and any separately selected documents, and grant only that scope.", "A workspace grant does not install an app adapter or approve a command."],
         expect: "The workspace grant names the intended executor consumer.", target: "access", action: "Inspect executor workspace access",
       },
       {
