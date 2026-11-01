@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from unittest.mock import Mock
@@ -51,11 +52,9 @@ def _create_macos_surfaces(root: Path) -> None:
         file_path.chmod(0o644)
 
 
-def test_macos_acl_verification_accepts_root_owned_nonwritable_surfaces(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+@pytest.mark.skipif(sys.platform != "darwin", reason="reads extended ACLs with the macOS ls")
+def test_macos_acl_verification_accepts_root_owned_nonwritable_surfaces(tmp_path: Path) -> None:
     _create_macos_surfaces(tmp_path)
-    monkeypatch.setattr(acl, "_macos_acl_is_mutable", lambda _path: False)
 
     result = acl.verify_protected_ownership_and_acl(
         _paths(tmp_path),
@@ -69,28 +68,10 @@ def test_macos_acl_verification_accepts_root_owned_nonwritable_surfaces(
     assert all(surface.healthy for surface in result.surfaces)
 
 
-def test_macos_acl_verification_queries_shared_ancestors_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _create_macos_surfaces(tmp_path)
-    query = Mock(return_value=False)
-    monkeypatch.setattr(acl, "_macos_acl_is_mutable", query)
-
-    acl.verify_protected_ownership_and_acl(
-        _paths(tmp_path),
-        system_name="Darwin",
-        expected_posix_uid=os.getuid(),
-        macos_surfaces=_macos_surfaces(tmp_path),
-    )
-
-    queried = [call.args[0] for call in query.call_args_list]
-    assert queried.count(tmp_path) == 1
-
-
-def test_macos_acl_verification_detects_standard_user_writable_surface(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+@pytest.mark.skipif(sys.platform != "darwin", reason="reads extended ACLs with the macOS ls")
+def test_macos_acl_verification_detects_standard_user_writable_surface(tmp_path: Path) -> None:
     _create_macos_surfaces(tmp_path)
     _paths(tmp_path).state_root.chmod(0o777)
-    monkeypatch.setattr(acl, "_macos_acl_is_mutable", lambda _path: False)
 
     result = acl.verify_protected_ownership_and_acl(
         _paths(tmp_path),
@@ -103,75 +84,42 @@ def test_macos_acl_verification_detects_standard_user_writable_surface(
     assert result.reason_code == "ownership_acl_standard_user_writable"
 
 
-def test_macos_acl_verification_detects_symlink_and_missing_surface(
+def test_macos_acl_verification_sends_each_surface_to_the_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object], *, deadline: float) -> dict[str, object]:
+        del deadline
+        requests.append(request)
+        return {"ok": True, "status": "healthy", "reason_code": "ownership_acl_valid", "surfaces": []}
+
+    monkeypatch.setattr(acl, "_native_answer", answer)
+
+    result = acl.verify_protected_ownership_and_acl(
+        _paths(tmp_path),
+        system_name="Darwin",
+        expected_posix_uid=501,
+        macos_surfaces=_macos_surfaces(tmp_path)[:1],
+    )
+
+    assert result.healthy
+    assert requests == [
+        {
+            "op": "macos-verify",
+            "macos_surfaces": [
+                {"name": "runtime", "path": str(tmp_path / "runtime"), "directory": True, "trust_root": str(tmp_path)}
+            ],
+            "expected_uid": 501,
+        }
+    ]
+
+
+def test_macos_acl_verification_without_the_runtime_fails_the_probe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _create_macos_surfaces(tmp_path)
-    monkeypatch.setattr(acl, "_macos_acl_is_mutable", lambda _path: False)
-    paths = _paths(tmp_path)
-    paths.manifest_path.unlink()
-    paths.manifest_path.symlink_to(tmp_path / "policy.json")
-
-    symlink_result = acl.verify_protected_ownership_and_acl(
-        paths,
-        system_name="Darwin",
-        expected_posix_uid=os.getuid(),
-        macos_surfaces=_macos_surfaces(tmp_path),
-    )
-    paths.manifest_path.unlink()
-    missing_result = acl.verify_protected_ownership_and_acl(
-        paths,
-        system_name="Darwin",
-        expected_posix_uid=os.getuid(),
-        macos_surfaces=_macos_surfaces(tmp_path),
-    )
-
-    assert symlink_result.reason_code == "ownership_acl_path_escape"
-    assert missing_result.reason_code == "ownership_acl_surface_absent"
-
-
-def test_macos_extended_acl_detects_non_root_mutation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    output = "-rw-r--r--+ 1 root wheel 0 Jul 17 00:00 policy\n 0: user:developer allow read,writeattr,delete\n"
-    monkeypatch.setattr(
-        acl.subprocess,
-        "run",
-        Mock(return_value=subprocess.CompletedProcess(["ls"], 0, output, "")),
-    )
-
-    assert acl._macos_acl_is_mutable(tmp_path)
-
-
-def test_macos_extended_acl_does_not_exempt_wheel_mutation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    output = "-rw-r--r--+ 1 root wheel 0 Jul 17 00:00 policy\n 0: group:wheel allow read,writeattr\n"
-    monkeypatch.setattr(
-        acl.subprocess,
-        "run",
-        Mock(return_value=subprocess.CompletedProcess(["ls"], 0, output, "")),
-    )
-
-    assert acl._macos_acl_is_mutable(tmp_path)
-
-
-def test_macos_extended_acl_exempts_inherited_root_mutation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    output = "-rw-r--r--+ 1 root wheel 0 Jul 17 00:00 policy\n 0: user:root inherited allow read,writeattr\n"
-    monkeypatch.setattr(
-        acl.subprocess,
-        "run",
-        Mock(return_value=subprocess.CompletedProcess(["ls"], 0, output, "")),
-    )
-
-    assert not acl._macos_acl_is_mutable(tmp_path)
-
-
-def test_macos_acl_verification_detects_pathname_race(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _create_macos_surfaces(tmp_path)
-
-    def mutate_once(path: Path) -> bool:
-        if path == tmp_path:
-            path.chmod(0o700)
-        return False
-
-    monkeypatch.setattr(acl, "_macos_acl_is_mutable", mutate_once)
+    monkeypatch.setattr(acl, "_native_answer", lambda _request, *, deadline: None)
 
     result = acl.verify_protected_ownership_and_acl(
         _paths(tmp_path),
@@ -180,38 +128,7 @@ def test_macos_acl_verification_detects_pathname_race(tmp_path: Path, monkeypatc
         macos_surfaces=_macos_surfaces(tmp_path),
     )
 
-    assert result.reason_code == "ownership_acl_probe_failed"
-
-
-def test_macos_acl_verification_detects_final_same_type_swap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    target = tmp_path / "service.plist"
-    target.write_text("first")
-    target.chmod(0o644)
-    tmp_path.chmod(0o755)
-    real_lstat = Path.lstat
-    target_calls = 0
-
-    def swap_before_final(path: Path) -> os.stat_result:
-        nonlocal target_calls
-        metadata = real_lstat(path)
-        if path == target:
-            target_calls += 1
-            if target_calls == 4:
-                values = list(metadata)
-                values[1] += 1
-                return os.stat_result(values)
-        return metadata
-
-    monkeypatch.setattr(Path, "lstat", swap_before_final)
-    monkeypatch.setattr(acl, "_macos_acl_is_mutable", lambda _path: False)
-
-    result = acl.verify_protected_ownership_and_acl(
-        _paths(tmp_path),
-        system_name="Darwin",
-        expected_posix_uid=os.getuid(),
-        macos_surfaces=(acl._PathSurface("serviceRegistration", target, False, tmp_path),),
-    )
-
+    assert result.status == "unknown"
     assert result.reason_code == "ownership_acl_probe_failed"
 
 

@@ -1,10 +1,11 @@
 //! `ownership-acl --stdin`: decide ownership and ACL health for the machine's
 //! protected surfaces (`mdm/acl.py` before the decisions moved here).
 //!
-//! Python still does the platform I/O: it walks the macOS path chain with
-//! `lstat` and `ls -lde`, and it runs the pinned PowerShell probe on Windows.
-//! This module owns what those probes mean:
+//! Python still runs the pinned PowerShell probe on Windows. This module owns
+//! what that probe means, and walks the macOS path chain itself:
 //!
+//! - `macos-verify` walks each surface's chain with `lstat` and `ls -lde`
+//!   (see `ownership_acl_macos.rs`) and folds the results into one verdict.
 //! - `windows-payload` lists the Windows surfaces to probe: each protected
 //!   file, directory and registry key, and every ancestor up to the drive or
 //!   `HKLM:\` root, once each regardless of case.
@@ -66,6 +67,10 @@ struct Request {
     rows: Option<Value>,
     #[serde(default)]
     surfaces: Option<Vec<Surface>>,
+    #[serde(default)]
+    macos_surfaces: Option<Vec<macos::MacosSurface>>,
+    #[serde(default)]
+    expected_uid: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -173,6 +178,12 @@ fn respond(request: Request) -> Result<Value, String> {
                 managed_file_payload(&file),
                 rows,
             )))
+        }
+        "macos-verify" => {
+            let surfaces = request.macos_surfaces.ok_or_else(invalid)?;
+            let expected_uid = request.expected_uid.ok_or_else(invalid)?;
+            let results = macos::verify_surfaces(&surfaces, expected_uid, &mut macos::SystemProbe);
+            Ok(verdict_json(&aggregate(results)))
         }
         "aggregate" => {
             let surfaces = request.surfaces.ok_or_else(invalid)?;
@@ -479,6 +490,9 @@ fn verdict_json(verdict: &Verdict) -> Value {
         "surfaces": surfaces,
     })
 }
+
+#[path = "ownership_acl_macos.rs"]
+mod macos;
 
 #[cfg(test)]
 #[path = "ownership_acl_verdict_tests.rs"]

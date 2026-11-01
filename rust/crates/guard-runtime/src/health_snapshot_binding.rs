@@ -395,4 +395,4 @@ fn days_in_month(year: u32, month: u32) -> u32 {
 
 #[cfg(test)]
 #[path = "health_snapshot_binding_tests.rs"]
-mod tests;
+pub(crate) mod tests;

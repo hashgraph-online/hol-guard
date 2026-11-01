@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = harness_coverage_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if health_lease_contract::is_command(command) && flag == "--stdin" => {
+            let response = health_lease_contract::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if health_snapshot_binding::is_command(command) && flag == "--stdin" => {
             let response = health_snapshot_binding::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
