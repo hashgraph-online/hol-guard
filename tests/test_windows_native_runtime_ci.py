@@ -236,7 +236,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
             "hol-guard-runtime --lib managed_owner_lock",
             "hol-guard-runtime --lib owner_release",
             "hol-guard-runtime --lib harness_coverage",
-            "hol-guard-runtime --lib ownership_acl_verdict::macos",
+            "hol-guard-runtime --lib ownership_acl_verdict",
         ],
         "mcp": [
             "guard-runtime-windows-process --test child_tree",

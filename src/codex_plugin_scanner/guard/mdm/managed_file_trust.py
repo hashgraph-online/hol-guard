@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import stat
-import subprocess
 from pathlib import Path
-from typing import cast
 
 from .acl import (
     _macos_request,
     _native_answer,
     _native_deadline,
     _PathSurface,
-    _run_windows_acl_payload,
 )
+from .windows_support import windows_directory
 
 
 def posix_path_is_root_owned_and_restricted(path: Path) -> bool:
@@ -53,19 +50,16 @@ def machine_controlled_file_is_trusted(path: Path, *, system_name: str | None = 
         answer = _native_answer(_macos_request((surface,), 0), deadline=_native_deadline())
         return answer is not None and answer.get("status") == "healthy"
     if resolved_system == "Windows":
-        request: dict[str, object] = {"op": "windows-file-payload", "managed_file": str(path)}
-        deadline = _native_deadline()
-        answer = _native_answer(request, deadline=deadline)
-        payload = None if answer is None else answer.get("payload")
-        if not isinstance(payload, list):
-            return False
         try:
-            rows = _run_windows_acl_payload(cast(list[dict[str, str | bool]], payload))
-        except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError):
+            directory = windows_directory()
+        except OSError:
             return False
-        verdict = _native_answer(
-            {"op": "windows-file-verify", "managed_file": str(path), "rows": rows}, deadline=deadline
-        )
+        request: dict[str, object] = {
+            "op": "windows-file-probe",
+            "managed_file": str(path),
+            "windows_directory": directory,
+        }
+        verdict = _native_answer(request, deadline=_native_deadline())
         return verdict is not None and verdict.get("status") == "healthy"
     if os.name != "posix":
         return False
