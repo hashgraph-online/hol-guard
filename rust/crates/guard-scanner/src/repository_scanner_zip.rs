@@ -62,9 +62,12 @@
 use std::collections::{BTreeMap, HashSet};
 use std::io::Read;
 
+use zeroize::Zeroizing;
+
 use super::{member_path, Caps, MAX_MEMBERS};
 use crate::repository_scanner::decode_text;
 use crate::secret_detection::{candidate_digest, scan_secret_text, CandidateDigest, SecretFinding};
+use crate::wiped_read::read_whole_or_fail;
 
 #[path = "repository_scanner_zip_prefix.rs"]
 mod prefix;
@@ -569,7 +572,11 @@ impl Member<'_> {
     }
 
     /// The member's bytes, read from the archive.
-    fn read(&self, data: &[u8]) -> Option<Vec<u8>> {
+    ///
+    /// The bytes are a file's contents and may be the secret itself, so they
+    /// wipe themselves once the scan is done with them rather than being left
+    /// in freed memory for a crash dump to carry.
+    fn read(&self, data: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
         let end = self.data_at.checked_add(self.compressed as usize)?;
         let compressed = data.get(self.data_at..end)?;
         match self.method {
@@ -577,7 +584,8 @@ impl Member<'_> {
                 // A stored member is its own data, so the two sizes claimed
                 // for it have to agree; one that does not is malformed rather
                 // than merely compressed oddly.
-                (compressed.len() as u64 == self.uncompressed).then(|| compressed.to_vec())
+                (compressed.len() as u64 == self.uncompressed)
+                    .then(|| Zeroizing::new(compressed.to_vec()))
             }
             _ => self.inflate(compressed),
         }
@@ -589,12 +597,12 @@ impl Member<'_> {
     /// than it was said to is refused rather than truncated: the two
     /// disagreeing is how a bomb gets past a check made on a size field alone,
     /// and a member whose real size is unknown is not read.
-    fn inflate(&self, compressed: &[u8]) -> Option<Vec<u8>> {
-        let mut inflated: Vec<u8> = Vec::new();
-        flate2::read::DeflateDecoder::new(compressed)
-            .take(self.uncompressed.checked_add(1)?)
-            .read_to_end(&mut inflated)
-            .ok()?;
+    fn inflate(&self, compressed: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+        let inflated = read_whole_or_fail(
+            &mut flate2::read::DeflateDecoder::new(compressed)
+                .take(self.uncompressed.checked_add(1)?),
+        )
+        .ok()?;
         (inflated.len() as u64 == self.uncompressed).then_some(inflated)
     }
 }

@@ -4950,6 +4950,23 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-switch-create-report-window-notes",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -c fix/report-window-notes"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-worktree-add-file",
       "fix_area": "git",
       "harnesses": [
@@ -14444,6 +14461,90 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "session-bun-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-bun-test-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test src/parser.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-bun-test-bail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test --bail"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-bun-test-name-pattern",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test -t adds"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-bun-test-preload",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun test --preload ${HOME}/.bun/setup.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "session-bun-e-print",
@@ -38514,6 +38615,40 @@
       "expect": "allow"
     },
     {
+      "id": "git-switch-previous-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git switch -"
+      },
+      "cwd": "org_wt",
+      "expect": "allow"
+    },
+    {
+      "id": "git-checkout-previous-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git checkout -"
+      },
+      "cwd": "org_wt",
+      "expect": "allow"
+    },
+    {
       "id": "git-switch-detaches-at-head",
       "fix_area": "git",
       "harnesses": [
@@ -45450,6 +45585,38 @@
         "command": "grep -rn TOKEN ${ORG}/service-api"
       },
       "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "gh-api-search-sorted-page-projection",
+      "fix_area": "gh",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api \"search/issues?q=repo:example-org/example-repo+is:pr+created:>=2026-10-29&sort=created&order=desc&per_page=30\" --jq '.items[] | [.number, .state, .title] | @tsv'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-gh-api-search-sorted-page-projection-to-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api \"search/issues?q=repo:example-org/example-repo+is:pr+created:>=2026-10-29&sort=created&order=desc&per_page=30\" --jq '.items[] | [.number, .state, .title] | @tsv' > ${HOME}/prs.tsv"
+      },
+      "cwd": "worktree",
       "expect": "not_allow"
     }
   ],
