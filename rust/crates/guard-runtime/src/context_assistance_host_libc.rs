@@ -2,7 +2,8 @@
 //!
 //! Guard's Linux runtime is a static musl binary shipped in a manylinux
 //! wheel, so its own compile target says nothing about the host. The C
-//! library of the host is read from the dynamic loader `/bin/sh` asks for.
+//! library of the host is read from the dynamic loader a system program asks
+//! for: `/bin/sh` first, then other base programs in case the shell is static.
 use std::io::Read;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,9 +15,15 @@ pub(super) enum Libc {
 const PT_INTERP: u32 = 3;
 const HEADER_LIMIT: u64 = 64 * 1024;
 
+const PROGRAMS: [&str; 4] = ["/bin/sh", "/usr/bin/env", "/bin/ls", "/usr/bin/ls"];
+
 pub(super) fn host_libc() -> Option<Libc> {
+    PROGRAMS.iter().find_map(|program| program_libc(program))
+}
+
+fn program_libc(program: &str) -> Option<Libc> {
     let mut head = Vec::new();
-    std::fs::File::open("/bin/sh")
+    std::fs::File::open(program)
         .ok()?
         .take(HEADER_LIMIT)
         .read_to_end(&mut head)
