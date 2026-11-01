@@ -23,6 +23,12 @@ pub const LOCAL_CLI_HELP_VARIATIONS_FEATURE: &str = "local-cli-help-variations-v
 /// and the local modules it imports (`imports`). A caller that sees it reads a
 /// script's source before deciding whether to run the script with `--help`.
 pub const LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE: &str = "local-cli-help-source-first-v1";
+/// Capability advertised when a script-source read also reports whether the
+/// script serves MCP (`mcp_server`): it imports an MCP server library or
+/// answers `tools/list`. A caller that sees it launches a readable script as
+/// an MCP server only on that evidence, since the launch passes the script its
+/// own arguments.
+pub const LOCAL_CLI_HELP_MCP_EVIDENCE_FEATURE: &str = "local-cli-help-mcp-evidence-v1";
 /// Largest canonical request serialization the op will accept. Python bounds
 /// the probed output at 8 KiB; this leaves room for the envelope around it.
 pub const LOCAL_CLI_HELP_PARSE_MAX_BYTES: usize = 256 * 1024;

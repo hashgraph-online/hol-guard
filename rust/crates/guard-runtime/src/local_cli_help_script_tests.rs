@@ -398,3 +398,33 @@ yargs(process.argv.slice(2))
 "#;
     assert_eq!(ids(node), vec!["--force", "-f"]);
 }
+
+#[test]
+fn mcp_server_libraries_and_tools_list_handlers_are_evidence() {
+    let serves = |source: &str| script_facts(source, &["tool".to_owned()]).mcp_server;
+    for source in [
+        "import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';\n",
+        "const { Server } = require(\"@modelcontextprotocol/sdk/server/index.js\");\n",
+        "const sdk = await import('@modelcontextprotocol/sdk/server/stdio.js');\n",
+        "import { FastMCP } from 'fastmcp';\n",
+        "from mcp.server.fastmcp import FastMCP\n",
+        "try:\n    import fastmcp\nexcept ImportError:\n    pass\n",
+        "import modelcontextprotocol\n",
+        "require 'mcp'\n",
+        "if (request.method === 'tools/list') { reply(tools); }\n",
+        "if message[\"method\"] == \"tools/list\":\n    send(tools)\n",
+    ] {
+        assert!(serves(source), "{source}");
+    }
+    for source in [
+        "import mcp_helpers\n",
+        "from mcpx import run\n",
+        "import { deploy } from './mcp.mjs';\n",
+        "// import { Server } from '@modelcontextprotocol/sdk';\n",
+        "# from mcp.server import Server\n",
+        "console.log('ship tools to the list');\n",
+        "import sys\nprint(sys.argv)\n",
+    ] {
+        assert!(!serves(source), "{source}");
+    }
+}

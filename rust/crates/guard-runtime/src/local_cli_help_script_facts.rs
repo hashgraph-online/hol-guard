@@ -1,6 +1,6 @@
 //! What a script's code says about how it may be read and run, before Guard
 //! runs it: whether it answers `--help` itself, which command-line frameworks
-//! it builds on, and the local modules it imports.
+//! it builds on, whether it serves MCP, and the local modules it imports.
 //!
 //! Guard runs `script --help` only for a script whose own code shows that it
 //! answers `--help`. A script that never looks for `--help` treats it as an
@@ -50,6 +50,9 @@ impl HelpHandler {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Facts {
     pub(crate) help: HelpHandler,
+    /// The code imports an MCP server library or answers `tools/list`, so
+    /// launching it with its own arguments starts a server, not a command.
+    pub(crate) mcp_server: bool,
     /// Local modules the script imports, as `./`-relative paths.
     pub(crate) imports: Vec<String>,
     /// Commander, yargs, cac or sade: `.command('name')` names a subcommand.
@@ -138,6 +141,18 @@ static OTHER_FRAMEWORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"\brequire\s+["'](?:optparse|thor|slop)["']|\bpod2usage\b|\bThor\b"#).unwrap()
 });
 
+/// An MCP server library, imported from JavaScript, Python or Ruby, or a
+/// handler for the `tools/list` method every MCP server answers.
+static MCP_SERVER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r#"(?:\brequire\s*\(\s*|\bfrom\s*|\bimport\s*\(?\s*)["'](?:@modelcontextprotocol/|fastmcp["'/]|mcp-framework["'/])"#,
+        r"|^(?:import|from)\s+(?:mcp|fastmcp|modelcontextprotocol)\b",
+        r#"|\brequire\s+["'](?:mcp|model_context_protocol|fast_mcp|fast-mcp)["'/]"#,
+        r#"|["']tools/list["']"#,
+    ))
+    .unwrap()
+});
+
 static JS_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["'](\./[^"'\s]+)["']"#).unwrap()
 });
@@ -167,6 +182,7 @@ pub(super) fn facts(raw: &[&str], lines: &[Option<String>]) -> Facts {
             continue;
         }
         read_help(line, &raw[index..], &mut facts);
+        facts.mcp_server |= MCP_SERVER.is_match(line);
         for import in imports(line) {
             if facts.imports.len() < MAX_IMPORTS && seen.insert(import.clone()) {
                 facts.imports.push(import);

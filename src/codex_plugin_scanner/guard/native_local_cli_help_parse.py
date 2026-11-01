@@ -28,6 +28,9 @@ LOCAL_CLI_HELP_VARIATIONS_FEATURE = "local-cli-help-variations-v1"
 # A resident whose source read also says whether the script handles --help and
 # which local modules it imports, so a script can be read before it is run.
 LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE = "local-cli-help-source-first-v1"
+# A resident whose source read also says whether the script serves MCP, so a
+# pasted script is launched as an MCP server only when its code says it is one.
+LOCAL_CLI_HELP_MCP_EVIDENCE_FEATURE = "local-cli-help-mcp-evidence-v1"
 _REQUEST_SCHEMA = "guard-local-cli-help-parse-request.v1"
 _RESULT_SCHEMA = "guard-local-cli-help-parse-result.v1"
 _TIMEOUT_SECONDS = 5.0
@@ -49,6 +52,9 @@ class SourceRead(NamedTuple):
     # a parser library it imports answers it, for each subcommand too.
     help_handler: HelpHandler
     imports: tuple[str, ...]
+    # Whether the code imports an MCP server library or answers tools/list.
+    # Read only when the request asked for it; False otherwise.
+    mcp_server: bool = False
 
 
 def resident_reads_sources_first() -> bool | None:
@@ -59,6 +65,16 @@ def resident_reads_sources_first() -> bool | None:
     older one that would let Guard run the script unread.
     """
 
+    return _resident_has(LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE)
+
+
+def resident_reads_mcp_evidence() -> bool | None:
+    """Whether the resident can say if a script serves MCP; None as above."""
+
+    return _resident_has(LOCAL_CLI_HELP_MCP_EVIDENCE_FEATURE)
+
+
+def _resident_has(feature: str) -> bool | None:
     try:
         status = native_runtime_status()
     except Exception:
@@ -66,7 +82,7 @@ def resident_reads_sources_first() -> bool | None:
     capabilities = status.capabilities
     if not status.available or not status.compatible or capabilities is None:
         return None
-    return LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE in capabilities.features
+    return feature in capabilities.features
 
 
 def native_local_cli_help_commands(
@@ -96,16 +112,19 @@ def native_local_cli_source_read(
     guard_home: Path,
     text: str,
     invocation: Sequence[str],
+    mcp_evidence: bool = False,
 ) -> SourceRead | None:
     """Read a script's source before anything runs it; None when the resident cannot.
 
     Besides the commands, the answer says whether the script handles --help
-    and which local modules it imports. Both decide what Guard runs next, so a
-    reply whose fields are missing or malformed is discarded whole.
+    and which local modules it imports, and with ``mcp_evidence`` whether it
+    serves MCP. Each decides what Guard runs next, so a reply whose fields are
+    missing or malformed is discarded whole.
     """
 
     home = Path(guard_home)
-    payload = _request(home, text, None, invocation, script_source=True, feature=LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE)
+    feature = LOCAL_CLI_HELP_MCP_EVIDENCE_FEATURE if mcp_evidence else LOCAL_CLI_HELP_SOURCE_FIRST_FEATURE
+    payload = _request(home, text, None, invocation, script_source=True, feature=feature)
     if payload is None:
         return None
     rows = _rows(payload, home)
@@ -117,7 +136,10 @@ def native_local_cli_source_read(
         return _unusable(home)
     if any(not isinstance(entry, str) or not entry.startswith("./") for entry in imports):
         return _unusable(home)
-    return SourceRead(rows=rows, help_handler=handler, imports=tuple(imports))
+    mcp_server = payload.get("mcp_server") if mcp_evidence else False
+    if not isinstance(mcp_server, bool):
+        return _unusable(home)
+    return SourceRead(rows=rows, help_handler=handler, imports=tuple(imports), mcp_server=mcp_server)
 
 
 def _request(

@@ -61,11 +61,13 @@ from ..runtime.local_cli_identity import (
 )
 from ..runtime.local_mcp_probe import (
     McpProbeError,
+    is_package_mcp_launcher,
     is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
     mcp_launch_tokens,
     probe_stdio_mcp_server,
 )
+from ..runtime.local_mcp_source_evidence import script_may_serve_mcp
 from ..runtime.local_mcp_stdio import McpCatalogResult
 from ..runtime.local_skill_index import (
     LocalSkillRecord,
@@ -774,6 +776,15 @@ class LocalCliApiService:
         # A known connection remains MCP even when its script no longer exists.
         if selected_server is None and not looks_like_mcp_launch(
             tokens, command_text=command, cwd=home_dir, home_dir=home_dir
+        ):
+            return None
+        # A pasted script runs with its own arguments, so only its source can
+        # say it is a server; a known connection or package launcher can.
+        if (
+            selected_server is None
+            and stored_observation is None
+            and not is_package_mcp_launcher(tokens)
+            and not script_may_serve_mcp(command, cwd=home_dir, home_dir=home_dir, guard_home=self._store.guard_home)
         ):
             return None
         extra_env = extra_env_for_mcp_launch(

@@ -555,6 +555,21 @@ a busy or missing resident is never taken for an older one. Only a resident
 whose capabilities list lacks the feature, or a compiled program that is not
 a script, takes the help-first path above.
 
+A pasted command is tried as a stdio MCP server before help discovery, and
+that launch passes the script its real arguments. A resident that advertises
+`local-cli-help-mcp-evidence-v1` adds `mcp_server` to the same source read:
+true when a code line imports an MCP server library (`@modelcontextprotocol/*`,
+`fastmcp` or `mcp-framework` from JavaScript, `mcp`, `fastmcp` or
+`modelcontextprotocol` from Python, `mcp` or `fast_mcp` from Ruby) or names
+the `tools/list` method. Python (`local_mcp_source_evidence.py`) launches a
+readable interpreter script, or a `#!` script run directly, only when the
+script or one of its followed `./` modules has that fact. A selected or stored
+server, a stored observation, a package MCP launcher (`npx`, `uvx` and the
+like), a package bin run through a runner, and a compiled program keep the
+launch without a read. A script whose source or answer cannot be read, or a
+runtime whose status cannot be read, is not launched. A resident without the
+feature keeps the launch, as before.
+
 Two consequences are worth naming. Discovery fails closed: a resident that
 cannot answer leaves the CLI with no commands found, and the grant falls back
 to its "other" bucket rather than to a Python parse. And the port keeps a
