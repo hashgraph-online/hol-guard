@@ -62,6 +62,46 @@ fn a_relative_vitest_entry_reads_as_the_project_runner() {
 }
 
 #[test]
+fn bun_launching_the_project_runner_reads_as_the_run_node_spells() {
+    for command in [
+        "bun node_modules/vitest/vitest.mjs run",
+        "bun node_modules/vitest/vitest.mjs run --root /work/tree/app",
+        "bun ./node_modules/vitest/vitest.mjs run src",
+        "bun ../app/node_modules/vitest/vitest.mjs run",
+        "bun node_modules/vitest/dist/cli.js run",
+        "bun node_modules/jest/bin/jest.js src",
+        "bun node_modules/mocha/bin/mocha.js test/unit",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn bun_launching_no_project_runner_reads_as_no_runner() {
+    for command in [
+        // `--cwd` names no entry at this position, and the sink reads the
+        // call the same way, so admitting it here would run a file the call
+        // never spelled.
+        "bun --cwd app node_modules/vitest/vitest.mjs run",
+        "bun --cwd=app node_modules/vitest/vitest.mjs run",
+        "bun xnode_modules/vitest/vitest.mjs run",
+        "bun node_modules/vitest/vitest.mjs watch",
+        "bun node_modules/vitest/vitest.mjs run --watch",
+        "bun node_modules/vite/dist/cli.js run",
+    ] {
+        assert_ne!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn a_relative_jest_entry_reads_as_the_project_runner() {
     for command in [
         "node node_modules/jest/bin/jest.js",

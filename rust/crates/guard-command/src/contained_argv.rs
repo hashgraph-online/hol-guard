@@ -32,6 +32,26 @@ pub(crate) fn local_mocha_entry(argument: &str) -> bool {
         || local_package_entry(argument, "mocha/bin/mocha")
 }
 
+/// Whether a word names one of those installed entry points. A runtime handed
+/// this path starts the workspace's own runner, whichever of the three it is.
+pub(crate) fn local_runner_entry(argument: &str) -> bool {
+    let entry = argument.replace('\\', "/");
+    local_vitest_entry(&entry)
+        || local_package_entry(&entry, "jest/bin/jest.js")
+        || local_mocha_entry(&entry)
+}
+
+/// Whether a call hands Bun one of those entry points as the file to run.
+///
+/// Bun executes a JavaScript entry the way Node does, so `bun
+/// node_modules/vitest/vitest.mjs run` is the run `node` spells beside it, and
+/// the sink relaunches the resolved entry under Node for either spelling. The
+/// `bun x` wrapper and a `--cwd` prefix name no entry at this position, so
+/// they are read by the routes that already carry them rather than here.
+pub(crate) fn bun_runner_entry_launch(command: &[String]) -> bool {
+    basename(command) == "bun" && command.get(1).is_some_and(|word| local_runner_entry(word))
+}
+
 /// The program a word names; on Windows without `.exe`, as the pre-tool parser
 /// reads it, so `node.exe` and a resolved `C:\...\python.exe` name `node` and
 /// `python`. Every reading of a program name goes through here, so a
@@ -525,7 +545,7 @@ pub fn contained_runner_invocation(
             let mut call = vec![name.to_owned()];
             call.extend_from_slice(&argv[1..]);
             call
-        } else if matches!(name, "node" | "nodejs") {
+        } else if matches!(name, "node" | "nodejs") || bun_runner_entry_launch(&argv) {
             let args = &argv[1 + runtime.len()..];
             let entry = args
                 .first()
@@ -776,6 +796,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
         && (matches!(name, "bunx" | "npx" | "vitest" | "jest" | "mocha")
             || manager_exec_runner(command).is_some()
             || bun.is_some()
+            || bun_runner_entry_launch(command)
             || tsx_test_invocation(command)?.is_some()
             || (matches!(name, "node" | "nodejs")
                 && entries.clone().any(|v| {
@@ -786,6 +807,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                 })));
     let node_tool = bun.is_none()
         && !bun_test
+        && !bun_runner_entry_launch(command)
         && manager_exec_runner(command).is_none()
         && !command.is_empty()
         && (matches!(
