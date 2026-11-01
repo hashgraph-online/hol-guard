@@ -24875,6 +24875,54 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-npm-run-lint-passed-option",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run lint -- --max-warnings=0"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-npm-run-typecheck-passed-option",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run typecheck -- --pretty"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-pnpm-lint-passed-option",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm lint -- --max-warnings=0"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "named-test-script-npm-run-unit",
       "fix_area": "shell",
       "harnesses": [

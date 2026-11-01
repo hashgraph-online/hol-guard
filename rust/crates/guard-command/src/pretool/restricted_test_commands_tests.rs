@@ -333,3 +333,34 @@ fn a_runner_left_watching_keeps_its_review() {
         assert_eq!(reason(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_package_script_run_keeps_the_words_it_passes_on() {
+    // `npm run lint -- --max-warnings=0` runs the project's own lint script
+    // with one more checking option. The manager hands the words after `--`
+    // to the script, so they belong to the run the manifest spells and the
+    // run is still the read-only tool the script names.
+    for command in [
+        "npm run lint -- --max-warnings=0",
+        "npm run typecheck -- --pretty",
+        "pnpm lint -- --max-warnings=0",
+        "yarn typecheck -- --pretty",
+        "bun run lint -- --max-warnings=0",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_node_tool_readonly_containment_required"),
+            "{command}"
+        );
+    }
+    // Words that write or chain are refused wherever they sit, and a tail is
+    // only a tail when `--` introduces it.
+    for command in [
+        "npm run lint -- --fix",
+        "npm run lint -- --output-file out.txt",
+        "npm run lint -- --max-warnings=0 && rm -rf dist",
+        "npm run lint extra",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
+    }
+}

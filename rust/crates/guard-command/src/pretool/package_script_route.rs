@@ -189,9 +189,19 @@ fn resolved(
         // narrower or broader execution is offered. A conventional name says
         // what the script does on its own; any other name is only as good as
         // the body behind it, so without the manifest it stays a package
-        // script and keeps the generic route.
-        return (test || task.is_some_and(|task| matches!(task, "lint" | "typecheck" | "build")))
-            .then_some(reason);
+        // script and keeps the generic route. A checking name runs read-only
+        // whatever the run passes on, and the words it passes have already
+        // been read for writes and shell effects, so a tail rides with it. A
+        // build's receipt names an output directory instead, and `--outDir`
+        // arriving in that tail can only be read against the manifest, so a
+        // build with a tail keeps the generic route.
+        return (test
+            || task.is_some_and(|(task, tail)| match task {
+                "lint" | "typecheck" => true,
+                "build" => tail.is_empty(),
+                _ => false,
+            }))
+        .then_some(reason);
     };
     let package = nearest(&directory, &workspace, "package.json");
     let (manifest, _) = read_json_with_integrity(&package.join("package.json"), false);
@@ -223,7 +233,8 @@ fn resolved(
         }
         return Some(PACKAGE_TEST);
     }
-    tool_script(scripts, task?, &directory, &workspace)
+    let (task, tail) = task?;
+    tool_script(scripts, task, tail, &directory, &workspace)
 }
 
 #[cfg(unix)]
@@ -359,6 +370,7 @@ fn test_script(scripts: &Map<String, Value>, arguments: &[String]) -> bool {
 fn tool_script(
     scripts: &Map<String, Value>,
     task: &str,
+    tail: &[String],
     directory: &Path,
     workspace: &Path,
 ) -> Option<&'static str> {
@@ -366,7 +378,12 @@ fn tool_script(
         return None;
     }
     let tokens = split_with(PLAIN_LEXER, scripts.get(task)?.as_str()?).ok()?;
-    let (tool, arguments) = tokens.split_first()?;
+    let (tool, body) = tokens.split_first()?;
+    // The words after `--` are the run's own arguments, so the tool is gated
+    // holding them: an `--outDir` or a redirection arriving that way is read
+    // here rather than reaching the sink unseen.
+    let passed = [body, tail].concat();
+    let arguments = passed.as_slice();
     let (_, entries, mode) = crate::contained_node_tool::supported_tool(tool, arguments)?;
     let build = mode == crate::contained_node_tool::ToolMode::Build;
     let reason = if build { NODE_BUILD } else { NODE_TOOL };

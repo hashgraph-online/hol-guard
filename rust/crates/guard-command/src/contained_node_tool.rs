@@ -62,6 +62,18 @@ pub(crate) enum NodeToolRoute {
     },
 }
 
+/// The words a manager run passes on to the script it names.
+///
+/// The first reading answered `Script`, so the command is a manager run; a
+/// command that is not leaves no tail to carry.
+fn script_tail(command: &[String], windows: bool) -> &[String] {
+    let Some((program, rest)) = command.split_first() else {
+        return &[];
+    };
+    let name = program_name(program, windows);
+    manager_script_task(&name, rest).map_or(&[][..], |(_, tail)| tail)
+}
+
 fn invalid(message: &'static str) -> NodeToolRoute {
     NodeToolRoute::Invalid {
         code: INVALID,
@@ -253,7 +265,13 @@ pub(crate) fn node_tool_route(
         let Some((name, arguments)) = tokens.split_first() else {
             return invalid("The requested local script is empty.");
         };
-        return gate(name, arguments.to_vec(), Vec::new(), None);
+        // The manager hands the words after `--` to the body it starts, so
+        // `npm run lint -- --fix` is the body holding `--fix`. Reading them
+        // back off the command gates them with the run they belong to instead
+        // of losing them between the two readings.
+        let mut arguments = arguments.to_vec();
+        arguments.extend_from_slice(script_tail(command, windows));
+        return gate(name, arguments, Vec::new(), None);
     }
     let Some((program, rest)) = command.split_first() else {
         return gate("", Vec::new(), Vec::new(), None);
@@ -286,7 +304,7 @@ pub(crate) fn node_tool_route(
         };
         (name, arguments) = peeled;
     } else if matches!(name.as_str(), "bun" | "npm" | "pnpm" | "yarn") {
-        let Some(task) = manager_script_task(&name, &arguments) else {
+        let Some((task, _)) = manager_script_task(&name, &arguments) else {
             return invalid("Only a single named package script is supported.");
         };
         if windows {
