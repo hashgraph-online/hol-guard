@@ -23,6 +23,7 @@ use crate::shell_execution_context_support::{
     split_shell_tokens, SHELL_CWD_MISSING_DIRECTORY, SHELL_CWD_NOT_DIRECTORY,
     SHELL_CWD_UNREADABLE_DIRECTORY,
 };
+use crate::shell_secret_read_glob::search_glob_pattern_is_safe;
 
 // `_SHELLS` (:17), `_SCRIPT_SUFFIXES` (:18-31), `_OTHER_READERS` (:32-48),
 // limits (:49-52).
@@ -973,14 +974,17 @@ pub(crate) fn local_read_operands_resolve_safely(
 }
 
 /// `_bounded_local_read_glob_is_safe` (:139-212). `glob.glob` semantics —
-/// `*`/`?`/`[seq]` per component; no `**` (guarded by
-/// `search_glob_pattern_is_safe` upstream / globbing here is per-segment).
+/// `*`/`?`/`[seq]` within one component. A search tool's `--glob` value never
+/// reaches here; `search_glob_pattern_is_safe` screens those on its own, and a
+/// positional operand spelling `**` leaves it in the parent path, which no
+/// directory answers to.
 #[allow(dead_code)]
 fn bounded_local_read_glob_is_safe(candidate: &Path, root: &Path, allow_dirs: bool) -> bool {
     let candidate_str = candidate.to_string_lossy();
     // Python glob with a metachar pattern walks the parent and fnmatches each
-    // entry; recursive `**` is already excluded.  Model a single-level match
-    // against the parent directory.
+    // entry.  Model a single-level match against the parent directory; a
+    // recursive spelling leaves `**` in that parent path, which no directory
+    // answers to.
     let (parent, pattern) = match candidate_str.rfind('/') {
         Some(index) => (&candidate_str[..index], &candidate_str[index + 1..]),
         None => (".", candidate_str.as_ref()),
@@ -1304,51 +1308,6 @@ pub(crate) fn search_file_operand_roles(
 /// `_search_command_has_no_pattern` (:415-417).
 fn search_command_has_no_pattern(command_name: &str, args: &[String]) -> bool {
     command_name == "rg" && args.iter().any(|a| a == "--files")
-}
-
-/// `_search_glob_pattern_is_safe` (:419-445).
-pub(crate) fn search_glob_pattern_is_safe(pattern: &str, root: Option<&Path>) -> bool {
-    let _ = root;
-    let is_exclusion = pattern.starts_with('!');
-    let effective_pattern = if is_exclusion { &pattern[1..] } else { pattern };
-    let path = crate::codex_output_py::PyPath::new(effective_pattern);
-    let components = path.parts();
-    if effective_pattern.is_empty()
-        || effective_pattern.chars().count() > 4096
-        || effective_pattern.contains('\n')
-        || effective_pattern.contains('\x00')
-        || ["**", "{", "}", "!"]
-            .iter()
-            .any(|token| effective_pattern.contains(token))
-        || path.is_absolute()
-        || components
-            .iter()
-            .any(|component| matches!(component.as_str(), "" | "." | ".."))
-    {
-        return false;
-    }
-    if is_exclusion {
-        return true;
-    }
-    for component in &components {
-        let folded = component.to_lowercase();
-        if folded.starts_with('.') && !SOURCE_INSPECTION_BENIGN_DOTFILES.contains(&folded.as_str())
-        {
-            return false;
-        }
-        for sensitive in SOURCE_INSPECTION_SENSITIVE_PARTS {
-            let sensitive_folded = sensitive.to_lowercase();
-            if fnmatchcase(&sensitive_folded, &folded)
-                || fnmatchcase(
-                    &format!("{sensitive_folded}.guard-sensitive-probe"),
-                    &folded,
-                )
-            {
-                return false;
-            }
-        }
-    }
-    true
 }
 
 // ---------------------------------------------------------------------------

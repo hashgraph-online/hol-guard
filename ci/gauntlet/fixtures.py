@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from .branch_return_fixtures import branch_return_checks
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .edge_clone_fixtures import write_edge_clone
@@ -417,6 +418,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     checks.update(script_case_checks(fixture.home, fixture.workspace, fixture.canary, scenario_id))
     checks.update(runtime_case_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
+    checks.update(branch_return_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))
     checks.update(git_allow_checks(fixture.workspace, scenario_id))
     checks.update(session_folder_checks(fixture.home, scenario_id))
@@ -487,6 +489,15 @@ CALC_TEST = (
     "def add(a, b):\n    return a + b\n\n\n"
     "def test_add():\n    assert add(2, 3) == 5\n\n\n"
     "assert add(2, 3) == 5\nprint('calc ok')\n"
+)
+# Bun's runner discovers its own naming, so the Python suite beside it is
+# invisible to it. The case that runs `bun test` needs a file Bun will pick up,
+# or the run reports no tests and says nothing about the boundary it took.
+BUN_TEST_CASE = "omp-native-bun-test-runner"
+BUN_TEST = (
+    'import { expect, test } from "bun:test";\n\n'
+    "const add = (a: number, b: number) => a + b;\n\n"
+    'test("adds", () => {\n  expect(add(2, 3)).toBe(5);\n});\n'
 )
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 
@@ -670,6 +681,9 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (main / "app/registry/[slug]").mkdir(parents=True)
     (main / "app/registry/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
     tracked = add_main_shapes(main)
+    if scenario_id == BUN_TEST_CASE:
+        (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")
+        tracked = (*tracked, "calc.test.ts")
     _git(("add", ".agents", "src", "app", "test_calc.py", *tracked), main, environment)
     _git(("commit", "--quiet", "-m", "Synthetic shapes"), main, environment)
     # Agents routinely run inside a linked worktree whose main checkout is a sibling.

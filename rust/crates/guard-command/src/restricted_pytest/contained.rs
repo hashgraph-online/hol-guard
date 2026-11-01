@@ -169,6 +169,11 @@ fn nearest_project_root(
 
 fn prepare_node(input: &Input) -> Result<Value, RestrictedPytestError> {
     let argv = normalized_command(&input.command)?;
+    // `bun test` shares this profile: the same read-only boundary, a
+    // different image approval.
+    if Path::new(&argv[0]).file_name().and_then(OsStr::to_str) == Some("bun") {
+        return bun::prepare_test(input, &argv);
+    }
     let runtime = node_runtime_args(&argv)?;
     let index = 1 + runtime.len();
     if argv.len() <= index
@@ -308,17 +313,30 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
     let workspace = Path::new(plan["workspace"].as_str().unwrap());
     let cwd = Path::new(plan["cwd"].as_str().unwrap());
     // Each contained runner is the workspace's own installed entry point.
-    let package_entry = match tool {
-        "jest" => "jest/bin/jest.js",
-        _ => "vitest/vitest.mjs",
+    // Mocha publishes two spellings of its `bin` shim across the releases
+    // this route reads: `bin/mocha.js` from Mocha 10 on, and the
+    // extensionless `bin/mocha` of Mocha 8 and 9. The installed one decides
+    // which the run executes, so a project on either release runs rather than
+    // reporting the package it holds as missing, and the walk up to the
+    // project root looks for the manifest both spellings ship beside rather
+    // than for one of them.
+    let (installed, package_entries): (&str, &[&str]) = match tool {
+        "jest" => ("jest/bin/jest.js", &["jest/bin/jest.js"]),
+        "mocha" => (
+            "mocha/package.json",
+            &["mocha/bin/mocha.js", "mocha/bin/mocha"],
+        ),
+        _ => ("vitest/vitest.mjs", &["vitest/vitest.mjs"]),
     };
-    let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{package_entry}"))?
+    let modules = nearest_project_root(cwd, workspace, &format!("node_modules/{installed}"))?
         .join("node_modules");
-    let entry = modules
-        .join(package_entry)
-        .canonicalize()
-        .ok()
-        .filter(|p| p.is_file() && path_is_within(p, &modules));
+    let entry = package_entries.iter().find_map(|package_entry| {
+        modules
+            .join(package_entry)
+            .canonicalize()
+            .ok()
+            .filter(|p| p.is_file() && path_is_within(p, &modules))
+    });
     let node = matches!(
         Path::new(&input.command[0])
             .file_name()
@@ -332,7 +350,7 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
         .iter()
         .cloned()
         .chain(
-            (tool != "jest")
+            (tool == "vitest")
                 .then(|| {
                     modules
                         .join("vitest/dist/cli.js")
@@ -354,16 +372,23 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             "vitest_restricted_dependency_unavailable",
             match tool {
                 "jest" => "Jest is not installed inside this workspace. Guard did not download or execute a replacement.",
+                "mocha" => "Mocha is not installed inside this workspace. Guard did not download or execute a replacement.",
                 _ => "Vitest is not installed inside this workspace. Guard did not download or execute a replacement.",
             },
         ));
     }
     let entry = entry.unwrap();
-    // The config loader argument is Vitest's own; Jest takes its arguments as given.
-    let args = if tool == "jest" {
-        args
-    } else {
-        readonly_config_arguments(&args, &entry.parent().unwrap().join("package.json"))
+    // The config loader argument is Vitest's own. Mocha reads a watch mode
+    // out of a workspace `.mocharc` or `package.json` that the call itself
+    // never names, and a watching run never finishes inside the sink, so the
+    // run states the mode its admission was read as; Mocha's command line
+    // beats its configuration file. Jest takes its arguments as given.
+    let args = match tool {
+        "vitest" => readonly_config_arguments(&args, &entry.parent().unwrap().join("package.json")),
+        "mocha" => std::iter::once("--watch=false".to_owned())
+            .chain(args)
+            .collect(),
+        _ => args,
     };
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);
