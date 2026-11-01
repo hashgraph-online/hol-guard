@@ -1382,12 +1382,19 @@ fn search_glob_spelling_is_safe(pattern: &str, is_exclusion: bool) -> bool {
     if is_exclusion {
         return true;
     }
-    for component in &components {
-        // `**` stands for any run of directories rather than a name, so there
-        // is no name here to compare against. The named components around it
-        // are still screened, and a search tool skips hidden entries while
-        // walking, which is what the dotfile screen below covers.
+    for (index, component) in components.iter().enumerate() {
         if component == "**" {
+            // A trailing `**` is the one place the recursive component names
+            // files rather than a run of directories: `src/**` selects every
+            // entry under `src`, sensitive names included, which is what the
+            // screen refuses `src/*` and `**/*` for. Anywhere else `**` stands
+            // for the directories between two named components, so there is no
+            // name here to compare against. The named components around it are
+            // still screened, and a search tool skips hidden entries while
+            // walking, which is what the dotfile screen below covers.
+            if index + 1 == components.len() {
+                return false;
+            }
             continue;
         }
         let folded = component.to_lowercase();

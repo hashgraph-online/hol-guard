@@ -40,6 +40,18 @@ fn a_pattern_of_only_recursion_names_everything() {
 }
 
 #[test]
+fn a_trailing_recursion_names_every_file_under_a_directory() {
+    // `src/**` selects `src/credentials.json` as readily as `src/*` does, and
+    // the component screen has always refused `src/*`. Only the recursion
+    // that stands between two named components is a run of directories.
+    assert!(!safe("src/**"));
+    assert!(!safe("src/sub/**"));
+    assert!(!safe("{src,tests}/**"));
+    assert!(safe("src/**/*.rs"));
+    assert!(safe("src/**/main.rs"));
+}
+
+#[test]
 fn braces_outside_a_filename_pattern_stay_refused() {
     // jq filters, GraphQL documents and `sed` expressions reach this screen as
     // operands. None of them is a glob, and expansion must not admit them.
