@@ -550,3 +550,28 @@ mod feature_directories;
 
 #[path = "search_scope_rg_glob_tests.rs"]
 mod rg_glob_inclusions;
+
+/// The include walk stops on the clock, not only on the entry count. The
+/// whole native evaluation runs inside half a second, and the entries the
+/// count allows cost what the host's filesystem charges for them, which on a
+/// loaded machine is not what they cost on an idle one. An evaluation that
+/// overruns its budget fails, and a failed evaluation blocks, so the clock
+/// has to be read as the walk goes.
+#[test]
+fn an_include_walk_out_of_clock_leaves_the_scope_unproven() {
+    let (home, project) = fixture();
+    let home = home.to_string_lossy().into_owned();
+    let source = project.join("src");
+    let filter =
+        crate::pretool::search_scope_filter::SearchFilter::from_rg_inclusions(&["*.md"]).unwrap();
+    let walk = |budget| {
+        crate::pretool::search_scope_walk::walk_include_scope(
+            &source,
+            &filter,
+            Some(home.as_str()),
+            budget,
+        )
+    };
+    assert!(walk(std::time::Instant::now() + std::time::Duration::from_secs(60)).is_ok());
+    assert!(walk(std::time::Instant::now()).is_err());
+}

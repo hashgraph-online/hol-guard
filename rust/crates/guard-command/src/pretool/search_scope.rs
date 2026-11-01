@@ -12,7 +12,8 @@
 use super::search_pattern_clearance::PatternClearance;
 use super::search_scope_filter::SearchFilter;
 use super::search_scope_walk::{
-    walk_include_scope, walk_scope, walk_scope_cleared, walk_scope_with, Ignores,
+    include_scope_deadline, walk_include_scope, walk_scope, walk_scope_cleared, walk_scope_with,
+    Ignores,
 };
 use serde_json::{Map, Value};
 use std::cell::Cell;
@@ -194,7 +195,7 @@ pub(super) fn grep_include_walk_proven(
     };
     verified_directory_root(root, home_dir, cwd).is_some_and(|directory| {
         !super::read_paths::inside_agent_state_tree(&directory, home_dir)
-            && walk_include_scope(&directory, &filter, home_dir).is_ok()
+            && walk_include_scope(&directory, &filter, home_dir, include_scope_deadline()).is_ok()
     })
 }
 

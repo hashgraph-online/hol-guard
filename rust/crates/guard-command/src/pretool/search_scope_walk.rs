@@ -15,6 +15,7 @@ use super::search_scope_ignore::{
 use super::search_scope_tracked::TrackedFiles;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 const MAX_SCOPE_ENTRIES: usize = 20_000;
 /// A names-only walk checks only entry metadata and links, never contents,
@@ -30,6 +31,16 @@ const MAX_NAME_SCOPE_ENTRIES: usize = 100_000;
 /// the evaluation on it. Withholding it only returns the answer the readings
 /// above already reached.
 const MAX_INCLUDE_SCOPE_ENTRIES: usize = 2_000;
+/// The wall clock an include walk may spend.
+///
+/// The whole native evaluation runs inside half a second, and the entry count
+/// above does not bound the time those entries take: a directory read costs
+/// what the host's filesystem charges for it, which on a loaded machine is
+/// not what it costs on an idle one. Spending the evaluation's remaining
+/// budget there fails the evaluation, and a failed evaluation blocks, so this
+/// walk stops on the clock as well. Stopping only withholds the narrowing and
+/// leaves the answer the readings above already reached.
+const INCLUDE_SCOPE_BUDGET: Duration = Duration::from_millis(50);
 
 /// Which ignore files a walk honors, matching the host that searches.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -159,12 +170,19 @@ pub(super) fn walk_scope(
     walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
 }
 
-/// [`walk_scope`] for a grep include, under the entry budget such a reading
-/// is allowed. Nothing is ignored: `grep` reads no ignore file.
+/// When an include walk started now has to stop.
+pub(super) fn include_scope_deadline() -> Instant {
+    Instant::now() + INCLUDE_SCOPE_BUDGET
+}
+
+/// [`walk_scope`] for a grep include, under the entry count and the wall
+/// clock such a reading is allowed. Nothing is ignored: `grep` reads no
+/// ignore file.
 pub(super) fn walk_include_scope(
     root: &Path,
     filter: &SearchFilter,
     home: Option<&str>,
+    budget: Instant,
 ) -> Result<(), ScopeUnproven> {
     walk_scope_inner(
         root,
@@ -176,6 +194,7 @@ pub(super) fn walk_include_scope(
         home,
         &mut None,
         Some(MAX_INCLUDE_SCOPE_ENTRIES),
+        Some(budget),
     )
 }
 
@@ -198,6 +217,7 @@ pub(super) fn walk_scope_cleared(
         clearance,
         home,
         blocker,
+        None,
         None,
     )
 }
@@ -223,6 +243,7 @@ pub(super) fn walk_scope_with(
         home,
         blocker,
         None,
+        None,
     )
 }
 
@@ -237,6 +258,7 @@ fn walk_scope_inner(
     home: Option<&str>,
     blocker: &mut Option<PathBuf>,
     entries: Option<usize>,
+    budget: Option<Instant>,
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
     let mut tiers = IgnoreTiers::default();
@@ -302,7 +324,7 @@ fn walk_scope_inner(
         for entry in entries {
             let entry = entry.map_err(|_| ScopeUnproven)?;
             inspected += 1;
-            if inspected > entry_limit {
+            if inspected > entry_limit || budget.is_some_and(|limit| Instant::now() >= limit) {
                 return Err(ScopeUnproven);
             }
             let path = entry.path();
