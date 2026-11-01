@@ -4,7 +4,6 @@ import plistlib
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import Mock
 from xml.etree import ElementTree
 
 import pytest
@@ -246,140 +245,107 @@ def test_windows_machine_paths_ignore_process_environment(monkeypatch: pytest.Mo
     assert paths.state_root == Path(r"C:\ProgramData") / "HOL Guard"
 
 
-def test_windows_native_verification_uses_pinned_powershell_and_safe_process_context(
+def _answering(
+    monkeypatch: pytest.MonkeyPatch, system: str, answer: dict[str, object] | None
+) -> list[dict[str, object]]:
+    requests: list[dict[str, object]] = []
+
+    def native_answer(request: dict[str, object]) -> dict[str, object] | None:
+        requests.append(request)
+        return answer
+
+    monkeypatch.setattr(native.platform, "system", lambda: system)
+    monkeypatch.setattr(native, "windows_directory", lambda: r"D:\Windows")
+    monkeypatch.setattr(native, "_native_answer", native_answer)
+    return requests
+
+
+def test_macos_native_verification_names_the_platform_and_team_pin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    run = Mock(
-        return_value=subprocess.CompletedProcess(
-            ["powershell.exe"],
-            0,
-            '{"Status":"Valid","Thumbprint":"0123456789ABCDEF0123456789ABCDEF01234567","Version":"3.0.0a1"}',
-            "",
-        )
+    requests = _answering(
+        monkeypatch,
+        "Darwin",
+        {
+            "ok": True,
+            "status": "healthy",
+            "reason_code": "native_install_valid",
+            "package_identity": "org.hol.guard",
+            "signature_state": "valid",
+            "version": "3.0.0a1",
+        },
     )
 
-    monkeypatch.setattr(native, "_windows_directory", lambda: r"D:\Windows")
-    monkeypatch.setattr(native.subprocess, "run", run)
-    monkeypatch.setenv("PATH", r"C:\attacker")
-
-    result = native._verify_windows(
-        tmp_path,
-        expected_thumbprints=("0123456789ABCDEF0123456789ABCDEF01234567",),
-    )
+    result = native.verify_native_install(tmp_path, macos_team_id="TEAM123", windows_signer_thumbprints=("X",))
 
     assert result.healthy
-    command = run.call_args.args[0]
-    kwargs = run.call_args.kwargs
-    assert command[0] == r"D:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    assert kwargs["cwd"] == r"D:\Windows\System32"
-    assert kwargs["env"] == {
-        "ComSpec": r"D:\Windows\System32\cmd.exe",
-        "SystemRoot": r"D:\Windows",
-        "WINDIR": r"D:\Windows",
-    }
     assert result.version == "3.0.0a1"
+    assert requests == [{"platform": "macos", "runtime_root": str(tmp_path), "macos_team_id": "TEAM123"}]
 
 
-def test_windows_native_verification_fails_closed_without_publisher_pin(tmp_path: Path) -> None:
-    result = native._verify_windows(tmp_path, expected_thumbprints=())
+def test_windows_native_verification_names_the_pins_and_system_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requests = _answering(
+        monkeypatch,
+        "Windows",
+        {
+            "ok": True,
+            "status": "tampered",
+            "reason_code": "native_publisher_signature_invalid",
+            "package_identity": "HOLGuardMachine",
+            "signature_state": "invalid",
+            "version": None,
+        },
+    )
+
+    result = native.verify_native_install(tmp_path, macos_team_id="TEAM123", windows_signer_thumbprints=("A", "B"))
 
     assert not result.healthy
-    assert result.reason_code == "native_publisher_pin_absent"
+    assert result.reason_code == "native_publisher_signature_invalid"
+    assert requests == [
+        {
+            "platform": "windows",
+            "runtime_root": str(tmp_path),
+            "windows_signer_thumbprints": ["A", "B"],
+            "windows_directory": r"D:\Windows",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {"ok": True, "status": "healthy", "reason_code": "native_install_valid", "package_identity": "x"},
+        {
+            "ok": True,
+            "status": "healthy",
+            "reason_code": "native_install_valid",
+            "package_identity": "org.hol.guard",
+            "signature_state": "valid",
+            "version": 3,
+        },
+    ],
+)
+def test_native_verification_without_a_runtime_answer_never_reports_healthy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None
+) -> None:
+    _ = _answering(monkeypatch, "Darwin", answer)
+
+    result = native.verify_native_install(tmp_path, macos_team_id="TEAM123")
+
+    assert not result.healthy
+    assert result.reason_code == "native_install_probe_failed"
 
 
 def test_windows_mdm_docs_exclude_desktop_artifact_signing_leaves() -> None:
     verify_doc = " ".join((native.verify_native_install.__doc__ or "").split())
-    windows_doc = " ".join((native._verify_windows.__doc__ or "").split())
+    runtime_source = Path("rust/crates/guard-runtime/src/native_install_verdict.rs").read_text(encoding="utf-8")
+    windows_doc = " ".join(line.removeprefix("//!").strip() for line in runtime_source.splitlines())
     policy_source = Path("rust/crates/guard-runtime/src/managed_policy.rs").read_text(encoding="utf-8")
 
     assert "not Desktop Artifact Signing" in verify_doc
     assert "Do not pin a rotating Azure Public Trust leaf" in verify_doc
     assert "not a valid pin for this HOLGuardMachine identity" in windows_doc
     assert "Do not store Azure Artifact Signing leaves" in policy_source
-
-
-def test_macos_native_verification_fails_closed_without_team_id(tmp_path: Path) -> None:
-    result = native._verify_macos(tmp_path, expected_team_id=None)
-
-    assert not result.healthy
-    assert result.reason_code == "native_publisher_pin_absent"
-
-
-def test_macos_native_verification_requires_matching_team_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    run = Mock(
-        side_effect=[
-            subprocess.CompletedProcess(["pkgutil"], 0, plistlib.dumps({"pkg-version": "3.0.0a1"}), b""),
-            subprocess.CompletedProcess(["codesign", "--verify"], 0, b"", b""),
-            subprocess.CompletedProcess(
-                ["codesign", "-d"],
-                0,
-                "",
-                "Executable=/path/hol-guard\nTeamIdentifier=TEAM123\n",
-            ),
-        ]
-    )
-    monkeypatch.setattr(native.subprocess, "run", run)
-
-    result = native._verify_macos(tmp_path, expected_team_id="TEAM123")
-
-    assert result.healthy
-    assert result.version == "3.0.0a1"
-
-
-def test_macos_native_verification_rejects_missing_receipt_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    run = Mock(
-        side_effect=[
-            subprocess.CompletedProcess(["pkgutil"], 0, plistlib.dumps({}), b""),
-            subprocess.CompletedProcess(["codesign", "--verify"], 0, b"", b""),
-            subprocess.CompletedProcess(["codesign", "-d"], 0, "", "TeamIdentifier=TEAM123\n"),
-        ]
-    )
-    monkeypatch.setattr(native.subprocess, "run", run)
-
-    result = native._verify_macos(tmp_path, expected_team_id="TEAM123")
-
-    assert not result.healthy
-    assert result.reason_code == "native_package_version_invalid"
-
-
-def test_macos_native_verification_rejects_missing_team_identifier(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    run = Mock(
-        side_effect=[
-            subprocess.CompletedProcess(["pkgutil"], 0, plistlib.dumps({"pkg-version": "3.0.0a1"}), b""),
-            subprocess.CompletedProcess(["codesign", "--verify"], 0, b"", b""),
-            subprocess.CompletedProcess(["codesign", "-d"], 0, "", "Executable=/path/hol-guard\n"),
-        ]
-    )
-    monkeypatch.setattr(native.subprocess, "run", run)
-
-    result = native._verify_macos(tmp_path, expected_team_id="TEAM123")
-
-    assert not result.healthy
-    assert result.reason_code == "native_publisher_signature_invalid"
-
-
-def test_windows_native_verification_rejects_unpinned_valid_signer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    run = Mock(
-        return_value=subprocess.CompletedProcess(
-            ["powershell.exe"],
-            0,
-            '{"Status":"Valid","Thumbprint":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","Version":"3.0.0a1"}',
-            "",
-        )
-    )
-    monkeypatch.setattr(native, "_windows_directory", lambda: r"D:\Windows")
-    monkeypatch.setattr(native.subprocess, "run", run)
-
-    result = native._verify_windows(
-        tmp_path,
-        expected_thumbprints=("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",),
-    )
-
-    assert not result.healthy
-    assert result.reason_code == "native_publisher_signature_invalid"
