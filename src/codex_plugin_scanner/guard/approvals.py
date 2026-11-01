@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from typing import ParamSpec, TypeVar, cast
-from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from ..version import __version__
 from .action_lattice import normalize_guard_action_result
@@ -139,27 +139,32 @@ class ApprovalRequestAlreadyResolvedError(ValueError):
     """Raised when an approval request was already resolved."""
 
 
-def build_approval_request_url(approval_center_url: str, request_id: str) -> str:
-    """Build the canonical local dashboard deep link for one approval request."""
-
-    return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
+_LINK_FIELDS = ("request_id", "artifact_id", "approval_url")
 
 
-def _normalize_harness_slug(harness: str | None) -> str | None:
-    if not isinstance(harness, str):
+def _link_item(item: object) -> dict[str, str] | None:
+    if not isinstance(item, Mapping):
         return None
-    normalized = harness.strip().lower()
-    if normalized in {"claude", "claude-code"}:
-        return "claude-code"
-    return normalized or None
+    fields = {key: value for key in _LINK_FIELDS if isinstance(value := item.get(key), str)}
+    return {**fields, "harness": str(item.get("harness") or "")}
 
 
-def _queued_request_dicts(queued: Sequence[object]) -> list[dict[str, object]]:
-    items: list[dict[str, object]] = []
-    for item in queued:
-        if isinstance(item, Mapping):
-            items.append(dict(item))
-    return items
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _approval_link(mode: str, queued: Sequence[object] | None, **fields: object) -> dict[str, object]:
+    """Ask the native runtime which queued request and review link a block binds to.
+
+    The link is display only, so an unavailable runtime yields no link.
+    """
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    items = None if queued is None else [_link_item(item) for item in queued]
+    try:
+        return native_runner_authority("approval_link", {"mode": mode, "queued": items, **fields})
+    except NativeRunnerAuthorityError:
+        return {}
 
 
 def primary_approval_request(
@@ -171,35 +176,10 @@ def primary_approval_request(
 ) -> dict[str, object] | None:
     """Return the approval request created for this blocked action."""
 
-    items = _queued_request_dicts(queued)
-    if not items:
-        return None
-
-    bound_request_id = _string_or_none(request_id)
-    if bound_request_id is not None:
-        for item in items:
-            if _string_or_none(item.get("request_id")) == bound_request_id:
-                return item
-        return None
-
-    bound_artifact_id = _string_or_none(artifact_id)
-    if bound_artifact_id is not None:
-        for item in reversed(items):
-            if _string_or_none(item.get("artifact_id")) == bound_artifact_id:
-                return item
-        return None
-
-    if len(items) == 1:
-        return items[0]
-
-    normalized_harness = _normalize_harness_slug(harness)
-    if normalized_harness is not None:
-        for item in reversed(items):
-            item_harness = _normalize_harness_slug(str(item.get("harness") or ""))
-            if item_harness == normalized_harness:
-                return item
-
-    return None
+    fields = {"harness": _text(harness), "request_id": _text(request_id), "artifact_id": _text(artifact_id)}
+    index = _approval_link("primary", queued, **fields).get("index")
+    item = queued[index] if isinstance(index, int) and 0 <= index < len(queued) else None
+    return dict(item) if isinstance(item, Mapping) else None
 
 
 def primary_approval_url(
@@ -210,66 +190,21 @@ def primary_approval_url(
     request_id: str | None = None,
     artifact_id: str | None = None,
 ) -> str | None:
-    request = primary_approval_request(
-        queued,
-        harness=harness,
-        request_id=request_id,
-        artifact_id=artifact_id,
-    )
-    if request is None:
-        return None
-    approval_url = request.get("approval_url")
-    if isinstance(approval_url, str) and approval_url.strip():
-        return canonical_local_approval_url(
-            approval_url,
-            approval_center_url=approval_center_url,
-        )
-    resolved_request_id = request.get("request_id")
-    if isinstance(resolved_request_id, str) and resolved_request_id.strip() and isinstance(approval_center_url, str):
-        center = approval_center_url.strip()
-        if center:
-            return build_approval_request_url(center, resolved_request_id.strip())
-    return None
+    fields = {"harness": _text(harness), "request_id": _text(request_id), "artifact_id": _text(artifact_id)}
+    return _text(_approval_link("primary", queued, approval_center_url=_text(approval_center_url), **fields).get("url"))
 
 
-def canonical_local_approval_url(approval_url: str, *, approval_center_url: str | None) -> str:
-    """Rewrite stale loopback approval links to the active approval center."""
-
-    approval_url = approval_url.strip()
-    try:
-        parsed_approval = urlparse(approval_url)
-    except ValueError:
-        return approval_url
-    loopback_hosts = {"127.0.0.1", "::1", "localhost"}
-    approval_host = _parsed_url_host(parsed_approval)
-    if parsed_approval.scheme not in {"http", "https"} or approval_host not in loopback_hosts:
-        return approval_url
-    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
-        return approval_url
-    try:
-        parsed_center = urlparse(approval_center_url.strip())
-    except ValueError:
-        return approval_url
-    center_host = _parsed_url_host(parsed_center)
-    if parsed_center.scheme not in {"http", "https"} or center_host not in loopback_hosts:
-        return approval_url
-    return urlunparse(
-        parsed_approval._replace(
-            scheme=parsed_center.scheme,
-            netloc=parsed_center.netloc,
-        )
-    )
+first_approval_url = primary_approval_url
 
 
-def _parsed_url_host(parsed: ParseResult) -> str:
-    host_port = parsed.netloc.rsplit("@", 1)[-1]
-    if host_port.startswith("["):
-        host, _separator, _rest = host_port[1:].partition("]")
-        return host
-    if host_port.count(":") == 1:
-        host, _port = host_port.rsplit(":", 1)
-        return host
-    return host_port
+def preferred_approval_review_url(payload: Mapping[str, object], *, harness: str) -> str | None:
+    """Return the review link for a hook payload, else its approval center."""
+
+    queued = payload.get("approval_requests")
+    keys = ("approval_center_url", "primary_approval_request_id", "artifact_id", "primary_approval_url")
+    fields = {key: _text(payload.get(key)) for key in keys}
+    link = _approval_link("preferred", queued if isinstance(queued, list) else None, harness=harness, **fields)
+    return _text(link.get("url")) or (fields["approval_center_url"] or "").strip() or None
 
 
 def queue_blocked_approvals(
@@ -1049,63 +984,6 @@ def approval_center_hint(
     )
 
 
-def first_approval_url(
-    queued: Sequence[object],
-    *,
-    harness: str | None = None,
-    approval_center_url: str | None = None,
-    request_id: str | None = None,
-    artifact_id: str | None = None,
-) -> str | None:
-    return primary_approval_url(
-        queued,
-        harness=harness,
-        approval_center_url=approval_center_url,
-        request_id=request_id,
-        artifact_id=artifact_id,
-    )
-
-
-def _primary_request_id_candidates(
-    payload: Mapping[str, object],
-    *,
-    request_id: str | None = None,
-) -> list[str]:
-    candidates: list[str] = []
-    seen: set[str] = set()
-
-    def add(value: object) -> None:
-        normalized = _string_or_none(value)
-        if normalized is not None and normalized not in seen:
-            seen.add(normalized)
-            candidates.append(normalized)
-
-    add(request_id)
-    add(payload.get("primary_approval_request_id"))
-    operation_ids = payload.get("approval_request_ids")
-    if isinstance(operation_ids, list):
-        for item in operation_ids:
-            add(item)
-    operation = payload.get("operation")
-    if isinstance(operation, Mapping):
-        nested_ids = operation.get("approval_request_ids")
-        if isinstance(nested_ids, list):
-            for item in nested_ids:
-                add(item)
-    return candidates
-
-
-def _queued_request_ids(queued: Sequence[object]) -> set[str]:
-    request_ids: set[str] = set()
-    for item in queued:
-        if not isinstance(item, Mapping):
-            continue
-        normalized = _string_or_none(item.get("request_id"))
-        if normalized is not None:
-            request_ids.add(normalized)
-    return request_ids
-
-
 def attach_primary_approval_link(
     payload: dict[str, object],
     *,
@@ -1119,49 +997,25 @@ def attach_primary_approval_link(
     queued = payload.get("approval_requests")
     if not isinstance(queued, list):
         return
-
-    bound_artifact_id = _string_or_none(artifact_id)
-    if bound_artifact_id is None:
-        bound_artifact_id = _string_or_none(payload.get("artifact_id"))
-
-    queued_ids = _queued_request_ids(queued)
-    bound_request_id = next(
-        (
-            candidate
-            for candidate in _primary_request_id_candidates(payload, request_id=request_id)
-            if candidate in queued_ids
-        ),
-        None,
-    )
-
-    primary = None
-    if bound_artifact_id is not None:
-        primary = primary_approval_request(
-            queued,
-            harness=harness,
-            artifact_id=bound_artifact_id,
-        )
-    if primary is None:
-        primary = primary_approval_request(
-            queued,
-            harness=harness,
-            request_id=bound_request_id,
-            artifact_id=bound_artifact_id,
-        )
-    if primary is None:
-        return
-    resolved_request_id = _string_or_none(primary.get("request_id"))
-    if resolved_request_id is not None:
-        payload["primary_approval_request_id"] = resolved_request_id
-    review_url = primary_approval_url(
+    operation = payload.get("operation")
+    operation_ids = operation.get("approval_request_ids") if isinstance(operation, Mapping) else None
+    request_ids = [
+        item for ids in (payload.get("approval_request_ids"), operation_ids) if isinstance(ids, list) for item in ids
+    ]
+    link = _approval_link(
+        "attach",
         queued,
-        harness=harness,
-        approval_center_url=approval_center_url,
-        request_id=resolved_request_id,
-        artifact_id=bound_artifact_id,
+        harness=_text(harness),
+        approval_center_url=_text(approval_center_url),
+        request_id=_text(request_id),
+        artifact_id=_text(artifact_id),
+        payload_artifact_id=_text(payload.get("artifact_id")),
+        primary_approval_request_id=_text(payload.get("primary_approval_request_id")),
+        approval_request_ids=[item for item in request_ids if isinstance(item, str)],
     )
-    if review_url is not None:
-        payload["primary_approval_url"] = review_url
+    for key, field in (("primary_approval_request_id", "request_id"), ("primary_approval_url", "url")):
+        if (value := _text(link.get(field))) is not None:
+            payload[key] = value
 
 
 def _live_hook_verification(
