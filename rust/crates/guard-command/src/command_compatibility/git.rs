@@ -246,10 +246,10 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "diff-index" | "diff-tree" | "log" | "cherry" | "show" | "blame"
-            | "describe" | "reflog" | "branch" | "hash-object" | "rev-parse" | "merge-base"
-            | "ls-files" | "remote" | "worktree" | "config" | "grep" | "ls-tree" | "cat-file"
-            | "show-ref" | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore"
+            "status" | "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "cherry"
+            | "show" | "blame" | "describe" | "reflog" | "branch" | "hash-object" | "rev-parse"
+            | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep" | "ls-tree"
+            | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog" | "check-ignore"
             | "count-objects" | "check-attr",
         ) => true,
         // A tag listing, a clean preview and a patch check only print, but the
@@ -434,14 +434,15 @@ fn routed_with_route<'a>(
 /// The owner a read subcommand answers to when it has no declarative rule of
 /// its own.
 ///
-/// `diff-tree` and `diff-index` print the comparison `diff` owns and `cherry`
+/// `diff-tree`, `diff-index` and `diff-files` print the comparison `diff` owns
+/// and `cherry`
 /// lists the commits `log` owns. Without this each would fall to the catch-all
 /// below, which leaves every git rule uncertain and sends an ordinary read to
 /// review; naming the owner instead keeps the permission a user disables
 /// working on the spelling they disabled it for.
 fn read_owner(command: &str) -> &str {
     match command {
-        "diff-tree" | "diff-index" => "diff",
+        "diff-tree" | "diff-index" | "diff-files" => "diff",
         "cherry" => "log",
         other => other,
     }

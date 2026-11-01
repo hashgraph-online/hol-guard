@@ -519,3 +519,30 @@ fn the_scripted_index_comparison_reads_what_diff_owns() {
             .contains(&"command.git.index-inspection")
     );
 }
+
+/// `git diff-files --quiet` is the unstaged half of the dirty-tree check, and
+/// `git diff-files --name-only` lists what has been edited but not staged.
+/// Both read the comparison `diff` owns, so each names that one rule instead
+/// of leaving every git rule uncertain.
+#[test]
+fn the_unstaged_index_comparison_reads_what_diff_owns() {
+    let worktree = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(worktree.path().join(".git")).unwrap();
+
+    let rules = |command: &str| {
+        let mut names: Vec<&str> = observations_in(command, worktree.path())
+            .rule_matches
+            .iter()
+            .map(|item| item.rule_id)
+            .collect();
+        names.sort_unstable();
+        names
+    };
+    for command in [
+        "git diff-files --quiet",
+        "git diff-files --name-only",
+        "git diff-files -p",
+    ] {
+        assert_eq!(rules(command), ["command.git.diff"], "{command}");
+    }
+}

@@ -794,6 +794,18 @@
       ]
     },
     {
+      "id": "omp-native-git-unstaged-file-listing",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find out which tracked files have been edited but not staged by running the listed command once, then tell me which files it printed.",
+      "commands": [
+        "git diff-files --name-only"
+      ]
+    },
+    {
       "id": "git-read-after-sibling-climb",
       "expectation": "allow",
       "oracle": "commands",
