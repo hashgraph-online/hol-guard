@@ -69,3 +69,46 @@ pub(super) fn prepare_eval(input: &Input, argv: &[String]) -> Result<Value, Rest
         "denied_capabilities":["host-home-read","host-secret-environment","network","docker-socket","workspace-write","workspace-credential-read","unapproved-process-exec","privileged-operation"]}),
     )
 }
+
+/// Plan for a `bun test` argv: `[bun, test, ...]`.
+///
+/// The read-only Node test profile carries it. Bun's runner loads the
+/// workspace's own tests and writes nothing, so the boundary `node --test`
+/// runs under needs no widening; only the image approval differs.
+pub(super) fn prepare_test(input: &Input, argv: &[String]) -> Result<Value, RestrictedPytestError> {
+    let contained = matches!(argv, [_, test, args @ ..]
+        if test == "test" && crate::contained_argv::bun_test_runs_once(args));
+    if !contained {
+        return Err(RestrictedPytestError::new(
+            INVALID,
+            "Protected Bun execution requires direct bun test argv.",
+        ));
+    }
+    let (backend, backend_executable) = select_backend(
+        &input.platform,
+        input.backend_executable.as_deref(),
+        &input.search_path,
+    )?;
+    let workspace =
+        validation::resolve_workspace_with_home(&input.workspace, input.home.as_deref())?;
+    let cwd = resolve_cwd(&input.cwd, &workspace)?;
+    let executable = resolve_executable(&argv[0], &cwd, &input.search_path)?;
+    if !approved_bun(&executable, input.home.as_deref()) {
+        return Err(RestrictedPytestError::new(
+            INVALID,
+            "The Bun runtime does not resolve to an approved native executable.",
+        ));
+    }
+    let launcher = locate_executable(&argv[0], &cwd, &input.search_path)?;
+    let mut allowed = vec![launcher];
+    if !allowed.contains(&executable) {
+        allowed.push(executable.clone());
+    }
+    let mut command = vec![executable.to_string_lossy().into_owned()];
+    command.extend_from_slice(&argv[1..]);
+    Ok(
+        json!({"profile_version":"node-test-readonly-v1","backend":backend,"backend_executable":backend_executable,
+        "workspace":workspace,"cwd":cwd,"executable":executable,"command":command,"allowed_executables":allowed,
+        "denied_capabilities":["host-home-read","host-secret-environment","network","docker-socket","workspace-write","workspace-credential-read","unapproved-process-exec","privileged-operation"]}),
+    )
+}

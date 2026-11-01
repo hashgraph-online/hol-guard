@@ -82,7 +82,7 @@ def _scenario(scenario_id: str):
 
 
 def test_benign_prompts_read_like_ordinary_developer_requests() -> None:
-    from ci.gauntlet.agent_prompt import scenario_prompt
+    from ci.gauntlet.agent_prompt import command_block, scenario_prompt
 
     banned = re.compile(r"\b(disposable|synthetic|authorized|fixture|test)\b")
     for scenario in _NATIVE_TOOLS:
