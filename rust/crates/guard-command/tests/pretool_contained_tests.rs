@@ -336,6 +336,56 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
 }
 
 #[test]
+fn bun_test_runs_contained_without_admitting_its_loading_options() {
+    for command in [
+        "bun test",
+        "bun test src/parser.test.ts",
+        "bun test --bail",
+        "bun test --bail=3",
+        "bun test --coverage",
+        "bun test --timeout=10000",
+        "bun test -t adds",
+        "bun test --test-name-pattern=adds",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        let expected = if cfg!(target_os = "macos") {
+            "native_node_test_readonly_containment_required"
+        } else {
+            "native_command_review_required"
+        };
+        assert_eq!(result.reason_code, expected, "{command}");
+    }
+    // Watching never finishes in the sink, snapshots and reporters write, and
+    // the loading options each name something the tests do not hold.
+    for command in [
+        "bun test --watch",
+        "bun test --hot",
+        "bun test -u",
+        "bun test --update-snapshots",
+        "bun test --preload ./setup.ts",
+        "bun test --config=/etc/bunfig.toml",
+        "bun test --env-file=.env",
+        "bun test --coverage-reporter=lcov",
+        "bun test --inspect",
+        "bun test --install=force",
+        "bun test ../other/tests",
+        "bun test /etc/suite.test.ts",
+        "bun test --coverage=yes",
+        "bun test > .env",
+        "bun test && rm -rf /",
+        "bun run test",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(
+            result.reason_code, "native_node_test_readonly_containment_required",
+            "{command}"
+        );
+        assert_ne!(result.decision, "allow", "{command}");
+    }
+}
+
+#[test]
 fn backgrounded_test_runs_keep_the_bare_command_verdict() {
     // A backgrounded list is read as the list itself. The contained sink runs
     // the submitted text in its own process group (a job object on Windows)
