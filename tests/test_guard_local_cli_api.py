@@ -19,9 +19,11 @@ def test_recognize_reads_help_and_lists_commands(tmp_path: Path, monkeypatch) ->
         staticmethod(lambda: home),
     )
     script = home / "ship.py"
+    # The script answers --help itself, so its source lets Guard run it.
     script.write_text(
-        """
-print(\"\"\"Commands:
+        """import sys
+if "--help" in sys.argv:
+    print(\"\"\"Commands:
   deploy  Ship the build
   status  Show status
 \"\"\")
@@ -40,6 +42,34 @@ print(\"\"\"Commands:
     assert "other" in ids
     assert result["help_status"] == "ok"
     assert "commands" in str(result["summary"]).lower()
+
+
+def test_recognize_never_runs_a_script_that_ignores_help(tmp_path: Path, monkeypatch) -> None:
+    """A script whose source never looks for --help would do its normal work if run with it."""
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
+        staticmethod(lambda: home),
+    )
+    ran = tmp_path / "ran"
+    script = home / "ship.py"
+    script.write_text(
+        f"""from pathlib import Path
+Path({str(ran)!r}).write_text("ran")
+print(\"\"\"Commands:
+  deploy  Ship the build
+\"\"\")
+""",
+        encoding="utf-8",
+    )
+    service = LocalCliApiService(store=GuardStore(home))
+    result = service.recognize({"command": f"python3 {script} deploy"})
+    assert not ran.exists()
+    item = result["item"]
+    assert isinstance(item, dict)
+    assert "deploy" not in [entry["command_id"] for entry in item["commands"]]
 
 
 def test_list_items_exposes_continuity_only_when_every_production_flag_is_enabled(
