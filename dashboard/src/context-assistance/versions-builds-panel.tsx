@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import type { ContextAssistanceStatus } from "./types";
 import { cigarBuildBlock, cigarJobPending, cigarPythonBlock, cigarVersionJobId } from "./versions-actions";
 import type { CigarVersionsData } from "./versions-data";
-import { versionButton, versionBytes, versionCard, versionField, type CigarVersionActionHandler } from "./versions-view";
+import { installationLabel, versionButton, versionBytes, versionCard, versionField, type CigarVersionActionHandler } from "./versions-view";
 type Props = { data: CigarVersionsData; status: ContextAssistanceStatus | null; disabled: boolean; selectionDisabled: boolean; onAction: CigarVersionActionHandler };
 export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, onAction }: Props) {
   const [python, setPython] = useState("");
@@ -18,7 +18,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
       {!data.installations.length ? <p className="text-sm text-slate-600">Prepare an available SDK build below, or register an approved bundle with the Guard CLI.</p> : null}
       {data.installations.map((item) => <article key={item.runtime_id} className={versionCard} aria-labelledby={id + "-installed-" + item.runtime_id}>
         <h4 id={id + "-installed-" + item.runtime_id} className="font-semibold text-brand-dark">CIGAR {item.sdk_version ?? "registered bundle"}{item.runtime_id === status?.preferences.runtime_id ? status.runtime?.active ? " · selected · running" : " · selected" : ""}</h4>
-        <p className="text-sm text-slate-600">Core {item.core_version ?? "not reported"} · Python {item.python_version.join(".")} · {item.platform} · {item.managed ? "Guard managed" : "externally registered"} · {item.qualification.replaceAll("_", " ")}</p>
+        <p className="text-sm text-slate-600">Core {item.core_version ?? "not reported"} · Python {item.python_version.join(".")} · {item.platform} · {item.managed ? "Guard managed" : "externally registered"} · {installationLabel(item.qualification)}</p>
         <p className="break-all text-xs text-slate-600">Build: {item.build_id ?? "legacy registration"}</p>
         <button type="button" className={versionButton} disabled={selectionBlocked || item.runtime_id === status?.preferences.runtime_id}
           onClick={() => { if (status) onAction({ input: { action: "prepare_switch", job_id: cigarVersionJobId(), target_runtime_id: item.runtime_id, expected_generation: status.generation },
@@ -44,7 +44,7 @@ export function CigarVersionBuildsPanel({ data, status, disabled, selectionDisab
         return <article key={build.identity.build_id} className={versionCard} aria-labelledby={id + "-build-" + build.identity.build_id + " " + id + "-build-id-" + build.identity.build_id}>
           <h4 id={id + "-build-" + build.identity.build_id} className="font-semibold text-brand-dark">CIGAR {build.identity.sdk_version} · {build.channel.replaceAll("_", " ")}{build.withdrawn ? " · withdrawn" : ""}</h4>
           <p id={id + "-build-id-" + build.identity.build_id} className="break-all text-sm text-slate-600">Build: {build.identity.build_id}</p>
-          <p className="text-sm text-slate-600">Core {build.identity.core_version} · {host?.qualification.replaceAll("_", " ") ?? "no artifact for this host"}{host ? " · download " + versionBytes(host.download_bytes) : ""}</p>
+          <p className="text-sm text-slate-600">Core {build.identity.core_version} · {host ? "available for this host" : "no artifact for this host"}{host ? " · download " + versionBytes(host.download_bytes) : ""}</p>
           {reason ? <p id={id + "-build-reason-" + build.identity.build_id} className="text-sm text-amber-800">{reason}</p> : null}
           <button type="button" className={versionButton} aria-describedby={reason ? id + "-build-reason-" + build.identity.build_id : undefined} disabled={disabled || reason !== null || !interpreter}
             onClick={() => { if (interpreter) onAction({ input: { action: "install", job_id: cigarVersionJobId(), build_id: build.identity.build_id, interpreter_id: interpreter.interpreter_id },

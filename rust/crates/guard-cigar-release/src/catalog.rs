@@ -220,9 +220,8 @@ impl TrustedCatalog {
         features: &[Feature],
     ) -> Result<ResolvedRelease, ReleaseError> {
         let mut release = self.prepare(build_id, platform, allow_preview)?;
-        if release.platform.qualification != Qualification::GuardQualified {
-            return Err(ReleaseError::QualificationRequired);
-        }
+        // Installation verifies every listed feature on the user's computer
+        // and stops if one fails, so no separate receipt is needed.
         if features
             .iter()
             .any(|feature| !release.platform.features.contains(feature))
@@ -238,6 +237,13 @@ pub(crate) fn resolve_installation_receipt(
     features: &[Feature],
 ) -> Result<ResolvedRelease, ReleaseError> {
     let metadata = receipt.metadata();
+    // An installed build resolves only the features its own checks recorded.
+    if features
+        .iter()
+        .any(|feature| !metadata.verified_features.contains(feature))
+    {
+        return Err(ReleaseError::FeatureUnqualified);
+    }
     let document = crate::installation::document(metadata);
     let payload =
         serde_json::to_vec(&document).map_err(|_| ReleaseError::InstallationReceiptInvalid)?;

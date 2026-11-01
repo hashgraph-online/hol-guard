@@ -2718,6 +2718,7 @@ const versionButton = "min-h-11 rounded-lg border border-slate-200 px-3 py-2 tex
 const versionField = "mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark";
 const versionCard = "space-y-3 rounded-xl border border-slate-200 bg-white p-4";
 const versionBytes = (bytes) => (bytes / 1048576).toFixed(1) + " MiB";
+const installationLabel = (qualification2) => qualification2 === "guard_qualified" ? "checked on this computer" : "local development build";
 function CigarRuntimeSelection(props) {
   const id2 = props.status?.preferences.runtime_id ?? props.value.runtime_id;
   const selected = props.installations?.find((item) => item.runtime_id === id2);
@@ -2732,7 +2733,7 @@ function CigarRuntimeSelection(props) {
       " · ",
       selected.platform,
       " · ",
-      selected.qualification.replaceAll("_", " ")
+      installationLabel(selected.qualification)
     ] }) : null,
     props.installations?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No registered CIGAR runtime is available in this profile. Python 3.14 may already be installed; use Updates to inspect approved builds and registration options." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "Choose, prepare and switch runtimes in Updates. A separate selection job protects your current runtime and data." }),
@@ -3685,8 +3686,8 @@ function cigarBuildBlock(catalog, build, updates) {
   if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing a build.";
   const host = build.platforms.find((p) => p.platform === catalog.host_platform);
   if (!host) return "No artifact is available for this Guard host.";
-  if (host.qualification !== "guard_qualified") return "This artifact still needs Guard qualification.";
   if (!host.has_wheel) return "This entry has no installable SDK package.";
+  if (!host.features.includes("graph") || !host.has_dependency_lock) return "This entry is missing pieces Guard needs to install it.";
   if (build.channel !== "stable") return "Preview and local candidate installation is unavailable in this Guard build.";
   if (updates.effective.pinned_build && updates.effective.pinned_build !== build.identity.build_id) return "Update preferences pin another build.";
   return null;
@@ -3695,7 +3696,7 @@ function cigarPythonBlock(catalog, build) {
   if (build.withdrawn) return "This Python build has been withdrawn.";
   if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing Python.";
   if (build.platform !== catalog.host_platform) return "This Python build is for another Guard host.";
-  if (build.qualification !== "guard_qualified") return "This Python build still needs Guard qualification.";
+  if (build.qualification === "local_candidate") return "This Python build is a local development candidate.";
   return null;
 }
 const object$5 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -3871,15 +3872,12 @@ function planCigarSetup(data, options) {
     if (!catalog.catalog.fresh_for_preparation) {
       return blocked("Guard needs a fresh version list", "Guard's list of CIGAR versions is out of date. Open Updates to refresh it.", "versions");
     }
-    if (forHost.every((item) => item.platforms.some((p) => p.platform === host && p.qualification !== "guard_qualified"))) {
-      return blocked("Waiting for Guard's safety check", "A CIGAR version exists for this computer, but Guard has not finished checking it. This button will work as soon as it has.");
-    }
     return blocked("No version can be installed right now", "Open Updates to see which CIGAR versions are available and why.", "versions");
   }
   const interpreter = data.interpreters.find((item) => item.platform === host && python314(item.python_version) && item.implementation.toLowerCase() === "cpython");
   const pythonBuild = interpreter ? null : catalog.interpreter_builds.find((item) => python314(item.python_version) && cigarPythonBlock(catalog, item) === null);
   if (!interpreter && !pythonBuild) {
-    return blocked("Waiting for Guard's safety check", "CIGAR needs its own copy of Python 3.14, and Guard has not approved one for this computer yet.");
+    return blocked("Not available for this computer yet", "CIGAR needs its own copy of Python 3.14, and Guard does not have one for this kind of computer yet. Guard keeps protecting you without it.");
   }
   return {
     kind: "run",
@@ -4224,8 +4222,8 @@ const CIGAR_UPDATE_TUTORIAL = {
     {
       title: "Read the available builds",
       description: "Opening Updates reads metadata without starting Python or CIGAR.",
-      instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn, expired or upstream-only artifact is unavailable for preparation. A new Guard release does not qualify an SDK automatically.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
-      expect: "You can identify the exact build and whether this Guard host has a qualified artifact.",
+      instructions: ["Check the Guard host, catalog freshness and build ID. Different builds can have the same version label.", "A withdrawn or expired artifact is unavailable for preparation. Installing checks each CIGAR feature on this computer before it can be used.", "Use Check for catalog updates only when a trusted feed is configured, or import a catalog signed by an already trusted key."],
+      expect: "You can identify the exact build and whether this Guard host has an installable artifact.",
       target: "versions",
       action: "Inspect versions & updates"
     },
@@ -5023,7 +5021,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
           " · ",
           item.managed ? "Guard managed" : "externally registered",
           " · ",
-          item.qualification.replaceAll("_", " ")
+          installationLabel(item.qualification)
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-slate-600", children: [
           "Build: ",
@@ -5100,7 +5098,7 @@ function CigarVersionBuildsPanel({ data, status, disabled, selectionDisabled, on
             "Core ",
             build.identity.core_version,
             " · ",
-            host?.qualification.replaceAll("_", " ") ?? "no artifact for this host",
+            host ? "available for this host" : "no artifact for this host",
             host ? " · download " + versionBytes(host.download_bytes) : ""
           ] }),
           reason ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: id2 + "-build-reason-" + build.identity.build_id, className: "text-sm text-amber-800", children: reason }) : null,
@@ -5462,6 +5460,7 @@ function wheelBytes(v) {
 function parsePlatform(v) {
   if (!object$3(v) || !platform(v.platform) || !qualification(v.qualification) || !digest(v.worker_sha256) || !(v.package_tree_sha256 === null || digest(v.package_tree_sha256)) || !(v.qualification_receipt_sha256 === null || digest(v.qualification_receipt_sha256)) || v.qualification === "guard_qualified" && v.qualification_receipt_sha256 === null || !Array.isArray(v.features) || v.features.length > 16 || !v.features.every((f) => typeof f === "string" && /^[a-z0-9_]{1,128}$/.test(f)) || new Set(v.features).size !== v.features.length || !Array.isArray(v.dependencies) || v.dependencies.length > 32) invalid$2();
   const hasWheel = v.wheel !== null;
+  const locked = v.package_tree_sha256 !== null && v.dependencies.some((w) => object$3(w) && w.distribution === "protobuf");
   const bytes = (hasWheel ? wheelBytes(v.wheel) : 0) + v.dependencies.reduce((n, w) => n + wheelBytes(w), 0);
   if (!count(bytes)) invalid$2();
   return {
@@ -5472,7 +5471,8 @@ function parsePlatform(v) {
     package_tree_sha256: v.package_tree_sha256,
     qualification_receipt_sha256: v.qualification_receipt_sha256,
     has_wheel: hasWheel,
-    download_bytes: bytes
+    download_bytes: bytes,
+    has_dependency_lock: locked
   };
 }
 function parseBuild(v) {

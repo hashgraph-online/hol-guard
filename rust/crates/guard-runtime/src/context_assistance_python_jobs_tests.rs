@@ -95,18 +95,17 @@ fn idempotency_keys_cannot_change_setup_builds_or_cross_operation_types() {
     );
 }
 #[test]
-fn unqualified_or_unavailable_interpreters_refuse_setup_without_creating_jobs_or_keys() {
+fn unknown_interpreters_refuse_setup_without_creating_jobs_or_keys() {
     let fixture = Fixture::new();
-    let catalog = TrustedCatalog::bundled().unwrap();
     let result = Jobs::default().setup_interpreter(
         &fixture.home,
         SetupInterpreterRequest {
-            job_id: "unqualified-python".into(),
-            build_id: catalog.document().interpreters[0].build_id.clone(),
+            job_id: "unknown-python".into(),
+            build_id: "cpython-9_9_9-20990101-darwin-arm64".into(),
         },
     );
     assert!(
-        matches!(result, Err(ref code) if [error("cigar_guard_qualification_required"),
+        matches!(result, Err(ref code) if [error("cigar_build_unknown"),
         error("cigar_build_platform_unavailable"), error("install_platform_unqualified")].contains(code))
     );
     assert!(!fixture.home.join("context-assistance/python-jobs").exists());

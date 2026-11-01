@@ -46,8 +46,14 @@ assert.equal(planCigarSetup(data(), { ...open, dirty: true }).kind, "blocked");
 const managed = planCigarSetup(data(), { ...open, locked: true });
 assert.ok(managed.kind === "blocked" && /organization/.test(managed.block.title));
 const upstream = planCigarSetup(data({ catalog: bundled }), open);
-assert.ok(upstream.kind === "blocked" && upstream.block.title === "Waiting for Guard's safety check",
-  "an upstream-only catalog entry is never installed by one click");
+assert.ok(upstream.kind === "run" && upstream.build_id === bundled.builds[0].identity.build_id,
+  "the bundled catalog entry installs by one click; installation checks each feature on this computer");
+for (const patch of [{ features: ["sharing"] }, { has_dependency_lock: false }]) {
+  const incomplete = structuredClone(bundled);
+  Object.assign(incomplete.builds[0].platforms[0], patch);
+  const refused = planCigarSetup(data({ catalog: incomplete }), open);
+  assert.ok(refused.kind === "blocked", "an entry native installation would refuse is never offered by one click");
+}
 const stale = planCigarSetup(data({ catalog: { ...qualified, catalog: { ...qualified.catalog, fresh_for_preparation: false } } }), open);
 assert.ok(stale.kind === "blocked" && stale.block.tab === "versions");
 const elsewhere = planCigarSetup(data({ catalog: { ...qualified, host_platform: null } }), open);

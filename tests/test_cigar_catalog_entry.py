@@ -110,7 +110,7 @@ def test_draft_preserves_independent_versions_and_never_qualifies(tmp_path):
     assert result["dependency_closure_checked"] is True
     assert result["guard_qualified"] is False
     assert build["platforms"][0]["qualification"] == "upstream_only"
-    assert build["platforms"][0]["features"] == []
+    assert build["platforms"][0]["features"] == ["graph", "sharing", "persistence", "execution_context"]
     assert len(build["platforms"][0]["package_tree_sha256"]) == 64
     assert build["platforms"][0]["wheel"]["requires_python"] == ">=3.14,<3.15"
     assert build["platforms"][0]["dependencies"][0]["requires_python"] == ">=3.14,<3.15"
@@ -172,7 +172,7 @@ def test_explicit_dependency_origin_changes_no_artifact_or_qualification_identit
     assert dependency["sha256"] == original_platform["dependencies"][0]["sha256"]
     assert dependency["source"]["kind"] == "pypi_file"
     assert platform["qualification"] == "upstream_only"
-    assert platform["features"] == []
+    assert platform["features"] == ["graph", "sharing", "persistence", "execution_context"]
 
 
 @pytest.mark.parametrize("change", ["host", "query", "unknown", "sdk", "duplicate", "traversal"])
@@ -215,7 +215,7 @@ def test_three_synthetic_builds_use_the_same_generator_and_profile_without_quali
         assert tool.draft(args) == draft, "same approved input bytes yield the same draft"
         assert draft["guard_qualified"] is False
         assert draft["build"]["platforms"][0]["qualification"] == "upstream_only"
-        assert draft["build"]["platforms"][0]["features"] == []
+        assert draft["build"]["platforms"][0]["features"] == ["graph", "sharing", "persistence", "execution_context"]
         drafts.append(draft["build"])
     assert {draft["profile_id"] for draft in drafts} == {"cigar-sdk-v1"}
     assert [draft["identity"]["sdk_version"] for draft in drafts] == ["0.99.5", "0.99.5", "0.99.6"]

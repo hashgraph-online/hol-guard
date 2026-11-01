@@ -111,12 +111,11 @@ for (const width of [1440, 790, 390, 320]) {
   });
 }
 
-test("an unapproved CIGAR build explains the wait plainly and changes nothing", async ({ page }) => {
+test("a computer without CIGAR offers one click and changes nothing until it is pressed", async ({ page }) => {
   const calls = await fixture(page, false);
   await page.goto("/cigar?guardDaemon=http://127.0.0.1:4175&section=runtime");
-  await expect(page.getByText("Waiting for Guard's safety check", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(/Guard has not finished checking it/).first()).toBeVisible();
-  for (const button of await page.getByRole("button", { name: "Turn on CIGAR", exact: true }).all()) await expect(button).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Turn on CIGAR", exact: true }).first()).toBeEnabled();
+  await expect(page.getByText("Waiting for Guard's safety check", { exact: true })).toHaveCount(0);
   expect(writes(calls)).toEqual([]);
 });
 

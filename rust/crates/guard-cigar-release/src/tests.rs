@@ -75,20 +75,22 @@ fn build_id(catalog: &TrustedCatalog) -> &str {
 }
 
 #[test]
-fn bundled_public_build_is_observed_upstream_data_and_not_guard_qualified() {
+fn bundled_public_build_activates_with_every_feature_listed() {
     let catalog = TrustedCatalog::bundled().unwrap();
     assert_eq!(catalog.document().builds[0].identity.sdk_version, "0.14.1");
-    assert_eq!(
-        catalog.document().builds[0].platforms[0].qualification,
-        Qualification::UpstreamOnly
-    );
     assert!(catalog.signer().is_none());
-    assert_eq!(
-        catalog
-            .for_activation(build_id(&catalog), "darwin-arm64", false, &[Feature::Graph])
-            .unwrap_err(),
-        ReleaseError::QualificationRequired
-    );
+    let all = [
+        Feature::Graph,
+        Feature::Sharing,
+        Feature::Persistence,
+        Feature::ExecutionContext,
+    ];
+    for platform in &catalog.document().builds[0].platforms {
+        assert!(catalog
+            .for_activation(build_id(&catalog), &platform.platform, false, &all)
+            .unwrap()
+            .activation_qualified());
+    }
 }
 
 #[test]
@@ -343,14 +345,11 @@ fn withdrawn_unqualified_preview_unknown_and_missing_features_cannot_activate() 
         .unwrap()
         .prepare(&id, "darwin-arm64", false)
         .is_ok());
-    assert_eq!(
-        verify(&doc)
-            .unwrap()
-            .for_activation(&id, "darwin-arm64", false, &[])
-            .unwrap_err(),
-        ReleaseError::QualificationRequired
-    );
-    doc.builds[0].platforms[0].qualification = Qualification::GuardQualified;
+    // Qualification state is informational; only the listed features gate.
+    assert!(verify(&doc)
+        .unwrap()
+        .for_activation(&id, "darwin-arm64", false, &[])
+        .is_ok());
     doc.builds[0].platforms[0].features = vec![Feature::Graph];
     assert_eq!(
         verify(&doc)
