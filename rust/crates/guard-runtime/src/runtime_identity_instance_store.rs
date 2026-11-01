@@ -16,12 +16,13 @@
 //! never fixed.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 use serde_json::{json, Value};
 
+use crate::encrypted_secret_store::atomic_write_bytes;
 use crate::runtime_identity_instances::{validate_known, KnownInstance};
 
 pub(crate) const FEATURE: &str = "runtime-identity-instance-store-v1";
@@ -84,7 +85,7 @@ pub(super) fn remember(home: &Path, reply: &Value) {
     kept.truncate(MAX_STORED);
     let payload = json!({"schema": STORE_SCHEMA, "instances": kept});
     if let Ok(text) = serde_json::to_vec(&payload) {
-        let _ = write_replacing(&home.join(STORE_NAME), &text);
+        let _ = atomic_write_bytes(&home.join(STORE_NAME), &text, 0o600);
     }
 }
 
@@ -135,37 +136,6 @@ fn carried(item: &Value) -> bool {
         && KEYS.iter().all(|key| fields.contains_key(*key))
         && serde_json::from_value::<KnownInstance>(item.clone())
             .is_ok_and(|known| validate_known(std::slice::from_ref(&known)).is_ok())
-}
-
-fn write_replacing(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let parent = path.parent().unwrap_or(Path::new("."));
-    fs::create_dir_all(parent)?;
-    let temporary = temporary_path(path);
-    let written = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)
-        .and_then(|mut file| {
-            file.write_all(bytes)?;
-            file.sync_all()
-        })
-        .and_then(|()| fs::rename(&temporary, path));
-    if written.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    written
-}
-
-fn temporary_path(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.subsec_nanos())
-        .unwrap_or_default();
-    path.with_file_name(format!(".{name}.{}.{nanos}.tmp", std::process::id()))
 }
 
 #[cfg(test)]

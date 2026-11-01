@@ -213,3 +213,17 @@ fn a_probe_without_a_record_starts_one() {
         .collect();
     assert!(leftovers.is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn the_record_is_readable_only_by_its_owner() {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().expect("tempdir");
+    remember(home.path(), &reply(&[instance("running", 7)]));
+    remember(home.path(), &reply(&[instance("running", 8)]));
+    let mode = fs::metadata(home.path().join(STORE_NAME))
+        .expect("stat")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+}
