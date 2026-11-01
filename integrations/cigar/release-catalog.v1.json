@@ -1,8 +1,8 @@
 {
   "schema": "guard-cigar-release-catalog.v1",
-  "revision": 5,
-  "issued_at": 1793053757,
-  "expires_at": 1824589757,
+  "revision": 6,
+  "issued_at": 1793541235,
+  "expires_at": 1825077235,
   "profiles": [
     {
       "profile_id": "cigar-sdk-v1",
@@ -62,9 +62,14 @@
               "requires_python": ">=3.10"
             }
           ],
-          "qualification": "upstream_only",
-          "qualification_receipt_sha256": null,
-          "features": []
+          "qualification": "guard_qualified",
+          "qualification_receipt_sha256": "0da32444b7fd78e192541fe605a1c327dc59229aace9930d3c149cd1a52fc11a",
+          "features": [
+            "graph",
+            "sharing",
+            "persistence",
+            "execution_context"
+          ]
         }
       ]
     }
@@ -92,8 +97,8 @@
       "files": 1701,
       "expanded_bytes": 106491517,
       "executable_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
-      "qualification": "upstream_only",
-      "qualification_receipt_sha256": null,
+      "qualification": "guard_qualified",
+      "qualification_receipt_sha256": "395dd46310f847da2752fd9d25502b25d5a81515dddd9ff1dc2ee6dd1ba32c39",
       "withdrawn": false
     }
   ]

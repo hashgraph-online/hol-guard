@@ -1,0 +1,172 @@
+{
+  "approval": {
+    "bytes": 11454530,
+    "files": 124,
+    "package_tree_sha256": "5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4",
+    "platform": "darwin-arm64",
+    "python_bundle": {
+      "archive_bytes": 26753457,
+      "archive_sha256": "95eb8c87d16af37c54e9765e31d8c56c0d8ffa9968ea0f704f73a9b83f84e9f9",
+      "build_id": "cpython-3_14_10-20261026-darwin-arm64",
+      "executable_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
+      "expanded_bytes": 106491517,
+      "files": 1701,
+      "platform": "darwin-arm64",
+      "python_version": [
+        3,
+        14,
+        10
+      ],
+      "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+      "tree_sha256": "1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375"
+    },
+    "python_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
+    "release": {
+      "adapter_id": "guard-cigar-python-sdk-v1",
+      "adapter_revision": 1,
+      "identity": {
+        "build_id": "cigar-0_14_1-10dd521dec82",
+        "core_version": "0.14.1",
+        "manifest_sha256": "472b722b5029f8dd3c7051c7d7d17a5909d251cf2ba3e0ae20ed9d7cf5b0b7f2",
+        "sdk_version": "0.14.1",
+        "source_revision": "10dd521dec8224d0957365a90111158e43c9d87f"
+      },
+      "platform": "darwin-arm64",
+      "profile_id": "cigar-sdk-v1",
+      "profile_sha256": "edb324ac3629b25d638fe97af6c9798fe2cda13d95f9391674c3f7a88bad08aa"
+    },
+    "schema": "guard-cigar-bundle-approval.v3",
+    "worker_sha256": "4650473529f0dc14e596b5cd0ca9d66e2d3bcd8ae11418b87ad971ac51ca78b8"
+  },
+  "elapsed_ms": 20239,
+  "enabled": false,
+  "interpreter": {
+    "abi": "cpython-314-darwin",
+    "debug_build": false,
+    "free_threaded": false,
+    "implementation": "cpython",
+    "platform": "darwin-arm64",
+    "release_level": "final",
+    "schema": "guard-cigar-interpreter.v1",
+    "version": [
+      3,
+      14,
+      10
+    ]
+  },
+  "interpreter_build": {
+    "archive_bytes": 26753457,
+    "archive_sha256": "95eb8c87d16af37c54e9765e31d8c56c0d8ffa9968ea0f704f73a9b83f84e9f9",
+    "build_id": "cpython-3_14_10-20261026-darwin-arm64",
+    "executable_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
+    "expanded_bytes": 106491517,
+    "files": 1701,
+    "platform": "darwin-arm64",
+    "python_version": [
+      3,
+      14,
+      10
+    ],
+    "qualification": "upstream_only",
+    "qualification_receipt_sha256": null,
+    "source_release": "20261026",
+    "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+    "tree_sha256": "1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375",
+    "withdrawn": false
+  },
+  "python_bytes": 106491517,
+  "python_files": 1701,
+  "python_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
+  "python_tree": "1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375",
+  "qualification_promoted": false,
+  "registered": false,
+  "relocated_before_probe": true,
+  "schema": "guard-cigar-private-python-qualification.v1",
+  "scope": "local-macos-arm64-source-build",
+  "sdk_build": {
+    "build_id": "cigar-0_14_1-10dd521dec82",
+    "core_version": "0.14.1",
+    "manifest_sha256": "472b722b5029f8dd3c7051c7d7d17a5909d251cf2ba3e0ae20ed9d7cf5b0b7f2",
+    "sdk_version": "0.14.1",
+    "source_revision": "10dd521dec8224d0957365a90111158e43c9d87f"
+  },
+  "sdk_tree": "5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4",
+  "selected": false,
+  "selection": {
+    "python": "/private/tmp/claude-501/hgq-homes/python-home/python/bin/python3.14",
+    "python_bundle": {
+      "binding": {
+        "archive_bytes": 26753457,
+        "archive_sha256": "95eb8c87d16af37c54e9765e31d8c56c0d8ffa9968ea0f704f73a9b83f84e9f9",
+        "build_id": "cpython-3_14_10-20261026-darwin-arm64",
+        "executable_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
+        "expanded_bytes": 106491517,
+        "files": 1701,
+        "platform": "darwin-arm64",
+        "python_version": [
+          3,
+          14,
+          10
+        ],
+        "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+        "tree_sha256": "1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375"
+      },
+      "root": "/private/tmp/claude-501/hgq-homes/python-home/python"
+    },
+    "site_packages": "/private/tmp/claude-501/hgq-homes/python-home/site-packages",
+    "work_dir": "/private/tmp/claude-501/hgq-homes/python-home/work"
+  },
+  "status": {
+    "active": false,
+    "adapter_id": "guard-cigar-python-sdk-v1",
+    "adapter_revision": 1,
+    "compile_verified": true,
+    "core_version": "0.14.1",
+    "execution_handoff_verified": true,
+    "features": [
+      "answer_review.v1",
+      "context_graph.v1",
+      "context_views.v1",
+      "document_boundaries.v1",
+      "selection_explanation.v1",
+      "snapshot_integrity.v1",
+      "source_replace.v1"
+    ],
+    "interpreter": {
+      "abi": "cpython-314-darwin",
+      "debug_build": false,
+      "free_threaded": false,
+      "implementation": "cpython",
+      "platform": "darwin-arm64",
+      "release_level": "final",
+      "schema": "guard-cigar-interpreter.v1",
+      "version": [
+        3,
+        14,
+        10
+      ]
+    },
+    "package_fingerprint": "5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4",
+    "package_version": "0.14.1",
+    "persistence_compile_verified": true,
+    "protocol": "cigar.context-worker.v1",
+    "release": {
+      "adapter_id": "guard-cigar-python-sdk-v1",
+      "adapter_revision": 1,
+      "identity": {
+        "build_id": "cigar-0_14_1-10dd521dec82",
+        "core_version": "0.14.1",
+        "manifest_sha256": "472b722b5029f8dd3c7051c7d7d17a5909d251cf2ba3e0ae20ed9d7cf5b0b7f2",
+        "sdk_version": "0.14.1",
+        "source_revision": "10dd521dec8224d0957365a90111158e43c9d87f"
+      },
+      "platform": "darwin-arm64",
+      "profile_id": "cigar-sdk-v1",
+      "profile_sha256": "edb324ac3629b25d638fe97af6c9798fe2cda13d95f9391674c3f7a88bad08aa"
+    },
+    "schema": "guard-cigar-runtime-status.v1",
+    "shared_compile_verified": true,
+    "worker_fingerprint": "4650473529f0dc14e596b5cd0ca9d66e2d3bcd8ae11418b87ad971ac51ca78b8"
+  },
+  "tree_unchanged_after_sdk": true
+}

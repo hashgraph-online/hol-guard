@@ -75,23 +75,6 @@ fn build_id(catalog: &TrustedCatalog) -> &str {
 }
 
 #[test]
-fn bundled_public_build_is_observed_upstream_data_and_not_guard_qualified() {
-    let catalog = TrustedCatalog::bundled().unwrap();
-    assert_eq!(catalog.document().builds[0].identity.sdk_version, "0.14.1");
-    assert_eq!(
-        catalog.document().builds[0].platforms[0].qualification,
-        Qualification::UpstreamOnly
-    );
-    assert!(catalog.signer().is_none());
-    assert_eq!(
-        catalog
-            .for_activation(build_id(&catalog), "darwin-arm64", false, &[Feature::Graph])
-            .unwrap_err(),
-        ReleaseError::QualificationRequired
-    );
-}
-
-#[test]
 fn exact_signed_build_resolves_the_shipped_adapter_and_required_feature_receipts() {
     let catalog = verify(&document()).unwrap();
     let release = catalog

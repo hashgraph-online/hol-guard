@@ -138,6 +138,8 @@ mod lifecycle_selection_tests;
 #[cfg(test)]
 mod lifecycle_tests;
 #[cfg(test)]
+mod qualification_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod update_preferences_tests;

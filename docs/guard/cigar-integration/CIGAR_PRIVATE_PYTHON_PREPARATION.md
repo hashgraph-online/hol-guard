@@ -1,6 +1,6 @@
 # Private CIGAR interpreter preparation
 
-Status: exact native preparation, relocation, complete-tree verification and stopped SDK qualification have real CPython 3.14.10/macOS arm64 source-build evidence. Durable setup jobs, automatic acquisition, authenticated registration and runtime binding remain incomplete. This is a preparation layer, not a delivered end-user Python installer. Both catalog entries remain `upstream_only`.
+Status: exact native preparation, relocation, complete-tree verification and stopped SDK qualification have real CPython 3.14.10/macOS arm64 source-build evidence. Durable setup jobs, automatic acquisition, authenticated registration and runtime binding remain incomplete. This is a preparation layer, not a delivered end-user Python installer. The bundled darwin-arm64 interpreter and SDK entries were promoted to `guard_qualified` from real runs of the maintainer qualification examples (see [the maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md#current-darwin-arm64-qualification)); the rest of this document describes the preparation layer those runs exercise.
 
 ## Catalog and build identity
 

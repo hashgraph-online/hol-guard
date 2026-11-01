@@ -219,6 +219,8 @@ fn job_record_tampering_and_public_path_injection_are_refused() {
 
 #[path = "context_assistance_python_jobs_tests.rs"]
 mod private_python;
+#[path = "context_assistance_unqualified_catalog_fixture.rs"]
+mod unqualified_catalog;
 
 #[cfg(unix)]
 #[path = "context_assistance_install_jobs_actual_tests.rs"]
@@ -267,14 +269,21 @@ fn metadata_interpreter(fixture: &Fixture) -> interpreters::Interpreter {
 fn upstream_only_build_is_refused_before_any_job_or_sdk_preparation() {
     let fixture = Fixture::new();
     let interpreter = metadata_interpreter(&fixture);
-    let catalog = TrustedCatalog::bundled().unwrap();
+    let catalog = unqualified_catalog::upstream_only_catalog();
     let request = InstallRequest {
         job_id: "unqualified".into(),
         build_id: catalog.document().builds[0].identity.build_id.clone(),
         interpreter_id: interpreter.interpreter_id,
     };
+    let (entered, _paused) = std::sync::mpsc::sync_channel(1);
+    let (_resume, proceed) = std::sync::mpsc::sync_channel(1);
     assert_eq!(
-        Jobs::default().install(&fixture.home, request),
+        Jobs::default().install_test_catalog(
+            &fixture.home,
+            request,
+            &catalog,
+            InstallPause { entered, proceed }
+        ),
         Err(error("cigar_guard_qualification_required"))
     );
     assert!(store::list(&fixture.home).unwrap().is_empty());

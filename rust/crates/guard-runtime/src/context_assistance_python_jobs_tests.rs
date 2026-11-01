@@ -97,13 +97,17 @@ fn idempotency_keys_cannot_change_setup_builds_or_cross_operation_types() {
 #[test]
 fn unqualified_or_unavailable_interpreters_refuse_setup_without_creating_jobs_or_keys() {
     let fixture = Fixture::new();
-    let catalog = TrustedCatalog::bundled().unwrap();
-    let result = Jobs::default().setup_interpreter(
+    let catalog = super::unqualified_catalog::upstream_only_catalog();
+    let (entered, _paused) = std::sync::mpsc::sync_channel(1);
+    let (_resume, proceed) = std::sync::mpsc::sync_channel(1);
+    let result = Jobs::default().setup_test_catalog(
         &fixture.home,
         SetupInterpreterRequest {
             job_id: "unqualified-python".into(),
             build_id: catalog.document().interpreters[0].build_id.clone(),
         },
+        &catalog,
+        InstallPause { entered, proceed },
     );
     assert!(
         matches!(result, Err(ref code) if [error("cigar_guard_qualification_required"),

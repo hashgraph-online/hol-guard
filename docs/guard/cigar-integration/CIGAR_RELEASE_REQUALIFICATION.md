@@ -60,7 +60,9 @@ unchanged package inode/mode/mtime inventory and lost-reply reconciliation.
 Synthetic tests cover independent preview/core labels and conflicting immutable
 identities. They do not constitute qualification of a real newer SDK.
 
-Production SDK and interpreter catalog entries remain `upstream_only`.
+The bundled darwin-arm64 SDK and interpreter entries are `guard_qualified` from the
+catalog-revision-6 receipts described in [the release maintenance runbook](CIGAR_RELEASE_MAINTENANCE.md#current-darwin-arm64-qualification).
+No other platform has a bundled entry.
 Qualification used by the actual-artifact tests is explicitly test-only. This
 work does not implement selection switching, data migration, public CLI/HTTP/UI
 controls, pruning, production catalog hosting/trust, installed/frozen acceptance
