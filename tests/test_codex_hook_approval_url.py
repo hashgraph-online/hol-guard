@@ -157,7 +157,8 @@ def test_unavailable_runtime_leaves_review_copy_unchanged(monkeypatch: pytest.Mo
     }
 
 
-def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("refused", [1, 2], ids=["first-batch", "later-batch"])
+def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.MonkeyPatch, refused: int) -> None:
     from codex_plugin_scanner.guard import native_runner_authority
     from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
 
@@ -168,7 +169,7 @@ def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.
         if kind != "approval_copy":
             return resolve(kind, args, **kwargs)
         calls.append(args)
-        if len(calls) == 2:
+        if len(calls) == refused:
             raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_invalid")
         batch = args["decisions"]
         assert isinstance(batch, list)
@@ -189,10 +190,13 @@ def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.
         "supply_chain_evaluation": {"user_copy": {"harness_message": "Package held."}},
     }
     policy._localize_pending_approval_copy(payload, harness="codex")
-    assert [call["user_copy_message"] for call in calls] == ["Package held.", None, None]
-    assert payload["decision_v2_json"] == {"action": "allow", "harness_message": "Routed."}
-    # The refused batch keeps its original copy; the next one still routes.
-    assert [item["decision_v2_json"]["harness_message"] for item in queued] == ["Held 0.", "Routed."]
+    # The user copy message rides with each batch until one answers.
+    assert [call["user_copy_message"] for call in calls] == ["Package held."] * refused + [None] * (3 - refused)
+    # The refused batch keeps its original copy; the others still route.
+    routed = ["Routed.", "Routed.", "Routed."]
+    routed[refused - 1] = ["Held.", "Held 0.", "Held 1."][refused - 1]
+    assert payload["decision_v2_json"] == {"action": "allow", "harness_message": routed[0]}
+    assert [item["decision_v2_json"]["harness_message"] for item in queued] == routed[1:]
     user_copy = payload["supply_chain_evaluation"]
     assert isinstance(user_copy, dict)
     assert user_copy["user_copy"]["harness_message"] == "Routed copy."

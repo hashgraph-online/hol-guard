@@ -96,20 +96,20 @@ def _approval_copy(
     result: dict[str, object] | None = None
     patches: list[object] = []
     batches = _copy_batches([_copy_fields(decision_v2) for decision_v2 in decisions or []])
-    for index, batch in enumerate(batches):
+    for batch in batches:
         args = {
             "harness": _canonical_harness_name(harness),
             "review_url": review_url,
             "decisions": batch,
-            "user_copy_message": user_copy_message if index == 0 else None,
+            # The message rides with every batch until one answers, so a
+            # refused first batch does not leave it unrouted.
+            "user_copy_message": user_copy_message if result is None else None,
         }
         try:
             answer = native_runner_authority("approval_copy", args)
         except NativeRunnerAuthorityError:
             answer = None
-        if result is None:
-            if answer is None:
-                return None
+        if result is None and answer is not None:
             result = answer
         routed = answer.get("decisions") if answer is not None else None
         if isinstance(routed, list) and len(routed) == len(batch):
