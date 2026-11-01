@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from contextlib import closing, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +12,7 @@ from uuid import uuid4
 
 from .sqlite_deadline_connection import connect_sqlite_with_deadline
 from .sqlite_errors import sqlite_error_is_fatal, sqlite_error_is_io
+from .sqlite_tuning import sqlite_operation_deadline_monotonic
 
 SQLiteStoreProbe = Literal["fatal", "healthy", "io", "unknown"]
 SQLiteFileIdentity = tuple[int, int, int, int, int]
@@ -165,117 +167,44 @@ def restore_readable_sqlite_store(*, destination: Path, quarantined: Path) -> bo
         return False
 
 
-_LOCAL_CLI_SALVAGE_TABLES = (
-    "local_cli_authority",
-    "local_cli_observation",
-    "local_cli_grant",
-    "local_cli_command",
-    "local_cli_command_grant",
-    "local_cli_grant_capability",
-)
-_REQUIRED_LOCAL_CLI_SALVAGE_TABLES = (
-    "local_cli_grant",
-    "local_cli_command",
-    "local_cli_command_grant",
-)
-_PARTIAL_COPY_OK_TABLES = frozenset(
-    {
-        "local_cli_authority",
-        "local_cli_observation",
-        "local_cli_grant",
-        # Losing a capability row only narrows an allowed grant.
-        "local_cli_grant_capability",
-    }
-)
+_SALVAGE_TIMEOUT_SECONDS = 15.0
 
 
-def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
-    """Copy readable custom-extension tables from a quarantined store.
+def salvage_quarantined_state(*, source: Path, destination: Path) -> tuple[bool, bool]:
+    """Carry Cloud Review and custom-extension state into the new store.
 
-    Full ``quick_check`` can fail after an interrupted update while
-    ``local_cli_*`` tables still SELECT. Empty reinit would drop those grants.
-    Grant, command catalog, and command-grant copies must all succeed
-    (empty tables still count) so an allowed grant cannot restore without
-    its scoped catalog.
+    ``sqlite_store_salvage.rs`` restores each atomically within its own
+    authority boundary and answers ``(cloud_review, local_cli)``. A runtime
+    that cannot answer salvages nothing, which leaves the fresh store as an
+    empty reinitialization. Normal OAuth, DPoP, capability-signature,
+    revocation and request-binding checks still apply afterwards.
     """
 
     if source.is_symlink() or destination.is_symlink() or not destination.is_file():
-        return False
-    try:
-        source_uri = f"{source.resolve().as_uri()}?mode=ro"
-        with (
-            closing(connect_sqlite_with_deadline(source_uri, uri=True, timeout_seconds=1.0)) as src,
-            closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst,
-            dst,
-        ):
-            from .store_local_cli_schema import ensure_local_cli_schema
+        return False, False
+    from .mdm.runtime_request import runtime_answer
+    from .review_event_wake import review_event_wake_signal
+    from .store_local_cli_schema import ensure_local_cli_schema
 
-            ensure_local_cli_schema(dst)
-            copied: dict[str, bool] = {}
-            for table in _LOCAL_CLI_SALVAGE_TABLES:
-                copied[table] = _copy_allowlisted_table(src, dst, table)
-            if not all(copied.get(table) for table in _REQUIRED_LOCAL_CLI_SALVAGE_TABLES):
-                dst.rollback()
-                return False
-            # A capability row rides along only with an allowed grant and a
-            # restored cli-surface observation, the same two facts the apply
-            # required to write it. An observation that failed to copy leaves
-            # the row an orphan, so it goes.
-            _ = dst.execute(
-                "delete from local_cli_grant_capability where cli_id not in "
-                "(select grant_row.cli_id from local_cli_grant as grant_row "
-                "join local_cli_observation as observed on observed.cli_id = grant_row.cli_id "
-                "where grant_row.state = 'allowed' and observed.surface = 'cli')"
-            )
-            dst.commit()
-            return True
-    except sqlite3.Error:
-        return False
-
-
-def _copy_allowlisted_table(src: sqlite3.Connection, dst: sqlite3.Connection, table: str) -> bool:
-    if table not in _LOCAL_CLI_SALVAGE_TABLES:
-        return False
-    try:
-        source_columns = _table_columns(src, table)
-        dest_columns = _table_columns(dst, table)
-    except sqlite3.Error:
-        return False
-    shared = [column for column in dest_columns if column in source_columns]
-    if not shared:
-        return False
-    quoted = ",".join(f'"{column}"' for column in shared)
-    placeholders = ",".join("?" for _ in shared)
-    try:
-        cursor = src.execute(f'select {quoted} from "{table}"')
-    except sqlite3.Error:
-        return False
-    inserted = False
-    saw_rows = False
-    statement = f'insert or replace into "{table}" ({quoted}) values ({placeholders})'
-    try:
-        for row in cursor:
-            saw_rows = True
-            try:
-                _ = dst.execute(statement, row)
-                inserted = True
-            except sqlite3.Error:
-                if table not in _PARTIAL_COPY_OK_TABLES:
-                    return False
-                continue
-    except sqlite3.Error:
-        # Partial command or command-grant copies can drop block rows and
-        # widen an allowed grant. Fail those tables closed.
-        return inserted if table in _PARTIAL_COPY_OK_TABLES else False
-    return inserted or not saw_rows
-
-
-def _table_columns(connection: sqlite3.Connection, table: str) -> list[str]:
-    if table not in _LOCAL_CLI_SALVAGE_TABLES:
-        return []
-    names: list[str] = []
-    for row in connection.execute(f'pragma table_info("{table}")'):
-        name = row[1] if isinstance(row, tuple) else row["name"]
-        if isinstance(name, str) and name:
-            names.append(name)
-    return names
+    # The native copy fills tables this store owns the schema of; a store
+    # that cannot take them leaves the local CLI copy to fail on its own.
+    with suppress(sqlite3.Error), closing(connect_sqlite_with_deadline(destination, timeout_seconds=1.0)) as dst, dst:
+        ensure_local_cli_schema(dst)
+    deadline = time.monotonic() + _SALVAGE_TIMEOUT_SECONDS
+    operation_deadline = sqlite_operation_deadline_monotonic()
+    answer = runtime_answer(
+        "native-sqlite-store-salvage-v1",
+        "sqlite-store-salvage",
+        {
+            "schema": "sqlite-store-salvage.v1",
+            "source": str(source.absolute()),
+            "destination": str(destination.absolute()),
+        },
+        output_limit=4096,
+        deadline=deadline if operation_deadline is None else min(deadline, operation_deadline),
+    )
+    cloud_review = answer is not None and answer.get("cloud_review") is True
+    local_cli = answer is not None and answer.get("local_cli") is True
+    if cloud_review:
+        review_event_wake_signal(destination).notify()
+    return cloud_review, local_cli
