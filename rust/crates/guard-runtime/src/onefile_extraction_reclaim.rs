@@ -1,18 +1,10 @@
 //! `onefile-extraction-reclaim --stdin`: delete the PyInstaller `_MEI*`
-//! extraction directories that leaked from hard-killed Guard launches
-//! (`guard/onefile_extraction.py` and `guard/onefile_unmarked.py` before
-//! they moved here).
-//!
-//! A onefile launch extracts to `<tempdir>/_MEIxxxxxx` and its bootloader
-//! parent removes that directory on a normal exit. Each launch stamps an owner
-//! marker with its pid and the bootloader parent pid, so a marked directory is
-//! deleted once both are provably dead. An unmarked directory has no pid to
-//! check: it is deleted only when the caller asks for the open-files scan, the
-//! directory is provably a Guard extraction, this user owns it, it is older
-//! than the unmarked floor, and the one system-wide scan
-//! (`onefile_open_paths`) shows no process using it. Otherwise it is only
-//! counted. Every liveness check fails closed: a pid that cannot be proven dead
-//! is alive, and a failed scan skips every unmarked directory.
+//! directories leaked by hard-killed Guard launches. A marked directory is
+//! deleted once its launch pid and bootloader parent pid are provably dead.
+//! An unmarked one is deleted only on request, when it is a provable Guard
+//! extraction owned by this user, older than the unmarked floor, and the
+//! `onefile_open_paths` scan shows no process using it. Liveness fails closed:
+//! an unproven pid is alive, and a failed scan skips every unmarked directory.
 
 use std::collections::BTreeSet;
 use std::fs::{self, Metadata};
@@ -95,8 +87,7 @@ impl ReclaimResult {
 enum Unmarked {
     /// The dashboard sentinel exists: a finished Guard extraction.
     Bundle,
-    /// No sentinel, but a real top-level package directory: a Guard
-    /// extraction that was cut short.
+    /// No sentinel, but a real package directory: an extraction cut short.
     Partial,
 }
 
@@ -215,9 +206,8 @@ fn settings(request: Request) -> Result<(PathBuf, Settings), String> {
     ))
 }
 
-/// One sweep over `temp_root`. Work on unmarked directories is bounded by
-/// the reclaim count and the time budget; the rest are only counted. A dry
-/// run still runs every proof and counts what it would delete.
+/// One sweep over `temp_root`. Unmarked work is bounded by count and time;
+/// the rest are only counted. A dry run proves and counts without deleting.
 fn reclaim(temp_root: &Path, settings: &Settings, host: &mut impl Host) -> ReclaimResult {
     let mut result = ReclaimResult::new();
     let Ok(resolved_root) = fs::canonicalize(temp_root) else {
@@ -407,11 +397,8 @@ fn is_extraction_name(name: &str) -> bool {
     })
 }
 
-/// Whether an unmarked directory is provably a Guard extraction. Empty
-/// directories, other PyInstaller apps, and launches killed before any Guard
-/// file landed are not identified. A mypyc runtime next to a bundled
-/// `libpython` is deliberately not a signature: any onefile app built with
-/// mypyc-compiled dependencies has the same layout.
+/// Whether an unmarked directory is provably a Guard extraction. A mypyc
+/// runtime next to `libpython` is not a signature: other onefile apps share it.
 fn classify_unmarked(directory: &Path) -> Option<Unmarked> {
     let sentinel = BUNDLE_SENTINEL
         .iter()
@@ -424,8 +411,7 @@ fn classify_unmarked(directory: &Path) -> Option<Unmarked> {
         .then_some(Unmarked::Partial)
 }
 
-/// The marker's pids, only when it is a small regular file with the owner
-/// schema and integer pids.
+/// The marker's pids, if it is a small regular file with the owner schema.
 fn read_owner_marker(marker: &Path) -> Option<Owner> {
     let metadata = fs::symlink_metadata(marker).ok()?;
     if !metadata.is_file() || metadata.len() > OWNER_MARKER_MAX_BYTES {
@@ -444,8 +430,7 @@ fn read_owner_marker(marker: &Path) -> Option<Owner> {
     })
 }
 
-/// Total size of the files below `root`, without following links. Entries
-/// that vanish or cannot be read are skipped.
+/// Size of the files below `root`; links are not followed, unreadable entries skipped.
 fn dir_bytes(root: &Path) -> u64 {
     let mut total = 0_u64;
     let mut pending = vec![root.to_path_buf()];

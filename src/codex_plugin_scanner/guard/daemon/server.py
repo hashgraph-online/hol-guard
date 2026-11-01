@@ -3824,8 +3824,12 @@ class GuardDaemonServer:
                 current_meipass=getattr(sys, "_MEIPASS", None),
                 now=datetime.now(timezone.utc),
                 scan_open_paths=True,
+                # Shutdown kills the sweep, so the stop join never waits it out.
+                stop_event=self._shutdown_started,
             )
         except Exception:
+            if self._shutdown_started.is_set():
+                return
             self._diagnostics.record_exception("onefile_extraction_reclaim_failed")
             self._server.onefile_extraction_status = {
                 "last_run_at": datetime.now(timezone.utc).isoformat(),

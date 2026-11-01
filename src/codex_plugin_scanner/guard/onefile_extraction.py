@@ -13,6 +13,7 @@ leak volume.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -84,10 +85,13 @@ def reclaim_orphaned_extraction_dirs(
     max_unmarked_reclaims: int = DEFAULT_MAX_UNMARKED_RECLAIMS,
     unmarked_time_budget: timedelta | None = DEFAULT_UNMARKED_TIME_BUDGET,
     dry_run: bool = False,
+    stop_event: threading.Event | None = None,
 ) -> ExtractionReclaimResult:
     """Reclaim ``_MEI*`` dirs under ``temp_root`` that are provably dead.
 
-    Raises ``ExtractionReclaimUnavailableError`` when the runtime gives no answer.
+    Setting ``stop_event`` kills the sweep. A directory it was deleting is
+    left partial, which the next sweep reclaims. Raises
+    ``ExtractionReclaimUnavailableError`` when the runtime gives no answer.
     """
 
     from .mdm.runtime_request import runtime_answer
@@ -111,6 +115,7 @@ def reclaim_orphaned_extraction_dirs(
         },
         output_limit=_OUTPUT_LIMIT,
         timeout_seconds=_SCAN_SECONDS + sweep_seconds + _SLACK_SECONDS,
+        stop_event=stop_event,
     )
     result = _result(answer)
     if result is None:

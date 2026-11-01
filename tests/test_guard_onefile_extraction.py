@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -131,3 +133,41 @@ def test_reclaim_fails_without_a_clean_answer(
 def test_marker_constants_are_the_launch_contract() -> None:
     assert onefile_extraction.OWNER_MARKER_NAME == ".hol-guard-extraction-owner.json"
     assert onefile_extraction._OWNER_MARKER_SCHEMA == "guard.onefile-extraction-owner.v1"  # pyright: ignore[reportPrivateUsage]
+
+
+def test_a_stop_event_reaches_the_runtime_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _answer(monkeypatch, _ANSWER)
+    stop = threading.Event()
+
+    reclaim_orphaned_extraction_dirs(temp_root=tmp_path, current_meipass=None, now=_NOW, stop_event=stop)
+
+    assert calls[0][3]["stop_event"] is stop
+
+
+def test_runtime_answer_hands_the_stop_event_to_the_native_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("/opt/guard/hol-guard-runtime")),
+        capabilities=SimpleNamespace(features=("native-test-v1",)),
+    )
+    seen: list[object] = []
+
+    def run(path: Path, args: tuple[str, ...], **kwargs: object) -> str | None:
+        seen.append(kwargs.get("stop_event"))
+        return None
+
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: status)
+    monkeypatch.setattr(native_runtime, "_run_native_process", run)
+    stop = threading.Event()
+
+    assert runtime_request.runtime_answer("native-test-v1", "test", "{}", output_limit=64, timeout_seconds=1.0) is None
+    assert (
+        runtime_request.runtime_answer(
+            "native-test-v1", "test", "{}", output_limit=64, timeout_seconds=1.0, stop_event=stop
+        )
+        is None
+    )
+    assert seen == [None, stop]
