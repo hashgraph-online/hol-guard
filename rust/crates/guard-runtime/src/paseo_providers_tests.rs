@@ -324,3 +324,28 @@ fn normpath_matches_posixpath() {
     assert_eq!(normpath("//a//b"), "//a/b");
     assert_eq!(normpath("///a"), "/a");
 }
+
+#[cfg(unix)]
+#[test]
+fn the_bounded_read_refuses_a_link_swapped_in_after_the_check() {
+    let home = tempfile::tempdir().unwrap();
+    let target = home.path().join("elsewhere.json");
+    fs::write(&target, "{}").unwrap();
+    let config = home.path().join("config.json");
+    std::os::unix::fs::symlink(&target, &config).unwrap();
+    assert_eq!(read_bounded(&config), None);
+    assert_eq!(read_bounded(&target), Some(b"{}".to_vec()));
+}
+
+#[cfg(unix)]
+#[test]
+fn the_bounded_read_refuses_a_fifo_without_blocking() {
+    let home = tempfile::tempdir().unwrap();
+    let config = home.path().join("config.json");
+    let made = std::process::Command::new("mkfifo")
+        .arg(&config)
+        .status()
+        .unwrap();
+    assert!(made.success());
+    assert_eq!(read_bounded(&config), None);
+}

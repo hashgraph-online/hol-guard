@@ -166,9 +166,11 @@ fn read_config(spelled: &str) -> Result<Vec<(String, PyVal)>, String> {
 
 /// The bounded read of `read_config_object`. Python refuses links,
 /// non-regular and oversized files and nothing else, so a hard-linked
-/// configuration still reads: Guard never writes this file.
+/// configuration still reads: Guard never writes this file. The open never
+/// follows a final link and never blocks on a FIFO swapped in after the
+/// `symlink_metadata` check; the descriptor's own metadata decides the rest.
 fn read_bounded(path: &Path) -> Option<Vec<u8>> {
-    let file = fs::File::open(path).ok()?;
+    let file = open_without_following(path).ok()?;
     let metadata = file.metadata().ok()?;
     if !metadata.is_file() || metadata.len() > MAX_CONFIG_BYTES as u64 {
         return None;
@@ -177,10 +179,30 @@ fn read_bounded(path: &Path) -> Option<Vec<u8>> {
     file.take(MAX_CONFIG_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .ok()?;
-    if bytes.len() > MAX_CONFIG_BYTES || fs::symlink_metadata(path).ok()?.file_type().is_symlink() {
-        return None;
-    }
-    Some(bytes)
+    (bytes.len() <= MAX_CONFIG_BYTES).then_some(bytes)
+}
+
+#[cfg(unix)]
+fn open_without_following(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+        .open(path)
+}
+
+#[cfg(windows)]
+fn open_without_following(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    // Opening the reparse point itself makes a swapped-in link read as a
+    // link, which the `is_file` check on the handle then refuses.
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
 }
 
 /// `_object_field`: an absent field is an empty object; any other
