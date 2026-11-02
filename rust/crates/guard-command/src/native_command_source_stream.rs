@@ -1,9 +1,12 @@
 //! Offline length-framed ingestion. Bounds apply to individual raw records;
 //! compiled-program and catalog-admission budgets remain independently enforced.
 
-use super::{catalog, contract::SourceDocument, json, mcp, validation, CompiledSourceCatalog};
+use super::{
+    catalog, cloud_binding, contract::SourceDocument, json, mcp, validation, CompiledSourceCatalog,
+};
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 
 const MAGIC: &[u8; 5] = b"HGCS\x01";
@@ -15,13 +18,17 @@ struct Header {
     schema: String,
     sources: usize,
     mcp_sources: usize,
+    /// Optional sibling cloud action binding records. Absent in legacy streams.
+    #[serde(default)]
+    cloud_bindings: usize,
     trust: Value,
 }
 
 #[derive(Debug)]
 pub struct SourceStreamError {
     pub code: &'static str,
-    /// Zero-based position in command records followed by MCP records.
+    /// Zero-based position in command records, then MCP records, then cloud
+    /// binding records.
     pub record: Option<usize>,
 }
 
@@ -85,6 +92,7 @@ pub fn compile_source_stream(
             .sources
             .checked_add(header.mcp_sources)
             .is_none_or(|count| count == 0 || count > MAX_RECORDS)
+        || header.cloud_bindings > MAX_RECORDS
     {
         return Err("command_source_stream_header_invalid".into());
     }
@@ -119,6 +127,26 @@ pub fn compile_source_stream(
             servers.push(bytes);
         }
     }
+    let first_binding = header.sources + header.mcp_sources;
+    let mut bindings = Vec::with_capacity(header.cloud_bindings);
+    for offset in 0..header.cloud_bindings {
+        let record = first_binding + offset;
+        // Bindings are retained until every source has arrived, so they draw on
+        // the same compact-byte budget as the sources they extend.
+        let parsed = frame(&mut reader)
+            .and_then(|bytes| {
+                let compact = json::compact_record(
+                    &json::decode(&bytes).map_err(|_| "cloud_binding_json_invalid")?,
+                    &mut remaining,
+                )?;
+                cloud_binding::parse_binding_contribution(&compact)
+            })
+            .map_err(|code| SourceStreamError {
+                code,
+                record: Some(record),
+            })?;
+        bindings.push((record, parsed));
+    }
     let mut trailing = [0];
     if reader
         .read(&mut trailing)
@@ -127,11 +155,64 @@ pub fn compile_source_stream(
     {
         return Err("command_source_stream_trailing_data".into());
     }
+    resolve_bindings(&bindings, &commands, &servers)?;
     let commands: Vec<_> = commands.iter().map(Vec::as_slice).collect();
     let servers: Vec<_> = servers.iter().map(Vec::as_slice).collect();
     Ok(catalog::compile_catalog_with_mcp(
         &commands, &servers, &trust,
     )?)
+}
+
+/// Each binding contribution extends exactly one extension in the same
+/// stream, at most once, and an action ID names one hosted action stream-wide.
+fn resolve_bindings(
+    bindings: &[(usize, cloud_binding::CloudBindingContribution)],
+    commands: &[Vec<u8>],
+    servers: &[Vec<u8>],
+) -> Result<(), SourceStreamError> {
+    if bindings.is_empty() {
+        return Ok(());
+    }
+    let mut sources = BTreeMap::new();
+    for (bytes, server) in commands
+        .iter()
+        .map(|bytes| (bytes, false))
+        .chain(servers.iter().map(|bytes| (bytes, true)))
+    {
+        let value = json::decode(bytes)?;
+        let id = if server {
+            &value["id"]
+        } else {
+            &value["extension"]["extension_id"]
+        };
+        if let Some(id) = id.as_str() {
+            sources.insert(id.to_owned(), (bytes.as_slice(), server));
+        }
+    }
+    let mut extended = BTreeSet::new();
+    let mut actions = BTreeSet::new();
+    for (record, contribution) in bindings {
+        let fail = |code| SourceStreamError {
+            code,
+            record: Some(*record),
+        };
+        let (bytes, server) = sources
+            .get(&contribution.extension_id)
+            .ok_or_else(|| fail("cloud_binding_extension_unknown"))?;
+        if !extended.insert(contribution.extension_id.as_str()) {
+            return Err(fail("cloud_binding_duplicate_extension"));
+        }
+        if contribution
+            .bindings
+            .iter()
+            .any(|binding| !actions.insert(binding.action_id.as_str()))
+        {
+            return Err(fail("cloud_binding_duplicate_action"));
+        }
+        let target = cloud_binding::BindingTarget::from_source(bytes, *server).map_err(fail)?;
+        cloud_binding::resolve(contribution, &target).map_err(fail)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -246,5 +327,161 @@ mod tests {
         let error = compile_source_stream(stream.as_slice()).unwrap_err();
         assert_eq!(error.code, "command_source_catalog_work_budget_exceeded");
         assert_eq!(error.record, Some(1));
+    }
+
+    fn binding_stream(bindings: &[Value]) -> Vec<u8> {
+        let source = include_bytes!("../tests/fixtures/command-source-example.v1.json");
+        let base = input(source);
+        let length = u32::from_be_bytes(base[5..9].try_into().unwrap()) as usize;
+        let mut header: Value = serde_json::from_slice(&base[9..9 + length]).unwrap();
+        header["cloud_bindings"] = json!(bindings.len());
+        let mut stream = MAGIC.to_vec();
+        append(&mut stream, &serde_json::to_vec(&header).unwrap());
+        append(&mut stream, source);
+        for binding in bindings {
+            append(&mut stream, &serde_json::to_vec(binding).unwrap());
+        }
+        stream
+    }
+
+    fn binding(extension: &str, action: &str) -> Value {
+        json!({
+            "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+            "extensionId": extension,
+            "bindings": [{
+                "actionId": action,
+                "permissionId": "command.example-cli.permission.destroy",
+                "effect": "destructive",
+                "requiredCapabilities": [],
+                "cloudSupport": "portable-policy"
+            }]
+        })
+    }
+
+    /// The complete authored inventory, as the release build streams it.
+    fn release_stream(bindings: &[Value]) -> Vec<u8> {
+        use crate::native_command_program::authored_test_support::{sources, trust_map};
+        let sources = sources();
+        let mut trust = trust_map();
+        let (mut commands, mut servers) = (Vec::new(), Vec::new());
+        for (metadata, bytes) in &sources {
+            for (class, ids) in metadata["trust"]["classes"].as_object().unwrap() {
+                trust["classes"][class]
+                    .as_array_mut()
+                    .unwrap()
+                    .extend(ids.as_array().unwrap().iter().cloned());
+            }
+            if metadata["kind"] == "command" {
+                commands.push(bytes);
+            } else {
+                servers.push(bytes);
+            }
+        }
+        let mut stream = MAGIC.to_vec();
+        append(
+            &mut stream,
+            &serde_json::to_vec(&json!({
+                "schema": "guard.command-extension-source-stream.v1",
+                "sources": commands.len(),
+                "mcp_sources": servers.len(),
+                "cloud_bindings": bindings.len(),
+                "trust": trust,
+            }))
+            .unwrap(),
+        );
+        for bytes in commands.into_iter().chain(servers) {
+            append(&mut stream, bytes);
+        }
+        for binding in bindings {
+            append(&mut stream, &serde_json::to_vec(binding).unwrap());
+        }
+        stream
+    }
+
+    #[test]
+    fn cloud_binding_records_are_optional_and_resolve_against_the_stream() {
+        let compile = |bindings: &[Value]| {
+            compile_source_stream(release_stream(bindings).as_slice())
+                .unwrap_or_else(|error| panic!("release stream must compile: {}", error.code))
+        };
+        let legacy = compile(&[]);
+        let bound = compile(&[json!({
+            "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+            "extensionId": "mcp.instapods",
+            "bindings": [{
+                "actionId": "instapods.pod.delete",
+                "tool": "delete_pod",
+                "effect": "destructive",
+                "requiredCapabilities": ["egress-pinned", "bounded-output"],
+                "cloudSupport": "cloud-executable"
+            }]
+        })]);
+        // Bindings never change the compiled local catalog in this version.
+        assert_eq!(bound.source_digest, legacy.source_digest);
+        assert_eq!(bound.program, legacy.program);
+    }
+
+    #[test]
+    fn binding_records_draw_on_the_shared_retention_budget() {
+        // Each record stays under the per-record cap, but together they exceed
+        // what the stream may retain once the sources are counted.
+        let segment = "x".repeat(100);
+        let tool = "t".repeat(256);
+        let large: Vec<Value> = (0..100)
+            .map(|index| {
+                json!({
+                    "schemaVersion": "guard.cloud-action-binding-contribution.v1",
+                    "extensionId": format!("mcp.filler-{index}"),
+                    "bindings": (0..256).map(|action| json!({
+                        "actionId": format!("filler.a{action}.{segment}"),
+                        "tool": tool,
+                        "effect": "read",
+                        "requiredCapabilities": [],
+                        "cloudSupport": "portable-policy"
+                    })).collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        let error = compile_source_stream(release_stream(&large).as_slice()).unwrap_err();
+        assert_eq!(error.code, "command_source_catalog_work_budget_exceeded");
+        assert!(error.record.is_some());
+    }
+
+    #[test]
+    fn cloud_binding_record_errors_keep_their_position() {
+        for (bindings, code) in [
+            (
+                vec![binding("command.missing", "example.resource.destroy")],
+                "cloud_binding_extension_unknown",
+            ),
+            (
+                vec![
+                    binding("command.example-cli", "example.resource.destroy"),
+                    binding("command.example-cli", "example.resource.remove"),
+                ],
+                "cloud_binding_duplicate_extension",
+            ),
+            (
+                vec![
+                    json!({"schemaVersion":"guard.cloud-action-binding-contribution.v1",
+                    "extensionId":"command.example-cli","bindings":[],"allow":true}),
+                ],
+                "cloud_binding_contract_invalid",
+            ),
+        ] {
+            let error = compile_source_stream(binding_stream(&bindings).as_slice()).unwrap_err();
+            assert_eq!(error.code, code);
+            assert_eq!(error.record, Some(bindings.len()));
+        }
+        let mut too_many = binding_stream(&[]);
+        let length = u32::from_be_bytes(too_many[5..9].try_into().unwrap()) as usize;
+        let mut header: Value = serde_json::from_slice(&too_many[9..9 + length]).unwrap();
+        header["cloud_bindings"] = json!(MAX_RECORDS + 1);
+        too_many = MAGIC.to_vec();
+        append(&mut too_many, &serde_json::to_vec(&header).unwrap());
+        assert_eq!(
+            compile_source_stream(too_many.as_slice()).unwrap_err().code,
+            "command_source_stream_header_invalid"
+        );
     }
 }
