@@ -190,7 +190,6 @@ fn requests_are_validated() {
         json!({ "schema": SCHEMA, "source_root": path }),
         json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "extra": true }),
         json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "cached": { "tree_sig": "a" } }),
-        json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "cache_dir": "relative" }),
         json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "cache_dir": 7 }),
     ] {
         assert_eq!(
@@ -198,6 +197,26 @@ fn requests_are_validated() {
             "runtime_fingerprint_request_invalid",
             "{request}"
         );
+    }
+}
+
+/// A `cache_dir` that cannot hold a cache file is skipped, not refused, so
+/// the daemon still learns its identity.
+#[test]
+fn an_unusable_cache_dir_only_costs_the_content_hash() {
+    let root = tree();
+    let expected = run(root.path(), None);
+    let path = root.path().to_str().unwrap();
+    for cache_dir in ["relative", "", "/"] {
+        let request = json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "cache_dir": cache_dir });
+        let answer: Value =
+            serde_json::from_slice(&run_command(request.to_string().as_bytes()).expect("answer"))
+                .unwrap();
+        assert_eq!(
+            answer["fingerprint"], expected["fingerprint"],
+            "{cache_dir:?}"
+        );
+        assert_eq!(answer["reused"], false, "{cache_dir:?}");
     }
 }
 
