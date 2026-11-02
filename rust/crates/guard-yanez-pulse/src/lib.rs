@@ -81,8 +81,8 @@ pub enum PulseError {
     AssuranceTooLow,
     /// The approver's key is not registered to the pinned YID at that tier.
     UserKeyNotRegistered,
-    /// The approver's key was added after enrollment and the user has not
-    /// confirmed it in Guard.
+    /// The approver's key is not one Guard pinned at enrollment. A new device
+    /// works only after the user sets up Pulse again with it.
     UserKeyNotPinned,
     /// The decision is older than Guard's freshness window.
     Stale,
@@ -158,7 +158,7 @@ impl PulseError {
                 "The approving device key is not registered to your Yanez identity."
             }
             Self::UserKeyNotPinned => {
-                "A new device approved this. Confirm the device in Guard before it can approve."
+                "This device isn't set up for Pulse in Guard. Turn Pulse off and set it up again with this new device."
             }
             Self::Stale => "The Pulse approval is too old. Approve the action again.",
             Self::ConsentExpired => "The Pulse approval window has closed. Approve again.",

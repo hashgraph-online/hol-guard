@@ -59,7 +59,7 @@ pub struct ReceiptPolicy<'a> {
     /// Approver keys (lower-case hex) Guard pinned at enrollment. `None`
     /// only for the enrollment receipt. The registry and the receipt come
     /// from the same Yanez service, so a key Yanez adds later does not count
-    /// until the user confirms it in Guard.
+    /// until the user sets up Pulse again with it.
     pub pinned_user_keys: Option<&'a [String]>,
     pub now_epoch: i64,
 }
