@@ -73,11 +73,13 @@ _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "pre
 # the fixture holds a runner body and a read-only tool body under the same
 # `test:` family. The third spells the same finishing Vitest run with the
 # option rather than the verb, which is how a project that passes reporting
-# options writes it.
+# options writes it, and the fourth names Bun's own runner, which is what a
+# Bun project's test entry holds.
 _TEST_FAMILY_SCRIPTS = {
     "test:unit": "vitest run tests/",
     "test:types": "tsc --noEmit",
     "test:ci": "vitest --run --reporter dot",
+    "test:bun": "bun test",
 }
 _INSTALLED_PACKAGES = _NODE_PACKAGES | {name: version for name, (version, _) in _NODE_TOOLS.items()}
 

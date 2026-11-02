@@ -96,6 +96,39 @@ fn a_vitest_script_resolves_on_every_spelling_that_finishes_its_run() {
 }
 
 #[test]
+fn a_bun_script_resolves_the_runner_a_bun_project_names() {
+    let manifest = scripts(json!({ "test": "bun test" }));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+        words(&["bun", "test"])
+    );
+    assert_eq!(
+        resolve(
+            &words(&["bun", "run", "test", "--", "-t", "parser"]),
+            Some(&manifest)
+        )
+        .unwrap(),
+        words(&["bun", "test", "-t", "parser"])
+    );
+    let filtered = scripts(json!({ "test": "bun test src/a.test.ts --coverage" }));
+    assert_eq!(
+        resolve(&words(&["pnpm", "test"]), Some(&filtered)).unwrap(),
+        words(&["bun", "test", "src/a.test.ts", "--coverage"])
+    );
+    let file = scripts(json!({ "test": "bun src/a.test.ts" }));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&file)).unwrap(),
+        words(&["bun", "src/a.test.ts"])
+    );
+    let outside = scripts(json!({ "test": "bun test ../other" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&outside)).is_err());
+    let unmodeled = scripts(json!({ "test": "bun test --watch" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&unmodeled)).is_err());
+    let manager = scripts(json!({ "test": "bun run inner" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&manager)).is_err());
+}
+
+#[test]
 fn a_jest_script_resolves_only_while_it_finishes_in_its_workspace() {
     let manifest = scripts(json!({"test": "jest --ci"}));
     assert_eq!(
