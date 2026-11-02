@@ -100,6 +100,9 @@ def _node_toolchain(workspace: Path, *, tools: bool = False) -> None:
     for name, (version, binaries) in _NODE_TOOLS.items():
         _node_package(workspace, name, version, binaries)
     _write(workspace / "tsconfig.json", json.dumps({"compilerOptions": {"strict": True, "noEmit": True}}) + "\n")
+    # A generated type-check project, the way a repository script writes one: it
+    # keeps the no-emit mode in the file and is run as `tsc -p` with no option.
+    _write(workspace / "tsconfig.check.json", json.dumps({"extends": "./tsconfig.json"}) + "\n")
     _write(workspace / "eslint.config.js", "export default [];\n")
     _write(workspace / ".prettierrc", "{}\n")
 

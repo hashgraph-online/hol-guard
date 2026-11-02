@@ -1,6 +1,7 @@
+use super::node_tool_modes::{prettier_checks, tool_entries, PRETTIER_ENTRIES};
 use super::{
-    entry_tool, local_package_entry, node_tool_route, prettier_checks, program_name,
-    supported_tool, tool_entries, writes_or_chains, NodeToolRoute, ToolMode, PRETTIER_ENTRIES,
+    entry_tool, local_package_entry, node_tool_route, program_name, supported_tool,
+    writes_or_chains, NodeToolRoute, ToolMode,
 };
 
 fn words(command: &[&str]) -> Vec<String> {
@@ -8,11 +9,11 @@ fn words(command: &[&str]) -> Vec<String> {
 }
 
 fn route(command: &[&str]) -> NodeToolRoute {
-    node_tool_route(&words(command), None, false)
+    node_tool_route(&words(command), None, false, None)
 }
 
 fn windows_route(command: &[&str]) -> NodeToolRoute {
-    node_tool_route(&words(command), None, true)
+    node_tool_route(&words(command), None, true, None)
 }
 
 fn tool(route: &NodeToolRoute) -> Option<(&'static str, Vec<String>, ToolMode)> {
@@ -102,14 +103,14 @@ fn a_run_carries_its_own_arguments_into_the_script_body() {
     // gates the body holding the word the run passed on.
     let command = words(&["npm", "run", "lint", "--", "--max-warnings=0"]);
     assert_eq!(
-        node_tool_route(&command, None, false),
+        node_tool_route(&command, None, false, None),
         NodeToolRoute::Script {
             task: "lint".to_owned()
         }
     );
     let body = words(&["eslint", "."]);
     assert_eq!(
-        tool(&node_tool_route(&command, Some(&body), false)),
+        tool(&node_tool_route(&command, Some(&body), false, None)),
         Some((
             "eslint",
             words(&[".", "--max-warnings=0"]),
@@ -121,7 +122,7 @@ fn a_run_carries_its_own_arguments_into_the_script_body() {
     // refused with the body rather than slipping past between the readings.
     let fixing = words(&["npm", "run", "lint", "--", "--fix"]);
     assert_eq!(
-        refusal(&node_tool_route(&fixing, Some(&body), false)).map(|(_, message)| message),
+        refusal(&node_tool_route(&fixing, Some(&body), false, None)).map(|(_, message)| message),
         Some("The lint/typecheck input has write or shell effects.")
     );
 }
@@ -129,7 +130,12 @@ fn a_run_carries_its_own_arguments_into_the_script_body() {
 #[test]
 fn a_script_body_is_gated_as_the_run_it_spells() {
     let body = words(&["tsc", "--noEmit"]);
-    let route = node_tool_route(&words(&["npm", "run", "typecheck"]), Some(&body), false);
+    let route = node_tool_route(
+        &words(&["npm", "run", "typecheck"]),
+        Some(&body),
+        false,
+        None,
+    );
     assert_eq!(
         tool(&route),
         Some(("tsc", words(&["--noEmit"]), ToolMode::Report))
@@ -140,7 +146,8 @@ fn a_script_body_is_gated_as_the_run_it_spells() {
         refusal(&node_tool_route(
             &words(&["npm", "run", "x"]),
             Some(&empty),
-            false
+            false,
+            None
         ))
         .map(|(_, message)| message),
         Some("The requested local script is empty.")
@@ -228,7 +235,7 @@ fn a_bounded_heap_option_is_carried_and_an_unbounded_one_is_refused() {
         let option = format!("--max-old-space-size={value}");
         let command = words(&["node", &option, "node_modules/eslint/bin/eslint.js"]);
         assert_eq!(
-            refusal(&node_tool_route(&command, None, false)).map(|(_, message)| message),
+            refusal(&node_tool_route(&command, None, false, None)).map(|(_, message)| message),
             Some("Invalid bounded Node memory option."),
             "{option}"
         );
@@ -280,7 +287,7 @@ fn a_write_or_shell_token_is_refused_after_the_tool_is_known() {
     ] {
         let command = words(&["npx", "eslint", "src", argument]);
         assert_eq!(
-            refusal(&node_tool_route(&command, None, false)).map(|(_, message)| message),
+            refusal(&node_tool_route(&command, None, false, None)).map(|(_, message)| message),
             Some("The lint/typecheck input has write or shell effects."),
             "{argument}"
         );
@@ -330,4 +337,60 @@ fn the_shared_table_answers_for_every_admitted_tool() {
     assert!(!prettier_checks(&words(&["."])));
     assert!(writes_or_chains(&words(&["--write"])));
     assert!(!writes_or_chains(&words(&["src"])));
+}
+
+/// A generated type-check project keeps the no-emit mode in the file rather
+/// than on the command line, so the route reads it there and writes it back
+/// onto the argv it admits.
+#[test]
+fn a_project_declaring_no_emit_reaches_the_reporting_tool() {
+    let directory = tempfile::tempdir().expect("temp root");
+    std::fs::write(
+        directory.path().join("tsconfig.tmp-devcheck.json"),
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    )
+    .expect("config");
+
+    let command = words(&[
+        "./node_modules/.bin/tsc",
+        "-p",
+        "tsconfig.tmp-devcheck.json",
+        "--pretty",
+        "false",
+    ]);
+    assert_eq!(
+        tool(&node_tool_route(
+            &command,
+            None,
+            false,
+            Some(directory.path())
+        )),
+        Some((
+            "tsc",
+            words(&[
+                "-p",
+                "tsconfig.tmp-devcheck.json",
+                "--pretty",
+                "false",
+                "--noEmit"
+            ]),
+            ToolMode::Report
+        ))
+    );
+
+    // Without the directory, and with a project that never says so, the run
+    // keeps the review it had.
+    assert!(tool(&node_tool_route(&command, None, false, None)).is_none());
+    std::fs::write(
+        directory.path().join("tsconfig.tmp-devcheck.json"),
+        r#"{"compilerOptions":{"strict":true}}"#,
+    )
+    .expect("config");
+    assert!(tool(&node_tool_route(
+        &command,
+        None,
+        false,
+        Some(directory.path())
+    ))
+    .is_none());
 }

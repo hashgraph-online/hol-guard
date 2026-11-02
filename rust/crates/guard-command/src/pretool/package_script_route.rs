@@ -49,7 +49,7 @@ pub(in crate::pretool) fn contained_test_reason(
     // `bun node_modules/<package>/<entry>` is the run `node` names.
     let spelled = bun_package_entry::node_spelling(model);
     let model = spelled.as_ref().unwrap_or(model);
-    if let Some(reason) = super::readonly_test_reason(model) {
+    if let Some(reason) = super::readonly_test_reason(model, context.cwd.map(Path::new)) {
         return resolved(model, reason, context.cwd.map(PathBuf::from), context);
     }
     if cfg!(windows) {
@@ -58,8 +58,12 @@ pub(in crate::pretool) fn contained_test_reason(
         }
     }
     let core = contained_core(model, context)?;
-    let reason = super::readonly_test_reason(&core).filter(|reason| *reason != GIT)?;
-    resolved(&core, reason, core_cwd(model, context), context)
+    // The core runs in its own directory, so the reading that depends on it
+    // and the receipt that records it are given the same answer.
+    let cwd = core_cwd(model, context);
+    let reason =
+        super::readonly_test_reason(&core, cwd.as_deref()).filter(|reason| *reason != GIT)?;
+    resolved(&core, reason, cwd, context)
 }
 
 /// The directory the wrapper core runs in: a projected `--cwd`, a verified
@@ -139,7 +143,7 @@ fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [
     if tool == "vite" {
         return None;
     }
-    crate::contained_node_tool::tool_entries(tool).map(|(_, entries)| entries)
+    crate::contained_node_tool::node_tool_modes::tool_entries(tool).map(|(_, entries)| entries)
 }
 
 /// Whether the nearest install carrying one of `entries` is a flat npm or

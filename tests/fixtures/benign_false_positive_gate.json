@@ -25433,6 +25433,40 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-tsc-generated-project-pipe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "./node_modules/.bin/tsc -p tsconfig.check.json 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "toolchain-tsc-current-directory-project",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "./node_modules/.bin/tsc -p . 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "toolchain-npm-run-typecheck",
       "fix_area": "shell",
       "harnesses": [

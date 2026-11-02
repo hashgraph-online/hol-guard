@@ -12,9 +12,10 @@ use crate::contained_argv::{
     contained_runner_call, jest_contained_call, mocha_contained_call, npm_exec_inert_option,
 };
 use crate::contained_node_tool::{
-    entry_tool, local_package_entry, supported_tool, writes_or_chains, ToolMode,
+    entry_tool, local_package_entry, supported_tool_in, writes_or_chains, ToolMode,
 };
 use crate::CanonicalCommandV1;
+use std::path::Path;
 
 #[path = "bun_eval_screen.rs"]
 mod bun_eval_screen;
@@ -530,7 +531,11 @@ fn local_runner_entry_call(arguments: &[String]) -> bool {
 /// same table `contained_node_tool` routes with. The admission and the sink
 /// that executes the run share one reading of which tools are supported and
 /// which of their modes only reports, so the two cannot drift apart.
-fn node_tool_mode(executable: &str, arguments: &[String]) -> Option<ToolMode> {
+fn node_tool_mode(
+    executable: &str,
+    arguments: &[String],
+    directory: Option<&Path>,
+) -> Option<ToolMode> {
     let (name, rest) = match (executable, arguments) {
         // A local-bin runner names the tool, and `node` names the entrypoint
         // file the tool published, so each is read back to the tool's own name.
@@ -544,10 +549,13 @@ fn node_tool_mode(executable: &str, arguments: &[String]) -> Option<ToolMode> {
         ("bunx" | "npx" | "node" | "nodejs", []) => return None,
         _ => (executable, arguments),
     };
-    supported_tool(name, rest).map(|(_, _, mode)| mode)
+    supported_tool_in(name, rest, directory).map(|(_, _, mode)| mode)
 }
 
-pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'static str> {
+pub(super) fn readonly_test_reason(
+    model: &CanonicalCommandV1,
+    directory: Option<&Path>,
+) -> Option<&'static str> {
     if requires_pytest_containment(model) {
         return Some("native_pytest_readonly_containment_required");
     }
@@ -695,7 +703,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
             _ => (crate::program_basename(executable), arguments),
         }
     };
-    let mode = node_tool_mode(executable, arguments);
+    let mode = node_tool_mode(executable, arguments, directory);
     let manager = matches!(executable, "bun" | "npm" | "pnpm" | "yarn");
     // The sink refuses a write or a chain in every mode, so a build carrying
     // one is left to ordinary review rather than sent to a route that would

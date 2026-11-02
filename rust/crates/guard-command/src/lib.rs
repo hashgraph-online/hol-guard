@@ -412,6 +412,7 @@ mod tool_action_identity_tests;
 pub mod trust_claim;
 #[cfg(test)]
 mod trust_claim_tests;
+mod tsc_project;
 pub mod typescript_launch_evidence;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]

@@ -382,9 +382,9 @@
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
    "item": "fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [&'static str]>",
    "verdict": "windows-equivalent",
-   "note": "Resolves the staged tool entry by name the same way the Unix arm does, now through the shared tool table; the entry names are platform-neutral.",
+   "note": "Resolves the staged tool entry by name the same way the Unix arm does, now through the shared tool table named by its module; the entry names are platform-neutral.",
    "cfg": "not(unix)",
-   "body": "db39b3c2f238"
+   "body": "41886b49b7b5"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",

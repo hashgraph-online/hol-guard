@@ -55,6 +55,10 @@ WORKSPACE_SCRIPT_RUN_ALIAS_CASE = "omp-native-workspace-script-run-alias"
 # inside `typescript`, so the tree, the manifest and the lockfile all say
 # `typescript` while `node_modules/.bin` says `tsc`.
 WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
+# The same checker run as a repository script runs it: a generated project keeps
+# the no-emit mode in the file, so the command line carries no option at all and
+# the run is proven read-only from the project it names.
+WORKSPACE_TSC_GENERATED_PROJECT_CASE = "omp-native-workspace-tsc-generated-project"
 # The same type checker in a workspace pnpm installed. pnpm writes its lockfile
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
@@ -75,6 +79,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
         WORKSPACE_SCRIPT_RUN_ALIAS_CASE,
         WORKSPACE_TSC_CASE,
+        WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_PNPM_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
     }
@@ -249,6 +254,18 @@ _TYPESCRIPT_FILES = {
 }
 
 
+# The project a type-check script generates: it names the same sources and keeps
+# the no-emit mode in the file, which is the whole reason the run carries no
+# `--noEmit` of its own.
+_GENERATED_PROJECT_FILES = {
+    **_TYPESCRIPT_FILES,
+    "tsconfig.check.json": (
+        '{\n  "compilerOptions": {\n    "strict": true,\n    "noEmit": true\n  },\n'
+        '  "include": ["src"]\n}\n'
+    ),
+}
+
+
 # pnpm resolves the same dependency and writes the same pin as YAML: one key
 # per release under a top-level `packages` mapping, repeated under `snapshots`.
 _PNPM_LOCK = (
@@ -325,6 +342,13 @@ _INSTALLS = {
     WORKSPACE_TSC_CASE: _Install(
         "tsc",
         _TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_TSC_GENERATED_PROJECT_CASE: _Install(
+        "tsc",
+        _GENERATED_PROJECT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",
