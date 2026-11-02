@@ -327,6 +327,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = hook_launch_scan::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if durable_runtime_collapse::is_command(command) && flag == "--stdin" => {
+            let response = durable_runtime_collapse::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if copilot_hook_commands::is_command(command) && flag == "--stdin" => {
             let response = copilot_hook_commands::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

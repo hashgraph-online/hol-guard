@@ -96,6 +96,15 @@ def repair_daemon(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[st
 
 
 def repair_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
+    step = _prune_native_runtime(guard_home, dry_run=dry_run)
+    if dry_run:
+        return step
+    from .durable_runtime_collapse import with_durable_runtime_collapse
+
+    return with_durable_runtime_collapse(step, guard_home)
+
+
+def _prune_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
     try:
         from .resident_state_prune import prune_native_runtime, prune_runtime_offered
 

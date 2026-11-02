@@ -44,6 +44,17 @@ fn a_copy_published_after_this_one_answers_for_it() {
 }
 
 #[test]
+fn a_copy_relinked_to_the_live_copy_still_hands_off() {
+    let base = state_base();
+    let own = publish(base.path(), OLD, Duration::from_secs(3600));
+    let newer = publish(base.path(), NEW, Duration::from_secs(60));
+    fs::remove_file(&own).unwrap();
+    fs::hard_link(&newer, &own).unwrap();
+
+    assert_eq!(successor_copy(&own, base.path(), NEW), Some(newer));
+}
+
+#[test]
 fn a_copy_published_before_this_one_never_answers_for_it() {
     let base = state_base();
     let own = publish(base.path(), NEW, Duration::from_secs(60));

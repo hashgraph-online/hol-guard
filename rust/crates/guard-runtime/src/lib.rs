@@ -298,6 +298,7 @@ mod direct_tool_context_tests;
 mod direct_tool_managed_bun;
 mod directory_trust;
 mod discovery_placement_op;
+mod durable_runtime_collapse;
 mod edge;
 mod edge_exact_command_review;
 mod edge_git_push;

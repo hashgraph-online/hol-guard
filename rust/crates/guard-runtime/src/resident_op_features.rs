@@ -311,4 +311,5 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-contained-output-match-v1",
     "native-agent-safety-guidance-v1",
     "native-guard-shim-profile-v1",
+    "native-durable-runtime-collapse-v1",
 ];

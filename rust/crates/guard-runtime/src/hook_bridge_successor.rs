@@ -21,7 +21,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use crate::hook_env_stamp::HOOK_HANDED_OFF_ENV;
 use crate::resident_process_identity::durable_digest_for;
@@ -58,7 +58,11 @@ pub(crate) fn successor(state_base: &Path) -> Option<PathBuf> {
 /// The copy published as `live_digest` beside `executable`, when
 /// `executable` is itself a durable copy under `state_base`, the two
 /// differ, both are owner-only copies the publisher would trust, and the
-/// live one was published after this one.
+/// live one was published after this one or is the very same file.
+///
+/// `durable-runtime-collapse` replaces an older copy with a hard link to the
+/// live one, so the two share an mtime while this bridge still sits at the
+/// older digest's path, which the resident never answers.
 pub(crate) fn successor_copy(
     executable: &Path,
     state_base: &Path,
@@ -75,13 +79,15 @@ pub(crate) fn successor_copy(
     let candidate = base
         .join(live_digest.to_ascii_lowercase())
         .join(executable.file_name()?);
-    let own_published = published_copy(executable)?;
-    (published_copy(&candidate)? > own_published).then_some(candidate)
+    let own = published_copy(executable)?;
+    let live = published_copy(&candidate)?;
+    let shared = own.dev() == live.dev() && own.ino() == live.ino();
+    (shared || live.modified().ok()? > own.modified().ok()?).then_some(candidate)
 }
 
-/// When an owner-only durable copy was published, or `None` for anything
-/// the durable-copy publisher would not trust.
-fn published_copy(file: &Path) -> Option<SystemTime> {
+/// An owner-only durable copy's metadata, or `None` for anything the
+/// durable-copy publisher would not trust.
+fn published_copy(file: &Path) -> Option<fs::Metadata> {
     let owner = nix::unistd::getuid().as_raw();
     let directory = fs::symlink_metadata(file.parent()?).ok()?;
     if !directory.is_dir()
@@ -95,7 +101,7 @@ fn published_copy(file: &Path) -> Option<SystemTime> {
     if !metadata.is_file() || metadata.uid() != owner || mode & 0o022 != 0 || mode & 0o100 == 0 {
         return None;
     }
-    metadata.modified().ok()
+    Some(metadata)
 }
 
 /// Run `successor` with `arguments`, `input` on its stdin, and wait for its
