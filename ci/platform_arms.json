@@ -2505,6 +2505,14 @@
    "item": "fn modified_ns(metadata: &fs::Metadata) -> i128",
    "cfg": "not(unix)",
    "body": "341845dc6c3c"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Windows has no POSIX mode bits or owner uid on a directory, so this arm only refuses a cache path that is not a directory. The cache file itself is opened through `open_private_read`, which opens it with `FILE_FLAG_OPEN_REPARSE_POINT` and verifies the handle's owner and ACL against the current user, and `store` creates the directory through `ensure_private_directory_under`, which applies the private ACL. A foreign or shared cache file is therefore still refused on Windows; a refused cache only costs the content hash.",
+   "file": "rust/crates/guard-runtime/src/runtime_fingerprint.rs",
+   "item": "fn private_directory(directory: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "d41e67212fd9"
   }
  ]
 }

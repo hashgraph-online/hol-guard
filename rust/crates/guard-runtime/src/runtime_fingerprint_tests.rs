@@ -190,6 +190,8 @@ fn requests_are_validated() {
         json!({ "schema": SCHEMA, "source_root": path }),
         json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "extra": true }),
         json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "cached": { "tree_sig": "a" } }),
+        json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "cache_dir": "relative" }),
+        json!({ "schema": SCHEMA, "source_root": path, "version": VERSION, "cache_dir": 7 }),
     ] {
         assert_eq!(
             run_command(request.to_string().as_bytes()).expect_err("refused"),
@@ -197,4 +199,159 @@ fn requests_are_validated() {
             "{request}"
         );
     }
+}
+
+#[cfg(unix)]
+fn private_cache_dir() -> (tempfile::TempDir, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+    let home = tempfile::tempdir().unwrap();
+    let guard_home = home.path().join(".hol-guard");
+    fs::create_dir(&guard_home).unwrap();
+    fs::set_permissions(&guard_home, fs::Permissions::from_mode(0o700)).unwrap();
+    let cache_dir = guard_home.join("runtime-fingerprint-cache");
+    (home, cache_dir)
+}
+
+#[cfg(unix)]
+fn run_with_cache_dir(root: &Path, cache_dir: &Path) -> Value {
+    let request = json!({
+        "schema": SCHEMA,
+        "source_root": root.to_str().unwrap(),
+        "version": VERSION,
+        "cache_dir": cache_dir.to_str().unwrap(),
+    });
+    let bytes = run_command(request.to_string().as_bytes()).expect("answer");
+    serde_json::from_slice(&bytes).expect("answer is JSON")
+}
+
+/// The cache file the daemon has always used: named by the SHA-256 of the
+/// source root, keyed by it, and holding the tree signature and fingerprint.
+#[cfg(unix)]
+fn cache_file(cache_dir: &Path, root: &Path) -> PathBuf {
+    let name = hex::encode(Sha256::digest(root.to_str().unwrap().as_bytes()));
+    cache_dir.join(format!("{name}.json"))
+}
+
+#[cfg(unix)]
+fn plant_cache(cache_dir: &Path, root: &Path, body: &[u8], mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::create_dir_all(cache_dir).unwrap();
+    fs::set_permissions(cache_dir, fs::Permissions::from_mode(0o700)).unwrap();
+    let path = cache_file(cache_dir, root);
+    fs::write(&path, body).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+/// A first answer hashes the tree and leaves a private cache file; the next
+/// answer for the same tree reads it back without hashing, and a changed
+/// tree hashes again and rewrites it.
+#[cfg(unix)]
+#[test]
+fn the_cache_file_is_written_privately_and_reused() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tree();
+    let (_home, cache_dir) = private_cache_dir();
+    let first = run_with_cache_dir(root.path(), &cache_dir);
+    assert_eq!(first["reused"], false);
+    assert_eq!(first, run(root.path(), None));
+
+    let path = cache_file(&cache_dir, root.path());
+    let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(
+        stored,
+        json!({
+            "content_fingerprint": first["fingerprint"],
+            "source_root": root.path().to_str().unwrap(),
+            "tree_sig": first["tree_sig"],
+        })
+    );
+    let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&path), 0o600);
+    assert_eq!(mode(&cache_dir), 0o700);
+
+    let second = run_with_cache_dir(root.path(), &cache_dir);
+    assert_eq!(second["reused"], true);
+    assert_eq!(second["fingerprint"], first["fingerprint"]);
+
+    fs::write(root.path().join(PACKAGE).join("a.py"), b"x = 2\n").unwrap();
+    let changed = run_with_cache_dir(root.path(), &cache_dir);
+    assert_eq!(changed["reused"], false);
+    assert_ne!(changed["fingerprint"], first["fingerprint"]);
+    let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(stored["content_fingerprint"], changed["fingerprint"]);
+}
+
+/// A cache file is trusted only when it names this source root, holds a
+/// digest, and passes the private-file checks. Anything else costs a hash.
+#[cfg(unix)]
+#[test]
+fn a_foreign_or_malformed_cache_file_is_ignored() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tree();
+    let expected = run(root.path(), None);
+    let planted = "0".repeat(64);
+    let body = |source_root: &str, fingerprint: &str| {
+        json!({
+            "content_fingerprint": fingerprint,
+            "source_root": source_root,
+            "tree_sig": expected["tree_sig"],
+        })
+        .to_string()
+        .into_bytes()
+    };
+    let source = root.path().to_str().unwrap();
+    let oversized = {
+        let mut stored: Value = serde_json::from_slice(&body(source, &planted)).unwrap();
+        stored["padding"] = json!("x".repeat(4096));
+        stored.to_string().into_bytes()
+    };
+    for (label, bytes, mode) in [
+        ("other root", body("/elsewhere", &planted), 0o600),
+        ("not a digest", body(source, "not-a-digest"), 0o600),
+        ("group readable", body(source, &planted), 0o640),
+        ("oversized", oversized, 0o600),
+        ("not json", b"{".to_vec(), 0o600),
+    ] {
+        let (_home, cache_dir) = private_cache_dir();
+        plant_cache(&cache_dir, root.path(), &bytes, mode);
+        let answer = run_with_cache_dir(root.path(), &cache_dir);
+        assert_eq!(answer["reused"], false, "{label}");
+        assert_eq!(answer["fingerprint"], expected["fingerprint"], "{label}");
+    }
+
+    // The same file is trusted from a private directory, and not from one
+    // other users can enter.
+    let (_home, cache_dir) = private_cache_dir();
+    plant_cache(&cache_dir, root.path(), &body(source, &planted), 0o600);
+    assert_eq!(
+        run_with_cache_dir(root.path(), &cache_dir)["fingerprint"],
+        planted.as_str()
+    );
+    plant_cache(&cache_dir, root.path(), &body(source, &planted), 0o600);
+    fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(run_with_cache_dir(root.path(), &cache_dir)["reused"], false);
+}
+
+/// A symlinked cache file is never followed.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_cache_file_is_ignored() {
+    let root = tree();
+    let expected = run(root.path(), None);
+    let (_home, cache_dir) = private_cache_dir();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let target = elsewhere.path().join("cache.json");
+    plant_cache(&cache_dir, root.path(), b"{}", 0o600);
+    let body = json!({
+        "content_fingerprint": "0".repeat(64),
+        "source_root": root.path().to_str().unwrap(),
+        "tree_sig": expected["tree_sig"],
+    });
+    fs::write(&target, body.to_string()).unwrap();
+    let path = cache_file(&cache_dir, root.path());
+    fs::remove_file(&path).unwrap();
+    std::os::unix::fs::symlink(&target, &path).unwrap();
+    let answer = run_with_cache_dir(root.path(), &cache_dir);
+    assert_eq!(answer["reused"], false);
+    assert_eq!(answer["fingerprint"], expected["fingerprint"]);
 }

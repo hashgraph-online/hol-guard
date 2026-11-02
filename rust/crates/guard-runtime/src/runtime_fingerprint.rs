@@ -1,6 +1,6 @@
 //! `runtime-fingerprint --stdin`: the identity of an installed Guard source
-//! tree, for daemon compatibility (`guard/daemon/manager.py` keeps the cache
-//! file and memoises the answer).
+//! tree, for daemon compatibility (`guard/daemon/manager.py` memoises the
+//! answer for the life of its process).
 //!
 //! Two processes of the same install must compute the same identity, and an
 //! in-place upgrade must change it. The identity covers every `*.py` file
@@ -14,7 +14,12 @@
 //!
 //! A cached fingerprint whose tree signature still matches is returned
 //! without reading any file, so only a changed tree pays for the content
-//! hash.
+//! hash. The cache is either the request's `cached` pair or, given a
+//! `cache_dir`, a private JSON file there named by the SHA-256 of the
+//! source root. The file is read through the same owner, mode and link
+//! checks as the resident's other private files, so a foreign or swapped
+//! file is never trusted, and a freshly hashed tree rewrites it. A cache
+//! that cannot be read or written only costs the content hash.
 
 use std::fs::{self, File};
 use std::io::{ErrorKind, Read};
@@ -23,6 +28,8 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+
+use crate::managed_resident;
 
 const SCHEMA: &str = "runtime-fingerprint.v1";
 const MAX_REQUEST_BYTES: u64 = 64 * 1024;
@@ -37,6 +44,8 @@ struct Request {
     version: String,
     #[serde(default)]
     cached: Option<Cached>,
+    #[serde(default)]
+    cache_dir: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -64,27 +73,152 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     if request.schema != SCHEMA || !source_root.is_absolute() {
         return Err(invalid());
     }
-    Ok(
-        answer(&source_root, &request.version, request.cached.as_ref())
-            .to_string()
-            .into_bytes(),
+    let cache = request
+        .cache_dir
+        .as_deref()
+        .map(|directory| CacheFile::new(directory, &request.source_root).ok_or_else(invalid))
+        .transpose()?;
+    Ok(answer(
+        &source_root,
+        &request.version,
+        request.cached,
+        cache.as_ref(),
     )
+    .to_string()
+    .into_bytes())
 }
 
 fn invalid() -> String {
     "runtime_fingerprint_request_invalid".to_owned()
 }
 
-fn answer(source_root: &Path, version: &str, cached: Option<&Cached>) -> Value {
+fn answer(
+    source_root: &Path,
+    version: &str,
+    cached: Option<Cached>,
+    cache: Option<&CacheFile>,
+) -> Value {
     let paths = identity_paths(source_root);
     let tree_sig = tree_signature(source_root, version, &paths);
+    let cached = cached.or_else(|| cache.and_then(CacheFile::load));
     let reused =
         cached.filter(|cached| cached.tree_sig == tree_sig && is_sha256_hex(&cached.fingerprint));
     let (fingerprint, reused) = match reused {
-        Some(cached) => (cached.fingerprint.clone(), true),
-        None => (content_fingerprint(source_root, version, &paths), false),
+        Some(cached) => (cached.fingerprint, true),
+        None => {
+            let fingerprint = content_fingerprint(source_root, version, &paths);
+            if let Some(cache) = cache {
+                cache.store(&tree_sig, &fingerprint);
+            }
+            (fingerprint, false)
+        }
     };
     json!({ "tree_sig": tree_sig, "fingerprint": fingerprint, "reused": reused })
+}
+
+/// The on-disk form of the cache, keyed by the source root it describes.
+/// Unknown keys are ignored.
+#[derive(Deserialize)]
+struct Stored {
+    content_fingerprint: String,
+    source_root: String,
+    tree_sig: String,
+}
+
+struct CacheFile {
+    directory: PathBuf,
+    path: PathBuf,
+    private_root: PathBuf,
+    source_root: String,
+}
+
+impl CacheFile {
+    fn new(directory: &str, source_root: &str) -> Option<Self> {
+        let directory = PathBuf::from(directory);
+        if !directory.is_absolute() {
+            return None;
+        }
+        let private_root = directory.parent()?.to_path_buf();
+        let name = format!(
+            "{}.json",
+            hex::encode(Sha256::digest(source_root.as_bytes()))
+        );
+        Some(Self {
+            path: directory.join(name),
+            directory,
+            private_root,
+            source_root: source_root.to_owned(),
+        })
+    }
+
+    fn load(&self) -> Option<Cached> {
+        if !private_directory(&self.directory) {
+            return None;
+        }
+        let bytes = managed_resident::private_file::read_private_bytes(
+            &self.path,
+            &self.private_root,
+            "runtime_fingerprint_cache",
+        )
+        .ok()??;
+        let stored: Stored = serde_json::from_slice(&bytes).ok()?;
+        (stored.source_root == self.source_root && is_sha256_hex(&stored.content_fingerprint))
+            .then_some(Cached {
+                tree_sig: stored.tree_sig,
+                fingerprint: stored.content_fingerprint,
+            })
+    }
+
+    fn store(&self, tree_sig: &str, fingerprint: &str) {
+        #[cfg(not(windows))]
+        {
+            let mut builder = fs::DirBuilder::new();
+            builder.recursive(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            if builder.create(&self.private_root).is_err() {
+                return;
+            }
+        }
+        if crate::resident_state::ensure_private_directory_under(
+            &self.directory,
+            &self.private_root,
+            true,
+        )
+        .is_err()
+        {
+            return;
+        }
+        let body = json!({
+            "content_fingerprint": fingerprint,
+            "source_root": self.source_root,
+            "tree_sig": tree_sig,
+        });
+        let _ = managed_resident::private_file::write_private(
+            &self.path,
+            body.to_string().as_bytes(),
+            &self.private_root,
+        );
+    }
+}
+
+/// The cache directory is a real directory only its owner can enter.
+#[cfg(unix)]
+fn private_directory(directory: &Path) -> bool {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    fs::symlink_metadata(directory).is_ok_and(|metadata| {
+        metadata.is_dir()
+            && metadata.permissions().mode() & 0o077 == 0
+            && metadata.uid() == nix::unistd::geteuid().as_raw()
+    })
+}
+
+#[cfg(not(unix))]
+fn private_directory(directory: &Path) -> bool {
+    fs::symlink_metadata(directory).is_ok_and(|metadata| metadata.is_dir())
 }
 
 fn is_sha256_hex(value: &str) -> bool {

@@ -2279,40 +2279,33 @@ class _FingerprintRuntime:
 
 def _fingerprint_runtime(tmp_path, monkeypatch, answer: dict[str, object] | None) -> tuple[_FingerprintRuntime, Path]:
     fake = _FingerprintRuntime(answer)
-    cache_path = tmp_path / "fp-cache" / "runtime-fingerprint-cache.json"
+    cache_dir = tmp_path / "fp-cache" / "runtime-fingerprint-cache"
     monkeypatch.setattr("codex_plugin_scanner.guard.mdm.runtime_request.runtime_answer", fake.answer)
     monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_source_root", lambda: str(tmp_path))
-    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache_path", lambda _source_root: cache_path)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache_dir", lambda: cache_dir)
     monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache", None)
-    return fake, cache_path
+    return fake, cache_dir
 
 
-def test_runtime_fingerprint_hands_the_cached_pair_to_the_native_runtime(tmp_path, monkeypatch):
-    """The walk and hashes are pinned in `runtime_fingerprint_tests.rs`; this pins the cache round trip."""
-    fake, cache_path = _fingerprint_runtime(
-        tmp_path, monkeypatch, {"tree_sig": "t" * 8, "fingerprint": "a" * 64, "reused": False}
+def test_runtime_fingerprint_hands_the_cache_dir_to_the_native_runtime(tmp_path, monkeypatch):
+    """The walk, hashes and cache file are pinned in `runtime_fingerprint_tests.rs`."""
+    fake, cache_dir = _fingerprint_runtime(
+        tmp_path, monkeypatch, {"tree_sig": "t" * 8, "fingerprint": "a" * 64, "reused": True}
     )
 
     assert daemon_manager_module._current_guard_daemon_runtime_fingerprint() == "a" * 64
-    assert json.loads(cache_path.read_text(encoding="utf-8")) == {
-        "content_fingerprint": "a" * 64,
-        "source_root": str(tmp_path),
-        "tree_sig": "t" * 8,
-    }
-    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache", None)
-    fake.answer_value = {"tree_sig": "t" * 8, "fingerprint": "a" * 64, "reused": True}
-    cache_path.write_text(
-        json.dumps({"content_fingerprint": "a" * 64, "source_root": str(tmp_path), "tree_sig": "t" * 8}),
-        encoding="utf-8",
-    )
+    fake.answer_value = {"tree_sig": "u" * 8, "fingerprint": "b" * 64, "reused": False}
+    # The answer is memoised for the life of the process.
     assert daemon_manager_module._current_guard_daemon_runtime_fingerprint() == "a" * 64
-
-    request = {
-        "schema": "runtime-fingerprint.v1",
-        "source_root": str(tmp_path),
-        "version": daemon_manager_module.__version__,
-    }
-    assert fake.requests == [request, {**request, "cached": {"tree_sig": "t" * 8, "fingerprint": "a" * 64}}]
+    assert daemon_manager_module._runtime_fingerprint_cache == ("t" * 8, "a" * 64)
+    assert fake.requests == [
+        {
+            "schema": "runtime-fingerprint.v1",
+            "source_root": str(tmp_path),
+            "version": daemon_manager_module.__version__,
+            "cache_dir": str(cache_dir),
+        }
+    ]
 
 
 @pytest.mark.parametrize(
@@ -2342,8 +2335,8 @@ def test_same_install_native_upgrade_rejects_live_previous_generation(tmp_path, 
     monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_source_root", lambda: str(tmp_path))
     monkeypatch.setattr(
         daemon_manager_module,
-        "_runtime_fingerprint_cache_path",
-        lambda _source_root: tmp_path / "fp-cache" / "runtime-fingerprint-cache.json",
+        "_runtime_fingerprint_cache_dir",
+        lambda: tmp_path / "fp-cache" / "runtime-fingerprint-cache",
     )
     monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache", None)
     previous_generation = {
