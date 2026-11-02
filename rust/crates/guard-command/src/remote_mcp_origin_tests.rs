@@ -30,6 +30,21 @@ fn keeps_scheme_host_and_path_only() {
 }
 
 #[test]
+fn reads_the_port_as_cpython_3_12_does() {
+    // `int()` ignores leading zeros, however many there are.
+    let padded = format!("https://mcp.example.test:{}80/mcp", "0".repeat(40));
+    assert_eq!(
+        origin(&padded).as_deref(),
+        Some("https://mcp.example.test:80/mcp")
+    );
+    // 3.12 requires ASCII digits, so a full-width port is no port at all.
+    assert_eq!(
+        origin("https://mcp.example.test:\u{ff11}\u{ff12}/mcp"),
+        None
+    );
+}
+
+#[test]
 fn rejects_what_is_not_a_remote_http_server() {
     for rejected in [
         "${MCP_URL}",

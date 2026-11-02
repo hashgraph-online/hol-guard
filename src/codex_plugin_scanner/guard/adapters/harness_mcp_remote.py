@@ -14,6 +14,9 @@ from ..runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .contracts import display_name_for
 
 MAX_DISCOVERED_MCP_SERVERS = 100
+# URLs per native request, far below its count and byte limits, so a config
+# that declares thousands of servers is read in several requests, not refused.
+_ORIGIN_BATCH = 256
 _NAMESPACE_UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
 
 
@@ -31,24 +34,21 @@ class DiscoveredRemoteMcpServer:
 
 
 def remote_mcp_origins(urls: Sequence[str], *, guard_home: Path | None = None) -> list[str | None]:
-    """Return each URL's recorded ``scheme://host/path`` origin, or ``None``.
+    """Each URL's recorded ``scheme://host/path`` origin from the native runtime, or ``None``.
 
-    The native runtime drops credentials, query and fragment, and masks a path
-    segment that looks like an account key. An unusable answer raises
-    ``NativeRunnerAuthorityError`` (a ``ValueError``), which discovery callers
-    treat as a failed read that lists none and forgets nothing.
+    An unusable answer raises ``NativeRunnerAuthorityError``: a failed read that lists none and forgets nothing.
     """
 
-    if not urls:
-        return []
-    answer = native_runner_authority("remote_mcp_origins", {"urls": list(urls)}, guard_home=guard_home)
-    origins = answer.get("origins")
-    if not isinstance(origins, list):
+    origins: list[object] = []
+    for start in range(0, len(urls), _ORIGIN_BATCH):
+        batch = list(urls[start : start + _ORIGIN_BATCH])
+        answer = native_runner_authority("remote_mcp_origins", {"urls": batch}, guard_home=guard_home).get("origins")
+        if not isinstance(answer, list) or len(cast(list[object], answer)) != len(batch):
+            raise NativeRunnerAuthorityError("remote MCP origins are malformed")
+        origins.extend(cast(list[object], answer))
+    if not all(value is None or isinstance(value, str) for value in origins):
         raise NativeRunnerAuthorityError("remote MCP origins are malformed")
-    values = cast(list[object], origins)
-    if len(values) != len(urls) or not all(value is None or isinstance(value, str) for value in values):
-        raise NativeRunnerAuthorityError("remote MCP origins are malformed")
-    return cast(list[str | None], values)
+    return cast(list[str | None], origins)
 
 
 def _remote_servers(
