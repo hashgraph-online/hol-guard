@@ -207,15 +207,56 @@ fn macos_runs_every_profile() {
 }
 
 #[test]
-fn linux_runs_only_the_workspace_sandbox() {
+fn linux_runs_the_workspace_sandbox_and_every_read_only_profile() {
     assert_eq!(
         sink(&workspace_inputs("linux", "claude-code")).0.as_deref(),
         Some("workspace-contained-v1")
     );
     assert_eq!(
-        kept(&pytest_inputs("linux", "claude-code")),
-        "platform_has_no_sink"
+        sink(&pytest_inputs("linux", "claude-code")).0.as_deref(),
+        Some("pytest-readonly-v2")
     );
+    for (reason, profile) in [
+        (
+            "native_python_eval_readonly_containment_required",
+            "python-eval-readonly-v1",
+        ),
+        (
+            "native_node_eval_readonly_containment_required",
+            "node-eval-readonly-v1",
+        ),
+        (
+            "native_bun_eval_readonly_containment_required",
+            "node-eval-readonly-v1",
+        ),
+        (
+            "native_package_test_readonly_containment_required",
+            "package-test-readonly-v1",
+        ),
+        (
+            "native_node_build_output_containment_required",
+            "node-build-output-v1",
+        ),
+        (
+            "native_node_tool_readonly_containment_required",
+            "node-tool-readonly-v1",
+        ),
+        (
+            "native_git_readonly_containment_required",
+            "git-readonly-v1",
+        ),
+        (
+            "native_vitest_readonly_containment_required",
+            "vitest-readonly-v1",
+        ),
+        (
+            "native_node_test_readonly_containment_required",
+            "node-test-readonly-v1",
+        ),
+    ] {
+        let inputs = sink_inputs("linux", "zcode", reason, profile);
+        assert_eq!(sink(&inputs).0.as_deref(), Some(profile), "{reason}");
+    }
 }
 
 #[test]

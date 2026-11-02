@@ -103,11 +103,13 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
     }
 }
 
-/// On macOS, narrower node profiles claim these commands before the general
-/// workspace profile; each is at least as tightly bounded, or needs no sandbox
-/// at all. Linux has only the workspace sandbox.
+/// Narrower node profiles claim these commands before the general workspace
+/// profile; each is at least as tightly bounded, or needs no sandbox at all.
+/// Every host whose sandbox can start a contained run routes them -- macOS
+/// under Seatbelt, Linux under a bubblewrap mount -- so the profile is asked
+/// of `host()` rather than of one operating system.
 #[test]
-fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
+fn node_commands_with_a_narrower_profile_keep_it() {
     let ws = workspace("node-narrow", true);
     // The narrow profiles run only these script bodies, from local entrypoints.
     let scripts = r#"{"scripts":{"lint":"eslint src","build":"vite build"}}"#;
@@ -133,12 +135,8 @@ fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
         ("npm -v", "native_exact_safe_command"),
     ] {
         let got = reason("omp", command, &ws, true);
-        if cfg!(target_os = "macos") {
+        if host() {
             assert_eq!(got, narrower, "{command}");
-        } else if host() {
-            // Linux has no narrower node profile; the workspace sandbox
-            // bounds the command instead.
-            assert!(got == narrower || got == CONTAINED, "{command}: {got}");
         } else {
             assert_ne!(got, CONTAINED, "{command}");
         }
@@ -147,14 +145,14 @@ fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
 
 /// Inline `node -e` has its own, narrower read-only containment profile, which
 /// runs before the general workspace profile and bounds the command at least
-/// as tightly.
+/// as tightly, on every host whose sandbox can start a contained run.
 #[test]
 fn inline_node_eval_keeps_its_read_only_containment_profile() {
     let ws = workspace("node-eval", true);
     let got = reason("omp", "node -e 1", &ws, true);
-    if cfg!(target_os = "macos") {
+    if host() {
         assert_eq!(got, "native_node_eval_readonly_containment_required");
-    } else if !host() {
+    } else {
         assert_ne!(got, CONTAINED);
     }
 }
@@ -472,10 +470,10 @@ fn a_linked_worktree_contains_git_with_its_shared_directory() {
     std::fs::write(tree.join("package.json"), "{}").unwrap();
     for command in ["rm notes.txt", "npm run build", "chmod +x scripts/run.sh"] {
         let got = reason("omp", command, &tree, true);
-        // macOS claims the build with its narrower node build-output profile.
-        let narrower = cfg!(target_os = "macos")
-            && command == "npm run build"
-            && got == "native_node_build_output_containment_required";
+        // A host with a sandbox claims the build with its narrower node
+        // build-output profile instead of the general workspace one.
+        let narrower =
+            command == "npm run build" && got == "native_node_build_output_containment_required";
         assert_eq!(got == CONTAINED || narrower, host(), "{command}");
     }
     // Its index, reflog and objects are the shared Git directory's, which the

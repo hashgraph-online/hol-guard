@@ -1084,11 +1084,12 @@ fn evaluate_envelope(
             },
         )
     });
-    // macOS runs every credential-filtering profile. Windows runs the Python
-    // and Node evaluation profiles, the read-only pytest profile, the Vite
-    // build and the read-only Node tools (lint, typecheck and format checks)
-    // in an AppContainer, for harnesses whose shell runs a sink command
-    // written for it: Claude Code (Git Bash) and the Pi family (a bash
+    // macOS runs every credential-filtering profile, and Linux runs every
+    // read-only one under bubblewrap where the mount is available. Windows
+    // runs the Python and Node evaluation profiles, the read-only pytest
+    // profile, the Vite build and the read-only Node tools (lint, typecheck
+    // and format checks) in an AppContainer, for harnesses whose shell runs a
+    // sink command written for it: Claude Code (Git Bash) and the Pi family (a bash
     // implementation) take the POSIX-quoted one, Codex a PowerShell one. The
     // sink command names only the profile, so every profile routes the same
     // way. Only harnesses that rewrite into the contained sink get the
@@ -1104,7 +1105,30 @@ fn evaluate_envelope(
                     | "native_pytest_readonly_containment_required"
             )
         ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi");
-    if (cfg!(target_os = "macos") || (cfg!(windows) && windows_contained))
+    // Linux runs the same read-only profiles under a bubblewrap mount, from
+    // the same POSIX sink command, so no harness is narrowed out here the way
+    // Windows narrows the shells whose quoting the sink command is written
+    // for. The mount probe is the one the workspace sandbox already asks: a
+    // host that refuses it cannot start a contained run at all, and the review
+    // this keeps there is the honest answer.
+    let linux_contained = matches!(
+        contained_test_reason,
+        Some(
+            "native_python_eval_readonly_containment_required"
+                | "native_node_eval_readonly_containment_required"
+                | "native_bun_eval_readonly_containment_required"
+                | "native_package_test_readonly_containment_required"
+                | "native_node_build_output_containment_required"
+                | "native_node_tool_readonly_containment_required"
+                | "native_git_readonly_containment_required"
+                | "native_vitest_readonly_containment_required"
+                | "native_node_test_readonly_containment_required"
+                | "native_pytest_readonly_containment_required"
+        )
+    ) && super::workspace_contained::sandbox_available();
+    if (cfg!(target_os = "macos")
+        || (cfg!(target_os = "linux") && linux_contained)
+        || (cfg!(windows) && windows_contained))
         && event == "PreToolUse"
         && (matches!(
             harness,

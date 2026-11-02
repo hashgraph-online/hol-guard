@@ -2,6 +2,7 @@
 
 use super::request::{cleanup_stale_requests, REQUEST_DIRECTORY_PREFIX, REQUEST_FILE_NAME};
 use super::{native_shape, route_on, HookDirectDefer, Host, SinkTarget, WORKSPACE_PROFILE};
+use crate::hook_decision_containment_route::LINUX_PROFILES;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -38,7 +39,7 @@ fn launcher() -> String {
 fn platform(name: &str) -> fn(&str) -> bool {
     match name {
         "darwin" => |_| true,
-        "linux" => |profile| profile == WORKSPACE_PROFILE,
+        "linux" => |profile| LINUX_PROFILES.contains(&profile),
         _ => |_| false,
     }
 }
