@@ -33,6 +33,7 @@ use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
 use super::pi_detect;
+use super::pi_extension_render;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
 use super::{
@@ -152,6 +153,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "zcode_detect" => zcode_detect::detect(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
+        "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
         "claude_code_detect" => claude_code_detect::detect(args),

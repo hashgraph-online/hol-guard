@@ -771,6 +771,11 @@ mod package_workspace_scope_op;
 mod persistence_action_class;
 #[path = "adapters/detection/pi_detect.rs"]
 mod pi_detect;
+#[path = "adapters/pi_extension_render.rs"]
+mod pi_extension_render;
+#[cfg(test)]
+#[path = "adapters/pi_extension_render_tests.rs"]
+mod pi_extension_render_tests;
 mod pi_glob;
 mod pi_hook_bridge;
 #[cfg(all(test, unix))]

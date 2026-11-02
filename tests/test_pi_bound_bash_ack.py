@@ -8,9 +8,7 @@ import subprocess
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
-    CONTAINED_TEST_HELPERS_SOURCE,
-)
+from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE
 
 
 @pytest.mark.parametrize("harness", ["omp", "pi"])

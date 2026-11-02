@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_tool_resume_source import TOOL_APPROVAL_RESUME_SOURCE
 from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from tests.pi_continuation_support import _decode_json_object, _node_executable, _run_child
+from tests.pi_extension_template import TOOL_APPROVAL_RESUME_SOURCE
 
 
 def _source(tmp_path: Path, harness: str, *, previous: bool = False) -> str:
