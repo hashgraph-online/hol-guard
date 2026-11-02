@@ -85,6 +85,7 @@ const PACKAGE_EXECUTABLES: &[&str] = &[
     "bun",
     "cargo",
     "cargo-binstall",
+    "cargo-install-update",
     "dnf",
     "gem",
     "npm",
@@ -99,7 +100,8 @@ const PACKAGE_EXECUTABLES: &[&str] = &[
 
 /// Whether the program `executable` names is a package manager. The basename
 /// is read without the extension Windows launches it by, and without the
-/// version a Python manager carries, so `pip3` and `pip3.12` are `pip`.
+/// version a manager carries, attached or hyphenated, so `pip3`, `pip3.12`,
+/// `pip-3.12` and Fedora's `dnf-3` all read as the manager they launch.
 pub(in crate::pretool) fn executable_is_package_tool(executable: &str) -> bool {
     let name = executable
         .rsplit(['/', '\\'])
@@ -110,8 +112,9 @@ pub(in crate::pretool) fn executable_is_package_tool(executable: &str) -> bool {
         .rsplit_once('.')
         .filter(|(_, extension)| matches!(*extension, "exe" | "cmd" | "bat" | "ps1"))
         .map_or(name.as_str(), |(stem, _)| stem);
-    let versionless =
-        name.trim_end_matches(|character: char| character.is_ascii_digit() || character == '.');
+    let versionless = name
+        .trim_end_matches(|character: char| character.is_ascii_digit() || character == '.')
+        .trim_end_matches('-');
     PACKAGE_EXECUTABLES.contains(&name) || PACKAGE_EXECUTABLES.contains(&versionless)
 }
 

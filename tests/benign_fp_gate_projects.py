@@ -66,6 +66,10 @@ _NODE_TOOLS = {
     "tsx": ("4.20.3", ("tsx",)),
     "turbo": ("2.5.5", ("turbo",)),
     "lint-staged": ("16.1.2", ("lint-staged",)),
+    # Runs the project's own scripts and installs nothing. Its launcher has to
+    # be here for a case that spells it from `.bin` to measure the route rather
+    # than a missing program, which contains on its own.
+    "npm-run-all": ("4.1.5", ("npm-run-all", "run-s", "run-p")),
 }
 _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "prettier --check ."}
 # The suite split into named parts, which is how a project with more than one
@@ -148,6 +152,9 @@ _PACKAGE_LAUNCHERS = {
     ("vitest", "vitest"): "vitest.mjs",
     ("typescript", "tsc"): "bin/tsc",
     ("prettier", "prettier"): "bin/prettier.cjs",
+    ("npm-run-all", "npm-run-all"): "bin/npm-run-all/index.js",
+    ("npm-run-all", "run-s"): "bin/run-s/index.js",
+    ("npm-run-all", "run-p"): "bin/run-p/index.js",
 }
 
 
