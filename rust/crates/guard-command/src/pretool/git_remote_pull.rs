@@ -302,16 +302,32 @@ pub(in crate::pretool) fn pager_enabled(effective: &GitConfig, command: &str) ->
         .is_some_and(|values| values.iter().any(|value| !disabled(value)))
 }
 
+/// Git compares the configured value as it reads it: `git_parse_maybe_bool`
+/// trims nothing, and a quoted value keeps the whitespace inside the quotes.
+/// So `pager.ls-remote = "false "` is not a boolean to Git at all -- it is the
+/// name of the pager program to run -- and trimming here would read it as a
+/// pager that is off.
 pub(in crate::pretool) fn disabled(value: &str) -> bool {
     matches!(
-        value.trim().to_ascii_lowercase().as_str(),
+        value.to_ascii_lowercase().as_str(),
         "false" | "no" | "off" | "0"
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{configuration_routed, fast_forward_merge, merge_inert, GitConfig, Pull};
+    use super::{configuration_routed, disabled, fast_forward_merge, merge_inert, GitConfig, Pull};
+
+    #[test]
+    fn only_a_value_git_reads_as_false_turns_a_pager_off() {
+        for value in ["false", "FALSE", "no", "off", "0"] {
+            assert!(disabled(value), "{value:?}");
+        }
+        // Git trims nothing, so a padded value is the pager program's name.
+        for value in ["false ", " false", "false\t", "cat", "less", "0 "] {
+            assert!(!disabled(value), "{value:?}");
+        }
+    }
 
     fn config(entries: &[(&str, &str)]) -> GitConfig {
         entries
