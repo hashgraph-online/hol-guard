@@ -565,3 +565,35 @@ fn a_word_a_manager_does_not_alias_stays_a_script_name() {
         );
     }
 }
+
+#[test]
+fn a_tsx_test_run_keeps_its_route_through_the_node_runner_flags() {
+    // `tsx` hands its arguments to Node, so a workspace test file run through
+    // it carries the runner's own flags ahead of the script. The script is
+    // still the one the sink loads, so the flags cannot move the route.
+    for command in [
+        "npx tsx --test __tests__/media.test.ts",
+        "npx tsx --test --test-only __tests__/media.test.ts",
+        "npx --no-install tsx --test --test-timeout=30000 src/parse.test.ts",
+        "tsx --test-concurrency=4 src/parse.test.ts",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+
+    // A reporter names a module to load and a file to write, so a run that
+    // asks for one is not this shape and keeps its review.
+    for command in [
+        "npx tsx --test-reporter=spec __tests__/media.test.ts",
+        "npx tsx --test --test-reporter-destination=out.txt src/parse.test.ts",
+    ] {
+        assert_ne!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+}
