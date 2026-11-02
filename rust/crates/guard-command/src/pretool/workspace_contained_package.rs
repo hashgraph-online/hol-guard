@@ -157,16 +157,22 @@ fn exec_runs_a_fetcher(manager: &str, arguments: &[&str], verb: usize) -> bool {
 }
 
 /// The index of the verb a workspace selector stands in front of. `yarn
-/// workspace <name>` and `pnpm recursive` name which project of the workspace
-/// the command runs in rather than what runs there, so the verb they carry is
-/// the word behind the selector and behind the options spelled after it.
-/// Reading the leading word alone would leave `yarn workspace web exec npx
-/// <package>` with no `exec` for [`exec_runs_a_fetcher`] to answer for, and the
-/// fetch behind it unread.
+/// workspace <name>` and pnpm's `recursive` — which pnpm also spells `multi`
+/// and `m` — name which project of the workspace the command runs in rather
+/// than what runs there, so the verb they carry is the word behind the
+/// selector and behind the options spelled after it. Reading the leading word
+/// alone would leave `yarn workspace web exec npx <package>` with no `exec`
+/// for [`exec_runs_a_fetcher`] to answer for, and the fetch behind it unread.
+///
+/// The index returned is the selector's own when nothing stands behind it, and
+/// the first word the option walk did not read otherwise. That word deciding
+/// the admission is the caller's to screen: an option the walk stopped at is
+/// one this route has not read, and a selector in front of it must not pass it
+/// in.
 fn verb_behind_a_selector(manager: &str, arguments: &[&str], verb: usize) -> usize {
     let selector = match (manager, arguments.get(verb).copied()) {
         ("yarn", Some("workspace")) => 2,
-        ("pnpm", Some("recursive")) => 1,
+        ("pnpm", Some("recursive" | "multi" | "m")) => 1,
         _ => return verb,
     };
     let Some(behind) = arguments.get(verb + selector..) else {
@@ -460,15 +466,23 @@ pub(super) fn local_package_work(
         } else {
             &arguments[..]
         };
+        // The verb a workspace selector carries is read behind the selector,
+        // and the option walk that finds it stops at the first option this
+        // route has not read. `pnpm recursive --dir <path> exec <tool>` is
+        // that shape: `--dir` moves the run to a directory the inert-value
+        // walk never read, and the selector in front of it would otherwise
+        // carry the command in on the leading word alone. A selector standing
+        // in front of an unread option therefore keeps the command out.
+        let selected = verb_behind_a_selector(&name, &arguments, verb);
+        let selector_hides_an_option = arguments
+            .get(selected)
+            .is_some_and(|argument| argument.starts_with('-'));
         !behind.is_empty()
             && (leading_verb || version_probe)
             && !workspace_fanout
             && !positional_init
-            && !exec_runs_a_fetcher(
-                &name,
-                &all_arguments,
-                verb_behind_a_selector(&name, &arguments, verb),
-            )
+            && !selector_hides_an_option
+            && !exec_runs_a_fetcher(&name, &all_arguments, selected)
             && !scan_reaches_a_registry(&name, scanned)
     })
 }

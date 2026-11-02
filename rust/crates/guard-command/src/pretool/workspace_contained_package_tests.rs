@@ -25,6 +25,8 @@ fn pnpm_and_yarn_exec_run_in_the_workspace_sandbox() {
         "pnpm -r exec vitest run",
         "yarn workspace web exec vitest run",
         "pnpm recursive exec vitest run",
+        "pnpm multi exec vitest run",
+        "pnpm m exec vitest run",
         // A script of the project's own named `exec` is the script it is.
         "pnpm run exec",
         // The target is read past a `--` separator, and reading it there must
@@ -83,6 +85,12 @@ fn exec_that_can_reach_a_registry_keeps_its_review() {
         "yarn workspace web exec env npx cowsay",
         "yarn workspace web exec 'npm install zod'",
         "pnpm recursive exec npx cowsay",
+        "pnpm multi exec npx cowsay",
+        "pnpm m exec npx cowsay",
+        // A selector cannot carry in an option this route has not read, and
+        // `--dir` moves the run to a directory the inert-value walk never saw.
+        "pnpm recursive --dir /tmp exec vitest run",
+        "pnpm m --dir /tmp exec vitest run",
         // An `exec` naming no program at all runs nothing this can read.
         "pnpm exec",
         "pnpm exec --",
