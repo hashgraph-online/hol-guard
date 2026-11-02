@@ -265,6 +265,45 @@ fn a_list_after_cd_into_a_sibling_root_runs_contained_there() {
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
 
+/// A run that reports its own status: agents end a sibling-root command with
+/// `; echo "<label>$?"` so the status survives the filter that bounds the
+/// output. The sink peels that tail before it lexes the text, and the
+/// classifier reads the same suffix, so the list is the one the root runs.
+#[test]
+fn a_status_echo_after_a_sibling_cd_stays_contained() {
+    let (home, main, tree) = fixture();
+    for command in [
+        format!("cd {} && npm run build; echo \"build=$?\"", tree.display()),
+        format!(
+            "cd {} && node scripts/report.mjs 2>&1 | tail -3; echo \"rc=$?\"",
+            tree.display()
+        ),
+        format!("cd {}; npm run build; echo rc=$?", tree.display()),
+    ] {
+        assert_eq!(
+            contained(&reason("omp", &home, &main, &command)),
+            host(),
+            "{command}"
+        );
+    }
+    for command in [
+        // Not the tail the sink peels: no status to print, a quoting the sink
+        // cannot read, or work after the echo that the `cd` would still join.
+        format!("cd {} && npm run build; echo done", tree.display()),
+        format!("cd {} && npm run build; echo 'rc=$?'", tree.display()),
+        format!(
+            "cd {} && npm run build; echo \"rc=$?\" && ls dist",
+            tree.display()
+        ),
+    ] {
+        assert!(
+            !contained(&reason("omp", &home, &main, &command)),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
 #[test]
 fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
     let (home, main, _tree) = fixture();

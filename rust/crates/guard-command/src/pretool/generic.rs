@@ -218,7 +218,7 @@ mod github;
 mod tools;
 #[path = "generic_web_fetch.rs"]
 mod web_fetch;
-pub(in crate::pretool) use tools::is_package_tool;
+pub(in crate::pretool) use tools::executable_is_package_tool;
 pub(in crate::pretool) use web_fetch::plain_public_url;
 
 /// Evaluate the complete raw PreToolUse payload in native code. This stays

@@ -137,7 +137,7 @@ jobs:
           echo "lanes=$LANES" >> "$GITHUB_OUTPUT"
           echo "data_only=$DATA_ONLY" >> "$GITHUB_OUTPUT"
       - name: Upload ci-plan
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ci-plan
           path: ci-plan.json
@@ -318,7 +318,7 @@ jobs:
         run: '"$SCCACHE_PATH" --show-stats || true'
       - name: Retain Rust test compilation timings
         if: always() && matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: rust-test-compilation-timings-${{ matrix.check }}-${{ github.run_attempt }}
           path: rust/target/cargo-timings/cargo-timing.html
@@ -329,7 +329,7 @@ jobs:
         run: python3 -m scripts.ci.clippy_report bind
       - name: Upload successful strict Clippy report
         if: matrix.check == 'clippy'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: clippy-report-${{ github.run_attempt }}
           path: clippy-report/
@@ -366,7 +366,7 @@ jobs:
         run: |
           uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --write-and-check
       - name: Upload native command evaluators
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-native-command-evaluators
           path: |
@@ -375,7 +375,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Upload matching native command projections
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-native-command-projections
           path: |
@@ -481,7 +481,7 @@ jobs:
             previous-client/src/codex_plugin_scanner/guard/contracts/data/extensions/
           key: ${{ steps.previous-cache.outputs.cache-primary-key }}
       - name: Upload pinned prior native command evaluators
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-prior-native-command-evaluators-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: |
@@ -490,7 +490,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Upload matching prior command projections
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-prior-native-command-projections-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: |
@@ -519,17 +519,17 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pinned prior native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-prior-native-command-evaluators-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: rust/target/previous-client/release
       - name: Restore matching prior command projections
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-prior-native-command-projections-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: previous-client
       - name: Download current native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -577,7 +577,7 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -655,12 +655,12 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pytest shard plan
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-shard-plan-3.12
           path: pytest-shards
       - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -721,7 +721,7 @@ jobs:
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-coverage-${{ github.run_attempt }}-${{ matrix.shard-index }}
           path: .coverage
@@ -730,7 +730,7 @@ jobs:
           retention-days: 1
       - name: Upload pytest duration artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-durations-${{ github.run_attempt }}-${{ matrix.shard-index }}
           path: pytest-durations.json
@@ -752,7 +752,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download pytest duration reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: pytest-durations-${{ github.run_attempt }}-*
           path: duration-reports
@@ -774,7 +774,7 @@ jobs:
           echo "complete=true" >> "$GITHUB_OUTPUT"
       - name: Upload pytest duration manifest candidate
         if: steps.duration-manifest.outputs.complete == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pytest-duration-manifest-candidate
           path: pytest-duration-manifest-candidate.json.gz
@@ -906,7 +906,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-projections
           path: .
@@ -1015,7 +1015,7 @@ jobs:
             --implementation-digest "$(jq -r '.implementation_digest' "$work/source-compiled.json")" \
             --base-program-digest "$(jq -r '.base_program_digest' "$work/source-compiled.json")"
           test "$(find dashboard-integration-wheel -maxdepth 1 -name 'hol_guard-*.whl' | wc -l)" -eq 1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: dashboard-integration-wheel
           path: dashboard-integration-wheel/hol_guard-*.whl
@@ -1038,11 +1038,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: dashboard-integration-wheel
           path: ${{ runner.temp }}/dashboard-integration-wheel
