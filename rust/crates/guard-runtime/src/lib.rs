@@ -773,6 +773,7 @@ mod package_protect_finalize_op;
 mod package_protect_projection_op;
 mod package_review_plan_op;
 mod package_workspace_scope_op;
+mod paseo_providers;
 mod persistence_action_class;
 #[path = "adapters/detection/pi_detect.rs"]
 mod pi_detect;
