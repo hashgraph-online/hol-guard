@@ -35,7 +35,7 @@ const PRESERVE_UNQUOTED_BACKSLASH: bool = cfg!(windows);
 /// Characters a surviving word may not contain: the core is handed to a
 /// sandbox, not to a shell, so a redirection or list operator inside a word
 /// would be passed through as text rather than obeyed.
-const ARGUMENT_REJECT: &str = "<>|&;";
+pub(in crate::pretool) const ARGUMENT_REJECT: &str = "<>|&;";
 /// The quiet `cd` suffix the peel resolves itself instead of the shell.
 const QUIET_SUFFIX: &str = "2>/dev/null";
 /// The longest label a final `; echo "<label>$?"` may carry.
@@ -349,6 +349,9 @@ fn lex(command: &str) -> Result<(Vec<Token>, bool), &'static str> {
         } else if word.is_none() && merge_at(&characters, index) {
             tokens.push(("2>&1".to_owned(), true));
             index += 4;
+        } else if word.is_none() && stderr_at(&characters, index) {
+            tokens.push(("2>".to_owned(), true));
+            index += 2;
         } else if OPERATOR.contains(character) {
             if let Some(value) = word.take() {
                 tokens.push((value, false));
@@ -423,6 +426,19 @@ fn lex(command: &str) -> Result<(Vec<Token>, bool), &'static str> {
         tokens.push((value, false));
     }
     Ok((tokens, exact))
+}
+
+/// `2>` as its own operator: a stderr redirect spelled the way the shell
+/// reads one, with the digit touching the `>` and no quote between them.
+///
+/// `cmd 2 >/dev/null` and `cmd '2'>/dev/null` pass `2` to the program and
+/// redirect standard output instead. Both leave the digit in the word stream,
+/// where the rejoin refuses it rather than writing back a command the shell
+/// would read as this redirect. `2>>log` and `2>&2` are not this operator
+/// either, so the `>` that follows keeps them out of every rejoin.
+fn stderr_at(characters: &[char], index: usize) -> bool {
+    characters.get(index..index + 2) == Some(&['2', '>'][..])
+        && !matches!(characters.get(index + 2).copied(), Some('&' | '>'))
 }
 
 /// `2>&1` as its own operator: the one redirection the sink applies itself.
@@ -703,20 +719,16 @@ fn plain_words(tokens: &[Token]) -> Option<String> {
 /// A trailing `2>&1` or `2>/dev/null` split off a command's words, with the
 /// text to re-emit after them.
 ///
-/// `2>&1` lexes as one operator token; `2>/dev/null` lexes as `2`, `>` and the
-/// path, because `/` ends no word. Each shape therefore needs its own reading.
+/// Both lex as one operator token followed, for the quiet form, by the path,
+/// so the digit can never have been a word the program was given.
 fn stderr_redirect(tokens: &[Token]) -> (&[Token], Option<&'static str>) {
     if let Some((last, rest)) = tokens.split_last() {
         if operator(last) == Some("2>&1") {
             return (rest, Some("2>&1"));
         }
     }
-    if let [rest @ .., number, redirect, target] = tokens {
-        if !number.1
-            && number.0.as_str() == "2"
-            && operator(redirect) == Some(">")
-            && word(target) == "/dev/null"
-        {
+    if let [rest @ .., redirect, target] = tokens {
+        if operator(redirect) == Some("2>") && word(target) == "/dev/null" {
             return (rest, Some(QUIET_SUFFIX));
         }
     }
@@ -725,11 +737,20 @@ fn stderr_redirect(tokens: &[Token]) -> (&[Token], Option<&'static str>) {
 
 /// Whether the filter peel refuses this command's pipeline, leaving the rejoin
 /// as the only reading that runs it in the root the `cd` named.
+///
+/// A `2>/dev/null` before the pipe refuses it as surely as an unreadable
+/// filter does: the peel truncates the command at the pipe and then reads the
+/// redirect's `>` among the core's words, which it will not run. The rejoin
+/// keeps the redirect in the text, where the root's own shell applies it to
+/// the same command the issued text did.
 fn peel_declines(tokens: &[Token]) -> bool {
     tokens
         .iter()
         .position(|token| operator(token) == Some("|"))
-        .is_some_and(|index| filter_chain(&tokens[index + 1..]).is_err())
+        .is_some_and(|index| {
+            filter_chain(&tokens[index + 1..]).is_err()
+                || stderr_redirect(&tokens[..index]).1 == Some(QUIET_SUFFIX)
+        })
 }
 
 /// Where a bare `node -e <program>` or `python3 -c <program>` holds its

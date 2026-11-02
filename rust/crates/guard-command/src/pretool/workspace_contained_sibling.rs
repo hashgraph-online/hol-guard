@@ -119,6 +119,10 @@ fn joined_filters(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool 
 fn plain_stage(model: &CanonicalCommandV1, segment: &CommandSegmentV1) -> bool {
     segment.executable.as_deref().is_some_and(|program| {
         super::super::contained_wrapper::output_filters::rejoined_stage(program, &segment.arguments)
+            && super::super::contained_wrapper::output_filters::rejoined_words(
+                program,
+                &segment.arguments,
+            )
     }) && segment.environment_names.is_empty()
         && segment.wrapper_chain.is_empty()
         && !segment.path_overridden
@@ -485,47 +489,5 @@ fn names_readable(segment: &CommandSegmentV1, directory: &Path, trees: &[PathBuf
 mod cargo_tests;
 
 #[cfg(test)]
-mod heap_size_tests {
-    #[test]
-    fn only_a_bounded_numeric_heap_size_is_peeled() {
-        for word in ["--max-old-space-size=16", "--max-old-space-size=4096"] {
-            assert!(super::node_heap_size(word), "{word}");
-        }
-        for word in [
-            "--max-old-space-size=",
-            "--max-old-space-size=8",
-            "--max-old-space-size=999999",
-            "--max-old-space-size=4096k",
-            "--max-old-space-size=+4096",
-            "--require=./hook.js",
-            "-r",
-        ] {
-            assert!(!super::node_heap_size(word), "{word}");
-        }
-    }
-}
-
-#[cfg(test)]
-mod operator_tests {
-    #[test]
-    fn only_operators_outside_quotes_keep_the_review() {
-        for text in [
-            "sed -i '' 's|1.0.0|1.1.0|' /tmp/wt/catalog.json",
-            "perl -pi -e \"s/a|b/c/\" /tmp/wt/notes.md",
-            "sed -i 's/a\\|b/c/' notes.md",
-            "printf 'a;b&c<d>e'",
-        ] {
-            assert!(!super::unquoted_operator(text), "{text}");
-        }
-        for text in [
-            "sed -i '' 's/a/b/' notes.md > out",
-            "perl -pi -e 's/a/b/' notes.md 2>/dev/null",
-            "echo \"`id`\"",
-            "echo 'open",
-            "printf 'a\\' > out '",
-            "cat notes.md | sh",
-        ] {
-            assert!(super::unquoted_operator(text), "{text}");
-        }
-    }
-}
+#[path = "workspace_contained_sibling_unit_tests.rs"]
+mod unit_tests;

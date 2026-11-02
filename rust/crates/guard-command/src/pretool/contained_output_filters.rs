@@ -180,6 +180,23 @@ pub(in crate::pretool) fn rejoined_stage(program: &str, arguments: &[String]) ->
     }
 }
 
+/// Whether a rejoined stage's own words survive being written back as text.
+///
+/// `plain_source` reads the segment the way a shell does, so it lets a quoted
+/// `|`, `;`, `<`, `>` or `&` through as an ordinary character. The sink writes
+/// the stage back from its lexed words, where those characters are operators
+/// again, so it refuses the same word. Asking for both here keeps the
+/// classifier from promising a containment the sink will not build.
+pub(in crate::pretool) fn rejoined_words(program: &str, arguments: &[String]) -> bool {
+    std::iter::once(program)
+        .chain(arguments.iter().map(String::as_str))
+        .all(|word| {
+            !word
+                .chars()
+                .any(|character| crate::pretool::sink_peel::ARGUMENT_REJECT.contains(character))
+        })
+}
+
 /// Whether `arguments` are switches and bounded option values only.
 ///
 /// `switches` are the single letters that change the shape of the text, and
@@ -255,7 +272,8 @@ pub(in crate::pretool) fn plain_source(source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        head_tail_bound, plain_source, rejoined_stage, stdin_arguments, GREP_SWITCHES, RG_SWITCHES,
+        head_tail_bound, plain_source, rejoined_stage, rejoined_words, stdin_arguments,
+        GREP_SWITCHES, RG_SWITCHES,
     };
 
     fn words(values: &[&str]) -> Vec<String> {
@@ -465,5 +483,13 @@ mod tests {
                 "{program} {arguments:?}"
             );
         }
+    }
+    #[test]
+    fn a_quoted_operator_passes_the_source_read_and_fails_the_word_read() {
+        assert!(plain_source("tr '|' x"));
+        assert!(!rejoined_words("tr", &words(&["|", "x"])));
+        assert!(rejoined_words("tr", &words(&["a-z", "A-Z"])));
+        assert!(!rejoined_words("grep", &words(&["a;b"])));
+        assert!(!rejoined_words("sort", &words(&["-t", "&"])));
     }
 }
