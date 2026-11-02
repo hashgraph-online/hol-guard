@@ -3058,7 +3058,7 @@ class TestGuardSurfaceServer:
         assert unsupported_error.code == 400
 
     def test_initialize_answers_503_when_the_native_handshake_fails(self, tmp_path, monkeypatch) -> None:
-        def unavailable(_kind: str, _args: dict[str, object]) -> dict[str, object]:
+        def unavailable(_kind: str, _args: dict[str, object], **_options: object) -> dict[str, object]:
             raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
         monkeypatch.setattr("codex_plugin_scanner.guard.schemas.surface_server.native_runner_authority", unavailable)
