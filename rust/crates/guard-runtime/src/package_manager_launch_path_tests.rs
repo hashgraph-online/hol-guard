@@ -142,6 +142,40 @@ fn a_link_to_the_shims_is_dropped_and_a_looping_shim_home_refuses() {
     assert_eq!(answer, json!({ "refused": "shim_unverified" }));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_double_slash_entry_names_the_same_directory() {
+    let layout = layout();
+    let tools = format!("/{}", text(&layout.tools));
+    let path = [format!("/{}", text(&layout.shims)), tools.clone()].join(":");
+    assert_eq!(launch_path(&layout, &path, ":"), json!({ "path": tools }));
+
+    let answer = dispatch(&json!({
+        "guard_home": format!("/{}", text(&layout.guard_home)),
+        "launch_cwd": text(&layout.base),
+        "separator": ":",
+        "path": [text(&layout.shims), text(&layout.tools)].join(":"),
+    }))
+    .expect("launch path answer");
+    assert_eq!(answer, json!({ "path": text(&layout.tools) }));
+}
+
+#[test]
+fn verbatim_windows_spellings_compare_as_their_plain_form() {
+    assert_eq!(
+        windows_spelling(Path::new(r"\\?\C:\Users\Me\Shims")),
+        windows_spelling(Path::new(r"c:\users\me\shims"))
+    );
+    assert_eq!(
+        windows_spelling(Path::new(r"\\?\UNC\server\share\bin")),
+        windows_spelling(Path::new(r"\\Server\Share\bin"))
+    );
+    assert_ne!(
+        windows_spelling(Path::new(r"\\?\C:\other")),
+        windows_spelling(Path::new(r"C:\shims"))
+    );
+}
+
 #[test]
 fn malformed_requests_are_invalid() {
     let layout = layout();

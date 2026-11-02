@@ -40,13 +40,13 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if path.len() > MAX_PATH_BYTES {
         return Err(ERR_INVALID);
     }
-    let Ok(shim_dir) = resolve(&guard_home.join("package-shims").join("bin")) else {
+    let Ok(shim_dir) = resolve(&posix_root(guard_home.join("package-shims").join("bin"))) else {
         return Ok(json!({ "refused": "shim_unverified" }));
     };
     let mut kept = Vec::new();
     for entry in path.split(separator).filter(|entry| !entry.is_empty()) {
         let resolved = expand_user(entry, user_home.as_deref())
-            .map(|expanded| launch_cwd.join(expanded))
+            .map(|expanded| posix_root(launch_cwd.join(expanded)))
             .and_then(|joined| resolve(&joined).ok());
         let Some(resolved) = resolved else {
             return Ok(json!({ "refused": "path_unverified" }));
@@ -89,13 +89,38 @@ fn expand_user(entry: &str, home: Option<&Path>) -> Option<PathBuf> {
     })
 }
 
-/// Python compares Windows paths without regard to case.
+/// Linux and macOS treat a leading `//` as `/`, so `//usr/bin` names
+/// `/usr/bin`. The resolver refuses that spelling, so it is folded first;
+/// three or more slashes already mean the root.
+fn posix_root(path: PathBuf) -> PathBuf {
+    let collapsed = path
+        .to_str()
+        .and_then(|text| text.strip_prefix('/'))
+        .filter(|rest| cfg!(unix) && rest.starts_with('/') && !rest.starts_with("//"))
+        .map(PathBuf::from);
+    collapsed.unwrap_or(path)
+}
+
+/// Python compares Windows paths without regard to case, and a link whose
+/// target is spelled `\\?\C:\...` still names `C:\...`.
 fn same_path(left: &Path, right: &Path) -> bool {
     if cfg!(windows) {
-        left.to_string_lossy().to_lowercase() == right.to_string_lossy().to_lowercase()
+        windows_spelling(left) == windows_spelling(right)
     } else {
         left == right
     }
+}
+
+fn windows_spelling(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    let plain = if let Some(share) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{share}")
+    } else if let Some(drive) = text.strip_prefix(r"\\?\") {
+        drive.to_owned()
+    } else {
+        text.into_owned()
+    };
+    plain.to_lowercase()
 }
 
 #[cfg(test)]
