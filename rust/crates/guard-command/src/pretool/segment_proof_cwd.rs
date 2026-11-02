@@ -81,6 +81,13 @@ fn cwd_list_context(
             .then(|| directory_targets::verified_climb_target(target, context))
             .flatten()
     })?;
+    // A trailing `; echo "<label>$?"` reports the status the steps before it
+    // left. It runs whatever the `cd` did, but an `echo` of a label is all it
+    // runs, so it joins no work to the directory the command started in.
+    let status_tail = model
+        .segments
+        .last()
+        .is_some_and(|segment| super::super::contained_wrapper::status_echo(model, segment));
     for (index, pair) in model.segments.windows(2).enumerate() {
         // Parser spans count Unicode characters, not UTF-8 byte offsets.
         let length = pair[1].span.start.checked_sub(pair[0].span.end)?;
@@ -93,6 +100,8 @@ fn cwd_list_context(
         let separator = separator.trim();
         let allowed = if index == 0 {
             separator == "&&" || (sequence_after_cd && separator == ";")
+        } else if separator == ";" {
+            status_tail && index + 2 == model.segments.len()
         } else {
             matches!(separator, "&&" | "|")
         };
