@@ -226,6 +226,40 @@ fn a_link_that_leaves_the_allowed_roots_is_refused() {
 }
 
 #[test]
+fn traversal_and_a_sibling_sharing_the_root_prefix_are_refused() {
+    let (_dir, base) = base();
+    let root = base.join("root");
+    fs::create_dir_all(&root).expect("root");
+    let sibling = base.join("root-other");
+    fs::create_dir_all(&sibling).expect("sibling");
+    for candidate in [sibling.clone(), root.join("..").join("root-other")] {
+        let answer = dispatch(&json!({
+            "explicit": [text(&candidate)],
+            "allowed_roots": [text(&root)],
+        }))
+        .expect("workspace answer");
+        assert_eq!(answer, json!({"workspace_dir": null}), "{candidate:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_workspace_under_a_linked_allowed_root_resolves_to_its_target() {
+    let (_dir, base) = base();
+    let real_root = base.join("real-root");
+    let target = real_root.join("workspace");
+    fs::create_dir_all(&target).expect("workspace");
+    let linked_root = base.join("linked-root");
+    std::os::unix::fs::symlink(&real_root, &linked_root).expect("symlink");
+    let answer = dispatch(&json!({
+        "explicit": [text(&linked_root.join("workspace"))],
+        "allowed_roots": [text(&linked_root)],
+    }))
+    .expect("workspace answer");
+    assert_eq!(answer, workspace(&target));
+}
+
+#[test]
 fn malformed_requests_are_invalid() {
     for args in [
         json!([]),

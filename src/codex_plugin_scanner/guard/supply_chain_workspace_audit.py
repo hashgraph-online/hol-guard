@@ -67,13 +67,16 @@ def resolve_supply_chain_audit_workspace_dir(
     except OSError:
         cwd = None
     user_home = os.path.expanduser("~")
+    cursor_project_dir = os.environ.get("CURSOR_PROJECT_DIR")
     answer = native_runner_authority(
         "supply_chain_audit_workspace_dir",
         {
-            "explicit": [value for value in (workspace_dir_value, workspace_value) if isinstance(value, str)],
+            "explicit": [
+                _home_expanded(value) for value in (workspace_dir_value, workspace_value) if isinstance(value, str)
+            ],
             "allowed_roots": [str(root) for root in allowed_roots],
-            "managed_workspace_dirs": list(managed_workspace_dirs or ()),
-            "cursor_project_dir": os.environ.get("CURSOR_PROJECT_DIR"),
+            "managed_workspace_dirs": [_home_expanded(value) for value in managed_workspace_dirs or ()],
+            "cursor_project_dir": None if cursor_project_dir is None else _home_expanded(cursor_project_dir),
             "cwd": cwd,
             "user_home": None if user_home == "~" else user_home,
             "reject_invalid_explicit": reject_invalid_explicit,
@@ -84,6 +87,13 @@ def resolve_supply_chain_audit_workspace_dir(
         raise ValueError("workspace_dir_invalid")
     workspace_dir = answer.get("workspace_dir")
     return Path(workspace_dir) if isinstance(workspace_dir, str) else None
+
+
+def _home_expanded(value: str) -> str:
+    """Expand a ``~user`` path here; the native runtime does not look up accounts."""
+
+    stripped = value.strip()
+    return os.path.expanduser(stripped) if stripped.startswith("~") else value
 
 
 def audit_receipt_metadata(
