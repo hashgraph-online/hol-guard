@@ -26,14 +26,18 @@ const WorkspaceFindingsWorkspace = lazyWorkspace("workspace-findings-workspace",
 const FeedHealthWorkspace = lazyWorkspace("feed-health-workspace", () =>
   import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
 );
+const McpCrossExamWorkspace = lazyWorkspace("mcp-cross-exam-workspace", () =>
+  import("./mcp-cross-exam-workspace").then((m) => ({ default: m.McpCrossExamWorkspace }))
+);
 
-type HubTab = "supply-chain" | "audit" | "workspaces" | "feed-health";
+type HubTab = "supply-chain" | "audit" | "workspaces" | "feed-health" | "mcp-cross-exam";
 
 const hubTabs: Array<{ value: HubTab; label: string }> = [
   { value: "supply-chain", label: "Supply Chain" },
   { value: "audit", label: "Audit" },
   { value: "workspaces", label: "Workspaces" },
   { value: "feed-health", label: "Feed Health" },
+  { value: "mcp-cross-exam", label: "MCP Audit" },
 ];
 
 export function hubTitleForTab(tab: HubTab): string {
@@ -41,7 +45,7 @@ export function hubTitleForTab(tab: HubTab): string {
 }
 
 function viewToTab(view: string): HubTab {
-  if (view === "supply-chain" || view === "audit" || view === "workspaces" || view === "feed-health") {
+  if (view === "supply-chain" || view === "audit" || view === "workspaces" || view === "feed-health" || view === "mcp-cross-exam") {
     return view;
   }
   return "supply-chain";
@@ -130,6 +134,7 @@ export function SupplyChainHubWorkspace(props: {
         {tab === "feed-health" && (
           <FeedHealthWorkspace snapshot={props.snapshot} onOpenSettings={props.onOpenSettings} />
         )}
+        {tab === "mcp-cross-exam" && <McpCrossExamWorkspace />}
       </Suspense>
       <div className={tab === "supply-chain" ? undefined : "hidden"} aria-hidden={tab !== "supply-chain"}>
         <PackageFirewallPanel

@@ -22,6 +22,7 @@ from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
 from .harness_version_api import attach_version_compatibility
 from .local_cli_http import handle_local_cli_list
+from .mcp_cross_exam_api import handle_mcp_cross_exam_get
 from .plugin_updates_http import handle_plugin_updates_read
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
@@ -136,6 +137,8 @@ class _DashboardRuntimeReadRoutes:
             return True
         if parsed.path == "/v1/supply-chain/bundle":
             self._handle_get_supply_chain_bundle()
+            return True
+        if handle_mcp_cross_exam_get(self, parsed.path):
             return True
         if handle_workspace_assessment_get(self, parsed.path, parsed.query):
             return True

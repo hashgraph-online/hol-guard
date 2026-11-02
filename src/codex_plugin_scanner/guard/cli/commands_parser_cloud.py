@@ -516,7 +516,7 @@ def _configure_guard_cloud_parsers(
 
     mcp_parser = guard_subparsers.add_parser(
         "mcp",
-        help="Serve the local Guard MCP server (guard-mcp.v1) or list MCP servers in the local inventory",
+        help="Serve the local Guard MCP server, list inventory MCP servers, or audit an authorized MCP target",
     )
     mcp_subparsers = mcp_parser.add_subparsers(
         dest="mcp_command",
@@ -534,6 +534,34 @@ def _configure_guard_cloud_parsers(
         help="List the MCP servers in the local Guard inventory",
     )
     configure_inventory_list_parser(mcp_list_parser)
+    mcp_audit_parser = mcp_subparsers.add_parser(
+        "audit",
+        help="Run MCP Cross Exam against an authorized HTTP, SSE, or stdio MCP target",
+    )
+    _add_guard_common_args(mcp_audit_parser)
+    mcp_audit_parser.add_argument("target", nargs="?", help="http(s) MCP endpoint, or omitted when using -- command")
+    mcp_audit_parser.add_argument("--sse", action="store_true", help="Use SSE transport for the http(s) target")
+    mcp_audit_parser.add_argument("--json", action="store_true")
+    mcp_audit_parser.add_argument("--out-dir")
+    mcp_audit_parser.add_argument("--family", dest="families", action="append", default=[])
+    mcp_audit_parser.add_argument("--probe", dest="probes", action="append", default=[])
+    mcp_audit_parser.add_argument("--skip", dest="skip", action="append", default=[])
+    mcp_audit_parser.add_argument("--tool")
+    mcp_audit_parser.add_argument("--jobs", type=int, default=1)
+    mcp_audit_parser.add_argument("--timeout", type=float, default=180.0)
+    mcp_audit_parser.add_argument("--config")
+    mcp_audit_parser.add_argument("--snapshot")
+    mcp_audit_parser.add_argument("--fail-on")
+    mcp_audit_parser.add_argument("--fail-on-incomplete", action="store_true")
+    mcp_audit_parser.add_argument("--read-only", action="store_true", default=True)
+    mcp_audit_parser.add_argument("--allow-writes", action="store_true")
+    mcp_audit_parser.add_argument("--not-production", action="store_true")
+    mcp_audit_parser.add_argument("--cwd")
+    mcp_audit_parser.add_argument("--env-from", dest="env_from", action="append", default=[])
+    mcp_audit_parser.add_argument("--bearer-env")
+    mcp_audit_parser.add_argument("--header-env", dest="header_env", action="append", default=[])
+    mcp_audit_parser.add_argument("--expired-bearer-env")
+    mcp_audit_parser.add_argument("stdio_command", nargs="*", help="stdio command after --")
     hidden_commands = {
         "admin",
         "hook",

@@ -644,6 +644,35 @@ def _run_guard_policies_command(
     return 0
 
 
+def _run_mcp_cross_exam_setting(args: argparse.Namespace, *, guard_home: Path) -> int:
+    from codex_plugin_scanner.integrations.mcp_cross_exam import (
+        mcp_cross_exam_enabled,
+        set_mcp_cross_exam_enabled,
+    )
+
+    gate_input = prompt_for_approval_gate(guard_home, use_cooldown=False)
+    try:
+        require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
+    except ApprovalGateError as error:
+        _emit("settings.mcp-cross-exam", approval_gate_cli_payload(error), getattr(args, "json", False))
+        return 4
+    enabled = getattr(args, "mcp_cross_exam", "off") == "on"
+    set_mcp_cross_exam_enabled(guard_home, enabled)
+    _emit(
+        "settings.mcp-cross-exam",
+        {
+            "mcp_cross_exam": "on" if mcp_cross_exam_enabled(guard_home) else "off",
+            "detail": (
+                "MCP Cross Exam audits are enabled on this machine. Findings stay local and do not change Guard policy."
+                if enabled
+                else "MCP Cross Exam audits are off. hol-guard mcp audit will refuse until this is turned on."
+            ),
+        },
+        getattr(args, "json", False),
+    )
+    return 0
+
+
 def _run_fleet_posture_setting(
     args: argparse.Namespace,
     *,
@@ -703,6 +732,8 @@ def _run_guard_settings_command(
         raise RuntimeError("Guard home is required")
     config = _require_guard_config(config)
     settings_sub = getattr(args, "settings_command", None)
+    if settings_sub == "set" and getattr(args, "settings_set_command", None) == "mcp-cross-exam":
+        return _run_mcp_cross_exam_setting(args, guard_home=guard_home)
     if settings_sub == "set" and getattr(args, "settings_set_command", None) == "fleet-posture":
         return _run_fleet_posture_setting(args, config=config, store=store, guard_home=guard_home)
     if settings_sub == "set":

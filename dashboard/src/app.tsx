@@ -163,6 +163,7 @@ export function viewTitle(view: AppView): string {
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
   if (view === "workspaces") return "Workspaces";
+  if (view === "mcp-cross-exam") return "MCP Audit";
   if (view === "about") return "About";
   if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
@@ -219,6 +220,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname === "/workspaces") {
     return "workspaces";
+  }
+  if (pathname === "/mcp-cross-exam") {
+    return "mcp-cross-exam";
   }
   if (pathname === "/about") {
     return "about";
@@ -378,7 +382,8 @@ export function App() {
       view === "app-detail" ||
       view === "supply-chain" ||
       view === "audit" ||
-      view === "feed-health";
+      view === "feed-health" ||
+      view === "mcp-cross-exam";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
         return;
@@ -510,7 +515,8 @@ export function App() {
       view === "app-detail" ||
       view === "supply-chain" ||
       view === "audit" ||
-      view === "feed-health";
+      view === "feed-health" ||
+      view === "mcp-cross-exam";
     const needsPolicies =
       view === "home" ||
       view === "fleet" ||
@@ -518,6 +524,7 @@ export function App() {
       view === "supply-chain" ||
       view === "audit" ||
       view === "feed-health" ||
+      view === "mcp-cross-exam" ||
       view === "policy";
     if (!needsReceipts && !needsPolicies) {
       return;
