@@ -224,6 +224,26 @@ fn findings_sort_like_the_python_key_and_are_capped() {
 }
 
 #[test]
+fn unprintable_advisory_ids_sort_by_their_escaped_repr() {
+    // Python's repr escapes U+200B as `\u200b`, which sorts before `~`.
+    let advisories: Vec<Value> = ["a~", "a\u{200b}"]
+        .iter()
+        .map(|id| {
+            advisory(
+                json!("affected"),
+                json!({"advisory_id": id, "known_exploited": false, "severity": "low"}),
+            )
+        })
+        .collect();
+    let (ordered, _) = findings(posture(json!({"advisories": advisories})));
+    let order: Vec<&str> = ordered
+        .iter()
+        .map(|finding| finding["advisory_ids"][0].as_str().unwrap())
+        .collect();
+    assert_eq!(order, ["a\u{200b}", "a~"]);
+}
+
+#[test]
 fn a_process_left_on_a_replaced_build_keeps_its_finding() {
     let (before, _) = findings(posture(
         json!({"advisories": [advisory(json!("affected"), json!({}))]}),

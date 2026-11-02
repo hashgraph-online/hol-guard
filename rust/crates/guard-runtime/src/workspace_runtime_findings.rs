@@ -26,6 +26,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::approval_queue_identity_op::{is_truthy, py_str};
+use crate::claude_hook_bridge_transport::py_repr;
 use crate::daemon_lifecycle_text::py_strip;
 use crate::runner_authority_detector::args_object;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
@@ -388,42 +389,6 @@ fn severity_of(value: Option<&Value>) -> &'static str {
 
 fn severity_rank(severity: &str) -> Option<usize> {
     SEVERITY_RANK.iter().position(|known| *known == severity)
-}
-
-/// `repr()` of a string: single quotes unless only double quotes avoid an
-/// escape, with backslash, quote and control escapes. Other non-ASCII
-/// characters are kept, as CPython keeps every printable one.
-fn py_repr(text: &str) -> String {
-    let quote = if text.contains('\'') && !text.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push(quote);
-    for character in text.chars() {
-        match character {
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            _ if character == quote => {
-                out.push('\\');
-                out.push(quote);
-            }
-            _ if character.is_control() => {
-                let code = u32::from(character);
-                if code <= 0xff {
-                    out.push_str(&format!("\\x{code:02x}"));
-                } else {
-                    out.push_str(&format!("\\u{code:04x}"));
-                }
-            }
-            _ => out.push(character),
-        }
-    }
-    out.push(quote);
-    out
 }
 
 fn write_strings(values: &[String], out: &mut Vec<u8>) {

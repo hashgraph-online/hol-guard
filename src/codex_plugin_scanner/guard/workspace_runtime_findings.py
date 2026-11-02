@@ -172,6 +172,10 @@ def assessment_context_digest(feed_digest: str, runtime_digest: str | None) -> s
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+class WorkspaceRuntimeFindingsError(RuntimeError):
+    """The native runtime could not project the runtime findings or coverage."""
+
+
 def project_runtime_findings(worktree_key: str, posture: Mapping[str, object]) -> tuple[list[dict[str, object]], bool]:
     """One finding per advisory and matched executable path, and whether any were dropped.
 
@@ -182,7 +186,7 @@ def project_runtime_findings(worktree_key: str, posture: Mapping[str, object]) -
     answer = _native("findings", {"worktree_key": worktree_key, "posture": dict(posture)})
     findings = answer.get("findings")
     if not isinstance(findings, list):
-        raise RuntimeError("Guard could not project the workspace runtime findings.")
+        raise WorkspaceRuntimeFindingsError("Guard could not project the workspace runtime findings.")
     return cast(list[dict[str, object]], findings), answer.get("truncated") is True
 
 
@@ -192,7 +196,7 @@ def with_runtime_coverage(coverage: dict[str, object], posture: Mapping[str, obj
     answer = _native("coverage", {"coverage": coverage, "posture": dict(posture) if posture is not None else None})
     merged = answer.get("coverage")
     if not isinstance(merged, dict):
-        raise RuntimeError("Guard could not summarize the workspace runtime coverage.")
+        raise WorkspaceRuntimeFindingsError("Guard could not summarize the workspace runtime coverage.")
     return cast(dict[str, object], merged)
 
 
@@ -200,7 +204,7 @@ def _native(op: str, args: Mapping[str, object]) -> dict[str, object]:
     try:
         return native_runner_authority("workspace_runtime_findings", {"op": op, **args})
     except NativeRunnerAuthorityError as error:
-        raise RuntimeError("Guard could not assess the workspace runtimes.") from error
+        raise WorkspaceRuntimeFindingsError("Guard could not assess the workspace runtimes.") from error
 
 
 __all__ = [
@@ -208,6 +212,7 @@ __all__ = [
     "RUNTIME_DETECTOR",
     "RUNTIME_OBSERVE_INTERVAL_MS",
     "RUNTIME_SOURCE_KIND",
+    "WorkspaceRuntimeFindingsError",
     "assessment_context_digest",
     "cached_runtime_digest",
     "log_probe_failure",

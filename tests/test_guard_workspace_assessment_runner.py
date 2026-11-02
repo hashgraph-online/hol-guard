@@ -431,6 +431,19 @@ def test_oversized_result_is_recorded_as_failure(tmp_path: Path, monkeypatch) ->
     assert run is not None and (run["state"], run["error_code"]) == ("failed", "assessment_result_too_large")
 
 
+def test_an_unanswered_runtime_detector_fails_the_claimed_run(tmp_path: Path, monkeypatch) -> None:
+    store, claimed = queued_run(tmp_path)
+
+    def unanswered(store, config, run, **_):
+        raise runtimes.WorkspaceRuntimeFindingsError("Guard could not project the runtime findings.")
+
+    monkeypatch.setattr(assessments, "claim_next", lambda store, owner, now_ms, **_: claimed)
+    monkeypatch.setattr(runner, "execute", unanswered)
+    assert runner.run_next(store, None, owner="test", clock=lambda: T0 + 1)
+    run = get_run(store, claimed.run_id)
+    assert run is not None and (run["state"], run["error_code"]) == ("failed", "runtime_detector_failed")
+
+
 def test_feed_digest_follows_cached_bundles(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "home")
     empty = runner.feed_context_digest(store)
