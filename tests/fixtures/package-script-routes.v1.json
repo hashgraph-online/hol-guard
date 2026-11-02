@@ -973,6 +973,60 @@
       "reason": "native_node_tool_readonly_containment_required"
     },
     {
+      "name": "tsx-test-files-script",
+      "scripts": {
+        "test": "tsx --test src/a.test.ts"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "tsx-entry-script",
+      "scripts": {
+        "test": "tsx src/main.ts"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "bun-test-script",
+      "scripts": {
+        "test": "bun test"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "bun-test-script-watching",
+      "scripts": {
+        "test": "bun test --watch"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "vitest-watch-off-option-script",
+      "scripts": {
+        "test": "vitest --run --reporter dot"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "vitest-watch-turned-back-on-script",
+      "scripts": {
+        "test": "vitest --run --watch"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
       "name": "named-test-unit-script",
       "scripts": {
         "test:unit": "vitest run"

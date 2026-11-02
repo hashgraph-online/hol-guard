@@ -64,6 +64,98 @@ fn supported_runners_resolve_with_their_passed_arguments() {
 }
 
 #[test]
+fn a_vitest_script_resolves_on_every_spelling_that_finishes_its_run() {
+    // Vitest finishes on the `run` verb and on the options that turn its
+    // watch off, so a manifest that spells the run either way names the same
+    // finishing call and resolves the same way.
+    for body in ["vitest --run", "vitest --no-watch", "vitest --watch=false"] {
+        let manifest = scripts(json!({ "test": body }));
+        let expected: Vec<String> = body.split(' ').map(|word| word.to_owned()).collect();
+        assert_eq!(
+            resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+            expected
+        );
+    }
+    let reporting = scripts(json!({"test": "vitest --run --reporter dot"}));
+    assert_eq!(
+        resolve(&words(&["yarn", "test"]), Some(&reporting)).unwrap(),
+        words(&["vitest", "--run", "--reporter", "dot"])
+    );
+    // The caller's own words are read with the manifest's, so the watch an
+    // argument turns back on keeps the alias at review, and a word naming a
+    // command this reading does not model does the same.
+    let watching = scripts(json!({"test": "vitest --run --watch"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&watching)).is_err());
+    let unmodeled = scripts(json!({"test": "vitest --run typecheck"}));
+    assert!(resolve(&words(&["npm", "test"]), Some(&unmodeled)).is_err());
+    let bare = scripts(json!({"test": "vitest"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test", "--", "--run"]), Some(&bare)).unwrap(),
+        words(&["vitest", "--run"])
+    );
+}
+
+#[test]
+fn a_tsx_script_resolves_the_test_files_it_names() {
+    let manifest = scripts(json!({ "test": "tsx --test src/a.test.ts" }));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+        words(&["tsx", "--test", "src/a.test.ts"])
+    );
+    let plain = scripts(json!({ "test": "tsx src/a.test.ts" }));
+    assert_eq!(
+        resolve(&words(&["yarn", "test"]), Some(&plain)).unwrap(),
+        words(&["tsx", "src/a.test.ts"])
+    );
+    let appended = scripts(json!({ "test": "tsx --test" }));
+    assert_eq!(
+        resolve(
+            &words(&["npm", "test", "--", "src/a.test.ts"]),
+            Some(&appended)
+        )
+        .unwrap(),
+        words(&["tsx", "--test", "src/a.test.ts"])
+    );
+    let outside = scripts(json!({ "test": "tsx --test ../other/a.test.ts" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&outside)).is_err());
+    let entry = scripts(json!({ "test": "tsx src/main.ts" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&entry)).is_err());
+}
+
+#[test]
+fn a_bun_script_resolves_the_runner_a_bun_project_names() {
+    let manifest = scripts(json!({ "test": "bun test" }));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&manifest)).unwrap(),
+        words(&["bun", "test"])
+    );
+    assert_eq!(
+        resolve(
+            &words(&["bun", "run", "test", "--", "-t", "parser"]),
+            Some(&manifest)
+        )
+        .unwrap(),
+        words(&["bun", "test", "-t", "parser"])
+    );
+    let filtered = scripts(json!({ "test": "bun test src/a.test.ts --coverage" }));
+    assert_eq!(
+        resolve(&words(&["pnpm", "test"]), Some(&filtered)).unwrap(),
+        words(&["bun", "test", "src/a.test.ts", "--coverage"])
+    );
+    let file = scripts(json!({ "test": "bun src/a.test.ts" }));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&file)).unwrap(),
+        words(&["bun", "src/a.test.ts"])
+    );
+    let outside = scripts(json!({ "test": "bun test ../other" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&outside)).is_err());
+    let unmodeled = scripts(json!({ "test": "bun test --watch" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&unmodeled)).is_err());
+    let manager = scripts(json!({ "test": "bun run inner" }));
+    assert!(resolve(&words(&["npm", "test"]), Some(&manager)).is_err());
+}
+
+#[test]
 fn a_jest_script_resolves_only_while_it_finishes_in_its_workspace() {
     let manifest = scripts(json!({"test": "jest --ci"}));
     assert_eq!(

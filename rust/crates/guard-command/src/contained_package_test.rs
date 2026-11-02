@@ -8,7 +8,10 @@
 #[path = "contained_package_test_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{jest_contained_call, mocha_contained_call, program_name};
+use crate::contained_argv::{
+    bun_test_runs_once, bun_test_script_once, jest_contained_call, mocha_contained_call,
+    program_name, tsx_test_invocation, vitest_runs_once,
+};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, SCRIPT_LEXER};
 use serde_json::{Map, Value};
@@ -143,13 +146,24 @@ pub(crate) fn script_tokens(
     {
         return Err(invalid("Test shell effects need separate evaluation."));
     }
+    // Each runner is read by its own grammar over the words the manifest
+    // declares and the words the caller appended, so a script body is admitted
+    // on the same terms as the direct call that spells it. Vitest included:
+    // `--run` turns the watch off exactly as the `run` verb does, and a
+    // manifest that spells it that way names the same finishing run. Bun too:
+    // `bun test` is the runner a Bun project's own `test` entry names, and
+    // `bun <file>.test.ts` loads one of the files that run already discovers.
+    // `tsx` names the test files it runs the same way at either spelling.
     let passthrough = trailing.get(1..).unwrap_or_default();
     let runner = tokens[0].as_str();
     let rest = &tokens[1..];
     let flag = rest.first();
     let node = matches!(program_name(runner), "node" | "nodejs")
         && flag.is_some_and(|flag| flag == "--test");
-    let vitest = program_name(runner) == "vitest" && flag.is_some_and(|flag| flag == "run");
+    let vitest = program_name(runner) == "vitest" && {
+        let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+        vitest_runs_once(&call)
+    };
     let jest = program_name(runner) == "jest" && {
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         jest_contained_call(&call)
@@ -158,7 +172,20 @@ pub(crate) fn script_tokens(
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         mocha_contained_call(&call)
     };
-    if !node && !vitest && !jest && !mocha {
+    let bun = program_name(runner) == "bun" && {
+        let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+        match call.split_first() {
+            Some((verb, args)) if verb == "test" => bun_test_runs_once(args),
+            _ => bun_test_script_once(&call),
+        }
+    };
+    let tsx = program_name(runner) == "tsx" && {
+        let call: Vec<String> = std::iter::once(runner.to_owned())
+            .chain(rest.iter().chain(passthrough.iter()).cloned())
+            .collect();
+        tsx_test_invocation(&call).ok().flatten().is_some()
+    };
+    if !node && !vitest && !jest && !mocha && !bun && !tsx {
         // A project may name a read-only tool run for the suite it checks,
         // such as a `test:types` entry holding `tsc --noEmit`. The words the
         // manifest declares are the run either way, so the body goes back as
