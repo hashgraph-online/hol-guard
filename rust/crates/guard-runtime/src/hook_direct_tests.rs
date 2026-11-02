@@ -175,6 +175,9 @@ mod emergency_lane;
 #[path = "hook_direct_lifecycle_tests.rs"]
 mod lifecycle;
 
+#[path = "hook_direct_lifecycle_wake_tests.rs"]
+mod lifecycle_wake;
+
 #[path = "hook_direct_counters_evaluate_tests.rs"]
 mod counters;
 

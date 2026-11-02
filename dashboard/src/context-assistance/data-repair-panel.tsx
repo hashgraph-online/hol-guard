@@ -8,6 +8,7 @@ import type { GuardContextAssistanceConfig } from "../guard-types";
 import { controlContextAssistance, fetchContextAssistance } from "./api";
 import { fetchContextData, forgetContextHistory, forgetSavedEvidence, type ContextDataSummary } from "./history-api";
 import { manageContextWorkspace } from "./workspaces-api";
+import { clearRecentProjects } from "./recent-projects";
 import { contextStatusCopy } from "./status";
 import type { ContextAssistanceStatus } from "./types";
 import { savedEvidenceCopy } from "./saved-evidence";
@@ -24,14 +25,14 @@ function Row({ title, body, action }: { title: string; body: string; action: Rea
 }
 type Action = "history" | "data" | "saved" | "recheck";
 const CONFIRM: Record<Action, { title: string; description: string; label: string }> = {
-  history: { title: "Clear prepared context history?", label: "Clear history",
-    description: "Deletes retained historical briefs. Current contexts and source permissions stay available. Guard approvals and evidence are unchanged." },
-  saved: { title: "Remove saved evidence?", label: "Remove saved evidence",
-    description: "Ends current context access and removes saved source evidence and reviewed notes, including inactive stores. Check and start the runtime and grant access again to continue. Guard approvals and evidence are unchanged." },
-  data: { title: "Clear all context data?", label: "Clear context data",
-    description: "Closes context graphs and deletes retained briefs, saved evidence, native context origins, source grants and app connections. Grant access again to continue. Guard approvals and evidence are unchanged." },
-  recheck: { title: "Recheck context runtime?", label: "Recheck runtime",
-    description: "Ends current context access and checks the selected runtime again. An enabled preference may start a fresh runtime. Grant source and app access again afterward." },
+  history: { title: "Clear past answers?", label: "Clear past answers",
+    description: "Deletes the answers CIGAR kept. Your projects keep their access. Guard's approvals and records are not touched." },
+  saved: { title: "Remove saved notes?", label: "Remove saved notes",
+    description: "Deletes everything CIGAR saved on this computer, including old projects, and ends current access. Turn CIGAR on and add your projects again to keep going. Guard's approvals and records are not touched." },
+  data: { title: "Delete everything CIGAR knows?", label: "Delete everything",
+    description: "Deletes past answers, saved notes, project access, app connections and the recent projects this page remembers. You can set it up again anytime. Guard's approvals and records are not touched." },
+  recheck: { title: "Start CIGAR fresh?", label: "Start fresh",
+    description: "Ends current access and checks CIGAR again. If it is turned on, it starts fresh. Add your projects again afterward." },
 };
 type Props = { savedEnabled: boolean; disabled: boolean; onStopped: (value: GuardContextAssistanceConfig) => void; onBusyChange: (busy: boolean) => void };
 
@@ -81,14 +82,14 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
     if (changes) onBusyChange(true);
     try { await operation(controller.signal); }
     catch (cause) { if (revision.current === current && !controller.signal.aborted) {
-      setStatus(null); setData(null); setMessage(cause instanceof Error ? cause.message : "Context data is unavailable. Refresh its status.");
+      setStatus(null); setData(null); setMessage(cause instanceof Error ? cause.message : "CIGAR did not answer. Try Refresh.");
     } }
     finally { if (changes) onBusyChange(false); if (revision.current === current) setBusy(false); }
   }
   useEffect(() => {
     const controller = new AbortController();
     request.current = controller;
-    void refresh(controller.signal).catch(() => { if (!controller.signal.aborted) setMessage("Context status is unavailable. Refresh or turn off the feature to check it."); });
+    void refresh(controller.signal).catch(() => { if (!controller.signal.aborted) setMessage("CIGAR did not answer. Try Refresh, or turn it off."); });
     return () => { revision.current += 1; controller.abort(); request.current?.abort(); onBusyChange(false); };
   }, []);
 
@@ -97,25 +98,26 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
     void perform(async (signal) => {
       if (action === "history") {
         const value = await forgetContextHistory(signal);
-        if (!signal.aborted) { setData(value); setMessage("Prepared context history cleared. Current context and source access remain available."); }
+        if (!signal.aborted) { setData(value); setMessage("Past answers cleared. Your projects keep their access."); }
       } else if (action === "saved") {
         await forgetSavedEvidence(signal);
         await refresh(signal);
-        if (!signal.aborted) setMessage("Saved evidence removed and current context access ended. Check and start the runtime, then grant sources again to continue.");
+        if (!signal.aborted) setMessage("Saved notes removed. Turn CIGAR on and add your projects again to keep going.");
       } else if (action === "data") {
         await manageContextWorkspace("clear", undefined, undefined, signal);
+        clearRecentProjects();
         await refresh(signal);
-        if (!signal.aborted) setMessage("Context data cleared. Grant workspace and app access again before preparing more context.");
+        if (!signal.aborted) setMessage("Everything CIGAR knew is deleted. Add a project to start again.");
       } else {
         const value = await controlContextAssistance("recheck", signal);
-        if (!signal.aborted) { setStatus(value); setData(null); setMessage("Runtime check scheduled. Refresh status to see the result; earlier context access has ended."); }
+        if (!signal.aborted) { setStatus(value); setData(null); setMessage("Checking CIGAR again. Refresh in a moment to see how it went."); }
       }
     }, true);
   }
   function stop() {
     void perform(async (signal) => {
       const value = await controlContextAssistance("stop", signal);
-      if (!signal.aborted) { setStatus(value); setData(null); onStopped(value.preferences); setMessage("Context assistance is off. Guard approvals and evidence remain available."); }
+      if (!signal.aborted) { setStatus(value); setData(null); onStopped(value.preferences); setMessage("CIGAR is off. Guard keeps protecting you as usual."); }
     }, true);
   }
   const ready = Boolean(status?.effective_enabled);
@@ -130,68 +132,68 @@ export function ContextDataRepairPanel({ savedEnabled, disabled, onStopped, onBu
             <span aria-hidden="true" className={"flex size-10 shrink-0 items-center justify-center rounded-full " + (ready ? "bg-brand-green-bg text-brand-green-text" : "bg-brand-dark/[0.06] text-brand-dark/55")}>
               <HiMiniLockClosed className="size-5" /></span>
             <div className="min-w-0 space-y-1.5">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-dark/55">Context data and repair</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-dark/55">Privacy and repair</h3>
               <p role="status" className="text-lg font-semibold tracking-[-0.01em] text-brand-dark">{copy.label}</p>
               <p className="max-w-[62ch] text-sm leading-6 text-brand-dark/75">{copy.detail}</p>
-              <p className={caption + " max-w-[70ch]"}>Prepared contexts and history use local memory. {status?.capabilities?.private_persistence
-                ? "Optional saved evidence uses private local files, with no Guard encryption. It remains after the runtime stops until expiry cleanup or removal. Guard removes expired evidence while running or before reuse after launch. Permissions must be granted again after restart."
-                : "This build cannot activate saved evidence. Existing saved evidence can still be inspected and removed below."}</p>
+              <p className={caption + " max-w-[70ch]"}>What CIGAR prepares stays in this computer's memory. {status?.capabilities?.private_persistence
+                ? "If you turn on saved notes, they are kept in private files here, not encrypted by Guard, until they expire or you remove them. After Guard restarts, add your projects again."
+                : "This version cannot save notes. Anything saved earlier can still be checked and removed below."}</p>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <button className={versionQuiet} type="button" disabled={busy || disabled} onClick={() => void perform(refresh)}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh context data</button>
+            <button className={versionQuiet} type="button" disabled={busy || disabled} onClick={() => void perform(refresh)}><HiMiniArrowPath aria-hidden="true" className="size-4" />Refresh</button>
             <button className={versionQuiet} type="button" disabled={busy || !status} onClick={() => {
               if (status) downloadBlob(new Blob([JSON.stringify(contextDiagnostics(status, data), null, 2)], { type: "application/json" }), "guard-context-diagnostics.json");
-            }}><HiMiniArrowDownTray aria-hidden="true" className="size-4" />Export context diagnostics</button>
+            }}><HiMiniArrowDownTray aria-hidden="true" className="size-4" />Download diagnostics</button>
           </div>
         </div>
       </section>
       {message ? <p role="status" className="rounded-xl border border-brand-dark/10 bg-surface-1 px-4 py-3 text-sm leading-6 text-brand-dark/75">{message}</p> : null}
       <section className="space-y-3" aria-labelledby="cigar-data-held">
         <div><h3 id="cigar-data-held" className={versionHeading}>What CIGAR is holding</h3>
-          <p className={versionLead}>Counts only. Guard never shows source text, queries or paths here.</p></div>
+          <p className={versionLead}>Just counts. Your files, questions and folder names are never shown here.</p></div>
         {data ? <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <Stat term="Active workspace/app grants" value={data.active_scopes} />
-          <Stat term="Selected files" value={data.selected_files} />
-          <Stat term="Current contexts" value={data.current_contexts} />
-          <Stat term="Prepared history entries" value={data.history_entries} />
-          <Stat term="Encoded history payload" value={data.history_encoded_bytes.toLocaleString() + " bytes"} />
-          <Stat term="App connections" value={data.agent_sessions} />
-        </dl> : <p className="rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70">Live context counts are available while a verified runtime is ready.</p>}
-        <p className={caption}>History is limited to eight entries and 512 KiB of encoded payload per workspace/app grant, with the configured retention period. These counts do not measure process memory or execution safety.</p>
+          <Stat term="Projects with access (per app)" value={data.active_scopes} />
+          <Stat term="Files it can read" value={data.selected_files} />
+          <Stat term="Answers ready" value={data.current_contexts} />
+          <Stat term="Past answers kept" value={data.history_entries} />
+          <Stat term="Space used by past answers" value={data.history_encoded_bytes.toLocaleString() + " bytes"} />
+          <Stat term="Connected apps" value={data.agent_sessions} />
+        </dl> : <p className="rounded-2xl border border-dashed border-brand-dark/15 px-5 py-6 text-center text-sm text-brand-dark/70">Counts show up while CIGAR is on.</p>}
+        <p className={caption}>CIGAR keeps at most 8 past answers (512 KiB) for each project and app, and clears them after the time you chose in Settings.</p>
       </section>
       {data?.saved_evidence ? <section className="space-y-3 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-5" role="region" aria-label="Saved context evidence">
-        <h4 className="text-sm font-semibold text-brand-dark">Saved evidence</h4>
+        <h4 className="text-sm font-semibold text-brand-dark">Saved notes</h4>
         <p role="status" className="text-sm text-brand-dark/75">{savedEvidenceCopy(data.saved_evidence)}</p>
         {data.saved_evidence.slots !== null ? <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat term="Saved workspace/app stores" value={data.saved_evidence.slots} />
-          <Stat term="Saved file bytes" value={data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable"} />
-          <Stat term="Note writes to reconcile" value={data.saved_evidence.unresolved_writes ?? "Unavailable"} />
-          <Stat term="Expired stores awaiting cleanup" value={data.saved_evidence.expired_slots ?? "Unavailable"} />
+          <Stat term="Projects with saved notes (per app)" value={data.saved_evidence.slots} />
+          <Stat term="Space used (bytes)" value={data.saved_evidence.bytes?.toLocaleString() ?? "Unavailable"} />
+          <Stat term="Notes still saving" value={data.saved_evidence.unresolved_writes ?? "Unavailable"} />
+          <Stat term="Expired, waiting to clear" value={data.saved_evidence.expired_slots ?? "Unavailable"} />
         </dl> : null}
-        <p className={caption}>Saved evidence is limited to eight stores and 528 MiB of logical file bytes, including database journals. This does not measure process memory.</p>
+        <p className={caption}>Saved notes cover at most 8 projects (each app counts separately) and use about 550 MB of disk.</p>
       </section> : null}
       <section className="space-y-3" aria-labelledby="cigar-data-fix">
         <h3 id="cigar-data-fix" className={versionHeading}>Fix a problem</h3>
         <ul className={versionList}>
-          <Row title="Check the runtime again" body={!ready ? "If a runtime is unavailable, turn off assistance to release its context. Rechecking requires an enrolled Python 3.14 runtime." : "Ends current context access, then checks the selected runtime. Grant access again afterward."}
-            action={<button className={versionButton} type="button" disabled={busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job)} onClick={() => setConfirm("recheck")}>Recheck context runtime</button>} />
-          <Row title="Change setup" body="Runtime, sources, limits and storage live in Settings."
-            action={<a className={versionButton} href={guardAwareHref("/cigar?section=runtime")}>Manage context setup</a>} />
+          <Row title="Start CIGAR fresh" body={!ready ? "If CIGAR seems stuck, turn it off to free everything it holds. Starting fresh needs Python 3.14, which Settings can set up." : "Ends current access and starts CIGAR again. Add your projects again afterward."}
+            action={<button className={versionButton} type="button" disabled={busy || disabled || !status?.verification_permitted || !status?.preferences.runtime_id || Boolean(status.job)} onClick={() => setConfirm("recheck")}>Start fresh</button>} />
+          <Row title="Change setup" body="Choose what CIGAR may read and how long it keeps things."
+            action={<a className={versionButton} href={guardAwareHref("/cigar?section=runtime")}>Open Settings</a>} />
         </ul>
       </section>
       <section className="space-y-3" aria-labelledby="cigar-data-danger">
         <div><h3 id="cigar-data-danger" className={versionHeading}>Delete or turn off</h3>
-          <p className={versionLead}>Deleting asks you first. Guard approvals and evidence are never touched.</p></div>
+          <p className={versionLead}>Each one asks you first. Guard's approvals and records are never touched.</p></div>
         <ul className="divide-y divide-red-200/70 overflow-hidden rounded-2xl border border-red-200 bg-red-50/30">
-          <Row title="Prepared context history" body="Deletes retained historical briefs. Current contexts and source permissions stay."
-            action={<button className={danger} type="button" disabled={busy || disabled || !ready || !data?.history_entries} onClick={() => setConfirm("history")}>Clear context history</button>} />
-          {removable ? <Row title="Saved evidence" body="Removes saved source evidence and reviewed notes, including inactive stores."
-            action={<button className={danger} type="button" disabled={busy || disabled} onClick={() => setConfirm("saved")}>Remove saved evidence</button>} /> : null}
-          <Row title="Everything CIGAR knows" body="Deletes briefs, saved evidence, source grants and app connections. You can grant access again later."
-            action={<button className={danger} type="button" disabled={busy || disabled || (!ready && !data?.saved_evidence)} onClick={() => setConfirm("data")}>Clear all context data</button>} />
-          {offAvailable ? <Row title="Turn CIGAR off" body="Stops the runtime now and ends all context access."
-            action={<button className={danger} type="button" disabled={busy || disabled} onClick={stop}>Turn off context assistance</button>} /> : null}
+          <Row title="Past answers" body="Deletes the answers CIGAR kept. Projects keep their access."
+            action={<button className={danger} type="button" disabled={busy || disabled || !ready || !data?.history_entries} onClick={() => setConfirm("history")}>Clear past answers</button>} />
+          {removable ? <Row title="Saved notes" body="Deletes what CIGAR saved on this computer, including old projects."
+            action={<button className={danger} type="button" disabled={busy || disabled} onClick={() => setConfirm("saved")}>Remove saved notes</button>} /> : null}
+          <Row title="Everything CIGAR knows" body="Deletes past answers, saved notes, project access, app connections and recent projects. You can set it up again anytime."
+            action={<button className={danger} type="button" disabled={busy || disabled || (!ready && !data?.saved_evidence)} onClick={() => setConfirm("data")}>Delete everything</button>} />
+          {offAvailable ? <Row title="Turn CIGAR off" body="Stops CIGAR now. Projects lose access until you turn it back on."
+            action={<button className={danger} type="button" disabled={busy || disabled} onClick={stop}>Turn CIGAR off</button>} /> : null}
         </ul>
       </section>
     </div>

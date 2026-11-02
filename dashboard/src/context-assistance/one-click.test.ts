@@ -266,3 +266,19 @@ const plan = install;
   await assert.rejects(runCigarSetup(planCigarStart(saved, false)!, saved, deps), CigarSetupStopped);
 }
 console.log("CIGAR one-click planning, approval, stop, retry and live-readiness contracts passed.");
+
+{
+  const { turnOnPreferences } = await import("./one-click");
+  const base = JSON.parse(readFileSync(new URL("./fixtures/intent-state.json", import.meta.url), "utf8")).native_test.ready_observation.preferences;
+  const off = { ...base.features, agent_context: false };
+  const fresh = turnOnPreferences({ ...base, enabled: false, features: off, sources: { ...base.sources, workspace_documents: false, source_set_id: "" } }, "runtime-a");
+  assert.equal(fresh.enabled, true);
+  assert.equal(fresh.runtime_id, "runtime-a");
+  assert.deepEqual([fresh.sources.workspace_documents, fresh.sources.source_set_id], [true, "selected-workspaces"]);
+  // A first turn-on lets prompts carry matching project files.
+  assert.equal(fresh.features.agent_context, true);
+  // Someone who turned project files off keeps that choice, and prompts stay as they were.
+  const chosen = turnOnPreferences({ ...base, enabled: false, features: off, sources: { ...base.sources, workspace_documents: false, source_set_id: "selected-workspaces" } }, "runtime-a");
+  assert.equal(chosen.sources.workspace_documents, false);
+  assert.equal(chosen.features.agent_context, false);
+}

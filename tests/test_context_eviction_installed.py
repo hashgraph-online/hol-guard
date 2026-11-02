@@ -153,6 +153,13 @@ def test_installed_retention_withdrawal_graph_slot_reuse_and_idle_retirement(
             assert "BRAVO_REVIEW_MARKER" in current["brief"]["rendered"]
             assert "ALPHA_REVIEW_MARKER" not in current["brief"]["rendered"]
             report.update(source_withdrawn=True, graph_slot_reused=True, active=sampler.sample())
+            # A granted project is the user's standing choice. The idle window
+            # passes without retiring the worker that holds it.
+            while time.monotonic() < last_active_at + 33:
+                assert control("status", guard_home=guard)["effective_enabled"], "idle retired a held project"
+                time.sleep(0.5)
+            ask("revoke", second_scope)
+            last_active_at = time.monotonic()
             # Status observes availability only. It must not renew an idle
             # graph or silently recreate consent after optional shutdown.
             deadline = last_active_at + 45
@@ -164,7 +171,7 @@ def test_installed_retention_withdrawal_graph_slot_reuse_and_idle_retirement(
                 time.sleep(0.25)
             elapsed = time.monotonic() - last_active_at
             assert elapsed >= 30
-            assert state["requested_enabled"] and state["diagnostic"] == "runtime_idle"
+            assert state["requested_enabled"] and state["diagnostic"] == "runtime_resting"
             assert state["job"] is None and not state["execution_ready"]
             report["idle_retirement_seconds"] = round(elapsed, 3)
             deadline = time.monotonic() + 5
@@ -175,10 +182,16 @@ def test_installed_retention_withdrawal_graph_slot_reuse_and_idle_retirement(
                 assert time.monotonic() < deadline, "idle retirement left an optional worker alive"
                 time.sleep(0.05)
             report["retired"] = retired
-            refused("runtime_not_verified", "compile", second_scope, query="BRAVO_REVIEW_MARKER")
-            refused("runtime_not_verified", "explain", second_scope, snapshot_id=current["brief"]["snapshot_id"])
-
+            # The next request wakes the resting worker; old authority never returns.
+            with pytest.raises(ContextAssistanceError) as woke:
+                ask("compile", second_scope, query="BRAVO_REVIEW_MARKER")
+            assert woke.value.code in {
+                "native_context_assistance_runtime_not_verified",
+                "native_context_assistance_context_scope_denied",
+            }
             activate()
+            refused("context_scope_denied", "compile", second_scope, query="BRAVO_REVIEW_MARKER")
+            refused("context_scope_denied", "explain", second_scope, snapshot_id=current["brief"]["snapshot_id"])
             assert ask("list")["scopes"] == [] and ask("list_agents")["agent_sessions"] == []
             refused("context_scope_denied", "compile", second_scope, query="BRAVO_REVIEW_MARKER")
             fresh_scope = grant(bravo)["scope_id"]

@@ -341,7 +341,7 @@ def _configure_guard_local_parsers(
         inspect_parser.add_argument("--json", action="store_true")
     extensions_parser = command_subparsers.add_parser(
         "extensions",
-        help="List or inspect built-in command safety extensions",
+        help="List or inspect the command safety extensions this device has, delivered ones included",
     )
     extensions_parser.add_argument("extension_id", nargs="?")
     extensions_parser.add_argument("--json", action="store_true")

@@ -94,6 +94,25 @@ fn a_matcher_reads_the_captured_text() {
 }
 
 #[test]
+fn a_cut_stage_reshapes_the_captured_text() {
+    if trusted_cut().is_none() {
+        return;
+    }
+    let (kept, diagnostics, status) =
+        apply(b"a:1\nb:2\n", &[stage(&["cut", "-d", ":", "-f1"])]).unwrap();
+    assert_eq!(
+        (kept.as_slice(), diagnostics.is_empty(), status),
+        (&b"a\nb\n"[..], true, 0)
+    );
+    let (kept, _, status) = apply(
+        b"error TS2345: long\nerror TS1005: short\n",
+        &[stage(&["cut", "-c1-5"]), stage(&["head", "1"])],
+    )
+    .unwrap();
+    assert_eq!((kept.as_slice(), status), (&b"error\n"[..], 0));
+}
+
+#[test]
 fn a_missing_ripgrep_exits_as_a_missing_program() {
     if trusted_ripgrep().is_some() {
         return;
@@ -141,7 +160,7 @@ fn a_grep_root_does_not_own_is_refused() {
     std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o755)).expect("chmod");
     let missing = directory.path().join("missing");
     assert_eq!(
-        trusted_grep_in(&[planted.as_path(), missing.as_path()]),
+        trusted_system_binary(&[planted.as_path(), missing.as_path()]),
         None
     );
 }

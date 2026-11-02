@@ -1,6 +1,7 @@
 //! Output filters after a contained core: `| head -N`, `| tail -N`, the same
-//! two bounded by bytes (`-c N`) or spelled with `-n N`, and a `grep` or `rg`
-//! that only reads its standard input, chained up to three deep.
+//! two bounded by bytes (`-c N`) or spelled with `-n N`, a `grep` or `rg`
+//! that only reads its standard input, and a `cut` that keeps part of each
+//! line, chained up to three deep.
 //!
 //! The execution sink (`contained_output_filters.py`) peels the same chain,
 //! runs the core contained and applies the filters to its captured output.
@@ -25,6 +26,14 @@ const RG_SWITCHES: &str = "FNSUacinosvwx";
 /// Options that take a line count, spelled alike by both programs.
 const GREP_COUNTS: &[&str] = &["-A", "-B", "-C", "-m"];
 
+/// `cut`'s own switches: `-s` drops a line with no delimiter and `-n` keeps a
+/// character whole. Neither names anything to open.
+const CUT_SWITCHES: &str = "sn";
+
+/// The options that carry `cut`'s selection and its delimiter. Every one of
+/// them takes a value, attached or as the word after.
+const CUT_VALUED: &[&str] = &["-b", "-c", "-f", "-d"];
+
 /// Whether `value` is a count small enough to be a filter's bound.
 fn bounded_count(value: &str) -> bool {
     !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
@@ -43,6 +52,7 @@ pub(super) fn filter_stage(segment: &CommandSegmentV1, source: &str) -> bool {
         Some("head" | "tail") => head_tail_arguments(&segment.arguments),
         Some("grep" | "egrep" | "fgrep") => stdin_arguments(&segment.arguments, GREP_SWITCHES),
         Some("rg") => stdin_arguments(&segment.arguments, RG_SWITCHES),
+        Some("cut") => text_filter(&segment.arguments, CUT_SWITCHES, CUT_VALUED),
         _ => false,
     }
 }
@@ -55,6 +65,10 @@ pub(in crate::pretool) fn matcher_stage(program: &str, arguments: &[String]) -> 
     match program {
         "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
         "rg" => stdin_arguments(arguments, RG_SWITCHES),
+        // `cut` keeps part of each line and opens nothing without an operand,
+        // which `text_filter` refuses, so the runtime can run it over the
+        // captured text exactly as the pipeline would have.
+        "cut" => text_filter(arguments, CUT_SWITCHES, CUT_VALUED),
         _ => false,
     }
 }
@@ -168,7 +182,7 @@ pub(in crate::pretool) fn rejoined_stage(program: &str, arguments: &[String]) ->
         "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
         "rg" => stdin_arguments(arguments, RG_SWITCHES),
         "wc" => text_filter(arguments, "clmwL", &[]),
-        "cut" => text_filter(arguments, "sn", &["-b", "-c", "-f", "-d"]),
+        "cut" => text_filter(arguments, CUT_SWITCHES, CUT_VALUED),
         // `-o` and `-T` name a file and a directory to write, and `-S` sizes a
         // buffer, so none of the three is a switch here.
         "sort" => text_filter(arguments, "bcdfghiMnrsuVz", &["-k", "-t"]),
@@ -270,226 +284,5 @@ pub(in crate::pretool) fn plain_source(source: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        head_tail_bound, plain_source, rejoined_stage, rejoined_words, stdin_arguments,
-        GREP_SWITCHES, RG_SWITCHES,
-    };
-
-    fn words(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| (*value).to_owned()).collect()
-    }
-
-    #[test]
-    fn grep_reading_standard_input_is_a_filter() {
-        for arguments in [
-            &["FAIL"][..],
-            &["-B", "3", "at async createViteServer"],
-            &["-E", "FAIL|Error"],
-            &["-i", "error"],
-            &["-inv", "-A2", "-m", "5", "x"],
-            &["-e", "FAIL", "-e", "Error"],
-            &["--", "-x"],
-        ] {
-            assert!(
-                stdin_arguments(&words(arguments), GREP_SWITCHES),
-                "{arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn grep_naming_a_file_or_reading_patterns_is_not_a_filter() {
-        for arguments in [
-            &[][..],
-            &["x", "notes.txt"],
-            &["x", "/home/user/.aws/credentials"],
-            &["-f", "/home/user/.ssh/id_rsa"],
-            &["--file=/home/user/.ssh/id_rsa", "x"],
-            &["-r", "x", "/etc"],
-            &["-rn", "x"],
-            &["-l", "x"],
-            &["-P", "x"],
-            &["-e", "x", "notes.txt"],
-            &["-e"],
-            &["-A", "x", "y"],
-            &["-B"],
-            &["-m", "1234567", "x"],
-            &["-iA3", "x"],
-            &["-", "x"],
-            &["--color=always", "x"],
-        ] {
-            assert!(
-                !stdin_arguments(&words(arguments), GREP_SWITCHES),
-                "{arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn ripgrep_reading_standard_input_is_a_filter() {
-        for arguments in [
-            &["FAIL"][..],
-            &["-A", "12", "FAIL|AssertionError"],
-            &["-n", "FAIL"],
-            &["-NU", "-e", "FAIL", "-e", "Error"],
-            &["-B2", "-A6", "-i", "error"],
-            &["-c", "FAIL"],
-        ] {
-            assert!(
-                stdin_arguments(&words(arguments), RG_SWITCHES),
-                "{arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn ripgrep_spelling_its_own_valued_options_is_not_a_filter() {
-        for arguments in [
-            &[][..],
-            &["x", "notes.txt"],
-            &["-f", "/home/user/.ssh/id_rsa"],
-            &["-l", "x"],
-            &["-P", "x"],
-            &["-z", "x"],
-            // `-g` and `-E` take a value in ripgrep, so the word after them
-            // is not a pattern and the stage is not a plain filter.
-            &["-g", "*.ts", "x"],
-            &["-E", "utf-8", "x"],
-            &["--files"],
-            &["--pre", "cat", "x"],
-        ] {
-            assert!(
-                !stdin_arguments(&words(arguments), RG_SWITCHES),
-                "{arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn only_plain_quoted_words_are_lexed_alike() {
-        for source in [
-            "grep FAIL",
-            "grep -B 3 \"at async createViteServer\"",
-            "grep -E 'FAIL|Error'",
-            "grep \"x\\|y\"",
-            "head -8",
-        ] {
-            assert!(plain_source(source), "{source}");
-        }
-        for source in [
-            "grep a[bc]",
-            "grep x*",
-            "grep ~/.ssh",
-            "grep \"$HOME\"",
-            "grep '$x'",
-            "grep `id`",
-            "grep x > out.txt",
-            "grep x 2>&1",
-            "grep x\\ y",
-            "grep 'unterminated",
-            "grep {a,b}",
-            "grep x;",
-            "grep \"a\nb\"",
-        ] {
-            assert!(!plain_source(source), "{source}");
-        }
-    }
-
-    #[test]
-    fn a_head_or_tail_bound_reads_lines_or_bytes() {
-        for (arguments, expected) in [
-            (&["-40"][..], (40u32, false)),
-            (&["-n", "40"][..], (40, false)),
-            (&["-c", "1500"][..], (1500, true)),
-            (&["-c1500"][..], (1500, true)),
-        ] {
-            assert_eq!(
-                head_tail_bound(&words(arguments)),
-                Some(expected),
-                "{arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_bound_that_names_a_file_or_no_count_is_not_a_filter() {
-        for arguments in [
-            &[][..],
-            &["-c"],
-            &["-n"],
-            &["-c", "1500", "notes.txt"],
-            &["-c", "-1500"],
-            &["-c", "1500000000"],
-            &["-q", "1500"],
-            &["notes.txt"],
-        ] {
-            assert_eq!(head_tail_bound(&words(arguments)), None, "{arguments:?}");
-        }
-    }
-
-    #[test]
-    fn a_rejoined_stage_reshapes_what_it_reads_on_standard_input() {
-        for (program, arguments) in [
-            ("cut", &["-c1-120"][..]),
-            ("cut", &["-d", ":", "-f1"]),
-            ("cut", &["-d:", "-f", "1", "-s"]),
-            ("sort", &[]),
-            ("sort", &["-u"]),
-            ("sort", &["-rn"]),
-            ("sort", &["-k2,2", "-t:"]),
-            ("uniq", &["-c"]),
-            ("uniq", &["-f", "2", "-w10"]),
-            ("wc", &["-l"]),
-            ("tr", &["-d", "\\r"]),
-            ("head", &["-40"]),
-            ("tail", &["-n", "15"]),
-            ("grep", &["-v", "ok"]),
-            ("rg", &["-c", "FAIL"]),
-        ] {
-            assert!(
-                rejoined_stage(program, &words(arguments)),
-                "{program} {arguments:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_stage_that_names_a_file_or_runs_a_program_is_not_rejoined() {
-        for (program, arguments) in [
-            ("head", &["/etc/passwd"][..]),
-            ("head", &["-5", "/etc/passwd"]),
-            ("tail", &["-f", "/var/log/system.log"]),
-            ("cut", &["-f1", "/etc/passwd"]),
-            ("sort", &["/etc/passwd"]),
-            // `-o`, `-T` and `-S` name a file, a directory and a size.
-            ("sort", &["-o", "out.txt"]),
-            ("sort", &["-oout.txt"]),
-            ("sort", &["--output=out.txt"]),
-            ("sort", &["-T", "/tmp"]),
-            ("sort", &["-S", "1G"]),
-            ("uniq", &["notes.txt"]),
-            ("wc", &["-l", "/etc/passwd"]),
-            ("grep", &["FAIL", "build.log"]),
-            ("sh", &[]),
-            ("bash", &["-s"]),
-            ("xargs", &["rm"]),
-            ("tee", &["out.txt"]),
-            ("awk", &["{print $1}"]),
-            ("sed", &["-i", "s/a/b/", "notes.txt"]),
-        ] {
-            assert!(
-                !rejoined_stage(program, &words(arguments)),
-                "{program} {arguments:?}"
-            );
-        }
-    }
-    #[test]
-    fn a_quoted_operator_passes_the_source_read_and_fails_the_word_read() {
-        assert!(plain_source("tr '|' x"));
-        assert!(!rejoined_words("tr", &words(&["|", "x"])));
-        assert!(rejoined_words("tr", &words(&["a-z", "A-Z"])));
-        assert!(!rejoined_words("grep", &words(&["a;b"])));
-        assert!(!rejoined_words("sort", &words(&["-t", "&"])));
-    }
-}
+#[path = "contained_output_filters_tests.rs"]
+mod tests;

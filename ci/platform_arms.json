@@ -787,6 +787,14 @@
    "body": "c4f2341b990a"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no stale-copy hand-off yet: a stale bounded bridge (ZCode, Copilot, Kimi, Devin, OpenClaw, Hermes) that misses the resident keeps the hook and takes the daemon path, exactly as before this arm existed. Nothing is decided differently; the hook only stays on the slower route. The Unix arm is pinned by bounded_hook_bridge_successor_tests.rs and hook_bridge_successor_tests.rs.",
+   "file": "rust/crates/guard-runtime/src/bounded_hook_bridge.rs",
+   "item": "fn successor_route( _config: &BridgeConfig, _prepared: &Prepared, _python_argv: &[String], _raw: &[u8], _deadline: Instant, ) -> Option<Route>",
+   "cfg": "not(unix)",
+   "body": "3d33baed3530"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/cisco_containment.rs",
    "item": "fn mode_of(meta: &std::fs::Metadata) -> u32",
    "verdict": "posix-primitive",
@@ -1041,6 +1049,14 @@
    "item": "fn validated_owned_temporary_workspace -- cfg! expression",
    "cfg": "unix",
    "body": "f09bd3d63b72"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows keeps a running image's file locked, so an older copy a hook is still running cannot be replaced, and the Windows arm answers `{\"outcome\": \"unsupported\"}` and touches no copy. `repair_native_runtime` keeps the step's status unchanged; `durable_runtime_collapse_tests.rs` is `cfg(unix)`-gated for the same reason.",
+   "file": "rust/crates/guard-runtime/src/durable_runtime_collapse.rs",
+   "item": "fn collapse(_state: &Path, _digest: &str, _now: SystemTime) -> Report",
+   "cfg": "not(unix)",
+   "body": "f4a11f63ec12"
   },
   {
    "file": "rust/crates/guard-runtime/src/edge_git_push.rs",

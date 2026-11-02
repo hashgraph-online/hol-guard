@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set up uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: "0.9.26"
           enable-cache: true
@@ -116,7 +116,7 @@ jobs:
         if: >-
           github.event_name == 'workflow_run' &&
           steps.publication.outputs.eligible == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-toolchain-sbom
           path: triggering-release

@@ -13,10 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_bound_bash_source import _ENVIRONMENT_NAMES
-from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
-    CONTAINED_TEST_HELPERS_SOURCE,
-)
 from codex_plugin_scanner.guard.approvals import ApprovalRequestAlreadyResolvedError, apply_approval_resolution
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
@@ -34,6 +30,7 @@ from tests import omp_bound_bash_sdk_source as sdk_source
 from tests.bash_http_registry import local_registry
 from tests.context_pi_sdk_support import assert_context_execution, cli_bootstrap, prepare_store
 from tests.omp_bound_bash_lifecycle import assert_sdk_host_death_cancels, pause_native_execute_source
+from tests.pi_extension_template import CONTAINED_TEST_HELPERS_SOURCE, ENVIRONMENT_NAMES
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="native Bash owner is macOS-only")
 
@@ -158,7 +155,7 @@ def test_pinned_sdk_bash_tool_delivers_consent_and_preserves_execution_cwd(
                     "schema": "guard-native-bash-host-delivery.v3",
                     "owner_pid": os.getpid(),
                     "host": "omp-input-rewrite-v1" if harness == "omp" else "pi-input-mutation-v1",
-                    "environment": {name: os.environ[name] for name in _ENVIRONMENT_NAMES if os.environ.get(name)},
+                    "environment": {name: os.environ[name] for name in ENVIRONMENT_NAMES if os.environ.get(name)},
                     "file_creation_mask": 0o022,
                 },
             },

@@ -212,28 +212,25 @@ def test_version_probe_stops_at_the_hook_deadline(containment_resident, tmp_path
     assert recorded["timeout"] == 0.25
 
 
-def test_other_platforms_and_missing_guard_home_pass_through(containment_resident, tmp_path, monkeypatch):
+def test_a_missing_guard_home_passes_through(containment_resident, tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     native = receipt()
     assert route.route_codex_containment(native, hook_input=hook_input(tmp_path), guard_home=None) is native
-    monkeypatch.setattr(sys, "platform", "linux")
-    # Linux has no sink for the pytest profile: the denial stands, with no update hint.
-    assert (
-        route.route_codex_containment(
-            native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard", home_dir=tmp_path / "hook-home"
-        )
-        is native
-    )
 
 
-def test_linux_routes_the_workspace_sandbox(containment_resident, tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("reason", "profile"),
+    [
+        ("native_workspace_containment_required", "workspace-contained-v1"),
+        ("native_pytest_readonly_containment_required", "pytest-readonly-v2"),
+    ],
+)
+def test_linux_routes_the_workspace_sandbox_and_the_read_only_profiles(
+    containment_resident, tmp_path, monkeypatch, reason, profile
+):
     capable(monkeypatch, "codex-cli 0.162.1")
     monkeypatch.setattr(sys, "platform", "linux")
-    native = {
-        **receipt(),
-        "reason_code": "native_workspace_containment_required",
-        "required_execution_profile": "workspace-contained-v1",
-    }
+    native = {**receipt(), "reason_code": reason, "required_execution_profile": profile}
     result = route.route_codex_containment(
         native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard", home_dir=tmp_path / "hook-home"
     )

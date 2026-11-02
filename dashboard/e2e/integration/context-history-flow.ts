@@ -50,9 +50,9 @@ export async function contextHistoryAndRepairFlow(page: Page, state: Integration
 
   await page.goto("/cigar?section=data");
   const repair = page.getByRole("region", { name: "Context data and repair controls", exact: true });
-  await repair.getByRole("button", { name: "Refresh context data", exact: true }).click();
+  await repair.getByRole("button", { name: "Refresh", exact: true }).click();
   const [download] = await Promise.all([
-    page.waitForEvent("download"), repair.getByRole("button", { name: "Export context diagnostics", exact: true }).click(),
+    page.waitForEvent("download"), repair.getByRole("button", { name: "Download diagnostics", exact: true }).click(),
   ]);
   const path = await download.path();
   expect(path).toBeTruthy();
@@ -65,11 +65,11 @@ export async function contextHistoryAndRepairFlow(page: Page, state: Integration
   expect(encoded).not.toContain(state.guardHome);
   expect(encoded).not.toContain("unsafe current source");
   expect(encoded).not.toContain("Historical browser fixture");
-  await repair.getByRole("button", { name: "Clear context history", exact: true }).click();
+  await repair.getByRole("button", { name: "Clear past answers", exact: true }).click();
   const confirm = page.getByRole("dialog");
-  await expect(confirm).toContainText("Guard approvals and evidence are unchanged.");
-  await confirm.getByRole("button", { name: "Clear history", exact: true }).click();
-  await expect(repair.getByText("Prepared context history cleared.", { exact: false })).toBeVisible();
+  await expect(confirm).toContainText("Guard's approvals and records are not touched.");
+  await confirm.getByRole("button", { name: "Clear past answers", exact: true }).click();
+  await expect(repair.getByText("Past answers cleared.", { exact: false })).toBeVisible();
   expect((await probe.request("get_context_status")).data.phase).toBe("authorized");
   await page.goto(`/evidence?selected=${native.receipt_id}`);
   await history.getByRole("button", { name: "Load prepared context history", exact: true }).click();
@@ -79,9 +79,9 @@ export async function contextHistoryAndRepairFlow(page: Page, state: Integration
 export async function clearContextFromRepair(page: Page) {
   await page.goto("/cigar?section=data");
   const repair = page.getByRole("region", { name: "Context data and repair controls", exact: true });
-  await repair.getByRole("button", { name: "Clear all context data", exact: true }).click();
+  await repair.getByRole("button", { name: "Delete everything", exact: true }).click();
   const confirm = page.getByRole("dialog");
-  await expect(confirm).toContainText("Grant access again to continue.");
-  await confirm.getByRole("button", { name: "Clear context data", exact: true }).click();
-  await expect(repair.getByText("Context data cleared.", { exact: false })).toBeVisible();
+  await expect(confirm).toContainText("You can set it up again anytime.");
+  await confirm.getByRole("button", { name: "Delete everything", exact: true }).click();
+  await expect(repair.getByText("Everything CIGAR knew is deleted.", { exact: false })).toBeVisible();
 }

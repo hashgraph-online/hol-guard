@@ -19,7 +19,7 @@ pub(crate) struct Rule {
 /// system cannot resolve, like CPython, is left unexpanded; the caller's own
 /// home is supplied so the resident never reads its own environment for a
 /// client's home.
-fn expanduser(value: &str, user_home: Option<&str>) -> PathBuf {
+pub(crate) fn expanduser(value: &str, user_home: Option<&str>) -> PathBuf {
     let path = py_path(value);
     let mut parts = path.components();
     let Some(std::path::Component::Normal(first)) = parts.next() else {

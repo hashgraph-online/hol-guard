@@ -241,7 +241,7 @@ matching receipt; this inspection alone is not proof of active protection.
 | I need install/connect docs | `hol-guard explain install-connect` | Which local-first setup and optional cloud commands should I share? |
 | I need to preview one install before I run it | `hol-guard protect npm install <package> --dry-run` | Would Guard allow, warn, review, or block this exact install request right now? |
 | I need to understand command protection | `hol-guard command test '<command>'` or `hol-guard command explain '<command>'` | Which built-in command safety extension recognizes this command, and why, without executing it or creating Guard state? |
-| I need the command protection catalog | `hol-guard command extensions` | Which built-in command safety extensions and action classes are available in this Guard version? |
+| I need the command protection catalog | `hol-guard command extensions` | Which command safety extensions and action classes does this device have, including the ones delivered after this Guard version shipped? |
 | I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |
 | A launch was blocked or changed | `hol-guard diff <harness>` | What changed since the last recorded snapshot? |
 | I need to resolve a queued block | `hol-guard approvals` | Which requests are waiting, and how do I approve or deny them? |

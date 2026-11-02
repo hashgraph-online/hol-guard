@@ -20,7 +20,7 @@ def test_test_compilation_html_is_uploaded_only_for_non_clippy_archive_misses():
     assert len(uploads) == 1
     upload = uploads[0]
     assert upload["if"] == ("always() && matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'")
-    assert upload["uses"] == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    assert upload["uses"] == "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
     assert upload["with"] == {
         "name": "rust-test-compilation-timings-${{ matrix.check }}-${{ github.run_attempt }}",
         "path": "rust/target/cargo-timings/cargo-timing.html",

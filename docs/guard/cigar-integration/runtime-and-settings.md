@@ -141,6 +141,19 @@ Guard's typed MCP registry supplies list, call and FastMCP registration. Pass th
 
 The status response can remain available through existing Guard status reporting. It should not require installing CIGAR to explain why CIGAR is unavailable.
 
+## Prompt context in Claude Code and Codex
+
+This part is implemented. When CIGAR is on and verified, and both `features.agent_context` and `sources.workspace_documents` are on, Guard's `UserPromptSubmit` hook for Claude Code and Codex adds matching project code to an allowed prompt through `hookSpecificOutput.additionalContext`. The one-click setup in the dashboard turns both on for a fresh install.
+
+For each prompt the native runtime:
+
+1. Finds the project from the hook's working directory: the nearest enclosing Git repository, or the folder itself. It never uses the home folder, a folder that contains it, a top-level folder, a credential folder, or anything inside the Guard home.
+2. Pulls search words from the prompt and walks the project for files whose path or contents match, skipping secrets, keys, hidden files and generated output. The walk applies Git's ignore rules from `.git/info/exclude` and every `.gitignore` it meets, nested ones included, without running `git`. A folder whose `.gitignore` cannot be read, holds more than 1,024 rules or has a pattern Guard cannot compile is skipped whole. The global `core.excludesFile` is not read. Test and spec files stay out when a source file matched and the prompt does not mention tests, so a test that quotes the same words does not crowd out the file the request is about.
+3. Asks the CIGAR worker for excerpts from those files, scoped to that project and app.
+4. Keeps only excerpts that mention a word from the prompt, renders them as fenced file contents under a short header that marks them as data, and lists the other matching files by path.
+
+The answer adds nothing when the prompt is shorter than 8 characters, when no file matches (a prompt such as "build a to-do app" in an empty folder), when no excerpt mentions the request, when the prompt is blocked or needs approval, or when the lookup runs late. The lookup starts after the verdict is settled and Guard's policy locks are released. The file walk stops after 350 ms or when the hook has too little time left, and the lookup waits at most 2.5 seconds. Both count the time the hook has already spent and leave 250 ms of the hook's deadline for the answer. A second hook delivery of the same prompt joins the lookup already running; a different prompt for the same project goes without rather than queueing. Rendered context, including the list of other matching files, is capped at 12,000 characters, and a settings change or worker restart while a lookup runs discards its result for every hook waiting on it.
+
 ## Resource and deadline policy
 
 These are proposed starting bounds, subject to installed benchmarks. They are smaller than several SDK defaults and do not constitute measured memory guarantees.

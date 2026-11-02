@@ -180,3 +180,29 @@ fn stop_persists_opt_out_without_erasing_other_preferences_or_guard_mode() {
     );
     assert!(answer["payload"]["state"]["runtime"].is_null());
 }
+
+#[test]
+fn the_project_picker_lists_folders_through_the_resident_without_changing_anything() {
+    assert!(crate::resident_protocol::capabilities()
+        .features
+        .iter()
+        .any(|feature| feature == FOLDERS_FEATURE));
+    let fixture = Fixture::new();
+    std::fs::create_dir(fixture.home.join("my-app")).unwrap();
+    let answer = fixture.ask_input("folders", json!({"path": fixture.home}));
+    assert_eq!(answer["status"], "ok", "{answer}");
+    let data = &answer["payload"]["data"];
+    assert_eq!(data["schema"], "guard-cigar-workspace-result.v1");
+    assert_eq!(data["data_role"], true);
+    assert_eq!(data["result"]["schema"], "guard-context-folders.v1");
+    assert!(data["result"]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["name"] == "my-app"));
+    assert!(!fixture.home.join("config.toml").exists());
+    assert_eq!(
+        fixture.ask_input("folders", json!({"path": "relative"}))["code"],
+        "native_context_assistance_folder_not_absolute"
+    );
+}

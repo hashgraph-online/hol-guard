@@ -261,7 +261,7 @@ def _run_guard_command_inspection_command(
         guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
         return run_extension_controls_command(args, guard_home=guard_home, output_stream=output_stream)
     from ..daemon.client import GuardDaemonRequestError
-    from ..runtime.command_inspection import command_extensions_payload, unavailable_command_inspection
+    from ..runtime.command_inspection import unavailable_command_inspection
     from .extension_controls_commands import _client
 
     command_command = str(getattr(args, "command_command", ""))
@@ -277,7 +277,10 @@ def _run_guard_command_inspection_command(
             _emit("command-setup", payload, bool(getattr(args, "json", False)))
             return 0
         if command_command == "extensions":
-            payload = command_extensions_payload(getattr(args, "extension_id", None))
+            from .command_extension_listing import command_extensions_listing
+
+            guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+            payload = command_extensions_listing(guard_home, getattr(args, "extension_id", None))
             _emit("command-extensions", payload, bool(getattr(args, "json", False)))
             return 0
         if command_command not in {"test", "explain"}:

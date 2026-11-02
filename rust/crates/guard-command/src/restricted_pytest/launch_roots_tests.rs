@@ -455,3 +455,17 @@ fn a_project_package_shim_directory_stays_reachable() {
 #[cfg(target_os = "macos")]
 #[path = "launch_roots_framework_tests.rs"]
 mod framework;
+
+#[test]
+fn a_developer_shim_stays_reachable_once_the_sandbox_finds_its_tool_first() {
+    // The sandbox PATH finds the tool a `/usr/bin` shim forwards to ahead of
+    // the shim, so the session's `/usr/bin/python3` and the sandbox's
+    // developer `python3` are the same program, not a mismatch to review.
+    if super::super::developer_shim::forwarded_tool(Path::new("/usr/bin/python3")).is_none() {
+        return;
+    }
+    let root = scratch();
+    assert!(!outside(&root, "python3", "/usr/bin:/bin"));
+    assert!(!outside(&root, "/usr/bin/python3", "/usr/bin:/bin"));
+    let _ = fs::remove_dir_all(root);
+}

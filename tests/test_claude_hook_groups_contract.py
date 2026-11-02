@@ -22,6 +22,7 @@ _LEGACY_GROUPS = (
     ("PostToolUse", _LEGACY_POST_TOOL_MATCHER, 30, None),
     ("Notification", "permission_prompt", 10, None),
     ("Stop", None, 10, None),
+    ("UserPromptSubmit", None, 10, None),
 )
 _ARGV = ("/opt/guard/native", "claude-hook-bridge", "HOL_GUARD_CLAUDE_DAEMON_HOOK", '{"query":"guard-home=x"}')
 _STALE_GUARD = {
@@ -41,7 +42,7 @@ def _legacy_sync(hooks: dict[str, object], argv: tuple[str, ...]) -> None:
             matcher,
             config.guard_command_handler(argv, timeout=timeout, status_message=status_message),
         )
-    for key in ("PermissionDenied", "UserPromptSubmit"):
+    for key in ("PermissionDenied",):
         entries = hooks.get(key)
         if not isinstance(entries, list):
             continue

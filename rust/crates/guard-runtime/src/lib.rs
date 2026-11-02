@@ -130,6 +130,11 @@ mod claude_session_start_contract;
 mod claude_session_start_live;
 mod cli_copilot_resolution;
 mod cli_runtime_support_op;
+#[path = "adapters/detection/cline_detect.rs"]
+mod cline_detect;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/cline_detect_tests.rs"]
+mod cline_detect_tests;
 mod cline_hook_worker;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
@@ -226,6 +231,9 @@ mod context_assistance_execution;
 mod context_assistance_history;
 mod context_assistance_notifications;
 mod context_assistance_op;
+mod context_assistance_prompt;
+mod context_assistance_prompt_files;
+mod context_assistance_prompt_ignore;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -292,12 +300,18 @@ mod developer_inspection_host;
 mod device_key_helper;
 #[path = "adapters/detection/devin_detect.rs"]
 mod devin_detect;
+#[path = "adapters/detection/devin_jsonc.rs"]
+mod devin_jsonc;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/devin_jsonc_tests.rs"]
+mod devin_jsonc_tests;
 mod direct_tool_context_op;
 #[cfg(test)]
 mod direct_tool_context_tests;
 mod direct_tool_managed_bun;
 mod directory_trust;
 mod discovery_placement_op;
+mod durable_runtime_collapse;
 mod edge;
 mod edge_exact_command_review;
 mod edge_git_push;
@@ -335,6 +349,19 @@ mod github_workflow_prepare_op;
 mod grok_detect;
 mod grok_executable;
 mod grok_executable_paths;
+#[path = "adapters/detection/grok_toml_engine.rs"]
+mod grok_toml_engine;
+#[path = "adapters/detection/grok_toml_scan.rs"]
+mod grok_toml_scan;
+#[path = "adapters/detection/grok_toml_semantic.rs"]
+mod grok_toml_semantic;
+#[path = "adapters/detection/grok_user_config.rs"]
+mod grok_user_config;
+#[path = "adapters/detection/grok_user_config_op.rs"]
+mod grok_user_config_op;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/grok_user_config_tests.rs"]
+mod grok_user_config_tests;
 mod guard_config_coerce;
 mod guard_config_harness;
 mod guard_config_iso;
@@ -735,6 +762,11 @@ mod onefile_extraction_reclaim;
 mod onefile_extraction_removal;
 mod onefile_open_paths;
 mod oneshot;
+#[path = "adapters/detection/openclaw_config.rs"]
+mod openclaw_config;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/openclaw_config_tests.rs"]
+mod openclaw_config_tests;
 #[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
 #[cfg(all(test, unix))]
@@ -744,6 +776,11 @@ mod openclaw_mcp;
 mod openclaw_skills;
 #[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
+#[path = "adapters/opencode_plugin_render.rs"]
+mod opencode_plugin_render;
+#[cfg(test)]
+#[path = "adapters/opencode_plugin_render_tests.rs"]
+mod opencode_plugin_render_tests;
 mod orphaned_worker_reap;
 mod ownership_acl_verdict;
 mod package_approval_hash_op;
@@ -764,9 +801,15 @@ mod package_protect_finalize_op;
 mod package_protect_projection_op;
 mod package_review_plan_op;
 mod package_workspace_scope_op;
+mod paseo_providers;
 mod persistence_action_class;
 #[path = "adapters/detection/pi_detect.rs"]
 mod pi_detect;
+#[path = "adapters/pi_extension_render.rs"]
+mod pi_extension_render;
+#[cfg(test)]
+#[path = "adapters/pi_extension_render_tests.rs"]
+mod pi_extension_render_tests;
 mod pi_glob;
 mod pi_hook_bridge;
 #[cfg(all(test, unix))]

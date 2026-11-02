@@ -66,13 +66,27 @@ _NODE_TOOLS = {
     "tsx": ("4.20.3", ("tsx",)),
     "turbo": ("2.5.5", ("turbo",)),
     "lint-staged": ("16.1.2", ("lint-staged",)),
+    # Runs the project's own scripts and installs nothing. Its launcher has to
+    # be here for a case that spells it from `.bin` to measure the route rather
+    # than a missing program, which contains on its own.
+    "npm-run-all": ("4.1.5", ("npm-run-all", "run-s", "run-p")),
 }
 _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "prettier --check ."}
 # The suite split into named parts, which is how a project with more than one
 # kind of test spells them. The route reads the body rather than the name, so
 # the fixture holds a runner body and a read-only tool body under the same
-# `test:` family.
-_TEST_FAMILY_SCRIPTS = {"test:unit": "vitest run tests/", "test:types": "tsc --noEmit"}
+# `test:` family. The third spells the same finishing Vitest run with the
+# option rather than the verb, which is how a project that passes reporting
+# options writes it, and the fourth names Bun's own runner, which is what a
+# Bun project's test entry holds. The fifth names the test files tsx runs,
+# which is how a project without a runner package spells its suite.
+_TEST_FAMILY_SCRIPTS = {
+    "test:unit": "vitest run tests/",
+    "test:types": "tsc --noEmit",
+    "test:ci": "vitest --run --reporter dot",
+    "test:bun": "bun test",
+    "test:tsx": "tsx --test tests/sample.test.ts",
+}
 _INSTALLED_PACKAGES = _NODE_PACKAGES | {name: version for name, (version, _) in _NODE_TOOLS.items()}
 
 
@@ -130,19 +144,40 @@ def _yarn_lockfile(packages: dict[str, str]) -> str:
     return "# yarn lockfile v1\n\n" + "\n".join(entries)
 
 
+# The launcher each package really publishes, where it is not ``bin/<binary>.js``.
+# Guard resolves a ``.bin`` launcher by looking for the installed entry the
+# package names, so a fixture that writes every launcher under ``bin/`` leaves
+# those runners unrecognised and scores every spelling of them a plain allow.
+_PACKAGE_LAUNCHERS = {
+    ("vitest", "vitest"): "vitest.mjs",
+    ("typescript", "tsc"): "bin/tsc",
+    ("prettier", "prettier"): "bin/prettier.cjs",
+    ("npm-run-all", "npm-run-all"): "bin/npm-run-all/index.js",
+    ("npm-run-all", "run-s"): "bin/run-s/index.js",
+    ("npm-run-all", "run-p"): "bin/run-p/index.js",
+}
+
+
 def _node_package(workspace: Path, name: str, version: str, binaries: tuple[str, ...] = ()) -> None:
     """One installed package with its ``node_modules/.bin`` shims, as npm links them."""
     binaries = binaries or (name,)
+    launchers = {
+        binary: _PACKAGE_LAUNCHERS.get((name, binary), f"bin/{binary}.js") for binary in binaries
+    }
     package = workspace / "node_modules" / name
-    manifest = {"name": name, "version": version, "bin": {binary: f"./bin/{binary}.js" for binary in binaries}}
+    manifest = {
+        "name": name,
+        "version": version,
+        "bin": {binary: f"./{launcher}" for binary, launcher in launchers.items()},
+    }
     _write(package / "package.json", json.dumps(manifest) + "\n")
-    for binary in binaries:
-        script = package / "bin" / f"{binary}.js"
+    for binary, launcher in launchers.items():
+        script = package / launcher
         _write(script, f"#!/usr/bin/env node\nconsole.log('{binary} {version}');\n")
         script.chmod(0o755)
         shim = workspace / "node_modules" / ".bin" / binary
         shim.parent.mkdir(parents=True, exist_ok=True)
-        shim.symlink_to(Path("..") / name / "bin" / f"{binary}.js")
+        shim.symlink_to(Path("..") / name / launcher)
 
 
 def _python_toolchain(workspace: Path) -> None:

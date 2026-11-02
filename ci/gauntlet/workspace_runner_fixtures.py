@@ -63,6 +63,11 @@ WORKSPACE_TSC_GENERATED_PROJECT_CASE = "omp-native-workspace-tsc-generated-proje
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
 WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
+# The other runner a Node project installs for itself, named the way a developer
+# narrows a run: the file to run beside the option that stops Vitest watching.
+# A filter is not a Vitest command, so the run is the same single pass the bare
+# `run` verb names.
+WORKSPACE_VITEST_FILTER_CASE = "omp-native-workspace-vitest-filter"
 # The commit hook a project runs over its staged files. It is declared,
 # installed and pinned exactly as the linter it drives is, and it is launched
 # through npx the same way, so the verdict has the same evidence to read.
@@ -71,6 +76,10 @@ WORKSPACE_LINT_STAGED_CASE = "omp-native-workspace-npx-lint-staged"
 # its sources. `--test` puts Node in test-runner mode, so the words behind the
 # flags are the files it loads rather than the first file's arguments.
 WORKSPACE_TSX_NODE_TEST_CASE = "omp-native-workspace-npx-tsx-node-test"
+# The script runner a Node project installs to drive several of its own scripts
+# at once. Its own name carries a manager's inside it, and it installs nothing:
+# every script it names is already in the project's manifest.
+WORKSPACE_RUN_ALL_CASE = "omp-native-workspace-npm-run-all-scripts"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -87,6 +96,8 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_PNPM_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
+        WORKSPACE_VITEST_FILTER_CASE,
+        WORKSPACE_RUN_ALL_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -290,6 +301,52 @@ _PNPM_TYPESCRIPT_FILES = {
 _PNPM_TYPESCRIPT_FILES["pnpm-lock.yaml"] = _PNPM_LOCK
 
 
+_VITEST_VERSION = "3.2.4"
+# The test file the scenario names. Vitest resolves a plain operand as a filter
+# over the files it has discovered, so the run only means anything when the
+# workspace holds a file the filter selects.
+VITEST_TEST_FILE = "src/a.test.ts"
+# The one line the workspace's own Vitest prints.
+VITEST_MARKER = f"vitest {_VITEST_VERSION} ran the named file once"
+_VITEST_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "test": "vitest run"\n  },\n'
+        f'  "devDependencies": {{\n    "vitest": "{_VITEST_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "vitest": "{_VITEST_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/vitest": {\n'
+        f'      "version": "{_VITEST_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "vitest": "vitest.mjs"\n      }\n    }\n  }\n}\n'
+    ),
+    "vitest.config.ts": 'export default { test: { include: ["src/**/*.test.ts"] } };\n',
+    VITEST_TEST_FILE: (
+        "import { expect, test } from 'vitest';\n\n"
+        "test('reads its own defaults', () => {\n  expect(3).toBe(3);\n});\n"
+    ),
+    # npm puts Vitest's launcher at the package root rather than under `bin`.
+    "node_modules/vitest/package.json": (
+        f'{{"name": "vitest", "version": "{_VITEST_VERSION}", "bin": {{"vitest": "vitest.mjs"}}}}\n'
+    ),
+    # A launch that lost the filter would still start this file, and one that
+    # lost the watch-off flag would leave Vitest watching rather than finishing
+    # a pass, so the line the oracle reads is printed only when both the named
+    # file and `--run` arrive. That makes the case fail where either word is
+    # dropped instead of passing on the launch alone.
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        f"const once = argv.includes('{VITEST_TEST_FILE}') && argv.includes('--run');\n"
+        f"console.log(once ? '{VITEST_MARKER}'"
+        " : 'vitest: the named one-pass run was not forwarded');\n"
+    ),
+}
+
+
 _LINT_STAGED_VERSION = "16.1.2"
 # The one line the workspace's own commit hook prints.
 LINT_STAGED_MARKER = f"lint-staged {_LINT_STAGED_VERSION} checked the staged files"
@@ -366,6 +423,36 @@ _TSX_FILES = {
 }
 
 
+_RUN_ALL_VERSION = "4.1.5"
+# The one line the workspace's own script runner prints.
+RUN_ALL_MARKER = f"npm-run-all {_RUN_ALL_VERSION} ran the named scripts"
+_RUN_ALL_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "test:unit": "node --test __tests__",\n'
+        '    "test:types": "tsc --noEmit"\n  },\n'
+        f'  "devDependencies": {{\n    "npm-run-all": "{_RUN_ALL_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "npm-run-all": "{_RUN_ALL_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/npm-run-all": {\n'
+        f'      "version": "{_RUN_ALL_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "npm-run-all": "bin/npm-run-all.js"\n      }\n    }\n  }\n}\n'
+    ),
+    "src/settings.ts": "export const settings = { retries: 3 };\n",
+    "node_modules/npm-run-all/package.json": (
+        f'{{"name": "npm-run-all", "version": "{_RUN_ALL_VERSION}", "bin": '
+        '{"npm-run-all": "bin/npm-run-all.js"}}\n'
+    ),
+    "node_modules/npm-run-all/bin/npm-run-all.js": (
+        f"#!/usr/bin/env node\nconsole.log('{RUN_ALL_MARKER}');\n"
+    ),
+}
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
@@ -406,6 +493,7 @@ _INSTALLS = {
         entry="bin/tsc",
     ),
     WORKSPACE_LINT_STAGED_CASE: _Install("lint-staged", _LINT_STAGED_FILES, LINT_STAGED_MARKER),
+    WORKSPACE_RUN_ALL_CASE: _Install("npm-run-all", _RUN_ALL_FILES, RUN_ALL_MARKER),
     WORKSPACE_PNPM_TSC_CASE: _Install(
         "tsc",
         _PNPM_TYPESCRIPT_FILES,
@@ -418,6 +506,12 @@ _INSTALLS = {
         _TSX_FILES,
         TSX_MARKER,
         entry="dist/cli.mjs",
+    ),
+    WORKSPACE_VITEST_FILTER_CASE: _Install(
+        "vitest",
+        _VITEST_FILES,
+        VITEST_MARKER,
+        entry="vitest.mjs",
     ),
 }
 

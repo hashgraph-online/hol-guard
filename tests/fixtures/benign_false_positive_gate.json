@@ -7134,6 +7134,23 @@
       "expect": "allow"
     },
     {
+      "id": "runner-watch-off-vitest-filter-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "./node_modules/.bin/vitest src/a.test.ts --run"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "gauntlet-node-jest-entry-ci",
       "fix_area": "shell",
       "harnesses": [
@@ -12082,6 +12099,23 @@
       "requires_sandbox": true
     },
     {
+      "id": "status-tail-cd-sibling-jest-entry",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>&1 | cut -c1-120; echo \"tests=$?\""
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "gauntlet-sibling-cd-jest-quiet",
       "fix_area": "shell",
       "harnesses": [
@@ -14913,6 +14947,22 @@
       "expect": "allow"
     },
     {
+      "id": "status-tail-cd-worktree-npm-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && npm test 2>&1 | tail -5; echo \"rc=$?\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "session-npm-test-stderr-pipe",
       "fix_area": "shell",
       "harnesses": [
@@ -16216,6 +16266,22 @@
       "tool": "shell",
       "tool_input": {
         "command": "cd ${WORKTREE}/dashboard && ./node_modules/.bin/vitest run 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-tail-cd-linked-modules-vitest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE}/dashboard && ./node_modules/.bin/vitest run 2>&1 | tail -20; echo \"tests=$?\""
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -22512,6 +22578,22 @@
       "expect": "allow"
     },
     {
+      "id": "status-tail-relative-cd-vite-build",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd dashboard && ./node_modules/.bin/vite build 2>&1 | tail -15; echo \"build=$?\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "gauntlet-linked-modules-relative-bun-entry",
       "fix_area": "shell",
       "harnesses": [
@@ -24788,6 +24870,22 @@
       "expect": "allow"
     },
     {
+      "id": "status-tail-cd-user-tmp-sibling-npm-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${USER_TMP_SIBLING_LINK}/dashboard && npm run test 2>&1 | tail -5; echo \"rc=$?\""
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
       "id": "user-tmp-sibling-link-local-commit",
       "fix_area": "git-sibling-worktree",
       "harnesses": [
@@ -25714,6 +25812,354 @@
       "expect": "allow",
       "requires_sandbox": true
     },    {
+      "id": "named-test-script-npm-run-tsx",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run test:tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "named-test-script-npm-run-bun",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run test:bun"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "named-test-script-pnpm-run-bun",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm run test:bun"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "named-test-script-npm-run-option-spelled",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm run test:ci"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "named-test-script-pnpm-run-option-spelled",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm run test:ci"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "local-exec-pnpm-filter-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter app exec vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "local-exec-pnpm-filter-short-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -F app exec vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "local-exec-pnpm-recursive-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -r exec vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "local-exec-pnpm-filter-tsc",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter app exec tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "local-exec-pnpm-separator-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm exec -- vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "local-exec-pnpm-separator-runner-options",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter app exec vitest run -- --reporter=json"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "local-exec-yarn-workspace-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn workspace app exec vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-exec-pnpm-filter-reaches-outside",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter ../sibling exec vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-pnpm-installs-behind-exec",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter app exec npm install zod"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-pnpm-nested-npm-exec",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm exec npm exec --yes cowsay"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-pnpm-nested-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm exec npx cowsay"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-yarn-nested-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn exec bunx cowsay"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-yarn-shell-script",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn exec 'npm install zod'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-pnpm-separator-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm exec -- npm install zod"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-pnpm-launcher-runner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm exec env npx cowsay"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-exec-npm-workspace-can-fetch",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --workspace app exec vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "named-test-script-pnpm-run-unit",
       "fix_area": "shell",
       "harnesses": [
@@ -27534,6 +27980,22 @@
       "tool": "shell",
       "tool_input": {
         "command": "cd ${WORKTREE} && .venv/bin/pytest -q 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "status-tail-cd-worktree-venv-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && .venv/bin/pytest -q 2>&1 | tail -20; echo \"rc=$?\""
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -30739,6 +31201,54 @@
       "tool": "shell",
       "tool_input": {
         "command": "bun --bun run typecheck"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-bun-filter-name-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun --filter app test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-bun-filter-short-scoped-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun -F @acme/web run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-bun-filter-relative-dir-inline-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun --filter=./packages/web test"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -47297,6 +47807,24 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "runner-local-bin-npm-run-all-scripts",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "./node_modules/.bin/npm-run-all test:unit test:types"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
     }
   ],
   "mcp_cases": [

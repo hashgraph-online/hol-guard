@@ -11,10 +11,10 @@ import { canStartCigar, type CigarTab } from "./workspace-model";
 
 export type CigarSetupStage = "python" | "download" | "check" | "start";
 export const CIGAR_SETUP_STAGE_LABELS: Record<CigarSetupStage, string> = {
-  python: "Get Python ready",
-  download: "Download CIGAR",
-  check: "Check it is the approved copy",
-  start: "Start CIGAR",
+  python: "Getting ready",
+  download: "Downloading CIGAR",
+  check: "Making sure it is safe",
+  start: "Starting up",
 };
 /** `wait` marks a block that clears by itself, so the page re-checks instead of waiting for a click. */
 export type CigarSetupBlock = { title: string; detail: string; tab?: CigarTab; wait?: boolean };
@@ -75,7 +75,7 @@ export function planCigarSetup(data: CigarVersionsData, options: { locked: boole
     && item.implementation.toLowerCase() === "cpython");
   const pythonBuild = interpreter ? null : catalog.interpreter_builds.find((item) => python314(item.python_version) && cigarPythonBlock(catalog, item) === null);
   if (!interpreter && !pythonBuild) {
-    return blocked("Not available for this computer yet", "CIGAR needs its own copy of Python 3.14, and Guard does not have one for this kind of computer yet. Guard keeps protecting you without it.");
+    return blocked("Not available for this computer yet", "CIGAR cannot run on this kind of computer yet. Guard keeps protecting you without it.");
   }
   return { kind: "run", runtime_id: null, build_id: build.identity.build_id, interpreter_id: interpreter?.interpreter_id ?? null,
     python_build_id: pythonBuild?.build_id ?? null, stages: [...(pythonBuild ? ["python" as const] : []), "download", "check", "start"],
@@ -177,6 +177,15 @@ async function follow(
 }
 
 /** Run the plan to a verified Ready state. Stop wins at every boundary. */
+/** Turning on also lets CIGAR add matching project files to each prompt unless someone already chose otherwise. */
+export function turnOnPreferences(previous: GuardContextAssistanceConfig, runtime: string): GuardContextAssistanceConfig {
+  const untouched = !previous.sources.workspace_documents && !previous.sources.source_set_id;
+  if (!untouched) return { ...previous, enabled: true, runtime_id: runtime };
+  return { ...previous, enabled: true, runtime_id: runtime,
+    sources: { ...previous.sources, workspace_documents: true, source_set_id: "selected-workspaces" },
+    features: { ...previous.features, agent_context: true } };
+}
+
 export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssistanceStatus, deps: CigarSetupDeps, proof?: ContextProof): Promise<ContextAssistanceStatus> {
   let state = initial;
   let interpreter = plan.interpreter_id;
@@ -216,7 +225,7 @@ export async function runCigarSetup(plan: CigarSetupRun, initial: ContextAssista
     const previous = state.preferences;
     let saved: GuardContextAssistanceConfig;
     try {
-      saved = await deps.saveSettings({ ...previous, enabled: true, runtime_id: runtime }, proof);
+      saved = await deps.saveSettings(turnOnPreferences(previous, runtime), proof);
     } catch (cause) { failure("start", cause); }
     deps.onSaved(saved, previous);
   }

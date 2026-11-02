@@ -112,6 +112,162 @@ const REGISTRY_VERBS: &[&str] = &[
     "doctor",
 ];
 
+/// Whether any word in `scanned` reaches a registry when `manager` reads it.
+/// Every word in [`REGISTRY_VERBS`] does for most of them, and `exec` is the
+/// exception the manager decides: `npm exec` installs the package it names
+/// when the project does not already hold it, the way `npx` does, while pnpm
+/// and yarn run only what the project installed and fetch under `dlx`. Their
+/// `exec` therefore reaches no registry of its own, and a run spelled with it
+/// — `pnpm exec vitest run`, or the same run pinned to one package with
+/// `--filter` — is the local work the sandbox bounds.
+///
+/// What that `exec` runs still decides the rest. A fetching program behind it
+/// — `pnpm exec npm exec <package>`, `pnpm exec npx <package>` — reaches the
+/// registry the outer verb does not, and the fetch is the command's effect
+/// whichever word spells it, so the exemption is read against the program
+/// after the verb rather than against the verb alone.
+///
+/// The program the verb runs is read by [`exec_runs_a_fetcher`], which sees the
+/// words a `--` separator hides from this scan. The word `exec` itself is
+/// exempt here wherever pnpm or yarn reads it, so a project script of their own
+/// named `exec` is not mistaken for the verb.
+fn scan_reaches_a_registry(manager: &str, scanned: &[&str]) -> bool {
+    scanned.iter().any(|argument| {
+        let argument = argument.to_ascii_lowercase();
+        if argument == "exec" && matches!(manager, "pnpm" | "yarn") {
+            return false;
+        }
+        REGISTRY_VERBS.contains(&argument.as_str())
+    })
+}
+
+/// Whether a pnpm or yarn `exec` runs a program that reaches a registry itself.
+/// `arguments` is the segment's whole argument list and `verb` the index of the
+/// verb within it, so the target behind `pnpm exec -- npx <package>` is read
+/// rather than hidden by the separator, and the options in front of it are
+/// read the way the selector walk reads them, so the value a selector carries
+/// is not mistaken for the program. An `exec` whose target cannot be read at
+/// all keeps the review it had: there is no program for this to answer for.
+fn exec_runs_a_fetcher(manager: &str, arguments: &[&str], verb: usize) -> bool {
+    if !matches!(manager, "pnpm" | "yarn") || arguments.get(verb) != Some(&"exec") {
+        return false;
+    }
+    let behind = arguments.get(verb + 1..).unwrap_or_default();
+    let behind = match behind.split_first() {
+        Some((&"--", rest)) => rest,
+        _ => behind,
+    };
+    match behind.get(options::skip_inert_options(manager, behind)) {
+        // The walk stops at the first option this route does not read, and a
+        // value-taking one hides the target behind its value: the first word
+        // after `pnpm exec --filter app` is the selector's value, not the
+        // program. An option left unread is one this reading cannot answer
+        // for, so the command keeps the review it had.
+        Some(word) if word.starts_with('-') => true,
+        Some(target) => target_keeps_its_review(target),
+        None => true,
+    }
+}
+
+/// The index of the verb a workspace selector stands in front of. `yarn
+/// workspace <name>` and pnpm's `recursive` — which pnpm also spells `multi`
+/// and `m` — name which project of the workspace the command runs in rather
+/// than what runs there, so the verb they carry is the word behind the
+/// selector and behind the options spelled after it. Reading the leading word
+/// alone would leave `yarn workspace web exec npx <package>` with no `exec`
+/// for [`exec_runs_a_fetcher`] to answer for, and the fetch behind it unread.
+///
+/// The index returned is the selector's own when nothing stands behind it, and
+/// the first word the option walk did not read otherwise. That word deciding
+/// the admission is the caller's to screen: an option the walk stopped at is
+/// one this route has not read, and a selector in front of it must not pass it
+/// in.
+fn verb_behind_a_selector(manager: &str, arguments: &[&str], verb: usize) -> usize {
+    let selector = match (manager, arguments.get(verb).copied()) {
+        ("yarn", Some("workspace")) => 2,
+        ("pnpm", Some("recursive" | "multi" | "m")) => 1,
+        _ => return verb,
+    };
+    let Some(behind) = arguments.get(verb + selector..) else {
+        return verb;
+    };
+    verb + selector + options::skip_inert_options(manager, behind)
+}
+
+/// Whether the program a pnpm or yarn `exec` runs keeps the command's review.
+/// The managers reach a registry through their own verbs, and a package runner
+/// fetches the package it names outright, so neither is the installed project
+/// tool a contained `exec` runs.
+///
+/// Yarn runs its `exec` argument through a shell, so a target holding
+/// whitespace or shell syntax is a script rather than a program name: `yarn
+/// exec 'npm install zod'` is one word here and names its install inside it.
+/// What such a script does is the question this reading cannot answer, so it
+/// stays at review rather than passing on the shape of the word.
+///
+/// A launcher is read the same way. `pnpm exec env npx <package>` and `pnpm
+/// exec sh -c '<script>'` name a program that runs another program, so the
+/// word after the verb is not the effect; reading only that word would admit
+/// the fetch it carries.
+fn target_keeps_its_review(target: &str) -> bool {
+    let shell_syntax =
+        |character: char| character.is_whitespace() || SHELL_SYNTAX.contains(character);
+    if target.is_empty() || target.contains(shell_syntax) {
+        return true;
+    }
+    let name = super::super::executable_basename(target).to_ascii_lowercase();
+    PACKAGE_RUNNERS.contains(&name.as_str())
+        || manager_program(&name)
+        || LAUNCHERS.contains(&name.as_str())
+}
+
+/// Programs whose own argument is the program that runs. The effect of a
+/// command spelled through one of these is whatever it launches, which this
+/// reading does not follow, so an `exec` target naming one keeps its review.
+const LAUNCHERS: &[&str] = &[
+    "ash",
+    "bash",
+    "busybox",
+    "command",
+    "dash",
+    "doas",
+    "env",
+    "eval",
+    "exec",
+    "ionice",
+    "ksh",
+    "nice",
+    "nohup",
+    "node",
+    "nodejs",
+    "perl",
+    "python",
+    "python3",
+    "pwsh",
+    "powershell",
+    "ruby",
+    "setsid",
+    "sh",
+    "stdbuf",
+    "sudo",
+    "time",
+    "timeout",
+    "xargs",
+    "zsh",
+];
+
+/// The characters that make a word a script rather than a program name.
+const SHELL_SYNTAX: &str = "&|;<>()$`\\\"'*?[]{}!#~=";
+
+/// Whether `name` runs a manager this module decides a verb for.
+fn manager_program(name: &str) -> bool {
+    NODE_MANAGERS.contains(&name)
+        || PYTHON_MANAGERS.contains(&name)
+        || super::vendored::VENDORED_MANAGERS.contains(&name)
+        || matches!(name, "uv" | "go" | "cargo")
+        || maven_executable(name)
+}
+
 /// Where a literal `target` below the workspace moves a run that stands in
 /// `directory`, or `None` when the sandbox cannot follow it there.
 pub(super) fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
@@ -140,11 +296,7 @@ pub(super) fn names_a_manager(model: &CanonicalCommandV1) -> bool {
     model.segments.iter().any(|segment| {
         segment.executable.as_deref().is_some_and(|executable| {
             let name = super::super::executable_basename(executable).to_ascii_lowercase();
-            NODE_MANAGERS.contains(&name.as_str())
-                || PYTHON_MANAGERS.contains(&name.as_str())
-                || super::vendored::VENDORED_MANAGERS.contains(&name.as_str())
-                || matches!(name.as_str(), "uv" | "go" | "cargo")
-                || maven_executable(&name)
+            manager_program(&name)
         })
     })
 }
@@ -267,19 +419,20 @@ pub(super) fn local_package_work(
             // admits whatever is not a package tool, which a runner is not,
             // so a manager's local verb beside it must not carry it in.
             return !PACKAGE_RUNNERS.contains(&name.as_str())
-                && !super::super::generic::is_package_tool(executable);
+                && !super::super::generic::executable_is_package_tool(executable);
         }
-        let arguments: Vec<&str> = segment
-            .arguments
+        let all_arguments: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+        let arguments: Vec<&str> = all_arguments
             .iter()
-            .map(String::as_str)
+            .copied()
             .take_while(|argument| *argument != "--")
             .collect();
         // A bare `yarn` (or `yarn --frozen-lockfile`) installs, so the verb must
         // come first; `npm init <name>` runs a fetched initializer. The verb
         // is read behind the words [`options::skip_inert_options`] knows; any
         // other leading option, `--cwd dir` among them, still hides it.
-        let behind = &arguments[options::skip_inert_options(&name, &arguments)..];
+        let verb = options::skip_inert_options(&name, &arguments);
+        let behind = &arguments[verb..];
         // `yarn workspaces focus` installs the dependencies of the projects it
         // selects, and `yarn workspaces foreach` runs a command of its own in
         // each of them. The verb names neither effect, so the subcommand after
@@ -326,13 +479,31 @@ pub(super) fn local_package_work(
         } else {
             &arguments[..]
         };
+        // The verb a workspace selector carries is read behind the selector,
+        // and the option walk that finds it stops at the first option this
+        // route has not read. `pnpm recursive --dir <path> exec <tool>` is
+        // that shape: `--dir` moves the run to a directory the inert-value
+        // walk never read, and the selector in front of it would otherwise
+        // carry the command in on the leading word alone. A selector standing
+        // in front of an unread option therefore keeps the command out.
+        //
+        // Only a selector that moved the index is screened here. Where none
+        // stands in front of the verb the word at `verb` is the verb itself,
+        // which `leading_verb` and `version_probe` already read: `npm -V`
+        // stops the walk on an option because the probe is the whole command,
+        // and there is no selector carrying anything past it.
+        let selected = verb_behind_a_selector(&name, &arguments, verb);
+        let selector_hides_an_option = selected != verb
+            && arguments
+                .get(selected)
+                .is_some_and(|argument| argument.starts_with('-'));
         !behind.is_empty()
             && (leading_verb || version_probe)
             && !workspace_fanout
             && !positional_init
-            && !scanned
-                .iter()
-                .any(|argument| REGISTRY_VERBS.contains(&argument.to_ascii_lowercase().as_str()))
+            && !selector_hides_an_option
+            && !exec_runs_a_fetcher(&name, &all_arguments, selected)
+            && !scan_reaches_a_registry(&name, scanned)
     })
 }
 

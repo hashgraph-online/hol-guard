@@ -1,13 +1,14 @@
 //! The output filters a peeled wrapper runs over its core's captured output,
 //! as Guard's own sink runs them.
 //!
-//! Native authority chose the chain: at most three `head`, `tail`, `grep` or
-//! `rg` stages, each reading only standard input. Head and tail cut the text
-//! in process, by lines or by bytes. A matcher runs as the installed binary,
-//! located by ownership rather than by the caller's `PATH`, with an
-//! environment built here, on the text the core already produced. The text
-//! stays bytes throughout, so a cut in the middle of a character reaches the
-//! next stage, and the output, exactly as the pipeline would have left it.
+//! Native authority chose the chain: at most three `head`, `tail`, `grep`,
+//! `rg` or `cut` stages, each reading only standard input. Head and tail
+//! shorten the text in process, by lines or by bytes. Every other stage runs
+//! as the installed binary, located by ownership rather than by the caller's
+//! `PATH`, with an environment built here, on the text the core already
+//! produced. The text stays bytes throughout, so a cut in the middle of a
+//! character reaches the next stage, and the output, exactly as the pipeline
+//! would have left it.
 
 use std::io::{Read, Write};
 use std::os::unix::fs::MetadataExt;
@@ -23,6 +24,7 @@ use super::output::Shaping;
 use super::{Failure, Outcome};
 
 const GREP_BINARIES: [&str; 2] = ["/usr/bin/grep", "/bin/grep"];
+const CUT_BINARIES: [&str; 2] = ["/usr/bin/cut", "/bin/cut"];
 /// ripgrep ships from a package manager rather than the system image, so it
 /// is looked for in the ordinary install directories.
 const RG_DIRECTORIES: [&str; 6] = [
@@ -154,6 +156,7 @@ pub(crate) fn matched_within(
         "grep" => trusted_grep().map(|binary| (binary, None)),
         "egrep" => trusted_grep().map(|binary| (binary, Some("-E"))),
         "fgrep" => trusted_grep().map(|binary| (binary, Some("-F"))),
+        "cut" => trusted_cut().map(|binary| (binary, None)),
         _ => return Err(unsupported()),
     };
     let Some((binary, switch)) = located else {
@@ -236,10 +239,17 @@ fn run(mut command: Command, input: &[u8], stdout_limit: u64) -> Outcome<(Vec<u8
 
 /// The system grep: a root-owned regular file nobody else can rewrite.
 fn trusted_grep() -> Option<PathBuf> {
-    trusted_grep_in(&GREP_BINARIES.map(Path::new))
+    trusted_system_binary(&GREP_BINARIES.map(Path::new))
 }
 
-fn trusted_grep_in(candidates: &[&Path]) -> Option<PathBuf> {
+/// The system `cut`, held to the same test as the system `grep`: both ship in
+/// the system image, so neither is looked for in a package manager's
+/// directories.
+fn trusted_cut() -> Option<PathBuf> {
+    trusted_system_binary(&CUT_BINARIES.map(Path::new))
+}
+
+fn trusted_system_binary(candidates: &[&Path]) -> Option<PathBuf> {
     candidates.iter().map(PathBuf::from).find(|candidate| {
         std::fs::metadata(candidate)
             .is_ok_and(|info| info.is_file() && info.uid() == 0 && info.mode() & 0o022 == 0)

@@ -76,10 +76,10 @@ try {
   assert.match(markup, /Preparation does not confirm delivery, approval, or execution/);
   assert.equal(requests, 0);
   const repair = renderToStaticMarkup(<ContextDataRepairPanel savedEnabled disabled={false} onStopped={() => {}} onBusyChange={() => {}} />);
-  assert.match(repair, /Context data and repair/);
-  assert.match(repair, /Turn off context assistance/);
-  assert.match(repair, /Existing saved evidence can still be inspected and removed/);
-  assert.match(repair, /Clear all context data/);
+  assert.match(repair, /Privacy and repair/);
+  assert.match(repair, /Turn CIGAR off/);
+  assert.match(repair, /Anything saved earlier can still be checked and removed/);
+  assert.match(repair, /Delete everything/);
   assert.doesNotMatch(repair, /<button[^>]*>Clear evidence/);
 } finally {
   globalThis.fetch = originalFetch;

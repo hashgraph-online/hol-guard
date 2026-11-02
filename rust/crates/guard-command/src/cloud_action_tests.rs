@@ -3,6 +3,7 @@ mod bindings;
 mod canonical;
 mod catalog;
 mod consent;
+mod differential;
 mod intake;
 mod parity;
 mod policy;

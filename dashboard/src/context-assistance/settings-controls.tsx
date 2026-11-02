@@ -32,7 +32,7 @@ const caption = "text-xs leading-5 text-slate-500";
 const PROFILES = [
   { value: "low_memory" as const, label: "Smaller context", description: "One project at a time. Stops after two idle minutes." },
   { value: "balanced" as const, label: "Balanced", description: "Two projects at a time. Stops after ten idle minutes." },
-  { value: "custom" as const, label: "Custom limits", description: "Set your own limits under Advanced." },
+  { value: "custom" as const, label: "Custom limits", description: "Set your own limits under More settings." },
 ];
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
@@ -119,9 +119,13 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
             <SettingsToggleRow label="Review briefs" description="Prepare cited context to help you understand a request. Guard's approval choices stay available."
               checked={value.features.review_briefs} disabled={editingDisabled}
               onChange={(review_briefs) => props.onChange({ ...value, features: { ...value.features, review_briefs } })} />
-            <SettingsToggleRow label="Context for AI apps" description="Allow scoped context tools for apps you authorize. Sharing between agents requires a separate choice."
+            <SettingsToggleRow label="Context for AI apps" description="Add the project files that match each prompt in Claude Code and Codex, and allow context tools for apps you authorize. Sharing between agents is a separate choice."
               checked={value.features.agent_context} disabled={editingDisabled}
               onChange={(agent_context) => props.onChange({ ...value, features: { ...value.features, agent_context, shared_agents: agent_context && value.features.shared_agents } })} />
+            <SettingsToggleRow label="Allow selected workspace documents" description="With Context for AI apps on, prompts in Claude Code and Codex get the files in their project that match them. Pick a project folder under Projects & AI apps to choose exact files instead."
+              checked={value.sources.workspace_documents} disabled={editingDisabled}
+              onChange={(workspace_documents) => props.onChange({ ...value, sources: { ...value.sources, workspace_documents,
+                source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id } })} />
             <div>
               <SettingsToggleRow label="Share context between paired AI connections"
                 description="Separate connections for the same app and workspace can use shared context. Notes require explicit access and your review before sharing. Saving this change ends existing context grants; pair connections again after starting the runtime."
@@ -134,7 +138,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
           <details className="group rounded-2xl border border-brand-dark/10 bg-white">
             <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 hover:bg-surface-1 sm:px-5 [&::-webkit-details-marker]:hidden">
               <HiMiniChevronRight aria-hidden="true" className="size-4 shrink-0 text-brand-dark/50 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
-              <span className="min-w-0"><span className="block text-sm font-semibold text-brand-dark">Advanced</span>
+              <span className="min-w-0"><span className="block text-sm font-semibold text-brand-dark">More settings</span>
                 <span className="block text-xs text-brand-dark/60">Sources, limits, storage and runtime details</span></span>
             </summary>
             <div className="space-y-8 border-t border-brand-dark/[0.07] px-4 py-5 sm:px-5">
@@ -148,10 +152,6 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
                   <SettingsToggleRow label="Sanitized receipt facts" description="Use sanitized facts from Guard's local history."
                     checked={value.sources.sanitized_receipt_facts} disabled={editingDisabled}
                     onChange={(sanitized_receipt_facts) => props.onChange({ ...value, sources: { ...value.sources, sanitized_receipt_facts } })} />
-                  <SettingsToggleRow label="Allow selected workspace documents" description="After saving, choose each folder and file in Workspace context access. Files are read only with an explicit grant."
-                    checked={value.sources.workspace_documents} disabled={editingDisabled}
-                    onChange={(workspace_documents) => props.onChange({ ...value, sources: { ...value.sources, workspace_documents,
-                      source_set_id: workspace_documents ? value.sources.source_set_id || "selected-workspaces" : value.sources.source_set_id } })} />
                   <div>
                     <SettingsToggleRow label="Associate native context with execution"
                       description="Add a short context check to supported native captured-Bash commands. Requires native facts and fresh app/workspace access. Guard proceeds under its existing authorization when the association is unavailable."
@@ -163,7 +163,7 @@ export function ContextSettingsControls(props: ContextSettingsControlsProps) {
                     {!value.sources.native_policy_facts ? <p className={caption + " pb-2"}>Enable native policy and decision facts to choose execution associations.</p> : null}
                   </div>
                 </div>
-                <p className={caption}>Workspace documents require explicit source access. Runtime activation grants no document access.</p>
+                <p className={caption}>Starting CIGAR grants no document access by itself. Project files are only added to prompts while Context for AI apps and Allow selected workspace documents are on.</p>
               </Group>
               {value.resource_profile === "custom" ? (
                 <fieldset className="grid gap-4 sm:grid-cols-2" disabled={editingDisabled}>

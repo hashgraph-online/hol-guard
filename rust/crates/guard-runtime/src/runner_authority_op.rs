@@ -19,20 +19,25 @@ use serde_json::Value;
 use super::aibom_op as aibom;
 use super::antigravity_detect;
 use super::claude_code_detect;
+use super::cline_detect;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
 use super::cursor_detect;
 use super::devin_detect;
+use super::devin_jsonc;
 use super::gemini_detect;
 use super::grok_detect;
+use super::grok_user_config_op;
 use super::hermes_detect;
 use super::kimi_detect;
 use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
+use super::opencode_plugin_render;
 use super::pi_detect;
+use super::pi_extension_render;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
 use super::{
@@ -128,6 +133,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "canonical_rollout" => policy::canonical_rollout(args),
         "downgrade_reference" => policy::downgrade_reference(args),
         "policy_simulation" => policy::policy_simulation(args),
+        "paseo_providers" => crate::paseo_providers::dispatch(args),
         "remote_mcp_origins" => crate::remote_mcp_origins::dispatch(args),
         "cloud_scrub_texts" => privacy::cloud_scrub_texts(args),
         "cloud_review_event_display" => privacy::cloud_review_event_display(args),
@@ -152,18 +158,23 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "zcode_detect" => zcode_detect::detect(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
+        "pi_extension_render" => pi_extension_render::render(args),
         "codex_detect" => codex_detect::detect(args),
         "copilot_detect" => copilot_detect::detect(args),
         "claude_code_detect" => claude_code_detect::detect(args),
+        "cline_detect" => cline_detect::detect(args),
         "gemini_detect" => gemini_detect::detect(args),
         "antigravity_detect" => antigravity_detect::detect(args),
         "devin_detect" => devin_detect::detect(args),
+        "devin_jsonc" => devin_jsonc::document(args),
         "grok_detect" => grok_detect::detect(args),
+        "grok_user_config" => grok_user_config_op::dispatch(args),
         "kimi_detect" => kimi_detect::detect(args),
         "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "opencode_detect" => opencode_detect::detect(args),
+        "opencode_plugin_render" => opencode_plugin_render::render(args),
         _ => Err(ERR_KIND),
     }
 }

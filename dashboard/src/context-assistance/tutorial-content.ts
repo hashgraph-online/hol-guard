@@ -36,13 +36,13 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
       {
         title: "Choose a small evidence set", description: "Pick the sources that can answer your question before granting workspace access.",
-        instructions: ["Open Advanced in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
+        instructions: ["Open More settings in Settings. Native policy and decision facts can be used without adding project files.", "For project documentation, turn on Allow selected workspace documents in Settings, above More settings. Plan to start with one or two relevant files, such as README.md and a release guide that exists in your project.", "Save changes and start CIGAR again if its status returns to Not started. Changing preferences can end existing context access."],
         expect: "Your intended source preferences are saved and the runtime is Ready.", target: "runtime", action: "Choose source preferences",
         tip: "A document preference allows you to choose files later. It does not grant access to the whole workspace.",
       },
       {
         title: "Grant one workspace access", description: "A grant connects a workspace and a consumer to the evidence you explicitly select.",
-        instructions: ["In Projects & AI apps, choose Guard dashboard as the Context consumer.", "Enter the absolute Workspace folder. Add individual files relative to that folder, one per line, if document context is enabled. Leave the file list empty for native facts only.", "Click Grant review source access. Confirm the exact workspace, consumer, and sources when Guard asks for approval proof."],
+        instructions: ["In Projects & AI apps, click Choose a project folder and browse to your project. Folders that look like projects are marked.", "Under What should CIGAR read?, keep the suggested notes such as the README, or browse to tick others. Untick everything to use only Guard's own safety facts.", "Click Give CIGAR access and confirm when Guard asks for your approval password."],
         expect: "A Context access section appears for your chosen workspace.", target: "access", action: "Open Projects & AI apps",
         tip: "Choose only relevant sources. Environment files and credential stores are not valid context sources.",
       },
@@ -78,7 +78,7 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
       {
         title: "Grant sources for that app", description: "A dashboard grant and an app grant have different consumers.",
-        instructions: ["In Projects & AI apps, choose your app in Context consumer: Codex, Claude Code, or Cursor.", "Choose the workspace and individual source files it needs. Enable document context first if you want to add files.", "Click Grant review source access and review the app and workspace in the confirmation."],
+        instructions: ["In Projects & AI apps, choose the project folder and tick the notes your app needs.", "Under Which app can use it?, pick Codex, Claude Code, or Cursor.", "Click Give CIGAR access and check the app and folder in the confirmation."],
         expect: "A workspace grant names the app you chose.", target: "access", action: "Choose the app's sources",
       },
       {
@@ -114,12 +114,12 @@ export const CIGAR_TUTORIALS: readonly CigarTutorial[] = [
       },
       {
         title: "Choose the execution preference", description: "Execution associations use native capture and policy facts.",
-        instructions: ["Open Advanced in Settings. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
+        instructions: ["Open More settings in Settings. Enable Native policy and decision facts.", "If the build offers it, enable Associate native context with execution.", "Save and start CIGAR. Inspect the Native execution context panel for preparation readiness."],
         expect: "The panel reports the current native preparation state.", target: "runtime", action: "Review execution preferences",
       },
       {
         title: "Scope the executor's workspace", description: "Choose the app and workspace for the native route you use.",
-        instructions: ["In Projects & AI apps, choose Pi or Oh My Pi as Context consumer when offered.", "Enter the workspace, review its native facts and any separately selected documents, and grant only that scope.", "A workspace grant does not install an app adapter or approve a command."],
+        instructions: ["In Projects & AI apps, choose the project folder, then pick Pi or Oh My Pi under Which app can use it?", "Tick only the notes it needs and give access to that one folder.", "A workspace grant does not install an app adapter or approve a command."],
         expect: "The workspace grant names the intended executor consumer.", target: "access", action: "Inspect executor workspace access",
       },
       {

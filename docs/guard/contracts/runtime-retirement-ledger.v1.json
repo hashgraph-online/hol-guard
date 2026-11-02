@@ -7423,8 +7423,8 @@
   {
    "old_node": "tests/test_guard_contained_wrapper_filters.py::test_grep_runs_only_with_validated_arguments",
    "replacement_nodes": [
-    "rust/crates/guard-command/src/pretool/contained_output_filters.rs::grep_naming_a_file_or_reading_patterns_is_not_a_filter",
-    "rust/crates/guard-command/src/pretool/contained_output_filters.rs::ripgrep_spelling_its_own_valued_options_is_not_a_filter"
+    "rust/crates/guard-command/src/pretool/contained_output_filters_tests.rs::grep_naming_a_file_or_reading_patterns_is_not_a_filter",
+    "rust/crates/guard-command/src/pretool/contained_output_filters_tests.rs::ripgrep_spelling_its_own_valued_options_is_not_a_filter"
    ],
    "status": "native_behavior_ported_requires_ci",
    "rationale": "Argument validation for the filter stage is the classifier's, not the sink's: a grep naming a file or reading patterns, and a ripgrep spelling its own valued options, never reach the filter chain at all, so the native tests replace the ValueError the Python sink used to raise."

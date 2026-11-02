@@ -366,9 +366,9 @@ pub(super) fn finish(
         "scanner_evidence": [],
         "browser_intent": null,
         "raw_command_text": command,
-        "guard_version": null,
-        "first_seen_guard_version": null,
-        "last_seen_guard_version": null,
+        "guard_version": crate::PACKAGE_VERSION,
+        "first_seen_guard_version": crate::PACKAGE_VERSION,
+        "last_seen_guard_version": crate::PACKAGE_VERSION,
         "continuation_snapshot": null,
         "extension_allow_hint": super::review_hint::coverage_hint(result),
     }))
