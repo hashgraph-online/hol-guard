@@ -109,10 +109,10 @@ fn a_linked_worktree_contains_git_with_its_shared_directory() {
     std::fs::write(tree.join("package.json"), "{}").unwrap();
     for command in ["rm notes.txt", "npm run build", "chmod +x scripts/run.sh"] {
         let got = reason("omp", command, &tree, true);
-        // macOS claims the build with its narrower node build-output profile.
-        let narrower = cfg!(target_os = "macos")
-            && command == "npm run build"
-            && got == "native_node_build_output_containment_required";
+        // A host with a sandbox claims the build with its narrower node
+        // build-output profile instead of the general workspace one.
+        let narrower =
+            command == "npm run build" && got == "native_node_build_output_containment_required";
         assert_eq!(got == CONTAINED || narrower, host(), "{command}");
     }
     // Its index, reflog and objects are the shared Git directory's, which the

@@ -36,7 +36,10 @@ mod agents;
 mod cache;
 #[path = "context_assistance_engine_policy.rs"]
 mod policy;
+#[path = "context_assistance_engine_prompt.rs"]
+mod prompt;
 use policy::{allowed, current_sources, effective, policy_current, policy_document, revision};
+pub(crate) use prompt::PickedExcerpt;
 #[cfg(target_os = "macos")]
 #[path = "context_assistance_engine_execution.rs"]
 mod execution;
@@ -177,6 +180,7 @@ pub(crate) struct Engine {
     retention_hours: u32,
     limits: guard_context_assistance::Limits,
     scopes: BTreeMap<String, Scope>,
+    auto: prompt::AutoScopes,
     notifications: Option<Arc<Notifications>>,
     receipt_epoch: Epoch,
     agents: crate::context_assistance_agents::Sessions,
@@ -213,9 +217,10 @@ impl Engine {
         self.sweep_saved()?;
         Ok(())
     }
-    /// True while a project grant would be lost if this worker retired.
+    /// True while a hand-picked project grant would be lost if this worker
+    /// retired. Automatic prompt scopes are rebuilt on the next prompt.
     pub(crate) fn holds_scopes(&self) -> bool {
-        self.scopes.values().any(|scope| !scope.revoked)
+        (self.scopes.iter()).any(|(id, scope)| !scope.revoked && !self.auto.contains(id))
     }
     pub(crate) fn maintenance(
         runtime: &mut VerifiedRuntime,
@@ -240,6 +245,7 @@ impl Engine {
             retention_hours: config.storage.retention_hours,
             limits: config.limits.clone(),
             scopes: BTreeMap::new(),
+            auto: Default::default(),
             notifications,
             receipt_epoch: Epoch::default(),
             agents: Default::default(),

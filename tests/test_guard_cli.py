@@ -2987,7 +2987,8 @@ args = ["workspace-skill.js", "--changed"]
         assert guard_pretool_entry["hooks"][0]["type"] == "command"
         assert _command_handler_argv(guard_pretool_entry["hooks"][0]) == expected_hook_argv
         assert "url" not in guard_pretool_entry["hooks"][0]
-        assert install_settings_payload["hooks"].get("UserPromptSubmit", []) == []
+        prompt_handler = install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+        assert _command_handler_argv(prompt_handler) == expected_hook_argv
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
         notification_handler = install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
         assert notification_handler["type"] == "command"
@@ -3247,7 +3248,7 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["SessionStart"]) == 4
         assert len(payload["hooks"]["PreToolUse"]) == 1
         assert len(payload["hooks"]["PostToolUse"]) == 1
-        assert payload["hooks"].get("UserPromptSubmit", []) == []
+        assert len(payload["hooks"]["UserPromptSubmit"]) == 1
         assert len(payload["hooks"]["Notification"]) == 1
         assert len(payload["hooks"]["Stop"]) == 1
         pretool_hook_commands = [

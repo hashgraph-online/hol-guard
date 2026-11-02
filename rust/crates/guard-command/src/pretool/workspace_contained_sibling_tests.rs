@@ -556,8 +556,9 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
         &main,
         &format!("cd {}/scripts && ./report.sh", tree.display())
     )));
-    // macOS holds a Vite build to its own read-only output profile instead.
-    if !cfg!(target_os = "macos") {
+    // A host with a sandbox holds a Vite build to its own read-only output
+    // profile instead, which `contained` reads as contained.
+    if !host() {
         let command = format!(
             "cd {}/web && ./node_modules/.bin/vite build --config {}",
             tree.display(),

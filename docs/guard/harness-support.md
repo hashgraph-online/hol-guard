@@ -46,7 +46,8 @@ Current Guard support in this repo:
 - `claude-code`
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
   - supports local hook install and uninstall in `.claude/settings.local.json`
-  - has native `PreToolUse` and `PermissionRequest` Guard hook coverage; Guard does not install `UserPromptSubmit`, so native prompt submission is not intercepted
+  - has native `PreToolUse`, `PermissionRequest` and `UserPromptSubmit` Guard hook coverage, so a typed prompt is screened before Claude reads it
+  - when CIGAR project context is on, the `UserPromptSubmit` answer also carries short excerpts from the project files that match the prompt (see [CIGAR runtime and settings](./cigar-integration/runtime-and-settings.md#prompt-context-in-claude-code-and-codex))
   - carries package-manager shell intent and pre-execution block state through the shared Guard runtime envelope before Claude sees the denied tool response
   - on macOS and Linux, when the bundled runtime supports it, the `SessionStart` hook first checks in the native runtime that the Guard hook entries are already current and the verified daemon is live, and prints the Guard context without starting Python; otherwise it hands the session start to the Python hook, which starts the daemon and refreshes the entries as before
   - is the best current harness for graceful approval deferral

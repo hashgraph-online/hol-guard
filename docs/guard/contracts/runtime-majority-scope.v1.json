@@ -799,7 +799,6 @@
           "src/codex_plugin_scanner/guard/adapters/muse_config.py",
           "src/codex_plugin_scanner/guard/adapters/omp_code_mode.py",
           "src/codex_plugin_scanner/guard/adapters/openclaw.py",
-          "src/codex_plugin_scanner/guard/adapters/openclaw_config.py",
           "src/codex_plugin_scanner/guard/adapters/openclaw_support.py",
           "src/codex_plugin_scanner/guard/adapters/opencode.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_artifacts.py",

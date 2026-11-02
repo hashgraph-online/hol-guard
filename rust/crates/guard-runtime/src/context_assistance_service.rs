@@ -20,6 +20,9 @@ mod data;
 mod execution;
 #[path = "context_assistance_service_lifecycle.rs"]
 mod lifecycle;
+#[path = "context_assistance_service_prompt.rs"]
+mod prompt;
+pub(crate) use prompt::PromptLane;
 #[path = "context_assistance_service_status.rs"]
 mod status;
 #[path = "context_assistance_service_upgrade.rs"]

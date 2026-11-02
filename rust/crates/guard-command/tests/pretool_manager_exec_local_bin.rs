@@ -13,6 +13,13 @@ fn classify(harness: &str, command: &str) -> guard_contracts::PreToolResultV1 {
     )
 }
 
+/// Whether this host runs Guard's own read-only sink. macOS always does; a
+/// Linux host only where the bubblewrap probe answers, so a host with no
+/// usable sandbox keeps the review each spelling had before.
+fn contained_host() -> bool {
+    guard_command::pretool::workspace_sandbox_available()
+}
+
 /// `npm exec`, `npm x` and `yarn exec` run the workspace's own installed
 /// binary, the work `npx` names. They reach the same read-only sink `npx` and
 /// `pnpm exec` already reach, rather than the review `npx` never had.
@@ -31,7 +38,7 @@ fn a_manager_exec_spelling_reaches_the_read_only_tool_sink() {
         ] {
             let result = classify(harness, command);
             assert_eq!(result.decision, "deny", "{harness} {command}");
-            if cfg!(target_os = "macos") {
+            if contained_host() {
                 assert_eq!(
                     result.reason_code, "native_node_tool_readonly_containment_required",
                     "{harness} {command}"
@@ -49,10 +56,13 @@ fn a_manager_exec_spelling_reaches_the_vitest_sink() {
         "npm exec -- vitest run",
         "npm x vitest run",
         "yarn exec vitest run",
+        // `--no-install` sits after `exec`, so it is the runner's own option
+        // and forbids a fetch rather than naming another package.
+        "npm exec --no-install vitest run",
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny", "{command}");
-        if cfg!(target_os = "macos") {
+        if contained_host() {
             assert_eq!(
                 result.reason_code, "native_vitest_readonly_containment_required",
                 "{command}"
@@ -82,7 +92,6 @@ fn a_manager_option_or_a_write_keeps_the_review() {
         "bun exec tsc --noEmit",
         "npm exec tsc --noEmit && rm -rf /",
         "npm exec vitest watch",
-        "npm exec --no-install vitest run",
         "npm exec --",
     ] {
         let result = classify("omp", command);
@@ -129,7 +138,7 @@ fn a_reporting_option_before_exec_keeps_the_local_bin_run() {
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny", "{command}");
-        if cfg!(target_os = "macos") {
+        if contained_host() {
             assert_eq!(
                 result.reason_code, "native_node_tool_readonly_containment_required",
                 "{command}"

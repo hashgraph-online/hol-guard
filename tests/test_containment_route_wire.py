@@ -266,15 +266,19 @@ def test_the_resident_route_matches_the_retired_python_edge(native_approval_reus
         assert _route(home, result) == "none", result
 
 
-def test_macos_runs_every_profile_and_linux_only_the_workspace_sandbox(
+def test_macos_and_linux_both_run_every_profile(
     native_approval_reuse_runtime: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Linux runs the read-only profiles under the same bubblewrap mount as the
+    workspace sandbox, so neither host leaves a narrower profile unrouted."""
     home = native_approval_reuse_runtime
     git = _receipt("native_git_readonly_containment_required", "git-readonly-v1")
-    for receipt in (_PYTEST, _WORKSPACE, git):
-        assert _sink(home, monkeypatch, "macos", receipt).profile == receipt["required_execution_profile"]
-    assert _sink(home, monkeypatch, "linux", _WORKSPACE).profile == "workspace-contained-v1"
-    assert _sink(home, monkeypatch, "linux", _PYTEST) == (None, "platform_has_no_sink")
+    for host in ("macos", "linux"):
+        for receipt in (_PYTEST, _WORKSPACE, git):
+            assert _sink(home, monkeypatch, host, receipt).profile == receipt["required_execution_profile"], (
+                host,
+                receipt,
+            )
 
 
 @pytest.mark.parametrize(

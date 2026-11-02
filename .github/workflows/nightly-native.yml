@@ -494,7 +494,7 @@ jobs:
           version: "0.9.26"
           enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12 --link-mode copy
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: hol-guard-native-build-linux-x64
       - name: Stage package projections from this run's compiler
@@ -1009,7 +1009,7 @@ jobs:
           version: 0.9.26
           enable-cache: true
       - run: uv sync --frozen --no-dev --group ci-test --python 3.12
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: hol-guard-native-build-linux-x64
       - name: Detect pending artifact regeneration
@@ -1334,7 +1334,7 @@ jobs:
           version: 0.9.26
           enable-cache: true
       - run: uv sync --frozen --no-dev --group ci-test --python 3.12
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: hol-guard-native-build-windows-x64
       - name: Detect pending artifact regeneration
@@ -1483,7 +1483,7 @@ jobs:
         env:
           NATIVE_PROOF: ${{ matrix.proof }}
         run: bash scripts/ci/install-native-proof-dependencies.sh
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: hol-guard-native-wheel-${{ matrix.target }}
       - name: Install the platform wheel built by this run
@@ -1771,7 +1771,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.12'
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: native-regression-*
           path: native-regression-reports

@@ -56,7 +56,7 @@ def _runtime_hook_handlers(payload: dict[str, object]) -> list[dict[str, object]
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     handlers: list[dict[str, object]] = []
-    for key in ("PreToolUse", "PermissionRequest", "PostToolUse", "Notification", "Stop"):
+    for key in ("PreToolUse", "PermissionRequest", "PostToolUse", "Notification", "Stop", "UserPromptSubmit"):
         entries = hooks.get(key, [])
         assert isinstance(entries, list)
         for entry in entries:
@@ -167,7 +167,11 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
         "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
     )
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
-    assert payload["hooks"].get("UserPromptSubmit", []) == []
+    user_prompt = payload["hooks"]["UserPromptSubmit"]
+    assert len(user_prompt) == 1
+    assert "matcher" not in user_prompt[0]
+    assert user_prompt[0]["hooks"][0]["timeout"] == 10
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(user_prompt[0]["hooks"][0]))
     assert len(notification) == 1
     assert notification[0]["matcher"] == "permission_prompt"
     assert notification[0]["hooks"][0]["type"] == "command"
@@ -255,8 +259,8 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         "command",
         "command",
         "command",
+        "command",
     ]
-    assert payload["hooks"].get("UserPromptSubmit", []) == []
     assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(handler)) for handler in installed_handlers)
     assert all("url" not in handler for handler in installed_handlers)
 

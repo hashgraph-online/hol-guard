@@ -46,12 +46,17 @@ const CARGO_VALUE_OPTIONS: &[&str] = &["--color", "--config", "-C", "-Z"];
 /// Whether every package-tool step in `model` is a cargo build or test.
 pub(super) fn build_or_test_command(
     model: &CanonicalCommandV1,
-    is_package_tool: fn(&str) -> bool,
+    is_package_executable: fn(&str) -> bool,
 ) -> bool {
     let mut package_steps = model
         .segments
         .iter()
-        .filter(|segment| segment.executable.as_deref().is_some_and(is_package_tool))
+        .filter(|segment| {
+            segment
+                .executable
+                .as_deref()
+                .is_some_and(is_package_executable)
+        })
         .peekable();
     package_steps.peek().is_some() && package_steps.all(cargo_build_step)
 }

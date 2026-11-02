@@ -226,6 +226,9 @@ mod context_assistance_execution;
 mod context_assistance_history;
 mod context_assistance_notifications;
 mod context_assistance_op;
+mod context_assistance_prompt;
+mod context_assistance_prompt_files;
+mod context_assistance_prompt_ignore;
 mod context_assistance_service;
 mod context_digest;
 mod context_digest_json;
@@ -736,6 +739,11 @@ mod onefile_extraction_reclaim;
 mod onefile_extraction_removal;
 mod onefile_open_paths;
 mod oneshot;
+#[path = "adapters/detection/openclaw_config.rs"]
+mod openclaw_config;
+#[cfg(all(test, unix))]
+#[path = "adapters/detection/openclaw_config_tests.rs"]
+mod openclaw_config_tests;
 #[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
 #[cfg(all(test, unix))]

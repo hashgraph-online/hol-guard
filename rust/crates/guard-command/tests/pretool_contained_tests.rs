@@ -13,6 +13,13 @@ fn classify(harness: &str, command: &str) -> guard_contracts::PreToolResultV1 {
     )
 }
 
+/// Whether this host runs Guard's own contained sink. macOS always does; a
+/// Linux host only where the bubblewrap probe answers, so a host with no
+/// usable sandbox keeps the review each profile had before.
+fn contained_host() -> bool {
+    guard_command::pretool::workspace_sandbox_available()
+}
+
 #[test]
 fn isolated_python_inline_code_requires_containment_not_unrestricted_allow() {
     for flags in ["-I", "-S", "-I -S", "-S -I", "-IS", "-SI"] {
@@ -207,7 +214,7 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
     ] {
         for harness in ["omp", "claude-code", "codex"] {
             let result = classify(harness, command);
-            let contained = cfg!(target_os = "macos") || cfg!(windows);
+            let contained = contained_host() || cfg!(windows);
             let (expected, reason) = if contained {
                 (
                     "sandbox-required",
@@ -326,7 +333,7 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny", "{command}");
-        let expected = if cfg!(target_os = "macos") {
+        let expected = if contained_host() {
             "native_node_test_readonly_containment_required"
         } else {
             "native_command_review_required"
@@ -366,9 +373,9 @@ fn bun_test_runs_contained_without_admitting_its_loading_options() {
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny", "{command}");
-        // Off macOS the command keeps the package-manager review `bun`
-        // invocations already take, the same way the vitest cases above do.
-        let expected = if cfg!(target_os = "macos") {
+        // Without a sandbox the command keeps the package-manager review
+        // `bun` invocations already take, as the vitest cases above do.
+        let expected = if contained_host() {
             "native_node_test_readonly_containment_required"
         } else {
             "native_package_review"
@@ -443,7 +450,7 @@ fn vitest_wrapper_and_resolved_script_require_the_same_protected_profile() {
         ] {
             let result = classify(harness, command);
             assert_eq!(result.decision, "deny", "{command}");
-            let expected = if cfg!(target_os = "macos") {
+            let expected = if contained_host() {
                 "native_vitest_readonly_containment_required"
             } else if command.starts_with("bun ") || command.starts_with("pnpm ") {
                 "native_package_review"
@@ -508,7 +515,7 @@ fn jest_runs_share_the_read_only_node_test_profile() {
         ] {
             let result = classify(harness, command);
             assert_eq!(result.decision, "deny", "{harness} {command}");
-            let expected = if cfg!(target_os = "macos") {
+            let expected = if contained_host() {
                 "native_vitest_readonly_containment_required"
             } else if command.starts_with("bun ") || command.starts_with("pnpm ") {
                 "native_package_review"
@@ -582,7 +589,7 @@ fn git_inspections_require_protected_execution_not_helper_consent() {
         assert_eq!(result.decision, "deny");
         assert_eq!(
             result.reason_code,
-            if cfg!(target_os = "macos") {
+            if contained_host() {
                 "native_git_readonly_containment_required"
             } else {
                 "native_git_helper_context_review"

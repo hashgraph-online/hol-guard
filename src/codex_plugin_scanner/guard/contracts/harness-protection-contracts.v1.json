@@ -98,6 +98,7 @@
       ],
       "event_surfaces": [
         "shell",
+        "prompt",
         "mcp_tool",
         "file_read",
         "tool_result"
@@ -105,7 +106,7 @@
       "native_approval": true,
       "browser_fallback": true,
       "resume_support": true,
-      "known_blind_spots": "Guard does not install a Claude Code UserPromptSubmit hook, so native prompt submission is not intercepted. Background agent sessions without an active terminal may not surface hook events.",
+      "known_blind_spots": "Background agent sessions without an active terminal may not surface hook events.",
       "smoke_command": "hol-guard install claude --dry-run",
       "capability_events": [
         {
@@ -156,17 +157,19 @@
         },
         {
           "event": "UserPromptSubmit",
-          "transport": "none",
-          "mode": "unsupported",
+          "transport": "native_hook",
+          "mode": "screening",
           "declared_actions": [
-            "unavailable"
+            "observe",
+            "block",
+            "approval"
           ],
-          "error_behavior": "No Guard UserPromptSubmit hook is installed; prompt submission is outside this declared boundary.",
-          "mandatory_compatibility": "Do not infer prompt interception unless a future Claude Code contract adds and verifies this hook.",
+          "error_behavior": "Prompt hook failures return a bounded response that lets the prompt continue.",
+          "mandatory_compatibility": "Claude Code must expose UserPromptSubmit and preserve the Guard hook response schema.",
           "known_blind_spots": [
-            "Guard does not install a Claude Code UserPromptSubmit hook, so native prompt submission is not intercepted."
+            "Prompt screening does not prove downstream model or host request rewriting."
           ],
-          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:claude-code.known_blind_spots"
+          "source_reference": "src/codex_plugin_scanner/guard/contracts/claude-hook-groups.v1.json:runtime_groups"
         }
       ]
     },
