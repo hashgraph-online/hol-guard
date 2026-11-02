@@ -7,6 +7,7 @@ protocol negotiation (the ``surface_server_handshake`` kind).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
@@ -17,16 +18,22 @@ class SurfaceServerUnavailableError(RuntimeError):
     """The native runtime could not answer the surface server handshake."""
 
 
-def surface_server_handshake(supported_protocol_versions: Sequence[object] = ()) -> dict[str, object]:
+def surface_server_handshake(
+    supported_protocol_versions: Sequence[object] = (),
+    *,
+    guard_home: Path | None = None,
+) -> dict[str, object]:
     """The contract, protocol block and negotiated version for one client.
 
     ``negotiated_version`` is ``None`` when no listed version is compatible.
+    ``guard_home`` names the home whose native runtime answers.
     """
 
     try:
         answer = native_runner_authority(
             "surface_server_handshake",
             {"supported_protocol_versions": list(supported_protocol_versions)},
+            guard_home=guard_home,
         )
     except NativeRunnerAuthorityError as error:
         raise SurfaceServerUnavailableError(_UNAVAILABLE_MESSAGE) from error

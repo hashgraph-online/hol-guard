@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 from ..approvals import first_approval_url, queue_blocked_approvals
@@ -63,7 +64,10 @@ class GuardSurfaceRuntime:
         supported_protocol_versions: tuple[str, ...] = (),
         include_sessions: bool = True,
     ) -> dict[str, object]:
-        handshake = surface_server_handshake(supported_protocol_versions)
+        handshake = surface_server_handshake(
+            supported_protocol_versions,
+            guard_home=Path(self.store.guard_home),
+        )
         negotiated_version = handshake.get("negotiated_version")
         if not isinstance(negotiated_version, str):
             raise ValueError("unsupported_protocol_version")

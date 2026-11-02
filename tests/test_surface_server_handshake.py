@@ -27,17 +27,17 @@ def _initialize(tmp_path: Path, versions: tuple[str, ...]) -> dict[str, object]:
 
 
 def test_initialize_returns_the_native_handshake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    calls: list[tuple[str, dict[str, object]]] = []
+    calls: list[tuple[str, dict[str, object], Path | None]] = []
 
-    def fake_authority(kind: str, args: dict[str, object]) -> dict[str, object]:
-        calls.append((kind, args))
+    def fake_authority(kind: str, args: dict[str, object], *, guard_home: Path | None = None) -> dict[str, object]:
+        calls.append((kind, args, guard_home))
         return {"contract": _CONTRACT, "protocol": {"negotiated_version": "1.1"}, "negotiated_version": "1.1"}
 
     monkeypatch.setattr(surface_server, "native_runner_authority", fake_authority)
 
     payload = _initialize(tmp_path, ("1.0",))
 
-    assert calls == [("surface_server_handshake", {"supported_protocol_versions": ["1.0"]})]
+    assert calls == [("surface_server_handshake", {"supported_protocol_versions": ["1.0"]}, tmp_path / "guard")]
     assert payload["protocol_version"] == "1.1"
     assert payload["schema_version"] == "guard-surface-server.v1"
     assert payload["schema"] == _CONTRACT
@@ -47,7 +47,7 @@ def test_initialize_returns_the_native_handshake(monkeypatch: pytest.MonkeyPatch
 def test_initialize_refuses_a_version_the_runtime_could_not_negotiate(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    def fake_authority(_kind: str, _args: dict[str, object]) -> dict[str, object]:
+    def fake_authority(_kind: str, _args: dict[str, object], **_options: object) -> dict[str, object]:
         return {"contract": _CONTRACT, "protocol": {"negotiated_version": None}, "negotiated_version": None}
 
     monkeypatch.setattr(surface_server, "native_runner_authority", fake_authority)
@@ -57,7 +57,7 @@ def test_initialize_refuses_a_version_the_runtime_could_not_negotiate(
 
 
 def test_the_contract_fails_closed_without_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
-    def unavailable(_kind: str, _args: dict[str, object]) -> dict[str, object]:
+    def unavailable(_kind: str, _args: dict[str, object], **_options: object) -> dict[str, object]:
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
     monkeypatch.setattr(surface_server, "native_runner_authority", unavailable)
