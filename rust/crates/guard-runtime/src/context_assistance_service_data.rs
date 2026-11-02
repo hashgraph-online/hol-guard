@@ -2,7 +2,6 @@
 //! Read routes cannot delete; authenticated access-reduction routes can.
 use super::*;
 use crate::context_assistance_data as saved;
-#[cfg(unix)]
 #[path = "context_assistance_service_data_removal.rs"]
 mod removal;
 
@@ -116,16 +115,11 @@ impl Service {
             return Ok(None);
         }
         let resume = matches!(request, WorkspaceRequest::ResumeErasure);
-        #[cfg(not(unix))]
-        if resume {
-            return Err("native_context_assistance_platform_unqualified".into());
-        }
         let force = resume || matches!(request, WorkspaceRequest::ForgetSaved);
         let clear = matches!(
             request,
             WorkspaceRequest::Clear | WorkspaceRequest::ForgetSaved
         );
-        #[cfg(unix)]
         let mut removal = None;
         let (old, retiring, retention) = {
             let mut state = lock(&self.state)?;
@@ -143,7 +137,6 @@ impl Service {
             if active && !force {
                 return Ok(None);
             }
-            #[cfg(unix)]
             if clear || resume {
                 removal = Some(
                     removal::Removal::acquire(home, resume)
@@ -171,15 +164,10 @@ impl Service {
         if !lifecycle::await_cleanup(retiring) {
             return Err("native_context_assistance_context_busy".into());
         }
-        #[cfg(unix)]
         let erased = removal
             .map(|removal| removal.run())
             .transpose()
             .map_err(|e| format!("native_context_assistance_{}", e.code()))?;
-        #[cfg(not(unix))]
-        if clear {
-            saved::remove(home).map_err(|e| format!("native_context_assistance_{}", e.code()))?;
-        }
         let data = if clear || resume {
             saved::inspect(home)
         } else {
@@ -192,11 +180,8 @@ impl Service {
         );
         if resume {
             result["resumed_erasure"] = json!(true);
-            #[cfg(unix)]
-            {
-                result["scope_erasure"] = serde_json::to_value(erased.flatten())
-                    .map_err(|_| "native_context_assistance_request_invalid")?;
-            }
+            result["scope_erasure"] = serde_json::to_value(erased.flatten())
+                .map_err(|_| "native_context_assistance_request_invalid")?;
         }
         Ok(Some(
             json!({"schema":"guard-cigar-workspace-result.v1","data_role":true,"result":result}),

@@ -34,20 +34,10 @@ impl Feed {
             .map_err(|_| error("cigar_catalog_feed_invalid"))
     }
 }
-#[cfg(unix)]
 #[path = "context_assistance_catalog_feed_native.rs"]
 mod native;
-#[cfg(unix)]
 pub(crate) use native::{begin, inspect, reconcile, Owner};
 pub(crate) fn configure(home: &Path, feed: Feed) -> Result<Value, String> {
     feed.validate()?;
-    #[cfg(unix)]
-    {
-        native::configure(home, feed)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = home;
-        Err(error("cigar_catalog_platform_unqualified"))
-    }
+    native::configure(home, feed)
 }

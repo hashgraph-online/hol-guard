@@ -11,14 +11,12 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-#[cfg(unix)]
 #[path = "context_assistance_backend_memory_upgrade.rs"]
 mod memory_upgrade;
 #[path = "context_assistance_backend_notes.rs"]
 mod notes;
 #[path = "context_assistance_backend_persistence.rs"]
 mod persistence;
-#[cfg(unix)]
 #[path = "context_assistance_backend_upgrade.rs"]
 mod upgrade;
 
@@ -75,10 +73,8 @@ pub(super) struct Backend {
     note_revision: Option<BrokerRevision>,
     note_expires: Option<Instant>,
     proposal_owners: BTreeMap<String, String>,
-    #[cfg(unix)]
     cache: Option<guard_context_assistance::EvidenceSlot>,
     restored: bool,
-    #[cfg(unix)]
     deferred_scope: Option<(
         std::sync::Arc<guard_context_assistance::PreparedEvidenceGeneration>,
         guard_context_assistance::EvidenceScope,
@@ -128,10 +124,8 @@ impl Backend {
             note_revision: None,
             note_expires: None,
             proposal_owners: BTreeMap::new(),
-            #[cfg(unix)]
             cache: None,
             restored: false,
-            #[cfg(unix)]
             deferred_scope: None,
         }
     }
@@ -393,10 +387,7 @@ impl Backend {
     pub(super) fn close(&mut self, runtime: &mut VerifiedRuntime) -> Result<(), RuntimeError> {
         if let Some(mode) = self.mode.take() {
             self.views.clear();
-            #[cfg(unix)]
-            {
-                self.deferred_scope = None;
-            }
+            self.deferred_scope = None;
             self.notes.clear();
             self.note_basis.clear();
             self.digests.clear();

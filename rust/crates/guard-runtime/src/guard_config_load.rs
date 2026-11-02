@@ -23,7 +23,7 @@ use crate::package_authority_config as base;
 pub(crate) mod cigar_updates;
 #[path = "context_assistance_config_snapshot.rs"]
 mod context_snapshot;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) use context_snapshot::with_changed_reads;
 
 const SCHEMA: &str = "guard-config-load.v1";

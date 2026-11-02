@@ -152,6 +152,7 @@ impl Service {
         self.updates.refresh_test_catalog(home, id, raw, pause)
     }
 
+    #[cfg(unix)]
     pub(crate) fn install_test_catalog(
         &self,
         home: &std::path::Path,

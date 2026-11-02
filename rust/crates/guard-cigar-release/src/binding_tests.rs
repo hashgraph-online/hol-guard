@@ -48,3 +48,29 @@ fn legacy_profile_remains_historical_and_separate_from_published_qualification()
     );
     assert_eq!(profile.python_minor, 14);
 }
+
+#[test]
+fn windows_resolves_only_the_features_guard_uses_there() {
+    // The store pins every folder above it against renames while open, and
+    // Guard hands execution context to agents only on macOS.
+    let catalog = TrustedCatalog::bundled().unwrap();
+    let id = &catalog.document().builds[0].identity.build_id;
+    let unused = [Feature::Persistence, Feature::ExecutionContext];
+    let release = catalog.prepare(id, "win32-x64", false).unwrap();
+    assert_eq!(
+        release.platform().features,
+        [Feature::Graph, Feature::Sharing]
+    );
+    for feature in unused {
+        assert_eq!(
+            catalog
+                .for_activation(id, "win32-x64", false, &[feature])
+                .unwrap_err(),
+            ReleaseError::FeatureUnqualified
+        );
+    }
+    let release = catalog.prepare(id, "linux-x64-gnu", false).unwrap();
+    assert!(unused
+        .iter()
+        .all(|f| release.platform().features.contains(f)));
+}

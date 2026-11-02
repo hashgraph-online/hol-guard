@@ -11,7 +11,7 @@ pub fn private_directory(path: &Path) -> Result<(), InstallError> {
         || path
             .components()
             .any(|c| matches!(c, Component::CurDir | Component::ParentDir))
-        || fs::canonicalize(path).map_err(|_| InstallError::DestinationUnsafe)? != path
+        || !crate::host::is_canonical(path).map_err(|_| InstallError::DestinationUnsafe)?
     {
         return Err(InstallError::DestinationUnsafe);
     }
@@ -23,9 +23,12 @@ pub fn private_directory(path: &Path) -> Result<(), InstallError> {
         }
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        Err(InstallError::PlatformUnsupported)
+        if !crate::host::private_directory(path, &metadata) {
+            return Err(InstallError::DestinationUnsafe);
+        }
+        Ok(())
     }
 }
 pub fn private_child(path: &Path) -> Result<(), InstallError> {
@@ -39,10 +42,15 @@ pub fn private_child(path: &Path) -> Result<(), InstallError> {
         }
         private_directory(path)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = path;
-        Err(InstallError::PlatformUnsupported)
+        // The new directory inherits the private Guard home's access list.
+        match fs::create_dir(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(_) => return Err(InstallError::WriteFailed),
+        }
+        private_directory(path)
     }
 }
 

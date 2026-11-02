@@ -2,6 +2,11 @@ use super::*;
 use std::io::Write;
 use std::path::PathBuf;
 
+#[cfg(unix)]
+const FOREIGN_HOME: &str = "/foreign/home";
+#[cfg(windows)]
+const FOREIGN_HOME: &str = r"C:\foreign\home";
+
 #[path = "context_assistance_action_installed_tests.rs"]
 mod actions;
 #[path = "context_assistance_agent_installed_tests.rs"]
@@ -121,7 +126,7 @@ fn foreign_home_and_caller_supplied_runtime_authority_are_refused() {
     let fixture = Fixture::new();
     let request: Request = serde_json::from_value(
         json!({"schema":"guard-context-assistance-request.v1", "request_id":"foreign",
-        "query":{"kind":"status","guard_home":"/foreign/home","input":{}}}),
+        "query":{"kind":"status","guard_home":FOREIGN_HOME,"input":{}}}),
     )
     .unwrap();
     let answer: serde_json::Value =

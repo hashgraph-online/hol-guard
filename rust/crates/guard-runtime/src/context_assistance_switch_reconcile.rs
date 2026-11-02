@@ -80,7 +80,7 @@ impl Owner {
     pub(crate) fn complete_publication(&mut self, id: &str) -> Result<(), String> {
         self.checked_advance(id, SelectionPhase::Healthy, SelectionPhase::Completed)
     }
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn finish_health(&mut self, id: &str) -> Result<(), String> {
         self.mark_healthy(id)?;
         self.complete_publication(id)

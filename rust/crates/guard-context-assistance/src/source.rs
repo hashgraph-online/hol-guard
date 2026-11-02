@@ -17,6 +17,8 @@ pub struct SourceRoot {
     path: PathBuf,
     #[cfg(unix)]
     identity: (u64, u64),
+    #[cfg(windows)]
+    identity: guard_cigar_artifacts::host::FileId,
 }
 
 pub struct AdmittedFile {
@@ -37,10 +39,10 @@ impl SourceRoot {
         {
             return Err(RuntimeError::ScopeDenied);
         }
-        let canonical = path.canonicalize().map_err(|_| RuntimeError::ScopeDenied)?;
-        let metadata =
-            std::fs::symlink_metadata(&canonical).map_err(|_| RuntimeError::ScopeDenied)?;
-        if !metadata.is_dir() || canonical != path || contains_symlink_component(path) {
+        let canonical = guard_cigar_artifacts::host::is_canonical(path)
+            .map_err(|_| RuntimeError::ScopeDenied)?;
+        let metadata = std::fs::symlink_metadata(path).map_err(|_| RuntimeError::ScopeDenied)?;
+        if !metadata.is_dir() || !canonical || contains_symlink_component(path) {
             return Err(RuntimeError::ScopeDenied);
         }
         #[cfg(unix)]
@@ -48,9 +50,11 @@ impl SourceRoot {
             use std::os::unix::fs::MetadataExt;
             (metadata.dev(), metadata.ino())
         };
+        #[cfg(windows)]
+        let identity =
+            guard_cigar_artifacts::host::node_id(path).map_err(|_| RuntimeError::ScopeDenied)?;
         Ok(Self {
-            path: canonical,
-            #[cfg(unix)]
+            path: path.to_path_buf(),
             identity,
         })
     }
@@ -61,18 +65,10 @@ impl SourceRoot {
 
     pub fn revalidate(&self) -> Result<(), RuntimeError> {
         let observed = Self::inspect(&self.path)?;
-        #[cfg(unix)]
-        {
-            if self.identity != observed.identity {
-                return Err(RuntimeError::ContextStale);
-            }
-            Ok(())
+        if self.identity != observed.identity {
+            return Err(RuntimeError::ContextStale);
         }
-        #[cfg(not(unix))]
-        {
-            let _ = observed;
-            Err(RuntimeError::PlatformUnqualified)
-        }
+        Ok(())
     }
 
     /// No globbing, recursion, locator dereference, external path or symlink.

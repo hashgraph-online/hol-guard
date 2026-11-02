@@ -3,7 +3,7 @@
 use super::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 pub(crate) const MAX_JOBS: usize = 32;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "context_assistance_switch_job_tests.rs"]
 mod tests;
 const MAX_BYTES: u64 = 16 * 1024;

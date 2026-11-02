@@ -72,7 +72,7 @@ fn decode_intent(owner: &Owner, raw: &[u8]) -> Result<EvidenceErasureScope, Runt
     EvidenceErasureScope::from_authenticated_intent(&intent.scope_sha256, intent.legacy_keys)
 }
 impl ScopeRemoval {
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn fail_next_after_purge() {
         AFTER_PURGE.with(|f| f.set(true));
     }

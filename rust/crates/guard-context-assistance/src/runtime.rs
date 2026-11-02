@@ -17,10 +17,15 @@ use std::time::Duration;
 #[path = "release_verification.rs"]
 mod release_verification;
 
+// Windows reports the host processor from `platform.machine()`, so an x64
+// interpreter emulated on an ARM64 PC would claim arm64; the build tag names
+// the interpreter itself.
 pub(crate) const PROBE: &str = r#"
 import json,platform,sys,sysconfig
 machine={"aarch64":"arm64","amd64":"x64","x86_64":"x64"}.get(platform.machine().lower(),platform.machine().lower())
 system={"Darwin":"darwin","Linux":"linux","Windows":"win32"}.get(platform.system(),"unknown")
+if system=="win32":
+    machine={"win-amd64":"x64","win-arm64":"arm64"}.get(sysconfig.get_platform(),machine)
 target=system+"-"+machine
 if system=="linux":
     abi=" ".join(str(sysconfig.get_config_var(key) or "") for key in ("MULTIARCH","HOST_GNU_TYPE","SOABI"))

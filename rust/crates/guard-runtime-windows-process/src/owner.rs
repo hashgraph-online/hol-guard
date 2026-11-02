@@ -5,7 +5,7 @@ use std::path::Path;
 use windows_permissions::constants::{SeObjectType, SecurityInformation};
 use windows_permissions::utilities::current_process_sid;
 use windows_permissions::wrappers::GetNamedSecurityInfo;
-use windows_permissions::{LocalBox, Sid};
+use windows_permissions::{LocalBox, SecurityDescriptor, Sid};
 
 /// Whether `applied` is the current user, LocalSystem or the local
 /// Administrators group. Windows Server makes the Administrators group the
@@ -37,4 +37,16 @@ pub fn owned_by_current_user(path: &Path) -> bool {
             .owner()
             .is_some_and(|owner| trusted_owner(owner, current.as_ref()))
     })
+}
+
+/// Create `path` owned by the current user with a protected access list
+/// that grants only that user, inherited by everything created inside. An
+/// elevated token would otherwise make the Administrators group the owner.
+/// Returns whether this call created the directory.
+pub fn create_owner_only_directory(path: &Path) -> std::io::Result<bool> {
+    let user = current_process_sid()?.to_string();
+    let descriptor = format!("O:{user}D:P(A;OICI;FA;;;{user})")
+        .parse::<LocalBox<SecurityDescriptor>>()
+        .map_err(std::io::Error::other)?;
+    crate::create_private_directory(path, &descriptor)
 }

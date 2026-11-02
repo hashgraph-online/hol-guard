@@ -36,21 +36,14 @@ impl Authority {
             SystemRandom::new()
                 .fill(&mut bytes)
                 .map_err(|_| RuntimeError::ArtifactUnreadable)?;
-            let mut file = directory.open_file(
-                "authority.key",
-                OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL,
-                32,
-            )?;
+            let mut file = directory.open_file("authority.key", Access::CreateNew, 32)?;
             file.write_all(&bytes)
                 .and_then(|_| file.sync_all())
                 .map_err(|_| RuntimeError::StorageOutcomeUnknown)?;
-            directory
-                .file
-                .sync_all()
-                .map_err(|_| RuntimeError::StorageOutcomeUnknown)?;
+            directory.sync()?;
             directory.check_file("authority.key", &file, 32)?;
         }
-        let file = directory.open_file("authority.key", OFlag::O_RDONLY, 32)?;
+        let file = directory.open_file("authority.key", Access::Read, 32)?;
         let mut bytes = Vec::new();
         (&file)
             .take(33)

@@ -366,6 +366,10 @@ pub fn read_stable(
         return Err(SecureReadError::TooLarge);
     }
     let canonical_before = fs::canonicalize(path).map_err(|_| SecureReadError::ReadFailed)?;
+    #[cfg(windows)]
+    let mut file =
+        secure_open::secure_open_replaceable(&canonical_before).map_err(map_secure_open_error)?;
+    #[cfg(not(windows))]
     let mut file = secure_open(path, &canonical_before).map_err(map_secure_open_error)?;
     #[cfg(windows)]
     ensure_windows_handle_is(&file, source_id)?;

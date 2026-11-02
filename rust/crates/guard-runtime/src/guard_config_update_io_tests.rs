@@ -96,7 +96,7 @@ fn replaced_profile_directory_and_config_links_never_redirect_a_commit() {
 fn uncertain_post_rename_result_is_observable_without_replaying_or_reverting_it() {
     let home = Scratch::new();
     let lock = WriteLock::acquire(&home.0).unwrap();
-    unix::AFTER_RENAME_FAULT.with(|flag| flag.set(true));
+    writer::AFTER_RENAME_FAULT.with(|flag| flag.set(true));
     assert_eq!(
         lock.publish(None, "mode = 'enforce'\n"),
         Err(Failure::Error("config_commit_outcome_unknown".into()))

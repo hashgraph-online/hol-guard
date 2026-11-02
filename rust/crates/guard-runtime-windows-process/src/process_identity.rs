@@ -3,7 +3,6 @@
 //! the user its token runs as, termination of one exact process generation
 //! and the Windows command-line split.
 
-use std::io;
 use std::mem::size_of;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
 use std::ptr::null_mut;

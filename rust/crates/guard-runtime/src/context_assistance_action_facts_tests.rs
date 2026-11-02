@@ -1,4 +1,9 @@
 use super::*;
+// Workspaces are absolute paths, which on Windows start with a drive.
+#[cfg(unix)]
+const ROOT: &str = "";
+#[cfg(windows)]
+const ROOT: &str = "C:";
 
 fn native(index: usize) -> (NativeHookDecisionReceiptV1, PreToolActionV1) {
     let receipt = serde_json::from_value(json!({
@@ -22,33 +27,57 @@ fn native(index: usize) -> (NativeHookDecisionReceiptV1, PreToolActionV1) {
 fn native_action_facts_bind_exact_workspace_app_policy_and_hide_private_bindings() {
     let actions = Actions::default();
     let (receipt, action) = native(1);
-    actions.capture("/workspace/one", &receipt, action);
+    actions.capture(&format!("{ROOT}/workspace/one"), &receipt, action);
     let fact = actions.get(&receipt.decision_id).unwrap();
     for app in ["dashboard", "codex"] {
         assert!(fact
-            .require_scope(Path::new("/workspace/one"), app, &fact.policy)
+            .require_scope(
+                Path::new(&format!("{ROOT}/workspace/one")),
+                app,
+                &fact.policy
+            )
             .is_ok());
     }
     assert!(fact
-        .require_scope(Path::new("/workspace/two"), "codex", &fact.policy)
+        .require_scope(
+            Path::new(&format!("{ROOT}/workspace/two")),
+            "codex",
+            &fact.policy
+        )
         .is_err());
     assert!(fact
-        .require_scope(Path::new("/workspace/one"), "claude-code", &fact.policy)
+        .require_scope(
+            Path::new(&format!("{ROOT}/workspace/one")),
+            "claude-code",
+            &fact.policy
+        )
         .is_err());
     let mut policy = fact.policy.clone();
     policy.generation += 1;
     assert!(fact
-        .require_scope(Path::new("/workspace/one"), "codex", &policy)
+        .require_scope(
+            Path::new(&format!("{ROOT}/workspace/one")),
+            "codex",
+            &policy
+        )
         .is_err());
     policy = fact.policy.clone();
     policy.digest = "a".repeat(64);
     assert!(fact
-        .require_scope(Path::new("/workspace/one"), "codex", &policy)
+        .require_scope(
+            Path::new(&format!("{ROOT}/workspace/one")),
+            "codex",
+            &policy
+        )
         .is_err());
     policy = fact.policy.clone();
     policy.runtime = "a".repeat(64);
     assert!(fact
-        .require_scope(Path::new("/workspace/one"), "codex", &policy)
+        .require_scope(
+            Path::new(&format!("{ROOT}/workspace/one")),
+            "codex",
+            &policy
+        )
         .is_err());
     let projection = format!(
         "{}{}{}",
@@ -85,11 +114,11 @@ fn malformed_or_unauthenticated_or_other_event_facts_never_enter_the_registry() 
             3 => receipt.event_name = "PostToolUse".into(),
             _ => action.harness = "other".into(),
         }
-        actions.capture("/workspace/one", &receipt, action);
+        actions.capture(&format!("{ROOT}/workspace/one"), &receipt, action);
         assert!(actions.get(&receipt.decision_id).is_err());
     }
     let (receipt, action) = native(2);
-    actions.capture("/workspace/../private", &receipt, action);
+    actions.capture(&format!("{ROOT}/workspace/../private"), &receipt, action);
     assert!(actions.get(&receipt.decision_id).is_err());
     assert!(matches!(
         actions.get("caller text"),
@@ -102,18 +131,18 @@ fn bounded_expiring_nonblocking_registry_rejects_replaced_and_closed_origins() {
     let actions = Actions::default();
     for index in 1..=CAPACITY + 1 {
         let (receipt, action) = native(index);
-        actions.capture("/workspace/one", &receipt, action);
+        actions.capture(&format!("{ROOT}/workspace/one"), &receipt, action);
     }
     assert_eq!(actions.entries.lock().unwrap().len(), CAPACITY);
     assert!(actions.get(&format!("{:064x}", 1)).is_err());
     let (mut receipt, action) = native(CAPACITY + 1);
     let before = actions.get(&receipt.decision_id).unwrap();
     receipt.execution_intent_digest = Some("2".repeat(64));
-    actions.capture("/workspace/one", &receipt, action.clone());
+    actions.capture(&format!("{ROOT}/workspace/one"), &receipt, action.clone());
     assert!(before != actions.get(&receipt.decision_id).unwrap());
     let mut lock = actions.entries.lock().unwrap();
     let started = Instant::now();
-    actions.capture("/workspace/one", &receipt, action.clone());
+    actions.capture(&format!("{ROOT}/workspace/one"), &receipt, action.clone());
     assert!(started.elapsed() < Duration::from_millis(100));
     assert!(matches!(
         actions.get(&receipt.decision_id),
@@ -122,7 +151,7 @@ fn bounded_expiring_nonblocking_registry_rejects_replaced_and_closed_origins() {
     lock.back_mut().unwrap().0 = Instant::now() - TTL;
     drop(lock);
     assert!(actions.get(&receipt.decision_id).is_err());
-    actions.capture("/workspace/one", &receipt, action);
+    actions.capture(&format!("{ROOT}/workspace/one"), &receipt, action);
     actions.clear().unwrap();
     assert!(actions.get(&receipt.decision_id).is_err());
     actions.close();

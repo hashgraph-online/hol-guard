@@ -15,6 +15,18 @@ import json
 # -S deliberately skips .pth processing; -I excludes user site and PYTHONPATH.
 sys.path.insert(0, sys.argv[1])
 
+if sys.platform == "win32":
+    import platform
+    import sysconfig
+
+    # Windows reports the host processor from platform.machine(), so the x64
+    # interpreter Guard installs on an ARM64 PC would claim arm64 and the SDK
+    # would look for a worker built for a processor it does not ship. The
+    # build tag names the interpreter, which is the ABI the worker must match.
+    _machine = {"win-amd64": "AMD64", "win-arm64": "ARM64"}.get(sysconfig.get_platform())
+    if _machine is not None:
+        platform.machine = lambda: _machine
+
 from cigar_sdk.context import LocalContextError, LocalContextGraph
 
 _SCHEMA = "guard-cigar-bridge.v1"

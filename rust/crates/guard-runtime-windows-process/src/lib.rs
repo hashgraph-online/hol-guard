@@ -52,9 +52,9 @@ pub use windows::{
     open_bound_regular_file, open_bound_replaceable_file, open_private_directory,
     open_private_file, open_skill_directory, path_is_within, path_stat, process_ids,
     process_liveness, process_parent_ids, process_start_marker, regular_file_id,
-    remove_file_if_same, running_process_image_path, running_process_start_marker,
-    terminate_process, terminate_process_verified, wait_for_process_exit, FileId, PathStat,
-    PrivateDirectoryBinding, ProcessQuery,
+    remove_file_if_same, rename_no_replace, running_process_image_path,
+    running_process_start_marker, terminate_process, terminate_process_verified,
+    wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding, ProcessQuery,
 };
 
 #[cfg(windows)]
@@ -77,7 +77,7 @@ pub use trusted_directories::{
 };
 
 #[cfg(windows)]
-pub use owner::owned_by_current_user;
+pub use owner::{create_owner_only_directory, owned_by_current_user};
 
 #[cfg(windows)]
 pub use windows::{

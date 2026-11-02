@@ -26,7 +26,7 @@ use crate::pyjson::{self, PyVal};
 mod assistance_preflight;
 #[path = "guard_config_update_io.rs"]
 pub(crate) mod io;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) use assistance_preflight::with_publication_hook;
 
 const SCHEMA: &str = "guard-config-update.v1";

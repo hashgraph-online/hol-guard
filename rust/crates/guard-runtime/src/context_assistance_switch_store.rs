@@ -1,7 +1,7 @@
 //! One profile lifecycle owner shares the installer/interpreter preparation
 //! lease. Its sealed SDK/data record and config writes use one short writer lane.
 use super::*;
-use crate::guard_config_update::io::{LifecycleFile, WriteLock};
+use crate::guard_config_update::io::{LifecycleFile, RootIdentity, WriteLock};
 use guard_cigar_release::{
     SelectionPhase, SelectionPointer, SelectionRecord, SelectionTransaction,
 };
@@ -51,7 +51,7 @@ struct Envelope {
 
 pub(crate) struct Owner {
     home: PathBuf,
-    root_identity: (u64, u64),
+    root_identity: RootIdentity,
     _lease: fs::File,
     raw: Option<Vec<u8>>,
     key: Option<Zeroizing<[u8; 32]>>,
@@ -303,6 +303,6 @@ impl Owner {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "context_assistance_switch_store_tests.rs"]
 mod tests;

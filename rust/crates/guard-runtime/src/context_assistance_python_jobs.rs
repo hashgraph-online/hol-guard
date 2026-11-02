@@ -24,6 +24,7 @@ pub(super) fn setup_platform() -> Option<&'static str> {
             Libc::Gnu => Some("linux-arm64-gnu"),
             Libc::Musl => Some("linux-arm64-musl"),
         },
+        ("windows", "x86_64") => Some("win32-x64"),
         _ => None,
     }
 }
@@ -37,7 +38,7 @@ impl Jobs {
     ) -> Result<Value, String> {
         self.setup_catalog(home, request, None)
     }
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn setup_test_catalog(
         &self,
         home: &Path,

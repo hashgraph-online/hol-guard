@@ -204,9 +204,20 @@ impl TrustedCatalog {
         {
             return Err(ReleaseError::DependencyLockMissing);
         }
+        let mut platform = artifact.clone();
+        // Installation checks only what Guard uses on this computer. Guard
+        // hands execution context to agents only on macOS. It never keeps the
+        // SDK's store on Windows: while that store is open it holds every
+        // folder above it without write sharing, so no program can save a
+        // file into the user's profile by renaming one there.
+        if platform.platform == "win32-x64" {
+            platform.features.retain(|feature| {
+                !matches!(feature, Feature::Persistence | Feature::ExecutionContext)
+            });
+        }
         Ok(ResolvedRelease {
             build: build.clone(),
-            platform: artifact.clone(),
+            platform,
             profile: profile.clone(),
             checkpoint: self.checkpoint.clone(),
             activation_qualified: false,

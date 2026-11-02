@@ -91,6 +91,12 @@ fn probe(
             return Err(RuntimeError::PackageUnsafe);
         }
     }
+    #[cfg(windows)]
+    if !guard_cigar_artifacts::host::owned(python)
+        || !guard_cigar_artifacts::host::private_directory(private_work, &directory)
+    {
+        return Err(RuntimeError::PackageUnsafe);
+    }
     let before = guard_secure_fs::read_stable(python, 128 * 1024 * 1024, true)
         .map_err(|_| RuntimeError::ArtifactUnreadable)?;
     let selection = RuntimeSelection {

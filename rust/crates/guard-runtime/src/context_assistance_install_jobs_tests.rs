@@ -228,7 +228,10 @@ mod actual;
 mod one_click_actual;
 
 fn metadata_interpreter(fixture: &Fixture) -> interpreters::Interpreter {
+    #[cfg(unix)]
     let python = PathBuf::from("/not-executed/python3.14");
+    #[cfg(windows)]
+    let python = PathBuf::from(r"C:\not-executed\python.exe");
     let facts = InterpreterFacts {
         schema: "guard-cigar-interpreter.v1".into(),
         implementation: "cpython".into(),

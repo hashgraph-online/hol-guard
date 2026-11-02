@@ -31,7 +31,6 @@ impl Service {
         if !permitted {
             return Err("native_context_assistance_workspace_input_invalid".into());
         }
-        #[cfg(unix)]
         if matches!(
             &request,
             WorkspaceRequest::ClearNotes { .. }

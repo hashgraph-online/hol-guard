@@ -1,6 +1,6 @@
 //! Real process exits exercise filesystem state without running an SDK.
 use super::*;
-use std::os::unix::fs::{symlink, PermissionsExt};
+use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
 fn home() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
     fs::set_permissions(d.path(), fs::Permissions::from_mode(0o700)).unwrap();
@@ -134,7 +134,7 @@ fn crash(d: &tempfile::TempDir, point: &str) {
     let result = std::process::Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
-            "guard_config_update::io::unix::catalog::tests::crash_child",
+            "guard_config_update::io::writer::catalog::tests::crash_child",
             "--ignored",
             "--nocapture",
         ])

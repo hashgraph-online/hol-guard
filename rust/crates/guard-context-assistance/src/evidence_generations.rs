@@ -44,10 +44,9 @@ struct StoreRoot {
     home: PathBuf,
 }
 impl StoreRoot {
-    fn lock(&self) -> Result<Flock<File>, RuntimeError> {
-        let file = self.directory.open_file("store.lock", OFlag::O_RDWR, 0)?;
-        let lock =
-            Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|_| RuntimeError::Busy)?;
+    fn lock(&self) -> Result<Locked, RuntimeError> {
+        let file = self.directory.open_file("store.lock", Access::Write, 0)?;
+        let lock = access::lock(file)?;
         self.authority.check()?;
         Ok(lock)
     }
@@ -122,15 +121,13 @@ impl EvidenceGenerationStore {
         home: &Path,
         provision: bool,
     ) -> Result<Self, RuntimeError> {
-        let flags = OFlag::O_RDWR
-            | if provision {
-                OFlag::O_CREAT
-            } else {
-                OFlag::empty()
-            };
-        let file = directory.open_file("store.lock", flags, 0)?;
-        let _lock =
-            Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|_| RuntimeError::Busy)?;
+        let mode = if provision {
+            Access::WriteOrCreate
+        } else {
+            Access::Write
+        };
+        let file = directory.open_file("store.lock", mode, 0)?;
+        let _lock = access::lock(file)?;
         let authority = crypto::Authority::open(&directory, home, provision)?;
         let result = Self {
             root: Arc::new(StoreRoot {

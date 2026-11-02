@@ -239,6 +239,6 @@ pub(crate) fn validate_present(home: &Path) -> Result<(), RuntimeError> {
     let key = key_bytes(&lock).map_err(data_error)?;
     decode(&home, raw.as_deref(), key.as_deref()).map(|_| ())
 }
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "context_assistance_scope_index_tests.rs"]
 mod tests;

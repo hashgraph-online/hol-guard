@@ -48,21 +48,31 @@ pub(super) fn storage_owner(file: &File) -> Result<(), RuntimeError> {
     }
 }
 #[cfg(test)]
-thread_local! { pub(super) static WRITE_FAULT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) }; }
+use super::access::boundary;
+use super::access::Access;
 #[cfg(test)]
-fn boundary(phase: u8) -> Result<(), RuntimeError> {
-    if WRITE_FAULT.with(|fault| {
-        if fault.get() == phase {
-            fault.set(0);
-            true
-        } else {
-            false
-        }
-    }) {
-        Err(RuntimeError::StorageOutcomeUnknown)
-    } else {
-        Ok(())
+pub(super) use super::access::WRITE_FAULT;
+fn flags(access: Access) -> OFlag {
+    match access {
+        Access::Read => OFlag::O_RDONLY,
+        Access::Write => OFlag::O_RDWR,
+        Access::WriteOrCreate => OFlag::O_RDWR | OFlag::O_CREAT,
+        Access::CreateNew => OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL,
     }
+}
+/// The metadata an in-place rewrite changes, for upgrade inventories.
+#[allow(clippy::type_complexity)]
+pub(super) fn file_stamp(file: &File) -> Result<(u64, u64, u64, i64, i64, i64, i64), RuntimeError> {
+    let m = file.metadata().map_err(io)?;
+    Ok((
+        m.dev(),
+        m.ino(),
+        m.len(),
+        m.mtime(),
+        m.mtime_nsec(),
+        m.ctime(),
+        m.ctime_nsec(),
+    ))
 }
 impl Directory {
     pub(super) fn inspect(path: &Path) -> Result<Self, RuntimeError> {
@@ -85,6 +95,12 @@ impl Directory {
         result.check()?;
         Ok(result)
     }
+    /// Make entry changes in this directory durable.
+    pub(super) fn sync(&self) -> Result<(), RuntimeError> {
+        self.file
+            .sync_all()
+            .map_err(|_| RuntimeError::StorageOutcomeUnknown)
+    }
     pub(super) fn check(&self) -> Result<(), RuntimeError> {
         ancestry(&self.path)?;
         for m in [
@@ -97,6 +113,10 @@ impl Directory {
             }
         }
         Ok(())
+    }
+    /// The directory handed to the SDK's SQLite store.
+    pub(super) fn storage_child(&self, name: &str) -> Result<Self, RuntimeError> {
+        self.child(name, true)
     }
     pub(super) fn child(&self, name: &str, create: bool) -> Result<Self, RuntimeError> {
         self.check()?;
@@ -160,14 +180,14 @@ impl Directory {
     pub(super) fn open_file(
         &self,
         name: &str,
-        flags: OFlag,
+        access: Access,
         limit: u64,
     ) -> Result<File, RuntimeError> {
         self.check()?;
         let file: File = openat(
             &self.file,
             name,
-            flags | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC | OFlag::O_NONBLOCK,
+            flags(access) | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC | OFlag::O_NONBLOCK,
             Mode::from_bits_truncate(0o600),
         )
         .map_err(os)?
@@ -199,7 +219,7 @@ impl Directory {
         self.read_limit(name, STATE_BYTES)
     }
     pub(super) fn read_limit(&self, name: &str, limit: u64) -> Result<Vec<u8>, RuntimeError> {
-        let file = self.open_file(name, OFlag::O_RDONLY, limit)?;
+        let file = self.open_file(name, Access::Read, limit)?;
         let before = file.metadata().map_err(io)?;
         let mut data = Vec::new();
         (&file).take(limit + 1).read_to_end(&mut data).map_err(io)?;
@@ -228,13 +248,9 @@ impl Directory {
             self.remove_file("state.next", limit)?;
         }
         if names.iter().any(|n| n == "state.json") {
-            self.open_file("state.json", OFlag::O_RDONLY, limit)?;
+            self.open_file("state.json", Access::Read, limit)?;
         }
-        let mut file = self.open_file(
-            "state.next",
-            OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL,
-            limit,
-        )?;
+        let mut file = self.open_file("state.next", Access::CreateNew, limit)?;
         file.write_all(data).map_err(io)?;
         file.sync_all().map_err(io)?;
         self.check_file("state.next", &file, limit)?;
@@ -251,7 +267,7 @@ impl Directory {
             .map_err(|_| RuntimeError::StorageOutcomeUnknown)
     }
     pub(super) fn remove_file(&self, name: &str, limit: u64) -> Result<(), RuntimeError> {
-        let file = self.open_file(name, OFlag::O_RDONLY, limit)?;
+        let file = self.open_file(name, Access::Read, limit)?;
         self.check_file(name, &file, limit)?;
         unlinkat(&self.file, name, UnlinkatFlags::NoRemoveDir)
             .map_err(|_| RuntimeError::StorageOutcomeUnknown)?;
