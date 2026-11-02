@@ -112,6 +112,22 @@ const REGISTRY_VERBS: &[&str] = &[
     "doctor",
 ];
 
+/// Whether `argument` reaches a registry when `manager` is the one reading it.
+/// Every word in [`REGISTRY_VERBS`] does for most of them, and `exec` is the
+/// exception the manager decides: `npm exec` installs the package it names
+/// when the project does not already hold it, the way `npx` does, while pnpm
+/// and yarn run only what the project installed and fetch under `dlx`. Their
+/// `exec` therefore reaches no registry, and a run spelled with it — `pnpm
+/// exec vitest run`, or the same run pinned to one package with `--filter` —
+/// is the local work the sandbox bounds.
+fn reaches_a_registry(manager: &str, argument: &str) -> bool {
+    let argument = argument.to_ascii_lowercase();
+    if argument == "exec" && matches!(manager, "pnpm" | "yarn") {
+        return false;
+    }
+    REGISTRY_VERBS.contains(&argument.as_str())
+}
+
 /// Where a literal `target` below the workspace moves a run that stands in
 /// `directory`, or `None` when the sandbox cannot follow it there.
 pub(super) fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
@@ -332,7 +348,7 @@ pub(super) fn local_package_work(
             && !positional_init
             && !scanned
                 .iter()
-                .any(|argument| REGISTRY_VERBS.contains(&argument.to_ascii_lowercase().as_str()))
+                .any(|argument| reaches_a_registry(&name, argument))
     })
 }
 

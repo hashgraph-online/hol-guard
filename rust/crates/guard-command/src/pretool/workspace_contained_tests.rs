@@ -304,6 +304,53 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
     }
 }
 
+/// pnpm and yarn run only what the project installed, so their `exec` reaches
+/// no registry and the run it spells is the local work the sandbox bounds.
+/// The selector that pins such a run to one package of the workspace, and the
+/// `-r` that fans it across all of them, name projects the sandbox already
+/// holds.
+#[test]
+fn pnpm_and_yarn_exec_run_in_the_workspace_sandbox() {
+    let ws = workspace("local-exec", true);
+    for command in [
+        "pnpm exec echo hi",
+        "pnpm --filter app exec vitest run",
+        "pnpm --filter=app exec vitest run",
+        "pnpm -F @acme/web exec vitest run",
+        "pnpm --filter app exec tsc --noEmit",
+        "pnpm -r exec vitest run",
+        "yarn workspace web exec vitest run",
+        // A script of the project's own named `exec` is the script it is.
+        "pnpm run exec",
+    ] {
+        let got = reason("omp", command, &ws, true);
+        if host() {
+            assert_eq!(got, CONTAINED, "{command}");
+        } else {
+            assert_ne!(got, CONTAINED, "{command}");
+        }
+    }
+}
+
+/// `npm exec` installs the package it names when the project does not hold
+/// it, so it keeps its admission whichever package it is pinned to. A
+/// selector reaching past the workspace, and a registry verb behind pnpm's
+/// own `exec`, keep theirs too.
+#[test]
+fn exec_that_can_reach_a_registry_keeps_its_review() {
+    let ws = workspace("registry-exec", true);
+    for command in [
+        "npm --workspace web exec vitest run",
+        "npm -w web exec vitest run",
+        "npm x foo",
+        "pnpm --filter ../sibling exec vitest run",
+        "pnpm --filter app exec npm install zod",
+        "pnpm exec pnpm add zod",
+    ] {
+        assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
+    }
+}
+
 #[test]
 fn missing_evidence_keeps_the_command_at_review() {
     let ws = workspace("evidence", true);
