@@ -26,6 +26,7 @@ mod aibom_vectors_tests;
 mod antigravity_detect;
 mod approval;
 mod approval_bulk_eligibility_op;
+mod approval_copy;
 mod approval_extension_recommendation_op;
 mod approval_gate_consumers;
 mod approval_gate_enrollment;
