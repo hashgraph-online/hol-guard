@@ -89,6 +89,25 @@ pub(in crate::pretool) fn repository_hidden_source_document(
         && repository_hidden_below(canonical, home_dir, cwd, true)
 }
 
+#[path = "hidden_listing_marker.rs"]
+mod marker;
+
+/// Whether `canonical` is such a marker file inside the repository's own
+/// hidden tree, such as the pid inside a lock directory the checkout holds.
+///
+/// Every screen the hidden content read applies runs here too. The one thing
+/// this rule stands in for is the document extension, which a marker never
+/// carries; in its place the file has to be named for a marker and hold one,
+/// so a hidden file is never admitted on the strength of its digits alone.
+pub(in crate::pretool) fn repository_hidden_marker_file(
+    canonical: &Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    marker::numeric_marker_file(canonical)
+        && repository_hidden_below(canonical, home_dir, cwd, true)
+}
+
 /// Directories a repository publishes a plugin manifest from. Neither is a
 /// harness directory: a harness loads a plugin the user installed, never the
 /// manifest of the checkout it is working in.

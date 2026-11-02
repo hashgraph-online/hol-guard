@@ -369,7 +369,8 @@ pub fn proven_repository_hidden_document(
 ) -> bool {
     let temporary = private_temporary::inside_private_temporary_directory(canonical, home_dir);
     location_allowed(canonical, home_dir, cwd, temporary, true)
-        && hidden_listing::repository_hidden_source_document(canonical, home_dir, cwd)
+        && (hidden_listing::repository_hidden_source_document(canonical, home_dir, cwd)
+            || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd))
 }
 
 pub(super) fn resolved_path_allowed_for_operation(
@@ -419,7 +420,8 @@ fn path_gate(
                     || virtualenv_activation_script(canonical)
                     || hidden_listing::repository_hidden_source_document(
                         canonical, home_dir, cwd,
-                    )))
+                    )
+                    || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;

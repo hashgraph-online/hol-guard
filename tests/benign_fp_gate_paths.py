@@ -128,8 +128,30 @@ def is_credential_like(relative: str) -> bool:
     return any(_CREDENTIAL_NAME.search(part) for part in relative.split("/") if part)
 
 
+# Leaf names a case reads for the number inside them. A lock directory's
+# marker is one, and ``otp`` is the file that holds a number and is not a
+# marker, which is the pair the read rule has to tell apart.
+_NUMERIC_BODIES = frozenset({"pid", "port", "generation", "otp"})
+
+
+def is_marker_file(relative: str) -> bool:
+    """Whether this path is read for the number inside it.
+
+    A ``.d`` lock directory holds the number a running process left behind,
+    never folders, and a read of that number is admitted by what the file
+    holds and what it is called, so the planter has to write a number rather
+    than a placeholder note.
+    """
+    return (
+        any(part.endswith(".d") for part in relative.split("/")[:-1])
+        or posixpath.basename(relative) in _NUMERIC_BODIES
+    )
+
+
 def is_file_like(relative: str) -> bool:
     name = posixpath.basename(relative)
+    if is_marker_file(relative):
+        return True
     if name in _KNOWN_FILES or (name.endswith("rc") and name.startswith(".")):
         return True
     # A package manager's shim directory holds executables, never folders. A
@@ -254,7 +276,8 @@ def materialise(roots: dict[str, Path], document: dict[str, object] | None = Non
             continue
         if is_file_like(relative):
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f"# {target.name}\nSynthetic placeholder content.\n", encoding="utf-8")
+            body = "4242\n" if is_marker_file(relative) else f"# {target.name}\nSynthetic placeholder content.\n"
+            target.write_text(body, encoding="utf-8")
         else:
             target.mkdir(parents=True, exist_ok=True)
             directories.append(target)
