@@ -548,41 +548,18 @@ pub(crate) fn aliased_test_script_name(manager: &str, word: &str) -> Option<&'st
         .then_some("test")
 }
 
-/// The arguments from the tool on, when `command` is a manager's bare `exec`
-/// spelling of a local-bin run: `npm exec`, `npm x`, `pnpm exec` or
-/// `yarn exec`, each with an optional `--`. The sink runs the project's own
-/// tool, never the manager, so a manager option before the tool (`-c` runs a
-/// shell, `-r`/`--filter` fan out) is not a local-bin run. The options that
-/// only choose how much the manager prints are the exception, peeled by
-/// [`manager_reporting_options_peeled`] before the verb is read.
+/// The arguments from the tool on, when `command` is a manager's spelling of
+/// a local-bin run.
+///
+/// This is the reading the admission takes, not a second one beside it. The
+/// sink plans the run the classifier read, and the classifier reads the kind
+/// out of this answer, so a spelling the admission lets through as a
+/// local-bin run has to reach the sink as that same run. Two readings of one
+/// spelling diverge the moment either is widened: the admission answers with
+/// a runner's reason while the classifier still answers with the manager's
+/// kind, and the sink refuses the mismatch rather than running the command.
 fn manager_exec_tool(command: &[String]) -> Option<&[String]> {
-    let manager = basename(command);
-    let arguments = manager_reporting_options_peeled(manager, command.get(1..)?);
-    let (npm, mut rest) = match (manager, arguments) {
-        ("npm", [verb, rest @ ..]) if verb == "exec" || verb == "x" => (true, rest),
-        ("pnpm" | "yarn", [verb, rest @ ..]) if verb == "exec" => (false, rest),
-        _ => return None,
-    };
-    // `npm exec` answers the install prompt and chooses between the cache and
-    // the registry before the tool, the way `npx` does. None of those options
-    // names a package, so the tool behind them is still the workspace's own
-    // one, and the route that admits the run has to read the same argv the
-    // sink will. The pnpm and yarn options left after the reporting peel
-    // choose which packages the run reaches, so they are not peeled here.
-    if npm {
-        while let [option, tail @ ..] = rest {
-            if !npm_exec_inert_option(option) {
-                break;
-            }
-            rest = tail;
-        }
-    }
-    let rest = match rest {
-        [separator, rest @ ..] if separator == "--" => rest,
-        rest => rest,
-    };
-    rest.first().filter(|tool| !tool.starts_with('-'))?;
-    Some(rest)
+    crate::pretool::manager_local_bin_arguments(basename(command), command.get(1..)?)
 }
 
 /// Whether an `npm exec` option names no package. The answer is read from the

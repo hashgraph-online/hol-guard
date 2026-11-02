@@ -175,6 +175,52 @@ fn npm_exec_reads_the_runner_behind_its_own_options() {
     }
 }
 
+/// The admission and the classifier read one spelling, so the kind the sink
+/// plans has to be the kind the admitting reason names. `pnpm vitest run` is
+/// admitted as the local-bin run `pnpm exec vitest run` is; if the classifier
+/// still answered `node_tool` for it, the sink would see a Vitest route over a
+/// Node-tool kind and refuse the run it had just admitted.
+#[test]
+fn the_implicit_exec_spelling_carries_the_same_kind_as_the_explicit_one() {
+    for (implicit, explicit) in [
+        (
+            json!(["pnpm", "vitest", "run"]),
+            json!(["pnpm", "exec", "vitest", "run"]),
+        ),
+        (
+            json!(["pnpm", "jest", "--ci"]),
+            json!(["pnpm", "exec", "jest", "--ci"]),
+        ),
+        (
+            json!(["pnpm", "mocha", "--reporter", "spec"]),
+            json!(["pnpm", "exec", "mocha", "--reporter", "spec"]),
+        ),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": implicit })).unwrap();
+        let same = evaluate("contained_kind", &json!({ "command": explicit })).unwrap();
+        assert_eq!(kind["value"], same["value"], "{implicit} {kind}");
+        assert_eq!(kind["value"]["vitest"], true, "{implicit} {kind}");
+        assert_eq!(kind["value"]["node_tool"], false, "{implicit} {kind}");
+        let arguments = evaluate("vitest_arguments", &json!({ "command": implicit })).unwrap();
+        let expected = evaluate("vitest_arguments", &json!({ "command": explicit })).unwrap();
+        assert_eq!(arguments["value"], expected["value"], "{implicit}");
+    }
+    // A tool that is no runner keeps the Node-tool kind the explicit spelling
+    // gives it, and a word pnpm runs itself or reads from the manifest is
+    // neither spelling of a local-bin run.
+    for command in [
+        json!(["pnpm", "tsc", "--noEmit"]),
+        json!(["pnpm", "exec", "tsc", "--noEmit"]),
+        json!(["pnpm", "test"]),
+        json!(["pnpm", "run", "test"]),
+        json!(["pnpm", "-r", "vitest", "run"]),
+        json!(["pnpm", "install"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["vitest"], false, "{command} {kind}");
+    }
+}
+
 /// The sink plans the call again from its own snapshot, so it has to be able
 /// to ask for the same reading the pre-tool pass made of an activation or a
 /// trailing group.
