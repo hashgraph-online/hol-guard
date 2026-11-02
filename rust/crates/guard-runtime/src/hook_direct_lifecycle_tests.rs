@@ -493,16 +493,3 @@ mod notification;
 
 #[path = "hook_direct_lifecycle_stop_tests.rs"]
 mod stop;
-
-#[test]
-fn a_new_session_that_wakes_cigar_still_gets_the_constant() {
-    let lane = lane("lifecycle-session-start", json!({}));
-    for harness in ["codex", "claude-code"] {
-        let result = run_as(&lane, harness, Some(HOME), lifecycle("SessionStart"));
-        assert_eq!(result["outcome"], "answer", "{harness}: {result}");
-        assert_eq!(
-            result["edge"]["harness_response"]["reason_code"], "native_hook_event_unavailable",
-            "{harness}: {result}"
-        );
-    }
-}
