@@ -10,12 +10,7 @@ from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 from ..approvals import first_approval_url, queue_blocked_approvals
 from ..codex_resume import seed_request_resume_record
 from ..models import GuardArtifact, HarnessDetection
-from ..schemas import build_surface_server_contract
-from ..schemas.surface_server import (
-    CURRENT_PROTOCOL_VERSION,
-    SCHEMA_VERSION,
-    SUPPORTED_PROTOCOL_VERSIONS,
-)
+from ..schemas.surface_server import surface_server_contract, surface_server_handshake
 from ..store import GuardStore
 
 SERVER_METHODS = (
@@ -68,20 +63,18 @@ class GuardSurfaceRuntime:
         supported_protocol_versions: tuple[str, ...] = (),
         include_sessions: bool = True,
     ) -> dict[str, object]:
-        negotiated_version = _negotiate_protocol_version(supported_protocol_versions)
+        handshake = surface_server_handshake(supported_protocol_versions)
+        negotiated_version = handshake.get("negotiated_version")
+        if not isinstance(negotiated_version, str):
+            raise ValueError("unsupported_protocol_version")
+        contract = surface_server_contract(handshake)
         client_id = uuid.uuid4().hex
-        contract = build_surface_server_contract()
-        protocol_payload = contract.get("protocol")
-        protocol_bundle: dict[str, object] = (
-            {str(key): value for key, value in protocol_payload.items()} if isinstance(protocol_payload, dict) else {}
-        )
-        protocol_bundle["negotiated_version"] = negotiated_version
         response: dict[str, object] = {
             "protocol_version": negotiated_version,
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": contract.get("schema_version"),
             "schema": contract,
             "client_id": client_id,
-            "protocol": protocol_bundle,
+            "protocol": handshake["protocol"],
             "server_capabilities": {
                 "methods": list(SERVER_METHODS),
                 "notifications": list(SERVER_NOTIFICATIONS),
@@ -373,28 +366,6 @@ class GuardSurfaceRuntime:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _negotiate_protocol_version(supported_protocol_versions: tuple[str, ...]) -> str:
-    if not supported_protocol_versions:
-        return CURRENT_PROTOCOL_VERSION
-    supported = tuple(value for value in supported_protocol_versions if isinstance(value, str))
-    compatible_versions = [
-        version
-        for version in SUPPORTED_PROTOCOL_VERSIONS
-        if version in supported or any(_major(version) == _major(candidate) for candidate in supported)
-    ]
-    if compatible_versions:
-        return sorted(compatible_versions, key=_version_key, reverse=True)[0]
-    raise ValueError("unsupported_protocol_version")
-
-
-def _major(version: str) -> str:
-    return version.split(".", maxsplit=1)[0]
-
-
-def _version_key(version: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in version.split("."))
 
 
 def _parse_detection(payload: dict[str, object]) -> HarnessDetection:

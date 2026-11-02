@@ -9,6 +9,7 @@ from ..approvals import (
     build_approval_browser_url,
 )
 from ..browser_opener import open_browser_url
+from ..schemas.surface_server import SurfaceServerUnavailableError
 from .server_common import (
     _is_string_object_dict,
 )
@@ -37,6 +38,9 @@ class _ControlOperationRoutes:
                 else (),
                 include_sessions=self._header_token_is_valid(payload=payload),
             )
+        except SurfaceServerUnavailableError as error:
+            self._write_json({"error": str(error)}, status=503)
+            return
         except ValueError as error:
             self._write_json({"error": str(error)}, status=400)
             return
