@@ -127,6 +127,32 @@ fn equivalent_spellings_share_one_identity_and_one_decision() {
     }
 }
 
+/// The first one-leaf edit of `arguments` that does not yield a second valid
+/// identity, if any. Arguments that have no identity themselves have none.
+fn unchanged_leaf_edit(evaluator: &CloudActionEvaluator, arguments: &Value) -> Option<Value> {
+    let before = answer(evaluator, &arguments.to_string());
+    if !before.0.is_string() {
+        return None;
+    }
+    let mut paths = Vec::new();
+    leaves(arguments, &mut Vec::new(), &mut paths);
+    paths.into_iter().find_map(|path| {
+        let mut edited = arguments.clone();
+        let mut slot = &mut edited;
+        for step in &path {
+            slot = match step {
+                Value::String(key) => &mut slot[key.as_str()],
+                _ => &mut slot[step.as_u64().unwrap() as usize],
+            };
+        }
+        *slot = changed(slot);
+        let after = answer(evaluator, &edited.to_string());
+        // A rejected edit has no identity, so it would differ without
+        // proving a second valid action.
+        (!after.0.is_string() || before.0 == after.0).then_some(edited)
+    })
+}
+
 #[test]
 fn changing_any_one_leaf_changes_the_identity() {
     let evaluator = evaluator();
@@ -134,25 +160,14 @@ fn changing_any_one_leaf_changes_the_identity() {
         let arguments = object(&mut Rng::new(seed), 3);
         let before = answer(&evaluator, &arguments.to_string());
         assert!(before.0.is_string(), "seed {seed}: {before:?}");
-        let mut paths = Vec::new();
-        leaves(&arguments, &mut Vec::new(), &mut paths);
-        for path in &paths {
-            let mut edited = arguments.clone();
-            let mut slot = &mut edited;
-            for step in path {
-                slot = match step {
-                    Value::String(key) => &mut slot[key.as_str()],
-                    _ => &mut slot[step.as_u64().unwrap() as usize],
-                };
-            }
-            *slot = changed(slot);
-            let after = answer(&evaluator, &edited.to_string());
-            // A rejected edit has no identity, so it would differ without
-            // proving a second valid action.
-            if !after.0.is_string() || before.0 == after.0 {
-                let case = json!({"distinct": [arguments.to_string(), edited.to_string()]});
-                panic!("{}", retain("sensitivity", seed, case));
-            }
+        let fails = |candidate: &Value| {
+            candidate.is_object() && unchanged_leaf_edit(&evaluator, candidate).is_some()
+        };
+        if fails(&arguments) {
+            let minimal = shrink(arguments, &fails);
+            let edited = unchanged_leaf_edit(&evaluator, &minimal).unwrap();
+            let case = json!({"distinct": [minimal.to_string(), edited.to_string()]});
+            panic!("{}", retain("sensitivity", seed, case));
         }
     }
 }
