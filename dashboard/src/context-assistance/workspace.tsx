@@ -90,6 +90,11 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
         <button type="button" className="cigar-button" disabled={props.disabled || props.busy || props.loading} onClick={props.onRefresh}><HiMiniArrowPath aria-hidden="true" />Refresh status</button>
       </div>
     </header>
+    <aside className="cigar-beta-note" aria-label="CIGAR beta status">
+      <span className="cigar-beta-note__chip">Beta</span>
+      <p>CIGAR is still being iterated on. Screens and settings may change between releases.</p>
+      <a href="https://github.com/hashgraph-online/hol-cigar/issues" target="_blank" rel="noopener noreferrer">Share feedback</a>
+    </aside>
     <section className="cigar-hero" aria-labelledby="cigar-hero-heading">
       <div className="cigar-hero-copy">
         <h2 id="cigar-hero-heading">Give your AI the right pages,<br className="hidden sm:block" /> not the whole book.</h2>

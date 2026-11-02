@@ -74,6 +74,16 @@ export function NavigationLink(props: {
       {props.variant === "drawer" ? (
         <span className="guard-shell-navigation-link__description">{props.item.description}</span>
       ) : null}
+      {props.item.badge ? (
+        // Decorative status chip: the link's aria-label already names the
+        // destination, matching how the Inbox count badge is announced.
+        <span
+          className="guard-shell-navigation-link__badge guard-shell-navigation-link__flag"
+          aria-hidden="true"
+        >
+          {props.item.badge}
+        </span>
+      ) : null}
       {props.item.view === "inbox" && props.queuedCount > 0 ? (
         <span className="guard-shell-navigation-link__badge" aria-hidden="true">
           {queueCountDisplay(props.queuedCount)}
