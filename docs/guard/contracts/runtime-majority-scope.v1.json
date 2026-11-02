@@ -220,7 +220,6 @@
           "src/codex_plugin_scanner/guard/aibom_reporting.py",
           "src/codex_plugin_scanner/guard/aibom_sync.py",
           "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
-          "src/codex_plugin_scanner/guard/local_risk_report.py",
           "src/codex_plugin_scanner/guard/insights_share.py",
           "src/codex_plugin_scanner/guard/access_graph_events.py",
           "src/codex_plugin_scanner/guard/daemon/aibom_inventory_persist.py",
@@ -230,7 +229,7 @@
       {
         "id": "cloud-review-async",
         "category": "async_control_plane",
-        "reason": "Wake-driven/background Cloud Review sync, replay and outbox delivery; asynchronous persistence and network delivery outside the synchronous request path. runtime/exact_cloud_review.py, exact_cloud_review_apply.py and exact_cloud_review_diagnostics.py hold the exact-review executor, apply and status logic; they are called only from the excluded command queue, executor, transport, cloud-review settings, connect-time consent and native-workspace-review modules. In-scope code reads constants from them (store_native_workspace_review's revocation state key) and review_exact_capability_advertisement calls _verified_capability and _capability_digest from exact_cloud_review.py to build the queue-eligibility advertisement. That call is reached only through review_contracts.build_local_review_request_claim, whose callers are the background claim paths (cloud_review_event_projection and exact_cloud_review_apply); it is asynchronous claim projection and is not invoked from hook admission, decision, consume or dispatch.",
+        "reason": "Wake-driven/background Cloud Review sync, replay and outbox delivery; asynchronous persistence and network delivery outside the synchronous request path. runtime/exact_cloud_review.py, exact_cloud_review_apply.py and exact_cloud_review_diagnostics.py hold the exact-review executor, apply and status logic; they are called only from the excluded command queue, executor, transport, cloud-review settings, connect-time consent and native-workspace-review modules. In-scope code reads constants from them (store_native_workspace_review's revocation state key) and review_exact_capability_advertisement calls _verified_capability and _capability_digest from exact_cloud_review.py to build the queue-eligibility advertisement. That call is reached only through review_contracts.build_local_review_request_claim, whose callers are the background claim paths (cloud_review_event_projection and exact_cloud_review_apply); it is asynchronous claim projection and is not invoked from hook admission, decision, consume or dispatch. review_oauth_binding.py builds the OAuth target binding for Cloud Review sync; the CLI reaches it only to recognize GuardReviewContractError when connect or sync is refused, which it reports as a runtime error.",
         "path": [
           "src/codex_plugin_scanner/guard/runtime/cloud_review_*.py",
           "src/codex_plugin_scanner/guard/runtime/review_event_delivery.py",
@@ -240,13 +239,13 @@
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_queue.py",
           "src/codex_plugin_scanner/guard/runtime/native_business_review_*.py",
           "src/codex_plugin_scanner/guard/store_review_event_sequence_recovery.py",
-          "src/codex_plugin_scanner/guard/sqlite_cloud_review_recovery.py",
           "src/codex_plugin_scanner/guard/cloud_exception_requests.py",
           "src/codex_plugin_scanner/guard/daemon/cloud_review_settings*.py",
           "src/codex_plugin_scanner/guard/daemon/first_cloud_sync.py",
           "src/codex_plugin_scanner/guard/daemon/business_review_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_review.py",
-          "src/codex_plugin_scanner/guard/runtime/exact_cloud_review*.py"
+          "src/codex_plugin_scanner/guard/runtime/exact_cloud_review*.py",
+          "src/codex_plugin_scanner/guard/review_oauth_binding.py"
         ]
       },
       {
@@ -293,8 +292,7 @@
           "src/codex_plugin_scanner/guard/daemon/mcp_policy_decisions.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_v2_client.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py",
-          "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py",
-          "src/codex_plugin_scanner/guard/adapters/remote_mcp_origin.py"
+          "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py"
         ]
       },
       {
@@ -560,12 +558,11 @@
           "src/codex_plugin_scanner/guard/runtime_identity_assessment.py",
           "src/codex_plugin_scanner/guard/runtime_identity_candidates.py",
           "src/codex_plugin_scanner/guard/runtime_identity_probe.py",
-          "src/codex_plugin_scanner/guard/runtime_instance_store.py",
           "src/codex_plugin_scanner/guard/runtime_posture.py",
           "src/codex_plugin_scanner/guard/runtime_advisory_bundle.py",
           "src/codex_plugin_scanner/guard/cli/runtime_posture_command.py"
         ],
-        "reason": "Read-only `guard runtime posture` report: discovers configured MCP servers, sends their launches to the native runtime-identity probe and assessment (launch resolution, shebang following, signed-bundle verification and the decision logic live in Rust), passes the locally cached supply-chain bundle and its sync context through unparsed, carries the running instances the native probe bound to their builds in a Guard-home file between probes, and formats the result. Reached only from the CLI dispatcher for that subcommand; no hook, approval, allow or deny path reads it."
+        "reason": "Read-only `guard runtime posture` report: discovers configured MCP servers, sends their launches to the native runtime-identity probe and assessment (launch resolution, shebang following, signed-bundle verification and the decision logic live in Rust), passes the locally cached supply-chain bundle and its sync context through unparsed, has the native probe carry the running instances it bound to their builds in a Guard-home file between probes, and formats the result. Reached only from the CLI dispatcher for that subcommand; no hook, approval, allow or deny path reads it."
       }
     ],
     "reviewed_runtime": [
@@ -919,6 +916,12 @@
           "src/codex_plugin_scanner/guard/durable_io.py"
         ],
         "reason": "Reviewed and retained in runtime scope: the retired Python command activity lifecycle imported it at load, so it counted as eager. It is now reached lazily through the Codex hook integrity and repair writers, which fsync a directory after a durable write. It runs while Guard records state, so it stays counted as runtime."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/command_extension_listing.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the CLI reaches it lazily when `command extensions` runs, so the import graph counts it as lazy. It is transport and presentation only -- it asks the daemon for the delivered catalog over the same route `command controls` uses, falls back to the packaged catalog when nothing answers, and renders what comes back. The native read model still owns the catalog, so nothing here re-derives an extension."
       }
     ],
     "tests": {
@@ -1768,19 +1771,19 @@
         "category": "cli_only",
         "path": "src/codex_plugin_scanner/guard/policy_document_io.py",
         "symbols": [
-          "_POLICY_FILE_MODE",
-          "_POLICY_DIRECTORY_MODE_MASK",
+          "_FEATURE",
+          "_SCHEMA",
+          "_TIMEOUT_SECONDS",
+          "_OUTPUT_LIMIT",
+          "_PARENT_CODES",
           "PolicyFileTrustError",
-          "_assert_trusted_parent_metadata",
-          "_open_trusted_parent",
-          "_assert_trusted_file_metadata",
-          "read_trusted_policy_bytes",
+          "_policy_file_io",
           "read_trusted_policy_text",
           "write_private_policy_text",
           "load_trusted_policy_document"
         ],
         "entry_points": [],
-        "reason": "Trusted reads and private writes of policy document files back the hol-guard policy import and export commands. Policy compilation (compile_policy_document, CompiledPolicyRow) stays counted because Cloud sync and the policy store use it.",
+        "reason": "Thin shims over the native runtime's policy-file-io command, which does the trusted reads and private writes of policy document files behind the hol-guard policy import and export commands. Policy compilation (compile_policy_document, CompiledPolicyRow) stays counted because Cloud sync and the policy store use it.",
         "evidence": "rg -n 'PolicyFileTrustError|read_trusted_policy_text|write_private_policy_text|load_trusted_policy_document' src -g '*.py' lists only cli/commands_dispatch_policy_document.py, cli/commands_dispatch_policy_dx.py and policy_document_diagnostics.py (used by the local policy commands) outside policy_document_io.py; mcp/policy_tools.py, runtime/runner.py and store_policy_document.py import only CompiledPolicyRow, PolicyCompilationError and compile_policy_document."
       },
       {
@@ -1878,14 +1881,15 @@
           "_bounded_hook_argv",
           "_slot_for_event",
           "_worker_path",
+          "_worker_config",
           "_write",
           "_posix_wrapper",
           "_ps_quote",
           "_powershell_wrapper"
         ],
         "entry_points": [],
-        "reason": "Cline native-hook install: worker and launcher file writes plus the POSIX and PowerShell launcher templates.",
-        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The generated Python hook worker source (_hook_source) stays in scope because that worker runs on each Cline hook call."
+        "reason": "Cline native-hook install: worker configuration and launcher file writes plus the POSIX and PowerShell launcher templates.",
+        "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names. The hook worker itself runs in the native runtime (cline-hook-worker); _worker_config only writes its configuration at install."
       },
       {
         "id": "adapter-cline-plugin-setup",
@@ -1949,27 +1953,20 @@
           "_record_local_once_approval",
           "_build_runtime_cloud_context",
           "_sync_payload_dict",
-          "_cloud_policy_last_ack_at",
           "_build_runtime_device_context",
           "_build_latest_connect_state",
           "_connect_state_proof",
-          "_build_runtime_proof_status",
-          "_runtime_proof_status_payload",
-          "_runtime_proof_status_name",
-          "_runtime_proof_status_label",
-          "_runtime_proof_status_detail",
-          "_build_cloud_sync_health",
-          "_latest_sync_timestamp",
-          "_parse_timestamp",
-          "_timestamp_is_stale",
-          "_cloud_sync_health_label",
-          "_cloud_sync_health_detail",
-          "_runtime_cloud_state_label",
-          "_runtime_cloud_state_detail",
-          "_resolve_guard_urls",
-          "_resolve_runtime_headline_state",
-          "_runtime_headline_label",
-          "_runtime_headline_detail",
+          "_runtime_cloud_status",
+          "_EVENT_SUMMARY_FIELDS",
+          "_CLOUD_STATUS_UNAVAILABLE",
+          "_GUARD_URL_FIELDS",
+          "_is_runtime_cloud_status",
+          "_policy_ack_facts",
+          "_runtime_headline",
+          "_HEADLINE_UNAVAILABLE",
+          "_HEADLINE_SETUP",
+          "_HEADLINE_NEEDS_DECISION",
+          "_fallback_guard_urls",
           "bulk_allow_read_only_once",
           "_optional_string",
           "_non_negative_int"

@@ -15,14 +15,7 @@
     "labels-finding": "A field on a scan finding record, alongside its severity and lifecycle state; no hook reads it.",
     "routes-guard-own-sink": "Passes a call through to Guard's own approval sink, which opens the request owner-only, checks its digest and re-authorizes the command there."
   },
-  "unparsed_templates": [
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py",
-      "label": "literal#0",
-      "line": 112,
-      "reason": "unmatched ')'"
-    }
-  ],
+  "unparsed_templates": [],
   "sites": [
     {
       "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
@@ -218,16 +211,6 @@
       "note": "Carries the answer wait_for_approval_requests read out of the approval store: allow only when every request the resident opened resolved to allow, block when any did not, and the review unchanged while one is still pending."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
-      "func": "_local_skill_security_label",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "review"
-      ],
-      "note": "An AIBOM skill-report label, not an enforced action."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/approvals.py",
       "func": "apply_approval_resolution",
       "root": "none",
@@ -268,16 +251,6 @@
         "block"
       ],
       "note": "The outage path: a pausing event blocks, an observation does not. The allow is only ever the observation branch."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/cli/product.py",
-      "func": "_resolve_next_action",
-      "root": "direct-cli",
-      "reading": "presentation",
-      "actions": [
-        "review"
-      ],
-      "note": "A product-page next-step string that happens to spell `review`; never reaches enforcement."
     },
     {
       "file": "src/codex_plugin_scanner/guard/cli/prompt.py",
@@ -483,16 +456,6 @@
       "note": "Decodes the stored resume resolution into the enforced vocabulary."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/local_risk_report.py",
-      "func": "_risk_band",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "review"
-      ],
-      "note": "A local risk-report band."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
       "func": "allow_tool_call",
       "root": "mcp",
@@ -683,18 +646,6 @@
       "note": "Admits a configured state value or rejects it; it chooses nothing."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/schemas/consumer_mode.py",
-      "func": "_install_recommendation",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "allow",
-        "block",
-        "review"
-      ],
-      "note": "Feeds policy_recommendation.action and can_install in the consumer-mode contract. Both are read only by the CLI report renderer; nothing gates on them."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/temporary_mcp_approvals.py",
       "func": "temporary_mcp_grant_decision",
       "root": "mcp",
@@ -723,16 +674,6 @@
         "warn"
       ],
       "note": "A scan finding's own decision field, next to its severity and lifecycle state."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/workspace_runtime_findings.py",
-      "func": "project_runtime_findings",
-      "root": "none",
-      "reading": "labels-finding",
-      "actions": [
-        "warn"
-      ],
-      "note": "Same scan-finding record field."
     },
     {
       "file": "src/codex_plugin_scanner/guard/workspace_secret_findings.py",

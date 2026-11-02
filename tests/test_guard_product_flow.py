@@ -254,6 +254,57 @@ args = ["workspace-skill.js", "--changed"]
         assert output["bootstrap_install"]["reason"] == "skipped_by_flag"
         assert GuardStore(guard_home).get_cloud_sync_profile() is None
 
+    @pytest.mark.parametrize("reply", [None, "malformed"], ids=["refused", "malformed"])
+    def test_guard_bootstrap_keeps_the_repair_step_without_native_copy(self, tmp_path, capsys, monkeypatch, reply):
+        from codex_plugin_scanner.guard import native_runner_authority as authority_module
+        from codex_plugin_scanner.guard.cli.render import _next_action_label
+
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        original = authority_module.native_runner_authority
+
+        def refuse_product_copy(kind, args, **kwargs):
+            if kind != "guard_product_copy":
+                return original(kind, args, **kwargs)
+            if reply is None:
+                raise authority_module.NativeRunnerAuthorityError("native_runtime_unavailable")
+            # Right length, but none of the fields the payload reads.
+            return {"harnesses": [{} for _ in args["harnesses"]]}
+
+        monkeypatch.setattr(authority_module, "native_runner_authority", refuse_product_copy)
+
+        rc = main(
+            [
+                "guard",
+                "bootstrap",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--skip-install",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["runtime_status"] == "unavailable"
+        assert output["next_steps"][0]["command"] == "hol-guard doctor"
+        assert len(output["next_steps"]) > 1
+        assert output["harnesses"]
+        for harness in output["harnesses"]:
+            assert harness["next_action"] == "unavailable"
+            assert harness["review_command"] == "hol-guard doctor"
+            assert _next_action_label(harness) == "Run hol-guard doctor"
+
     def test_guard_start_recommends_copilot_when_it_is_the_only_detected_harness(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

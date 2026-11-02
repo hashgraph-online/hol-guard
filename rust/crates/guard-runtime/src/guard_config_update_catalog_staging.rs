@@ -19,27 +19,11 @@ fn temporary(name: &str, prefix: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
-fn names(parent: &File) -> Result<Vec<String>, Failure> {
-    let fd = openat(
-        parent,
-        ".",
-        OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC,
-        Mode::empty(),
-    )
-    .map_err(|_| invalid())?;
-    let mut dir = nix::dir::Dir::from_fd(fd).map_err(|_| invalid())?;
-    let mut names = Vec::new();
-    for (i, e) in dir.iter().enumerate() {
-        if i >= 4096 {
-            return Err(failure("cigar_catalog_staging_limit"));
-        }
-        let e = e.map_err(|_| invalid())?;
-        let n = e.file_name().to_str().map_err(|_| invalid())?;
-        if n != "." && n != ".." {
-            names.push(n.into());
-        }
-    }
-    Ok(names)
+fn names(parent: &Dir) -> Result<Vec<String>, Failure> {
+    parent.names(4096).map_err(|e| match e {
+        Names::Limit => failure("cigar_catalog_staging_limit"),
+        Names::Failed => invalid(),
+    })
 }
 pub(super) fn recover_directories(lock: &WriteLock) -> Result<(), Failure> {
     let mut pending = Vec::new();
@@ -59,13 +43,13 @@ pub(super) fn recover_directories(lock: &WriteLock) -> Result<(), Failure> {
                 CACHE => LIMIT,
                 _ => return Err(failure("cigar_catalog_staging_unsafe")),
             };
-            let file = checked_file(&dir, &child, limit, OFlag::O_RDONLY)?.ok_or_else(invalid)?;
-            let m = file.metadata().map_err(|_| invalid())?;
-            total = total.saturating_add(m.len());
+            let file = checked_file(&dir, &child, limit, How::Read)?.ok_or_else(invalid)?;
+            let m = entry(&dir, &child, &file)?;
+            total = total.saturating_add(m.len);
             if total > 128 * 1024 * 1024 {
                 return Err(failure("cigar_catalog_staging_limit"));
             }
-            files.push((child, file, m));
+            files.push((child, m));
         }
         pending.push((name, dir, files));
     }
@@ -73,25 +57,25 @@ pub(super) fn recover_directories(lock: &WriteLock) -> Result<(), Failure> {
     // not cause partial cleanup of the inventoried roots.
     for (name, dir, files) in pending {
         check_directory(lock, &name, &dir)?;
-        for (child, file, meta) in files {
-            let fresh = checked_file(&dir, &child, LIMIT, OFlag::O_RDONLY)?.ok_or_else(invalid)?;
-            if !same(&meta, &fresh.metadata().map_err(|_| invalid())?)
-                || !same(&meta, &file.metadata().map_err(|_| invalid())?)
-            {
+        for (child, meta) in files {
+            let fresh = checked_file(&dir, &child, LIMIT, How::Read)?.ok_or_else(invalid)?;
+            let current = entry(&dir, &child, &fresh)?;
+            drop(fresh);
+            if !same(&meta, &current) {
                 return Err(invalid());
             }
-            unlinkat(&dir, child.as_str(), UnlinkatFlags::NoRemoveDir).map_err(|_| invalid())?;
+            dir.remove_file(&child).map_err(|_| invalid())?;
         }
         check_directory(lock, &name, &dir)?;
-        unlinkat(&lock.directory, name.as_str(), UnlinkatFlags::RemoveDir)
-            .map_err(|_| invalid())?;
+        drop(dir);
+        lock.directory.remove_dir(&name).map_err(|_| invalid())?;
     }
     lock.directory
-        .sync_all()
+        .sync()
         .map_err(|_| failure("cigar_catalog_write_failed"))?;
     lock.check()
 }
-pub(super) fn recover_files(dir: &File) -> Result<(), Failure> {
+pub(super) fn recover_files(dir: &Dir) -> Result<(), Failure> {
     let mut pending = Vec::new();
     let mut bytes = 0_u64;
     for name in names(dir)? {
@@ -101,23 +85,23 @@ pub(super) fn recover_files(dir: &File) -> Result<(), Failure> {
         if pending.len() >= 32 {
             return Err(failure("cigar_catalog_staging_limit"));
         }
-        let file = checked_file(dir, &name, LIMIT, OFlag::O_RDONLY)?.ok_or_else(invalid)?;
-        let meta = file.metadata().map_err(|_| invalid())?;
-        bytes = bytes.saturating_add(meta.len());
+        let file = checked_file(dir, &name, LIMIT, How::Read)?.ok_or_else(invalid)?;
+        let meta = entry(dir, &name, &file)?;
+        bytes = bytes.saturating_add(meta.len);
         if bytes > 128 * 1024 * 1024 {
             return Err(failure("cigar_catalog_staging_limit"));
         }
-        pending.push((name, file, meta));
+        pending.push((name, meta));
     }
-    for (name, file, meta) in pending {
-        let fresh = checked_file(dir, &name, LIMIT, OFlag::O_RDONLY)?.ok_or_else(invalid)?;
-        if !same(&meta, &fresh.metadata().map_err(|_| invalid())?)
-            || !same(&meta, &file.metadata().map_err(|_| invalid())?)
-        {
+    for (name, meta) in pending {
+        let fresh = checked_file(dir, &name, LIMIT, How::Read)?.ok_or_else(invalid)?;
+        let current = entry(dir, &name, &fresh)?;
+        drop(fresh);
+        if !same(&meta, &current) {
             return Err(invalid());
         }
-        unlinkat(dir, name.as_str(), UnlinkatFlags::NoRemoveDir).map_err(|_| invalid())?;
+        dir.remove_file(&name).map_err(|_| invalid())?;
     }
-    dir.sync_all()
+    dir.sync()
         .map_err(|_| failure("cigar_catalog_write_failed"))
 }

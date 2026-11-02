@@ -536,6 +536,8 @@ class CursorHarnessAdapter(HarnessAdapter):
             notes.append("Prepended the Guard launcher shim directory to your shell profile.")
         elif profile.get("restart_shell_required"):
             notes.append("Restart your shell or open a new terminal so guard-cursor shims are on PATH.")
+        elif profile.get("manual_path_required"):
+            notes.append(f"Put {context.guard_home / 'bin'} first on your PATH so guard-cursor shims run.")
         return {
             "harness": self.harness,
             "active": True,

@@ -65,13 +65,24 @@ _NODE_TOOLS = {
     "jest": ("30.0.5", ("jest",)),
     "tsx": ("4.20.3", ("tsx",)),
     "turbo": ("2.5.5", ("turbo",)),
+    "lint-staged": ("16.1.2", ("lint-staged",)),
 }
 _TOOL_SCRIPTS = {"lint": "eslint .", "typecheck": "tsc --noEmit", "format": "prettier --check ."}
 # The suite split into named parts, which is how a project with more than one
 # kind of test spells them. The route reads the body rather than the name, so
 # the fixture holds a runner body and a read-only tool body under the same
-# `test:` family.
-_TEST_FAMILY_SCRIPTS = {"test:unit": "vitest run tests/", "test:types": "tsc --noEmit"}
+# `test:` family. The third spells the same finishing Vitest run with the
+# option rather than the verb, which is how a project that passes reporting
+# options writes it, and the fourth names Bun's own runner, which is what a
+# Bun project's test entry holds. The fifth names the test files tsx runs,
+# which is how a project without a runner package spells its suite.
+_TEST_FAMILY_SCRIPTS = {
+    "test:unit": "vitest run tests/",
+    "test:types": "tsc --noEmit",
+    "test:ci": "vitest --run --reporter dot",
+    "test:bun": "bun test",
+    "test:tsx": "tsx --test tests/sample.test.ts",
+}
 _INSTALLED_PACKAGES = _NODE_PACKAGES | {name: version for name, (version, _) in _NODE_TOOLS.items()}
 
 
@@ -99,6 +110,9 @@ def _node_toolchain(workspace: Path, *, tools: bool = False) -> None:
     for name, (version, binaries) in _NODE_TOOLS.items():
         _node_package(workspace, name, version, binaries)
     _write(workspace / "tsconfig.json", json.dumps({"compilerOptions": {"strict": True, "noEmit": True}}) + "\n")
+    # A generated type-check project, the way a repository script writes one: it
+    # keeps the no-emit mode in the file and is run as `tsc -p` with no option.
+    _write(workspace / "tsconfig.check.json", json.dumps({"extends": "./tsconfig.json"}) + "\n")
     _write(workspace / "eslint.config.js", "export default [];\n")
     _write(workspace / ".prettierrc", "{}\n")
 
@@ -126,19 +140,37 @@ def _yarn_lockfile(packages: dict[str, str]) -> str:
     return "# yarn lockfile v1\n\n" + "\n".join(entries)
 
 
+# The launcher each package really publishes, where it is not ``bin/<binary>.js``.
+# Guard resolves a ``.bin`` launcher by looking for the installed entry the
+# package names, so a fixture that writes every launcher under ``bin/`` leaves
+# those runners unrecognised and scores every spelling of them a plain allow.
+_PACKAGE_LAUNCHERS = {
+    ("vitest", "vitest"): "vitest.mjs",
+    ("typescript", "tsc"): "bin/tsc",
+    ("prettier", "prettier"): "bin/prettier.cjs",
+}
+
+
 def _node_package(workspace: Path, name: str, version: str, binaries: tuple[str, ...] = ()) -> None:
     """One installed package with its ``node_modules/.bin`` shims, as npm links them."""
     binaries = binaries or (name,)
+    launchers = {
+        binary: _PACKAGE_LAUNCHERS.get((name, binary), f"bin/{binary}.js") for binary in binaries
+    }
     package = workspace / "node_modules" / name
-    manifest = {"name": name, "version": version, "bin": {binary: f"./bin/{binary}.js" for binary in binaries}}
+    manifest = {
+        "name": name,
+        "version": version,
+        "bin": {binary: f"./{launcher}" for binary, launcher in launchers.items()},
+    }
     _write(package / "package.json", json.dumps(manifest) + "\n")
-    for binary in binaries:
-        script = package / "bin" / f"{binary}.js"
+    for binary, launcher in launchers.items():
+        script = package / launcher
         _write(script, f"#!/usr/bin/env node\nconsole.log('{binary} {version}');\n")
         script.chmod(0o755)
         shim = workspace / "node_modules" / ".bin" / binary
         shim.parent.mkdir(parents=True, exist_ok=True)
-        shim.symlink_to(Path("..") / name / "bin" / f"{binary}.js")
+        shim.symlink_to(Path("..") / name / launcher)
 
 
 def _python_toolchain(workspace: Path) -> None:
@@ -356,3 +388,73 @@ def _application_database(path: Path) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+# The second release of the type checker a monorepo's other workspace is held
+# back on. One `pnpm-lock.yaml` serves the whole tree, so its `packages` block
+# names both, and only the `importers` block says which one each workspace runs.
+_PNPM_LEGACY_TYPESCRIPT = "5.4.5"
+
+
+def pnpm_monorepo(root: Path) -> None:
+    """A pnpm workspace root whose lockfile carries a second workspace's own release.
+
+    This is the ordinary shape of any monorepo that has not finished a version
+    bump: the root runs the current type checker, a package somewhere under it
+    is still on the previous one, and the single lockfile lists both. Reading
+    `packages` alone leaves two candidates and no answer about what `npx tsc`
+    would run here, which is what turned a type check into an approval prompt.
+    """
+
+    version = _NODE_TOOLS["typescript"][0]
+    manifest = {
+        "private": True,
+        "scripts": {"typecheck": "tsc --noEmit"},
+        "devDependencies": {"typescript": f"^{version}"},
+    }
+    _write(root / "package.json", json.dumps(manifest) + "\n")
+    _write(root / "pnpm-workspace.yaml", "packages:\n  - packages/*\n")
+    _write(root / "tsconfig.json", json.dumps({"compilerOptions": {"strict": True}}) + "\n")
+    _write(root / "src" / "index.ts", "export const ready = true;\n")
+    legacy = {"name": "@acme/legacy", "devDependencies": {"typescript": f"~{_PNPM_LEGACY_TYPESCRIPT}"}}
+    _write(root / "packages" / "legacy" / "package.json", json.dumps(legacy) + "\n")
+    _write(root / "pnpm-lock.yaml", _pnpm_monorepo_lockfile(version))
+    _node_package(root, "typescript", version, ("tsc",))
+
+
+def _pnpm_monorepo_lockfile(version: str) -> str:
+    """The lockfile pnpm writes for that tree: an importer each, both releases listed once."""
+    legacy = _PNPM_LEGACY_TYPESCRIPT
+    return (
+        "lockfileVersion: '9.0'\n"
+        "\n"
+        "settings:\n"
+        "  autoInstallPeers: true\n"
+        "  excludeLinksFromLockfile: false\n"
+        "\n"
+        "importers:\n"
+        "\n"
+        "  .:\n"
+        "    devDependencies:\n"
+        "      typescript:\n"
+        f"        specifier: ^{version}\n"
+        f"        version: {version}\n"
+        "\n"
+        "  packages/legacy:\n"
+        "    devDependencies:\n"
+        "      typescript:\n"
+        f"        specifier: ~{legacy}\n"
+        f"        version: {legacy}\n"
+        "\n"
+        "packages:\n"
+        "\n"
+        f"  typescript@{legacy}:\n"
+        "    resolution: {integrity: sha512-fixture}\n"
+        "    engines: {node: '>=14.17'}\n"
+        "    hasBin: true\n"
+        "\n"
+        f"  typescript@{version}:\n"
+        "    resolution: {integrity: sha512-fixture}\n"
+        "    engines: {node: '>=14.17'}\n"
+        "    hasBin: true\n"
+    )

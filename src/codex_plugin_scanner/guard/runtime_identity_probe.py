@@ -5,7 +5,8 @@ it resolves symlinks, hashes the file and infers family and version from the
 install layout. It also resolves configured MCP server launches (search path
 lookup, relative anchoring and a script's ``#!`` interpreter) to the files to
 describe. Asked for instances, it also lists the processes running from those
-files, each bound to the build it started from. This module only sends paths
+files, each bound to the build it started from, and keeps the running ones in
+the Guard home for the next probe. This module only sends paths
 or launch specs and checks the shape of the reply. Its ``artifacts``,
 ``locations`` and ``instances`` are valid input for ``runtime-identity-assess``.
 """
@@ -14,12 +15,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from .runtime_identity_assessment import RuntimeIdentityError, run_native_identity_command
 
 # Launch resolution and instances are additive capabilities of the same command.
 RUNTIME_PROBE_LAUNCH_FEATURE = "runtime-identity-launch-v1"
-RUNTIME_PROBE_INSTANCES_FEATURE = "runtime-identity-instances-v1"
+RUNTIME_PROBE_INSTANCE_STORE_FEATURE = "runtime-identity-instance-store-v1"
 RUNTIME_PROBE_COMMAND = "runtime-identity-probe"
 RUNTIME_PROBE_SCHEMA = "guard.runtime-identity-probe.v1"
 # The probe hashes whole files, so it gets more time than a plain assessment.
@@ -29,7 +31,6 @@ _LOCATION_STATES = frozenset({"present", "missing", "unknown"})
 _LAUNCH_STATES = frozenset({"resolved", "unresolved"})
 _INSTANCE_STATES = frozenset({"running", "exited", "unknown"})
 _INSTANCE_TEXT_KEYS = ("instance_id", "boot_identity", "start_identity", "artifact_id")
-_KNOWN_INSTANCE_INVALID = "runtime_identity_probe_known_instance_invalid"
 _ARTIFACT_TEXT_KEYS = ("artifact_id", "family", "os", "arch", "identity_assurance")
 
 
@@ -52,7 +53,7 @@ def probe_runtime_launches(
     *,
     environment: Mapping[str, str],
     candidate_limit: int,
-    known_instances: Sequence[Mapping[str, object]] | None = None,
+    instance_home: Path | None = None,
 ) -> RuntimeProbe:
     """Resolve configured launches and describe their executables natively, never running them.
 
@@ -60,8 +61,9 @@ def probe_runtime_launches(
     own ``configured_path``. ``environment`` holds only the process values a
     search path may reference; the native command never echoes them.
 
-    ``known_instances`` asks for running instances too, passing back what an
-    earlier probe bound them to so a file replaced since keeps its old build.
+    ``instance_home`` asks for running instances too. The native probe reads
+    what an earlier probe stored there, so a file replaced since keeps its old
+    build, and stores the instances it saw running.
     """
 
     if not launches:
@@ -71,16 +73,10 @@ def probe_runtime_launches(
         "environment": dict(environment),
         "candidate_limit": candidate_limit,
     }
-    if known_instances is None:
+    if instance_home is None:
         return _probe(RUNTIME_PROBE_LAUNCH_FEATURE, request)
-    known = [dict(item) for item in known_instances]
-    try:
-        return _probe(RUNTIME_PROBE_INSTANCES_FEATURE, {**request, "instances": True, "known_instances": known})
-    except RuntimeIdentityError as error:
-        if error.code == _KNOWN_INSTANCE_INVALID and known:
-            # A damaged record costs what it carried, not the scan.
-            return _probe(RUNTIME_PROBE_INSTANCES_FEATURE, {**request, "instances": True, "known_instances": []})
-        raise
+    home = str(instance_home.absolute())
+    return _probe(RUNTIME_PROBE_INSTANCE_STORE_FEATURE, {**request, "instances": True, "instance_home": home})
 
 
 def _probe(feature: str, request: dict[str, object]) -> RuntimeProbe:
@@ -202,7 +198,7 @@ def _instance_ok(row: object, artifact_ids: set[object], location_ids: set[objec
 
 
 __all__ = [
-    "RUNTIME_PROBE_INSTANCES_FEATURE",
+    "RUNTIME_PROBE_INSTANCE_STORE_FEATURE",
     "RUNTIME_PROBE_LAUNCH_FEATURE",
     "RuntimeProbe",
     "probe_runtime_launches",

@@ -2,24 +2,26 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
 import re
 import urllib.error
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
-from ..path_support import resolves_within_root
 from .inventory_contract import GuardAgentInventoryItem, GuardAgentInventorySnapshot
+from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
 _CONTENT_HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _MAX_CONTENT_ITEMS_PER_BATCH = 100
-_MAX_CONTENT_ITEM_BYTES = 1024 * 1024
 _MAX_CONTENT_RAW_BYTES_PER_BATCH = 5 * 1024 * 1024
 _MAX_CONTENT_REQUEST_BYTES = 7 * 1024 * 1024
+# One admission call checks every candidate's link-free path under its root.
+_NATIVE_ADMIT_TIMEOUT_SECONDS = 8.0
+# Bounded admit requests: a path is at most a few KiB, so a chunk stays well
+# under the native request limit, and one refused chunk leaves the rest.
+_NATIVE_ADMIT_CHUNK = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +90,12 @@ def primary_content_sources_from_artifacts(
     workspace_dir: Path | None,
 ) -> tuple[GuardAibomPrimaryContentSource, ...]:
     items_by_id = {item.item_id: item for item in snapshot.items}
-    sources: list[GuardAibomPrimaryContentSource] = []
+    candidates: list[tuple[str, GuardAgentInventoryItem, str, Path]] = []
     for artifact in artifacts:
         artifact_type = str(getattr(artifact, "artifact_type", ""))
         if artifact_type not in {"skill", "instruction"}:
             continue
-        item_id = str(getattr(artifact, "artifact_id", ""))
-        item = items_by_id.get(item_id)
+        item = items_by_id.get(str(getattr(artifact, "artifact_id", "")))
         if item is None:
             continue
         primary_content_hash = _primary_content_hash(item, artifact_type=artifact_type)
@@ -103,29 +104,71 @@ def primary_content_sources_from_artifacts(
         path_value = getattr(artifact, "config_path", None)
         if not isinstance(path_value, str) or not path_value.strip():
             continue
-        path = Path(path_value).expanduser()
-        allowed_root = _primary_allowed_root(
-            artifact_type=artifact_type,
+        candidates.append((artifact_type, item, primary_content_hash, Path(path_value).expanduser()))
+    allowed_roots = _native_allowed_roots(candidates, workspace_dir=workspace_dir)
+    return tuple(
+        GuardAibomPrimaryContentSource(
+            agent_id=snapshot.agent_id,
+            allowed_root=Path(allowed_root),
+            content_hash=primary_content_hash,
+            harness_id=snapshot.agent_type,
+            item_id=item.item_id,
+            item_kind=item.item_kind,
+            mime_type=_content_mime_type(path),
             path=path,
-            workspace_dir=workspace_dir,
+            snapshot_id=snapshot.snapshot_id,
+            version_id=item.source_fingerprint,
         )
-        if allowed_root is None or not _safe_primary_path(path, allowed_root=allowed_root):
-            continue
-        sources.append(
-            GuardAibomPrimaryContentSource(
-                agent_id=snapshot.agent_id,
-                allowed_root=allowed_root,
-                content_hash=primary_content_hash,
-                harness_id=snapshot.agent_type,
-                item_id=item.item_id,
-                item_kind=item.item_kind,
-                mime_type=_content_mime_type(path),
-                path=path,
-                snapshot_id=snapshot.snapshot_id,
-                version_id=item.source_fingerprint,
-            )
+        for (_, item, primary_content_hash, path), allowed_root in zip(candidates, allowed_roots, strict=True)
+        if allowed_root is not None
+    )
+
+
+def _native_allowed_roots(
+    candidates: list[tuple[str, GuardAgentInventoryItem, str, Path]],
+    *,
+    workspace_dir: Path | None,
+) -> list[str | None]:
+    """Ask the native runtime which primary documents may be uploaded.
+
+    Without a native answer no body is uploaded; the inventory still carries
+    every content hash.
+    """
+
+    roots: list[str | None] = []
+    for start in range(0, len(candidates), _NATIVE_ADMIT_CHUNK):
+        chunk = candidates[start : start + _NATIVE_ADMIT_CHUNK]
+        roots.extend(_native_allowed_roots_chunk(chunk, workspace_dir=workspace_dir))
+    return roots
+
+
+def _native_allowed_roots_chunk(
+    candidates: list[tuple[str, GuardAgentInventoryItem, str, Path]],
+    *,
+    workspace_dir: Path | None,
+) -> list[str | None]:
+    request = {
+        "op": "admit",
+        "workspace_dir": None if workspace_dir is None else str(workspace_dir),
+        "candidates": [{"artifact_type": artifact_type, "path": str(path)} for artifact_type, _, _, path in candidates],
+    }
+    try:
+        answer = native_runner_authority(
+            "aibom_primary_content",
+            request,
+            timeout_seconds=_NATIVE_ADMIT_TIMEOUT_SECONDS,
         )
-    return tuple(sources)
+    except NativeRunnerAuthorityError:
+        return [None] * len(candidates)
+    raw_roots: object = answer.get("allowed_roots")
+    if not isinstance(raw_roots, list):
+        return [None] * len(candidates)
+    roots: list[str | None] = []
+    for root in cast("list[object]", raw_roots):
+        if root is not None and (not isinstance(root, str) or not root):
+            return [None] * len(candidates)
+        roots.append(root)
+    return roots if len(roots) == len(candidates) else [None] * len(candidates)
 
 
 def _primary_content_hash(item: GuardAgentInventoryItem, *, artifact_type: str) -> str | None:
@@ -140,46 +183,6 @@ def _primary_content_hash(item: GuardAgentInventoryItem, *, artifact_type: str) 
     return candidate
 
 
-def _primary_allowed_root(
-    *,
-    artifact_type: str,
-    path: Path,
-    workspace_dir: Path | None,
-) -> Path | None:
-    if artifact_type == "instruction":
-        if workspace_dir is None or path.suffix.lower() not in {".md", ".mdc"}:
-            return None
-        return workspace_dir
-    if path.name != "SKILL.md":
-        return None
-    parents = list(path.parents)
-    skills_root = next((parent for parent in parents if parent.name.lower() == "skills"), None)
-    if skills_root is None:
-        return None
-    try:
-        relative = path.relative_to(skills_root)
-    except ValueError:
-        return None
-    return skills_root if len(relative.parts) >= 2 else None
-
-
-def _safe_primary_path(path: Path, *, allowed_root: Path) -> bool:
-    if not path.is_file() or not resolves_within_root(allowed_root, path, require_exists=True):
-        return False
-    try:
-        relative = path.relative_to(allowed_root)
-    except ValueError:
-        return False
-    current = allowed_root
-    if current.is_symlink():
-        return False
-    for part in relative.parts:
-        current = current / part
-        if current.is_symlink():
-            return False
-    return True
-
-
 def _content_mime_type(path: Path) -> str:
     if path.suffix.lower() in {".md", ".mdc"}:
         return "text/markdown; charset=utf-8"
@@ -187,22 +190,28 @@ def _content_mime_type(path: Path) -> str:
 
 
 def _prepared_upload_item(source: GuardAibomPrimaryContentSource) -> tuple[dict[str, object], int] | None:
-    if not _safe_primary_path(source.path, allowed_root=source.allowed_root):
-        return None
+    """Read the exact admitted body; the native runtime re-checks the path and digest."""
+
     try:
-        with source.path.open("rb") as handle:
-            body = handle.read(_MAX_CONTENT_ITEM_BYTES + 1)
-    except OSError:
+        answer = native_runner_authority(
+            "aibom_primary_content",
+            {
+                "op": "read",
+                "path": str(source.path),
+                "allowed_root": str(source.allowed_root),
+                "content_hash": source.content_hash,
+            },
+        )
+    except NativeRunnerAuthorityError:
         return None
-    if len(body) > _MAX_CONTENT_ITEM_BYTES:
-        return None
-    content_hash = f"sha256:{hashlib.sha256(body).hexdigest()}"
-    if content_hash != source.content_hash:
+    body_base64 = answer.get("body_base64")
+    size = answer.get("size")
+    if not isinstance(body_base64, str) or isinstance(size, bool) or not isinstance(size, int) or size < 0:
         return None
     return (
         {
             "agentId": source.agent_id,
-            "bodyBase64": base64.b64encode(body).decode("ascii"),
+            "bodyBase64": body_base64,
             "contentHash": source.content_hash,
             "itemKind": source.item_kind,
             "itemId": source.item_id,
@@ -213,7 +222,7 @@ def _prepared_upload_item(source: GuardAibomPrimaryContentSource) -> tuple[dict[
             "affectsV4Score": False,
             "bundleCompletenessState": "device_declared",
         },
-        len(body),
+        size,
     )
 
 

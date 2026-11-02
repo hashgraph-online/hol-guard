@@ -1,7 +1,11 @@
+import pytest
+
+from codex_plugin_scanner.guard import insights_share
 from codex_plugin_scanner.guard.insights_share import (
     build_insights_share_payload,
     normalized_insights_share_url,
 )
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 
 
 def test_build_insights_share_payload_defaults():
@@ -56,3 +60,37 @@ def test_build_insights_share_payload_with_top_artifacts():
 def test_normalized_insights_share_url_from_receipts_sync():
     url = normalized_insights_share_url("https://hol.org/api/guard/receipts/sync")
     assert url == "https://hol.org/api/guard/insights/shares"
+
+
+def test_an_unavailable_resident_fails_the_share(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(insights_share, "native_runner_authority", _unavailable)
+    monkeypatch.setattr(insights_share, "derived_sync_url", _unavailable)
+    with pytest.raises(RuntimeError, match="could not prepare the insights share"):
+        build_insights_share_payload({"total": 1})
+    with pytest.raises(RuntimeError, match="could not prepare the insights share"):
+        normalized_insights_share_url("https://hol.org/api/guard/receipts/sync")
+
+
+def test_only_the_shown_top_artifacts_reach_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[dict[str, object]] = []
+
+    def record(_kind: str, args: dict[str, object], **_kwargs: object) -> dict[str, object]:
+        sent.append(args)
+        return {"payload": {}}
+
+    monkeypatch.setattr(insights_share, "native_runner_authority", record)
+    rows = [None, {"name": "x" * 5000, "total": 9}, "bash", *({"name": f"a{index}", "total": 1} for index in range(6))]
+
+    insights_share.build_insights_share_payload({"top_artifacts": rows}, include_top_artifacts=True)
+    insights_share.build_insights_share_payload({"top_artifacts": rows})
+
+    shown, hidden = (args["analytics"] for args in sent)
+    assert shown["top_artifacts"] == [
+        {"name": "x" * 120, "total": 9},
+        {"name": "a0", "total": 1},
+        {"name": "a1", "total": 1},
+    ]
+    assert hidden["top_artifacts"] == []

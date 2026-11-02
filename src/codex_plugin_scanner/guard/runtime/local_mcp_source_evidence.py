@@ -1,0 +1,197 @@
+"""Whether a pasted script's own source says it is an MCP server.
+
+Recognizing a pasted command as MCP launches it with its real arguments, so a
+script that is not a server would do its normal work. For a readable script
+the resident reads the source first, without running it, and only a script
+that imports an MCP server library or answers ``tools/list`` is launched. For
+the wrapper pip or uv writes for an installed command, that evidence must come
+from the installed package the wrapper runs.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from .approval_context import build_runtime_launch_identity
+from .command_model import parse_shell_command
+from .local_cli_identity import identify_unlisted_cli
+from .local_cli_script_source import (
+    local_import_paths,
+    read_local_module,
+    read_script_source,
+    safe_probe_path,
+)
+
+# Python files read from the package an entry-point wrapper runs.
+MAX_PACKAGE_FILES = 24
+
+
+def script_may_serve_mcp(command: str, *, cwd: Path, home_dir: Path | None, guard_home: Path) -> bool:
+    """Whether Guard may launch ``command`` to ask it for MCP tools.
+
+    True for a compiled program and a project bin run through a package
+    launcher. A script is launched only when its source, or a local module it
+    imports, shows an MCP server; for an installed command's entry-point
+    wrapper, the installed package it runs must show one. A lookup that fails,
+    a script whose source cannot be read, or a resident that cannot be asked
+    never launches; an older resident that cannot read MCP evidence keeps the
+    launch.
+    """
+
+    identity = identify_unlisted_cli(command, cwd=cwd, home_dir=home_dir)
+    if identity is None:
+        return False
+    if identity.runner is not None:
+        return True
+    launched = _launched_script(command, cwd=cwd, home_dir=home_dir)
+    if launched is None:
+        return False
+    if launched == "":
+        return True
+    text = read_script_source(launched, shebang_only=False)
+    if text is None:
+        return False
+    reads_evidence = _resident_reads_mcp_evidence()
+    if reads_evidence is None:
+        return False
+    if not reads_evidence:
+        return True
+    invocation = (identity.name,)
+    read = _source_read(text, invocation, guard_home)
+    if read is None:
+        return False
+    if read.mcp_server:
+        return True
+    modules = local_import_paths(launched, read.imports)
+    if read.entry_point is not None and not modules:
+        return _package_serves_mcp(read.entry_point, launched, text, invocation, guard_home)
+    for module in modules:
+        module_text = read_local_module(module, launched)
+        if module_text is None:
+            continue
+        imported = _source_read(module_text, invocation, guard_home)
+        if imported is not None and imported.mcp_server:
+            return True
+    return False
+
+
+def _package_serves_mcp(module: str, wrapper: str, text: str, invocation: tuple[str, ...], guard_home: Path) -> bool:
+    """Whether the module an entry-point wrapper runs shows an MCP server.
+
+    The module is looked up in the ``site-packages`` of the environment that
+    holds the wrapper or its ``#!`` interpreter, as pip, pipx and ``uv tool``
+    lay them out. Its own file is read, then the modules of the same package it
+    imports, up to ``MAX_PACKAGE_FILES`` in all. Another module in the package,
+    such as an optional MCP server beside a CLI's commands, does not count. A
+    module Guard cannot find is not launched.
+    """
+
+    parts = module.split(".")
+    for site in _site_packages(wrapper, text):
+        base = site.joinpath(*parts)
+        entry = next((path for path in (base / "__init__.py", base.with_suffix(".py")) if path.is_file()), None)
+        if entry is None:
+            continue
+        package = site / parts[0] / "__init__.py"
+        anchor = package if package.is_file() else entry
+        queue, seen = [str(entry)], {str(entry)}
+        while queue:
+            path = queue.pop(0)
+            source = read_local_module(path, str(anchor))
+            read = _source_read(source, invocation, guard_home) if source is not None else None
+            if read is None:
+                continue
+            if read.mcp_server:
+                return True
+            for imported in _package_imports(path, read.imports, site, parts[0]):
+                if imported not in seen and len(seen) < MAX_PACKAGE_FILES:
+                    seen.add(imported)
+                    queue.append(imported)
+        return False
+    return False
+
+
+def _package_imports(path: str, imports: tuple[str, ...], site: Path, top: str) -> tuple[str, ...]:
+    """The modules of package ``top`` that the file at ``path`` imports.
+
+    The resident reports ``from .server import serve`` as ``./server.py``,
+    beside ``path``, and ``from top.server import serve`` as
+    ``./top/server.py``, under ``site``. Both are read only inside the package.
+    """
+
+    initializer = site / top / "__init__.py"
+    try:
+        package = initializer.resolve(strict=True).parent
+        folder = Path(path).resolve(strict=True).parent.relative_to(package)
+    except (OSError, RuntimeError, ValueError):
+        return ()
+    entries = [
+        f"./{entry[len(top) + 3 :]}" if entry.startswith(f"./{top}/") else f"./{(folder / entry[2:]).as_posix()}"
+        for entry in imports
+    ]
+    return local_import_paths(str(initializer), entries)
+
+
+def _site_packages(wrapper: str, text: str) -> list[Path]:
+    """The ``site-packages`` folders of the environments a wrapper may belong to."""
+
+    prefixes = [Path(wrapper).parent.parent, Path(wrapper).resolve().parent.parent]
+    first = text.split("\n", 1)[0]
+    if first.startswith("#!"):
+        interpreter = first[2:].strip().split(" ", 1)[0]
+        if interpreter.startswith("/") and Path(interpreter).name.startswith("python"):
+            prefixes.append(Path(interpreter).parent.parent)
+    found: list[Path] = []
+    for prefix in dict.fromkeys(prefixes):
+        for site in [*sorted(prefix.glob("lib/python3*/site-packages")), prefix / "Lib" / "site-packages"]:
+            if site.is_dir() and site not in found:
+                found.append(site)
+    return found
+
+
+def _launched_script(command: str, *, cwd: Path, home_dir: Path | None) -> str | None:
+    """The script ``command`` runs, ``""`` for a compiled program, or None when unknown.
+
+    The launch identity says which: an interpreter's script argument, a file
+    run through its ``#!`` line, or a program that is not a script at all.
+    """
+
+    try:
+        model = parse_shell_command(command, cwd=cwd, home_dir=home_dir)
+        if not model.segments:
+            return None
+        segment = model.segments[0]
+        launch = build_runtime_launch_identity(
+            segment.executable, args=segment.arguments, structured_command=True, cwd=cwd, home_dir=home_dir
+        )
+    except Exception:
+        return None
+    executable = launch.get("executable")
+    entrypoint = launch.get("entrypoint")
+    if not isinstance(executable, dict) or not isinstance(entrypoint, dict):
+        return None
+    kind = entrypoint.get("kind")
+    if kind == "direct-executable" and executable.get("shebang_status") == "not_script":
+        return ""
+    if entrypoint.get("status") != "verified" or not isinstance(kind, str) or not kind.endswith("-script"):
+        return None
+    path = executable.get("path") if kind == "direct-script" else entrypoint.get("path")
+    return path if isinstance(path, str) and safe_probe_path(path) else None
+
+
+def _resident_reads_mcp_evidence() -> bool | None:
+    from ..native_local_cli_help_parse import resident_reads_mcp_evidence
+
+    try:
+        return resident_reads_mcp_evidence()
+    except Exception:
+        return None
+
+
+def _source_read(text: str, invocation: tuple[str, ...], guard_home: Path):
+    from ..native_local_cli_help_parse import native_local_cli_source_read
+
+    try:
+        return native_local_cli_source_read(guard_home=guard_home, text=text, invocation=invocation, mcp_evidence=True)
+    except Exception:
+        return None

@@ -71,6 +71,9 @@ pub(super) fn run() -> Result<(), String> {
         {
             std::process::exit(cursor_hook_bridge::run(python_argv))
         }
+        [command, config] if command == cline_hook_worker::WORKER_COMMAND => {
+            std::process::exit(cline_hook_worker::run(config))
+        }
         [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
             std::process::exit(pi_hook_bridge::run(config))
         }
@@ -92,8 +95,12 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
-        [command, flag] if bounded_probe::is_command(command) && flag == "--stdin" => {
-            let response = bounded_probe::run_command(io::stdin().lock())?;
+        [command, flag] if contained_output_match::is_command(command) && flag == "--stdin" => {
+            let response = contained_output_match::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if desktop_core_onedir::is_command(command) && flag == "--stdin" => {
+            let response = desktop_core_onedir::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if codex_hook_trust::is_command(command) && flag == "--stdin" => {
@@ -104,6 +111,16 @@ pub(super) fn run() -> Result<(), String> {
             let response = desktop_notification::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if harness_version_compat::is_command(command) && flag == "--stdin" => {
+            let response = harness_version_compat::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if harness_version_compat::discovery::is_command(command) && flag == "--stdin" =>
+        {
+            let response = harness_version_compat::discovery::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if hook_removal_sweep::is_command(command) && flag == "--stdin" => {
             let response = hook_removal_sweep::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -112,8 +129,20 @@ pub(super) fn run() -> Result<(), String> {
             let response = macos_code_signing::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if policy_file_io::is_command(command) && flag == "--stdin" => {
+            let response = policy_file_io::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if removal_evidence::is_command(command) && flag == "--stdin" => {
             let response = removal_evidence::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if guard_shim_profile::is_command(command) && flag == "--stdin" => {
+            let response = guard_shim_profile::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if agent_safety_guidance::is_command(command) && flag == "--stdin" => {
+            let response = agent_safety_guidance::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if grok_executable::is_command(command) && flag == "--stdin" => {
@@ -168,6 +197,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = hermes_file_inspect::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if local_authority_integrity_op::is_command(command) && flag == "--stdin" => {
+            let response = local_authority_integrity_op::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if store_quarantine_forensics::is_command(command) && flag == "--stdin" => {
             let response = store_quarantine_forensics::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -188,8 +221,24 @@ pub(super) fn run() -> Result<(), String> {
             let response = onefile_extraction_reclaim::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if resident_state_prune::is_command(command) && flag == "--stdin" => {
+            let response = resident_state_prune::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if device_key_helper::is_command(command) && flag == "--stdin" => {
             let response = device_key_helper::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if desktop_foreign_installs::is_command(command) && flag == "--stdin" => {
+            let response = desktop_foreign_installs::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if desktop_foreign_remove::is_command(command) && flag == "--stdin" => {
+            let response = desktop_foreign_remove::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if posix_processes::is_command(command) && flag == "--stdin" => {
+            let response = posix_processes::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag]
@@ -246,12 +295,44 @@ pub(super) fn run() -> Result<(), String> {
             let response = orphaned_worker_reap::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if runtime_fingerprint::is_command(command) && flag == "--stdin" => {
+            let response = runtime_fingerprint::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if process_identity::is_command(command) && flag == "--stdin" => {
             let response = process_identity::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if local_risk_report::is_command(command) && flag == "--stdin" => {
+            let response = local_risk_report::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if storage_retention::is_command(command) && flag == "--stdin" => {
             let response = storage_retention::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if sqlite_store_salvage::is_command(command) && flag == "--stdin" => {
+            let response = sqlite_store_salvage::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if sqlite_store_probe::is_command(command) && flag == "--stdin" => {
+            let response = sqlite_store_probe::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if guard_home_resolve::is_command(command) && flag == "--stdin" => {
+            let response = guard_home_resolve::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if hook_launch_scan::is_command(command) && flag == "--stdin" => {
+            let response = hook_launch_scan::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if durable_runtime_collapse::is_command(command) && flag == "--stdin" => {
+            let response = durable_runtime_collapse::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if copilot_hook_commands::is_command(command) && flag == "--stdin" => {
+            let response = copilot_hook_commands::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if command == "compile-business-policy" && flag == "--stdin" => {

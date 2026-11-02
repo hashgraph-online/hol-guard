@@ -21,7 +21,6 @@ from .models import HarnessDetection
 from .runtime_identity_assessment import RuntimeIdentityAssessment, RuntimeIdentityError, assess_runtime_identity
 from .runtime_identity_candidates import RuntimeCandidates, collect_runtime_candidates
 from .runtime_identity_probe import RuntimeProbe
-from .runtime_instance_store import load_known_instances, remember_instances
 
 RUNTIME_POSTURE_SCHEMA = "guard.runtime-posture.v1"
 ADVISORIES_UNAVAILABLE = "runtime_advisories_unavailable"
@@ -54,10 +53,9 @@ def build_runtime_posture(
     ``instance_home`` is the Guard home that carries running instances between
     probes; without it processes are not enumerated.
     """
-    known = load_known_instances(instance_home) if instance_home is not None else None
     try:
         candidates, probe = collect_runtime_candidates(
-            detections, environment=environment, workspace_dir=workspace_dir, known_instances=known
+            detections, environment=environment, workspace_dir=workspace_dir, instance_home=instance_home
         )
     except ValueError as error:
         # Reading server entries projects their identity through the native runtime.
@@ -67,8 +65,6 @@ def build_runtime_posture(
         # The native probe resolves the launches, so without it nothing is known about them.
         base = {**_base_payload(generated_at, None), "skipped_harnesses": list(dict.fromkeys(skipped_harnesses))}
         return {**base, "status": "unavailable", "error": error.code, "runtimes": []}
-    if instance_home is not None and known is not None:
-        remember_instances(instance_home, probe)
     base = {**_base_payload(generated_at, candidates), "skipped_harnesses": list(dict.fromkeys(skipped_harnesses))}
     # A harness whose config could not be read, or launches past the candidate
     # limit, leave the inventory incomplete, which is not the same as having no servers.

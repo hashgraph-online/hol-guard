@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.temporary_mcp_approvals import temporary_mcp_grant_selector
 from tests.mcp_contribution_loader import load_mcp_contribution_payloads
 
 from . import mcp_extension_driver as extension_driver
@@ -23,7 +22,7 @@ from .mcp_contribution_client import mcp_tool_state
 from .mcp_recorded_expectations import expected_decision, recorded
 from .test_guard_mcp_server_grants import _artifact, _AuthorityStore, _layer
 from .test_guard_temporary_mcp_approvals import _artifact as _browser_click_artifact
-from .test_guard_temporary_mcp_approvals import _evaluate
+from .test_guard_temporary_mcp_approvals import _evaluate, temporary_mcp_grant_selector
 
 _ACTIONS = ("allow", "warn", "review", "require-reapproval", "block")
 _LOCKDOWN_REASON = "This MCP tool is blocked by its authenticated extension authority."

@@ -1,11 +1,12 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { HiMiniArrowPath, HiMiniArrowRight, HiMiniCircleStack, HiMiniCpuChip, HiMiniShieldCheck } from "react-icons/hi2";
-import { contextStatusCopy } from "./status";
+import { HiMiniArrowPath, HiMiniArrowRight, HiMiniCircleStack, HiMiniShieldCheck } from "react-icons/hi2";
 import type { ContextAssistanceStatus, ContextInstallation } from "./types";
+import { CigarSetupAction, CigarSetupProgress, type CigarOneClick } from "./one-click-setup";
 import { CigarGuide } from "./workspace-guide";
 import { CigarOverview } from "./workspace-overview";
-import { CIGAR_TABS, canStartCigar, cigarRuntimeSummary, cigarTabFromSearch, type CigarTab } from "./workspace-model";
-import { CIGAR_FULL_NAME, cigarTutorial, type CigarTutorialId } from "./tutorial-content";
+import { CIGAR_TABS, cigarTabFromSearch, type CigarTab } from "./workspace-model";
+import { contextStatusCopy } from "./status";
+import { cigarTutorial, type CigarTutorialId } from "./tutorial-content";
 import { useCigarTutorial } from "./tutorial-progress";
 import { CigarTutorials, CigarWalkthrough } from "./tutorials";
 import { subscribeDashboardLocation } from "../dashboard-location";
@@ -19,12 +20,12 @@ export type CigarWorkspaceProps = {
   dirty: boolean;
   stopAvailable?: boolean;
   error: string | null;
+  setup: CigarOneClick;
   versions?: ReactNode;
   controls: ReactNode;
   access: ReactNode;
   data: ReactNode;
   onRefresh: () => void;
-  onStart: () => void;
   onStop: () => void;
 };
 
@@ -35,16 +36,15 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
   const walkthroughAnchor = useRef<HTMLDivElement>(null);
   const lesson = useCigarTutorial();
   const status = props.status;
-  const copy = props.loading ? { label: "Checking status", detail: "Reading the local runtime registration and availability." }
-    : status ? contextStatusCopy(status) : { label: "Status unavailable", detail: "Reconnect to the local Guard service, then refresh. Your Python version has not been checked here." };
-  const runtime = cigarRuntimeSummary(status, props.installations);
   const canStop = props.stopAvailable ?? Boolean(status?.requested_enabled || status?.effective_enabled || status?.job);
-  const startRequested = status?.requested_enabled === true && !status.effective_enabled;
-  const primaryLabel = status?.job ? status.job.phase === "cancelling" ? "Stopping…" : "Checking runtime…"
-    : props.dirty ? "Save preferences first" : status?.effective_enabled ? "Use CIGAR"
-    : startRequested ? "Start CIGAR" : "Get started";
-  const primaryDisabled = props.disabled || props.busy || props.loading || Boolean(status?.job)
-    || (!props.dirty && startRequested && !canStartCigar(status, props.dirty));
+  const actionDisabled = props.disabled || props.busy || props.loading;
+  const running = props.setup.run.phase === "running";
+  let stripLabel = props.loading ? "Checking" : "Status unavailable";
+  if (status) stripLabel = contextStatusCopy(status).label;
+  if (running) stripLabel = "Working";
+  const stripDetail = running ? "Guard is turning CIGAR on. You can keep browsing."
+    : status?.effective_enabled ? (status.runtime ? "CIGAR " + status.runtime.package_version : "CIGAR") + " is running on this computer. It reads only the folders you pick."
+    : "CIGAR is off. One click turns it on; Guard handles the setup.";
 
   useEffect(() => {
     const sync = () => setTab(cigarTabFromSearch(window.location.search));
@@ -92,35 +92,35 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
 
   return <div className="cigar-workspace" data-testid="cigar-workspace">
     <header className="cigar-heading">
-      <div><span className="cigar-eyebrow">Local context assistance</span><h1><HiMiniCircleStack aria-hidden="true" />CIGAR</h1><p>{CIGAR_FULL_NAME}</p></div>
+      <div><h1><HiMiniCircleStack aria-hidden="true" />CIGAR</h1><p>A context helper for your AI that runs on your computer.</p></div>
       <div className="cigar-heading-actions">
         {canStop ? <button type="button" className="cigar-button" disabled={props.disabled || props.busy} onClick={props.onStop}>Turn off CIGAR</button> : null}
         <button type="button" className="cigar-button" disabled={props.disabled || props.busy || props.loading} onClick={props.onRefresh}><HiMiniArrowPath aria-hidden="true" />Refresh status</button>
       </div>
     </header>
-    <section className="cigar-hero" aria-labelledby="cigar-hero-heading">
-      <div className="cigar-hero-copy">
-        <span className="cigar-hero-kicker"><span aria-hidden="true" />Optional. Local. Yours to control.</span>
-        <h2 id="cigar-hero-heading">Bring the right context<br className="hidden sm:block" /> to your next action.</h2>
-        <p>Turn the sources you trust into useful context for command reviews, connected AI apps, and supported execution flows.</p>
-        <div className="cigar-hero-actions">
-          <button type="button" className="cigar-button cigar-button-primary" disabled={primaryDisabled}
-            onClick={() => {
-              if (canStartCigar(status, props.dirty)) props.onStart();
-              else select(!props.dirty && status?.effective_enabled ? "access" : "runtime");
-            }}>{primaryLabel}<HiMiniArrowRight aria-hidden="true" /></button>
-          <button type="button" className="cigar-hero-link" onClick={() => select("guide")}>How it works<HiMiniArrowRight aria-hidden="true" /></button>
-          <button type="button" className="cigar-hero-link" onClick={() => select("tutorials")}>Take a walkthrough<HiMiniArrowRight aria-hidden="true" /></button>
+    <aside className="cigar-beta-note" aria-label="CIGAR beta status">
+      <span className="cigar-beta-note__chip">Beta</span>
+      <p>CIGAR is still being iterated on. Screens and settings may change between releases.</p>
+      <a href="https://github.com/hashgraph-online/hol-cigar/issues" target="_blank" rel="noopener noreferrer">Share feedback</a>
+    </aside>
+    {tab === "overview" ? <section className="cigar-hero" aria-labelledby="cigar-hero-heading">
+        <div className="cigar-hero-copy">
+          <h2 id="cigar-hero-heading">Give your AI the right pages,<br className="hidden sm:block" /> not the whole book.</h2>
+          <p>Think of CIGAR as a librarian on your computer. You choose the books. When your AI or Guard has a question, CIGAR finds the few pages that answer it and shows where each one came from.</p>
+          <CigarSetupAction setup={props.setup} status={status} disabled={actionDisabled} tone="hero" onOpen={select} />
+          <div className="cigar-hero-actions">
+            <button type="button" className="cigar-hero-link" onClick={() => select("guide")}>How it works<HiMiniArrowRight aria-hidden="true" /></button>
+            <button type="button" className="cigar-hero-link" onClick={() => select("tutorials")}>Take a walkthrough<HiMiniArrowRight aria-hidden="true" /></button>
+          </div>
         </div>
-        {props.dirty ? <p className="mt-3 text-xs text-slate-200">Save your changes before starting CIGAR or granting context access.</p> : null}
+        <CigarSetupProgress setup={props.setup} status={status} loading={props.loading} />
+      </section> : <section className="cigar-strip" aria-label="CIGAR status">
+      <div className="cigar-strip-copy">
+        <span className="cigar-status" data-ready={status?.effective_enabled === true}><span aria-hidden="true" />{stripLabel}</span>
+        <p>{stripDetail}</p>
       </div>
-      <div className="cigar-runtime-card">
-        <div className="cigar-runtime-top"><span className="cigar-eyebrow">On this machine</span><span className="cigar-status" data-ready={status?.effective_enabled === true} role="status"><span aria-hidden="true" />{copy.label}</span></div>
-        <HiMiniCpuChip className="cigar-runtime-symbol" aria-hidden="true" />
-        <h3>{props.loading ? "Reading runtime…" : runtime.label}</h3><p>{props.loading ? "No runtime is started by opening this page." : runtime.detail}</p>
-        <div className="cigar-runtime-note">{copy.detail}</div>
-      </div>
-    </section>
+      {tab === "access" && status?.effective_enabled ? null : <CigarSetupAction setup={props.setup} status={status} disabled={actionDisabled} onOpen={select} />}
+    </section>}
     {props.error ? <div className="cigar-note" role="alert"><strong>CIGAR needs attention</strong><p>{props.error}</p></div> : null}
     <nav className="cigar-tabs" role="tablist" aria-label="CIGAR sections">
       {CIGAR_TABS.map((item, index) => <button key={item.value} id={id + "-tab-" + item.value} type="button" role="tab"
@@ -134,19 +134,18 @@ export function CigarWorkspace(props: CigarWorkspaceProps) {
           onExit={() => { lesson.exit(); select("tutorials"); }} />
       </div> : null}
     <div ref={panel} id={id + "-panel"} role="tabpanel" aria-labelledby={id + "-tab-" + tab} tabIndex={-1} className="cigar-panel">
-      {tab === "overview" ? <CigarOverview status={status} installations={props.installations} loading={props.loading} onSelect={select} /> : null}
+      {tab === "overview" ? <CigarOverview status={status} onSelect={select} /> : null}
       <div hidden={tab !== "runtime"}>
-        <div className="cigar-section-intro"><span className="cigar-eyebrow">Make it yours</span><h2>Runtime & preferences</h2><p>Manage runtime selection in Versions & updates, choose the features you want here, and save. Start the runtime when you are ready to use context.</p></div>
-        {props.installations?.length === 0 ? <div className="cigar-note"><strong>No CIGAR bundle is registered in this Guard profile.</strong><p>Python 3.14 may already be installed. Guard also needs the approved CIGAR package and worker registered together; an empty list does not mean your Python is incompatible.</p><button type="button" className="cigar-text-button" onClick={() => select("guide")}>Read the runtime setup guide<HiMiniArrowRight aria-hidden="true" /></button></div> : null}
+        <div className="cigar-section-intro"><h2>Settings</h2><p>CIGAR works well with the recommended settings. Change these only if you want to.</p></div>
         {props.controls}
       </div>
       {tab === "versions" ? props.versions : null}
-      {tab === "access" ? <div><div className="cigar-section-intro"><span className="cigar-eyebrow">Give context a scope</span><h2>Sources & AI apps</h2><p>Grant access to one workspace at a time. Choose documents and app connections explicitly; sharing requires its own preference.</p></div>{!status?.effective_enabled ? <div className="cigar-note"><strong>Start CIGAR before granting context access.</strong><p>Save your runtime and feature preferences, then start context assistance. Sources and app access become available when the runtime is Ready.</p><button type="button" className="cigar-text-button" onClick={() => select("runtime")}>Open runtime & preferences<HiMiniArrowRight aria-hidden="true" /></button></div> : null}{props.access}</div> : null}
-      {tab === "data" ? <div><div className="cigar-section-intro"><span className="cigar-eyebrow">Stay in control</span><h2>Data & privacy</h2><p>Review context storage, revoke access, clear saved evidence, or stop the runtime. Storage and retention preferences live in Runtime & preferences.</p></div>{props.data}</div> : null}
+      {tab === "access" ? <div><div className="cigar-section-intro"><h2>Projects & AI apps</h2><p>Pick the project folders CIGAR may read, one at a time. Then connect an AI app if you want. Each step asks you first.</p></div>{!status?.effective_enabled ? <div className="cigar-note"><strong>Turn on CIGAR first</strong><p>Projects and AI apps open up as soon as CIGAR is on. Use the button above.</p></div> : null}{props.access}</div> : null}
+      {tab === "data" ? <div><div className="cigar-section-intro"><h2>Privacy</h2><p>By default, CIGAR keeps its notes in memory only, so they disappear when you turn it off. Here you can see what it keeps, take back access, or delete saved notes.</p></div>{props.data}</div> : null}
       {tab === "tutorials" ? <CigarTutorials progress={lesson.progress} onBegin={beginTutorial} /> : null}
       {tab === "guide" ? <CigarGuide onSelect={select} /> : null}
     </div>
     </div>
-    <footer className="cigar-footer"><HiMiniShieldCheck aria-hidden="true" /><span>Guard makes and enforces security decisions. CIGAR supplies context from the sources you authorize.</span>{props.dirty ? <strong>Unsaved preferences</strong> : null}</footer>
+    <footer className="cigar-footer"><HiMiniShieldCheck aria-hidden="true" /><span>Guard still decides what your AI may do. CIGAR only helps explain, using the folders you pick.</span>{props.dirty ? <strong>Unsaved changes</strong> : null}</footer>
   </div>;
 }

@@ -224,8 +224,14 @@ mod private_python;
 #[path = "context_assistance_install_jobs_actual_tests.rs"]
 mod actual;
 
+#[path = "context_assistance_one_click_actual_tests.rs"]
+mod one_click_actual;
+
 fn metadata_interpreter(fixture: &Fixture) -> interpreters::Interpreter {
+    #[cfg(unix)]
     let python = PathBuf::from("/not-executed/python3.14");
+    #[cfg(windows)]
+    let python = PathBuf::from(r"C:\not-executed\python.exe");
     let facts = InterpreterFacts {
         schema: "guard-cigar-interpreter.v1".into(),
         implementation: "cpython".into(),
@@ -264,18 +270,17 @@ fn metadata_interpreter(fixture: &Fixture) -> interpreters::Interpreter {
     record
 }
 #[test]
-fn upstream_only_build_is_refused_before_any_job_or_sdk_preparation() {
+fn unknown_build_is_refused_before_any_job_or_sdk_preparation() {
     let fixture = Fixture::new();
     let interpreter = metadata_interpreter(&fixture);
-    let catalog = TrustedCatalog::bundled().unwrap();
     let request = InstallRequest {
-        job_id: "unqualified".into(),
-        build_id: catalog.document().builds[0].identity.build_id.clone(),
+        job_id: "unknown".into(),
+        build_id: "cigar-9_9_9-000000000000".into(),
         interpreter_id: interpreter.interpreter_id,
     };
     assert_eq!(
         Jobs::default().install(&fixture.home, request),
-        Err(error("cigar_guard_qualification_required"))
+        Err(error("cigar_build_unknown"))
     );
     assert!(store::list(&fixture.home).unwrap().is_empty());
     for name in ["bundles", "work", "staging", "artifacts"] {

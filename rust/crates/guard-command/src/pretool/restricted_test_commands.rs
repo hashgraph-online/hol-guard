@@ -7,14 +7,18 @@
 #[cfg(test)]
 #[path = "restricted_test_commands_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "restricted_test_commands_tsx_tests.rs"]
+mod tsx_tests;
 
 use crate::contained_argv::{
     contained_runner_call, jest_contained_call, mocha_contained_call, npm_exec_inert_option,
 };
 use crate::contained_node_tool::{
-    entry_tool, local_package_entry, supported_tool, writes_or_chains, ToolMode,
+    entry_tool, local_package_entry, supported_tool_in, writes_or_chains, ToolMode,
 };
 use crate::CanonicalCommandV1;
+use std::path::Path;
 
 #[path = "bun_eval_screen.rs"]
 mod bun_eval_screen;
@@ -100,26 +104,6 @@ fn test_script_name(script: &str) -> bool {
             || matches!(stem, "test" | "tests" | "runtests" | "run_tests"))
 }
 
-/// `math.test.ts`, `api.spec.mjs`, `test_calc.js`: the usual JavaScript and
-/// TypeScript test file names.
-fn node_test_script_name(script: &str) -> bool {
-    let name = script.rsplit('/').next().unwrap_or(script);
-    let Some((stem, extension)) = name.rsplit_once('.') else {
-        return false;
-    };
-    matches!(
-        extension,
-        "js" | "mjs" | "cjs" | "jsx" | "ts" | "mts" | "cts" | "tsx"
-    ) && stem
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
-        && (stem.ends_with(".test")
-            || stem.ends_with(".spec")
-            || stem.starts_with("test_")
-            || stem.ends_with("_test")
-            || matches!(stem, "test" | "tests"))
-}
-
 /// Type stripping and warning filters change how Node loads and reports a
 /// script, not what the script can reach.
 fn node_after_script_flags(arguments: &[String]) -> &[String] {
@@ -147,11 +131,12 @@ fn node_after_script_flags(arguments: &[String]) -> &[String] {
 /// script shares the inline evaluation boundary, as Python test scripts do.
 fn node_test_script_args(arguments: &[String]) -> bool {
     matches!(node_after_script_flags(arguments), [script, ..]
-        if workspace_relative(script) && node_test_script_name(script))
+        if crate::contained_argv::workspace_test_script(script))
 }
 
-/// `tsx math.test.ts` in its installed forms. The sink loads the file through
-/// the package's own loader inside the Vitest transform boundary.
+/// `tsx math.test.ts` in its installed forms, with or without the Node
+/// test-runner flags Node reads ahead of the script. The sink loads the file
+/// through the package's own loader inside the Vitest transform boundary.
 fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
     let rest = match (name, arguments) {
         ("tsx", rest) => rest,
@@ -176,7 +161,14 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
         }
         _ => return false,
     };
-    matches!(rest, [script, ..] if workspace_relative(script) && node_test_script_name(script))
+    let (flags, rest) = rest.split_at(crate::contained_argv::tsx_runner_flag_count(rest));
+    let named = |script: &String| crate::contained_argv::workspace_test_script(script);
+    if crate::contained_argv::tsx_runner_test_mode(flags) {
+        // Node runs each remaining word as a test file of its own, so a word
+        // outside the workspace is code the run loads rather than inert argv.
+        return !rest.is_empty() && rest.iter().all(named);
+    }
+    matches!(rest, [script, ..] if named(script))
 }
 
 /// Classify a direct pytest invocation for delegation, never direct allowance.
@@ -477,16 +469,30 @@ pub(crate) fn manager_local_bin_arguments<'a>(
 /// `npm run lint -- --fix` hands `--fix` to the script's own command, so the
 /// tail belongs to the run the manifest body spells and is gated with it. A
 /// tail that is not introduced by `--` is not a package script run.
+///
+/// An option that only chooses how much the manager prints names no script,
+/// so the reading looks behind it, both before the `run` verb and after it:
+/// `npm --silent run lint` and `npm run --silent lint` are the same run as
+/// `npm run lint`. The peeled options are the manager's own reporting
+/// options; an option that moves the directory or fans the run out is not
+/// among them, so a peeled reading never names a different script.
 pub(crate) fn manager_script_task<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<(&'a str, &'a [String])> {
+    let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
+    if let [run, tail @ ..] = arguments {
+        if crate::contained_argv::names_script_run_verb(manager, run) {
+            let tail = crate::contained_argv::manager_reporting_options_peeled(manager, tail);
+            return match tail {
+                [task] => Some((task.as_str(), &tail[1..])),
+                [task, separator, rest @ ..] if separator == "--" => Some((task.as_str(), rest)),
+                _ => None,
+            };
+        }
+    }
     let bare = matches!(manager, "pnpm" | "yarn");
     match arguments {
-        [run, task] if run == "run" => Some((task.as_str(), &arguments[2..])),
-        [run, task, separator, tail @ ..] if run == "run" && separator == "--" => {
-            Some((task.as_str(), tail))
-        }
         [task] if bare && !MANAGER_SUBCOMMANDS.contains(&task.as_str()) => {
             Some((task.as_str(), &arguments[1..]))
         }
@@ -516,7 +522,11 @@ fn local_runner_entry_call(arguments: &[String]) -> bool {
 /// same table `contained_node_tool` routes with. The admission and the sink
 /// that executes the run share one reading of which tools are supported and
 /// which of their modes only reports, so the two cannot drift apart.
-fn node_tool_mode(executable: &str, arguments: &[String]) -> Option<ToolMode> {
+fn node_tool_mode(
+    executable: &str,
+    arguments: &[String],
+    directory: Option<&Path>,
+) -> Option<ToolMode> {
     let (name, rest) = match (executable, arguments) {
         // A local-bin runner names the tool, and `node` names the entrypoint
         // file the tool published, so each is read back to the tool's own name.
@@ -530,10 +540,13 @@ fn node_tool_mode(executable: &str, arguments: &[String]) -> Option<ToolMode> {
         ("bunx" | "npx" | "node" | "nodejs", []) => return None,
         _ => (executable, arguments),
     };
-    supported_tool(name, rest).map(|(_, _, mode)| mode)
+    supported_tool_in(name, rest, directory).map(|(_, _, mode)| mode)
 }
 
-pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'static str> {
+pub(super) fn readonly_test_reason(
+    model: &CanonicalCommandV1,
+    directory: Option<&Path>,
+) -> Option<&'static str> {
     if requires_pytest_containment(model) {
         return Some("native_pytest_readonly_containment_required");
     }
@@ -605,6 +618,13 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         {
             return Some("native_node_test_readonly_containment_required");
         }
+        // `bun math.test.ts` runs that one file as a script; Bun starts no
+        // test runner for it. The pass is that `bun test` already loads the
+        // same file, inside the same read-only profile, as one of the test
+        // files it discovers, so naming it widens nothing.
+        ("bun", args) if crate::contained_argv::bun_test_script_once(args) => {
+            return Some("native_node_test_readonly_containment_required");
+        }
         (name, args) if tsx_test_script_args(name, args) => {
             return Some("native_vitest_readonly_containment_required");
         }
@@ -624,15 +644,24 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         // name is a script only for the managers that run one.
         let manager = super::executable_basename(executable);
         let named = |task: &String| {
-            crate::contained_package_test::test_task(task)
-                && (task.as_str() == "test" || matches!(manager, "pnpm" | "yarn"))
+            (crate::contained_package_test::test_task(task)
+                && (task.as_str() == "test" || matches!(manager, "pnpm" | "yarn")))
+                || crate::contained_argv::aliased_test_script_name(manager, task).is_some()
         };
+        // An option that only chooses how much the manager prints names no
+        // script, so the reading looks behind it, before the `run` verb and
+        // after it. The sink reads the same words, so a quiet spelling routes
+        // to the run the loud one names rather than staying under review.
+        let arguments = crate::contained_argv::manager_reporting_options_peeled(manager, arguments);
         let rest = match arguments {
             [test, rest @ ..] if named(test) && manager != "bun" => Some(rest),
-            [run, test, rest @ ..]
-                if run == "run" && crate::contained_package_test::test_task(test) =>
-            {
-                Some(rest)
+            [run, tail @ ..] if crate::contained_argv::names_script_run_verb(manager, run) => {
+                match crate::contained_argv::manager_reporting_options_peeled(manager, tail) {
+                    [test, rest @ ..] if crate::contained_package_test::test_task(test) => {
+                        Some(rest)
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         };
@@ -672,7 +701,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
             _ => (crate::program_basename(executable), arguments),
         }
     };
-    let mode = node_tool_mode(executable, arguments);
+    let mode = node_tool_mode(executable, arguments, directory);
     let manager = matches!(executable, "bun" | "npm" | "pnpm" | "yarn");
     // The sink refuses a write or a chain in every mode, so a build carrying
     // one is left to ordinary review rather than sent to a route that would

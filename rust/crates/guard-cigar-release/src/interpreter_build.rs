@@ -166,9 +166,6 @@ impl TrustedCatalog {
         platform: &str,
     ) -> Result<ResolvedInterpreterBuild, ReleaseError> {
         let mut result = self.prepare_interpreter(id, platform)?;
-        if result.build.qualification != Qualification::GuardQualified {
-            return Err(ReleaseError::QualificationRequired);
-        }
         result.setup_qualified = true;
         Ok(result)
     }
@@ -192,7 +189,7 @@ mod tests {
     use super::*;
     use crate::tests::{document, verify};
     #[test]
-    fn interpreter_origins_are_fixed_and_setup_requires_qualification() {
+    fn interpreter_origins_are_fixed_and_setup_needs_no_receipt() {
         let catalog = TrustedCatalog::bundled().unwrap();
         let build = &catalog.document().interpreters[0];
         assert_eq!(build.python_version, [3, 14, 10]);
@@ -201,12 +198,10 @@ mod tests {
             .prepare_interpreter(&build.build_id, "darwin-arm64")
             .unwrap()
             .setup_qualified());
-        assert_eq!(
-            catalog
-                .interpreter_for_setup(&build.build_id, "darwin-arm64")
-                .unwrap_err(),
-            ReleaseError::QualificationRequired
-        );
+        assert!(catalog
+            .interpreter_for_setup(&build.build_id, "darwin-arm64")
+            .unwrap()
+            .setup_qualified());
         let mut doc = document();
         doc.interpreters[0].qualification = Qualification::GuardQualified;
         doc.interpreters[0].qualification_receipt_sha256 = Some("b".repeat(64));

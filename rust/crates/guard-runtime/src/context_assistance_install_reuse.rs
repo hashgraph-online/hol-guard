@@ -8,19 +8,23 @@ use guard_cigar_release::{CatalogCheckpoint, ResolvedRelease};
 pub(super) struct RefreshTarget {
     pub prior_record_sha256: String,
     pub catalog_checkpoint: CatalogCheckpoint,
-    pub qualification_receipt_sha256: String,
+    /// Informational: carried when the catalog entry names one. Refresh no
+    /// longer requires it, since installation verifies each feature itself.
+    #[serde(default)]
+    pub qualification_receipt_sha256: Option<String>,
     pub guard_binary_sha256: String,
     pub features: Vec<Feature>,
 }
 impl RefreshTarget {
     pub fn validate(&self) -> Result<(), String> {
         if [
-            &self.prior_record_sha256,
-            &self.catalog_checkpoint.payload_sha256,
-            &self.qualification_receipt_sha256,
-            &self.guard_binary_sha256,
+            Some(&self.prior_record_sha256),
+            Some(&self.catalog_checkpoint.payload_sha256),
+            self.qualification_receipt_sha256.as_ref(),
+            Some(&self.guard_binary_sha256),
         ]
-        .iter()
+        .into_iter()
+        .flatten()
         .any(|value| !is_lower_hex(value, 64))
             || self.catalog_checkpoint.revision == 0
             || self.features.len() > 4
@@ -108,11 +112,7 @@ pub(super) fn target(
     let target = RefreshTarget {
         prior_record_sha256: record_sha(record)?,
         catalog_checkpoint: release.checkpoint().clone(),
-        qualification_receipt_sha256: release
-            .platform()
-            .qualification_receipt_sha256
-            .clone()
-            .ok_or_else(|| error("cigar_guard_qualification_required"))?,
+        qualification_receipt_sha256: release.platform().qualification_receipt_sha256.clone(),
         guard_binary_sha256: crate::resident_state::runtime_digest()?,
         features: release.platform().features.clone(),
     };
@@ -134,8 +134,7 @@ pub(super) fn committed(
         return Ok(false);
     }
     let release = versioned::resolve(home, record, &target.features)?;
-    if release.platform().qualification_receipt_sha256.as_ref()
-        != Some(&target.qualification_receipt_sha256)
+    if release.platform().qualification_receipt_sha256 != target.qualification_receipt_sha256
         || release.checkpoint() != &target.catalog_checkpoint
     {
         return Err(error("verification_conflict"));

@@ -12,6 +12,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard import supply_chain_workspace_audit as workspace_audit_module
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.support.network import stub_authenticated_urlopen
@@ -329,6 +330,46 @@ def test_sync_managed_workspace_audits_enqueues_persisted_job_mode_for_managed_w
     assert summary["failed_jobs"] == 0
     assert summary["workspaces"][0]["job_id"] == "job-1"
     assert summary["workspaces"][0]["package_count"] == 1
+
+
+def test_sync_managed_workspace_audits_degrades_when_the_native_summary_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"react":"18.2.0"}}\n')
+    store = GuardStore(home_dir)
+    _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
+    store.set_managed_install("codex", True, str(workspace_dir), {}, "2026-05-25T10:00:00+00:00")
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_enqueue_cloud_workspace_audit_job",
+        lambda **_kwargs: {"jobId": "job-1", "status": "queued"},
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_poll_cloud_workspace_audit_job",
+        lambda **_kwargs: {"jobId": "job-1", "status": "completed"},
+    )
+
+    def _unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(local_supply_chain_module, "native_runner_authority", _unavailable)
+
+    # Sync callers suppress RuntimeError, so a missing summary must not escape
+    # as the runtime's ValueError.
+    with pytest.raises(RuntimeError, match="could not summarize the workspace audit sync"):
+        local_supply_chain_module.sync_managed_workspace_audits(
+            store,
+            auth_context={
+                "access_token": "token",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+            },
+        )
+    assert store.get_sync_payload("workspace_audits_sync_summary") is None
 
 
 def test_sync_managed_workspace_audits_reports_partial_when_cloud_visible_count_is_lower(

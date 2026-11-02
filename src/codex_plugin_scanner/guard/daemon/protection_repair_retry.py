@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
+from pathlib import Path
 
 from ..runtime.containment_health import containment_health_signals
 from ..runtime.protection_health import ProtectionCheckStatus
@@ -20,6 +21,7 @@ def containment_repair_outcome(
     load_health: Callable[[], Mapping[str, object] | None],
     *,
     attempts: int = 3,
+    guard_home: Path | None = None,
 ) -> tuple[list[str], list[str], dict[str, str]]:
     """Return confirmed repairable pass/fail checks and per-check reasons.
 
@@ -33,7 +35,7 @@ def containment_repair_outcome(
             health = load_health()
             if health is None:
                 continue
-            latest = containment_health_signals(health, now=datetime.now(timezone.utc))
+            latest = containment_health_signals(health, now=datetime.now(timezone.utc), guard_home=guard_home)
         except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
             continue
         repairable_check_ids = [

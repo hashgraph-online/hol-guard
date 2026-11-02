@@ -183,6 +183,7 @@ def fetch_policy_delivery(store: GuardStore) -> dict[str, object]:
         "devices": devices,
         "deviceCount": _count(response.get("deviceCount")),
         "stateCounts": _state_counts(response.get("stateCounts")),
+        "inactiveDeviceCount": _count(response.get("inactiveDeviceCount")),
         "thisDevice": this_device,
     }
 
@@ -215,6 +216,15 @@ def _live_version_text(version: object, delivery: dict[str, object], *, numbered
     ):
         return f"{cloud_version} (bundle {version})"
     return str(version)
+
+
+def _inactive_text(value: object) -> str:
+    """Cloud leaves out devices Fleet retired; say how many so the totals add up."""
+
+    count = _count(value)
+    if not count:
+        return ""
+    return f" ({count} inactive device{'' if count == 1 else 's'} not counted)"
 
 
 def format_policy_status(payload: dict[str, object]) -> str:
@@ -252,6 +262,7 @@ def format_policy_status(payload: dict[str, object]) -> str:
         lines.append(
             f"Cloud version {delivery.get('versionNumber')}: "
             + ", ".join(f"{count} {state}" for state, count in counts.items())
+            + _inactive_text(delivery.get("inactiveDeviceCount"))
         )
         mine = delivery.get("thisDevice")
         if isinstance(mine, dict):

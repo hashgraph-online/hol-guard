@@ -1,7 +1,7 @@
 //! Owner-authenticated installed Python metadata; never a remote catalog key.
 use crate::{
-    types::hex, CatalogCheckpoint, InterpreterBuild, Qualification, ReleaseError,
-    ResolvedInterpreterBuild, TrustedCatalog,
+    types::hex, CatalogCheckpoint, InterpreterBuild, ReleaseError, ResolvedInterpreterBuild,
+    TrustedCatalog,
 };
 use ring::hmac;
 use serde::{Deserialize, Serialize};
@@ -120,8 +120,8 @@ fn validate(metadata: &InstalledInterpreterReceipt) -> Result<(), ReleaseError> 
         return Err(ReleaseError::InstallationReceiptInvalid);
     }
     metadata.build.validate()?;
-    if metadata.build.qualification != Qualification::GuardQualified || metadata.build.withdrawn {
-        return Err(ReleaseError::QualificationRequired);
+    if metadata.build.withdrawn {
+        return Err(ReleaseError::BuildWithdrawn);
     }
     Ok(())
 }

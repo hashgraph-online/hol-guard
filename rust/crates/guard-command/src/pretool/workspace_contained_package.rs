@@ -284,7 +284,15 @@ pub(super) fn local_package_work(
         // selects, and `yarn workspaces foreach` runs a command of its own in
         // each of them. The verb names neither effect, so the subcommand after
         // it decides, and neither effect is the local script work this admits.
-        let workspace_fanout = name == "yarn" && behind.first() == Some(&"workspaces");
+        //
+        // `yarn workspaces list` is the exception: it prints the workspaces the
+        // project declares and runs nothing, so it carries neither effect. A
+        // `workspaces` with no subcommand, and any subcommand not read here,
+        // stay excluded, because what they do is the question this cannot
+        // answer.
+        let workspace_fanout = name == "yarn"
+            && behind.first() == Some(&"workspaces")
+            && behind.get(1) != Some(&"list");
         // `-V` is the other short spelling of the same probe. A manager
         // that reads it as "verbose" still has no verb to run, so either
         // reading prints a version or a usage line and exits.

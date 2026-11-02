@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{json, Map, Value};
 
+use super::profile_block::{managed_profile_content, strip_managed_marker_blocks};
 use super::pyfs::ReadError;
 use super::values::{py_is_space, py_splitlines, py_strip};
 use super::{ShimContext, ShimFacts, ShimResult, GUARD_PROFILE_MARKER, PACKAGE_PROFILE_MARKER};
@@ -460,69 +461,6 @@ pub(crate) fn profile_status(context: &ShimContext) -> ShimResult<Map<String, Va
     status.insert("shell_profile_paths".into(), json!(configured));
     status.insert("shell_profile_missing_paths".into(), json!(missing));
     Ok(status)
-}
-
-/// `_strip_managed_marker_blocks`.
-pub fn strip_managed_marker_blocks(content: &str, marker: &str) -> String {
-    if content.is_empty() {
-        return String::new();
-    }
-    let marker_stripped = py_strip(marker);
-    let lines = py_splitlines(content);
-    let mut drop: BTreeSet<usize> = BTreeSet::new();
-    for (index, line) in lines.iter().enumerate() {
-        if py_strip(line) == marker_stripped && index + 1 < lines.len() {
-            drop.insert(index);
-            drop.insert(index + 1);
-        }
-    }
-    if drop.is_empty() {
-        return if content.ends_with('\n') {
-            content.to_owned()
-        } else {
-            format!("{content}\n")
-        };
-    }
-    let mut keep: Vec<&str> = Vec::new();
-    for (index, line) in lines.iter().enumerate() {
-        if drop.contains(&index) {
-            continue;
-        }
-        if py_strip(line).is_empty() {
-            let previous_blank = keep.last().is_some_and(|kept| py_strip(kept).is_empty());
-            let previous_dropped = index > 0 && drop.contains(&(index - 1));
-            let next_dropped = drop.contains(&(index + 1));
-            if (previous_dropped || next_dropped) && !previous_blank {
-                continue;
-            }
-        }
-        keep.push(line);
-    }
-    let mut cleaned = keep.join("\n");
-    if !cleaned.is_empty() && !cleaned.ends_with('\n') {
-        cleaned.push('\n');
-    }
-    cleaned
-}
-
-/// `_managed_profile_content`.
-fn managed_profile_content(existing: &str, export_line: &str, marker: &str) -> String {
-    let mut export_line = export_line.trim_end_matches('\n').to_owned();
-    let marker_line = export_line.split('\n').next().unwrap_or("");
-    if py_strip(marker_line) != py_strip(marker) {
-        export_line = format!("{marker}\n{export_line}");
-    }
-    let desired = format!("{export_line}\n");
-    if existing == desired {
-        return existing.to_owned();
-    }
-    let cleaned = strip_managed_marker_blocks(existing, marker);
-    if cleaned.is_empty() {
-        desired
-    } else {
-        let prefix = if cleaned.ends_with('\n') { "" } else { "\n" };
-        format!("{cleaned}{prefix}{desired}")
-    }
 }
 
 /// `_upsert_managed_profile_block`: whether the file changed.

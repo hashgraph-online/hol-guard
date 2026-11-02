@@ -17,11 +17,6 @@ from .commands_parser_helpers import *
 from ..adapters.mcp_servers import ManagedMcpServer, proxy_process_env, stable_mcp_server_identifier
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
-def _truncate_codex_display_text(value: str, *, limit: int) -> str:
-    if len(value) <= limit:
-        return value
-    return f"{value[: limit - 1].rstrip()}…"
-
 def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
     summary = artifact.metadata.get("request_summary")
     if isinstance(summary, str) and summary:
@@ -219,5 +214,4 @@ __all__ = [
     "_run_hermes_mcp_proxy",
     "_runtime_request_summary",
     "_server_command", "_server_env", "_server_headers",
-    "_truncate_codex_display_text",
 ]

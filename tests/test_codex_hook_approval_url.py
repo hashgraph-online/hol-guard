@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -128,3 +129,111 @@ def test_watch_posture_with_stale_prompt_mode_does_not_block_codex_hook(tmp_path
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert output["policy_action"] == "warn"
     assert store.list_approval_requests(limit=5) == []
+
+
+def test_unavailable_runtime_leaves_review_copy_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _localize_pending_approval_copy
+
+    resolve = native_runner_authority.native_runner_authority
+
+    def unavailable(kind: str, args: dict[str, object], **kwargs: Any) -> dict[str, object]:
+        if kind != "approval_copy":
+            return resolve(kind, args, **kwargs)
+        raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", unavailable)
+    review_url = "http://127.0.0.1:5474/requests/req-codex-3"
+    payload: dict[str, object] = {
+        "primary_approval_url": review_url,
+        "decision_v2_json": {"action": "ask", "harness_message": "Held for review."},
+        "supply_chain_evaluation": {"user_copy": {"harness_message": "Package held."}},
+    }
+    assert _native_approval_center_context(payload, harness="codex") is None
+    _localize_pending_approval_copy(payload, harness="codex")
+    assert payload["decision_v2_json"] == {"action": "ask", "harness_message": "Held for review."}
+    assert payload["supply_chain_evaluation"] == {
+        "user_copy": {"harness_message": "Package held.", "dashboard_url": review_url}
+    }
+
+
+@pytest.mark.parametrize("refused", [1, 2], ids=["first-batch", "later-batch"])
+def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.MonkeyPatch, refused: int) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
+
+    calls: list[dict[str, object]] = []
+    resolve = native_runner_authority.native_runner_authority
+
+    def route(kind: str, args: dict[str, object], **kwargs: Any) -> dict[str, object]:
+        if kind != "approval_copy":
+            return resolve(kind, args, **kwargs)
+        calls.append(args)
+        if len(calls) == refused:
+            raise native_runner_authority.NativeRunnerAuthorityRefusalError("native_runner_authority_invalid")
+        batch = args["decisions"]
+        assert isinstance(batch, list)
+        return {
+            "review_context": "Open HOL Guard.",
+            "decisions": [{"harness_message": "Routed."} for _ in batch],
+            "user_copy_message": "Routed copy." if args["user_copy_message"] else None,
+        }
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", route)
+    # One decision per request.
+    monkeypatch.setattr(policy, "_APPROVAL_COPY_BATCH_BYTES", 1)
+    queued = [{"decision_v2_json": {"action": "allow", "harness_message": f"Held {index}."}} for index in range(2)]
+    payload: dict[str, object] = {
+        "primary_approval_url": "http://127.0.0.1:5474/requests/req-codex-4",
+        "decision_v2_json": {"action": "allow", "harness_message": "Held."},
+        "approval_requests": queued,
+        "supply_chain_evaluation": {"user_copy": {"harness_message": "Package held."}},
+    }
+    policy._localize_pending_approval_copy(payload, harness="codex")
+    # The user copy message rides with each batch until one answers.
+    answered = 2 if refused == 1 else 1
+    assert [call["user_copy_message"] for call in calls] == ["Package held."] * answered + [None] * (3 - answered)
+    # The refused batch keeps its original copy; the others still route.
+    routed = ["Routed.", "Routed.", "Routed."]
+    routed[refused - 1] = ["Held.", "Held 0.", "Held 1."][refused - 1]
+    assert payload["decision_v2_json"] == {"action": "allow", "harness_message": routed[0]}
+    assert [item["decision_v2_json"]["harness_message"] for item in queued] == routed[1:]
+    user_copy = payload["supply_chain_evaluation"]
+    assert isinstance(user_copy, dict)
+    assert user_copy["user_copy"]["harness_message"] == "Routed copy."
+
+
+def test_an_unavailable_resident_stops_the_batch_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
+
+    calls: list[dict[str, object]] = []
+    resolve = native_runner_authority.native_runner_authority
+
+    def route(kind: str, args: dict[str, object], **kwargs: Any) -> dict[str, object]:
+        if kind != "approval_copy":
+            return resolve(kind, args, **kwargs)
+        calls.append(args)
+        if len(calls) == 2:
+            raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+        batch = args["decisions"]
+        assert isinstance(batch, list)
+        return {
+            "review_context": "Open HOL Guard.",
+            "decisions": [{"harness_message": "Routed."} for _ in batch],
+            "user_copy_message": None,
+        }
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", route)
+    monkeypatch.setattr(policy, "_APPROVAL_COPY_BATCH_BYTES", 1)
+    queued = [{"decision_v2_json": {"action": "allow", "harness_message": f"Held {index}."}} for index in range(2)]
+    payload: dict[str, object] = {
+        "primary_approval_url": "http://127.0.0.1:5474/requests/req-codex-5",
+        "decision_v2_json": {"action": "allow", "harness_message": "Held."},
+        "approval_requests": queued,
+    }
+    policy._localize_pending_approval_copy(payload, harness="codex")
+    # The third batch is never sent once the resident stops answering.
+    assert len(calls) == 2
+    assert payload["decision_v2_json"] == {"action": "allow", "harness_message": "Routed."}
+    assert [item["decision_v2_json"]["harness_message"] for item in queued] == ["Held 0.", "Held 1."]

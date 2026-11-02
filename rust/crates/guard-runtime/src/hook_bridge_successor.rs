@@ -21,14 +21,15 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use crate::hook_env_stamp::HOOK_HANDED_OFF_ENV;
 use crate::resident_process_identity::durable_digest_for;
 use crate::resident_state::{discover_same_executable_states, validate_process_start_marker};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
-/// A hook answer is a few kilobytes; nothing past this is read.
+/// A hook answer is a few kilobytes; an answer longer than this is cut off,
+/// so it fails rather than reach the harness in part.
 const MAX_OUTPUT_BYTES: u64 = 1 << 20;
 
 /// What the successor bridge did with the hook.
@@ -36,7 +37,8 @@ const MAX_OUTPUT_BYTES: u64 = 1 << 20;
 pub(crate) enum HandOff {
     /// Its stdout and exit code.
     Answered(Vec<u8>, i32),
-    /// It ran but gave no answer before the deadline, or was killed.
+    /// It ran but gave no answer before the deadline, answered with more
+    /// than [`MAX_OUTPUT_BYTES`], or was killed.
     Failed,
 }
 
@@ -58,7 +60,11 @@ pub(crate) fn successor(state_base: &Path) -> Option<PathBuf> {
 /// The copy published as `live_digest` beside `executable`, when
 /// `executable` is itself a durable copy under `state_base`, the two
 /// differ, both are owner-only copies the publisher would trust, and the
-/// live one was published after this one.
+/// live one was published after this one or is the very same file.
+///
+/// `durable-runtime-collapse` replaces an older copy with a hard link to the
+/// live one, so the two share an mtime while this bridge still sits at the
+/// older digest's path, which the resident never answers.
 pub(crate) fn successor_copy(
     executable: &Path,
     state_base: &Path,
@@ -75,13 +81,15 @@ pub(crate) fn successor_copy(
     let candidate = base
         .join(live_digest.to_ascii_lowercase())
         .join(executable.file_name()?);
-    let own_published = published_copy(executable)?;
-    (published_copy(&candidate)? > own_published).then_some(candidate)
+    let own = published_copy(executable)?;
+    let live = published_copy(&candidate)?;
+    let shared = own.dev() == live.dev() && own.ino() == live.ino();
+    (shared || live.modified().ok()? > own.modified().ok()?).then_some(candidate)
 }
 
-/// When an owner-only durable copy was published, or `None` for anything
-/// the durable-copy publisher would not trust.
-fn published_copy(file: &Path) -> Option<SystemTime> {
+/// An owner-only durable copy's metadata, or `None` for anything the
+/// durable-copy publisher would not trust.
+fn published_copy(file: &Path) -> Option<fs::Metadata> {
     let owner = nix::unistd::getuid().as_raw();
     let directory = fs::symlink_metadata(file.parent()?).ok()?;
     if !directory.is_dir()
@@ -95,7 +103,7 @@ fn published_copy(file: &Path) -> Option<SystemTime> {
     if !metadata.is_file() || metadata.uid() != owner || mode & 0o022 != 0 || mode & 0o100 == 0 {
         return None;
     }
-    metadata.modified().ok()
+    Some(metadata)
 }
 
 /// Run `successor` with `arguments`, `input` on its stdin, and wait for its
@@ -132,7 +140,8 @@ pub(crate) fn hand_off(
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         let mut output = Vec::new();
-        let read = stdout.take(MAX_OUTPUT_BYTES).read_to_end(&mut output);
+        // One byte past the bound tells a full answer from a cut-off one.
+        let read = stdout.take(MAX_OUTPUT_BYTES + 1).read_to_end(&mut output);
         let _ = sender.send(read.map(|_| output));
     });
     let status = loop {
@@ -149,8 +158,14 @@ pub(crate) fn hand_off(
     // Anything it left running still holds the pipe; stop reading at the
     // deadline rather than wait for it.
     let wait = deadline.saturating_duration_since(Instant::now());
+    // An answer this bridge only reads past its deadline is as late as no
+    // answer at all.
     match (status.code(), receiver.recv_timeout(wait)) {
-        (Some(code), Ok(Ok(output))) => Some(HandOff::Answered(output, code)),
+        (Some(code), Ok(Ok(output)))
+            if output.len() as u64 <= MAX_OUTPUT_BYTES && Instant::now() < deadline =>
+        {
+            Some(HandOff::Answered(output, code))
+        }
         _ => Some(HandOff::Failed),
     }
 }

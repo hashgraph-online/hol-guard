@@ -12,7 +12,7 @@ fn parsed(command: &str) -> crate::CanonicalCommandV1 {
 }
 
 fn reason(command: &str) -> Option<&'static str> {
-    readonly_test_reason(&parsed(command))
+    readonly_test_reason(&parsed(command), None)
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn the_node_test_reason_carries_bun_s_package_protection_permission() {
         "bun test -t adds",
     ] {
         let model = parsed(command);
-        let found = readonly_test_reason(&model);
+        let found = readonly_test_reason(&model, None);
         assert_eq!(
             found,
             Some("native_node_test_readonly_containment_required"),
@@ -38,6 +38,47 @@ fn the_node_test_reason_carries_bun_s_package_protection_permission() {
             package_permission_contained(found, Some(&model)),
             "{command}"
         );
+    }
+}
+
+#[test]
+fn bun_running_one_workspace_test_file_takes_the_node_test_boundary() {
+    // `bun src/app-routing.test.ts` is the pass `bun test` takes over that one
+    // file: `bun test` discovers and loads the same file under this profile.
+    for command in [
+        "bun src/app-routing.test.ts",
+        "bun src/shell-navigation.test.tsx",
+        "bun api.spec.mjs",
+        "bun tests/test_parser.js",
+    ] {
+        let model = parsed(command);
+        let found = readonly_test_reason(&model, None);
+        assert_eq!(
+            found,
+            Some("native_node_test_readonly_containment_required"),
+            "{command}"
+        );
+        assert!(
+            package_permission_contained(found, Some(&model)),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn bun_keeps_the_review_for_a_file_outside_the_workspace_or_a_second_word() {
+    // A path that leaves the tree, a name no project gives a test file, and a
+    // line carrying more than the one file each stay at ordinary review.
+    for command in [
+        "bun /tmp/payload.test.ts",
+        "bun ../other/app.test.ts",
+        "bun ~/scratch/app.test.ts",
+        "bun src/server.ts",
+        "bun src/app.test.ts --preload ./setup.ts",
+        "bun src/app.test.ts src/other.test.ts",
+        "bun src/app.test.sh",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
     }
 }
 
@@ -270,7 +311,7 @@ fn admission_and_the_route_read_one_tool_table() {
         ("npx vite build --output-file dist/log", None),
     ] {
         let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
-        let routed = match node_tool_route(&words, None, false) {
+        let routed = match node_tool_route(&words, None, false, None) {
             NodeToolRoute::Tool { mode, .. } => Some(mode),
             _ => None,
         };
@@ -340,6 +381,13 @@ fn a_runner_told_not_to_watch_runs_once() {
         "npx vitest related src/a.ts --run",
         "npx vitest bench --run",
         "vitest --run src",
+        // CAC hands a first operand it has no command for to the default
+        // command, whose operands are test filters, so these are the same
+        // one pass `vitest run` names and the spelling `jest` and `mocha`
+        // were already contained in.
+        "npx vitest src/a.test.ts --run",
+        "npx vitest src/a.test.ts src/b.test.ts --no-watch",
+        "vitest math --watch=false",
         "node node_modules/vitest/vitest.mjs --run",
     ] {
         assert_eq!(
@@ -356,7 +404,8 @@ fn a_runner_left_watching_keeps_its_review() {
     // one pass only in a spelling the runner's own parser does not read is
     // still a watching run: mri spends no word on a declared boolean, the last
     // watch option on the line wins, nothing after `--` is an option at all,
-    // and the first operand picks the command however many options precede it.
+    // and a word naming a command the reading does not model keeps its review
+    // wherever it stands.
     for command in [
         "npx jest --watch",
         "npx jest --watchAll=true",
@@ -368,78 +417,24 @@ fn a_runner_left_watching_keeps_its_review() {
         "npx vitest --watch false",
         "npx vitest --watch=false --watch",
         "npx vitest --no-watch -w",
+        // mri reads a `--no-` prefix as the option set to false, so `--no-run`
+        // undoes the `--run` before it and leaves Vitest watching.
+        "npx vitest --run --no-run",
+        "npx vitest --no-watch --no-run",
         "npx vitest -- --run",
         "npx vitest --run init",
         "npx vitest --run watch",
         "npx vitest related src/a.ts",
         "npx vitest init --run",
+        // A filter is not the pass: without a watch-off spelling Vitest keeps
+        // watching the files the filter selected.
+        "npx vitest src/a.test.ts",
+        "npx vitest src/a.test.ts --run --watch",
         "node node_modules/vitest/vitest.mjs --watch",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }
 }
 
-#[test]
-fn a_package_script_run_keeps_the_words_it_passes_on() {
-    // `npm run lint -- --max-warnings=0` runs the project's own lint script
-    // with one more checking option. The manager hands the words after `--`
-    // to the script, so they belong to the run the manifest spells and the
-    // run is still the read-only tool the script names.
-    for command in [
-        "npm run lint -- --max-warnings=0",
-        "npm run lint -- --max-warnings 0",
-        "npm run typecheck -- --pretty",
-        "pnpm lint -- --max-warnings=0",
-        "yarn typecheck -- --pretty",
-        "bun run lint -- --max-warnings=0",
-    ] {
-        assert_eq!(
-            reason(command),
-            Some("native_node_tool_readonly_containment_required"),
-            "{command}"
-        );
-    }
-    // Words that write or chain are refused wherever they sit, and a tail is
-    // only a tail when `--` introduces it.
-    for command in [
-        "npm run lint -- --fix",
-        "npm run lint -- --output-file out.txt",
-        "npm run lint -- --max-warnings=0 && rm -rf dist",
-        "npm run lint extra",
-    ] {
-        assert_eq!(reason(command), None, "{command}");
-    }
-}
-
-#[test]
-fn a_passed_on_word_cannot_turn_a_reporting_tool_into_a_writing_one() {
-    // The tail is the agent's own text, and the tool reads it as part of its
-    // own command line. TypeScript takes an optional `true`/`false` after a
-    // boolean option, so `tsc --noEmit false` compiles and writes while the
-    // script's `--noEmit` is still there; `--init`, `--outDir` and the trace
-    // options write without touching `--noEmit` at all. Each is refused at
-    // the admission and left to ordinary review rather than reaching the sink
-    // as a read-only run.
-    for command in [
-        "npm run typecheck -- false",
-        "npm run typecheck -- --noEmit false",
-        "npm run typecheck -- --init",
-        "npm run typecheck -- --outDir dist",
-        "npm run typecheck -- --outFile bundle.js",
-        "npm run typecheck -- --build",
-        "npm run typecheck -- --generateTrace trace",
-        "npm run typecheck -- --generateCpuProfile profile.cpuprofile",
-        "npm run typecheck -- --declaration",
-        "pnpm typecheck -- false",
-        "yarn typecheck -- --init",
-        "bun run typecheck -- --noEmit false",
-        // ESLint's formatter is a module the run loads, and a count is a
-        // count: neither a path nor a word of another shape is a value this
-        // option takes.
-        "npm run lint -- --format ./reporter.js",
-        "npm run lint -- --max-warnings false",
-        "npm run lint -- src",
-    ] {
-        assert_eq!(reason(command), None, "{command}");
-    }
-}
+#[path = "restricted_test_commands_manager_tests.rs"]
+mod manager;

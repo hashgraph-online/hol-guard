@@ -72,7 +72,6 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/discovery.py",
         "src/codex_plugin_scanner/guard/daemon/manager.py",
         "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py",
-        "src/codex_plugin_scanner/guard/daemon/manager_process_query.py",
         # Interpreter bootstrap identity only; no policy or command decisions.
         "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
         # Resident sensitive-request transport; the observed git path is a fact, never a verdict.
@@ -277,7 +276,6 @@ _PERSISTENCE_PATH_PREFIXES: Final = (
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
-    "src/codex_plugin_scanner/guard/guard_home_state.py",
     "src/codex_plugin_scanner/guard/store_base.py",
     "src/codex_plugin_scanner/guard/store_mcp_catalog.py",
     "src/codex_plugin_scanner/guard/store_storage_gate.py",
@@ -308,7 +306,6 @@ _SERVICE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/lifecycle_journal.py",
         "src/codex_plugin_scanner/guard/daemon/manager.py",
         "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py",
-        "src/codex_plugin_scanner/guard/daemon/manager_process_query.py",
         "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
         "src/codex_plugin_scanner/guard/daemon/start_classification.py",
         "src/codex_plugin_scanner/guard/frozen_daemon_runtime.py",

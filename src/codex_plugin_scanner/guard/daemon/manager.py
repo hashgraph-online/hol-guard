@@ -31,7 +31,7 @@ from typing import Any, BinaryIO, Literal, TypedDict, cast
 
 from ...version import __version__
 from .. import live_process_identity as _live_process_identity
-from .. import windows_processes
+from .. import posix_processes, windows_processes
 from ..fork_safety import forget_in_child
 from ..frozen_runtime_commands import (
     decode_frozen_daemon_serve_payload,
@@ -41,6 +41,7 @@ from ..live_process_identity import process_owner_marker
 from ..mdm.file_lock import release_file_lock
 from ..native_daemon_lifecycle import (
     NativeDaemonLifecycleError,
+    await_native_runtime,
     bind_daemon_lifecycle_deadline,
     native_daemon_lifecycle,
     reset_daemon_lifecycle_deadline,
@@ -118,16 +119,11 @@ _START_CLASSIFICATION_RESERVE_FRACTION = 0.25
 # One readiness poll may ask the resident who published daemon state. Cap that
 # ask so a missed answer is retried instead of spending the whole start budget.
 _SPAWNED_URL_POLL_LIFECYCLE_SECONDS = 5.0
-_GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES = 1024 * 1024
-_GUARD_DAEMON_PROCESS_QUERY_MONITOR_INTERVAL_SECONDS = 0.01
-_GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS = 0.25
-_RUNTIME_FINGERPRINT_CACHE_MAX_BYTES = 4096
 _RUNTIME_FINGERPRINT_HEX_LENGTH = 64
 _WINDOWS_CREATE_NEW_PROCESS_GROUP = 0x00000200
 _WINDOWS_DETACHED_PROCESS = 0x00000008
 _WINDOWS_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-_GUARD_DAEMON_POSIX_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _GUARD_DAEMON_BOOTSTRAP = (
     "import json,runpy,sys; "
     # Signal liveness before the slow Guard imports so a cold start is not
@@ -2617,18 +2613,13 @@ def _guard_daemon_process_inventory_for_guard_home(
         if entries is None:
             return None
     else:
-        ps_path = _trusted_posix_ps_path()
-        if ps_path is None:
-            if not sys.platform.startswith("linux"):
-                return None
-            proc_entries = _linux_proc_process_entries()
-            if proc_entries is None:
-                return None
-            entries = proc_entries
+        inventory = posix_processes.posix_process_inventory()
+        if inventory is None:
+            return None
+        if isinstance(inventory, str):
+            output = inventory
         else:
-            output = _bounded_process_query_stdout([ps_path, "-axo", "pid=,command="])
-            if output is None:
-                return None
+            entries = inventory
 
     query: dict[str, object] = {
         "guard_home": str(guard_home),
@@ -2663,54 +2654,53 @@ def _current_guard_daemon_source_root() -> str:
     return str(Path(__file__).resolve().parents[3])
 
 
-def _runtime_identity_paths(source_root: Path) -> list[Path]:
-    package_root = source_root / "codex_plugin_scanner"
-    static_root = package_root / "guard" / "daemon" / "static"
-    paths = [*package_root.rglob("*.py")]
-    native_manifest = package_root / "_native" / "runtime-manifest.json"
-    if native_manifest.is_file():
-        paths.append(native_manifest)
-    if static_root.is_dir():
-        paths.extend(path for path in static_root.rglob("*") if path.is_file())
-    return paths
+def _measure_runtime_fingerprint(source_root: Path, cache_dir: Path | None) -> tuple[str, str, bool]:
+    """The native runtime's (tree signature, fingerprint, reused) for `source_root`.
+
+    `runtime_fingerprint.rs` walks the tree and hashes it. Given `cache_dir`
+    it also reads and rewrites the private cache file there, so a tree whose
+    signature still matches comes back without reading a file.
+    """
+
+    from ..mdm.runtime_request import runtime_answer
+
+    request: dict[str, object] = {
+        "schema": "runtime-fingerprint.v1",
+        "source_root": str(source_root),
+        "version": __version__,
+    }
+    if cache_dir is not None:
+        request["cache_dir"] = str(cache_dir)
+
+    def ask() -> dict[str, object] | None:
+        return runtime_answer(
+            "native-runtime-fingerprint-v1",
+            "runtime-fingerprint",
+            request,
+            output_limit=4096,
+            timeout_seconds=60.0,
+        )
+
+    answer = ask()
+    # A freshly installed runtime can miss its first capability probe; wait
+    # that out once rather than failing the daemon start.
+    if answer is None and await_native_runtime(60.0) > 0.0:
+        answer = ask()
+    tree_sig = None if answer is None else answer.get("tree_sig")
+    fingerprint = None if answer is None else answer.get("fingerprint")
+    reused = None if answer is None else answer.get("reused")
+    if (
+        not isinstance(tree_sig, str)
+        or not isinstance(fingerprint, str)
+        or not _is_sha256_hex(fingerprint)
+        or type(reused) is not bool
+    ):
+        raise RuntimeError("Guard daemon runtime identity requires the native runtime.")
+    return tree_sig, fingerprint, reused
 
 
-def _runtime_tree_signature(source_root: Path, paths: list[Path]) -> str:
-    digest = hashlib.sha256()
-    digest.update(__version__.encode("utf-8"))
-    for path in sorted(paths):
-        try:
-            stat_result = path.stat()
-        except OSError:
-            continue
-        digest.update(str(path.relative_to(source_root)).encode("utf-8"))
-        digest.update(str(stat_result.st_size).encode("utf-8"))
-        digest.update(str(stat_result.st_mtime_ns).encode("utf-8"))
-    return digest.hexdigest()
-
-
-def _hash_runtime_contents(source_root: Path, paths: list[Path]) -> str:
-    digest = hashlib.sha256()
-    digest.update(__version__.encode("utf-8"))
-    for path in sorted(paths):
-        try:
-            stat_result = path.stat()
-        except OSError:
-            continue
-        digest.update(str(path.relative_to(source_root)).encode("utf-8"))
-        digest.update(str(stat_result.st_size).encode("utf-8"))
-        try:
-            with path.open("rb") as handle:
-                while chunk := handle.read(65536):
-                    digest.update(chunk)
-        except OSError:
-            continue
-    return digest.hexdigest()
-
-
-def _runtime_fingerprint_cache_path(source_root: Path) -> Path:
-    digest = hashlib.sha256(os.fsencode(str(source_root))).hexdigest()
-    return Path.home() / ".hol-guard" / "runtime-fingerprint-cache" / f"{digest}.json"
+def _runtime_fingerprint_cache_dir() -> Path:
+    return Path.home() / ".hol-guard" / "runtime-fingerprint-cache"
 
 
 def _is_sha256_hex(value: object) -> bool:
@@ -2721,63 +2711,12 @@ def _is_sha256_hex(value: object) -> bool:
     )
 
 
-def _load_runtime_fingerprint_cache(source_root: Path, tree_sig: str) -> str | None:
-    raw_payload = read_private_regular_text(
-        _runtime_fingerprint_cache_path(source_root),
-        max_bytes=_RUNTIME_FINGERPRINT_CACHE_MAX_BYTES,
-        require_private_parent=True,
-    )
-    if raw_payload is None:
-        return None
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("source_root") != str(source_root):
-        return None
-    cached_tree_sig = payload.get("tree_sig")
-    cached_fingerprint = payload.get("content_fingerprint")
-    if cached_tree_sig != tree_sig or not isinstance(cached_fingerprint, str):
-        return None
-    if not _is_sha256_hex(cached_fingerprint):
-        return None
-    return cached_fingerprint
-
-
-def _store_runtime_fingerprint_cache(source_root: Path, tree_sig: str, fingerprint: str) -> None:
-    cache_path = _runtime_fingerprint_cache_path(source_root)
-    try:
-        _ensure_private_directory(cache_path.parent)
-        _write_private_atomic_text(
-            cache_path,
-            json.dumps(
-                {
-                    "content_fingerprint": fingerprint,
-                    "source_root": str(source_root),
-                    "tree_sig": tree_sig,
-                },
-                sort_keys=True,
-            ),
-        )
-    except (OSError, RuntimeError, ValueError):
-        return
-
-
 def _current_guard_daemon_runtime_fingerprint() -> str:
     global _runtime_fingerprint_cache
     if _runtime_fingerprint_cache is not None:
         return _runtime_fingerprint_cache[1]
     source_root = Path(_current_guard_daemon_source_root())
-    paths = _runtime_identity_paths(source_root)
-    tree_sig = _runtime_tree_signature(source_root, paths)
-    cached = _load_runtime_fingerprint_cache(source_root, tree_sig)
-    if cached is not None:
-        _runtime_fingerprint_cache = (tree_sig, cached)
-        return cached
-    fingerprint = _hash_runtime_contents(source_root, paths)
-    _store_runtime_fingerprint_cache(source_root, tree_sig, fingerprint)
+    tree_sig, fingerprint, _reused = _measure_runtime_fingerprint(source_root, _runtime_fingerprint_cache_dir())
     _runtime_fingerprint_cache = (tree_sig, fingerprint)
     return fingerprint
 
@@ -2819,21 +2758,7 @@ def _guard_daemon_pid_is_running(pid: int) -> bool:
 def _guard_daemon_parent_pid(pid: int) -> int | None:
     """Return the parent PID for a live process, or ``None`` when it cannot be proven."""
 
-    if pid <= 0:
-        return None
-    if os.name == "nt":
-        return None
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    output = _bounded_process_query_stdout([ps_path, "-p", str(pid), "-o", "ppid="])
-    if output is None:
-        return None
-    try:
-        parent_pid = int(output.strip())
-    except ValueError:
-        return None
-    return parent_pid if parent_pid > 0 else None
+    return posix_processes.posix_parent_pid(pid)
 
 
 def _guard_daemon_pid_is_spawned_launch(pid: int, expected_pid: int) -> bool:
@@ -2936,16 +2861,7 @@ def _guard_daemon_command_for_pid(pid: int) -> str | None:
             pid,
             max_command_line_bytes=_GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES,
         )
-    ps_path = _trusted_posix_ps_path()
-    if ps_path is None:
-        return None
-    output = _bounded_process_query_stdout(
-        [ps_path, "-p", str(pid), "-o", "command="],
-    )
-    if output is None:
-        return None
-    stdout = output.strip()
-    return stdout or None
+    return posix_processes.posix_process_command(pid)
 
 
 def _guard_daemon_pid_identity_for_retirement(pid: int) -> tuple[str, str] | None:
@@ -3532,13 +3448,4 @@ from .manager_ephemeral_reap import (  # noqa: E402, F401
     _running_ephemeral_guard_daemon_processes,
     _schedule_stale_ephemeral_guard_daemon_reap,
     _state_path_age_seconds,
-)
-from .manager_process_query import (  # noqa: E402, F401
-    _bounded_process_query_stdout,
-    _capture_bounded_process_query_stdout,
-    _linux_proc_process_entries,
-    _process_query_environment,
-    _spawn_bounded_process_query,
-    _terminate_bounded_process_query,
-    _trusted_posix_ps_path,
 )

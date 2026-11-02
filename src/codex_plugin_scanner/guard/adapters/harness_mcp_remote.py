@@ -5,13 +5,18 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
+from typing import cast
 
 from ..models import GuardArtifact, HarnessDetection
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from ..runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .contracts import display_name_for
-from .remote_mcp_origin import remote_mcp_origin
 
 MAX_DISCOVERED_MCP_SERVERS = 100
+# URLs per native request, far below its count and byte limits, so a config
+# that declares thousands of servers is read in several requests, not refused.
+_ORIGIN_BATCH = 256
 _NAMESPACE_UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
 
 
@@ -28,22 +33,45 @@ class DiscoveredRemoteMcpServer:
     source_label: str
 
 
-def _remote_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredRemoteMcpServer, ...]:
+def remote_mcp_origins(urls: Sequence[str], *, guard_home: Path | None = None) -> list[str | None]:
+    """Each URL's recorded ``scheme://host/path`` origin from the native runtime, or ``None``.
+
+    An unusable answer raises ``NativeRunnerAuthorityError``: a failed read that lists none and forgets nothing.
+    """
+
+    origins: list[object] = []
+    for start in range(0, len(urls), _ORIGIN_BATCH):
+        batch = list(urls[start : start + _ORIGIN_BATCH])
+        answer = native_runner_authority("remote_mcp_origins", {"urls": batch}, guard_home=guard_home).get("origins")
+        if not isinstance(answer, list) or len(cast(list[object], answer)) != len(batch):
+            raise NativeRunnerAuthorityError("remote MCP origins are malformed")
+        origins.extend(cast(list[object], answer))
+    if not all(value is None or isinstance(value, str) for value in origins):
+        raise NativeRunnerAuthorityError("remote MCP origins are malformed")
+    return cast(list[str | None], origins)
+
+
+def _remote_servers(
+    loaded: Sequence[HarnessDetection], guard_home: Path | None = None
+) -> tuple[DiscoveredRemoteMcpServer, ...]:
+    candidates = [
+        artifact
+        for detection in loaded
+        for artifact in detection.artifacts
+        if artifact.artifact_type == "mcp_server" and not artifact.command and artifact.url
+    ]
+    origins = remote_mcp_origins([artifact.url or "" for artifact in candidates], guard_home=guard_home)
     found: dict[str, DiscoveredRemoteMcpServer] = {}
-    for detection in loaded:
-        for artifact in detection.artifacts:
-            server = _remote_server(artifact)
-            if server is None or server.tool.identity.identity_hash in found:
-                continue
-            found[server.tool.identity.identity_hash] = server
+    for artifact, origin in zip(candidates, origins, strict=True):
+        server = _remote_server(artifact, origin)
+        if server is None or server.tool.identity.identity_hash in found:
+            continue
+        found[server.tool.identity.identity_hash] = server
     ranked = sorted(found.values(), key=lambda server: (server.source_label.lower(), server.tool.server_name.lower()))
     return tuple(ranked[:MAX_DISCOVERED_MCP_SERVERS])
 
 
-def _remote_server(artifact: GuardArtifact) -> DiscoveredRemoteMcpServer | None:
-    if artifact.artifact_type != "mcp_server" or artifact.command or not artifact.url:
-        return None
-    origin = remote_mcp_origin(artifact.url)
+def _remote_server(artifact: GuardArtifact, origin: str | None) -> DiscoveredRemoteMcpServer | None:
     # Harnesses put the server name in the tool namespace with every
     # character outside [A-Za-z0-9_-] replaced by `_`.
     name = _NAMESPACE_UNSAFE.sub("_", artifact.name.strip())
@@ -76,6 +104,6 @@ def remote_scan_harnesses(
 __all__ = [
     "MAX_DISCOVERED_MCP_SERVERS",
     "DiscoveredRemoteMcpServer",
-    "remote_mcp_origin",
+    "remote_mcp_origins",
     "remote_scan_harnesses",
 ]

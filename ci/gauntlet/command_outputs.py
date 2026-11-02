@@ -18,7 +18,13 @@ from .feature_directory_fixtures import (
     SESSION_MARKER,
     SESSION_PATH,
 )
-from .fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES
+from .fixtures import (
+    BUN_TEST_FILE_CASE,
+    BUN_TEST_SCRIPT_MARKER,
+    SECURITY_NOTES,
+    SOURCE,
+    SOURCE_FILES,
+)
 from .realism_fixtures import VITE_BUILD_MARKER
 from .runtime_cases import OUTPUT as RUNTIME_OUTPUT
 from .runtime_cases import QUIET_CASES as RUNTIME_QUIET_CASES
@@ -264,6 +270,14 @@ def _bun_entry_build_match(calls: list[dict[str, Any]]) -> bool:
     return text is not None and VITE_BUILD_MARKER in text
 
 
+def _bun_test_file_match(calls: list[dict[str, Any]]) -> bool:
+    """Bun evaluated the named file, rather than exiting cleanly without reading it."""
+    if len(calls) != 1:
+        return False
+    text = _text(calls[0])
+    return text is not None and BUN_TEST_SCRIPT_MARKER in text
+
+
 def _workspace_runner_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """The workspace's own runner actually launched, printing the line only it prints."""
     if len(calls) != 1:
@@ -290,6 +304,8 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         return _workspace_runner_match(scenario, calls)
     if scenario.id in BUN_ENTRY_CASES:
         return _bun_entry_build_match(calls)
+    if scenario.id == BUN_TEST_FILE_CASE:
+        return _bun_test_file_match(calls)
     if scenario.id not in OUTPUT_SCENARIOS:
         return True
     if len(calls) != len(scenario.commands):

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import urllib.error
-import urllib.parse
 
+from .native_runner_authority import NativeRunnerAuthorityError
+from .runtime.runner_native_sync import sync_url as derived_sync_url
 from .store import GuardStore
 
 _VALID_SCOPES = frozenset({"artifact", "publisher", "harness", "workspace"})
@@ -20,21 +21,12 @@ class CloudExceptionRequestError(RuntimeError):
 
 
 def normalized_cloud_exception_requests_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(sync_url)
-    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, "/registry/api/v1/guard/exceptions/requests", parsed.query, "")
-        )
-    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, "/api/guard/exceptions/requests", parsed.query, "")
-        )
-    if parsed.path.rstrip("/") == "/guard/receipts/sync":
-        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "/guard/exceptions/requests", parsed.query, ""))
-    base = sync_url.rstrip("/")
-    if base.endswith("/receipts/sync"):
-        return base[: -len("/receipts/sync")] + "/exceptions/requests"
-    return urllib.parse.urljoin(base + "/", "exceptions/requests")
+    try:
+        return derived_sync_url("exception_requests", sync_url)
+    except NativeRunnerAuthorityError as error:
+        raise CloudExceptionRequestError(
+            "Guard could not reach its local runtime to route the exception request.", status=502
+        ) from error
 
 
 def _as_trimmed_string(value: object | None) -> str | None:

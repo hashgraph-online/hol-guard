@@ -674,7 +674,6 @@ def test_prepared_native_install_preserves_foreign_edit_before_any_publication(t
         ("files", [None]),
         ("managed_installs", ["invalid"]),
         ("deadline_monotonic", True),
-        ("deadline_monotonic", float("inf")),
         ("forward_expires_monotonic", "later"),
         ("candidate", {}),
         ("recovery_causes", "invalid"),
@@ -689,6 +688,19 @@ def test_authenticated_record_shape_failure_preserves_state_and_bindings(transit
     record = runtime.path.read_bytes()
     with pytest.raises(TransitionError):
         runtime.restore_files(plan.operation_id, first_cause="candidate failed")
+    assert runtime.path.read_bytes() == record
+    assert bindings.read_bytes() == b"previous hooks"
+    assert pointer.read_bytes() == b"previous pointer"
+
+
+def test_a_record_that_is_not_json_is_never_authenticated(transition):
+    runtime, plan, bindings, pointer = transition
+    begin(runtime, plan)
+    payload = runtime._read(plan.operation_id)
+    record = runtime.path.read_bytes()
+    payload["deadline_monotonic"] = float("inf")
+    with pytest.raises(ValueError):
+        runtime._write(payload)
     assert runtime.path.read_bytes() == record
     assert bindings.read_bytes() == b"previous hooks"
     assert pointer.read_bytes() == b"previous pointer"
@@ -1804,6 +1816,28 @@ def test_transition_begin_dependency_wait_consumes_original_coordinator_deadline
     monkeypatch.setattr(runtime, "_compare", delayed_compare)
     with pytest.raises(TransitionError, match="deadline_exceeded"):
         runtime.begin(plan, authority_home=plan.guard_home, grant=None, deadline_monotonic=deadline)
+    assert not runtime.path.exists()
+    assert bindings.read_bytes() == b"previous hooks" and pointer.read_bytes() == b"previous pointer"
+
+
+@pytest.mark.parametrize(
+    "expired,reason", [(True, "deadline_exceeded"), (False, "local_authority_integrity_runtime_unavailable")]
+)
+def test_transition_begin_reports_a_signer_failure_as_a_stable_reason(transition, monkeypatch, expired, reason):
+    from codex_plugin_scanner.guard import runtime_transition as module
+
+    runtime, plan, bindings, pointer = transition
+    deadline = time.monotonic() + 60
+
+    def unavailable(*_args, **_kwargs):
+        if expired:
+            monkeypatch.setattr(module.time, "monotonic", lambda: deadline + 1)
+        raise RuntimeError("local authority signing requires the native runtime")
+
+    monkeypatch.setattr(module, "sign_local_authority_payload", unavailable)
+    with pytest.raises(TransitionError) as caught:
+        runtime.begin(plan, authority_home=plan.guard_home, grant=None, deadline_monotonic=deadline)
+    assert caught.value.reason == reason
     assert not runtime.path.exists()
     assert bindings.read_bytes() == b"previous hooks" and pointer.read_bytes() == b"previous pointer"
 

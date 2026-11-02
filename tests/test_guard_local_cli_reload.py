@@ -308,6 +308,11 @@ def test_a_cancel_stops_further_help_runs(tool, monkeypatch):
         return "Usage: fixturetool <command>\n\nCommands:\n  deploy  Ship it\n  status  Show state\n"
 
     monkeypatch.setattr(local_cli_api, "run_cli_help", help_once)
+    # The fixture script never looks for --help, so a resident that reads
+    # sources first would not run it at all; this covers the nested probes.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_local_cli_help_parse.resident_reads_sources_first", lambda: False
+    )
     home = Path(os.environ["HOME"])
     local_cli_api._discover_from_command(tool.name, tool, home, home, home / "guard", cancel=cancel)
     assert len(started) == 1

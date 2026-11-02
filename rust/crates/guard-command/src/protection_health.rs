@@ -38,7 +38,7 @@ pub const PROTECTION_CHECK_IDS: [&str; 9] = [
 ];
 
 /// `_STABLE_ID` (protection_health.py:25).
-static STABLE_ID: LazyLock<Regex> =
+pub(crate) static STABLE_ID: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$").unwrap());
 
 /// `_MAX_HARNESSES` (protection_health.py:26).
@@ -57,6 +57,10 @@ const UNSUPPORTED_PLATFORM_CHECK_IDS: [&str; 4] = [
 pub struct ProtectionHealthError(String);
 
 impl ProtectionHealthError {
+    pub(crate) fn new(message: &str) -> Self {
+        Self(message.to_owned())
+    }
+
     pub fn message(&self) -> &str {
         &self.0
     }
@@ -151,6 +155,16 @@ impl ProtectionSignal {
             status,
             reason_code: reason_code.to_owned(),
         })
+    }
+
+    /// A signal whose reason code is one of this crate's own constants, and
+    /// so already a stable identifier.
+    pub(crate) fn stable(status: ProtectionCheckStatus, reason_code: &'static str) -> Self {
+        debug_assert!(STABLE_ID.is_match(reason_code));
+        Self {
+            status,
+            reason_code: reason_code.to_owned(),
+        }
     }
 
     pub fn status(&self) -> ProtectionCheckStatus {

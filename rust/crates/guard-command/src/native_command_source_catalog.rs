@@ -33,6 +33,10 @@ pub struct CompiledSourceCatalog {
     pub implementation_digest: String,
     pub catalog_projection_kind: String,
     pub base_program_digest: Option<String>,
+    /// The cloud action binding artifact, present only when the build input
+    /// carried binding contributions. Legacy output is unchanged without them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cloud_bindings: Option<Value>,
 }
 
 pub(super) fn digest(domain: &[u8], value: &Value) -> Result<String, &'static str> {
@@ -378,6 +382,7 @@ pub(super) fn lower_catalog_inner(
         implementation_digest,
         catalog_projection_kind: "complete".to_owned(),
         base_program_digest: None,
+        cloud_bindings: None,
     })
 }
 

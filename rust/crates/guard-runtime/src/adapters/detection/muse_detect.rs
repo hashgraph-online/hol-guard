@@ -362,6 +362,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
             },
             &skill_root,
             &identity_root,
+            "skills",
         )?;
     }
     inventory.finish()

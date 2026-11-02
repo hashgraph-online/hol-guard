@@ -54,6 +54,7 @@ use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreR
 use crate::guard_store_devices as devices;
 use crate::guard_store_evidence as evidence;
 use crate::guard_store_inventory as inventory;
+use crate::guard_store_legacy_probe as legacy_probe;
 use crate::guard_store_local_cli as local_cli;
 use crate::guard_store_local_cli_catalog as local_cli_catalog;
 use crate::guard_store_local_cli_grants as local_cli_grants;
@@ -471,6 +472,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
         | "oldest_approval_request_created_at" => Kind::Snapshot,
+        // Admission evidence only: a deferred read that never finalizes the
+        // outbox, so it cannot wait on the write lock.
+        "read_legacy_codex_probe_receipt" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
@@ -777,6 +781,9 @@ fn dispatch(
         }
         "latest_receipt_rowid" => receipt_reads::latest_rowid(connection, args),
         "get_receipt" => receipt_reads::get_receipt(connection, args),
+        "read_legacy_codex_probe_receipt" => {
+            legacy_probe::read_legacy_codex_probe_receipt(connection, args)
+        }
         "get_approval_request" => {
             approval_reads::get_approval_request(connection, guard_home, args, owner)
         }

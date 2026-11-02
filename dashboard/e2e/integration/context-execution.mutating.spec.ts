@@ -5,6 +5,7 @@ import { contextStatus } from "./context-status";
 import { stopContextAssistance } from "./context-stop";
 import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from "./fixtures";
 import { decide, requestRecord } from "./inbox-helpers";
+import { chooseMenuOption, menuValues } from "../select-menu";
 
 test.use({ actionTimeout: 15_000 });
 
@@ -41,7 +42,7 @@ test("execution opt-in and browser approvals reach the installed native executor
       const toggle = page.getByRole("switch", { name: label, exact: true });
       if (await toggle.getAttribute("aria-checked") === "true") await toggle.click();
     }
-    await page.getByText("Sources, limits and runtime details", { exact: true }).click();
+    await page.getByText("Sources, limits, storage and runtime details", { exact: true }).click();
     const execution = page.getByRole("switch", { name: "Associate native context with execution", exact: true });
     await expect(execution).toHaveAttribute("aria-checked", "false");
     await execution.focus();
@@ -58,11 +59,10 @@ test("execution opt-in and browser approvals reach the installed native executor
     const panel = page.getByRole("region", { name: "Native execution context observations", exact: true });
     await expect(panel.getByText(/Preparation is ready for Pi and Oh My Pi/)).toBeVisible();
     await expect(panel.getByText("No recent execution-context observations.", { exact: true })).toBeVisible();
-    await page.getByRole("tab", { name: "Sources & AI apps", exact: true }).click();
+    await page.getByRole("tab", { name: "Projects & AI apps", exact: true }).click();
     const consumer = page.getByRole("combobox", { name: "Context consumer", exact: true });
-    expect(await consumer.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)))
-      .toEqual(["dashboard", "pi", "omp"]);
-    await consumer.selectOption("omp");
+    expect(await menuValues(consumer)).toEqual(["dashboard", "pi", "omp"]);
+    await chooseMenuOption(consumer, "omp");
     await page.getByLabel("Workspace folder", { exact: true }).fill(state.workspace);
     await page.getByRole("button", { name: "Grant review source access", exact: true }).click();
     const grantProof = page.getByRole("dialog");

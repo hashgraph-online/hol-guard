@@ -8,7 +8,10 @@
 #[path = "contained_package_test_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{jest_contained_call, mocha_contained_call, program_name};
+use crate::contained_argv::{
+    bun_test_runs_once, bun_test_script_once, jest_contained_call, mocha_contained_call,
+    program_name, tsx_test_invocation, vitest_runs_once,
+};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, SCRIPT_LEXER};
 use serde_json::{Map, Value};
@@ -57,8 +60,31 @@ pub(crate) fn is_package_test(command: &[String]) -> bool {
     if !matches!(manager, "npm" | "pnpm" | "bun" | "yarn") {
         return false;
     }
-    (command.len() >= 2 && manager != "bun" && test_task(&command[1]))
-        || (command.len() >= 3 && command[1] == "run" && test_task(&command[2]))
+    let arguments = reporting_options_peeled(manager, &command[1..]);
+    match arguments {
+        [task, ..]
+            if manager != "bun"
+                && (test_task(task)
+                    || crate::contained_argv::aliased_test_script_name(manager, task)
+                        .is_some()) =>
+        {
+            true
+        }
+        [run, tail @ ..] if crate::contained_argv::names_script_run_verb(manager, run) => {
+            matches!(reporting_options_peeled(manager, tail), [task, ..] if test_task(task))
+        }
+        _ => false,
+    }
+}
+
+/// The manager's words with its reporting options peeled off, before the
+/// `run` verb or after it.
+///
+/// `npm --silent test` and `npm run --silent test` are the run `npm test`
+/// names; the admission reads them the same way, so the sink has to resolve
+/// the same script rather than refusing the quiet spelling.
+fn reporting_options_peeled<'a>(manager: &str, arguments: &'a [String]) -> &'a [String] {
+    crate::contained_argv::manager_reporting_options_peeled(manager, arguments)
 }
 
 /// The words the declared `test` script runs, read from the manager's own
@@ -69,12 +95,26 @@ pub(crate) fn is_package_test(command: &[String]) -> bool {
 /// outside the supported set keep the alias unresolved, because the narrow
 /// receipt the sink holds is for the run this reading spells and nothing else.
 pub(crate) fn script_tokens(
+    manager: &str,
     arguments: &[String],
     scripts: Option<&Map<String, Value>>,
 ) -> Result<Vec<String>, RestrictedPytestError> {
-    let (task, trailing) = match arguments {
-        [run, task, rest @ ..] if run == "run" && test_task(task) => (task.as_str(), rest),
-        [task, rest @ ..] if test_task(task) => (task.as_str(), rest),
+    let arguments = reporting_options_peeled(manager, arguments);
+    let run_tail = match arguments {
+        [run, tail @ ..] if crate::contained_argv::names_script_run_verb(manager, run) => {
+            Some(reporting_options_peeled(manager, tail))
+        }
+        _ => None,
+    };
+    let (task, trailing) = match (run_tail, arguments) {
+        (Some([task, rest @ ..]), _) if test_task(task) => (task.as_str(), rest),
+        (Some(_), _) => return Err(invalid("Only local package test scripts are supported.")),
+        (None, [task, rest @ ..]) if test_task(task) => (task.as_str(), rest),
+        (None, [task, rest @ ..])
+            if crate::contained_argv::aliased_test_script_name(manager, task).is_some() =>
+        {
+            ("test", rest)
+        }
         _ => return Err(invalid("Only local package test scripts are supported.")),
     };
     if trailing.first().is_some_and(|word| word != "--") {
@@ -106,13 +146,24 @@ pub(crate) fn script_tokens(
     {
         return Err(invalid("Test shell effects need separate evaluation."));
     }
+    // Each runner is read by its own grammar over the words the manifest
+    // declares and the words the caller appended, so a script body is admitted
+    // on the same terms as the direct call that spells it. Vitest included:
+    // `--run` turns the watch off exactly as the `run` verb does, and a
+    // manifest that spells it that way names the same finishing run. Bun too:
+    // `bun test` is the runner a Bun project's own `test` entry names, and
+    // `bun <file>.test.ts` loads one of the files that run already discovers.
+    // `tsx` names the test files it runs the same way at either spelling.
     let passthrough = trailing.get(1..).unwrap_or_default();
     let runner = tokens[0].as_str();
     let rest = &tokens[1..];
     let flag = rest.first();
     let node = matches!(program_name(runner), "node" | "nodejs")
         && flag.is_some_and(|flag| flag == "--test");
-    let vitest = program_name(runner) == "vitest" && flag.is_some_and(|flag| flag == "run");
+    let vitest = program_name(runner) == "vitest" && {
+        let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+        vitest_runs_once(&call)
+    };
     let jest = program_name(runner) == "jest" && {
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         jest_contained_call(&call)
@@ -121,7 +172,20 @@ pub(crate) fn script_tokens(
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         mocha_contained_call(&call)
     };
-    if !node && !vitest && !jest && !mocha {
+    let bun = program_name(runner) == "bun" && {
+        let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
+        match call.split_first() {
+            Some((verb, args)) if verb == "test" => bun_test_runs_once(args),
+            _ => bun_test_script_once(&call),
+        }
+    };
+    let tsx = program_name(runner) == "tsx" && {
+        let call: Vec<String> = std::iter::once(runner.to_owned())
+            .chain(rest.iter().chain(passthrough.iter()).cloned())
+            .collect();
+        tsx_test_invocation(&call).ok().flatten().is_some()
+    };
+    if !node && !vitest && !jest && !mocha && !bun && !tsx {
         // A project may name a read-only tool run for the suite it checks,
         // such as a `test:types` entry holding `tsc --noEmit`. The words the
         // manifest declares are the run either way, so the body goes back as
@@ -148,10 +212,11 @@ pub(crate) fn script_tokens(
 /// question about a directory this module never sees, so the body comes back
 /// out for the route to answer.
 pub(crate) fn script_tool_body(
+    manager: &str,
     arguments: &[String],
     scripts: Option<&Map<String, Value>>,
 ) -> Option<(String, Vec<String>)> {
-    let tokens = script_tokens(arguments, scripts).ok()?;
+    let tokens = script_tokens(manager, arguments, scripts).ok()?;
     let (runner, rest) = tokens.split_first()?;
     crate::contained_node_tool::supported_tool(runner, rest)?;
     Some((runner.clone(), rest.to_vec()))
@@ -167,5 +232,5 @@ pub(crate) fn resolve(
     if !is_package_test(&argv) {
         return Err(invalid("Only local package test scripts are supported."));
     }
-    script_tokens(&argv[1..], scripts)
+    script_tokens(program_name(&argv[0]), &argv[1..], scripts)
 }

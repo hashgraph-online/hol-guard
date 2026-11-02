@@ -65,7 +65,7 @@ jobs:
           # checks it against SOURCE_SHA below, so a pull request has to build its own head
           # rather than the merge commit Actions checks out by default.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405

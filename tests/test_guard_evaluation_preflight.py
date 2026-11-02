@@ -149,7 +149,7 @@ def test_invalid_probe_budget_never_spawns(
     def unexpected_spawn(*_args: object, **_kwargs: object) -> object:
         pytest.fail("invalid budget attempted process execution")
 
-    monkeypatch.setattr(probe_module, "runtime_answer", unexpected_spawn)
+    monkeypatch.setattr(probe_module, "run_isolated_hook_process", unexpected_spawn)
 
     with pytest.raises(ValueError, match="invalid probe"):
         probe_module.run_probe(["synthetic-agent"], cwd=tmp_path, env={}, **settings)  # type: ignore[arg-type]
@@ -178,8 +178,7 @@ def test_host_version_probe_rejects_output_beyond_profile_budget(
     assert "xxxxxxxx" not in str(report.to_dict())
 
 
-@pytest.mark.skipif(os.name == "nt", reason="requires POSIX process-group cleanup")
-def test_host_version_deadline_stops_child_holding_output_pipe(tmp_path: Path) -> None:
+def _host_with_delayed_child(tmp_path: Path, *, host_tail: str) -> tuple[Path, Path, Path]:
     effect = tmp_path / "delayed-child-effect"
     started = tmp_path / "child-started"
     executable = tmp_path / "synthetic-agent"
@@ -187,10 +186,16 @@ def test_host_version_deadline_stops_child_holding_output_pipe(tmp_path: Path) -
         "#!/bin/sh\n"
         f"(/bin/sleep 3; printf '%s' 'child ran' > {shlex.quote(str(effect))}) &\n"
         f"printf '%s' 'started' > {shlex.quote(str(started))}\n"
-        "printf '%s\\n' 'synthetic-agent 0.1.0'\n",
+        "printf '%s\\n' 'synthetic-agent 0.1.0'\n" + host_tail,
         encoding="utf-8",
     )
     executable.chmod(0o755)
+    return executable, started, effect
+
+
+@pytest.mark.skipif(os.name == "nt", reason="requires POSIX process-group cleanup")
+def test_host_version_deadline_stops_host_and_child(tmp_path: Path) -> None:
+    executable, started, effect = _host_with_delayed_child(tmp_path, host_tail="/bin/sleep 3\n")
     report = preflight_evaluation(
         _profile(tmp_path, executable), artifact_paths=_artifact_paths(_artifact(tmp_path)), allow_host_execution=True
     )
@@ -198,6 +203,19 @@ def test_host_version_deadline_stops_child_holding_output_pipe(tmp_path: Path) -
     assert started.exists(), report.reason
     assert report.status == "blocked_environment"
     assert report.reason == "host_version_timeout"
+    time.sleep(3.1)
+    assert not effect.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="requires POSIX process-group cleanup")
+def test_exited_host_version_probe_stops_child_holding_output_pipe(tmp_path: Path) -> None:
+    executable, started, effect = _host_with_delayed_child(tmp_path, host_tail="")
+    report = preflight_evaluation(
+        _profile(tmp_path, executable), artifact_paths=_artifact_paths(_artifact(tmp_path)), allow_host_execution=True
+    )
+
+    assert started.exists(), report.reason
+    assert report.status == "passed", report.reason
     time.sleep(3.1)
     assert not effect.exists()
 

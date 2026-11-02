@@ -1,11 +1,11 @@
-import type { ContextAssistanceStatus, ContextInstallation } from "./types";
+import type { ContextAssistanceStatus } from "./types";
 
 export const CIGAR_TABS = [
   { value: "overview", label: "Overview" },
-  { value: "runtime", label: "Runtime & preferences" },
-  { value: "versions", label: "Versions & updates" },
-  { value: "access", label: "Sources & AI apps" },
-  { value: "data", label: "Data & privacy" },
+  { value: "runtime", label: "Settings" },
+  { value: "versions", label: "Updates" },
+  { value: "access", label: "Projects & AI apps" },
+  { value: "data", label: "Privacy" },
   { value: "tutorials", label: "Tutorials" },
   { value: "guide", label: "How it works" },
 ] as const;
@@ -15,7 +15,7 @@ export type CigarSetupStep = {
   title: string;
   description: string;
   complete: boolean;
-  action: string;
+  action: string | null;
   tab: CigarTab;
 };
 
@@ -31,62 +31,30 @@ export function cigarTabFromSearch(search: string): CigarTab {
   return CIGAR_TABS.find((tab) => tab.value === value)?.value ?? "overview";
 }
 
-/** Registration is metadata. Only the native effective state proves readiness. */
-export function cigarSetupSteps(
-  status: ContextAssistanceStatus | null,
-  installations: ContextInstallation[] | null,
-): CigarSetupStep[] {
-  const registered = (installations?.length ?? 0) > 0 || status?.runtime !== null && status?.runtime !== undefined;
-  const selected = Boolean(status?.preferences.runtime_id) && (
-    installations?.some((item) => item.runtime_id === status?.preferences.runtime_id) === true
-    || status?.runtime !== null && status?.runtime !== undefined
-  );
+/** Only the native effective state proves CIGAR is on; later steps stay optional. */
+export function cigarSetupSteps(status: ContextAssistanceStatus | null): CigarSetupStep[] {
+  const on = status?.effective_enabled === true;
   return [
     {
-      title: "Connect a local runtime",
-      description: registered
-        ? "A registered CIGAR bundle with Python 3.14 is available on this machine."
-        : "Register an approved CIGAR bundle that uses final CPython 3.14, then refresh the runtime list.",
-      complete: registered,
-      action: registered ? "View runtimes" : "Set up runtime",
-      tab: "runtime",
+      title: "Turn on CIGAR",
+      description: on ? "CIGAR is running on this computer." : "One click. Guard gets everything ready and checks it first.",
+      complete: on,
+      action: null,
+      tab: "overview",
     },
     {
-      title: "Choose your preferences",
-      description: "Select the runtime, turn on CIGAR, choose the features you want, and save your preferences.",
-      complete: selected && status?.requested_enabled === true,
-      action: "Choose preferences",
-      tab: "runtime",
+      title: "Pick a project folder",
+      description: "Choose the folder CIGAR may read. It reads nothing else.",
+      complete: false,
+      action: on ? "Pick a folder" : null,
+      tab: "access",
     },
     {
-      title: "Start context assistance",
-      description: "Start the saved runtime. Guard verifies Python, the CIGAR package, and its worker before reporting Ready.",
-      complete: status?.effective_enabled === true,
-      action: status?.effective_enabled ? "Manage runtime" : "Check & start",
-      tab: "runtime",
+      title: "Connect an AI app (optional)",
+      description: "Let an AI app ask CIGAR for the parts of your project it needs. You approve each app.",
+      complete: false,
+      action: on ? "Connect an app" : null,
+      tab: "access",
     },
   ];
-}
-
-export function cigarRuntimeSummary(
-  status: ContextAssistanceStatus | null,
-  installations: ContextInstallation[] | null,
-): { label: string; detail: string } {
-  if (status?.runtime && status.effective_enabled) return {
-    label: "Python " + status.runtime.interpreter.version.join("."),
-    detail: "CIGAR " + status.runtime.package_version + " · running locally",
-  };
-  const selected = installations?.find((item) => item.runtime_id === status?.preferences.runtime_id);
-  if (selected) return {
-    label: "Python " + selected.python_version.join("."),
-    detail: "Selected · activation verifies this bundle again",
-  };
-  if (installations?.length) return {
-    label: "Python " + installations[0].python_version.join("."),
-    detail: installations.length === 1 ? "Registered · choose it to get started" : String(installations.length) + " registered runtimes · choose one",
-  };
-  return {
-    label: installations === null ? "Runtime status pending" : "Runtime setup needed",
-    detail: "Requires a registered CIGAR bundle with CPython 3.14",
-  };
 }

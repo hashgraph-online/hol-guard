@@ -12,6 +12,8 @@ pub(super) fn document() -> CatalogDocument {
     document.builds[0].identity.build_id = "synthetic-qualified-0_14_1".into();
     document.issued_at = 900;
     document.expires_at = 2000;
+    // Synthetic fixtures describe one platform; bundled coverage is separate.
+    document.builds[0].platforms.truncate(1);
     let platform = &mut document.builds[0].platforms[0];
     platform.qualification = Qualification::GuardQualified;
     platform.package_tree_sha256 = Some("5".repeat(64));
@@ -75,20 +77,50 @@ fn build_id(catalog: &TrustedCatalog) -> &str {
 }
 
 #[test]
-fn bundled_public_build_is_observed_upstream_data_and_not_guard_qualified() {
+fn bundled_public_build_activates_with_every_feature_listed() {
     let catalog = TrustedCatalog::bundled().unwrap();
     assert_eq!(catalog.document().builds[0].identity.sdk_version, "0.14.1");
-    assert_eq!(
-        catalog.document().builds[0].platforms[0].qualification,
-        Qualification::UpstreamOnly
-    );
     assert!(catalog.signer().is_none());
+    let all = [
+        Feature::Graph,
+        Feature::Sharing,
+        Feature::ExecutionContext,
+        Feature::Persistence,
+    ];
+    let platforms: Vec<_> = catalog.document().builds[0]
+        .platforms
+        .iter()
+        .map(|platform| platform.platform.as_str())
+        .collect();
     assert_eq!(
-        catalog
-            .for_activation(build_id(&catalog), "darwin-arm64", false, &[Feature::Graph])
-            .unwrap_err(),
-        ReleaseError::QualificationRequired
+        platforms,
+        [
+            "darwin-arm64",
+            "darwin-x64",
+            "linux-x64-gnu",
+            "linux-arm64-gnu",
+            "linux-x64-musl",
+            "linux-arm64-musl",
+            "win32-x64"
+        ]
     );
+    for platform in platforms {
+        let features = &all[..if platform == "win32-x64" { 2 } else { 4 }];
+        assert!(catalog
+            .for_activation(build_id(&catalog), platform, false, features)
+            .unwrap()
+            .activation_qualified());
+        let python = catalog
+            .document()
+            .interpreters
+            .iter()
+            .find(|build| build.platform == platform)
+            .unwrap();
+        assert!(catalog
+            .interpreter_for_setup(&python.build_id, platform)
+            .unwrap()
+            .setup_qualified());
+    }
 }
 
 #[test]
@@ -343,14 +375,11 @@ fn withdrawn_unqualified_preview_unknown_and_missing_features_cannot_activate() 
         .unwrap()
         .prepare(&id, "darwin-arm64", false)
         .is_ok());
-    assert_eq!(
-        verify(&doc)
-            .unwrap()
-            .for_activation(&id, "darwin-arm64", false, &[])
-            .unwrap_err(),
-        ReleaseError::QualificationRequired
-    );
-    doc.builds[0].platforms[0].qualification = Qualification::GuardQualified;
+    // Qualification state is informational; only the listed features gate.
+    assert!(verify(&doc)
+        .unwrap()
+        .for_activation(&id, "darwin-arm64", false, &[])
+        .is_ok());
     doc.builds[0].platforms[0].features = vec![Feature::Graph];
     assert_eq!(
         verify(&doc)

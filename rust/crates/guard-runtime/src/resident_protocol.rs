@@ -98,6 +98,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::runtime_identity::BUNDLE_FEATURE.into(),
         crate::runtime_identity_probe::FEATURE.into(),
         crate::runtime_identity_instances::FEATURE.into(),
+        crate::runtime_identity_instance_store::FEATURE.into(),
         crate::runtime_identity_launch::FEATURE.into(),
         guard_plugin_kit::FEATURE.into(),
         guard_plugin_telemetry::FEATURE.into(),
@@ -138,6 +139,10 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         #[cfg(unix)]
         features.push(crate::binding_capture_op::BINDING_CAPTURE_FEATURE.into());
     }
+    // Unpacking extracts with the pinned macOS `ditto`, so only a macOS
+    // runtime offers it.
+    #[cfg(target_os = "macos")]
+    features.push("native-desktop-core-onedir-v1".into());
     features.push(crate::mcp_relay::RELAY_FEATURE.into());
     features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_WRITER_FEATURE.into());
     features.push(crate::claude_session_start::SESSION_START_FEATURE.into());
@@ -146,6 +151,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     features.push(guard_contracts::SKILL_DOCUMENT_EVIDENCE_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
@@ -213,6 +219,7 @@ pub(crate) enum ResidentOperationV1 {
     GithubCliClassify(GithubCliClassifyRequestV1),
     GithubWorkflowPrepare(guard_contracts::GithubWorkflowPrepareRequestV1),
     ProtectRequest(ProtectRequestRequestV1),
+    ProtectAdvisoryMerge(guard_contracts::ProtectAdvisoryMergeRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalReuseDiagnostic(ApprovalReuseDiagnosticRequestV1),
     ApprovalBulkEligibility(ApprovalBulkEligibilityRequestV1),
@@ -349,6 +356,7 @@ pub(crate) enum ResidentOperationV1 {
     RetryLineageCapture(guard_contracts::RetryLineageCaptureRequestV1),
     AdapterStateIntegrity(guard_contracts::AdapterStateIntegrityRequestV1),
     ProtectionHealthReport(guard_contracts::ProtectionHealthReportRequestV1),
+    ProtectionHealthFacts(guard_contracts::ProtectionHealthFactsRequestV1),
     ResidentHealth(guard_contracts::ResidentHealthRequestV1),
     Health(Value),
     Shutdown(Value),

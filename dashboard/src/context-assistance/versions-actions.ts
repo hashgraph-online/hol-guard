@@ -10,13 +10,17 @@ export function canCommitCigarJob(job: CigarSelectionJob, status: ContextAssista
 export function cigarJobPending(job: CigarVersionJob): boolean {
   return job.worker_live === true || (!job.recovery_available && !["ready", "completed", "cancelled", "failed", "recovery_required"].includes(job.phase));
 }
+/** Jobs that still need Guard or the user; finished history stays out of "In progress". */
+export function cigarJobActive(job: CigarVersionJob): boolean {
+  return cigarJobPending(job) || job.can_commit || job.recovery_available || job.phase === "recovery_required";
+}
 export function cigarBuildBlock(catalog: CigarCatalog, build: CigarCatalogBuild, updates: CigarUpdateSettings): string | null {
   if (build.withdrawn) return "This build has been withdrawn.";
   if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing a build.";
   const host = build.platforms.find((p) => p.platform === catalog.host_platform);
   if (!host) return "No artifact is available for this Guard host.";
-  if (host.qualification !== "guard_qualified") return "This artifact still needs Guard qualification.";
   if (!host.has_wheel) return "This entry has no installable SDK package.";
+  if (!host.features.includes("graph") || !host.has_dependency_lock) return "This entry is missing pieces Guard needs to install it.";
   if (build.channel !== "stable") return "Preview and local candidate installation is unavailable in this Guard build.";
   if (updates.effective.pinned_build && updates.effective.pinned_build !== build.identity.build_id) return "Update preferences pin another build.";
   return null;
@@ -25,6 +29,6 @@ export function cigarPythonBlock(catalog: CigarCatalog, build: CigarInterpreterB
   if (build.withdrawn) return "This Python build has been withdrawn.";
   if (!catalog.catalog.fresh_for_preparation) return "Refresh the catalog before preparing Python.";
   if (build.platform !== catalog.host_platform) return "This Python build is for another Guard host.";
-  if (build.qualification !== "guard_qualified") return "This Python build still needs Guard qualification.";
+  if (build.qualification === "local_candidate") return "This Python build is a local development candidate.";
   return null;
 }

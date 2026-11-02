@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BDZwrTBd.js","assets/chunks/home-protection-module-D5_hG3QH.js","assets/chunks/supply-chain-protection-stats-fPS2dg9t.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-Au8qkrQu.js","assets/chunks/harness-version-label-BNKf9mmo.js","assets/chunks/connect-guard-cloud-button-CjnpnUTg.js","assets/chunks/settings-save-proof-modal-CJfd7bMi.js","assets/chunks/settings-workspace-EATcOtZR.js","assets/chunks/confirm-dialog-NIjTMm3y.js","assets/chunks/extensions-workspace-DuWvCy2e.js","assets/chunks/app-detail-workspace-SQy3r0dU.js","assets/chunks/policy-workspace-page-B8GrOyNn.js","assets/chunks/about-workspace-BO9K8980.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BEvKhWTD.js","assets/chunks/home-protection-module-CANjTunq.js","assets/chunks/supply-chain-protection-stats-DfVtGkjL.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-DztkJ4qz.js","assets/chunks/harness-version-label-DLHQPsG7.js","assets/chunks/connect-guard-cloud-button-Dh1EACz2.js","assets/chunks/settings-save-proof-modal-DWkfO5xd.js","assets/chunks/settings-workspace-dNgHqb69.js","assets/chunks/confirm-dialog-D_YTXeN9.js","assets/chunks/extensions-workspace-CAMEB68-.js","assets/chunks/app-detail-workspace-D4YdA5lr.js","assets/chunks/policy-workspace-page-B6AQVnEK.js","assets/chunks/about-workspace-CMN7AGdE.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12819,6 +12819,9 @@ function HiMiniPlus(props) {
 function HiMiniPencilSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" }, "child": [] }] })(props);
 }
+function HiMiniPauseCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 10a8 8 0 1 1 16 0 8 8 0 0 1-16 0Zm5-2.25A.75.75 0 0 1 7.75 7h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Zm4 0a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniNoSymbol(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12936,6 +12939,9 @@ function HiMiniCircleStack(props) {
 function HiMiniChevronUp(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniChevronUpDown(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10.53 3.47a.75.75 0 0 0-1.06 0L6.22 6.72a.75.75 0 0 0 1.06 1.06L10 5.06l2.72 2.72a.75.75 0 1 0 1.06-1.06l-3.25-3.25Zm-4.31 9.81 3.25 3.25a.75.75 0 0 0 1.06 0l3.25-3.25a.75.75 0 1 0-1.06-1.06L10 14.94l-2.72-2.72a.75.75 0 0 0-1.06 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniChevronRight(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12959,6 +12965,9 @@ function HiMiniChartBar(props) {
 }
 function HiMiniBugAnt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.56 1.14a.75.75 0 0 1 .177 1.045 3.989 3.989 0 0 0-.464.86c.185.17.382.329.59.473A3.993 3.993 0 0 1 10 2c1.272 0 2.405.594 3.137 1.518.208-.144.405-.302.59-.473a3.989 3.989 0 0 0-.464-.86.75.75 0 0 1 1.222-.869c.369.519.65 1.105.822 1.736a.75.75 0 0 1-.174.707 7.03 7.03 0 0 1-1.299 1.098A4 4 0 0 1 14 6c0 .52-.301.963-.723 1.187a6.961 6.961 0 0 1-1.158.486c.13.208.231.436.296.679 1.413-.174 2.779-.5 4.081-.96a19.655 19.655 0 0 0-.09-2.319.75.75 0 1 1 1.493-.146 21.239 21.239 0 0 1 .08 3.028.75.75 0 0 1-.482.667 20.873 20.873 0 0 1-5.153 1.249 2.521 2.521 0 0 1-.107.247 20.945 20.945 0 0 1 5.252 1.257.75.75 0 0 1 .482.74 20.945 20.945 0 0 1-.908 5.107.75.75 0 0 1-1.433-.444c.415-1.34.69-2.743.806-4.191-.495-.173-1-.327-1.512-.46.05.284.076.575.076.873 0 1.814-.517 3.312-1.426 4.37A4.639 4.639 0 0 1 10 19a4.639 4.639 0 0 1-3.574-1.63C5.516 16.311 5 14.813 5 13c0-.298.026-.59.076-.873-.513.133-1.017.287-1.512.46.116 1.448.39 2.85.806 4.191a.75.75 0 1 1-1.433.444 20.94 20.94 0 0 1-.908-5.107.75.75 0 0 1 .482-.74 20.838 20.838 0 0 1 5.252-1.257 2.493 2.493 0 0 1-.107-.247 20.874 20.874 0 0 1-5.153-1.249.75.75 0 0 1-.482-.667 21.342 21.342 0 0 1 .08-3.028.75.75 0 1 1 1.493.146 19.745 19.745 0 0 0-.09 2.319c1.302.46 2.668.786 4.08.96.066-.243.166-.471.297-.679a6.962 6.962 0 0 1-1.158-.486A1.348 1.348 0 0 1 6 6a4 4 0 0 1 .166-1.143 7.032 7.032 0 0 1-1.3-1.098.75.75 0 0 1-.173-.707 5.48 5.48 0 0 1 .822-1.736.75.75 0 0 1 1.046-.177Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniBookOpen(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 16.82A7.462 7.462 0 0 1 15 15.5c.71 0 1.396.098 2.046.282A.75.75 0 0 0 18 15.06v-11a.75.75 0 0 0-.546-.721A9.006 9.006 0 0 0 15 3a8.963 8.963 0 0 0-4.25 1.065V16.82ZM9.25 4.065A8.963 8.963 0 0 0 5 3c-.85 0-1.673.118-2.454.339A.75.75 0 0 0 2 4.06v11a.75.75 0 0 0 .954.721A7.506 7.506 0 0 1 5 15.5c1.579 0 3.042.487 4.25 1.32V4.065Z" }, "child": [] }] })(props);
 }
 function HiMiniBolt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" }, "child": [] }] })(props);
@@ -21864,12 +21873,13 @@ const SHELL_NAV_ITEMS = [
   },
   {
     href: "/cigar",
-    label: "CIGAR",
-    shortLabel: "CIGAR",
+    label: "Context",
+    shortLabel: "Context",
     description: "Local context, setup, sources, and AI app access",
     view: "cigar",
     group: "primary",
-    icon: HiMiniCircleStack
+    icon: HiMiniCircleStack,
+    badge: "Beta"
   },
   {
     href: "/extensions",
@@ -22001,6 +22011,18 @@ function NavigationLink(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__icon", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, {}) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__label", children: props.variant === "bottom" ? props.item.shortLabel : props.item.label }),
         props.variant === "drawer" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__description", children: props.item.description }) : null,
+        props.item.badge ? (
+          // Decorative status chip: the link's aria-label already names the
+          // destination, matching how the Inbox count badge is announced.
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
+            {
+              className: "guard-shell-navigation-link__badge guard-shell-navigation-link__flag",
+              "aria-hidden": "true",
+              children: props.item.badge
+            }
+          )
+        ) : null,
         props.item.view === "inbox" && props.queuedCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-shell-navigation-link__badge", "aria-hidden": "true", children: queueCountDisplay(props.queuedCount) }) : null
       ]
     }
@@ -23592,6 +23614,186 @@ function LoggedActionPanel(props) {
     ] })
   ] });
 }
+const useClientLayoutEffect = typeof window === "undefined" ? reactExports.useEffect : reactExports.useLayoutEffect;
+function SelectMenu(props) {
+  const generated = reactExports.useId();
+  const id2 = props.id ?? generated;
+  const listId = id2 + "-listbox";
+  const optionId = (index) => id2 + "-option-" + index;
+  const button2 = reactExports.useRef(null);
+  const list = reactExports.useRef(null);
+  const typed = reactExports.useRef({ text: "", at: 0 });
+  const [open, setOpen] = reactExports.useState(false);
+  const [active, setActive] = reactExports.useState(-1);
+  const [upward, setUpward] = reactExports.useState(false);
+  const selectedIndex = props.options.findIndex((option) => option.value === props.value);
+  const selected = selectedIndex >= 0 ? props.options[selectedIndex] : void 0;
+  const enabled = (index) => index >= 0 && index < props.options.length && !props.options[index].disabled;
+  function step(from, direction) {
+    for (let index = from + direction; index >= 0 && index < props.options.length; index += direction) {
+      if (enabled(index)) return index;
+    }
+    return from;
+  }
+  const first = () => step(-1, 1);
+  const last = () => step(props.options.length, -1);
+  function show(start) {
+    if (props.disabled || open) return;
+    const rect = button2.current?.getBoundingClientRect();
+    if (rect) {
+      const below = window.innerHeight - rect.bottom;
+      setUpward(below < 300 && rect.top > below);
+    }
+    setActive(start ?? (enabled(selectedIndex) ? selectedIndex : first()));
+    setOpen(true);
+  }
+  function hide() {
+    setOpen(false);
+    setActive(-1);
+  }
+  function choose(index) {
+    if (!enabled(index)) return;
+    hide();
+    if (props.options[index].value !== props.value) props.onChange(props.options[index].value);
+  }
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const close = (event) => {
+      const target2 = event.target;
+      if (!button2.current?.contains(target2) && !list.current?.contains(target2)) hide();
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+  useClientLayoutEffect(() => {
+    if (!open || active < 0) return;
+    document.getElementById(optionId(active))?.scrollIntoView({ block: "nearest" });
+  }, [open, active]);
+  function typeahead(key) {
+    const now2 = Date.now();
+    const text2 = (now2 - typed.current.at > 600 ? "" : typed.current.text) + key.toLowerCase();
+    typed.current = { text: text2, at: now2 };
+    const from = open ? active : selectedIndex;
+    const order = props.options.map((_, index) => (from + 1 + index) % props.options.length);
+    const repeated = text2.length > 1 && [...text2].every((char) => char === text2[0]);
+    const match = order.find((index) => enabled(index) && props.options[index].label.toLowerCase().startsWith(repeated ? text2[0] : text2));
+    if (match === void 0) return;
+    if (open) setActive(match);
+    else show(match);
+  }
+  function onKeyDown(event) {
+    const key = event.key;
+    if (!open) {
+      if (key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === " ") {
+        event.preventDefault();
+        show(key === "ArrowUp" && !enabled(selectedIndex) ? last() : void 0);
+      } else if (key === "Home" || key === "End") {
+        event.preventDefault();
+        show(key === "Home" ? first() : last());
+      } else if (key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        typeahead(key);
+      }
+      return;
+    }
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      event.preventDefault();
+      if (event.altKey && key === "ArrowUp") {
+        choose(active);
+        return;
+      }
+      setActive(step(active, key === "ArrowDown" ? 1 : -1));
+    } else if (key === "Home" || key === "End" || key === "PageUp" || key === "PageDown") {
+      event.preventDefault();
+      setActive(key === "Home" || key === "PageUp" ? first() : last());
+    } else if (key === " " && typed.current.text && Date.now() - typed.current.at <= 600) {
+      event.preventDefault();
+      typeahead(key);
+    } else if (key === "Enter" || key === " ") {
+      event.preventDefault();
+      choose(active);
+    } else if (key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      hide();
+    } else if (key === "Tab") {
+      hide();
+    } else if (key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      typeahead(key);
+    }
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative " + (props.className ?? "w-full"), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        ref: button2,
+        id: id2,
+        type: "button",
+        role: "combobox",
+        "aria-haspopup": "listbox",
+        "aria-expanded": open,
+        "data-value": props.value,
+        "aria-controls": listId,
+        "aria-activedescendant": open && active >= 0 ? optionId(active) : void 0,
+        "aria-label": props.label,
+        "aria-labelledby": props.labelledBy,
+        "aria-describedby": props.describedBy,
+        disabled: props.disabled,
+        onKeyDown,
+        onBlur: hide,
+        onClick: () => {
+          if (open) hide();
+          else show();
+        },
+        className: "group relative flex min-h-11 w-full items-center gap-2 rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-10 text-left text-sm text-brand-dark shadow-[0_1px_0_rgba(15,23,42,0.04)] transition-colors hover:border-brand-blue/40 focus-visible:border-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/25 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 aria-expanded:border-brand-blue aria-expanded:ring-2 aria-expanded:ring-brand-blue/20",
+        children: [
+          props.leading,
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1 truncate" + (selected ? "" : " text-slate-500"), children: selected?.label ?? props.placeholder ?? "Choose an option" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUpDown, { "aria-hidden": "true", className: "pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-400 group-hover:text-brand-blue" })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "ul",
+      {
+        ref: list,
+        id: listId,
+        role: "listbox",
+        tabIndex: -1,
+        hidden: !open,
+        "aria-labelledby": props.labelledBy,
+        "aria-label": props.labelledBy ? void 0 : props.label,
+        onMouseDown: (event) => event.preventDefault(),
+        className: "absolute left-0 z-50 max-h-72 w-full min-w-56 overflow-auto rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-[0_18px_40px_-16px_rgba(15,23,42,0.35)] focus:outline-none " + (upward ? "bottom-full mb-1.5" : "top-full mt-1.5"),
+        children: props.options.map((option, index) => {
+          const isSelected = index === selectedIndex;
+          const isActive = index === active;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "li",
+            {
+              id: optionId(index),
+              role: "option",
+              "aria-selected": isSelected,
+              "data-value": option.value,
+              "aria-disabled": option.disabled ? true : void 0,
+              onMouseMove: () => {
+                if (enabled(index) && active !== index) setActive(index);
+              },
+              onClick: () => choose(index),
+              className: "relative flex select-none flex-col rounded-lg py-2 pl-3 pr-9 " + (option.disabled ? "cursor-not-allowed text-slate-400" : "cursor-pointer text-brand-dark") + (isActive ? " bg-brand-blue/[0.08]" : ""),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-words " + (isSelected ? "font-semibold" : "font-medium"), children: option.label }),
+                option.description ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 break-words text-xs " + (option.disabled ? "text-slate-400" : "text-slate-500"), children: option.description }) : null,
+                isSelected ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { "aria-hidden": "true", className: "absolute right-2.5 top-2.5 size-4 text-brand-blue" }) : null
+              ]
+            },
+            option.value + ":" + index
+          );
+        })
+      }
+    )
+  ] });
+}
 const record$6 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const digest$7 = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const timestamp = (value) => value === null || typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -23678,11 +23880,11 @@ function contextStatusCopy(status) {
   };
   if (status.requested_enabled && status.verification_permitted && status.effective_preferences.enabled && (status.diagnostic === "runtime_not_verified" || status.diagnostic === null)) return {
     label: "Not started",
-    detail: "Your preferences are saved. Click Start CIGAR to verify and run the selected runtime."
+    detail: "Your preferences are saved. Click Turn on CIGAR to verify and run the selected runtime."
   };
   if (status.diagnostic === "runtime_idle") return {
     label: "Paused",
-    detail: "CIGAR stopped after being idle. Click Start CIGAR when you need context again."
+    detail: "CIGAR stopped after being idle. Click Turn on CIGAR when you need context again."
   };
   const code = status.diagnostic ?? "runtime_not_verified";
   const detail = code === "policy_restricted" ? "Your preference is saved. Organization or workspace policy currently prevents context assistance. You can still turn it off." : code.startsWith("python_") ? "Choose a verified final CPython 3.14 runtime. Other Python versions cannot run this feature." : code.includes("managed") || code.includes("configuration") ? "Local or managed settings currently restrict context assistance. Review this machine's settings." : code === "runtime_not_verified" ? "Your preference is saved. Review the selected runtime and any policy restrictions before starting CIGAR." : "Context assistance needs attention. Check the selected runtime; Guard protection remains available.";
@@ -24052,27 +24254,22 @@ function ContextHistoryPanel({ decisionId, harness }) {
     ] }),
     error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-slate-600", children: error }) : null,
     open && !busy && !error && scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: "No authorized workspace has available context history." }) : null,
-    open && scopes.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block text-sm text-slate-600", htmlFor: id2, children: [
-      "Context workspace and app",
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "select",
+    open && scopes.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: id2 + "-label", className: "text-sm text-slate-600", children: "Context workspace and app" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        SelectMenu,
         {
           id: id2,
-          className: "mt-1 min-h-11 w-full rounded-lg border border-slate-200 px-2 text-sm",
+          labelledBy: id2 + "-label",
+          className: "mt-1 w-full",
           disabled: busy,
           value: scope?.scope_id ?? "",
-          onChange: (event) => {
-            const selected = scopes.find((scope2) => scope2.scope_id === event.target.value);
+          placeholder: "Choose authorized context access",
+          options: scopes.map((item) => ({ value: item.scope_id, label: item.workspace + " · " + (item.app === "dashboard" ? "Guard dashboard" : harnessDisplayName(item.app)) })),
+          onChange: (value) => {
+            const selected = scopes.find((item) => item.scope_id === value);
             if (selected) void perform((signal) => choose(selected, signal));
-          },
-          children: [
-            !scope ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Choose authorized context access" }) : null,
-            scopes.map((scope2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: scope2.scope_id, children: [
-              scope2.workspace,
-              " · ",
-              scope2.app === "dashboard" ? "Guard dashboard" : harnessDisplayName(scope2.app)
-            ] }, scope2.scope_id))
-          ]
+          }
         }
       )
     ] }) : null,
@@ -33741,7 +33938,7 @@ function ContextReviewPanel({ item }) {
           setPrevious(null);
           setBusy(false);
           setWatching(false);
-          setError("Context access changed. Check Sources & AI apps in CIGAR before preparing more context.");
+          setError("Context access changed. Check Projects & AI apps in CIGAR before preparing more context.");
         }
       }).catch(() => {
         if (!controller.signal.aborted) {
@@ -33774,12 +33971,12 @@ function ContextReviewPanel({ item }) {
       const status = await fetchContextAssistance(controller.signal);
       if (controller.signal.aborted) return;
       if (!status.effective_enabled || !status.effective_preferences.features.review_briefs) {
-        throw new Error("Enable review context and start a verified Python 3.14 runtime in CIGAR → Runtime & preferences.");
+        throw new Error("Enable review context and start a verified Python 3.14 runtime in CIGAR → Settings.");
       }
       generation.current = status.generation;
       const scopes = await listContextWorkspaces(controller.signal);
       const scope = scopes.find((scope2) => scope2.app === "dashboard" && scope2.workspace === item.workspace && !scope2.revoked && scope2.native_policy_facts);
-      if (!scope) throw new Error("Grant this workspace dashboard access with native Guard policy facts in CIGAR → Sources & AI apps.");
+      if (!scope) throw new Error("Grant this workspace dashboard access with native Guard policy facts in CIGAR → Projects & AI apps.");
       const value = await prepareNativeDecisionContext(
         scope,
         decisionId,
@@ -37604,7 +37801,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BjSV4UAw.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-DxSG107E.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -38264,34 +38461,34 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BDZwrTBd.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-Au8qkrQu.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-EATcOtZR.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BEvKhWTD.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-DztkJ4qz.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-dNgHqb69.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-DuWvCy2e.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-CAMEB68-.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-SQy3r0dU.js"), true ? __vite__mapDeps([13,7]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-D4YdA5lr.js"), true ? __vite__mapDeps([13,7]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-a48S1S1l.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BlbTNCTo.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CSkTBytN.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-B8GrOyNn.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-B6AQVnEK.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-BO9K8980.js"), true ? __vite__mapDeps([15,3,4,16]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-CMN7AGdE.js"), true ? __vite__mapDeps([15,3,4,16]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-D9-6feom.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-DvrzWspZ.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-BKNYPKvI.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-Cr187lIn.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -39252,7 +39449,7 @@ export {
   WatchProtectionBanner as Z,
   EvidenceInsightsShareModal as _,
   controlContextAssistance as a,
-  isApprovalProofSubmitDisabled as a$,
+  ApprovalProofFieldInputs as a$,
   HiMiniShieldCheck as a0,
   DeviceProofCard as a1,
   guardActionDisposition as a2,
@@ -39288,8 +39485,8 @@ export {
   HiMiniAdjustmentsHorizontal as aW,
   HiMiniCircleStack as aX,
   TabBar as aY,
-  fetchCloudReviewSettings as aZ,
-  ApprovalProofFieldInputs as a_,
+  SelectMenu as aZ,
+  fetchCloudReviewSettings as a_,
   HiMiniQuestionMarkCircle as aa,
   useFocusTrap as ab,
   approvalProofRequiresPassword as ac,
@@ -39317,273 +39514,275 @@ export {
   resetRepairOutcomeTracker as ay,
   HiMiniWrenchScrewdriver as az,
   formatRelativeTime as b,
-  sortHarnessRows as b$,
-  buildApprovalProofCredentials as b0,
-  changeCloudReviewSettings as b1,
-  shellHref as b2,
-  listContextAgentSessions as b3,
-  revokeContextAgentSession as b4,
-  authorizeContextAgentSession as b5,
-  ContextAssistanceApiError as b6,
-  ask as b7,
-  parseContextScope as b8,
-  validContextBrokerRevision as b9,
-  clearHarnessWatchOverrides as bA,
-  withHarnessPosturePatch as bB,
-  clearPolicy as bC,
-  clearReviewQueue as bD,
-  revokeApprovalGateCooldown as bE,
-  disableApprovalGateTotp as bF,
-  importSettings as bG,
-  resetSettings as bH,
-  enrollApprovalGateTotp as bI,
-  verifyApprovalGateTotp as bJ,
-  clearEvidence as bK,
-  exportDiagnostics as bL,
-  repairApprovalCenter as bM,
-  exportSettings as bN,
-  setupDesktopNotifications as bO,
-  settingsWatchBannerModel as bP,
-  WorkspacePageHeader as bQ,
-  navigateFromAnchor as bR,
-  humanizeList as bS,
-  isProtectionPosture as bT,
-  deriveProtectionPosture as bU,
-  normalizeHarnessPostures as bV,
-  approvalGateCooldownLabel as bW,
-  isRecord$5 as bX,
-  overrideRows as bY,
-  harnessPostureSummary as bZ,
-  joinNames as b_,
-  listContextWorkspaces as ba,
-  manageContextWorkspace as bb,
-  grantContextWorkspace as bc,
-  compileWorkspaceContext as bd,
-  HiMiniDocumentMagnifyingGlass as be,
-  HiMiniLink as bf,
-  HiMiniArrowLeft as bg,
-  HiMiniAcademicCap as bh,
-  subscribeDashboardLocation as bi,
-  HiMiniCpuChip as bj,
-  isGuardDemoMode as bk,
-  fetchWithGuardAuth as bl,
-  parseContextAssistanceStatus as bm,
-  isCigarBuildIdentity as bn,
-  isCigarProducerVersion as bo,
-  isCigarCoreLabel as bp,
-  fetchContextInstallations as bq,
-  commitDashboardLocation as br,
-  savedEvidenceCopy as bs,
-  downloadBlob as bt,
-  guardAwareHref as bu,
-  fetchContextData as bv,
-  forgetContextHistory as bw,
-  forgetSavedEvidence as bx,
-  resolveProtectionLevelCopy as by,
-  fetchRuntimeSnapshot as bz,
+  normalizeHarnessPostures as b$,
+  isApprovalProofSubmitDisabled as b0,
+  buildApprovalProofCredentials as b1,
+  changeCloudReviewSettings as b2,
+  shellHref as b3,
+  HiMiniPauseCircle as b4,
+  listContextAgentSessions as b5,
+  HiMiniLink as b6,
+  revokeContextAgentSession as b7,
+  authorizeContextAgentSession as b8,
+  ContextAssistanceApiError as b9,
+  guardAwareHref as bA,
+  fetchContextData as bB,
+  forgetContextHistory as bC,
+  forgetSavedEvidence as bD,
+  resolveProtectionLevelCopy as bE,
+  fetchRuntimeSnapshot as bF,
+  clearHarnessWatchOverrides as bG,
+  withHarnessPosturePatch as bH,
+  clearPolicy as bI,
+  clearReviewQueue as bJ,
+  revokeApprovalGateCooldown as bK,
+  disableApprovalGateTotp as bL,
+  importSettings as bM,
+  resetSettings as bN,
+  enrollApprovalGateTotp as bO,
+  verifyApprovalGateTotp as bP,
+  clearEvidence as bQ,
+  exportDiagnostics as bR,
+  repairApprovalCenter as bS,
+  exportSettings as bT,
+  setupDesktopNotifications as bU,
+  settingsWatchBannerModel as bV,
+  WorkspacePageHeader as bW,
+  navigateFromAnchor as bX,
+  humanizeList as bY,
+  isProtectionPosture as bZ,
+  deriveProtectionPosture as b_,
+  ask as ba,
+  parseContextScope as bb,
+  validContextBrokerRevision as bc,
+  listContextWorkspaces as bd,
+  HiMiniFolderOpen as be,
+  HiMiniFolder as bf,
+  grantContextWorkspace as bg,
+  manageContextWorkspace as bh,
+  compileWorkspaceContext as bi,
+  isCigarProducerVersion as bj,
+  isCigarCoreLabel as bk,
+  HiMiniBookOpen as bl,
+  HiMiniArrowLeft as bm,
+  HiMiniAcademicCap as bn,
+  subscribeDashboardLocation as bo,
+  HiMiniArrowUpCircle as bp,
+  isGuardDemoMode as bq,
+  fetchWithGuardAuth as br,
+  parseContextAssistanceStatus as bs,
+  isCigarBuildIdentity as bt,
+  fetchContextInstallations as bu,
+  HiMiniCloudArrowDown as bv,
+  commitDashboardLocation as bw,
+  HiMiniArrowDownTray as bx,
+  downloadBlob as by,
+  savedEvidenceCopy as bz,
   contextStatusCopy as c,
-  isBulkApproveGateReady as c$,
-  restartHarnessWatch as c0,
-  harnessWatchPrompt as c1,
-  canRestartHarnessWatch as c2,
-  HiMiniKey as c3,
-  fetchExtensionCatalog as c4,
-  ExtensionControlApiError as c5,
-  normalizeExtensionCatalogSummary as c6,
-  normalizeExtensionPermission as c7,
-  ExtensionControlProtocolError as c8,
-  normalizeExtensionCatalogItem as c9,
-  ExtensionBrandMark as cA,
-  fetchMcpProviderActions as cB,
-  connectorSetupReady as cC,
-  shortIdentity as cD,
-  customExtensionDisplayName as cE,
-  previewLocalCliMutation as cF,
-  applyLocalCliMutation as cG,
-  LOCAL_CLI_CAPABILITIES as cH,
-  loadLocalCliCommands as cI,
-  DiscoveryFailure as cJ,
-  readJson as cK,
-  enrollablePackageScriptCommands as cL,
-  seenSuggestionMeta as cM,
-  HiMiniPlus as cN,
-  looksLikeProjectRelocatePaste as cO,
-  packageScriptFilterNeedle as cP,
-  initialAddCommand as cQ,
-  suggestedPackageScriptExtensions as cR,
-  filterExtensionSuggestions as cS,
-  suggestedHarnessExtensions as cT,
-  suggestedSeenExtensions as cU,
-  keepsPackageScriptCatalog as cV,
-  prefillSuggestedStates as cW,
-  recognizeLocalCli as cX,
-  preferredPackageScriptExtension as cY,
-  looksLikePackageScriptPaste as cZ,
-  enrollmentCommandStates as c_,
-  guardApiCacheScope as ca,
-  fetchExtensionCatalogV2Api as cb,
-  localPermissionDraftState as cc,
-  setLocalPermissionDraftState as cd,
-  extensionPolicyAuthorityUnchanged as ce,
-  newExtensionPolicyDraftIdentity as cf,
-  extensionPolicyDraftIsDirty as cg,
-  setLocalPermissionDraftStates as ch,
-  buildExtensionPolicyDraftMutation as ci,
-  fetchEffectiveExtensionControls as cj,
-  previewExtensionMutation as ck,
-  isCurrentExtensionPolicyDraft as cl,
-  applyExtensionMutation as cm,
-  fetchExtensionControlHistory as cn,
-  managedPermissionState as co,
-  controlProvenance as cp,
-  treatmentLabel as cq,
-  useResolvedApprovalGate as cr,
-  groupPermissionsByFamily as cs,
-  HiMiniInformationCircle as ct,
-  LocalCliApiError as cu,
-  hasSuggestedRules as cv,
-  approvalProofRecentlySatisfied as cw,
-  StyledSelect as cx,
-  bulkCommandState as cy,
-  fetchLocalCliApi as cz,
+  keepsPackageScriptCatalog as c$,
+  approvalGateCooldownLabel as c0,
+  isRecord$5 as c1,
+  overrideRows as c2,
+  harnessPostureSummary as c3,
+  joinNames as c4,
+  sortHarnessRows as c5,
+  restartHarnessWatch as c6,
+  harnessWatchPrompt as c7,
+  canRestartHarnessWatch as c8,
+  HiMiniKey as c9,
+  LocalCliApiError as cA,
+  hasSuggestedRules as cB,
+  approvalProofRecentlySatisfied as cC,
+  StyledSelect as cD,
+  bulkCommandState as cE,
+  fetchLocalCliApi as cF,
+  ExtensionBrandMark as cG,
+  fetchMcpProviderActions as cH,
+  connectorSetupReady as cI,
+  shortIdentity as cJ,
+  customExtensionDisplayName as cK,
+  previewLocalCliMutation as cL,
+  applyLocalCliMutation as cM,
+  LOCAL_CLI_CAPABILITIES as cN,
+  loadLocalCliCommands as cO,
+  DiscoveryFailure as cP,
+  readJson as cQ,
+  enrollablePackageScriptCommands as cR,
+  seenSuggestionMeta as cS,
+  HiMiniPlus as cT,
+  looksLikeProjectRelocatePaste as cU,
+  packageScriptFilterNeedle as cV,
+  initialAddCommand as cW,
+  suggestedPackageScriptExtensions as cX,
+  filterExtensionSuggestions as cY,
+  suggestedHarnessExtensions as cZ,
+  suggestedSeenExtensions as c_,
+  fetchExtensionCatalog as ca,
+  ExtensionControlApiError as cb,
+  normalizeExtensionCatalogSummary as cc,
+  normalizeExtensionPermission as cd,
+  ExtensionControlProtocolError as ce,
+  normalizeExtensionCatalogItem as cf,
+  guardApiCacheScope as cg,
+  fetchExtensionCatalogV2Api as ch,
+  localPermissionDraftState as ci,
+  setLocalPermissionDraftState as cj,
+  extensionPolicyAuthorityUnchanged as ck,
+  newExtensionPolicyDraftIdentity as cl,
+  extensionPolicyDraftIsDirty as cm,
+  setLocalPermissionDraftStates as cn,
+  buildExtensionPolicyDraftMutation as co,
+  fetchEffectiveExtensionControls as cp,
+  previewExtensionMutation as cq,
+  isCurrentExtensionPolicyDraft as cr,
+  applyExtensionMutation as cs,
+  fetchExtensionControlHistory as ct,
+  managedPermissionState as cu,
+  controlProvenance as cv,
+  treatmentLabel as cw,
+  useResolvedApprovalGate as cx,
+  groupPermissionsByFamily as cy,
+  HiMiniInformationCircle as cz,
   formatNumber as d,
-  CommandActivityWorkspace as d$,
-  fetchLocalCliList as d0,
-  normalizeLocalCliList as d1,
-  unreviewedToolChangeCount as d2,
-  connectorSetupMatch as d3,
-  refreshMcpInventory as d4,
-  connectorGroupOutcome as d5,
-  allowedEarlierVersion as d6,
-  startGuardCloudConnect as d7,
-  extensionEffectiveState as d8,
-  permissionEffectiveState as d9,
-  loadCurrentDashboardBuild as dA,
-  canonicalExtensionId as dB,
-  extensionDetailHref as dC,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as dD,
-  addCustomExtensionPrefillHref as dE,
-  acknowledgeDegradedExtensionControlAuthority as dF,
-  recoverExtensionControlAuthority as dG,
-  connectorSetupLinkFromSearch as dH,
-  readExtensionDetailUrlState as dI,
-  parseProtectionRoute as dJ,
-  addCustomExtensionHref as dK,
-  GuardModalLayer as dL,
-  runHarnessAction as dM,
-  GuardHarnessActionError as dN,
-  HiMiniRocketLaunch as dO,
-  HiMiniTrash as dP,
-  fetchGuardApi as dQ,
-  formatHarnessCommand as dR,
-  fetchApprovalPage as dS,
-  fetchPolicy as dT,
-  HiMiniHome as dU,
-  appSetupTarget as dV,
-  guardActionPresentation as dW,
-  DEFAULT_FILTER_STATE as dX,
-  filterEvidence as dY,
-  sortEvidence as dZ,
-  computeMetrics as d_,
-  HiMiniArrowTopRightOnSquare as da,
-  fetchExtensionControlApi as db,
-  permissionForRule as dc,
-  refreshEffectiveExtensionControls as dd,
-  fetchExtensionDiscoveryApi as de,
-  HiMiniClock as df,
-  startCancelableDiscoveryJob as dg,
-  waitForMcpDiscoveryJob as dh,
-  isLocalCliId as di,
-  localCliHref as dj,
-  fetchPluginUpdatesApi as dk,
-  filterCodexHostApps as dl,
-  connectorWorkspaceItems as dm,
-  customExtensionNeedsReview as dn,
-  profileSetupCommand as dp,
-  customExtensionBadge as dq,
-  extensionDisplayName as dr,
-  catalogRowSecondLine as ds,
-  extensionStateLabel as dt,
-  HiMiniGlobeAlt as du,
-  HiMiniFunnel as dv,
-  discoveryFailureMessage as dw,
-  refreshCodexHostInventory as dx,
-  CODEX_HOST_FALLBACK as dy,
-  CONFIGURED_CONNECTIONS_FALLBACK as dz,
+  appSetupTarget as d$,
+  prefillSuggestedStates as d0,
+  recognizeLocalCli as d1,
+  preferredPackageScriptExtension as d2,
+  looksLikePackageScriptPaste as d3,
+  enrollmentCommandStates as d4,
+  isBulkApproveGateReady as d5,
+  fetchLocalCliList as d6,
+  normalizeLocalCliList as d7,
+  unreviewedToolChangeCount as d8,
+  connectorSetupMatch as d9,
+  HiMiniGlobeAlt as dA,
+  HiMiniFunnel as dB,
+  discoveryFailureMessage as dC,
+  refreshCodexHostInventory as dD,
+  CODEX_HOST_FALLBACK as dE,
+  CONFIGURED_CONNECTIONS_FALLBACK as dF,
+  loadCurrentDashboardBuild as dG,
+  canonicalExtensionId as dH,
+  extensionDetailHref as dI,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as dJ,
+  addCustomExtensionPrefillHref as dK,
+  acknowledgeDegradedExtensionControlAuthority as dL,
+  recoverExtensionControlAuthority as dM,
+  connectorSetupLinkFromSearch as dN,
+  readExtensionDetailUrlState as dO,
+  parseProtectionRoute as dP,
+  addCustomExtensionHref as dQ,
+  GuardModalLayer as dR,
+  runHarnessAction as dS,
+  GuardHarnessActionError as dT,
+  HiMiniRocketLaunch as dU,
+  HiMiniTrash as dV,
+  fetchGuardApi as dW,
+  formatHarnessCommand as dX,
+  fetchApprovalPage as dY,
+  fetchPolicy as dZ,
+  HiMiniHome as d_,
+  refreshMcpInventory as da,
+  connectorGroupOutcome as db,
+  allowedEarlierVersion as dc,
+  startGuardCloudConnect as dd,
+  extensionEffectiveState as de,
+  permissionEffectiveState as df,
+  HiMiniArrowTopRightOnSquare as dg,
+  fetchExtensionControlApi as dh,
+  permissionForRule as di,
+  refreshEffectiveExtensionControls as dj,
+  fetchExtensionDiscoveryApi as dk,
+  HiMiniClock as dl,
+  startCancelableDiscoveryJob as dm,
+  waitForMcpDiscoveryJob as dn,
+  isLocalCliId as dp,
+  localCliHref as dq,
+  fetchPluginUpdatesApi as dr,
+  filterCodexHostApps as ds,
+  connectorWorkspaceItems as dt,
+  customExtensionNeedsReview as du,
+  profileSetupCommand as dv,
+  customExtensionBadge as dw,
+  extensionDisplayName as dx,
+  catalogRowSecondLine as dy,
+  extensionStateLabel as dz,
   HiMiniChevronUp as e,
-  HiMiniDocumentPlus as e$,
-  EvidenceFilterBar as e0,
-  EvidenceInsightStrip as e1,
-  EvidenceActionList as e2,
-  EvidenceActionDetail as e3,
-  policyIdentityKey as e4,
-  clearLabelForScope as e5,
-  HiMiniChartBar as e6,
-  HiMiniCheckBadge as e7,
-  isSupplyChainAuditIncomplete as e8,
-  isSupplyChainAuditEvidence as e9,
-  lazyWorkspace as eA,
-  __vitePreload as eB,
-  scopeLabel as eC,
-  HiMiniCloudArrowUp as eD,
-  HiMiniCodeBracket as eE,
-  HiMiniUsers as eF,
-  HiMiniFolder as eG,
-  HiMiniIdentification as eH,
-  policyActionLabel as eI,
-  createCloudExceptionRequest as eJ,
-  HiMiniPuzzlePiece as eK,
-  fetchCloudExceptions as eL,
-  fetchCloudExceptionRequests as eM,
-  PaginationControls as eN,
-  PolicyStatField as eO,
-  HiMiniArrowDownTray as eP,
-  HiMiniInbox as eQ,
-  HiMiniQueueList as eR,
-  Surface as eS,
-  HiMiniEllipsisHorizontal as eT,
-  HiMiniMinus as eU,
-  HiMiniWrench as eV,
-  HiMiniArrowLongRight as eW,
-  HiMiniArrowUpCircle as eX,
-  fetchReleaseFeedApi as eY,
-  fetchMcpPolicyRequest as eZ,
-  resolveMcpPolicyRequest as e_,
-  readString$1 as ea,
-  IconActionButton as eb,
-  HiMiniBeaker as ec,
-  HiMiniBugAnt as ed,
-  ActivationSummary as ee,
-  ActionResultPanel as ef,
-  fetchSupplyChainBundle as eg,
-  closeOnEscape as eh,
-  ConnectFlowCard as ei,
-  ApprovalProofInline as ej,
-  HiMiniCloudArrowDown as ek,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as el,
-  fetchPackageFirewallStatus as em,
-  runPackageAudit as en,
-  resolveSupplyChainAuditFailure as eo,
-  runPackageSync as ep,
-  GuardOperationTimeoutError as eq,
-  startPackageFirewallConnect as er,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as es,
-  repairSupplyChainProtection as et,
-  runPackageFirewallAction as eu,
-  parseInterceptProofSnapshot as ev,
-  activatePackageFirewallRuntime as ew,
-  EntitlementNotice as ex,
-  chooseSupplyChainAuditFolder as ey,
-  fetchReceipts as ez,
+  fetchMcpPolicyRequest as e$,
+  guardActionPresentation as e0,
+  DEFAULT_FILTER_STATE as e1,
+  filterEvidence as e2,
+  sortEvidence as e3,
+  computeMetrics as e4,
+  CommandActivityWorkspace as e5,
+  EvidenceFilterBar as e6,
+  EvidenceInsightStrip as e7,
+  EvidenceActionList as e8,
+  EvidenceActionDetail as e9,
+  parseInterceptProofSnapshot as eA,
+  activatePackageFirewallRuntime as eB,
+  EntitlementNotice as eC,
+  chooseSupplyChainAuditFolder as eD,
+  fetchReceipts as eE,
+  lazyWorkspace as eF,
+  __vitePreload as eG,
+  scopeLabel as eH,
+  HiMiniCloudArrowUp as eI,
+  HiMiniCodeBracket as eJ,
+  HiMiniUsers as eK,
+  HiMiniIdentification as eL,
+  policyActionLabel as eM,
+  createCloudExceptionRequest as eN,
+  HiMiniPuzzlePiece as eO,
+  fetchCloudExceptions as eP,
+  fetchCloudExceptionRequests as eQ,
+  PaginationControls as eR,
+  PolicyStatField as eS,
+  HiMiniInbox as eT,
+  HiMiniQueueList as eU,
+  Surface as eV,
+  HiMiniEllipsisHorizontal as eW,
+  HiMiniMinus as eX,
+  HiMiniWrench as eY,
+  HiMiniArrowLongRight as eZ,
+  fetchReleaseFeedApi as e_,
+  policyIdentityKey as ea,
+  clearLabelForScope as eb,
+  HiMiniChartBar as ec,
+  HiMiniCheckBadge as ed,
+  isSupplyChainAuditIncomplete as ee,
+  isSupplyChainAuditEvidence as ef,
+  readString$1 as eg,
+  IconActionButton as eh,
+  HiMiniBeaker as ei,
+  HiMiniBugAnt as ej,
+  ActivationSummary as ek,
+  ActionResultPanel as el,
+  fetchSupplyChainBundle as em,
+  closeOnEscape as en,
+  ConnectFlowCard as eo,
+  ApprovalProofInline as ep,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eq,
+  fetchPackageFirewallStatus as er,
+  runPackageAudit as es,
+  resolveSupplyChainAuditFailure as et,
+  runPackageSync as eu,
+  GuardOperationTimeoutError as ev,
+  startPackageFirewallConnect as ew,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as ex,
+  repairSupplyChainProtection as ey,
+  runPackageFirewallAction as ez,
   fetchContextAssistance as f,
-  HiMiniChevronLeft as f0,
-  HiMiniArrowDown as f1,
-  HiMiniArrowUp as f2,
-  runAuditRemediation as f3,
-  isBlockedGuardAction as f4,
-  isSupplyChainScannerEvidence as f5,
-  HiMiniFolderOpen as f6,
-  HiMiniSignal as f7,
+  resolveMcpPolicyRequest as f0,
+  HiMiniDocumentPlus as f1,
+  HiMiniDocumentMagnifyingGlass as f2,
+  HiMiniChevronLeft as f3,
+  HiMiniArrowDown as f4,
+  HiMiniArrowUp as f5,
+  runAuditRemediation as f6,
+  isBlockedGuardAction as f7,
+  isSupplyChainScannerEvidence as f8,
+  HiMiniSignal as f9,
   HiMiniChevronDown as g,
   harnessDisplayName as h,
   HiMiniArrowPath as i,

@@ -13,7 +13,6 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +44,7 @@ from .native_package_protect_projection import (
     native_package_protect_projection,
 )
 from .native_package_workspace_scope import NativePackageWorkspaceScopeError
+from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .native_shim_admin import NativeShimAdminError
 from .native_supply_chain_posture import native_local_supply_chain_posture
 from .native_workspace_inventory import native_workspace_inventory
@@ -60,7 +60,6 @@ from .runtime.package_execution_policy import is_execution_permitted
 from .runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
-    redact_package_request_token,
 )
 from .runtime.package_protect_projection import (
     LOCAL_SUPPLY_CHAIN_HARNESS as _LOCAL_SUPPLY_CHAIN_HARNESS,
@@ -73,20 +72,6 @@ from .shims import package_shim_protection, package_shim_supported_managers
 from .store import GuardStore
 from .store_guard_home_binding import binds_store_guard_home
 
-_MANIFEST_CANDIDATES = (
-    "package.json",
-    "requirements.txt",
-    "constraints.txt",
-    "pyproject.toml",
-    "Pipfile",
-    "Cargo.toml",
-    "go.mod",
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-    "composer.json",
-    "Gemfile",
-)
 _PACKAGE_MANAGER_BY_ECOSYSTEM = {
     "npm": "npm",
     "pypi": "pip",
@@ -118,8 +103,8 @@ _CLOUD_AUDIT_JOB_PAGE_SIZE = 1
 _CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS = 0.5
 _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
-_PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
-_PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
+# The job fields the native summary reads; the rest of a cloud reply stays here.
+_AUDIT_JOB_SUMMARY_FIELDS = ("status", "totalPackages", "processedCount", "error")
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
 
 
@@ -240,33 +225,16 @@ def _parse_package_intent_native(
     raise NativeProtectRequestError("native_package_intent_malformed")
 
 
-def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
-    return guard_home / _PACKAGE_FIREWALL_REFRESH_STATE_FILE
-
-
-def _read_package_firewall_refresh_state(guard_home: Path) -> dict[str, object]:
-    path = _package_firewall_refresh_state_path(guard_home)
+def _claim_package_firewall_refresh(guard_home: Path, now: float) -> bool:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _write_package_firewall_refresh_state(guard_home: Path, last_attempt: float) -> None:
-    path = _package_firewall_refresh_state_path(guard_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        tmp_path.write_text(
-            json.dumps({"last_refresh_attempt_at": last_attempt}, sort_keys=True, separators=(",", ":")),
-            encoding="utf-8",
+        answer = native_runner_authority(
+            "package_firewall_refresh_claim",
+            {"now": now},
+            guard_home=guard_home,
         )
-        tmp_path.replace(path)
-    finally:
-        if tmp_path.exists():
-            with suppress(OSError):
-                tmp_path.unlink()
+    except NativeRunnerAuthorityError:
+        return False
+    return answer.get("refresh") is True
 
 
 def build_local_supply_chain_posture(
@@ -334,14 +302,8 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
     now_iso = datetime.now(timezone.utc).isoformat()
     now = time.time()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
-        state = _read_package_firewall_refresh_state(store.guard_home)
-        last_refresh_at = state.get("last_refresh_attempt_at")
-        if (
-            isinstance(last_refresh_at, (int, float))
-            and (now - float(last_refresh_at)) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS
-        ):
+        if not _claim_package_firewall_refresh(store.guard_home, now):
             return entitlement
-        _write_package_firewall_refresh_state(store.guard_home, now)
     auth_context: dict[str, object] | None = None
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
@@ -371,14 +333,6 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
         except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
     return entitlement_module.package_firewall_entitlement_or_denied(store)
-
-
-def _workspace_has_project_markers(workspace_dir: Path) -> bool:
-    try:
-        resolved = workspace_dir.resolve()
-    except OSError:
-        return False
-    return any((resolved / marker).exists() for marker in _MANIFEST_CANDIDATES)
 
 
 def managed_install_audit_workspace_dirs(store: Any) -> tuple[str, ...]:
@@ -462,27 +416,26 @@ def _package_manager_launch_environment(
 ) -> dict[str, str]:
     """Exclude Guard's interception shim from the reviewed and executed package-manager path."""
 
-    launch_environment = dict(environment)
+    user_home = os.path.expanduser("~")
     try:
-        shim_dir = (guard_home / "package-shims" / "bin").expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        raise ValueError("Guard's package shim path could not be verified") from None
-    path_entries = environment.get("PATH", "").split(os.pathsep)
-    filtered_entries: list[str] = []
-    for entry in path_entries:
-        if not entry:
-            continue
-        try:
-            path_entry = Path(entry).expanduser()
-            if not path_entry.is_absolute():
-                path_entry = launch_cwd / path_entry
-            resolved_entry = path_entry.resolve()
-        except (OSError, RuntimeError, ValueError):
-            raise ValueError("package manager PATH could not be verified") from None
-        if resolved_entry != shim_dir:
-            filtered_entries.append(entry)
-    launch_environment["PATH"] = os.pathsep.join(filtered_entries)
-    return launch_environment
+        answer = native_runner_authority(
+            "package_manager_launch_path",
+            {
+                "guard_home": str(guard_home.expanduser().absolute()),
+                "launch_cwd": str(launch_cwd),
+                "user_home": user_home if os.path.isabs(user_home) else None,
+                "separator": os.pathsep,
+                "path": environment.get("PATH", ""),
+            },
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError:
+        answer = {}
+    if answer.get("refused") == "shim_unverified":
+        raise ValueError("Guard's package shim path could not be verified")
+    if not isinstance(launch_path := answer.get("path"), str):
+        raise ValueError("package manager PATH could not be verified")
+    return {**environment, "PATH": launch_path}
 
 
 @binds_store_guard_home
@@ -497,6 +450,7 @@ def _build_package_protect_authority(
     additional_policy_context: dict[str, object] | None,
     external_archive_network_authorized: bool = False,
     invoking_harness: str | None = None,
+    redacted_command: str | None = None,
 ) -> _PackageProtectAuthority | None:
     try:
         launch_cwd = workspace_dir.expanduser().resolve(strict=True)
@@ -520,7 +474,17 @@ def _build_package_protect_authority(
     )
     if intent is None:
         return None
-    sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
+    if intent.routine_local_runner:
+        # A runner the project already pins locally fetches nothing: the native
+        # parser resolved the executable inside the installed package and read
+        # the lockfile entry that binds it to a published release. A package
+        # request reviews a fetch, and this command has none to review, so the
+        # cached install verdict the native parser already carries is the whole
+        # answer whichever route reached protect.
+        return None
+    if redacted_command is None:
+        redacted_command = redacted_command_text(command, guard_home=store.guard_home)
+    sanitized_intent = replace(intent, redacted_command=redacted_command)
     artifact = build_package_request_artifact(
         _LOCAL_SUPPLY_CHAIN_HARNESS,
         sanitized_intent,
@@ -682,6 +646,9 @@ def _final_package_protect_authority(
         additional_policy_context=additional_context,
         external_archive_network_authorized=saved_approval_claimed,
         invoking_harness=initial.invoking_harness,
+        # The same argv redacts to the same text; reusing it keeps a resident
+        # round-trip out of the window after a saved approval is claimed.
+        redacted_command=initial.intent.redacted_command,
     )
     stored_policy = None
     if (
@@ -1054,8 +1021,21 @@ def _evaluation_uses_saved_package_approval(evaluation: Any) -> bool:
     return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
 
 
-def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:
-    return tuple(_redact_command_token(str(token)) for token in command)
+def redacted_command_text(command: Sequence[str], *, guard_home: Path) -> str:
+    """The command text a receipt stores, as the resident redacts and joins it."""
+
+    from .native_protect_request import NativeProtectRequestError
+
+    try:
+        answer = native_runner_authority(
+            "package_command_redaction", {"command": [str(token) for token in command]}, guard_home=guard_home
+        )
+    except NativeRunnerAuthorityError as error:
+        raise NativeProtectRequestError("native_package_command_redaction_unavailable") from error
+    text = answer.get("text")
+    if not isinstance(text, str):
+        raise NativeProtectRequestError("native_package_command_redaction_malformed")
+    return text
 
 
 def _build_command_execution_payload(
@@ -1242,29 +1222,15 @@ def sync_managed_workspace_audits(
             "or use `hol-guard login` as a compatibility alias for the same browser flow."
         )
     synced_at = datetime.now(timezone.utc).isoformat()
-    workspaces_payload: list[dict[str, object]] = []
-    completed_jobs = 0
-    failed_jobs = 0
-    incomplete_jobs = 0
-    queued_jobs = 0
-    skipped_workspaces = 0
+    outcomes: list[dict[str, object]] = []
     for candidate_path in native_managed_workspaces(store, candidates=True, workspace_dir=workspace_dir):
         candidate = Path(candidate_path)
         workspace_label = candidate.name or str(candidate)
         try:
             workspace_inventory = native_workspace_inventory(store, candidate)
-            manifest_paths, lockfile_paths = workspace_inventory.manifest_paths, workspace_inventory.lockfile_paths
             inventory = workspace_inventory.inventory
             if not inventory:
-                skipped_workspaces += 1
-                workspaces_payload.append(
-                    {
-                        "workspace": workspace_label,
-                        "status": "skipped",
-                        "message": "No supported package inventory was detected for workspace audit sync.",
-                        "package_count": 0,
-                    }
-                )
+                outcomes.append({"outcome": "skipped", "workspace": workspace_label})
                 continue
             request_payload = native_cloud_audit_payload(
                 store,
@@ -1287,43 +1253,17 @@ def sync_managed_workspace_audits(
                 job_id=job_id,
                 workspace_id=workspace_id,
             )
-            final_status = (
-                str(final_response.get("status") or enqueue_response.get("status") or "queued").strip().lower()
-            )
-            cloud_visible_count = _int_value(final_response.get("totalPackages"))
-            cloud_processed_count = _int_value(final_response.get("processedCount"))
-            incomplete_cloud_projection = (
-                final_status == "completed" and cloud_visible_count is not None and cloud_visible_count < len(inventory)
-            )
-            if incomplete_cloud_projection:
-                incomplete_jobs += 1
-                workspace_status = "partial"
-            else:
-                workspace_status = final_status
-                if final_status == "completed":
-                    completed_jobs += 1
-                elif final_status == "failed":
-                    failed_jobs += 1
-                else:
-                    queued_jobs += 1
-            message = final_response.get("error")
-            if incomplete_cloud_projection:
-                message = (
-                    "Guard Cloud accepted fewer package rows than hol-guard discovered "
-                    f"({cloud_visible_count} of {len(inventory)} visible)."
-                )
-            workspaces_payload.append(
+            outcomes.append(
                 {
+                    "outcome": "job",
                     "workspace": workspace_label,
                     "workspace_fingerprint": request_payload.get("workspaceFingerprint"),
                     "job_id": job_id,
-                    "status": workspace_status,
                     "package_count": len(inventory),
-                    "cloud_processed_count": cloud_processed_count,
-                    "cloud_visible_count": cloud_visible_count,
-                    "manifest_paths": list(manifest_paths),
-                    "lockfile_paths": list(lockfile_paths),
-                    "message": message,
+                    "enqueue_status": enqueue_response.get("status"),
+                    "final": {key: final_response[key] for key in _AUDIT_JOB_SUMMARY_FIELDS if key in final_response},
+                    "manifest_paths": list(workspace_inventory.manifest_paths),
+                    "lockfile_paths": list(workspace_inventory.lockfile_paths),
                 }
             )
         except (
@@ -1333,34 +1273,17 @@ def sync_managed_workspace_audits(
         ):
             raise
         except (OSError, RuntimeError, ValueError) as error:
-            failed_jobs += 1
-            workspaces_payload.append(
-                {
-                    "workspace": workspace_label,
-                    "status": "failed",
-                    "message": str(error),
-                    "package_count": 0,
-                }
-            )
-    if failed_jobs > 0 and completed_jobs == 0 and queued_jobs == 0 and incomplete_jobs == 0:
-        status = "failed"
-    elif failed_jobs > 0 or incomplete_jobs > 0:
-        status = "partial"
-    elif completed_jobs > 0 or queued_jobs > 0:
-        status = "synced"
-    else:
-        status = "idle"
-    summary: dict[str, object] = {
-        "synced_at": synced_at,
-        "status": status,
-        "workspace_count": len(workspaces_payload),
-        "completed_jobs": completed_jobs,
-        "queued_jobs": queued_jobs,
-        "failed_jobs": failed_jobs,
-        "incomplete_jobs": incomplete_jobs,
-        "skipped_workspaces": skipped_workspaces,
-        "workspaces": workspaces_payload,
-    }
+            outcomes.append({"outcome": "failed", "workspace": workspace_label, "message": str(error)})
+    try:
+        summary = native_runner_authority(
+            "workspace_audit_sync",
+            {"synced_at": synced_at, "workspaces": outcomes},
+            guard_home=store.guard_home,
+        )
+    except NativeRunnerAuthorityError as error:
+        # Sync callers degrade on RuntimeError; the jobs already ran, only the
+        # summary is missing.
+        raise RuntimeError("Guard could not summarize the workspace audit sync.") from error
     store.set_sync_payload("workspace_audits_sync_summary", summary, synced_at)
     return summary
 
@@ -1411,19 +1334,6 @@ def _package_manager_for_scan(manifest_paths: Sequence[str]) -> str:
 
 def _protect_action_for_policy_action(policy_action: object) -> GuardAction:
     return normalize_guard_action(policy_action, unknown_action="block")
-
-
-def _redact_command_token(token: str) -> str:
-    token = redact_package_request_token(token)
-    if "=" in token:
-        key, _, _ = token.partition("=")
-        if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
-            return f"{key}=*****"
-    if ":" in token:
-        key, _, _ = token.partition(":")
-        if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
-            return f"{key}: *****"
-    return redact_text(token).text
 
 
 def _int_value(value: object) -> int | None:

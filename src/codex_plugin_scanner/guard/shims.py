@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +41,10 @@ HarnessContext = HarnessContextLike
 
 _PACKAGE_SHIM_COMMANDS = {manager: manager for manager in SUPPORTED_PACKAGE_SHIM_MANAGERS}
 _GUARD_PROFILE_MARKER = "# HOL Guard harness launchers"
+_GUARD_SHIM_PROFILE_FEATURE = "native-guard-shim-profile-v1"
+_GUARD_SHIM_PROFILE_TIMEOUT_SECONDS = 10.0
+# Profile under the home directory for each shell; any other shell uses .zshrc.
+_GUARD_SHIM_PROFILE_FILES = {"fish": (".config", "fish", "config.fish"), "bash": (".bashrc",)}
 # Path fragments that indicate a shim dir lives in an ephemeral location (a test
 # temp dir, the system temp root, etc.). Such paths must never be written into a
 # long-lived shell profile: they vanish and leave broken PATH entries behind.
@@ -246,25 +249,31 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
     """Capture the selected shell profile and render its PATH block without writes."""
     from .adapters.base import _ensure_path_within_root
     from .codex_hook_recovery import _snapshot
+    from .mdm.runtime_request import runtime_answer
     from .runtime_transition import TransitionFile
 
     shim_dir = context.guard_home / "bin"
-    if os.name == "nt" or _is_transient_path(shim_dir):
-        return PreparedGuardShim(
-            (),
-            {
-                "changed": False,
-                "profile_path": None,
-                "shim_dir": str(shim_dir),
-                "restart_shell_required": False,
-                "manual_path_required": True,
-            },
-        )
-    profile_path, export_line = _guard_shim_profile_target(context.home_dir, shim_dir)
+    if os.name == "nt":
+        return _manual_guard_shim_profile(shim_dir, "unsupported_shell")
+    if _is_transient_path(shim_dir):
+        return _manual_guard_shim_profile(shim_dir, "transient_guard_home")
+    shell = Path(os.environ.get("SHELL", "")).name
+    profile_path = context.home_dir.joinpath(*_GUARD_SHIM_PROFILE_FILES.get(shell, (".zshrc",)))
     _ensure_path_within_root(context.home_dir, profile_path, label="Guard shell profile")
     before = _snapshot(profile_path)
     existing = before.decode("utf-8") if before is not None else ""
-    after = _managed_profile_content(existing, export_line, _GUARD_PROFILE_MARKER).encode("utf-8")
+    # The runtime renders the block; without it the user adds the PATH entry.
+    answer = runtime_answer(
+        _GUARD_SHIM_PROFILE_FEATURE,
+        "guard-shim-profile",
+        {"schema": "guard-shim-profile.v1", "existing": existing, "shim_dir": str(shim_dir), "fish": shell == "fish"},
+        output_limit=6 * len(existing) + 64 * 1024,
+        timeout_seconds=_GUARD_SHIM_PROFILE_TIMEOUT_SECONDS,
+    )
+    content = answer.get("content") if answer is not None else None
+    if not isinstance(content, str):
+        return _manual_guard_shim_profile(shim_dir, "native_runtime_unavailable")
+    after = content.encode("utf-8")
     mode = profile_path.stat().st_mode & 0o777 if before is not None else 0o600
     change = TransitionFile(
         profile_path.resolve(strict=False), before, after, before_mode=mode, after_mode=mode, no_follow=True
@@ -277,6 +286,20 @@ def prepare_guard_shim_shell_profile(context: HarnessContext) -> PreparedGuardSh
             "profile_path": str(profile_path),
             "shim_dir": str(shim_dir),
             "restart_shell_required": True,
+        },
+    )
+
+
+def _manual_guard_shim_profile(shim_dir: Path, reason: str) -> PreparedGuardShim:
+    return PreparedGuardShim(
+        (),
+        {
+            "changed": False,
+            "profile_path": None,
+            "shim_dir": str(shim_dir),
+            "restart_shell_required": False,
+            "manual_path_required": True,
+            "manual_path_reason": reason,
         },
     )
 
@@ -299,97 +322,6 @@ def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str
             RuntimeTransition._write_file(change.payload(), "after")
         RuntimeTransition._compare(payload, "after")
         return prepared.manifest
-
-
-def _managed_profile_content(existing: str, export_line: str, marker: str) -> str:
-    """Render the same idempotent block for normal and transition publication."""
-    export_line = export_line.rstrip("\n")
-    marker_line = export_line.split("\n", 1)[0]
-    if marker_line.strip() != marker.strip():
-        # Defensive: caller always passes a block whose first line is the marker.
-        export_line = f"{marker}\n{export_line}"
-    desired = f"{export_line}\n"
-    if existing == desired:
-        return existing
-    cleaned = _strip_managed_marker_blocks(existing, marker)
-    if cleaned == "":
-        new_content = desired
-    else:
-        prefix = "" if cleaned.endswith("\n") else "\n"
-        new_content = f"{cleaned}{prefix}{desired}"
-    return new_content
-
-
-def _strip_managed_marker_blocks(content: str, marker: str) -> str:
-    """Remove every Guard-managed block tagged with *marker* from *content*.
-
-    A block is the marker line plus the single line that follows it. To avoid
-    leaving a gap where a block sat, a single blank line immediately preceding
-    or following a removed block is also dropped. Blank-line runs elsewhere in
-    the file (user content) are left untouched.
-    """
-
-    if not content:
-        return ""
-    marker_stripped = marker.strip()
-    lines = content.splitlines()
-    # First pass: locate index ranges [i, i+1] of each marker block.
-    drop_indices: set[int] = set()
-    for index, line in enumerate(lines):
-        if line.strip() == marker_stripped and index + 1 < len(lines):
-            drop_indices.add(index)
-            drop_indices.add(index + 1)
-    if not drop_indices:
-        return content if content.endswith("\n") else content + "\n"
-    # Second pass: keep lines, swallowing one blank line adjacent to a dropped
-    # block so the removal does not leave a stale blank gap.
-    keep: list[str] = []
-    for index, line in enumerate(lines):
-        if index in drop_indices:
-            continue
-        is_blank = line.strip() == ""
-        if is_blank:
-            prev_kept_blank_gap = keep and keep[-1].strip() == ""
-            # Drop this blank only if both neighbors were removed (i.e. the blank
-            # was sandwiched between two removed block lines or sits at the edge
-            # of a removal zone).
-            prev_dropped = (index - 1) in drop_indices
-            next_dropped = (index + 1) in drop_indices
-            edge_of_removal = prev_dropped or next_dropped
-            if edge_of_removal and not prev_kept_blank_gap:
-                continue
-        keep.append(line)
-    cleaned = "\n".join(keep)
-    if cleaned and not cleaned.endswith("\n"):
-        cleaned += "\n"
-    return cleaned
-
-
-def _guard_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, str]:
-    shell = Path(os.environ.get("SHELL", "")).name
-    marker = _GUARD_PROFILE_MARKER
-    if shell == "fish":
-        return (
-            home_dir / ".config" / "fish" / "config.fish",
-            f"{marker}\n{_fish_path_prepend(shim_dir)}",
-        )
-    if shell == "bash":
-        return (
-            home_dir / ".bashrc",
-            f"{marker}\n{_posix_path_export(shim_dir)}",
-        )
-    return (
-        home_dir / ".zshrc",
-        f"{marker}\n{_posix_path_export(shim_dir)}",
-    )
-
-
-def _posix_path_export(shim_dir: Path) -> str:
-    return f"export PATH={shlex.quote(str(shim_dir))}:$PATH"
-
-
-def _fish_path_prepend(shim_dir: Path) -> str:
-    return f"fish_add_path --prepend -- {shlex.quote(str(shim_dir))}"
 
 
 def _is_transient_path(path: Path) -> bool:

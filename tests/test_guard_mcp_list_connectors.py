@@ -11,7 +11,6 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discover_remote_mcp_servers,
     persist_discovered_harness_mcp_servers,
-    remote_mcp_origin,
 )
 from codex_plugin_scanner.guard.cli.inventory_list_commands import mcp_list_payload
 from codex_plugin_scanner.guard.cli.render_connectors import connector_setup_line
@@ -75,23 +74,6 @@ def _remote_detection(harness: str, name: str, url: str) -> HarnessDetection:
             ),
         ),
     )
-
-
-def test_remote_origin_keeps_scheme_host_and_path_only() -> None:
-    assert remote_mcp_origin("HTTPS://user:pw@MCP.Example.Test:8443/v1/mcp?key=secret#frag") == (
-        "https://mcp.example.test:8443/v1/mcp"
-    )
-    assert remote_mcp_origin("https://mcp.example.test/mcp") == "https://mcp.example.test/mcp"
-    for rejected in ("${MCP_URL}", "file:///tmp/sock", "ftp://mcp.example.test/", "https:///path", ""):
-        assert remote_mcp_origin(rejected) is None
-
-
-def test_remote_origin_masks_path_segments_that_look_like_keys() -> None:
-    assert remote_mcp_origin("https://mcp.example.test/api/mcp/s/a1b2c3d4e5/mcp") == (
-        "https://mcp.example.test/api/mcp/s/[masked]/mcp"
-    )
-    assert remote_mcp_origin("https://mcp.example.test/v1/" + "k" * 24) == "https://mcp.example.test/v1/[masked]"
-    assert remote_mcp_origin("https://mcp.example.test/2025-06-18/mcp") == "https://mcp.example.test/2025-06-18/mcp"
 
 
 def test_a_server_name_is_read_as_the_namespace_its_calls_carry(tmp_path: Path) -> None:

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import ast
 import json
-import re
 import shlex
 import subprocess
 import sys
@@ -56,13 +54,11 @@ if TYPE_CHECKING:
 _MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest", "permissionRequestV2")
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
-_LEGACY_MANAGED_HOOK_PATTERNS = (
-    re.compile(r'(^|["\s])-m["\s]+codex_plugin_scanner\.cli(["\s]|$)'),
-    re.compile(r'(^|["\s])guard(["\s]|$)'),
-    re.compile(r'(^|["\s])hook(["\s]|$)'),
-    re.compile(r'--harness(?:["\s=]+)copilot(["\s]|$)'),
-)
-_INLINE_GUARD_ARGS_PATTERN = re.compile(r"json\.loads\((?P<payload>'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\)")
+_HOOK_COMMANDS_FEATURE = "native-copilot-hook-commands-v1"
+_HOOK_COMMANDS_TIMEOUT_SECONDS = 10.0
+# Well inside the runtime's 1,024-command and 1 MiB request limits.
+_HOOK_COMMANDS_BATCH_COUNT = 1024
+_HOOK_COMMANDS_BATCH_BYTES = 512 * 1024
 
 
 class _ManagedHookPayload(TypedDict):
@@ -161,109 +157,100 @@ def _hook_entry(
     return entry
 
 
-def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) -> bool:
-    normalized_command = command.lower()
-    if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
-        return True
-    try:
-        split_tokens = shlex.split(command)
-    except ValueError:
-        return False
-    from .bounded_cli_hook_native import bounded_python_argv
+class CopilotHookOwnershipError(RuntimeError):
+    """The native runtime could not say which Copilot hook commands Guard wrote."""
 
-    # A native launcher prefix wraps the same Python bridge argv.
-    tokens = [str(token) for token in bounded_python_argv(split_tokens)]
-    if len(tokens) == 3 and tokens[1] == "__guard-bounded-hook":
-        if Path(tokens[0]).name.lower() not in {"hol guard", "hol-guard", "hol-guard.exe"}:
-            return False
-        try:
-            raw_config: object = json.loads(tokens[2])
-        except json.JSONDecodeError:
-            return False
-        if not isinstance(raw_config, dict) or raw_config.get("harness") != "copilot":
-            return False
-        cli_args = raw_config.get("cli_args")
-        if not isinstance(cli_args, list):
-            return False
-        normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
-        return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
-    if len(tokens) == 3 and tokens[1] == "-I":
-        if guard_home is None:
-            return False
+
+def _hook_command_batches(commands: list[str]) -> list[list[str]]:
+    """Distinct *commands* in runtime-sized batches.
+
+    A command longer than one batch's byte budget is never Guard's, so it is
+    left out rather than sent.
+    """
+
+    batches: list[list[str]] = []
+    batch: list[str] = []
+    batch_bytes = 0
+    for command in dict.fromkeys(commands):
+        size = len(json.dumps(command, ensure_ascii=False).encode("utf-8")) + 1
+        if size > _HOOK_COMMANDS_BATCH_BYTES:
+            continue
+        if batch and (len(batch) == _HOOK_COMMANDS_BATCH_COUNT or batch_bytes + size > _HOOK_COMMANDS_BATCH_BYTES):
+            batches.append(batch)
+            batch, batch_bytes = [], 0
+        batch.append(command)
+        batch_bytes += size
+    if batch:
+        batches.append(batch)
+    return batches
+
+
+def _managed_hook_commands(commands: list[str], *, guard_home: Path | None) -> set[str]:
+    """The commands in *commands* that Guard wrote, as the native runtime reads them.
+
+    Raises `CopilotHookOwnershipError` when the runtime cannot answer, so an
+    install never duplicates Guard's entries and an uninstall never leaves
+    them behind.
+    """
+
+    batches = _hook_command_batches(commands)
+    if not batches:
+        return set()
+    from ..mdm.runtime_request import runtime_answer
+
+    interpreter: str | None = None
+    script: str | None = None
+    if guard_home is not None:
         from .bounded_cli_hook_bridge import bounded_hook_script_path
         from .cursor_hook_config import isolated_cursor_hook_python
 
-        expected_script = bounded_hook_script_path(guard_home, "copilot")
+        bridge_script = bounded_hook_script_path(guard_home, "copilot")
         interpreter = isolated_cursor_hook_python()
-        if expected_script is None or interpreter is None:
-            return False
-        try:
-            return (
-                Path(tokens[0]).resolve() == Path(interpreter).resolve()
-                and Path(tokens[2]).resolve() == expected_script.resolve()
+        script = None if bridge_script is None else str(bridge_script)
+    managed: set[str] = set()
+    for batch in batches:
+        answer = runtime_answer(
+            _HOOK_COMMANDS_FEATURE,
+            "copilot-hook-commands",
+            {
+                "schema": "copilot-hook-commands.v1",
+                "commands": batch,
+                "interpreter": interpreter,
+                "script": script,
+            },
+            output_limit=64 * 1024,
+            timeout_seconds=_HOOK_COMMANDS_TIMEOUT_SECONDS,
+        )
+        flags = None if answer is None else answer.get("managed")
+        if not isinstance(flags, list) or len(flags) != len(batch):
+            raise CopilotHookOwnershipError(
+                "Guard could not read which Copilot hooks it installed; the native Guard runtime did not answer. "
+                "Run `hol-guard doctor copilot` and try again."
             )
-        except OSError:
-            return False
-    if len(tokens) < 3:
-        return False
-    executable = Path(tokens[0]).name.lower()
-    if not executable.startswith("python"):
-        return False
-    try:
-        inline_code_index = tokens.index("-c", 1)
-    except ValueError:
-        return False
-    supported_interpreter_flags = {"-B", "-E", "-I", "-P", "-S", "-s", "-u"}
-    if any(flag not in supported_interpreter_flags for flag in tokens[1:inline_code_index]):
-        return False
-    if inline_code_index + 1 >= len(tokens):
-        return False
-    inline_code = tokens[inline_code_index + 1]
-    if "bounded_cli_hook_bridge" in inline_code and len(tokens) == inline_code_index + 3:
-        try:
-            raw_config: object = json.loads(tokens[inline_code_index + 2])
-        except json.JSONDecodeError:
-            return False
-        if not isinstance(raw_config, dict):
-            return False
-        config: dict[str, object] = {key: value for key, value in raw_config.items() if isinstance(key, str)}
-        if config.get("harness") != "copilot":
-            return False
-        cli_args = config.get("cli_args")
-        if not isinstance(cli_args, list):
-            return False
-        normalized_args = tuple(item.lower() for item in cli_args if isinstance(item, str))
-        return len(normalized_args) == len(cli_args) and _argv_targets_copilot(normalized_args)
-    inline_args = _inline_guard_args(inline_code)
-    return "codex_plugin_scanner.cli" in inline_code and _argv_targets_copilot(inline_args)
+        managed.update(command for command, flag in zip(batch, flags, strict=True) if flag is True)
+    return managed
 
 
-def _inline_guard_args(inline_code: str) -> tuple[str, ...]:
-    match = _INLINE_GUARD_ARGS_PATTERN.search(inline_code)
-    if match is None:
-        return ()
-    try:
-        payload = ast.literal_eval(match.group("payload"))
-    except (SyntaxError, ValueError):
-        return ()
-    if not isinstance(payload, str):
-        return ()
-    try:
-        guard_args = json.loads(payload)
-    except json.JSONDecodeError:
-        return ()
-    if not isinstance(guard_args, list) or any(not isinstance(item, str) for item in guard_args):
-        return ()
-    return tuple(item.lower() for item in guard_args)
+def _is_managed_hook_command(command: str, *, guard_home: Path | None = None) -> bool:
+    return command in _managed_hook_commands([command], guard_home=guard_home)
 
 
-def _argv_targets_copilot(argv: tuple[str, ...]) -> bool:
-    for index, token in enumerate(argv):
-        if token == "--harness" and index + 1 < len(argv) and argv[index + 1] == "copilot":
-            return "guard" in argv and "hook" in argv
-        if token.startswith("--harness=") and token.split("=", 1)[1] == "copilot":
-            return "guard" in argv and "hook" in argv
-    return False
+def _entry_commands(entry: object) -> list[str]:
+    if not isinstance(entry, dict):
+        return []
+    return [command for key in ("command", "bash", "powershell") if isinstance(command := entry.get(key), str)]
+
+
+def _hooks_commands(hooks: dict[str, object]) -> list[str]:
+    """Every command in the managed events of one hooks object."""
+
+    return [
+        command
+        for hook_name in _MANAGED_HOOK_EVENTS
+        if isinstance(entries := hooks.get(hook_name), list)
+        for entry in entries
+        for command in _entry_commands(entry)
+    ]
 
 
 def _is_managed_hook_entry(
@@ -271,27 +258,22 @@ def _is_managed_hook_entry(
     bash_command: str,
     powershell_command: str,
     *,
-    guard_home: Path | None = None,
+    managed: set[str],
 ) -> bool:
     if not isinstance(entry, dict):
         return False
     if entry.get("bash") == bash_command and entry.get("powershell") == powershell_command:
         return True
-    for command in (entry.get("command"), entry.get("bash"), entry.get("powershell")):
-        if not isinstance(command, str):
-            continue
-        if command in {bash_command, powershell_command}:
-            return True
-        if _is_managed_hook_command(command, guard_home=guard_home):
-            return True
-    return False
+    return any(
+        command in {bash_command, powershell_command} or command in managed for command in _entry_commands(entry)
+    )
 
 
 def _merge_hook_entries(
     entries: object,
     hook_entry: dict[str, object],
     *,
-    guard_home: Path | None = None,
+    managed: set[str],
 ) -> list[object]:
     normalized = list(entries) if isinstance(entries, list) else []
     bash_command = str(hook_entry["bash"])
@@ -299,7 +281,7 @@ def _merge_hook_entries(
     preserved_entries = [
         entry
         for entry in normalized
-        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
+        if not _is_managed_hook_entry(entry, bash_command, powershell_command, managed=managed)
     ]
     return [*preserved_entries, hook_entry]
 
@@ -309,14 +291,14 @@ def _remove_hook_entries(
     bash_command: str,
     powershell_command: str,
     *,
-    guard_home: Path | None = None,
+    managed: set[str],
 ) -> list[object]:
     if not isinstance(entries, list):
         return []
     return [
         entry
         for entry in entries
-        if not _is_managed_hook_entry(entry, bash_command, powershell_command, guard_home=guard_home)
+        if not _is_managed_hook_entry(entry, bash_command, powershell_command, managed=managed)
     ]
 
 
@@ -600,6 +582,30 @@ class CopilotHarnessAdapter(HarnessAdapter):
             change.payload()
             prepared_files.append(change)
 
+        # Read which hook commands Guard owns before anything is written, so a
+        # runtime that cannot answer leaves every file as it was.
+        config_path = self._config_path(context)
+        _ensure_path_within_root(context.home_dir, config_path, label="Copilot config")
+        config_payload = (
+            self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
+            if prepared_files is None
+            else parsed(config_path)
+        )
+        hooks_payload = _inline_hooks_payload(config_payload)
+        managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
+        managed_hook_path = self._hook_path(context)
+        managed_hook_payload: _ManagedHookPayload | None = None
+        workspace_managed: set[str] = set()
+        if managed_hook_path is not None:
+            if context.workspace_dir is None:
+                raise ValueError("Copilot workspace hook requires a workspace root")
+            _ensure_path_within_root(context.workspace_dir, managed_hook_path, label="Copilot hook")
+            managed_hook_payload = _managed_hook_payload(
+                _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path),
+            )
+            workspace_managed = _managed_hook_commands(
+                _hooks_commands(managed_hook_payload["hooks"]), guard_home=context.guard_home
+            )
         detection = self.detect(context, config_contents=config_contents)
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
@@ -706,21 +712,9 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_target_mcp_path = target_mcp_paths[0]
         primary_backup_path = backup_paths[0]
         primary_state_path = state_paths[0]
-        config_path = self._config_path(context)
-        _ensure_path_within_root(context.home_dir, config_path, label="Copilot config")
-        config_payload = (
-            self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
-            if prepared_files is None
-            else parsed(config_path)
-        )
-        hooks_payload = _inline_hooks_payload(config_payload)
         hook_entry = _hook_entry(context, include_workspace=False, prepared_files=prepared_files)
         for hook_name in _MANAGED_HOOK_EVENTS:
-            hooks_payload[hook_name] = _merge_hook_entries(
-                hooks_payload.get(hook_name),
-                hook_entry,
-                guard_home=context.guard_home,
-            )
+            hooks_payload[hook_name] = _merge_hook_entries(hooks_payload.get(hook_name), hook_entry, managed=managed)
         if prepared_files is None:
             config_path.parent.mkdir(parents=True, exist_ok=True)
             write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
@@ -728,21 +722,14 @@ class CopilotHarnessAdapter(HarnessAdapter):
             prepare_file(
                 config_path, (json.dumps(config_payload, indent=2) + "\n").encode("utf-8"), before=captured(config_path)
             )
-        managed_hook_path = self._hook_path(context)
-        if managed_hook_path is not None:
-            if context.workspace_dir is None:
-                raise ValueError("Copilot workspace hook requires a workspace root")
-            _ensure_path_within_root(context.workspace_dir, managed_hook_path, label="Copilot hook")
-            managed_hook_payload = _managed_hook_payload(
-                _json_payload(managed_hook_path) if prepared_files is None else parsed(managed_hook_path),
-            )
+        if managed_hook_path is not None and managed_hook_payload is not None:
             managed_workspace_hooks = managed_hook_payload["hooks"]
             managed_workspace_entry = _hook_entry(context, include_workspace=True, prepared_files=prepared_files)
             for hook_name in _MANAGED_HOOK_EVENTS:
                 managed_workspace_hooks[hook_name] = _merge_hook_entries(
                     managed_workspace_hooks.get(hook_name),
                     managed_workspace_entry,
-                    guard_home=context.guard_home,
+                    managed=workspace_managed,
                 )
             if prepared_files is None:
                 managed_hook_path.parent.mkdir(parents=True, exist_ok=True)
@@ -776,6 +763,20 @@ class CopilotHarnessAdapter(HarnessAdapter):
 
     @copilot_lifecycle_uninstall
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        # Read which hook commands Guard owns before anything is restored or
+        # removed, so a runtime that cannot answer leaves every file as it was.
+        config_path = self._config_path(context)
+        config_payload = self._strict_json_object(config_path, label="Copilot config")
+        hooks_payload = _inline_hooks_payload(config_payload)
+        managed = _managed_hook_commands(_hooks_commands(hooks_payload), guard_home=context.guard_home)
+        managed_hook_path = self._hook_path(context)
+        managed_hook_payload: _ManagedHookPayload | None = None
+        workspace_managed: set[str] = set()
+        if managed_hook_path is not None and managed_hook_path.is_file():
+            managed_hook_payload = _managed_hook_payload(_json_payload(managed_hook_path))
+            workspace_managed = _managed_hook_commands(
+                _hooks_commands(managed_hook_payload["hooks"]), guard_home=context.guard_home
+            )
         uninstall_targets = self._uninstall_targets(context)
         for state_path, target_mcp_path, backup_path in uninstall_targets:
             cleanup_complete = False
@@ -805,9 +806,6 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_target_mcp_path = managed_config_paths[0] if managed_config_paths else ""
         primary_backup_path = backup_paths[0] if backup_paths else ""
         primary_state_path = state_paths[0] if state_paths else ""
-        config_path = self._config_path(context)
-        config_payload = self._strict_json_object(config_path, label="Copilot config")
-        hooks_payload = _inline_hooks_payload(config_payload)
         bash_command, powershell_command = _hook_shell_commands(context, include_workspace=False)
         if len(remaining_state_entries) == 0:
             for hook_name in _MANAGED_HOOK_EVENTS:
@@ -815,7 +813,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                     hooks_payload.get(hook_name),
                     bash_command,
                     powershell_command,
-                    guard_home=context.guard_home,
+                    managed=managed,
                 )
                 if len(updated_entries) > 0:
                     hooks_payload[hook_name] = updated_entries
@@ -825,9 +823,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 config_payload.pop("hooks", None)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         write_text_at_authorized_path(config_path, json.dumps(config_payload, indent=2) + "\n")
-        managed_hook_path = self._hook_path(context)
-        if managed_hook_path is not None and managed_hook_path.is_file():
-            managed_hook_payload = _managed_hook_payload(_json_payload(managed_hook_path))
+        if managed_hook_path is not None and managed_hook_payload is not None:
             managed_workspace_hooks = managed_hook_payload["hooks"]
             managed_bash_command, managed_powershell_command = _hook_shell_commands(
                 context,
@@ -838,7 +834,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                     managed_workspace_hooks.get(hook_name),
                     managed_bash_command,
                     managed_powershell_command,
-                    guard_home=context.guard_home,
+                    managed=workspace_managed,
                 )
                 if len(updated_entries) > 0:
                     managed_workspace_hooks[hook_name] = updated_entries

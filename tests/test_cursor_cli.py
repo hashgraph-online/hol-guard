@@ -195,3 +195,18 @@ def test_cursor_cli_detected_without_shims_when_cursor_agent_subcommand_exists(
     assert cursor_cli_command_available(context) is True
     assert cursor_cli_detected(context) is True
     assert CursorHarnessAdapter().detect(context).command_available is True
+
+
+def test_cli_install_names_the_launcher_directory_when_the_profile_needs_a_manual_path(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    shim = {"shim_path": "agent", "shim_dir": "bin", "shim_command": "guard-cursor-agent", "notes": []}
+    manifest = CursorHarnessAdapter()._cli_install_manifest(  # pyright: ignore[reportPrivateUsage]
+        context,
+        shim,
+        {"shim_path": "cursor"},
+        {"changed": False, "restart_shell_required": False, "manual_path_required": True},
+    )
+
+    notes = manifest["notes"]
+    assert isinstance(notes, list)
+    assert f"Put {context.guard_home / 'bin'} first on your PATH so guard-cursor shims run." in notes
