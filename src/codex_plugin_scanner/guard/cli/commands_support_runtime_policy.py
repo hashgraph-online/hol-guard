@@ -91,7 +91,11 @@ def _approval_copy(
 
     The copy is display only, so an unavailable runtime leaves it unchanged.
     """
-    from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+    from ..native_runner_authority import (
+        NativeRunnerAuthorityError,
+        NativeRunnerAuthorityRefusalError,
+        native_runner_authority,
+    )
 
     result: dict[str, object] | None = None
     patches: list[object] = []
@@ -107,8 +111,12 @@ def _approval_copy(
         }
         try:
             answer = native_runner_authority("approval_copy", args)
-        except NativeRunnerAuthorityError:
+        except NativeRunnerAuthorityRefusalError:
             answer = None
+        except NativeRunnerAuthorityError:
+            # An unavailable resident would cost every later batch its own
+            # budget, so the remaining copy stays unchanged instead.
+            break
         if result is None and answer is not None:
             result = answer
         routed = answer.get("decisions") if answer is not None else None
@@ -118,7 +126,7 @@ def _approval_copy(
             # A refused batch keeps its original copy; the others still route.
             patches.extend([None] * len(batch))
     if result is not None:
-        result["decisions"] = patches
+        result["decisions"] = patches + [None] * (sum(len(batch) for batch in batches) - len(patches))
     return result
 
 def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:

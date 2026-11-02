@@ -170,7 +170,7 @@ def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.
             return resolve(kind, args, **kwargs)
         calls.append(args)
         if len(calls) == refused:
-            raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_invalid")
+            raise native_runner_authority.NativeRunnerAuthorityRefusalError("native_runner_authority_invalid")
         batch = args["decisions"]
         assert isinstance(batch, list)
         return {
@@ -201,3 +201,39 @@ def test_a_long_approval_queue_is_routed_in_bounded_batches(monkeypatch: pytest.
     user_copy = payload["supply_chain_evaluation"]
     assert isinstance(user_copy, dict)
     assert user_copy["user_copy"]["harness_message"] == "Routed copy."
+
+
+def test_an_unavailable_resident_stops_the_batch_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runner_authority
+    from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as policy
+
+    calls: list[dict[str, object]] = []
+    resolve = native_runner_authority.native_runner_authority
+
+    def route(kind: str, args: dict[str, object], **kwargs: Any) -> dict[str, object]:
+        if kind != "approval_copy":
+            return resolve(kind, args, **kwargs)
+        calls.append(args)
+        if len(calls) == 2:
+            raise native_runner_authority.NativeRunnerAuthorityError("native_runner_authority_unavailable")
+        batch = args["decisions"]
+        assert isinstance(batch, list)
+        return {
+            "review_context": "Open HOL Guard.",
+            "decisions": [{"harness_message": "Routed."} for _ in batch],
+            "user_copy_message": None,
+        }
+
+    monkeypatch.setattr(native_runner_authority, "native_runner_authority", route)
+    monkeypatch.setattr(policy, "_APPROVAL_COPY_BATCH_BYTES", 1)
+    queued = [{"decision_v2_json": {"action": "allow", "harness_message": f"Held {index}."}} for index in range(2)]
+    payload: dict[str, object] = {
+        "primary_approval_url": "http://127.0.0.1:5474/requests/req-codex-5",
+        "decision_v2_json": {"action": "allow", "harness_message": "Held."},
+        "approval_requests": queued,
+    }
+    policy._localize_pending_approval_copy(payload, harness="codex")
+    # The third batch is never sent once the resident stops answering.
+    assert len(calls) == 2
+    assert payload["decision_v2_json"] == {"action": "allow", "harness_message": "Routed."}
+    assert [item["decision_v2_json"]["harness_message"] for item in queued] == ["Held 0.", "Held 1."]
