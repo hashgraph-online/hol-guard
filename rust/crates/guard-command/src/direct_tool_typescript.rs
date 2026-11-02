@@ -25,9 +25,7 @@ pub(super) fn direct_typescript_diagnostic_filter_context(
     {
         return None;
     }
-    let Some((arguments, through_npx)) = typescript_compiler_call(&compiler.tokens) else {
-        return None;
-    };
+    let (arguments, through_npx) = typescript_compiler_call(&compiler.tokens)?;
     if arguments != ["--noEmit", "2>&1"]
         || !compiler_is_bound(workspace, home, authority, through_npx)
         || grep.tokens.len() != 3
