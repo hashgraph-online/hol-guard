@@ -19,7 +19,8 @@ use serde_json::{Map, Value};
 #[cfg(unix)]
 const ROUTED_REASON: &str = "native_contained_execution_routed";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
-#[cfg(any(target_os = "linux", all(unix, test)))]
+/// Only the tests name it now: the Linux arm reads the decision route's table.
+#[cfg(all(unix, test))]
 const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 /// Set to `0` to keep every workspace sandbox on the daemon's sink.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -392,8 +393,10 @@ fn routable(response: &Value, platform: fn(&str) -> bool) -> bool {
         && text("required_execution_profile") == Some(profile)
 }
 
-/// macOS runs every contained profile; Linux runs the workspace sandbox,
-/// which it contains with a bubblewrap overlay.
+/// macOS runs every contained profile; Linux runs the workspace sandbox and
+/// every read-only profile, each under a bubblewrap mount. The Linux table is
+/// the decision route's own, so the direct lane and the resident answer one
+/// host question rather than two.
 fn platform_contains(profile: &str) -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -402,7 +405,7 @@ fn platform_contains(profile: &str) -> bool {
     }
     #[cfg(target_os = "linux")]
     {
-        profile == WORKSPACE_PROFILE
+        crate::hook_decision_containment_route::LINUX_PROFILES.contains(&profile)
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {

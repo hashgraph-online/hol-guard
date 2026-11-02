@@ -66,6 +66,13 @@ pub fn contained_matcher_stage(program: &str, arguments: &[String]) -> bool {
 }
 pub(crate) mod curl_reads;
 pub use curl_reads::bound_curl_read_destinations;
+
+/// Whether this host runs Guard's contained execution sink for a read-only
+/// profile. macOS always does; a Linux host only where the bubblewrap probe
+/// answers, so a host with no usable sandbox keeps the review it had.
+pub fn workspace_sandbox_available() -> bool {
+    workspace_contained::sandbox_available()
+}
 #[cfg(unix)]
 mod contained_exact_shape;
 pub(crate) mod dd_reads;

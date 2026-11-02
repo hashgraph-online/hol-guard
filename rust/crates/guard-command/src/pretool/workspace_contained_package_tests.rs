@@ -6,7 +6,7 @@
 //! verb does not. Helpers are shared with the containment tests they sit beside
 //! in [`super::workspace_contained_tests`].
 
-use super::workspace_contained_tests::{host, reason, workspace, CONTAINED};
+use super::workspace_contained_tests::{claimed, contained, host, reason, workspace, CONTAINED};
 
 /// pnpm and yarn run only what the project installed, so their `exec` reaches
 /// no registry and the run it spells is the local work the sandbox bounds.
@@ -36,9 +36,12 @@ fn pnpm_and_yarn_exec_run_in_the_workspace_sandbox() {
     ] {
         let got = reason("omp", command, &ws, true);
         if host() {
-            assert_eq!(got, CONTAINED, "{command}");
+            // A host with a sandbox may claim the run with the narrower
+            // profile of the runner the verb spells instead of the general
+            // workspace one; either way the sandbox bounds it.
+            assert!(claimed(&got, command), "{command}: {got}");
         } else {
-            assert_ne!(got, CONTAINED, "{command}");
+            assert!(!contained(&got), "{command}");
         }
     }
 }

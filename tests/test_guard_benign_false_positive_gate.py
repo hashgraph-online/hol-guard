@@ -36,7 +36,7 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields, cursor_route_probe, source_ref_payload
+from tests.gauntlet_replay import cursor_hook_fields, cursor_route_probe, omp_routes_profile, source_ref_payload
 from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
 from tests.outbound_network_guard import outbound_network_attempts
 
@@ -295,8 +295,8 @@ def _harness_route(
 
     ``review_http_payload`` already routes Z Code and Claude Code, and admits the
     sink command Cursor's probe wrote. Codex routes
-    in its hook bridge and Oh My Pi in its TypeScript extension (every profile
-    on macOS, the workspace profile on Linux). Without this the gate
+    in its hook bridge and Oh My Pi in its TypeScript extension (see
+    ``omp_routes_profile`` for the profiles each host takes). Without this the gate
     counts their contained runs as reviews although the user sees nothing.
     """
     if case.harness == "codex":
@@ -312,8 +312,7 @@ def _omp_routes(result: dict[str, object]) -> bool:
         result.get("decision") == "deny"
         and result.get("policy_action") == "sandbox-required"
         and result.get("observe_mode") is not True
-        and (profile, _reason(result)) in OMP_CONTAINED
-        and (sys.platform == "darwin" or (sys.platform == "linux" and profile == "workspace-contained-v1"))
+        and omp_routes_profile(profile, _reason(result))
     )
 
 

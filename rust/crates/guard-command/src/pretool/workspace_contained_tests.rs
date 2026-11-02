@@ -44,6 +44,34 @@ pub(super) fn reason(harness: &str, command: &str, cwd: &Path, with_controls: bo
 
 pub(super) const CONTAINED: &str = "native_workspace_containment_required";
 
+/// The narrower profile the tool a command names answers with, where a host's
+/// sink claims it before the general workspace sandbox: that tool's own
+/// read-only profile, or the build-output one for a bundler that writes
+/// `dist/`. `None` where only the general workspace profile claims the run.
+pub(super) fn tool_profile(command: &str) -> Option<&'static str> {
+    if command.contains("vitest") {
+        Some("native_vitest_readonly_containment_required")
+    } else if command.contains("tsc") {
+        Some("native_node_tool_readonly_containment_required")
+    } else if command.contains("vite build") {
+        Some("native_node_build_output_containment_required")
+    } else {
+        None
+    }
+}
+
+/// Whether one of Guard's own contained sinks claims this run: the general
+/// workspace sandbox, or the narrower profile of the tool the command names.
+pub(super) fn claimed(reason: &str, command: &str) -> bool {
+    reason == CONTAINED || tool_profile(command) == Some(reason)
+}
+
+/// Whether this reason routes the command into a contained sink at all. Every
+/// contained reason code ends this way; a review reason never does.
+pub(super) fn contained(reason: &str) -> bool {
+    reason.ends_with("_containment_required")
+}
+
 #[test]
 fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
     let ws = workspace("convert", true);
@@ -103,11 +131,13 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
     }
 }
 
-/// On macOS, narrower node profiles claim these commands before the general
-/// workspace profile; each is at least as tightly bounded, or needs no sandbox
-/// at all. Linux has only the workspace sandbox.
+/// Narrower node profiles claim these commands before the general workspace
+/// profile; each is at least as tightly bounded, or needs no sandbox at all.
+/// Every host whose sandbox can start a contained run routes them -- macOS
+/// under Seatbelt, Linux under a bubblewrap mount -- so the profile is asked
+/// of `host()` rather than of one operating system.
 #[test]
-fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
+fn node_commands_with_a_narrower_profile_keep_it() {
     let ws = workspace("node-narrow", true);
     // The narrow profiles run only these script bodies, from local entrypoints.
     let scripts = r#"{"scripts":{"lint":"eslint src","build":"vite build"}}"#;
@@ -133,12 +163,8 @@ fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
         ("npm -v", "native_exact_safe_command"),
     ] {
         let got = reason("omp", command, &ws, true);
-        if cfg!(target_os = "macos") {
+        if host() {
             assert_eq!(got, narrower, "{command}");
-        } else if host() {
-            // Linux has no narrower node profile; the workspace sandbox
-            // bounds the command instead.
-            assert!(got == narrower || got == CONTAINED, "{command}: {got}");
         } else {
             assert_ne!(got, CONTAINED, "{command}");
         }
@@ -147,14 +173,14 @@ fn node_commands_with_a_narrower_profile_keep_it_on_macos() {
 
 /// Inline `node -e` has its own, narrower read-only containment profile, which
 /// runs before the general workspace profile and bounds the command at least
-/// as tightly.
+/// as tightly, on every host whose sandbox can start a contained run.
 #[test]
 fn inline_node_eval_keeps_its_read_only_containment_profile() {
     let ws = workspace("node-eval", true);
     let got = reason("omp", "node -e 1", &ws, true);
-    if cfg!(target_os = "macos") {
+    if host() {
         assert_eq!(got, "native_node_eval_readonly_containment_required");
-    } else if !host() {
+    } else {
         assert_ne!(got, CONTAINED);
     }
 }
