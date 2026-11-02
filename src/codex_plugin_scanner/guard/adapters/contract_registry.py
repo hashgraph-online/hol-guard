@@ -24,9 +24,7 @@ _BASE_HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         native_approval=True,
         browser_fallback=True,
         resume_support=True,
-        known_blind_spots=(
-            "Background agent sessions without an active terminal may not surface hook events."
-        ),
+        known_blind_spots=("Background agent sessions without an active terminal may not surface hook events."),
         smoke_command="hol-guard install claude --dry-run",
     ),
     HarnessProtectionContract(

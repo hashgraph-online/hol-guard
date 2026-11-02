@@ -114,7 +114,7 @@ fn attach(
         words,
         found,
     };
-    let Some(context) = lookup(service, home, request, deadline) else {
+    let Some(context) = lookup(service, store.guard_home(), request, deadline) else {
         return;
     };
     add_context(response, &context);
@@ -162,7 +162,7 @@ fn flights() -> &'static Flights {
 
 fn lookup(
     service: &crate::context_assistance_service::Service,
-    home: &Path,
+    guard_home: &Path,
     request: Request,
     deadline: Instant,
 ) -> Option<String> {
@@ -179,7 +179,7 @@ fn lookup(
     if let Some(flight) = flight {
         return wait_for(&flight, deadline).flatten();
     }
-    let lane = service.prompt_lane(home, deadline)?;
+    let lane = service.prompt_lane(guard_home, deadline)?;
     let flight = Arc::new(Flight {
         prompt,
         done: Mutex::new(None),

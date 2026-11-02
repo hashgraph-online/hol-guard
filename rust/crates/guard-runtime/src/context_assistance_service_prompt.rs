@@ -27,14 +27,14 @@ impl Service {
             .is_ok_and(|state| !state.closed && chosen(&state.settings))
     }
 
-    /// The live worker for a prompt, waking a resting one and waiting for it
-    /// until `deadline` at most.
+    /// The live worker for a prompt, waking a resting one in `guard_home`
+    /// and waiting for it until `deadline` at most.
     pub(crate) fn prompt_lane(
         &self,
-        home: &std::path::Path,
+        guard_home: &std::path::Path,
         deadline: Instant,
     ) -> Option<PromptLane> {
-        self.wake(home, chosen);
+        self.wake(guard_home, chosen);
         loop {
             if let Ok(mut state) = self.state.try_lock() {
                 if state.closed || !chosen(&state.settings) {
