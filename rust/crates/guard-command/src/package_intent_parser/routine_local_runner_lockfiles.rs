@@ -12,7 +12,7 @@ use std::path::{Component, Path};
 
 use serde_json::Value;
 
-use super::{read_bounded, registry_entry, MAX_VERDICT_FILE_BYTES, REMOTE_VERSION_PREFIXES};
+use super::{read_bounded, registry_entry, MAX_VERDICT_FILE_BYTES};
 use crate::jsonc::loads_jsonc;
 
 /// The versions one lockfile pins for `dependency_name`, or `None` when it is
