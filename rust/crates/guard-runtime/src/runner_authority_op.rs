@@ -96,6 +96,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "cli_runtime_support" => crate::cli_runtime_support_op::dispatch(args),
         "approval_copy" => crate::approval_copy::dispatch(args),
         "workspace_audit_sync" => crate::workspace_audit_sync::dispatch(args),
+        "workspace_runtime_findings" => crate::workspace_runtime_findings::dispatch(args),
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "guard_product_copy" => crate::guard_product_copy::dispatch(args),
         "detector_authority" => detector::detector_authority(args),

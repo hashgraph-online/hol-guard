@@ -942,6 +942,7 @@ mod workspace_inventory_files;
 mod workspace_inventory_op;
 mod workspace_mcp_config;
 mod workspace_package_findings;
+mod workspace_runtime_findings;
 mod workspace_scan_targets;
 mod workspace_snapshot;
 mod workspace_snapshot_file;
