@@ -1384,6 +1384,19 @@ pub fn python_target(
             },
         );
     }
+    if let Some((distribution, version)) = python_distribution_file(spec) {
+        // The file names the distribution it holds, but its contents are
+        // whatever is on disk. Carrying the path as the target's source keeps
+        // the parsed identity out of registry matching: a policy entry for the
+        // published `distribution==version` must not admit an archive that
+        // merely spells that name.
+        return base(
+            Some(distribution),
+            Some(version),
+            Some(spec.to_owned()),
+            extras,
+        );
+    }
     let (normalized_name, requested_specifier) = split_python_specifier(spec);
     let (mut package_name, detected_extras) = split_python_extras(&normalized_name);
     if package_name.starts_with("./")
@@ -1535,6 +1548,35 @@ pub fn homebrew_target(spec: &str, cask: bool) -> PackageIntentTarget {
         extras: Vec::new(),
         editable: false,
     }
+}
+
+/// A local distribution file names its distribution and version in the file
+/// name, not in the path that reaches it. `Path::file_name` alone turns
+/// `dist/hol_guard-3.59.0-py3-none-any.whl` into a package named after the
+/// whole artifact, which matches no policy entry and never repeats.
+fn python_distribution_file(spec: &str) -> Option<(String, String)> {
+    let file_name = Path::new(spec).file_name()?.to_string_lossy().into_owned();
+    let versioned = |distribution: &str, version: &str| {
+        (!distribution.is_empty() && version.starts_with(|c: char| c.is_ascii_digit()))
+            .then(|| (distribution.to_owned(), version.to_owned()))
+    };
+    if let Some(stem) = file_name.strip_suffix(".whl") {
+        // PEP 427: `{distribution}-{version}(-{build})?-{python}-{abi}-{platform}`,
+        // where the distribution and version escape their own `-` as `_`.
+        let fields: Vec<&str> = stem.split('-').collect();
+        if fields.len() < 5 {
+            return None;
+        }
+        return versioned(fields[0], fields[1]);
+    }
+    for suffix in [".tar.gz", ".tar.bz2", ".tar.xz", ".zip"] {
+        let Some(stem) = file_name.strip_suffix(suffix) else {
+            continue;
+        };
+        let (distribution, version) = stem.rsplit_once('-')?;
+        return versioned(distribution, version);
+    }
+    None
 }
 
 /// `split_python_specifier` (:522-531).
