@@ -168,6 +168,62 @@ fn a_byte_bounded_head_is_peeled_as_a_filter_stage() {
     );
 }
 
+/// A `cut` that keeps part of each line is a filter stage like a matcher.
+///
+/// `| cut -c1-120` trims a type-checker's long diagnostics, and `| cut -d: -f1`
+/// keeps the file each one names. Both read standard input and open nothing,
+/// but the chain knew only `head`, `tail`, `grep` and `rg`, so the whole
+/// pipeline left the contained route and went to review, while the same run
+/// spelled `| head -30` stayed quiet.
+#[test]
+fn a_cut_that_trims_each_line_is_peeled_as_a_filter_stage() {
+    let root = workspace("plan-cut-filter", true);
+    let workspace_path = root.to_str().expect("workspace path");
+
+    for (command, stages) in [
+        (
+            "pytest -q 2>&1 | cut -c1-120",
+            vec![vec!["cut".to_owned(), "-c1-120".to_owned()]],
+        ),
+        (
+            "pytest -q 2>&1 | cut -d: -f1 | head -20",
+            vec![
+                vec!["cut".to_owned(), "-d:".to_owned(), "-f1".to_owned()],
+                vec!["head".to_owned(), "20".to_owned()],
+            ],
+        ),
+    ] {
+        let peeled = wrapper_plan(
+            command,
+            workspace_path,
+            Some(workspace_path),
+            Some(HOME),
+            true,
+        )
+        .plan
+        .unwrap_or_else(|| panic!("{command}"));
+        assert_eq!(peeled.core, "pytest -q", "{command}");
+        let output = peeled.output.expect("cut filter");
+        assert_eq!(
+            (output.kind, output.merge_stderr),
+            ("pipe", true),
+            "{command}"
+        );
+        assert_eq!(output.stages, stages, "{command}");
+    }
+
+    // A `cut` naming a file reads it, which the core's proof never screened.
+    let answer = wrapper_plan(
+        "pytest -q | cut -f1 results.txt",
+        workspace_path,
+        Some(workspace_path),
+        Some(HOME),
+        true,
+    );
+    assert_eq!(answer.plan, None);
+    assert_eq!(answer.refusal, Some(CONTAINED_WRAPPER_PLAN_UNSUPPORTED));
+}
+
 /// `pnpm -w` names the workspace root without spelling it, so the sink peels
 /// it into that root the way native authority projects it
 /// (`package_directory_flags.rs`). Were it left unpeeled, the sink would read

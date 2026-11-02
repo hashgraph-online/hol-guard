@@ -1,6 +1,7 @@
 //! Output filters after a contained core: `| head -N`, `| tail -N`, the same
-//! two bounded by bytes (`-c N`) or spelled with `-n N`, and a `grep` or `rg`
-//! that only reads its standard input, chained up to three deep.
+//! two bounded by bytes (`-c N`) or spelled with `-n N`, a `grep` or `rg`
+//! that only reads its standard input, and a `cut` that keeps part of each
+//! line, chained up to three deep.
 //!
 //! The execution sink (`contained_output_filters.py`) peels the same chain,
 //! runs the core contained and applies the filters to its captured output.
@@ -25,6 +26,14 @@ const RG_SWITCHES: &str = "FNSUacinosvwx";
 /// Options that take a line count, spelled alike by both programs.
 const GREP_COUNTS: &[&str] = &["-A", "-B", "-C", "-m"];
 
+/// `cut`'s own switches: `-s` drops a line with no delimiter and `-n` keeps a
+/// character whole. Neither names anything to open.
+const CUT_SWITCHES: &str = "sn";
+
+/// The options that carry `cut`'s selection and its delimiter. Every one of
+/// them takes a value, attached or as the word after.
+const CUT_VALUED: &[&str] = &["-b", "-c", "-f", "-d"];
+
 /// Whether `value` is a count small enough to be a filter's bound.
 fn bounded_count(value: &str) -> bool {
     !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
@@ -43,6 +52,7 @@ pub(super) fn filter_stage(segment: &CommandSegmentV1, source: &str) -> bool {
         Some("head" | "tail") => head_tail_arguments(&segment.arguments),
         Some("grep" | "egrep" | "fgrep") => stdin_arguments(&segment.arguments, GREP_SWITCHES),
         Some("rg") => stdin_arguments(&segment.arguments, RG_SWITCHES),
+        Some("cut") => text_filter(&segment.arguments, CUT_SWITCHES, CUT_VALUED),
         _ => false,
     }
 }
@@ -55,6 +65,10 @@ pub(in crate::pretool) fn matcher_stage(program: &str, arguments: &[String]) -> 
     match program {
         "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
         "rg" => stdin_arguments(arguments, RG_SWITCHES),
+        // `cut` keeps part of each line and opens nothing without an operand,
+        // which `text_filter` refuses, so the runtime can run it over the
+        // captured text exactly as the pipeline would have.
+        "cut" => text_filter(arguments, CUT_SWITCHES, CUT_VALUED),
         _ => false,
     }
 }
@@ -168,7 +182,7 @@ pub(in crate::pretool) fn rejoined_stage(program: &str, arguments: &[String]) ->
         "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
         "rg" => stdin_arguments(arguments, RG_SWITCHES),
         "wc" => text_filter(arguments, "clmwL", &[]),
-        "cut" => text_filter(arguments, "sn", &["-b", "-c", "-f", "-d"]),
+        "cut" => text_filter(arguments, CUT_SWITCHES, CUT_VALUED),
         // `-o` and `-T` name a file and a directory to write, and `-S` sizes a
         // buffer, so none of the three is a switch here.
         "sort" => text_filter(arguments, "bcdfghiMnrsuVz", &["-k", "-t"]),
@@ -272,8 +286,8 @@ pub(in crate::pretool) fn plain_source(source: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        head_tail_bound, plain_source, rejoined_stage, rejoined_words, stdin_arguments,
-        GREP_SWITCHES, RG_SWITCHES,
+        head_tail_bound, matcher_stage, plain_source, rejoined_stage, rejoined_words,
+        stdin_arguments, GREP_SWITCHES, RG_SWITCHES,
     };
 
     fn words(values: &[&str]) -> Vec<String> {
@@ -425,6 +439,46 @@ mod tests {
             &["notes.txt"],
         ] {
             assert_eq!(head_tail_bound(&words(arguments)), None, "{arguments:?}");
+        }
+    }
+
+    #[test]
+    fn a_cut_that_only_reshapes_standard_input_is_a_matcher_stage() {
+        for arguments in [
+            &["-c1-120"][..],
+            &["-c", "1-120"],
+            &["-d", "(", "-f1"],
+            &["-d(", "-f", "1"],
+            &["-f1", "-s"],
+            &["-b", "1-80", "-n"],
+        ] {
+            assert!(matcher_stage("cut", &words(arguments)), "{arguments:?}");
+        }
+    }
+
+    /// The peel runs each stage itself, so it takes only the stages the
+    /// runtime can run: a `cut` that opens a file is not one of them, and
+    /// neither is a `sort` or a `uniq` the rejoin path admits.
+    #[test]
+    fn a_stage_the_runtime_cannot_run_over_the_text_is_not_a_matcher_stage() {
+        for (program, arguments) in [
+            ("cut", &["-f1", "build.log"][..]),
+            ("cut", &["-c1-20", "/etc/passwd"]),
+            ("cut", &["-c1-20", "-"]),
+            // A long option this grammar does not carry; `cut` in the system
+            // image has none of them.
+            ("cut", &["--fields=1"]),
+            ("sort", &["-u"]),
+            ("uniq", &["-c"]),
+            ("wc", &["-l"]),
+            ("tr", &["-d", "\\r"]),
+            ("awk", &["{print $1}"]),
+            ("head", &["-40"]),
+        ] {
+            assert!(
+                !matcher_stage(program, &words(arguments)),
+                "{program} {arguments:?}"
+            );
         }
     }
 

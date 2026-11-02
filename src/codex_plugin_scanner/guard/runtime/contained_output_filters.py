@@ -1,13 +1,14 @@
 """Running the output filters native authority classified after a contained core.
 
 `contained_output_filters.rs` decides which chain of `| head`, `| tail`,
-`| grep` and `| rg` stages a contained command may carry: at most three, each
-reading only standard input, with no file operand, pattern file, recursion or
-other output, so a stage can only print part of the text it is given. That
-grammar lives there alone. This module carries out the chain it chose.
+`| grep`, `| rg` and `| cut` stages a contained command may carry: at most
+three, each reading only standard input, with no file operand, pattern file,
+recursion or other output, so a stage can only print part of the text it is
+given. That grammar lives there alone. This module carries out the chain it
+chose.
 
 Head and tail run in-process, bounded by lines (`head`, `N`) or by bytes
-(`head`, `-c`, `N`). A matcher stage is the native runtime's: it runs the
+(`head`, `-c`, `N`). Every other stage is the native runtime's: it runs the
 installed binary, located by ownership rather than by the caller's `PATH`,
 with an environment it builds, on the text the core already produced.
 """

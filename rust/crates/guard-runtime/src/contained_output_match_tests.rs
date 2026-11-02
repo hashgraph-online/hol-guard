@@ -58,6 +58,9 @@ fn arguments_outside_the_filter_grammar_are_refused() {
         ("rg", &["a", "/etc"][..]),
         ("rg", &["-g", "*.rs", "a"][..]),
         ("grep", &[][..]),
+        ("cut", &["-f1", "/etc/hosts"][..]),
+        ("cut", &["-c1-20", "-"][..]),
+        ("sort", &["-u"][..]),
     ] {
         assert_eq!(
             run(&request(program, arguments, b"a\n")).expect_err("refused"),
@@ -94,6 +97,21 @@ fn a_matcher_prints_back_the_pipeline_bytes() {
         (stdout(&answer), answer["status"].clone()),
         (Vec::new(), json!(1))
     );
+}
+
+/// A `cut` stage reaches the runtime like a matcher does: the Python sink
+/// applies only `head` and `tail` itself.
+#[cfg(unix)]
+#[test]
+fn a_cut_stage_reshapes_each_line_it_is_given() {
+    let answer = run(&request("cut", &["-d", ":", "-f1"], b"a:1\nb:2\n")).expect("answer");
+    assert_eq!(stdout(&answer), b"a\nb\n");
+    assert_eq!(
+        (answer["status"].clone(), answer["stderr"].clone()),
+        (json!(0), json!(""))
+    );
+    let answer = run(&request("cut", &["-c1-5"], b"error TS2345: long\n")).expect("answer");
+    assert_eq!(stdout(&answer), b"error\n");
 }
 
 #[cfg(unix)]
