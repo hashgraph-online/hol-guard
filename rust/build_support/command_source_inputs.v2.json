@@ -400,6 +400,7 @@
       "src/pretool/git_init_chain.rs",
       "src/pretool/git_init_target.rs",
       "src/pretool/git_listing_reads.rs",
+      "src/pretool/git_ls_remote.rs",
       "src/pretool/git_local_writes.rs",
       "src/pretool/git_local_writes_config.rs",
       "src/pretool/git_local_writes_forms.rs",
