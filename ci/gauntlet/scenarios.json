@@ -1568,7 +1568,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Run one of this project's Bun test files: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "prompt": "Run one of this project's Bun specs: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
       "commands": [
         "bun src/app-routing.test.ts"
       ],
