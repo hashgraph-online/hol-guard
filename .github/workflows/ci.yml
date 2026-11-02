@@ -519,17 +519,17 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pinned prior native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-prior-native-command-evaluators-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: rust/target/previous-client/release
       - name: Restore matching prior command projections
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-prior-native-command-projections-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
           path: previous-client
       - name: Download current native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -577,7 +577,7 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -655,12 +655,12 @@ jobs:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       - name: Download pytest shard plan
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-shard-plan-3.12
           path: pytest-shards
       - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-evaluators
           path: rust/target/release
@@ -752,7 +752,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download pytest duration reports
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           pattern: pytest-durations-${{ github.run_attempt }}-*
           path: duration-reports
@@ -906,7 +906,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pytest-native-command-projections
           path: .
@@ -1042,7 +1042,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: dashboard-integration-wheel
           path: ${{ runner.temp }}/dashboard-integration-wheel
