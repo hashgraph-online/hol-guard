@@ -67,7 +67,7 @@ WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
 # narrows a run: the file to run beside the option that stops Vitest watching.
 # A filter is not a Vitest command, so the run is the same single pass the bare
 # `run` verb names.
-WORKSPACE_VITEST_FILTER_CASE = "omp-native-workspace-npx-vitest-filter"
+WORKSPACE_VITEST_FILTER_CASE = "omp-native-workspace-vitest-filter"
 # The commit hook a project runs over its staged files. It is declared,
 # installed and pinned exactly as the linter it drives is, and it is launched
 # through npx the same way, so the verdict has the same evidence to read.

@@ -7145,7 +7145,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "npx vitest src/a.test.ts --run"
+        "command": "./node_modules/.bin/vitest src/a.test.ts --run"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -7162,7 +7162,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "npx vitest src/a.test.ts src/b.test.ts --no-watch"
+        "command": "./node_modules/.bin/vitest src/a.test.ts src/b.test.ts --no-watch"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -7179,7 +7179,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "npx vitest src/a.test.ts"
+        "command": "./node_modules/.bin/vitest src/a.test.ts"
       },
       "cwd": "worktree",
       "expect": "not_allow"
