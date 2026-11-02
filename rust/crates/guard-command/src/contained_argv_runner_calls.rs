@@ -69,7 +69,10 @@ fn names_another_command(arguments: &[String]) -> bool {
 /// the word as a test filter; only the `=` spelling carries a value. A bare
 /// `--watch`, a `--watch=true` and the short `-w` all turn the watch back on,
 /// and mri keeps the last spelling, so an option that turns it on anywhere on
-/// the line keeps the review.
+/// the line keeps the review. mri also reads a `--no-` prefix as the option
+/// set to false, so `--no-run` undoes a `--run` earlier on the line and leaves
+/// Vitest watching; it is read here as an option that turns the watch back
+/// on.
 fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
     let turns_watch_off = |argument: &String| {
         argument == "--run"
@@ -78,6 +81,7 @@ fn vitest_asked_not_to_watch(arguments: &[String]) -> bool {
     };
     let turns_watch_on = |argument: &String| {
         short_options_carry_watch(argument)
+            || option_name(argument) == "norun"
             || (option_name(argument) == "watch" && joined_boolean(argument) != Some(false))
     };
     arguments.iter().any(turns_watch_off) && !arguments.iter().any(turns_watch_on)

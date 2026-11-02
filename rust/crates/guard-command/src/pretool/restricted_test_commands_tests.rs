@@ -417,6 +417,10 @@ fn a_runner_left_watching_keeps_its_review() {
         "npx vitest --watch false",
         "npx vitest --watch=false --watch",
         "npx vitest --no-watch -w",
+        // mri reads a `--no-` prefix as the option set to false, so `--no-run`
+        // undoes the `--run` before it and leaves Vitest watching.
+        "npx vitest --run --no-run",
+        "npx vitest --no-watch --no-run",
         "npx vitest -- --run",
         "npx vitest --run init",
         "npx vitest --run watch",
