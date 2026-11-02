@@ -40,12 +40,16 @@ pub(super) struct Pull {
 }
 
 /// What the proof must cover for one remote segment: the pull or merge shape
-/// when the segment is one, and whether the refresh reaches every remote the
-/// repository configures rather than the `origin` it names.
+/// when the segment is one, whether the refresh reaches every remote the
+/// repository configures rather than the `origin` it names, and whether the
+/// segment only lists what the remote advertises.
 #[derive(Clone, Copy)]
 pub(super) struct Operation {
     pub(super) upstream: Option<Pull>,
     pub(super) every_remote: bool,
+    /// A `git ls-remote origin`: the remote's refs are printed and nothing
+    /// else happens, so the proof is the transport alone.
+    pub(super) listing: bool,
 }
 
 impl Operation {
@@ -55,6 +59,7 @@ impl Operation {
         Self {
             upstream: Some(shape),
             every_remote: false,
+            listing: false,
         }
     }
 }

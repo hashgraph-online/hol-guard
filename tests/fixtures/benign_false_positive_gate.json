@@ -16253,6 +16253,23 @@
       "expect": "allow"
     },
     {
+      "id": "session-git-ls-remote-origin-heads",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git ls-remote --heads origin main"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "session-git-pull-ff-only",
       "fix_area": "git",
       "harnesses": [

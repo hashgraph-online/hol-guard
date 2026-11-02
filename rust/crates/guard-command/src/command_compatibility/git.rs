@@ -593,6 +593,18 @@ pub(super) fn observe_with_contexts(
         && (crate::pretool::init_arguments(&arguments[1..]).is_some()
             || crate::pretool::git_init_target::target(&arguments[1..])
                 .is_some_and(crate::pretool::git_init_target::absolute_target));
+    // A proven listing of what `origin` advertises reads the remote and
+    // writes nothing locally, so it owns no porcelain rule. The hook's native
+    // proof already checked this repository's origin, transport and
+    // credential helpers for exactly this segment; an unproven listing falls
+    // through to the review below.
+    let remote_listing =
+        command == "ls-remote" && crate::pretool::verified_origin_operation(segment, proof_context);
+    if remote_listing {
+        // Read-only, but a disabled Git permission or extension can still
+        // block it, as it can the fetch that reaches the same remote.
+        result.permission("command.git.permission.fetch", index, false);
+    }
     // A plain configuration write sets a key Git never runs; its own proof
     // still decides the repository.
     let plain_config_write = command == "config"
@@ -604,6 +616,7 @@ pub(super) fn observe_with_contexts(
         });
     if plumbing
         || plain_config_write
+        || remote_listing
         || branch_listing
         || hash_read
         || plain_init
