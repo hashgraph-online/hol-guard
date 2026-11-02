@@ -13,6 +13,8 @@ mod baseline;
 mod capabilities;
 #[path = "native_command_source_catalog.rs"]
 mod catalog;
+#[path = "native_command_source_cloud_binding.rs"]
+mod cloud_binding;
 #[path = "native_command_source_contract.rs"]
 mod contract;
 #[path = "native_command_source_evaluation_batch.rs"]
@@ -44,6 +46,10 @@ pub use authoring::{authoring_context, authoring_index};
 pub use catalog::{
     compile_addition, compile_addition_with_mcp, compile_catalog, compile_catalog_with_mcp,
     CompiledSourceCatalog,
+};
+pub use cloud_binding::{
+    admit_binding_contribution, parse_binding_contribution, BindingResourceInput,
+    CloudBindingContribution, CloudBindingInput, CloudSupport,
 };
 pub use contract::{descriptor_schema, source_schema};
 pub use evaluation_batch::evaluate_batch;

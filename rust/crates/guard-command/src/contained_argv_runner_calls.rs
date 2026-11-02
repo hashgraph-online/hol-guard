@@ -373,3 +373,45 @@ pub(crate) fn tsx_runner_flag_count(arguments: &[String]) -> usize {
 pub(crate) fn tsx_runner_test_mode(flags: &[String]) -> bool {
     flags.iter().any(|flag| flag.starts_with("--test"))
 }
+
+/// A test-named file the workspace holds: `math.test.ts`, `api.spec.mjs` or
+/// `src/test_calc.js`. The path stays inside the tree it was admitted for and
+/// the leaf is one of the names a project gives a test file, so neither an
+/// option, an expansion nor a program outside the workspace is read as one.
+pub(crate) fn workspace_test_script(script: &str) -> bool {
+    if script.is_empty()
+        || script.starts_with(['-', '/', '~', '$'])
+        || script.contains(['\\', '$', '`'])
+        || script
+            .trim_end_matches('/')
+            .split('/')
+            .any(|part| part.is_empty() || part == "..")
+    {
+        return false;
+    }
+    let name = script.rsplit('/').next().unwrap_or(script);
+    let Some((stem, extension)) = name.rsplit_once('.') else {
+        return false;
+    };
+    matches!(
+        extension,
+        "js" | "mjs" | "cjs" | "jsx" | "ts" | "mts" | "cts" | "tsx"
+    ) && stem
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+        && (stem.ends_with(".test")
+            || stem.ends_with(".spec")
+            || stem.starts_with("test_")
+            || stem.ends_with("_test")
+            || matches!(stem, "test" | "tests"))
+}
+
+/// True when a `bun` call runs one of the workspace's own test files.
+///
+/// Bun runs the named file as a script rather than through its test runner,
+/// so the pass is the one `bun test` takes over that file. One file and
+/// nothing else: an option would name something this reading does not model,
+/// and a second operand is an argument the file reads rather than a test.
+pub(crate) fn bun_test_script_once(arguments: &[String]) -> bool {
+    matches!(arguments, [script] if workspace_test_script(script))
+}

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..models import HarnessDetection
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..runtime.local_cli_identity import UnlistedCliIdentity
 from ..runtime.local_mcp_probe import mcp_launch_tokens
 from ..runtime.mcp_connection_identity import McpConnectionIdentity, build_mcp_connection_identity
@@ -25,7 +26,6 @@ from .harness_mcp_remote import (
     remote_scan_harnesses,
 )
 from .mcp_servers import ManagedMcpServer, observable_stdio_servers_with_proxy, proxy_process_env
-from .remote_mcp_origin import remote_mcp_origin as remote_mcp_origin
 
 if TYPE_CHECKING:
     from .base import HarnessContext
@@ -69,7 +69,7 @@ def discover_remote_mcp_servers(
     """Return unique remote MCP servers from harness configs. Never connects."""
 
     loaded = detections if detections is not None else _safe_detections(home_dir, guard_home, workspace_dir)
-    return _remote_servers(loaded)
+    return _remote_servers(loaded, guard_home)
 
 
 def configured_mcp_server_names(loaded: Sequence[HarnessDetection]) -> dict[str, tuple[str, ...]]:
@@ -230,13 +230,19 @@ def observe_configured_mcp_servers(store: object, *, context: HarnessContext, se
 
     try:
         detections = _safe_detections(context.home_dir, context.guard_home, context.workspace_dir)
-        remote = _remote_servers(detections)
+        try:
+            remote = _remote_servers(detections, context.guard_home)
+            remote_harnesses = remote_scan_harnesses(detections, remote)
+        except NativeRunnerAuthorityError as exc:
+            # Local servers still record; with no remote read nothing is forgotten.
+            logger.debug("configured remote MCP servers not read after %s", type(exc).__name__)
+            remote, remote_harnesses = (), None
         labels = persist_discovered_harness_mcp_servers(
             store,
             _stdio_servers(detections) if stdio else (),
             seen_at=seen_at,
             remote=remote,
-            remote_harnesses=remote_scan_harnesses(detections, remote),
+            remote_harnesses=remote_harnesses,
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as exc:
         logger.debug("configured MCP servers not recorded after %s", type(exc).__name__)

@@ -211,16 +211,6 @@
       "note": "Carries the answer wait_for_approval_requests read out of the approval store: allow only when every request the resident opened resolved to allow, block when any did not, and the review unchanged while one is still pending."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
-      "func": "_local_skill_security_label",
-      "root": "none",
-      "reading": "presentation",
-      "actions": [
-        "review"
-      ],
-      "note": "An AIBOM skill-report label, not an enforced action."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/approvals.py",
       "func": "apply_approval_resolution",
       "root": "none",

@@ -373,6 +373,7 @@ def _package_shim_context(
         workspace_value=payload.get("workspace"),
         allowed_roots=allowed_roots,
         managed_workspace_dirs=managed_install_audit_workspace_dirs(store),
+        guard_home=store.guard_home,
     )
     return HarnessContext(
         home_dir=base_context.home_dir,

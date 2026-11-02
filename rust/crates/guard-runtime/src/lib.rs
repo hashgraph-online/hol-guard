@@ -16,10 +16,12 @@ mod aibom_marketplace;
 mod aibom_mcp_metadata;
 mod aibom_op;
 mod aibom_paths;
+mod aibom_primary_content;
 mod aibom_report_summaries_op;
 mod aibom_skill_rules;
 mod aibom_skills;
 mod aibom_symlink;
+mod aibom_trust_claims;
 #[cfg(all(test, unix))]
 mod aibom_vectors_tests;
 #[path = "adapters/detection/antigravity_detect.rs"]
@@ -752,7 +754,9 @@ mod package_config_mirror;
 mod package_context_build_op;
 mod package_evaluation_compose_op;
 mod package_evaluation_view_op;
+mod package_firewall_refresh;
 mod package_intent_extract_op;
+mod package_manager_launch_path;
 mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_finalize_op;
@@ -811,6 +815,7 @@ mod registry_vectors_tests;
 mod release_feed_op;
 mod release_manifest_verify;
 mod release_manifest_verify_command;
+mod remote_mcp_origins;
 mod removal_evidence;
 mod request_context_op;
 mod request_context_shell;
@@ -902,6 +907,7 @@ mod store_quarantine_forensics;
 mod store_vectors_support_tests;
 mod strict_json;
 mod supervisor_verdict;
+mod supply_chain_audit_workspace;
 mod supply_chain_bundle_verify_op;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;
@@ -910,9 +916,11 @@ mod supply_chain_eval_caller;
 mod supply_chain_eval_rounds;
 mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
+mod surface_server_handshake;
 mod system_proxies;
 mod tool_action_identity_op;
 mod totp;
+mod trust_attestation_shape;
 mod trust_attestation_verify_op;
 #[cfg(test)]
 #[path = "../../../test_support/unique_nanos.rs"]

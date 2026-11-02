@@ -13,7 +13,6 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,20 +73,6 @@ from .shims import package_shim_protection, package_shim_supported_managers
 from .store import GuardStore
 from .store_guard_home_binding import binds_store_guard_home
 
-_MANIFEST_CANDIDATES = (
-    "package.json",
-    "requirements.txt",
-    "constraints.txt",
-    "pyproject.toml",
-    "Pipfile",
-    "Cargo.toml",
-    "go.mod",
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-    "composer.json",
-    "Gemfile",
-)
 _PACKAGE_MANAGER_BY_ECOSYSTEM = {
     "npm": "npm",
     "pypi": "pip",
@@ -121,8 +106,6 @@ _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
 # The job fields the native summary reads; the rest of a cloud reply stays here.
 _AUDIT_JOB_SUMMARY_FIELDS = ("status", "totalPackages", "processedCount", "error")
-_PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
-_PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
 
 
@@ -243,33 +226,16 @@ def _parse_package_intent_native(
     raise NativeProtectRequestError("native_package_intent_malformed")
 
 
-def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
-    return guard_home / _PACKAGE_FIREWALL_REFRESH_STATE_FILE
-
-
-def _read_package_firewall_refresh_state(guard_home: Path) -> dict[str, object]:
-    path = _package_firewall_refresh_state_path(guard_home)
+def _claim_package_firewall_refresh(guard_home: Path, now: float) -> bool:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _write_package_firewall_refresh_state(guard_home: Path, last_attempt: float) -> None:
-    path = _package_firewall_refresh_state_path(guard_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        tmp_path.write_text(
-            json.dumps({"last_refresh_attempt_at": last_attempt}, sort_keys=True, separators=(",", ":")),
-            encoding="utf-8",
+        answer = native_runner_authority(
+            "package_firewall_refresh_claim",
+            {"now": now},
+            guard_home=guard_home,
         )
-        tmp_path.replace(path)
-    finally:
-        if tmp_path.exists():
-            with suppress(OSError):
-                tmp_path.unlink()
+    except NativeRunnerAuthorityError:
+        return False
+    return answer.get("refresh") is True
 
 
 def build_local_supply_chain_posture(
@@ -337,14 +303,8 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
     now_iso = datetime.now(timezone.utc).isoformat()
     now = time.time()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
-        state = _read_package_firewall_refresh_state(store.guard_home)
-        last_refresh_at = state.get("last_refresh_attempt_at")
-        if (
-            isinstance(last_refresh_at, (int, float))
-            and (now - float(last_refresh_at)) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS
-        ):
+        if not _claim_package_firewall_refresh(store.guard_home, now):
             return entitlement
-        _write_package_firewall_refresh_state(store.guard_home, now)
     auth_context: dict[str, object] | None = None
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
@@ -374,14 +334,6 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
         except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
     return entitlement_module.package_firewall_entitlement_or_denied(store)
-
-
-def _workspace_has_project_markers(workspace_dir: Path) -> bool:
-    try:
-        resolved = workspace_dir.resolve()
-    except OSError:
-        return False
-    return any((resolved / marker).exists() for marker in _MANIFEST_CANDIDATES)
 
 
 def managed_install_audit_workspace_dirs(store: Any) -> tuple[str, ...]:
@@ -465,27 +417,26 @@ def _package_manager_launch_environment(
 ) -> dict[str, str]:
     """Exclude Guard's interception shim from the reviewed and executed package-manager path."""
 
-    launch_environment = dict(environment)
+    user_home = os.path.expanduser("~")
     try:
-        shim_dir = (guard_home / "package-shims" / "bin").expanduser().resolve()
-    except (OSError, RuntimeError, ValueError):
-        raise ValueError("Guard's package shim path could not be verified") from None
-    path_entries = environment.get("PATH", "").split(os.pathsep)
-    filtered_entries: list[str] = []
-    for entry in path_entries:
-        if not entry:
-            continue
-        try:
-            path_entry = Path(entry).expanduser()
-            if not path_entry.is_absolute():
-                path_entry = launch_cwd / path_entry
-            resolved_entry = path_entry.resolve()
-        except (OSError, RuntimeError, ValueError):
-            raise ValueError("package manager PATH could not be verified") from None
-        if resolved_entry != shim_dir:
-            filtered_entries.append(entry)
-    launch_environment["PATH"] = os.pathsep.join(filtered_entries)
-    return launch_environment
+        answer = native_runner_authority(
+            "package_manager_launch_path",
+            {
+                "guard_home": str(guard_home.expanduser().absolute()),
+                "launch_cwd": str(launch_cwd),
+                "user_home": user_home if os.path.isabs(user_home) else None,
+                "separator": os.pathsep,
+                "path": environment.get("PATH", ""),
+            },
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError:
+        answer = {}
+    if answer.get("refused") == "shim_unverified":
+        raise ValueError("Guard's package shim path could not be verified")
+    if not isinstance(launch_path := answer.get("path"), str):
+        raise ValueError("package manager PATH could not be verified")
+    return {**environment, "PATH": launch_path}
 
 
 @binds_store_guard_home

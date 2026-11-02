@@ -100,6 +100,8 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "shell_request_authority" => crate::shell_request_authority_op::dispatch(args),
         "guard_product_copy" => crate::guard_product_copy::dispatch(args),
         "consumer_mode_contract" => crate::consumer_mode_contract::dispatch(args),
+        "surface_server_handshake" => crate::surface_server_handshake::dispatch(args),
+        "trust_attestation_shape" => crate::trust_attestation_shape::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
         "skill_content_risk" => detector::skill_content_risk(args),
@@ -126,20 +128,25 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "canonical_rollout" => policy::canonical_rollout(args),
         "downgrade_reference" => policy::downgrade_reference(args),
         "policy_simulation" => policy::policy_simulation(args),
+        "remote_mcp_origins" => crate::remote_mcp_origins::dispatch(args),
         "cloud_scrub_texts" => privacy::cloud_scrub_texts(args),
         "cloud_review_event_display" => privacy::cloud_review_event_display(args),
         "cloud_sync_receipt_payloads" => receipt::cloud_sync_receipt_payloads(args),
         "cloud_request_payload" => snapshot::cloud_request_payload(args),
         "local_request_snapshot" => snapshot::local_request_snapshot(args),
+        "supply_chain_audit_workspace_dir" => crate::supply_chain_audit_workspace::dispatch(args),
         "local_request_snapshot_items" => snapshot::local_request_snapshot_items(args),
+        "package_manager_launch_path" => crate::package_manager_launch_path::dispatch(args),
         "oci_bundle_evidence" => oci::oci_bundle_evidence(args),
         "oci_evidence_verdict" => oci::oci_evidence_verdict(args),
         "oci_bundle_digest" => oci::oci_bundle_digest(args),
         "oci_bundle_plan" => oci::oci_bundle_plan(args),
+        "aibom_trust_claims" => crate::aibom_trust_claims::dispatch(args),
         "aibom_workspace_artifacts" => aibom::workspace_artifacts(args),
         "aibom_workspace_plan" => aibom::workspace_merge_plan(args),
         "aibom_codex_skills" => aibom::codex_skills(args),
         "aibom_mcp_metadata" => aibom::mcp_metadata(args),
+        "aibom_primary_content" => crate::aibom_primary_content::dispatch(args),
         "zcode_detect" => zcode_detect::detect(args),
         "hermes_detect" => hermes_detect::detect(args),
         "pi_detect" => pi_detect::detect(args),
@@ -166,7 +173,14 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
     if request.guard_home.is_empty() {
         return Err(ERR_INVALID);
     }
-    dispatch(&request.kind, &request.args)
+    match request.kind.as_str() {
+        // Kinds that write under the Guard home take the home the resident
+        // verified for this request, never one from their arguments.
+        "package_firewall_refresh_claim" => {
+            crate::package_firewall_refresh::dispatch(&request.args, &request.guard_home)
+        }
+        _ => dispatch(&request.kind, &request.args),
+    }
 }
 
 pub(crate) fn evaluate_runner_authority(

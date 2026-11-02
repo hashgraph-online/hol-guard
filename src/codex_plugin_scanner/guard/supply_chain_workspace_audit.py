@@ -10,8 +10,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
-
 from . import local_supply_chain as _lsc
 from . import supply_chain_cloud_audit as _cloud_audit
 from .config import GuardConfig
@@ -24,6 +22,7 @@ from .native_package_audit_projection import (
     native_empty_audit_outcome,
     native_normalize_cloud_audit_response,
 )
+from .native_runner_authority import native_runner_authority
 from .native_workspace_inventory import (
     NativeWorkspaceInventoryError,
     check_audit_deadline,
@@ -55,45 +54,46 @@ def resolve_supply_chain_audit_workspace_dir(
     allowed_roots: tuple[Path, ...],
     managed_workspace_dirs: Sequence[str] | None = None,
     reject_invalid_explicit: bool = False,
+    guard_home: Path | None = None,
 ) -> Path | None:
-    for candidate in (workspace_dir_value, workspace_value):
-        if not isinstance(candidate, str) or not candidate.strip():
-            continue
-        resolved = resolve_path_within_allowed_roots(
-            candidate,
-            allowed_roots,
-            require_exists=True,
-        )
-        if resolved is not None:
-            return resolved
-        if reject_invalid_explicit:
-            raise ValueError("workspace_dir_invalid")
-    cursor_project = os.environ.get("CURSOR_PROJECT_DIR", "").strip()
-    if cursor_project:
-        resolved = resolve_path_within_allowed_roots(
-            cursor_project,
-            allowed_roots,
-            require_exists=True,
-        )
-        if resolved is not None and _lsc._workspace_has_project_markers(resolved):
-            return resolved
+    """The workspace an audit runs against; the native runtime resolves it.
+
+    The request carries this process's working directory, home and
+    ``CURSOR_PROJECT_DIR`` so the answer never depends on the resident's own.
+    """
+
     try:
-        cwd = Path.cwd().resolve()
+        cwd: str | None = os.getcwd()
     except OSError:
         cwd = None
-    if cwd is not None and _lsc._workspace_has_project_markers(cwd):
-        for root in allowed_roots:
-            if resolves_within_root(root, cwd, require_exists=True):
-                return cwd
-    for managed_workspace in managed_workspace_dirs or ():
-        resolved = resolve_path_within_allowed_roots(
-            managed_workspace,
-            allowed_roots,
-            require_exists=True,
-        )
-        if resolved is not None and _lsc._workspace_has_project_markers(resolved):
-            return resolved
-    return None
+    user_home = os.path.expanduser("~")
+    cursor_project_dir = os.environ.get("CURSOR_PROJECT_DIR")
+    answer = native_runner_authority(
+        "supply_chain_audit_workspace_dir",
+        {
+            "explicit": [
+                _home_expanded(value) for value in (workspace_dir_value, workspace_value) if isinstance(value, str)
+            ],
+            "allowed_roots": [str(root) for root in allowed_roots],
+            "managed_workspace_dirs": [_home_expanded(value) for value in managed_workspace_dirs or ()],
+            "cursor_project_dir": None if cursor_project_dir is None else _home_expanded(cursor_project_dir),
+            "cwd": cwd,
+            "user_home": None if user_home == "~" else user_home,
+            "reject_invalid_explicit": reject_invalid_explicit,
+        },
+        guard_home=guard_home,
+    )
+    if answer.get("invalid_explicit") is True:
+        raise ValueError("workspace_dir_invalid")
+    workspace_dir = answer.get("workspace_dir")
+    return Path(workspace_dir) if isinstance(workspace_dir, str) else None
+
+
+def _home_expanded(value: str) -> str:
+    """Expand a ``~user`` path here; the native runtime does not look up accounts."""
+
+    stripped = value.strip()
+    return os.path.expanduser(stripped) if stripped.startswith("~") else value
 
 
 def audit_receipt_metadata(
