@@ -97,7 +97,7 @@ export function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllo
           <button className={versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800"} type="button" disabled={busy || scopes.length === 0} onClick={() => manage("clear")}>Clear all context data</button>
         </div> : null}
       </div>
-      {!ready ? <p className={empty}>Start a verified context runtime to manage sources. Existing Guard approvals remain available.</p> : <>
+      {!ready ? <p className={empty}>Turn on CIGAR to pick project folders. Folders you already picked come back when it is on.</p> : <>
         {error ? <p role="alert" className="cigar-note">{error}</p> : null}
         {scopes.length === 0 ? <div className={empty}><HiMiniFolderOpen aria-hidden="true" className="mx-auto mb-2 size-6 text-brand-dark/35" /><p>No projects yet.</p><p className="mt-1 text-xs text-brand-dark/55">Choose a folder below to get started.</p></div> : <>
           <div><label htmlFor={`${id}-query`} className={fieldLabel}>What would you like context about?</label>

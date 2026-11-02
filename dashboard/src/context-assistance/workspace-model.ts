@@ -32,6 +32,11 @@ export function cigarWaking(status: ContextAssistanceStatus | null): boolean {
   return status.diagnostic === "runtime_resting" || (status.requested_enabled && status.job?.operation === "activate");
 }
 
+/** Picked folders are kept while CIGAR rests, and listing them wakes it, so the list stays visible. */
+export function cigarFoldersReady(status: ContextAssistanceStatus | null): boolean {
+  return status?.effective_enabled === true || cigarWaking(status);
+}
+
 /** Prompts only get project files when both switches are on. */
 export function cigarHelpsPrompts(status: ContextAssistanceStatus | null): boolean {
   const effective = status?.effective_preferences;

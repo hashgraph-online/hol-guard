@@ -4481,7 +4481,7 @@ function ContextWorkspacesPanel({ ready, generation, dirty, documentsAllowed, ag
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: versionQuiet + " text-red-700 hover:bg-red-50 hover:text-red-800", type: "button", disabled: busy || scopes.length === 0, onClick: () => manage("clear"), children: "Clear all context data" })
         ] }) : null
       ] }),
-      !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Start a verified context runtime to manage sources. Existing Guard approvals remain available." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      !ready ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: empty, children: "Turn on CIGAR to pick project folders. Folders you already picked come back when it is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "cigar-note", children: error }) : null,
         scopes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: empty, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFolderOpen, { "aria-hidden": "true", className: "mx-auto mb-2 size-6 text-brand-dark/35" }),
@@ -4908,6 +4908,9 @@ function cigarTabFromSearch(search) {
 function cigarWaking(status) {
   if (!status || status.effective_enabled) return false;
   return status.diagnostic === "runtime_resting" || status.requested_enabled && status.job?.operation === "activate";
+}
+function cigarFoldersReady(status) {
+  return status?.effective_enabled === true || cigarWaking(status);
 }
 function cigarHelpsPrompts(status) {
   const effective = status?.effective_preferences;
@@ -7266,7 +7269,7 @@ function ContextAssistanceSettings(props) {
   const access = /* @__PURE__ */ jsxRuntimeExports.jsx(
     ContextWorkspacesPanel,
     {
-      ready: status?.effective_enabled === true,
+      ready: cigarFoldersReady(status),
       generation: status?.generation ?? null,
       dirty,
       documentsAllowed: status?.effective_preferences.sources.workspace_documents === true,

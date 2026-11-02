@@ -10,6 +10,7 @@ import { CigarSetupProof } from "./one-click-setup";
 import { useCigarOneClick } from "./use-one-click";
 import { commitDashboardLocation } from "../dashboard-location";
 import { sameCigarPreferences } from "./selection-settings";
+import { cigarFoldersReady } from "./workspace-model";
 
 type Props = {
   workspace?: boolean;
@@ -187,7 +188,7 @@ export function ContextAssistanceSettings(props: Props) {
       const url = new URL(window.location.href); url.searchParams.set("section", "versions");
       commitDashboardLocation(url.pathname + url.search + url.hash);
     } : undefined} />;
-  const access = <ContextWorkspacesPanel ready={status?.effective_enabled === true} generation={status?.generation ?? null}
+  const access = <ContextWorkspacesPanel ready={cigarFoldersReady(status)} generation={status?.generation ?? null}
       dirty={dirty} documentsAllowed={status?.effective_preferences.sources.workspace_documents === true}
       agentsAllowed={status?.effective_preferences.features.agent_context === true}
       executionAllowed={status?.effective_preferences.features.execution_context === true
