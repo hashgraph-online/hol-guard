@@ -243,9 +243,8 @@ impl Service {
                 cancel: Arc::clone(&cancel),
             });
             state.error = None;
-            if operation == Check::Activate {
-                state.started = Some(Instant::now());
-            }
+            // Both checks may publish a new worker; its crash window starts now.
+            state.started = Some(Instant::now());
             (
                 generation,
                 state.settings.clone(),

@@ -131,6 +131,23 @@ fn a_worker_that_stops_right_after_starting_is_shown_not_rested() {
 }
 
 #[test]
+fn a_recheck_starts_a_new_crash_window_for_its_worker() {
+    let home = home();
+    let service = Service::default();
+    saved_on(&service);
+    lock(&service.state).unwrap().started = Instant::now().checked_sub(Duration::from_secs(600));
+    service
+        .schedule(Check::Recheck, home.path().to_path_buf())
+        .unwrap();
+    let state = lock(&service.state).unwrap();
+    assert_eq!(
+        wake::closed(&state),
+        "runtime_crashed",
+        "a replacement that stops at once is shown, not rested"
+    );
+}
+
+#[test]
 fn a_start_that_cannot_be_queued_is_shown_instead_of_resting() {
     let home = home();
     std::fs::write(home.path().join("cigar-erasure.json"), "{}").unwrap();
