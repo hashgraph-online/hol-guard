@@ -1,86 +1,22 @@
-"""OpenCode pretool plugin generation for HOL Guard runtime interception."""
+"""OpenCode pretool plugin generation for HOL Guard runtime interception.
+
+The native runtime owns the plugin template and renders it from the attested
+Guard CLI this module resolves.
+"""
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
 from ..codex_hook_windows_job import windows_system_executable_path
-from ._modules.opencode.opencode_pretool_template import _PLUGIN_TEMPLATE
+from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .base import HarnessContext
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
-from .bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
-from .guard_cli_attestation import GuardCliAttestation, resolve_attested_guard_cli
-from .hook_python import (
-    HookPythonExecutableIdentity,
-    HookPythonFileMetadata,
-)
-from .opencode_v2_entrypoint import OPENCODE_V2_ENTRYPOINT
+from .guard_cli_attestation import executable_identity_payload, resolve_attested_guard_cli
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
-_INTERCEPT_TOOLS = ("bash", "ctx_shell", "shell", "sh", "zsh", "terminal", "oc_bash")
-_HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
 _HOOK_TIMEOUT_SECONDS = 25
-_INHERIT_ENV_KEYS = (
-    "PATH",
-    "HOME",
-    "USER",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "LANG",
-    "LC_ALL",
-    "SYSTEMROOT",
-    "HOL_GUARD_NATIVE",
-    "HOL_GUARD_NATIVE_BINARY",
-)
-
-
-def _trusted_pythonpath_entries(package_root: str) -> list[str]:
-    trimmed = package_root.strip()
-    return [trimmed] if trimmed else []
-
-
-def _pretool_hook_launcher_code(
-    *,
-    import_roots: tuple[str, ...] = (),
-    package_root: str | None = None,
-) -> str:
-    trusted_entries = list(import_roots)
-    if not trusted_entries and package_root is not None:
-        trusted_entries = _trusted_pythonpath_entries(package_root)
-    return (
-        "import json,os,sys;"
-        f"trusted={json.dumps(trusted_entries)};"
-        "sys.path[:0]=trusted;"
-        "from codex_plugin_scanner.guard.codex_hook_windows_job import "
-        "assign_current_process_to_windows_hook_job;"
-        "_windows_job=assign_current_process_to_windows_hook_job() if os.name=='nt' else None;"
-        "sys.stderr.write('HOL_GUARD_WINDOWS_JOB_CONTAINED\\n') if _windows_job is not None else None;"
-        "sys.stderr.flush() if _windows_job is not None else None;"
-        "from pathlib import Path;"
-        "import codex_plugin_scanner;"
-        "from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text;"
-        "from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import run_bounded_cli_hook;"
-        f"argv=json.loads(os.environ[{_HOOK_ARGV_ENV!r}]);"
-        "guard_index=argv.index('--guard-home');"
-        "guard_home=argv[guard_index+1];"
-        "package_root=Path(codex_plugin_scanner.__file__).resolve().parent.parent;"
-        "config={'python_executable':sys.executable,'package_root':str(package_root),"
-        f"'guard_home':guard_home,'cli_args':argv,'harness':'opencode','timeout_seconds':{_HOOK_TIMEOUT_SECONDS}}};"
-        "raise SystemExit(run_bounded_cli_hook(config,input_text=stamp_hook_input_text(sys.stdin.read(1000001))))"
-    )
-
-
-def _pretool_hook_env(*, package_root: str | None = None) -> dict[str, str]:
-    del package_root
-    return {
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "PYTHONIOENCODING": "utf-8",
-        "PYTHONNOUSERSITE": "1",
-        "PYTHONSAFEPATH": "1",
-    }
 
 
 def managed_plugin_path(context: HarnessContext) -> Path:
@@ -91,72 +27,47 @@ def global_plugin_path(context: HarnessContext) -> Path:
     return context.home_dir / ".config" / "opencode" / "plugins" / PLUGIN_FILENAME
 
 
-def _metadata_payload(metadata: HookPythonFileMetadata) -> dict[str, str]:
-    return {
-        "device": str(metadata.device),
-        "inode": str(metadata.inode),
-        "mode": str(metadata.mode),
-        "size": str(metadata.size),
-        "mtimeNs": str(metadata.mtime_ns),
-    }
-
-
-def _python_identity_payload(identity: HookPythonExecutableIdentity) -> dict[str, object]:
-    return {
-        "invocationPath": str(identity.invocation_path),
-        "invocationType": identity.invocation_type,
-        "invocationLinkTarget": identity.invocation_link_target,
-        "invocationStat": _metadata_payload(identity.invocation_stat),
-        "targetPath": str(identity.target_path),
-        "targetStat": _metadata_payload(identity.target_stat),
-        "targetSha256": identity.target_sha256,
-    }
-
-
-def _native_bridge_payload(context: HarnessContext, guard_cli: GuardCliAttestation) -> dict[str, object] | None:
-    """The native bounded bridge the plugin starts first, or None to keep the Python launcher.
-
-    The plugin fills in the interpreter and the per-workspace CLI argv when it
-    runs a hook. The native runtime answers from the daemon, starts the daemon
-    once when it does not answer, and otherwise fails the hook closed.
-    """
-    if guard_cli.python is None:
-        return None
-    argv = bounded_cli_hook_command(
-        python_executable=str(guard_cli.python.executable),
-        package_root=Path(__file__).resolve().parents[3],
-        guard_home=context.guard_home,
-        cli_args=[],
-        harness="opencode",
-        timeout_seconds=_HOOK_TIMEOUT_SECONDS,
-    )
-    if len(argv) != 7 or argv[1] != NATIVE_BOUNDED_HOOK_COMMAND:
-        return None
-    return {"runtimePath": argv[0], "bootstrap": argv[5], "config": json.loads(argv[6])}
-
-
 def pretool_plugin_source(context: HarnessContext) -> str:
     guard_cli = resolve_attested_guard_cli(context)
     identity = guard_cli.frozen_identity or (guard_cli.python.identity if guard_cli.python is not None else None)
     if identity is None:
         raise RuntimeError("Guard could not attest the OpenCode hook runtime.")
-    import_roots = tuple(str(root) for root in guard_cli.python.import_roots) if guard_cli.python is not None else ()
+    native_bridge_argv: list[str] | None = None
+    import_roots: list[str] = []
+    if guard_cli.python is not None:
+        # The plugin fills in the interpreter and the per-workspace CLI argv
+        # when it runs a hook; the native kind keeps this argv only when it is
+        # the bounded native bridge.
+        native_bridge_argv = list(
+            bounded_cli_hook_command(
+                python_executable=str(guard_cli.python.executable),
+                package_root=Path(__file__).resolve().parents[3],
+                guard_home=context.guard_home,
+                cli_args=[],
+                harness="opencode",
+                timeout_seconds=_HOOK_TIMEOUT_SECONDS,
+            )
+        )
+        import_roots = [str(root) for root in guard_cli.python.import_roots]
     try:
         taskkill_path = windows_system_executable_path("taskkill.exe") if os.name == "nt" else None
     except (OSError, ValueError):
         taskkill_path = None
-    template = (_PLUGIN_TEMPLATE + OPENCODE_V2_ENTRYPOINT).replace("__HOOK_ARGV_ENV__", _HOOK_ARGV_ENV)
-    return (
-        template.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
-        .replace("__GUARD_PYTHON__", json.dumps(_python_identity_payload(identity)))
-        .replace("__GUARD_FROZEN__", json.dumps(guard_cli.frozen))
-        .replace("__GUARD_NATIVE_BRIDGE__", json.dumps(_native_bridge_payload(context, guard_cli)))
-        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code(import_roots=import_roots)))
-        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env()))
-        .replace("__GUARD_INHERIT_ENV_KEYS__", json.dumps(list(_INHERIT_ENV_KEYS)))
-        .replace("__GUARD_TASKKILL_PATH__", json.dumps(taskkill_path))
-        .replace("__INTERCEPT_TOOLS__", json.dumps(list(_INTERCEPT_TOOLS)))
-    )
+    args = {
+        "guard_home": str(context.guard_home.resolve()),
+        "python": executable_identity_payload(identity),
+        "frozen": guard_cli.frozen,
+        "native_bridge_argv": native_bridge_argv,
+        "import_roots": import_roots,
+        "taskkill_path": taskkill_path,
+    }
+    try:
+        source = native_runner_authority("opencode_plugin_render", args, guard_home=context.guard_home).get("source")
+    except NativeRunnerAuthorityError as error:
+        raise RuntimeError(f"Guard could not render the OpenCode plugin: {error}") from error
+    if not isinstance(source, str):
+        raise RuntimeError("Guard could not render the OpenCode plugin.")
+    return source
 
 
 def install_pretool_plugin(context: HarnessContext) -> dict[str, object]:
