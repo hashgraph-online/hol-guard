@@ -5068,6 +5068,11 @@ function CigarWorkspace(props) {
         ] })
       ] })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "cigar-beta-note", "aria-label": "CIGAR beta status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cigar-beta-note__chip", children: "Beta" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "CIGAR is still being iterated on. Screens and settings may change between releases." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: "https://github.com/hashgraph-online/hol-cigar/issues", target: "_blank", rel: "noopener noreferrer", children: "Share feedback" })
+    ] }),
     tab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "cigar-hero", "aria-labelledby": "cigar-hero-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cigar-hero-copy", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: "cigar-hero-heading", children: [
