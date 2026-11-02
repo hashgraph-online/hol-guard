@@ -2,7 +2,8 @@
 use super::*;
 use crate::contained_argv::{
     bun_runner_entry_launch, bun_vitest_invocation, contained_runner_invocation, inline_eval,
-    node_runtime_args, node_script_index, python_runtime_args, tsx_test_invocation,
+    node_runtime_args, node_script_index, python_runtime_args, tsx_runner_test_mode,
+    tsx_test_invocation, tsx_test_runner_flags,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -447,11 +448,18 @@ fn prepare_tsx(
     let Some(loader) = loader.filter(|_| matching) else {
         return Err(RestrictedPytestError::new("vitest_restricted_dependency_unavailable", "tsx is not installed inside this workspace. Guard did not download or execute a replacement."));
     };
-    if !cwd
-        .join(script)
-        .canonicalize()
-        .is_ok_and(|path| path.is_file() && path_is_within(&path, workspace))
-    {
+    let flags = tsx_test_runner_flags(argv)?;
+    // In test-runner mode every word after the flags is another file Node
+    // loads, so each one has to resolve inside the workspace.
+    let mut files = vec![script.to_owned()];
+    if tsx_runner_test_mode(&flags) {
+        files.extend_from_slice(arguments);
+    }
+    if !files.iter().all(|file| {
+        cwd.join(file)
+            .canonicalize()
+            .is_ok_and(|path| path.is_file() && path_is_within(&path, workspace))
+    }) {
         return Err(RestrictedPytestError::new(
             "vitest_restricted_invalid_command",
             "Test script is not in the workspace.",
@@ -461,7 +469,11 @@ fn prepare_tsx(
         .map_err(|_| invalid_node("Test loader is unavailable."))?;
     let mut command = vec![plan["executable"].as_str().unwrap().to_owned()];
     command.extend(runtime);
-    command.extend(["--import".to_owned(), uri.into(), script.to_owned()]);
+    command.extend(["--import".to_owned(), uri.into()]);
+    // Node reads its test-runner flags before the first file; behind it they
+    // are a word the run loads, so they go back in front of it.
+    command.extend(flags);
+    command.push(script.to_owned());
     command.extend_from_slice(arguments);
     plan["profile_version"] = json!("vitest-readonly-v1");
     plan["command"] = json!(command);

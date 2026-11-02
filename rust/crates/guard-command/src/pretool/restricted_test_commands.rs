@@ -7,6 +7,9 @@
 #[cfg(test)]
 #[path = "restricted_test_commands_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "restricted_test_commands_tsx_tests.rs"]
+mod tsx_tests;
 
 use crate::contained_argv::{
     contained_runner_call, jest_contained_call, mocha_contained_call, npm_exec_inert_option,
@@ -131,8 +134,9 @@ fn node_test_script_args(arguments: &[String]) -> bool {
         if crate::contained_argv::workspace_test_script(script))
 }
 
-/// `tsx math.test.ts` in its installed forms. The sink loads the file through
-/// the package's own loader inside the Vitest transform boundary.
+/// `tsx math.test.ts` in its installed forms, with or without the Node
+/// test-runner flags Node reads ahead of the script. The sink loads the file
+/// through the package's own loader inside the Vitest transform boundary.
 fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
     let rest = match (name, arguments) {
         ("tsx", rest) => rest,
@@ -157,7 +161,14 @@ fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
         }
         _ => return false,
     };
-    matches!(rest, [script, ..] if crate::contained_argv::workspace_test_script(script))
+    let (flags, rest) = rest.split_at(crate::contained_argv::tsx_runner_flag_count(rest));
+    let named = |script: &String| crate::contained_argv::workspace_test_script(script);
+    if crate::contained_argv::tsx_runner_test_mode(flags) {
+        // Node runs each remaining word as a test file of its own, so a word
+        // outside the workspace is code the run loads rather than inert argv.
+        return !rest.is_empty() && rest.iter().all(named);
+    }
+    matches!(rest, [script, ..] if named(script))
 }
 
 /// Classify a direct pytest invocation for delegation, never direct allowance.

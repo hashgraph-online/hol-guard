@@ -2,6 +2,9 @@
 #[cfg(test)]
 #[path = "contained_argv_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "contained_argv_tsx_tests.rs"]
+mod tsx_tests;
 use crate::contained_node_tool::local_package_entry;
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, PLAIN_LEXER, STRICT_LEXER};
@@ -166,9 +169,17 @@ pub fn node_script_index(command: &[String], start: usize) -> Option<usize> {
         .map(|_| index)
 }
 
-pub fn tsx_test_invocation(
-    command: &[String],
-) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
+/// A tsx test run split at its script.
+struct TsxTestParts<'a> {
+    /// The Node test-runner flags ahead of the script.
+    flags: &'a [String],
+    /// The script the run names.
+    script: &'a String,
+    /// The arguments the script is passed.
+    arguments: &'a [String],
+}
+
+fn tsx_test_parts(command: &[String]) -> Result<Option<TsxTestParts<'_>>, RestrictedPytestError> {
     let name = basename(command);
     let Some(mut args) = command.get(1..) else {
         return Ok(None);
@@ -191,10 +202,32 @@ pub fn tsx_test_invocation(
     } else if name != "tsx" {
         return Ok(None);
     }
-    Ok(args
+    let (flags, rest) = args.split_at(tsx_runner_flag_count(args));
+    if tsx_runner_test_mode(flags) && !rest.iter().all(|value| named_test_script(value, true)) {
+        return Ok(None);
+    }
+    Ok(rest
         .first()
         .filter(|value| named_test_script(value, true))
-        .map(|script| (script.clone(), args[1..].to_vec())))
+        .map(|script| TsxTestParts {
+            flags,
+            script,
+            arguments: &rest[1..],
+        }))
+}
+
+/// The test script a tsx run names, and the arguments the script is passed.
+pub fn tsx_test_invocation(
+    command: &[String],
+) -> Result<Option<(String, Vec<String>)>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map(|parts| (parts.script.clone(), parts.arguments.to_vec())))
+}
+
+/// The Node test-runner flags a tsx run carries, which the sink re-emits in
+/// front of the script. Node reads them nowhere else: behind the script they
+/// are the script's own arguments, and the run is no longer a test run.
+pub fn tsx_test_runner_flags(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
+    Ok(tsx_test_parts(command)?.map_or_else(Vec::new, |parts| parts.flags.to_vec()))
 }
 
 pub fn python_runtime_args(command: &[String]) -> Option<Vec<String>> {
@@ -302,7 +335,8 @@ fn bun_runner_invocation(
 mod runner_calls;
 pub(crate) use runner_calls::{
     bun_test_runs_once, bun_test_script_once, contained_runner_call, jest_contained_call,
-    jest_runs_once, mocha_contained_call, mocha_runs_once, vitest_runs_once, workspace_test_script,
+    jest_runs_once, mocha_contained_call, mocha_runs_once, tsx_runner_flag_count,
+    tsx_runner_test_mode, vitest_runs_once, workspace_test_script,
 };
 
 /// True when a command is Bun's own test runner taking one contained pass.
