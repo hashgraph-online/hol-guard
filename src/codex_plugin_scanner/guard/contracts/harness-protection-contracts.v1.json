@@ -1,0 +1,1404 @@
+{
+  "schema": "hol-guard.harness-protection-contracts.v1",
+  "contracts": [
+    {
+      "harness": "codex",
+      "install_aliases": [
+        "codex"
+      ],
+      "config_paths": [
+        "~/.codex/config.toml"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read",
+        "tool_result"
+      ],
+      "native_approval": true,
+      "browser_fallback": true,
+      "resume_support": true,
+      "known_blind_spots": "Inline file edits applied directly by the model without a tool call are not visible to Guard.",
+      "smoke_command": "hol-guard install codex --dry-run",
+      "capability_events": [
+        {
+          "event": "PreToolUse",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, transport failure, or unavailable Guard authority fails closed before tool execution.",
+          "mandatory_compatibility": "Codex must invoke the Guard-managed native hook and honor its response before executing the tool.",
+          "known_blind_spots": [
+            "A source declaration does not prove that a live Codex process honored a deny response."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_managed_hook_groups"
+        },
+        {
+          "event": "PermissionRequest",
+          "transport": "native_hook",
+          "mode": "approval",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Approval transport or decision failures fail closed and leave the request pending or denied.",
+          "mandatory_compatibility": "The Codex permission event must remain attached to the managed Guard hook command.",
+          "known_blind_spots": [
+            "Native approval UX and Guard evidence still require a live host/version check."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_permission_request_hook_group"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "native_hook",
+          "mode": "screening",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Prompt hook failures return a bounded fail-closed response where Codex honors the hook contract.",
+          "mandatory_compatibility": "Codex must expose UserPromptSubmit and preserve the Guard hook response schema.",
+          "known_blind_spots": [
+            "Prompt screening does not prove downstream model or host request rewriting."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_prompt_hook_group"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Post-tool transport failures are surfaced as unavailable review; a completed host action cannot be undone.",
+          "mandatory_compatibility": "Codex must invoke the managed PostToolUse hook after the tool event.",
+          "known_blind_spots": [
+            "Native post-tool observation does not prove model-visible output replacement."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/codex.py:_post_tool_hook_group"
+        }
+      ]
+    },
+    {
+      "harness": "claude-code",
+      "install_aliases": [
+        "claude-code",
+        "claude"
+      ],
+      "config_paths": [
+        "~/.claude/settings.json",
+        "~/.claude/settings.local.json"
+      ],
+      "event_surfaces": [
+        "shell",
+        "mcp_tool",
+        "file_read",
+        "tool_result"
+      ],
+      "native_approval": true,
+      "browser_fallback": true,
+      "resume_support": true,
+      "known_blind_spots": "Guard does not install a Claude Code UserPromptSubmit hook, so native prompt submission is not intercepted. Background agent sessions without an active terminal may not surface hook events.",
+      "smoke_command": "hol-guard install claude --dry-run",
+      "capability_events": [
+        {
+          "event": "PreToolUse",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed input, hook transport failure, or unavailable Guard authority fails closed before tool execution.",
+          "mandatory_compatibility": "Claude Code must invoke the managed PreToolUse hook and honor its deny/defer response.",
+          "known_blind_spots": [
+            "Background sessions without an active terminal may not surface hook events."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+        },
+        {
+          "event": "PermissionRequest",
+          "transport": "native_hook",
+          "mode": "approval",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Approval hook failures remain fail closed or pending until Guard can return an authenticated decision.",
+          "mandatory_compatibility": "Claude Code must preserve the managed PermissionRequest hook group in its settings.",
+          "known_blind_spots": [
+            "Guard adds pending review context and defers to Claude's own permission dialog; the native PreToolUse verdict remains the decision boundary."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Post-tool failures are recorded as unavailable review and cannot retract a result already delivered by the host.",
+          "mandatory_compatibility": "Claude Code must invoke the managed PostToolUse hook after the tool event.",
+          "known_blind_spots": [
+            "Native PostToolUse is not a general model-visible result replacement boundary."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/claude_hook_config.py:_sync_runtime_hook_groups"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "none",
+          "mode": "unsupported",
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "No Guard UserPromptSubmit hook is installed; prompt submission is outside this declared boundary.",
+          "mandatory_compatibility": "Do not infer prompt interception unless a future Claude Code contract adds and verifies this hook.",
+          "known_blind_spots": [
+            "Guard does not install a Claude Code UserPromptSubmit hook, so native prompt submission is not intercepted."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:claude-code.known_blind_spots"
+        }
+      ]
+    },
+    {
+      "harness": "opencode",
+      "install_aliases": [
+        "opencode"
+      ],
+      "config_paths": [
+        "~/.config/opencode/config.json"
+      ],
+      "event_surfaces": [
+        "shell",
+        "mcp_tool"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them.",
+      "smoke_command": "hol-guard install opencode --dry-run",
+      "capability_events": [
+        {
+          "event": "shell",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:opencode.event_surfaces"
+        },
+        {
+          "event": "mcp_tool",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard unless OpenCode permission rules block them."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:opencode.event_surfaces"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "none",
+          "mode": "unsupported",
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "OpenCode's declared hooks do not surface prompt submission to Guard.",
+          "mandatory_compatibility": "A host prompt hook must exist before prompt interception can be claimed.",
+          "known_blind_spots": [
+            "Prompt content is not available through the declared OpenCode hooks."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:opencode.known_blind_spots"
+        }
+      ]
+    },
+    {
+      "harness": "copilot",
+      "install_aliases": [
+        "copilot"
+      ],
+      "config_paths": [
+        "~/.config/gh/hosts.yml"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt"
+      ],
+      "native_approval": true,
+      "browser_fallback": true,
+      "resume_support": true,
+      "known_blind_spots": "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook.",
+      "smoke_command": "hol-guard install copilot --dry-run",
+      "capability_events": [
+        {
+          "event": "shell",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:copilot.event_surfaces"
+        },
+        {
+          "event": "prompt",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:copilot.event_surfaces"
+        }
+      ]
+    },
+    {
+      "harness": "cursor",
+      "install_aliases": [
+        "cursor"
+      ],
+      "config_paths": [
+        "~/.cursor/mcp.json",
+        "~/.cursor/hooks.json",
+        ".cursor/hooks.json"
+      ],
+      "event_surfaces": [
+        "shell",
+        "mcp_tool",
+        "file_read"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Shell commands issued through Cursor's built-in terminal bypass Guard unless the terminal runs inside an agent session. Prompt submission is not surfaced through native Cursor hooks.",
+      "smoke_command": "hol-guard install cursor --dry-run",
+      "surface_capabilities": [
+        "editor",
+        "cli"
+      ],
+      "supported_actions": [
+        "connect:editor",
+        "connect:cli",
+        "test:editor",
+        "test:cli",
+        "repair:editor",
+        "repair:cli",
+        "disconnect:editor",
+        "disconnect:cli"
+      ],
+      "docs_path": "docs/guard/cursor-local-cloud-contract.md",
+      "icon_label": "Cursor",
+      "capability_events": [
+        {
+          "event": "beforeShellExecution",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Blocking hook or Guard transport failure fails closed before Cursor starts the shell command.",
+          "mandatory_compatibility": "Cursor must load the managed beforeShellExecution hook and honor failClosed behavior.",
+          "known_blind_spots": [
+            "Cursor terminal actions outside an agent hook path remain outside this boundary."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+        },
+        {
+          "event": "beforeMCPExecution",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Blocking hook or Guard transport failure fails closed before Cursor forwards the MCP request.",
+          "mandatory_compatibility": "Cursor must load the managed beforeMCPExecution hook and honor failClosed behavior.",
+          "known_blind_spots": [
+            "Only MCP traffic entering Cursor's declared hook surface is covered."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+        },
+        {
+          "event": "beforeReadFile",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Blocking hook or Guard transport failure fails closed before Cursor reads the file.",
+          "mandatory_compatibility": "Cursor must load the managed beforeReadFile hook and honor failClosed behavior.",
+          "known_blind_spots": [
+            "Reads outside the Cursor hook path are not covered."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+        },
+        {
+          "event": "preToolUse",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Blocking hook or Guard transport failure fails closed before Cursor writes, edits or deletes the file.",
+          "mandatory_compatibility": "Cursor must load the managed preToolUse hook for file mutation tools and honor failClosed behavior.",
+          "known_blind_spots": [
+            "Inline edits that bypass the declared Cursor hook are not covered."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_BLOCKING_MANAGED_HOOK_EVENTS"
+        },
+        {
+          "event": "afterShellExecution",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Observer failure is recorded without claiming that a completed shell action can be reversed.",
+          "mandatory_compatibility": "Cursor must load the managed afterShellExecution observer when post-action evidence is requested.",
+          "known_blind_spots": [
+            "Observation does not block or undo the completed shell command."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+        },
+        {
+          "event": "afterMCPExecution",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Observer failure is recorded without claiming that a completed MCP action can be reversed.",
+          "mandatory_compatibility": "Cursor must load the managed afterMCPExecution observer when post-action evidence is requested.",
+          "known_blind_spots": [
+            "Observation does not block or replace a result already returned by Cursor."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cursor_hook_config.py:_OBSERVER_MANAGED_HOOK_EVENTS"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "none",
+          "mode": "unsupported",
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "Cursor has no declared native prompt submission hook in this contract.",
+          "mandatory_compatibility": "Do not claim prompt interception unless Cursor exposes a separately verified hook boundary.",
+          "known_blind_spots": [
+            "Prompt submission is not surfaced through the declared Cursor hooks."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:cursor.known_blind_spots"
+        }
+      ]
+    },
+    {
+      "harness": "cline",
+      "install_aliases": [
+        "cline",
+        "cline-cli",
+        "cline-vscode"
+      ],
+      "config_paths": [
+        "~/.cline/hooks/",
+        "~/.cline/plugins/",
+        "~/.cline/data/settings/cline_mcp_settings.json",
+        "~/.cline/settings/cline_mcp_settings.json",
+        "~/Documents/Cline/Hooks/",
+        "~/Documents/Cline/Plugins/"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read",
+        "file_write",
+        "tool_result",
+        "network_request"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Native Cline PostToolUse hooks are observation-only and cannot replace a result already returned to the model; full post-tool output mediation requires the Guard-managed Cline plugin transport. JetBrains protection is reported as unverified until a live pre-tool deny proof is observed.",
+      "smoke_command": "hol-guard apps test cline --json",
+      "surface_capabilities": [
+        "auto",
+        "hooks",
+        "plugin",
+        "cli",
+        "all"
+      ],
+      "supported_actions": [
+        "connect:auto",
+        "connect:hooks",
+        "connect:plugin",
+        "connect:cli",
+        "connect:all",
+        "test:auto",
+        "test:hooks",
+        "test:plugin",
+        "test:cli",
+        "test:all",
+        "repair:auto",
+        "repair:hooks",
+        "repair:plugin",
+        "repair:cli",
+        "repair:all",
+        "disconnect:auto",
+        "disconnect:hooks",
+        "disconnect:plugin",
+        "disconnect:cli",
+        "disconnect:all"
+      ],
+      "docs_path": "docs/guard/cline-local-protection-contract.md",
+      "icon_label": "Cline",
+      "capability_events": [
+        {
+          "event": "PreToolUse",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, bridge failure, or unavailable Guard authority denies state-changing tools; designated emergency-safe inspection actions may continue in degraded mode.",
+          "mandatory_compatibility": "Cline must invoke the managed native PreToolUse hook and honor its response.",
+          "known_blind_spots": [
+            "Emergency-safe inspection actions can continue during Guard authority failure.",
+            "JetBrains protection remains unverified until a live pre-tool deny proof is observed."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:install_cline_hooks"
+        },
+        {
+          "event": "PreToolUse",
+          "transport": "agent_plugin",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Plugin bridge failure returns a bounded blocked result before the tool call continues.",
+          "mandatory_compatibility": "Cline must load the Guard AgentPlugin and call beforeTool for each tool invocation.",
+          "known_blind_spots": [
+            "Plugin load and live pre-tool suppression still require an installed-host proof."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_plugin.py:plugin.hooks.beforeTool"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Native PostToolUse failures are recorded; the native hook cannot replace a result already returned to Cline.",
+          "mandatory_compatibility": "Cline must invoke the managed native PostToolUse hook after the tool event.",
+          "known_blind_spots": [
+            "Native Cline PostToolUse is observation-only and cannot provide model-visible replacement."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "agent_plugin",
+          "mode": "replace_or_withhold",
+          "declared_actions": [
+            "observe",
+            "block",
+            "rewrite"
+          ],
+          "error_behavior": "Unavailable review withholds the original result; reviewed output may replace it without forwarding unreviewed metadata.",
+          "mandatory_compatibility": "Cline must load the Guard AgentPlugin and route afterTool results through Guard before model delivery.",
+          "known_blind_spots": [
+            "Synthetic plugin canaries do not prove live Cline model-visible replacement."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_plugin.py:plugin.hooks.afterTool"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "The native prompt hook reports a decision but does not cancel prompt submission on denial or failure.",
+          "mandatory_compatibility": "Cline must invoke the managed UserPromptSubmit hook for prompt observation.",
+          "known_blind_spots": [
+            "Prompt observation does not block submission or prove final model request redaction."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+        },
+        {
+          "event": "TaskStart",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "The native lifecycle hook records the event but does not cancel it on denial or failure.",
+          "mandatory_compatibility": "Cline must invoke the managed TaskStart hook for lifecycle observation.",
+          "known_blind_spots": [
+            "Lifecycle observations do not establish a blocking boundary."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+        },
+        {
+          "event": "TaskError",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "The native lifecycle hook records the event but does not cancel it on denial or failure.",
+          "mandatory_compatibility": "Cline must invoke the managed TaskError hook for lifecycle observation.",
+          "known_blind_spots": [
+            "Lifecycle observations do not establish a blocking boundary."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+        },
+        {
+          "event": "SessionShutdown",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "The native lifecycle hook records the event but does not cancel it on denial or failure.",
+          "mandatory_compatibility": "Cline must invoke the managed SessionShutdown hook for lifecycle observation.",
+          "known_blind_spots": [
+            "Lifecycle observations do not establish a blocking boundary."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS"
+        }
+      ]
+    },
+    {
+      "harness": "gemini",
+      "install_aliases": [
+        "gemini"
+      ],
+      "config_paths": [
+        "~/.gemini/settings.json"
+      ],
+      "event_surfaces": [
+        "shell",
+        "mcp_tool"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface.",
+      "smoke_command": "hol-guard install gemini --dry-run",
+      "capability_events": [
+        {
+          "event": "shell",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:gemini.event_surfaces"
+        },
+        {
+          "event": "mcp_tool",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Prompt submission events and file read/write operations are not currently observable through the Gemini hook surface."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:gemini.event_surfaces"
+        }
+      ]
+    },
+    {
+      "harness": "hermes",
+      "install_aliases": [
+        "hermes"
+      ],
+      "config_paths": [],
+      "event_surfaces": [
+        "shell",
+        "mcp_tool",
+        "prompt"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call.",
+      "smoke_command": "hol-guard install hermes --dry-run",
+      "capability_events": [
+        {
+          "event": "shell",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:hermes.event_surfaces"
+        },
+        {
+          "event": "mcp_tool",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:hermes.event_surfaces"
+        },
+        {
+          "event": "prompt",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Hermes desktop and ACP entry paths may not register shell hooks; CLI and gateway honor hooks.pre_tool_call."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:hermes.event_surfaces"
+        }
+      ]
+    },
+    {
+      "harness": "openclaw",
+      "install_aliases": [
+        "openclaw"
+      ],
+      "config_paths": [
+        "~/.openclaw/config.json"
+      ],
+      "event_surfaces": [
+        "mcp_tool"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Shell commands and prompt events are not currently observable. Guard only intercepts MCP tool calls via the proxy layer.",
+      "smoke_command": "hol-guard install openclaw --dry-run",
+      "capability_events": [
+        {
+          "event": "mcp_tool",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Shell commands and prompt events are not currently observable. Guard only intercepts MCP tool calls via the proxy layer."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:openclaw.event_surfaces"
+        }
+      ]
+    },
+    {
+      "harness": "antigravity",
+      "install_aliases": [
+        "antigravity"
+      ],
+      "config_paths": [
+        "~/.config/antigravity/user/settings.json",
+        "~/.gemini/antigravity/mcp_config.json",
+        "~/.antigravity/extensions/extensions.json"
+      ],
+      "event_surfaces": [
+        "mcp_tool",
+        "prompt"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time.",
+      "smoke_command": "hol-guard install antigravity --dry-run",
+      "capability_events": [
+        {
+          "event": "mcp_tool",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:antigravity.event_surfaces"
+        },
+        {
+          "event": "prompt",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Shell commands are not currently observable through the Antigravity hook surface. Guard intercepts extensions and MCP registrations via scan at launch time."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:antigravity.event_surfaces"
+        }
+      ]
+    },
+    {
+      "harness": "kimi",
+      "install_aliases": [
+        "kimi",
+        "kimi-code",
+        "kimi-cli"
+      ],
+      "config_paths": [
+        "~/.kimi-code/config.toml"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently.",
+      "smoke_command": "hol-guard install kimi --dry-run",
+      "capability_events": [
+        {
+          "event": "shell",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:kimi.event_surfaces"
+        },
+        {
+          "event": "prompt",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. Hooks run in parallel, so separate requests may be reviewed concurrently."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:kimi.event_surfaces"
+        }
+      ]
+    },
+    {
+      "harness": "grok",
+      "install_aliases": [
+        "grok",
+        "grok-build",
+        "grok-build-cli",
+        "xai-grok"
+      ],
+      "config_paths": [
+        "~/.grok/config.toml",
+        "~/.grok/managed_config.toml",
+        "~/.grok/hooks/"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read",
+        "file_write"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": true,
+      "known_blind_spots": "Grok can reject user-typed prompts through UserPromptSubmit. Auto-wake and subagent prompt callbacks are passive; tool enforcement uses the catch-all PreToolUse hook, including subagent and MCP tools. --always-approve and bypassPermissions weaken Grok's own prompt policy, but the Guard hook still returns a native deny when policy blocks a tool call.",
+      "smoke_command": "hol-guard install grok --dry-run",
+      "capability_events": [
+        {
+          "event": "PreToolUse",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "The catch-all pre-tool hook returns a native deny when Guard blocks the tool call.",
+          "mandatory_compatibility": "Grok must invoke the managed PreToolUse hook and honor its decision for tool and subagent calls.",
+          "known_blind_spots": [
+            "Post-tool events do not prevent an action that already executed."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/grok_hooks.py:grok_hook_response_from_guard"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block"
+          ],
+          "error_behavior": "Guard returns decision:block for protected prompts and unavailable prompt review.",
+          "mandatory_compatibility": "Grok must honor UserPromptSubmit decision:block before delivering a user-typed prompt.",
+          "known_blind_spots": [
+            "Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/daemon/hook_fail_closed.py:fail_closed_response"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "The native post-tool hook records an event after execution and cannot replace its result.",
+          "mandatory_compatibility": "Grok must invoke the managed PostToolUse hook after the tool event.",
+          "known_blind_spots": [
+            "Post-tool observation does not block or replace model-visible output."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/grok_hooks.py:_OBSERVE_ONLY_EVENTS"
+        }
+      ]
+    },
+    {
+      "harness": "pi",
+      "install_aliases": [
+        "pi",
+        "pi-agent",
+        "pi-coding-agent"
+      ],
+      "config_paths": [
+        "~/.pi/agent/settings.json",
+        ".pi/settings.json",
+        "~/.pi/agent/extensions/*.ts",
+        ".pi/extensions/*.ts"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read",
+        "tool_result"
+      ],
+      "native_approval": true,
+      "browser_fallback": true,
+      "resume_support": true,
+      "known_blind_spots": "Pi package install and update flows happen outside the runtime extension bridge, so Guard observes the configured package surfaces plus the prompt and tool events forwarded by the managed extension.",
+      "smoke_command": "hol-guard install pi --dry-run",
+      "capability_events": [
+        {
+          "event": "UserPromptSubmit",
+          "transport": "managed_extension",
+          "mode": "screening",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Extension or Guard runtime failure returns a bounded fail-closed prompt decision.",
+          "mandatory_compatibility": "Pi must load the current managed Guard extension and forward input events to the Guard runtime.",
+          "known_blind_spots": [
+            "Package installation and update flows happen outside the runtime extension bridge."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"input\")"
+        },
+        {
+          "event": "PreToolUse",
+          "transport": "managed_extension",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Extension or Guard runtime failure returns a bounded fail-closed tool decision.",
+          "mandatory_compatibility": "Pi must load the current managed Guard extension and forward tool_call events to Guard before execution.",
+          "known_blind_spots": [
+            "A present extension file alone does not prove Pi loaded it or suppressed a live tool call."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_call\")"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "managed_extension",
+          "mode": "replace_or_withhold",
+          "declared_actions": [
+            "observe",
+            "block",
+            "rewrite"
+          ],
+          "error_behavior": "Unavailable or failed review withholds the tool result; reviewed content may replace it.",
+          "mandatory_compatibility": "Pi must load the current managed Guard extension and forward tool_result events before model delivery.",
+          "known_blind_spots": [
+            "A synthetic extension canary does not prove live Pi model-visible replacement."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_result\")"
+        }
+      ]
+    },
+    {
+      "harness": "omp",
+      "install_aliases": [
+        "omp",
+        "oh-my-pi"
+      ],
+      "config_paths": [
+        "~/.omp/agent/settings.json",
+        ".omp/settings.json",
+        "~/.omp/agent/extensions/*.ts",
+        ".omp/extensions/*.ts"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read",
+        "tool_result"
+      ],
+      "native_approval": true,
+      "browser_fallback": true,
+      "resume_support": true,
+      "known_blind_spots": "Oh My Pi package install and update flows happen outside the runtime extension bridge, so Guard observes the configured package surfaces plus the prompt and tool events forwarded by the managed extension.",
+      "smoke_command": "hol-guard install omp --dry-run",
+      "capability_events": [
+        {
+          "event": "UserPromptSubmit",
+          "transport": "managed_extension",
+          "mode": "screening",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Extension or Guard runtime failure returns a bounded fail-closed prompt decision.",
+          "mandatory_compatibility": "Oh My Pi must load the managed Guard extension and forward input events to Guard.",
+          "known_blind_spots": [
+            "Package installation and update flows happen outside the runtime extension bridge."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"input\")"
+        },
+        {
+          "event": "PreToolUse",
+          "transport": "managed_extension",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Extension or Guard runtime failure returns a bounded fail-closed tool decision.",
+          "mandatory_compatibility": "Oh My Pi must load the managed Guard extension and forward tool_call events before execution.",
+          "known_blind_spots": [
+            "A present extension file alone does not prove live tool suppression."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_call\")"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "managed_extension",
+          "mode": "replace_or_withhold",
+          "declared_actions": [
+            "observe",
+            "block",
+            "rewrite"
+          ],
+          "error_behavior": "Unavailable or failed review withholds the tool result; reviewed content may replace it.",
+          "mandatory_compatibility": "Oh My Pi must load the managed Guard extension and forward tool_result events before model delivery.",
+          "known_blind_spots": [
+            "A synthetic extension canary does not prove live model-visible replacement."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py:pi.on(\"tool_result\")"
+        }
+      ]
+    },
+    {
+      "harness": "zcode",
+      "install_aliases": [
+        "zcode",
+        "zai",
+        "z-code",
+        "zai-zcode"
+      ],
+      "config_paths": [
+        "~/.zcode/cli/config.json",
+        "~/.zcode/cli/plugins/"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events.",
+      "smoke_command": "hol-guard install zcode --dry-run",
+      "capability_events": [
+        {
+          "event": "shell",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:zcode.event_surfaces"
+        },
+        {
+          "event": "prompt",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:zcode.event_surfaces"
+        },
+        {
+          "event": "mcp_tool",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:zcode.event_surfaces"
+        },
+        {
+          "event": "file_read",
+          "transport": "adapter_declared",
+          "mode": "declared",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Failure behavior is adapter-specific until a concrete host hook contract is declared.",
+          "mandatory_compatibility": "The host must expose the declared event and preserve the adapter's response boundary.",
+          "known_blind_spots": [
+            "Inline edits applied directly by the model without a tool call are not visible to Guard, and background sessions that run without an active terminal do not surface hook events."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:zcode.event_surfaces"
+        }
+      ]
+    },
+    {
+      "harness": "devin",
+      "install_aliases": [
+        "devin",
+        "devin-cli",
+        "cognition-devin"
+      ],
+      "config_paths": [
+        "~/.config/devin/config.json",
+        "~/.config/devin/mcp_config.json",
+        ".devin/hooks.v1.json",
+        ".devin/mcp_config.json"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read",
+        "file_write",
+        "tool_result"
+      ],
+      "native_approval": false,
+      "browser_fallback": true,
+      "resume_support": false,
+      "known_blind_spots": "Devin loads Claude Code hook files by default, so Guard's Claude Code hooks may also run inside Devin sessions and attribute them to Claude Code. Inline edits applied without a tool call, write_to_process input, and background shell output are not visible to Guard. Subagent tool calls are covered only where Devin fires hooks for them.",
+      "smoke_command": "hol-guard install devin --dry-run",
+      "docs_path": "docs/guard/devin.md",
+      "icon_label": "Devin",
+      "capability_events": [
+        {
+          "event": "PreToolUse",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, hook failure, or unavailable Guard authority fails closed before tool execution.",
+          "mandatory_compatibility": "Devin must invoke the managed PreToolUse hook and honor its block decision before running the tool.",
+          "known_blind_spots": [
+            "A source declaration does not prove that a live Devin session honored a deny response."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "PermissionRequest",
+          "transport": "native_hook",
+          "mode": "approval",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Approval hook failures fail closed and leave the request pending or denied.",
+          "mandatory_compatibility": "Devin must preserve the managed PermissionRequest hook group in its user config.",
+          "known_blind_spots": [
+            "Native approval UX and Guard evidence still require a live host/version check."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "native_hook",
+          "mode": "screening",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Prompt hook failures return a bounded fail-closed response where Devin honors the hook contract.",
+          "mandatory_compatibility": "Devin must expose UserPromptSubmit and preserve the Guard hook response schema.",
+          "known_blind_spots": [
+            "Prompt screening does not prove downstream model or host request rewriting."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Post-tool transport failures are surfaced as unavailable review; a completed host action cannot be undone.",
+          "mandatory_compatibility": "Devin must invoke the managed PostToolUse hook after the tool event.",
+          "known_blind_spots": [
+            "Post-tool observation does not block or replace model-visible output."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/devin.py:_sync_managed_hook_groups"
+        }
+      ]
+    },
+    {
+      "harness": "muse",
+      "install_aliases": [
+        "muse",
+        "muse-code"
+      ],
+      "config_paths": [
+        "~/.config/muse/settings.json",
+        ".muse/settings.json",
+        ".muse-plugin/plugin.json"
+      ],
+      "event_surfaces": [
+        "shell",
+        "prompt",
+        "mcp_tool",
+        "file_read",
+        "file_write",
+        "tool_result"
+      ],
+      "native_approval": true,
+      "browser_fallback": true,
+      "resume_support": true,
+      "known_blind_spots": "Guard manages Muse hooks in the user settings file; hooks contributed by installed Muse plugins run beside Guard's and are inventoried but not rewritten. Inline edits applied without a tool call, and background shell output after a call returns, are not visible to Guard.",
+      "smoke_command": "hol-guard install muse --dry-run",
+      "docs_path": "docs/guard/muse.md",
+      "icon_label": "Muse",
+      "capability_events": [
+        {
+          "event": "PreToolUse",
+          "transport": "native_hook",
+          "mode": "blocking",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Malformed payload, hook failure, or unavailable Guard authority fails closed before tool execution. An approved call resumes unchanged inside the pending hook.",
+          "mandatory_compatibility": "Muse must invoke the managed PreToolUse hook and honor its deny response before running the tool.",
+          "known_blind_spots": [
+            "A source declaration does not prove that a live Muse session honored a deny response."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "PermissionRequest",
+          "transport": "native_hook",
+          "mode": "approval",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Approval hook failures fail closed and leave the request pending or denied.",
+          "mandatory_compatibility": "Muse must preserve the managed PermissionRequest hook group in its user settings.",
+          "known_blind_spots": [
+            "Native approval UX and Guard evidence still require a live host/version check."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "UserPromptSubmit",
+          "transport": "native_hook",
+          "mode": "screening",
+          "declared_actions": [
+            "observe",
+            "block",
+            "approval"
+          ],
+          "error_behavior": "Prompt hook failures return a bounded fail-closed response where Muse honors the hook contract.",
+          "mandatory_compatibility": "Muse must expose UserPromptSubmit and preserve the Guard hook response schema.",
+          "known_blind_spots": [
+            "Prompt screening does not prove downstream model or host request rewriting."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "PostToolUse",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Post-tool transport failures are surfaced as unavailable review; a completed host action cannot be undone.",
+          "mandatory_compatibility": "Muse must invoke the managed PostToolUse hook after the tool event.",
+          "known_blind_spots": [
+            "Post-tool observation does not block or replace model-visible output."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "SessionStart",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Session lifecycle failures are recorded; the hook adds Guard context and cannot block the session.",
+          "mandatory_compatibility": "Muse must invoke the managed SessionStart hook when a session starts.",
+          "known_blind_spots": [
+            "Session context does not prove that later tool calls were reviewed."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+        },
+        {
+          "event": "Stop",
+          "transport": "native_hook",
+          "mode": "observe",
+          "declared_actions": [
+            "observe"
+          ],
+          "error_behavior": "Session lifecycle failures are recorded; the hook observes the stop and cannot block it.",
+          "mandatory_compatibility": "Muse must invoke the managed Stop hook when a session stops.",
+          "known_blind_spots": [
+            "Stop observation does not prove that earlier tool calls were reviewed."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/muse.py:_sync_managed_hook_groups"
+        }
+      ]
+    },
+    {
+      "harness": "paseo",
+      "install_aliases": [
+        "paseo"
+      ],
+      "config_paths": [
+        "~/.paseo/config.json"
+      ],
+      "event_surfaces": [],
+      "native_approval": false,
+      "browser_fallback": false,
+      "resume_support": false,
+      "known_blind_spots": "Protection is delegated to supported native providers on the Paseo daemon host. Paseo permission notifications are not blocking hooks. Terminals, daemon git/browser actions, plugin code, custom commands, ACP providers, relocated native homes, and remote hosts are not covered. Native runtime failure behavior and approval/resume support remain provider-specific.",
+      "smoke_command": "hol-guard install paseo --dry-run",
+      "docs_path": "docs/guard/paseo.md",
+      "icon_label": "Paseo",
+      "capability_events": [
+        {
+          "event": "*",
+          "transport": "none",
+          "mode": "unsupported",
+          "declared_actions": [
+            "unavailable"
+          ],
+          "error_behavior": "No event surface is declared for this adapter.",
+          "mandatory_compatibility": "A concrete host event and transport must be added before protection is claimed.",
+          "known_blind_spots": [
+            "Protection is delegated to supported native providers on the Paseo daemon host. Paseo permission notifications are not blocking hooks. Terminals, daemon git/browser actions, plugin code, custom commands, ACP providers, relocated native homes, and remote hosts are not covered. Native runtime failure behavior and approval/resume support remain provider-specific."
+          ],
+          "source_reference": "src/codex_plugin_scanner/guard/adapters/contracts.py:paseo.event_surfaces"
+        }
+      ]
+    }
+  ]
+}
