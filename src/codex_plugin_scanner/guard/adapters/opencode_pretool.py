@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from ..codex_hook_windows_job import windows_system_executable_path
+from ..native_context import _resolve_existing_digest_home
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from .base import HarnessContext
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
@@ -61,8 +62,10 @@ def pretool_plugin_source(context: HarnessContext) -> str:
         "import_roots": import_roots,
         "taskkill_path": taskkill_path,
     }
+    # Rendering is pure: it must not create the Guard home before install publishes it.
+    home = _resolve_existing_digest_home(context.guard_home)
     try:
-        source = native_runner_authority("opencode_plugin_render", args, guard_home=context.guard_home).get("source")
+        source = native_runner_authority("opencode_plugin_render", args, guard_home=home).get("source")
     except NativeRunnerAuthorityError as error:
         raise RuntimeError(f"Guard could not render the OpenCode plugin: {error}") from error
     if not isinstance(source, str):
