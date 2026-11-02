@@ -24,6 +24,14 @@ impl Engine {
         withdrawn: Option<&str>,
     ) -> Result<Value, RuntimeError> {
         let mut scope = self.scopes.remove(id).ok_or(RuntimeError::ScopeDenied)?;
+        let withdrawn_file = withdrawn
+            .and_then(|source| scope.sources.get(source))
+            .map(|source| {
+                (
+                    scope.root.path().to_path_buf(),
+                    source.relative_path.clone(),
+                )
+            });
         let mut changed = false;
         let result = (|| {
             policy_current(&self.home, &mut scope, runtime)?;
@@ -79,6 +87,8 @@ impl Engine {
         self.scopes.insert(id.into(), scope);
         if result.is_ok() {
             self.remember_pick(id, None);
+        } else if let Some((root, file)) = withdrawn_file.filter(|_| changed) {
+            let _ = self.forget_source(&root, &file);
         }
         result
     }

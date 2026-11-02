@@ -180,3 +180,17 @@ fn busy_cache_keeps_durable_intent_until_its_real_owner_releases() {
     crate::context_assistance_data::remove(&f.home).unwrap();
     assert!(!f.home.join("cigar-erasure.json").exists());
 }
+#[test]
+fn clearing_cigar_data_forgets_picked_folders() {
+    use crate::policy_store::context_assistance_registry::picked;
+    let f = Fixture::new(false);
+    let folder = picked::Folder {
+        workspace: f.home.join("todo-app"),
+        sources: vec!["README.md".into()],
+        notes_read: false,
+        notes_propose: false,
+    };
+    picked::save(&f.home, &[folder]).unwrap();
+    crate::context_assistance_data::remove(&f.home).unwrap();
+    assert!(picked::load(&f.home).unwrap().is_empty());
+}

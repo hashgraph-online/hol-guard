@@ -345,7 +345,7 @@ impl Engine {
                 Ok(json!({"session_id":session_id,"revoked":true}))
             }
             Request::Revoke { scope_id } => {
-                self.forget_pick(&scope_id);
+                self.forget_pick(&scope_id)?;
                 let scope = self
                     .scopes
                     .get_mut(&scope_id)

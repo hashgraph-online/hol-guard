@@ -6,7 +6,7 @@ use super::*;
 const SCHEMA: &str = "guard-cigar-picked-folders.v1";
 const FILE: &str = "picked-folders.json";
 const LIMIT: u64 = 64 * 1024;
-const MAX_FOLDERS: usize = 8;
+pub(crate) const MAX_FOLDERS: usize = 8;
 const MAX_FILES: usize = 32;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -98,6 +98,21 @@ pub(crate) fn save(home: &Path, folders: &[Folder]) -> Result<(), String> {
         home,
     )
     .map_err(|_| error("picked_folders_write_failed"))
+}
+
+/// Deletes the record. Removing access must never leave an old record that a
+/// later restore would grant again, so this is the fallback when a smaller
+/// record cannot be written.
+pub(crate) fn forget(home: &Path) -> Result<(), String> {
+    let Some(directory) = directory(home, false)? else {
+        return Ok(());
+    };
+    match fs::remove_file(directory.join(FILE)) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            Err(error("picked_folders_write_failed"))
+        }
+        _ => Ok(()),
+    }
 }
 
 #[cfg(all(test, unix))]

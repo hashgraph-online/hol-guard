@@ -57,6 +57,8 @@ impl DataRemoval {
     /// All paths converge here after SDK/cache owners have acknowledged close.
     /// No source/SDK path from a record is used as a filesystem destination.
     pub(crate) fn remove(self) -> Result<(), RuntimeError> {
+        crate::policy_store::context_assistance_registry::picked::forget(&self.home)
+            .map_err(|_| RuntimeError::StorageRepairRequired)?;
         if let Some(cache) = EvidenceCache::existing(&self.home)? {
             cache.forget_all()?;
         }
