@@ -1,7 +1,7 @@
 //! Cleanup only exact job-owned preparation roots; registered runtimes and
 //! external interpreter aliases protect their referenced files from deletion.
 use super::*;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Owner {
@@ -40,7 +40,7 @@ fn references(home: &Path) -> Result<Vec<PathBuf>, String> {
 }
 fn roots(home: &Path, job: &python_store::Job, paths: &[(&str, &str)]) -> Result<(), String> {
     let references = references(home)?;
-    let deadline = Instant::now() + Duration::from_millis(500);
+    let deadline = Instant::now() + cleanup::CLEANUP_TIME;
     for (parent, name) in paths {
         let parent_path = home.join("context-assistance").join(parent);
         match fs::symlink_metadata(&parent_path) {

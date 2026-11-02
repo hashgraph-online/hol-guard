@@ -15,6 +15,7 @@ guard-command = { path = "../guard-command" }
 guard-contained-process = { path = "../guard-contained-process" }
 guard-context-assistance = { path = "../guard-context-assistance" }
 guard-cigar-release = { path = "../guard-cigar-release" }
+guard-cigar-artifacts = { path = "../guard-cigar-artifacts" }
 guard-cigar-install = { path = "../guard-cigar-install" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }

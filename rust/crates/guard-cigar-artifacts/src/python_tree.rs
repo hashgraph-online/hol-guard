@@ -125,6 +125,8 @@ fn verify(
     paths::private_directory(root)?;
     #[cfg(unix)]
     let root_before = fs::symlink_metadata(root).map_err(|_| InstallError::DestinationUnsafe)?;
+    #[cfg(windows)]
+    let root_before = stamp(root).map_err(|_| InstallError::DestinationUnsafe)?;
     let mut scan = Walk {
         root,
         checkpoint,
@@ -172,6 +174,12 @@ fn verify(
             return Err(InstallError::DestinationUnsafe);
         }
     }
+    #[cfg(windows)]
+    if !crate::host::read_only(
+        &fs::symlink_metadata(&executable).map_err(|_| InstallError::ArtifactUnreadable)?,
+    ) {
+        return Err(InstallError::DestinationUnsafe);
+    }
     paths::private_directory(root)?;
     #[cfg(unix)]
     {
@@ -192,6 +200,10 @@ fn verify(
         ) {
             return Err(InstallError::DestinationUnsafe);
         }
+    }
+    #[cfg(windows)]
+    if stamp(root).map_err(|_| InstallError::DestinationUnsafe)? != root_before {
+        return Err(InstallError::DestinationUnsafe);
     }
     let snapshot = VerifiedPythonSnapshot::new(root, expected, scan.entries);
     snapshot.recheck_with(checkpoint)?;
@@ -222,18 +234,15 @@ impl Walk<'_> {
             return Err(InstallError::LimitExceeded);
         }
         paths::private_directory(path)?;
-        let directory_before =
-            stamp(&fs::symlink_metadata(path).map_err(|_| InstallError::DestinationUnsafe)?)?;
+        let directory_before = stamp(path).map_err(|_| InstallError::DestinationUnsafe)?;
         for entry in fs::read_dir(path).map_err(|_| InstallError::ArtifactUnreadable)? {
             (self.checkpoint)()?;
             let path = entry.map_err(|_| InstallError::ArtifactUnreadable)?.path();
             let metadata =
                 fs::symlink_metadata(&path).map_err(|_| InstallError::ArtifactUnreadable)?;
-            let name = path
-                .strip_prefix(self.root)
-                .ok()
-                .and_then(|p| p.to_str())
-                .ok_or(InstallError::EntryUnsafe)?;
+            let name =
+                crate::host::relative_name(&path, self.root).ok_or(InstallError::EntryUnsafe)?;
+            let name = name.as_str();
             if metadata.file_type().is_symlink() {
                 return Err(InstallError::EntryUnsafe);
             }
@@ -255,6 +264,13 @@ impl Walk<'_> {
                         return Err(InstallError::DestinationUnsafe);
                     }
                 }
+                #[cfg(windows)]
+                if !crate::host::read_only(&metadata)
+                    || !crate::host::private_file(&path, &metadata)
+                {
+                    return Err(InstallError::DestinationUnsafe);
+                }
+                let before = stamp(&path)?;
                 let name =
                     paths::admit_interpreter_name(name.as_bytes(), false, &mut self.namespace)?;
                 if metadata.len() > MAX_FILE_BYTES {
@@ -270,10 +286,8 @@ impl Walk<'_> {
                 let content = guard_secure_fs::read_stable(&path, MAX_FILE_BYTES as usize, false)
                     .map_err(|_| InstallError::ArtifactUnreadable)?;
                 (self.checkpoint)()?;
-                let after = stamp(
-                    &fs::symlink_metadata(&path).map_err(|_| InstallError::ArtifactUnreadable)?,
-                )?;
-                if stamp(&metadata)? != after {
+                let after = stamp(&path)?;
+                if before != after {
                     return Err(InstallError::ArtifactMismatch);
                 }
                 self.entries.insert(name.clone(), after);
@@ -282,17 +296,13 @@ impl Walk<'_> {
                 return Err(InstallError::EntryUnsafe);
             }
         }
-        let after =
-            stamp(&fs::symlink_metadata(path).map_err(|_| InstallError::DestinationUnsafe)?)?;
+        let after = stamp(path).map_err(|_| InstallError::DestinationUnsafe)?;
         if directory_before != after {
             return Err(InstallError::DestinationUnsafe);
         }
-        let relative = path
-            .strip_prefix(self.root)
-            .ok()
-            .and_then(|value| value.to_str())
-            .ok_or(InstallError::EntryUnsafe)?;
-        self.entries.insert(relative.into(), after);
+        let relative =
+            crate::host::relative_name(path, self.root).ok_or(InstallError::EntryUnsafe)?;
+        self.entries.insert(relative, after);
         Ok(())
     }
 }

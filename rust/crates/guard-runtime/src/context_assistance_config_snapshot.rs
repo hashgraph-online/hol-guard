@@ -60,7 +60,7 @@ pub(super) fn read_home(home: &Path) -> Result<Map<String, Value>, String> {
 #[cfg(test)]
 thread_local! {static CHANGED_READS:std::cell::Cell<usize>=const{std::cell::Cell::new(0)};}
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn with_changed_reads<T>(count: usize, run: impl FnOnce() -> T) -> T {
     struct Reset;
     impl Drop for Reset {

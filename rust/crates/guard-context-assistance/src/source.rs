@@ -17,6 +17,8 @@ pub struct SourceRoot {
     path: PathBuf,
     #[cfg(unix)]
     identity: (u64, u64),
+    #[cfg(windows)]
+    identity: guard_cigar_artifacts::host::FileId,
 }
 
 pub struct AdmittedFile {
@@ -37,10 +39,10 @@ impl SourceRoot {
         {
             return Err(RuntimeError::ScopeDenied);
         }
-        let canonical = path.canonicalize().map_err(|_| RuntimeError::ScopeDenied)?;
-        let metadata =
-            std::fs::symlink_metadata(&canonical).map_err(|_| RuntimeError::ScopeDenied)?;
-        if !metadata.is_dir() || canonical != path || contains_symlink_component(path) {
+        let canonical = guard_cigar_artifacts::host::is_canonical(path)
+            .map_err(|_| RuntimeError::ScopeDenied)?;
+        let metadata = std::fs::symlink_metadata(path).map_err(|_| RuntimeError::ScopeDenied)?;
+        if !metadata.is_dir() || !canonical || contains_symlink_component(path) {
             return Err(RuntimeError::ScopeDenied);
         }
         #[cfg(unix)]
@@ -48,9 +50,11 @@ impl SourceRoot {
             use std::os::unix::fs::MetadataExt;
             (metadata.dev(), metadata.ino())
         };
+        #[cfg(windows)]
+        let identity =
+            guard_cigar_artifacts::host::node_id(path).map_err(|_| RuntimeError::ScopeDenied)?;
         Ok(Self {
-            path: canonical,
-            #[cfg(unix)]
+            path: path.to_path_buf(),
             identity,
         })
     }
@@ -61,18 +65,10 @@ impl SourceRoot {
 
     pub fn revalidate(&self) -> Result<(), RuntimeError> {
         let observed = Self::inspect(&self.path)?;
-        #[cfg(unix)]
-        {
-            if self.identity != observed.identity {
-                return Err(RuntimeError::ContextStale);
-            }
-            Ok(())
+        if self.identity != observed.identity {
+            return Err(RuntimeError::ContextStale);
         }
-        #[cfg(not(unix))]
-        {
-            let _ = observed;
-            Err(RuntimeError::PlatformUnqualified)
-        }
+        Ok(())
     }
 
     /// No globbing, recursion, locator dereference, external path or symlink.
@@ -80,11 +76,14 @@ impl SourceRoot {
     pub fn read(&self, relative: &str) -> Result<AdmittedFile, RuntimeError> {
         validate_relative(relative)?;
         self.revalidate()?;
+        // The decision names the file by its canonical spelling, which on
+        // Windows carries the `\\?\` prefix the stored root may leave off.
+        let root = std::fs::canonicalize(&self.path).map_err(|_| RuntimeError::ScopeDenied)?;
         let decision = classify_source_path(relative, &self.path, None, false);
         let selected = decision
             .resolved_path
             .filter(|_| decision.allowed)
-            .filter(|path| path.starts_with(&self.path))
+            .filter(|path| path.starts_with(&root))
             .ok_or(RuntimeError::ScopeDenied)?;
         let read = read_bounded(&selected, MAX_FILE_BYTES)
             .map_err(|_| RuntimeError::ArtifactUnreadable)?;

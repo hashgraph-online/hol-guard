@@ -20,10 +20,8 @@ mod backend;
 mod grants;
 #[path = "context_assistance_engine_proposals.rs"]
 mod proposals;
-#[cfg(unix)]
 #[path = "context_assistance_engine_upgrade.rs"]
 mod upgrade;
-#[cfg(unix)]
 pub(crate) use upgrade::UpgradeBoundary;
 #[cfg(all(test, target_os = "macos"))]
 pub(crate) use upgrade::{
@@ -184,17 +182,13 @@ pub(crate) struct Engine {
     agents: crate::context_assistance_agents::Sessions,
     #[cfg(target_os = "macos")]
     execution_lane: Option<execution::Lane>,
-    #[cfg(unix)]
     cache: Option<guard_context_assistance::EvidenceCache>,
-    #[cfg(unix)]
     producer: Option<guard_context_assistance::EvidenceUpgradeProducer>,
-    #[cfg(unix)]
     data_generation: Option<Arc<guard_context_assistance::PreparedEvidenceGeneration>>,
 }
 
 impl Engine {
     fn expire_notes(&mut self, runtime: &mut VerifiedRuntime) -> Result<(), RuntimeError> {
-        #[cfg(unix)]
         crate::policy_store::context_assistance_registry::switching::DataRemoval::check_clear(
             &self.home,
         )?;
@@ -247,11 +241,8 @@ impl Engine {
             agents: Default::default(),
             #[cfg(target_os = "macos")]
             execution_lane: None,
-            #[cfg(unix)]
             cache: None,
-            #[cfg(unix)]
             producer: None,
-            #[cfg(unix)]
             data_generation: None,
         }
     }
@@ -309,7 +300,6 @@ impl Engine {
                 shared_notes,
             } => self.grant(runtime, workspace, app, sources, shared_notes),
             Request::Clear | Request::ForgetSaved => {
-                #[cfg(unix)]
                 let removal = crate::policy_store::context_assistance_registry::switching::DataRemoval::acquire(&self.home)?;
                 // A failed close leaves this generation unavailable, never a
                 // partially cleared graph eligible for later compilation.
@@ -320,10 +310,7 @@ impl Engine {
                 #[cfg(target_os = "macos")]
                 self.close_execution_lane(runtime)?;
                 self.scopes.clear();
-                #[cfg(unix)]
                 self.forget_saved(removal)?;
-                #[cfg(not(unix))]
-                self.forget_saved()?;
                 self.agents = Default::default();
                 if let Some(notifications) = &self.notifications {
                     notifications.clear()?;

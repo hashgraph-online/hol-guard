@@ -110,3 +110,17 @@ fn link_and_directory_replacement_do_not_reuse_admitted_roots() {
     ));
     fs::remove_dir_all(old).unwrap();
 }
+
+/// Workspaces arrive as ordinary drive paths, while the read decision names
+/// the file by its `\\?\` canonical spelling.
+#[cfg(windows)]
+#[test]
+fn ordinary_drive_spelling_of_the_root_reads_its_files() {
+    let fixture = Fixture::new();
+    fs::write(fixture.0.join("README.md"), "Plain spelling\n").unwrap();
+    let text = fixture.0.to_str().unwrap();
+    let plain = PathBuf::from(text.strip_prefix(r"\\?\").unwrap_or(text));
+    assert!(!plain.to_str().unwrap().starts_with(r"\\?\"));
+    let root = SourceRoot::inspect(&plain).unwrap();
+    assert_eq!(root.read("README.md").unwrap().documents.len(), 1);
+}

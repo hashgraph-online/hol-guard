@@ -18,25 +18,21 @@ pub(crate) mod catalog;
 mod owner_key;
 #[path = "context_assistance_install_jobs.rs"]
 mod preparation;
-#[cfg(unix)]
 #[path = "context_assistance_switch_store.rs"]
 pub(crate) mod switching;
-#[cfg(unix)]
 pub(crate) fn preparation_job_id_exists(home: &Path, id: &str) -> Result<bool, String> {
     preparation::native_job_id_exists(home, id)
 }
-#[cfg(unix)]
 pub(crate) fn lifecycle_job_count(home: &Path) -> Result<usize, String> {
     preparation::total_job_count(home)
 }
-#[cfg(unix)]
 pub(crate) fn selection_lease(home: &Path) -> Result<fs::File, String> {
     preparation::lifecycle_lease(home)
 }
 #[path = "context_assistance_installation_v2.rs"]
 mod versioned;
 use super::policy_store_validation::validate_private_directory;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) use preparation::InstallPause;
 pub(crate) use preparation::{run_operator_command, InstallRequest, Jobs, SetupInterpreterRequest};
 pub(crate) use versioned::publish_verified;
@@ -131,6 +127,10 @@ pub(crate) fn load(home: &Path, runtime_id: &str) -> Result<Installation, String
         if metadata.nlink() != 1 {
             return Err(error("installation_invalid"));
         }
+    }
+    #[cfg(windows)]
+    if !guard_runtime_windows_process::is_single_link_file(&path).unwrap_or(false) {
+        return Err(error("installation_invalid"));
     }
     let (value, _) = read_private_json(&path, MAX_RECORD, "cigar_installation", home)
         .map_err(|_| error("installation_invalid"))?
@@ -274,7 +274,6 @@ fn enroll_with_source(
     if settings.diagnostic.is_some() || !settings.verification_permitted {
         return Err(error("policy_restricted"));
     }
-    #[cfg(unix)]
     let _lifecycle_lease = preparation::lifecycle_lease(&request.guard_home)?;
     // No fact supplied by the operator substitutes for the actual process,
     // package, worker handshake and synthetic compilation checks.

@@ -147,6 +147,12 @@ fn exact_download_is_cached_and_wrong_hash_length_or_changed_file_is_refused() {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&file.path, fs::Permissions::from_mode(0o600)).unwrap();
     }
+    #[cfg(windows)]
+    {
+        let mut permissions = fs::metadata(&file.path).unwrap().permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&file.path, permissions).unwrap();
+    }
     fs::write(&file.path, b"changed after download").unwrap();
     assert!(commit_download(
         &home,
@@ -212,9 +218,10 @@ fn untrusted_redirect_is_refused_before_destination_dns_or_request() {
         location: Some("https://other.example/untrusted.whl".into()),
     }]);
     let result = download(&mock, 10, &temporary);
-    assert!(
-        matches!(result,RestrictedArchiveDownloadResult::Failure(value) if value.code=="install_origin_rejected")
-    );
+    let RestrictedArchiveDownloadResult::Failure(value) = result else {
+        panic!("redirect was followed")
+    };
+    assert_eq!(value.code, "install_origin_rejected");
     assert_eq!(mock.resolutions.load(Ordering::SeqCst), 1);
     assert_eq!(mock.opens.load(Ordering::SeqCst), 1);
     assert_eq!(fs::read_dir(&temporary).unwrap().count(), 0);

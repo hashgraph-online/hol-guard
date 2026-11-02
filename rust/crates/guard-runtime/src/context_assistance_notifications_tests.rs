@@ -1,4 +1,9 @@
 use super::*;
+// Workspaces are absolute paths, which on Windows start with a drive.
+#[cfg(unix)]
+const ROOT: &str = "";
+#[cfg(windows)]
+const ROOT: &str = "C:";
 use serde_json::json;
 use std::time::{Duration, Instant};
 
@@ -40,13 +45,13 @@ fn receipt_notifications_do_not_collect_when_only_native_policy_facts_are_enable
     let observer = Arc::new(Notifications::with_sources(true, false));
     let receipt = receipt(42);
     let home = PathBuf::from(format!(
-        "/synthetic-cigar-notification-{}",
+        "{ROOT}/synthetic-cigar-notification-{}",
         crate::unique_nanos::unique_nanos()
     ));
     assert!(register(home.clone(), &observer));
     native_origin(
         &home,
-        Some("/workspace"),
+        Some(format!("{ROOT}/workspace").as_str()),
         &receipt,
         &json!({"action":{
             "schema":"guard-pre-tool-action.v1","version":1,"harness":"codex","event":"PreToolUse",
@@ -67,7 +72,7 @@ fn only_persisted_matching_native_origins_become_small_data_only_facts() {
     let mut mapping = wire(&receipt);
     observer.persisted(&mapping);
     assert!(observer.drain().unwrap().facts.is_empty());
-    observer.native_origin("/workspace/project", &receipt);
+    observer.native_origin(&format!("{ROOT}/workspace/project"), &receipt);
     assert!(
         observer.drain().unwrap().facts.is_empty(),
         "origin alone is not persisted evidence"
@@ -117,7 +122,7 @@ fn bounded_origin_and_ready_queues_report_loss_and_keep_the_newest_facts() {
     let _fixture = global_loss_fixture();
     let observer = Notifications::default();
     for index in 1..=ORIGINS + 3 {
-        observer.native_origin("/workspace", &receipt(index));
+        observer.native_origin(&format!("{ROOT}/workspace"), &receipt(index));
     }
     assert_eq!(observer.inbox.lock().unwrap().origins.len(), ORIGINS);
     observer.persisted(&wire(&receipt(1)));
@@ -146,7 +151,7 @@ fn observed_policy_actions_remain_distinct_and_free_form_actions_are_excluded() 
     receipt.policy_action = None;
     receipt.observed_policy_action = Some("block".into());
     receipt.observe_mode = true;
-    observer.native_origin("/workspace", &receipt);
+    observer.native_origin(&format!("{ROOT}/workspace"), &receipt);
     observer.persisted(&wire(&receipt));
     let text = observer.drain().unwrap().facts[0].document().text;
     assert!(text.contains("decision 'allow'"));
@@ -154,7 +159,7 @@ fn observed_policy_actions_remain_distinct_and_free_form_actions_are_excluded() 
         "Recorded policy action: not recorded; observed policy action: block; observe mode: true"
     ));
     receipt.policy_action = Some("private free-form action".into());
-    observer.native_origin("/workspace", &receipt);
+    observer.native_origin(&format!("{ROOT}/workspace"), &receipt);
     assert!(observer.inbox.lock().unwrap().origins.is_empty());
 }
 
@@ -164,20 +169,32 @@ fn pending_receipts_invalidate_only_matching_workspace_and_harness_reads() {
     let observer = Notifications::default();
     let receipt = receipt(10);
     let epoch = observer.epoch();
-    observer.native_origin("/workspace/first", &receipt);
+    observer.native_origin(&format!("{ROOT}/workspace/first"), &receipt);
     observer.persisted(&wire(&receipt));
     assert!(observer
-        .current(epoch, Some((Path::new("/workspace/second"), "dashboard")))
+        .current(
+            epoch,
+            Some((Path::new(&format!("{ROOT}/workspace/second")), "dashboard"))
+        )
         .is_ok());
     assert!(observer
-        .current(epoch, Some((Path::new("/workspace/first"), "claude-code")))
+        .current(
+            epoch,
+            Some((Path::new(&format!("{ROOT}/workspace/first")), "claude-code"))
+        )
         .is_ok());
     assert!(matches!(
-        observer.current(epoch, Some((Path::new("/workspace/first"), "codex"))),
+        observer.current(
+            epoch,
+            Some((Path::new(&format!("{ROOT}/workspace/first")), "codex"))
+        ),
         Err(RuntimeError::ContextStale)
     ));
     assert!(matches!(
-        observer.current(epoch, Some((Path::new("/workspace/first"), "dashboard"))),
+        observer.current(
+            epoch,
+            Some((Path::new(&format!("{ROOT}/workspace/first")), "dashboard"))
+        ),
         Err(RuntimeError::ContextStale)
     ));
     assert!(matches!(
@@ -188,7 +205,7 @@ fn pending_receipts_invalidate_only_matching_workspace_and_harness_reads() {
     assert!(observer
         .current(
             drained.epoch,
-            Some((Path::new("/workspace/first"), "dashboard"))
+            Some((Path::new(&format!("{ROOT}/workspace/first")), "dashboard"))
         )
         .is_ok());
 }
@@ -200,7 +217,7 @@ fn contention_is_nonblocking_and_invalidates_the_retained_epoch() {
     let epoch = observer.epoch();
     let guard = observer.inbox.lock().unwrap();
     let started = Instant::now();
-    observer.native_origin("/workspace", &receipt(2));
+    observer.native_origin(&format!("{ROOT}/workspace"), &receipt(2));
     observer.persisted(&wire(&receipt(2)));
     assert!(started.elapsed() < Duration::from_millis(100));
     assert!(observer.epoch() != epoch);
@@ -213,7 +230,10 @@ fn contention_is_nonblocking_and_invalidates_the_retained_epoch() {
     assert!(matches!(
         observer.current(
             epoch,
-            Some((Path::new("/unrelated/workspace"), "claude-code"))
+            Some((
+                Path::new(&format!("{ROOT}/unrelated/workspace")),
+                "claude-code"
+            ))
         ),
         Err(RuntimeError::ContextStale)
     ));
@@ -229,10 +249,10 @@ fn close_restart_and_malformed_origin_never_restore_a_prior_delivery() {
         observer.native_origin(path, &receipt);
     }
     receipt.origin_authentication = None;
-    observer.native_origin("/workspace", &receipt);
+    observer.native_origin(&format!("{ROOT}/workspace"), &receipt);
     assert!(observer.inbox.lock().unwrap().origins.is_empty());
     receipt.origin_authentication = Some("f".repeat(64));
-    observer.native_origin("/workspace", &receipt);
+    observer.native_origin(&format!("{ROOT}/workspace"), &receipt);
     observer.close();
     observer.persisted(&wire(&receipt));
     assert!(matches!(observer.drain(), Err(RuntimeError::Cancelled)));

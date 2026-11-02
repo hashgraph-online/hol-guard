@@ -12,7 +12,7 @@ fn inspect_tree(directory: &Directory) -> Result<(), RuntimeError> {
     for name in directory.names(3)? {
         match name.as_str() {
             "state.json" | "state.next" => {
-                directory.open_file(&name, OFlag::O_RDONLY, RECORD_BYTES)?;
+                directory.open_file(&name, Access::Read, RECORD_BYTES)?;
             }
             "cache" => {
                 if let Some(cache) = cache(directory)? {
@@ -68,9 +68,8 @@ impl EvidenceGenerationStore {
             return Ok(0);
         }
         let root = assistance.child("evidence-generations", false)?;
-        let file = root.open_file("store.lock", OFlag::O_RDWR | OFlag::O_CREAT, 0)?;
-        let _lock =
-            Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|_| RuntimeError::Busy)?;
+        let file = root.open_file("store.lock", Access::WriteOrCreate, 0)?;
+        let _lock = access::lock(file)?;
         let mut ids = Vec::new();
         for name in root.names(MAX_GENERATIONS + 2)? {
             if matches!(name.as_str(), "authority.key" | "store.lock") {

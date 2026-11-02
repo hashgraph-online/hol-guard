@@ -25,54 +25,40 @@ impl WriteLock {
     pub(super) fn recover_staging(&self) -> Result<(), Failure> {
         self.check()?;
         let mut pending = Vec::new();
-        for (index, entry) in fs::read_dir(&self.canonical)
-            .map_err(|_| failure("config_directory_unavailable"))?
-            .enumerate()
-        {
-            if index >= 4096 {
-                return Err(failure("config_staging_limit_exceeded"));
-            }
-            let entry = entry.map_err(|_| failure("config_directory_unavailable"))?;
-            let name = entry.file_name();
-            let Some(name) = name.to_str().filter(|n| reserved(n)) else {
-                continue;
-            };
+        let names = self.directory.names(4096).map_err(|e| match e {
+            Names::Limit => failure("config_staging_limit_exceeded"),
+            Names::Failed => failure("config_directory_unavailable"),
+        })?;
+        for name in names.iter().filter(|n| reserved(n)) {
             if pending.len() == 32 {
                 return Err(failure("config_staging_limit_exceeded"));
             }
-            let stat = fstatat(&self.directory, name, AtFlags::AT_SYMLINK_NOFOLLOW)
+            let entry = self
+                .directory
+                .stat(name)
                 .map_err(|_| failure("config_staging_changed"))?;
-            if SFlag::from_bits_truncate(stat.st_mode) != SFlag::S_IFREG
-                || stat.st_uid != nix::unistd::geteuid().as_raw()
-                || stat.st_nlink != 1
-                || stat.st_mode & 0o077 != 0
-                || stat.st_size < 0
-                || stat.st_size as u64 > MAX_CONFIG_BYTES as u64
-            {
+            if !entry.private_file() || entry.len > MAX_CONFIG_BYTES as u64 {
                 return Err(failure("config_staging_unsafe"));
             }
-            pending.push((name.to_owned(), stat));
+            pending.push((name, entry));
         }
         self.check()?;
         for (name, expected) in &pending {
             self.check()?;
-            let stat = fstatat(&self.directory, name.as_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
+            let entry = self
+                .directory
+                .stat(name)
                 .map_err(|_| failure("config_staging_changed"))?;
-            if stat.st_dev != expected.st_dev
-                || stat.st_ino != expected.st_ino
-                || stat.st_nlink != expected.st_nlink
-                || stat.st_mode != expected.st_mode
-                || stat.st_size != expected.st_size
-                || stat.st_uid != expected.st_uid
-            {
+            if entry != *expected {
                 return Err(failure("config_staging_changed"));
             }
-            unlinkat(&self.directory, name.as_str(), UnlinkatFlags::NoRemoveDir)
+            self.directory
+                .remove_file(name)
                 .map_err(|_| failure("config_staging_cleanup_failed"))?;
         }
         if !pending.is_empty() {
             self.directory
-                .sync_all()
+                .sync()
                 .map_err(|_| failure("config_staging_cleanup_failed"))?;
         }
         self.check()

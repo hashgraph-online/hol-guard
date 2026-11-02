@@ -154,6 +154,19 @@ fn inspect(
             return Err(RuntimeError::PackageUnsafe);
         }
     }
+    // Windows has no group or world write bits; the counterpart is that the
+    // user owns each path and its access list lets no other account change it.
+    #[cfg(windows)]
+    if [
+        &selection.python,
+        &selection.site_packages,
+        &selection.work_dir,
+    ]
+    .into_iter()
+    .any(|path| !guard_cigar_artifacts::host::owned(path))
+    {
+        return Err(RuntimeError::PackageUnsafe);
+    }
     let root =
         fs::canonicalize(&selection.site_packages).map_err(|_| RuntimeError::SelectionInvalid)?;
     if !root.is_dir() || !selection.work_dir.is_dir() {

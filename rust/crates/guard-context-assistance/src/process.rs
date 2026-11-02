@@ -20,7 +20,7 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 type Job = (Vec<u8>, SyncSender<Result<Vec<u8>, RuntimeError>>);
 
 pub(crate) struct JsonProcess {
-    child: Child,
+    child: Tree,
     jobs: Option<SyncSender<Job>>,
     io_thread: Option<JoinHandle<()>>,
     next_id: u64,
@@ -34,10 +34,6 @@ fn command(
     cancel: &AtomicBool,
 ) -> Result<Command, RuntimeError> {
     crate::private_python::check_selection(selection, None, Some(cancel))?;
-    // Windows needs a qualified Job Object implementation before activation.
-    if !cfg!(any(target_os = "linux", target_os = "macos")) {
-        return Err(RuntimeError::PlatformUnqualified);
-    }
     let mut cmd = Command::new(&selection.python);
     cmd.args(["-I", "-S", "-B", "-u", "-c", script])
         .env_clear()
@@ -50,13 +46,69 @@ fn command(
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CPython needs SystemRoot to load its socket and SSL modules; the
+        // value comes from the kernel, not the inherited environment.
+        if let Some(root) = guard_runtime_windows_process::kernel_windows_directory() {
+            cmd.env("SystemRoot", root);
+        }
+        cmd.creation_flags(guard_runtime_windows_process::CHILD_TREE_CREATION_FLAGS);
+    }
     Ok(cmd)
+}
+
+/// A launched interpreter and every process it starts: a process group on
+/// Unix, a kill-on-close Job Object on Windows.
+struct Tree {
+    child: Child,
+    #[cfg(windows)]
+    job: guard_runtime_windows_process::ChildTree,
+}
+
+impl Tree {
+    fn spawn(cmd: &mut Command) -> Result<Self, RuntimeError> {
+        let child = cmd.spawn().map_err(|_| RuntimeError::LaunchFailed)?;
+        #[cfg(windows)]
+        let job = match guard_runtime_windows_process::ChildTree::adopt_suspended(&child) {
+            Ok(job) => job,
+            Err(_) => {
+                let mut child = child;
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(RuntimeError::LaunchFailed);
+            }
+        };
+        Ok(Self {
+            child,
+            #[cfg(windows)]
+            job,
+        })
+    }
+
+    // Keep exclusive child wait custody; signal before reap so this process
+    // group identifier cannot be reused. The bundled SDK workers inherit the
+    // group, or on Windows the job.
+    fn terminate(&mut self) {
+        #[cfg(unix)]
+        if let Ok(id) = i32::try_from(self.child.id()) {
+            let _ = nix::sys::signal::killpg(
+                nix::unistd::Pid::from_raw(id),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
+        #[cfg(windows)]
+        let _ = self.job.terminate();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 impl JsonProcess {
     #[cfg(test)]
     pub(crate) fn pid(&self) -> u32 {
-        self.child.id()
+        self.child.child.id()
     }
     #[cfg(test)]
     pub(crate) fn spawn(selection: &RuntimeSelection, script: &str) -> Result<Self, RuntimeError> {
@@ -73,9 +125,13 @@ impl JsonProcess {
         }
         let mut cmd = command(selection, script, &cancel)?;
         cmd.arg(&selection.site_packages);
-        let mut child = cmd.spawn().map_err(|_| RuntimeError::LaunchFailed)?;
-        let mut stdin = child.stdin.take().ok_or(RuntimeError::LaunchFailed)?;
-        let stdout = child.stdout.take().ok_or(RuntimeError::LaunchFailed)?;
+        let mut child = Tree::spawn(&mut cmd)?;
+        let mut stdin = child.child.stdin.take().ok_or(RuntimeError::LaunchFailed)?;
+        let stdout = child
+            .child
+            .stdout
+            .take()
+            .ok_or(RuntimeError::LaunchFailed)?;
         let (jobs, rx): (SyncSender<Job>, Receiver<Job>) = mpsc::sync_channel(1);
         let io_thread = thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
@@ -179,6 +235,10 @@ impl JsonProcess {
                     | "Integrity"
                     | "BaseMismatch",
                 ) => Err(RuntimeError::WorkerRejected),
+                // The SDK found no bundled worker for this interpreter.
+                Some("UnsupportedPlatform") => Err(RuntimeError::Interpreter(
+                    crate::UnavailableReason::PlatformUnsupported,
+                )),
                 _ => Err(RuntimeError::TransportFailed),
             },
             _ => Err(RuntimeError::TransportFailed),
@@ -191,27 +251,13 @@ impl JsonProcess {
         }
         self.stopped = true;
         self.jobs.take();
-        terminate(&mut self.child);
+        self.child.terminate();
         if self.io_thread.as_ref().is_some_and(|t| t.is_finished()) {
             if let Some(thread) = self.io_thread.take() {
                 let _ = thread.join();
             }
         }
     }
-}
-
-// Keep exclusive child wait custody; signal before reap so this process-group
-// identifier cannot be reused. The bundled SDK workers inherit the group.
-fn terminate(child: &mut Child) {
-    #[cfg(unix)]
-    if let Ok(id) = i32::try_from(child.id()) {
-        let _ = nix::sys::signal::killpg(
-            nix::unistd::Pid::from_raw(id),
-            nix::sys::signal::Signal::SIGKILL,
-        );
-    }
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 impl Drop for JsonProcess {
@@ -230,8 +276,12 @@ pub(crate) fn probe(
     }
     let mut cmd = command(selection, script, cancel)?;
     cmd.stdin(Stdio::null());
-    let mut child = cmd.spawn().map_err(|_| RuntimeError::LaunchFailed)?;
-    let stdout = child.stdout.take().ok_or(RuntimeError::LaunchFailed)?;
+    let mut child = Tree::spawn(&mut cmd)?;
+    let stdout = child
+        .child
+        .stdout
+        .take()
+        .ok_or(RuntimeError::LaunchFailed)?;
     let (tx, rx) = mpsc::sync_channel(1);
     thread::spawn(move || {
         let mut bytes = Vec::new();
@@ -239,7 +289,7 @@ pub(crate) fn probe(
         let _ = tx.send(read.map(|_| bytes));
     });
     let result = receive(&rx, PROBE_TIMEOUT, cancel);
-    terminate(&mut child);
+    child.terminate();
     let bytes = result?.map_err(|_| RuntimeError::TransportFailed)?;
     if bytes.len() > 64 * 1024 {
         return Err(RuntimeError::TransportFailed);

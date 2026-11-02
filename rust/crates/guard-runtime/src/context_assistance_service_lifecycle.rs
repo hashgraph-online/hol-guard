@@ -29,7 +29,6 @@ pub(super) fn configure(
                 settings.effective.enabled = false;
             }
         }
-        #[cfg(unix)]
         if !state.stopping
             && state
                 .cutover
@@ -48,10 +47,7 @@ pub(super) fn configure(
             .generation
             .checked_add(1)
             .ok_or("native_context_assistance_generation_exhausted")?;
-        #[cfg(unix)]
-        {
-            state.cutover = None;
-        }
+        state.cutover = None;
         state.settings = settings;
         state.error = None;
         state.last_check = None;
@@ -161,7 +157,6 @@ impl Service {
             revoke_runtime(&mut state)
         };
         self.updates.shutdown();
-        #[cfg(unix)]
         self.switches.shutdown();
         await_cleanup(old);
     }

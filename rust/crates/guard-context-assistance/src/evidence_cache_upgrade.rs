@@ -1,7 +1,6 @@
 //! Read-only, bounded storage inventory. Digests bind a later preparation;
 //! neither this snapshot nor a preflight result carries CIGAR authority.
 use super::*;
-use std::os::unix::fs::MetadataExt;
 
 #[path = "evidence_upgrade_plan.rs"]
 mod plan;
@@ -90,23 +89,10 @@ fn record(
             } else {
                 JOURNAL_BYTES
             };
-            let file = sdk.open_file(&name, OFlag::O_RDONLY, limit)?;
-            let m = file
-                .metadata()
-                .map_err(|_| RuntimeError::ArtifactUnreadable)?;
+            let file = sdk.open_file(&name, Access::Read, limit)?;
+            let stamp = fs::file_stamp(&file)?;
             sdk.check_file(&name, &file, limit)?;
-            stamps.insert(
-                name,
-                (
-                    m.dev(),
-                    m.ino(),
-                    m.len(),
-                    m.mtime(),
-                    m.mtime_nsec(),
-                    m.ctime(),
-                    m.ctime_nsec(),
-                ),
-            );
+            stamps.insert(name, stamp);
             broker_bytes += size;
         }
     }

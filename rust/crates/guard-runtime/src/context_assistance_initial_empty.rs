@@ -34,6 +34,8 @@ fn fingerprint(owner: &Owner, lock: &WriteLock) -> Result<String, String> {
         }
     }
     let identity = lock.root_identity().map_err(storage_error)?;
+    #[cfg(windows)]
+    let identity = identity.to_hex();
     let data = serde_json::to_vec(&(
         "guard-cigar-initial-empty-data.v1",
         identity,

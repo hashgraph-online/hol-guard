@@ -1,5 +1,4 @@
 //! Signed metadata only. Refresh never executes SDKs or touches reviewed data.
-#[cfg(unix)]
 use super::super::catalog::feed::Owner;
 use super::*;
 use catalog_store::{Job, Phase};
@@ -21,10 +20,9 @@ fn directory(home: &Path, job: &Job, create: bool) -> Result<PathBuf, String> {
                 .create(&path)
                 .map_err(|_| error("cigar_catalog_download_exists"))?;
         }
-        #[cfg(not(unix))]
-        {
-            return Err(error("cigar_catalog_platform_unqualified"));
-        }
+        // Windows inherits the Guard home's owner-only access control list.
+        #[cfg(windows)]
+        fs::create_dir(&path).map_err(|_| error("cigar_catalog_download_exists"))?;
         let bytes = serde_json::to_vec(&json!({"schema":"guard-cigar-catalog-download-owner.v1","job_id":job.job_id,"request_sha256":job.request_sha256})).map_err(|_| error("cigar_catalog_refresh_job_invalid"))?;
         persist_private_bytes(
             &path.join("installation-owner.json"),
@@ -73,7 +71,6 @@ pub(super) fn cleanup(home: &Path, job: &Job) -> Result<(), String> {
     super::cleanup::collect(&path, &mut items, &mut 0, 0, deadline)?;
     super::cleanup::remove_collected(&path, items, deadline)
 }
-#[cfg(unix)]
 fn fetch(
     home: &Path,
     job: &Job,
@@ -115,7 +112,6 @@ fn fetch(
     downloaded.cleanup();
     raw
 }
-#[cfg(unix)]
 pub(super) fn run(
     home: &Path,
     job: &mut Job,
@@ -186,35 +182,27 @@ pub(super) fn fail(home: &Path, job: &mut Job, code: &str) -> Result<(), String>
     catalog_store::save(home, job, phase, code)
 }
 pub(super) fn recover(home: &Path, job: &mut Job) -> Result<(), String> {
-    #[cfg(unix)]
-    {
-        let target = job.target.clone();
-        super::super::catalog::feed::reconcile(home, target.as_ref(), |published| {
-            cleanup(home, job)?;
-            if published {
-                return catalog_store::save(home, job, Phase::Ready, "ok");
-            }
-            let cancelled =
-                fs::symlink_metadata(catalog_store::cancel_path(home, &job.job_id)?).is_ok();
-            catalog_store::save(
-                home,
-                job,
-                if cancelled {
-                    Phase::Cancelled
-                } else {
-                    Phase::Failed
-                },
-                if cancelled {
-                    "cigar_catalog_refresh_cancelled"
-                } else {
-                    "cigar_catalog_refresh_interrupted"
-                },
-            )
-        })
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, job);
-        Err(error("cigar_catalog_platform_unqualified"))
-    }
+    let target = job.target.clone();
+    super::super::catalog::feed::reconcile(home, target.as_ref(), |published| {
+        cleanup(home, job)?;
+        if published {
+            return catalog_store::save(home, job, Phase::Ready, "ok");
+        }
+        let cancelled =
+            fs::symlink_metadata(catalog_store::cancel_path(home, &job.job_id)?).is_ok();
+        catalog_store::save(
+            home,
+            job,
+            if cancelled {
+                Phase::Cancelled
+            } else {
+                Phase::Failed
+            },
+            if cancelled {
+                "cigar_catalog_refresh_cancelled"
+            } else {
+                "cigar_catalog_refresh_interrupted"
+            },
+        )
+    })
 }

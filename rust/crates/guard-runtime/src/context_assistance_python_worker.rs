@@ -14,11 +14,9 @@ pub(super) fn create_owned(home: &Path, path: &Path, job: &Job) -> Result<(), St
             .create(path)
             .map_err(|_| error("install_slot_exists"))?;
     }
-    #[cfg(not(unix))]
-    {
-        let _ = (home, path, job);
-        return Err(error("install_platform_unqualified"));
-    }
+    // Windows inherits the Guard home's owner-only access control list.
+    #[cfg(windows)]
+    fs::create_dir(path).map_err(|_| error("install_slot_exists"))?;
     let marker = json!({"schema":"guard-cigar-python-install-owner.v1", "job_id":job.request.job_id,
         "request_sha256":job.request_sha256,"slot":job.slot});
     persist_private_bytes(
@@ -115,6 +113,9 @@ pub(super) fn run(
         create_owned(home, &work, job)?;
         control.checkpoint().map_err(|e| error(e.code()))?;
         fs::rename(&stage, &destination).map_err(|_| error("install_publish_failed"))?;
+        // NTFS journals directory entries itself, and a directory cannot be
+        // opened for flushing through `File::open` there.
+        #[cfg(unix)]
         for path in [&stage, &destination] {
             fs::File::open(path.parent().ok_or_else(|| error("install_path_invalid"))?)
                 .and_then(|file| file.sync_all())

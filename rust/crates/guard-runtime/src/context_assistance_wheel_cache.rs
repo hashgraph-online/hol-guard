@@ -61,6 +61,15 @@ pub(super) fn publish(home: &Path, lock: &WheelLock, bytes: &[u8]) -> Result<Pat
         fs::set_permissions(&path, fs::Permissions::from_mode(0o400))
             .map_err(|_| error("install_cache_write_failed"))?;
     }
+    // The read-only attribute is the Windows counterpart of mode 0400.
+    #[cfg(windows)]
+    {
+        let mut permissions = fs::metadata(&path)
+            .map_err(|_| error("install_cache_write_failed"))?
+            .permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&path, permissions).map_err(|_| error("install_cache_write_failed"))?;
+    }
     Ok(path)
 }
 
