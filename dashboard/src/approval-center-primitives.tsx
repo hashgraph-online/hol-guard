@@ -53,7 +53,6 @@ export type AppView =
   | "policy"
   | "feed-health"
   | "workspaces"
-  | "mcp-cross-exam"
   | "about"
   | "releases"
   | "protection-repair";

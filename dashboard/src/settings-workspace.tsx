@@ -1996,13 +1996,6 @@ export function SettingsWorkspace({ onApprovalGateChange, contextOnly = false, o
           <div className="flex min-h-0 flex-1 flex-col space-y-6">
             <ContextDataRepairPanel savedEnabled={Boolean(state.payload.settings.context_assistance?.enabled)} disabled={saving || proofModalOpen}
               onStopped={handleContextAssistanceStopped} onBusyChange={setContextAssistanceBusy} />
-            <SettingsFormSection title="MCP Cross Exam" description="Local protocol audits stay on this machine and never change Guard policy.">
-              <p className="text-sm text-slate-600 py-3">
-                Enablement is controlled from the CLI, not this page. Run{" "}
-                <code>hol-guard settings set mcp-cross-exam on</code> or{" "}
-                <code>hol-guard settings set mcp-cross-exam off</code>, then view stored summaries on the MCP Audit tab.
-              </p>
-            </SettingsFormSection>
             <SettingsFormSection title="Keep this machine tidy" description="Export, reset, clear history, or fix a broken approval link.">
               <div className="space-y-4 py-3">
                 {perfSnapshot !== null ? <DiagnosticsPerfCard snapshot={perfSnapshot} /> : null}

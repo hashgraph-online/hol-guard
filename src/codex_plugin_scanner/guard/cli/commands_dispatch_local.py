@@ -821,23 +821,27 @@ def _run_guard_mcp_command(
     args: argparse.Namespace,
     *,
     input_text: str | None = None,
-    output_stream: TextIO | None = None,
+    output_stream: object | None = None,
 ) -> int:
-    mcp_command = getattr(args, "mcp_command", None)
-    if mcp_command == "audit":
-        from codex_plugin_scanner.integrations.mcp_cross_exam import run_guard_mcp_audit_command
+    """Start the local Guard MCP server over stdio transport.
 
-        return run_guard_mcp_audit_command(args, output_stream=output_stream)
-    if mcp_command != "serve":
-        print("Error: only 'serve' subcommand is supported", file=sys.stderr)
-        return 2
-
+    This is an early handler: it resolves its own guard_home and manages
+    its own GuardStore lifecycle. Stdout is protocol-only; diagnostics
+    go to stderr.
+    """
     from codex_plugin_scanner.guard.mcp.server import GuardMCPServer
 
     home_override = getattr(args, "home", None)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
+
+    mcp_command = getattr(args, "mcp_command", None)
+    if mcp_command != "serve":
+        print("Error: only 'serve' subcommand is supported", file=sys.stderr)
+        return 2
+
     server = GuardMCPServer(guard_home=guard_home)
     return server.run_stdio()
+
 
 
 __all__ = [

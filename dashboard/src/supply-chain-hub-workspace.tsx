@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
@@ -26,18 +26,14 @@ const WorkspaceFindingsWorkspace = lazyWorkspace("workspace-findings-workspace",
 const FeedHealthWorkspace = lazyWorkspace("feed-health-workspace", () =>
   import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
 );
-const MCPCrossExamWorkspace = lazy(() =>
-  import("./mcp-cross-exam-workspace").then((module) => ({ default: module.MCPCrossExamWorkspace }))
-);
 
-type HubTab = "supply-chain" | "audit" | "workspaces" | "feed-health" | "mcp-cross-exam";
+type HubTab = "supply-chain" | "audit" | "workspaces" | "feed-health";
 
 const hubTabs: Array<{ value: HubTab; label: string }> = [
   { value: "supply-chain", label: "Supply Chain" },
   { value: "audit", label: "Audit" },
   { value: "workspaces", label: "Workspaces" },
   { value: "feed-health", label: "Feed Health" },
-  { value: "mcp-cross-exam", label: "MCP Audit" },
 ];
 
 export function hubTitleForTab(tab: HubTab): string {
@@ -45,7 +41,7 @@ export function hubTitleForTab(tab: HubTab): string {
 }
 
 function viewToTab(view: string): HubTab {
-  if (view === "supply-chain" || view === "audit" || view === "workspaces" || view === "feed-health" || view === "mcp-cross-exam") {
+  if (view === "supply-chain" || view === "audit" || view === "workspaces" || view === "feed-health") {
     return view;
   }
   return "supply-chain";
@@ -134,7 +130,6 @@ export function SupplyChainHubWorkspace(props: {
         {tab === "feed-health" && (
           <FeedHealthWorkspace snapshot={props.snapshot} onOpenSettings={props.onOpenSettings} />
         )}
-        {tab === "mcp-cross-exam" && <MCPCrossExamWorkspace />}
       </Suspense>
       <div className={tab === "supply-chain" ? undefined : "hidden"} aria-hidden={tab !== "supply-chain"}>
         <PackageFirewallPanel

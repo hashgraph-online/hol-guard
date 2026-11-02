@@ -295,13 +295,6 @@ def _configure_guard_policy_parsers(
     settings_fleet_posture_parser.add_argument("fleet_posture", choices=("on", "off"))
     _add_guard_common_args(settings_fleet_posture_parser, suppress_defaults=True)
     settings_fleet_posture_parser.add_argument("--json", action="store_true")
-    settings_mcp_cross_exam_parser = settings_set_subparsers.add_parser(
-        "mcp-cross-exam",
-        help="Enable or disable local MCP Cross Exam audits (on or off, default off)",
-    )
-    settings_mcp_cross_exam_parser.add_argument("mcp_cross_exam", choices=("on", "off"))
-    _add_guard_common_args(settings_mcp_cross_exam_parser, suppress_defaults=True)
-    settings_mcp_cross_exam_parser.add_argument("--json", action="store_true")
     settings_explain_parser = settings_subparsers.add_parser(
         "explain", help="Explain current Guard settings in plain language"
     )
