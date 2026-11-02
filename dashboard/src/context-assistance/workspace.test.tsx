@@ -65,6 +65,12 @@ const base: CigarWorkspaceProps = {
 const render = (props: Partial<CigarWorkspaceProps> = {}) => renderToStaticMarkup(<CigarWorkspace {...base} {...props} />);
 assert.match(render(), /<h1>.*CIGAR<\/h1>/);
 assert.doesNotMatch(render(), /cigar-eyebrow|Context Intelligence Graph/, "the header explains CIGAR without jargon or a kicker");
+assert.match(render(), /class="cigar-beta-note" aria-label="CIGAR beta status"/);
+assert.match(render(), /cigar-beta-note__chip">Beta</);
+assert.match(render(), /CIGAR is still being iterated on\. Screens and settings may change between releases\./);
+assert.match(render(), /href="https:\/\/github\.com\/hashgraph-online\/hol-cigar\/issues"[^>]*>Share feedback</);
+assert.doesNotMatch(render({ error: "Service unavailable" }), /class="cigar-beta-note"[^>]*role="alert"/,
+  "the beta disclosure informs; only failures alert");
 assert.match(render(), /role="tablist" aria-label="CIGAR sections"/);
 assert.match(render(), /role="tabpanel" aria-labelledby=/);
 assert.match(render(), />Turn on CIGAR</);
