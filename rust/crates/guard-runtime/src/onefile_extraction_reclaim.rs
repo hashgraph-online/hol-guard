@@ -475,7 +475,7 @@ fn same_inode(_left: &Metadata, _right: &Metadata) -> bool {
 
 /// Fail closed: a pid that cannot be proven dead counts as alive.
 #[cfg(unix)]
-fn pid_alive(pid: i64) -> bool {
+pub(crate) fn pid_alive(pid: i64) -> bool {
     let Some(pid) = i32::try_from(pid).ok().filter(|pid| *pid > 0) else {
         return true;
     };
@@ -487,7 +487,7 @@ fn pid_alive(pid: i64) -> bool {
 
 /// Fail closed: a pid that cannot be proven dead counts as alive.
 #[cfg(not(unix))]
-fn pid_alive(pid: i64) -> bool {
+pub(crate) fn pid_alive(pid: i64) -> bool {
     u32::try_from(pid)
         .ok()
         .filter(|pid| *pid > 0)

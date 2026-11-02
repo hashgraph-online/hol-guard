@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hol.org/schemas/guard/harness-version-coverage.v1.schema.json",
   "title": "HOL Guard harness version coverage v1",
-  "description": "Shape of the bundled coverage manifest. The runtime validator in codex_plugin_scanner.guard.harness_versions.manifest also enforces suite eligibility, adapter-declared events, and duplicate claims.",
+  "description": "Shape of the bundled coverage manifest. The native runtime validator (and scripts/ci/harness_version_manifest.py in CI) also enforces suite eligibility, adapter-declared events, and duplicate claims.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "revision", "harnesses"],

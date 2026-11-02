@@ -151,6 +151,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
     features.push(crate::bounded_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::cursor_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::pi_hook_bridge::BRIDGE_FEATURE.into());
+    features.push(crate::cline_hook_worker::WORKER_FEATURE.into());
     features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     features.push(guard_contracts::SKILL_DOCUMENT_EVIDENCE_FEATURE.into());
     let (program_digest, catalog_digest, trust_digest) =
@@ -218,6 +219,7 @@ pub(crate) enum ResidentOperationV1 {
     GithubCliClassify(GithubCliClassifyRequestV1),
     GithubWorkflowPrepare(guard_contracts::GithubWorkflowPrepareRequestV1),
     ProtectRequest(ProtectRequestRequestV1),
+    ProtectAdvisoryMerge(guard_contracts::ProtectAdvisoryMergeRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalReuseDiagnostic(ApprovalReuseDiagnosticRequestV1),
     ApprovalBulkEligibility(ApprovalBulkEligibilityRequestV1),
@@ -354,6 +356,7 @@ pub(crate) enum ResidentOperationV1 {
     RetryLineageCapture(guard_contracts::RetryLineageCaptureRequestV1),
     AdapterStateIntegrity(guard_contracts::AdapterStateIntegrityRequestV1),
     ProtectionHealthReport(guard_contracts::ProtectionHealthReportRequestV1),
+    ProtectionHealthFacts(guard_contracts::ProtectionHealthFactsRequestV1),
     ResidentHealth(guard_contracts::ResidentHealthRequestV1),
     Health(Value),
     Shutdown(Value),

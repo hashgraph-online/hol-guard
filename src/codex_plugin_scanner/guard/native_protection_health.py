@@ -14,10 +14,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from .native_runtime_values import NativeRuntimeIdentity
-    from .runtime.protection_health import ProtectionSignal
 
-_FEATURE = "protection-health-report-v1"
-_REQUEST_SCHEMA = "guard-protection-health-report-request.v1"
+_FEATURE = "protection-health-facts-v1"
+_OPERATION = "protection_health_facts"
+_REQUEST_SCHEMA = "guard-protection-health-facts-request.v1"
 _RESULT_SCHEMA = "guard-protection-health-report-result.v1"
 _RESULT_KEYS = frozenset({"schema", "request_id", "request_sha256", "status", "code", "payload"})
 _PAYLOAD_KEYS = frozenset(
@@ -36,8 +36,8 @@ _REPORT_STATES = frozenset({"protected", "partial", "degraded"})
 _CHECK_STATUSES = frozenset({"pass", "unknown", "fail"})
 _CHECK_KEYS = frozenset({"check_id", "status", "reason_code"})
 _APP_KEYS = frozenset({"harness", "state", "label", "detail", "evidence_gap", "checks", "reason_codes"})
-# Nine checks and at most a hundred short harness identifiers; the op's own
-# bound is 256 KiB and the wire envelope carries the same material plus framing.
+# A handful of facts and the managed installs' identities; the op's own bound
+# is 256 KiB and the wire envelope carries the same material plus framing.
 _MAX_WIRE_BYTES = 512 * 1024
 
 
@@ -46,26 +46,24 @@ class NativeProtectionHealthError(RuntimeError):
 
 
 def protection_health_report(
-    signals: Mapping[str, ProtectionSignal],
+    facts: Mapping[str, object],
     *,
-    harness_signals: Mapping[str, ProtectionSignal],
     guard_home: Path | None = None,
     timeout_seconds: float = 10.0,
 ) -> dict[str, object]:
-    """Return the resident's protection-health report for these signals.
+    """Return the resident's protection-health report for these facts.
 
-    Which statuses add up to ``protected``, which failures are a platform with
-    no such check, and the words an operator reads are the resident's. Every
-    outcome other than a well-formed, request-bound ``ok`` reply raises
-    ``NativeProtectionHealthError``, so an unreachable runtime is never read as
-    a machine that turned out to be protected.
+    What each fact proves, which statuses add up to ``protected``, which
+    failures are a platform with no such check, and the words an operator reads
+    are the resident's. Every outcome other than a well-formed, request-bound
+    ``ok`` reply raises ``NativeProtectionHealthError``, so an unreachable
+    runtime is never read as a machine that turned out to be protected.
     """
 
     wire: dict[str, object] = {
+        **facts,
         "schema": _REQUEST_SCHEMA,
-        "request_id": native_execution._request_id("protection_health_report"),
-        "signals": _signal_rows(signals),
-        "harness_signals": _signal_rows(harness_signals),
+        "request_id": native_execution._request_id(_OPERATION),
     }
     try:
         home = _resolve_digest_home(guard_home)
@@ -77,7 +75,7 @@ def protection_health_report(
         # the same binary, and the lookup walks the runtime on disk.
         status = native_runtime_status()
         decoded = native_execution._resident_request(
-            operation="protection_health_report",
+            operation=_OPERATION,
             request=wire,
             guard_home=home,
             timeout_seconds=timeout_seconds,
@@ -99,10 +97,6 @@ def protection_health_report(
         raise
     _record(home, status.identity, success=True)
     return report
-
-
-def _signal_rows(signals: Mapping[str, ProtectionSignal]) -> dict[str, dict[str, str]]:
-    return {key: {"status": signal.status.value, "reason_code": signal.reason_code} for key, signal in signals.items()}
 
 
 def _is_word(value: Any, words: frozenset[str]) -> bool:

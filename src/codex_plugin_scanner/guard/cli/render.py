@@ -2618,6 +2618,8 @@ def _next_action_label(harness: dict[str, object]) -> str:
         return f"Review {review_count} change{'s' if review_count != 1 else ''}"
     if next_action == "run":
         return "Run through Guard"
+    if next_action == "unavailable":
+        return "Run hol-guard doctor"
     return next_action.replace("-", " ").strip() or "Check status"
 
 

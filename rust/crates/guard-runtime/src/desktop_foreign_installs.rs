@@ -4,8 +4,8 @@
 //!
 //! A pipx or uv tool venv, a `pip --user` install, or a stale link left in a
 //! bin directory keeps an older `hol-guard` on PATH. This command only finds
-//! them; Python still removes them, so a resident that will not stop keeps
-//! its install.
+//! them; `desktop-foreign-remove` removes them once the caller has stopped
+//! their residents, so a resident that will not stop keeps its install.
 //!
 //! The runtime runs with an isolated environment and its own working
 //! directory, so the caller sends the variables and the directory the lookup

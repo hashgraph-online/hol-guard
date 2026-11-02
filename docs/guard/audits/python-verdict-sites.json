@@ -15,14 +15,7 @@
     "labels-finding": "A field on a scan finding record, alongside its severity and lifecycle state; no hook reads it.",
     "routes-guard-own-sink": "Passes a call through to Guard's own approval sink, which opens the request owner-only, checks its digest and re-authorizes the command there."
   },
-  "unparsed_templates": [
-    {
-      "file": "src/codex_plugin_scanner/guard/adapters/cline_hooks.py",
-      "label": "literal#0",
-      "line": 112,
-      "reason": "unmatched ')'"
-    }
-  ],
+  "unparsed_templates": [],
   "sites": [
     {
       "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
@@ -268,16 +261,6 @@
         "block"
       ],
       "note": "The outage path: a pausing event blocks, an observation does not. The allow is only ever the observation branch."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/cli/product.py",
-      "func": "_resolve_next_action",
-      "root": "direct-cli",
-      "reading": "presentation",
-      "actions": [
-        "review"
-      ],
-      "note": "A product-page next-step string that happens to spell `review`; never reaches enforcement."
     },
     {
       "file": "src/codex_plugin_scanner/guard/cli/prompt.py",

@@ -105,15 +105,6 @@ class PackageRequestEvaluation:
         return payload
 
 
-def strip_review_evidence_tail(message: str) -> str:
-    stripped = message.strip()
-    lower_stripped = stripped.lower()
-    for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):
-        if lower_stripped.endswith(suffix.lower()):
-            return stripped[: -len(suffix)].rstrip()
-    return stripped
-
-
 def _persist_evidence(
     *, store: GuardStore, artifact: GuardArtifact, evaluation: PackageRequestEvaluation, now: str
 ) -> None:

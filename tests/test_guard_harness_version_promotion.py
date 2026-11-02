@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.harness_versions import manifest as manifest_module
-from codex_plugin_scanner.guard.harness_versions.manifest import (
+from scripts.ci import harness_version_manifest as manifest_module
+from scripts.ci import promote_harness_version_coverage as promote_module
+from scripts.ci.harness_version_manifest import (
     MAX_RECORDS_PER_HARNESS,
     ManifestError,
     bundled_manifest_path,
     parse_manifest,
 )
-from scripts.ci import promote_harness_version_coverage as promote_module
 from scripts.ci.promote_harness_version_coverage import main, next_revision, promote, render
 
 GUARD = "9.9.9"

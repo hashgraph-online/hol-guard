@@ -50,6 +50,19 @@ WORKSPACE_QUIET_SCRIPT_RUN_CASE = "omp-native-workspace-quiet-script-run"
 # npm's own longer spelling of the same verb. The run it names is the script,
 # so it has to reach the same place the short spelling reaches.
 WORKSPACE_SCRIPT_RUN_ALIAS_CASE = "omp-native-workspace-script-run-alias"
+# The type checker a TypeScript project installs for itself. `tsc` is the only
+# routine runner whose executable name is not its package name: npm installs it
+# inside `typescript`, so the tree, the manifest and the lockfile all say
+# `typescript` while `node_modules/.bin` says `tsc`.
+WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
+# The same type checker in a workspace pnpm installed. pnpm writes its lockfile
+# in YAML rather than JSON, so the pin the verdict reads is the same fact
+# written in another dialect.
+WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
+# The commit hook a project runs over its staged files. It is declared,
+# installed and pinned exactly as the linter it drives is, and it is launched
+# through npx the same way, so the verdict has the same evidence to read.
+WORKSPACE_LINT_STAGED_CASE = "omp-native-workspace-npx-lint-staged"
 WORKSPACE_RUNNER_CASES = frozenset(
     {
         WORKSPACE_JEST_CASE,
@@ -61,6 +74,9 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_SCRIPT_PASSED_OPTION_CASE,
         WORKSPACE_QUIET_SCRIPT_RUN_CASE,
         WORKSPACE_SCRIPT_RUN_ALIAS_CASE,
+        WORKSPACE_TSC_CASE,
+        WORKSPACE_PNPM_TSC_CASE,
+        WORKSPACE_LINT_STAGED_CASE,
     }
 )
 # The same installed build, launched through the Bun the installer leaves in the
@@ -190,12 +206,114 @@ _ALIAS_LINT_FILES = {
 }
 
 
+_TYPESCRIPT_VERSION = "5.9.2"
+# The option the scenario spells. The installed executable answers only to it,
+# so a launch that lost the project tail prints a different line.
+TSC_PROJECT_OPTION = "-p"
+# The one line the workspace's own type checker prints.
+TSC_MARKER = f"tsc {_TYPESCRIPT_VERSION} checked the project"
+_TYPESCRIPT_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "scripts": {\n    "typecheck": "tsc -p tsconfig.json"\n  },\n'
+        f'  "devDependencies": {{\n    "typescript": "{_TYPESCRIPT_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "typescript": "{_TYPESCRIPT_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/typescript": {\n'
+        f'      "version": "{_TYPESCRIPT_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "tsc": "bin/tsc",\n        "tsserver": "bin/tsserver"\n'
+        '      }\n    }\n  }\n}\n'
+    ),
+    "tsconfig.json": (
+        '{\n  "compilerOptions": {\n    "strict": true,\n    "noEmit": true\n  },\n'
+        '  "include": ["src"]\n}\n'
+    ),
+    "src/settings.ts": "export const settings = { retries: 3 };\n",
+    # npm writes the package's own name here, not the executable's, which is
+    # the whole point of the case.
+    "node_modules/typescript/package.json": (
+        f'{{"name": "typescript", "version": "{_TYPESCRIPT_VERSION}", "bin": '
+        '{"tsc": "bin/tsc", "tsserver": "bin/tsserver"}}\n'
+    ),
+    # A launch that dropped the project tail would still start this file, so the
+    # line the oracle reads is printed only when the option actually arrives.
+    "node_modules/typescript/bin/tsc": (
+        "#!/usr/bin/env node\n"
+        f"const project = process.argv.slice(2).includes('{TSC_PROJECT_OPTION}');\n"
+        f"console.log(project ? '{TSC_MARKER}' : 'tsc: the project option was not forwarded');\n"
+    ),
+}
+
+
+# pnpm resolves the same dependency and writes the same pin as YAML: one key
+# per release under a top-level `packages` mapping, repeated under `snapshots`.
+_PNPM_LOCK = (
+    "lockfileVersion: '9.0'\n\n"
+    "settings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\n\n"
+    "importers:\n\n  .:\n    devDependencies:\n      typescript:\n"
+    f"        specifier: {_TYPESCRIPT_VERSION}\n        version: {_TYPESCRIPT_VERSION}\n\n"
+    f"packages:\n\n  typescript@{_TYPESCRIPT_VERSION}:\n"
+    "    resolution: {tarball: https://registry.npmjs.org/typescript/-/"
+    f"typescript-{_TYPESCRIPT_VERSION}.tgz}}\n"
+    "    engines: {node: '>=14.17'}\n    hasBin: true\n\n"
+    f"snapshots:\n\n  typescript@{_TYPESCRIPT_VERSION}: {{}}\n"
+)
+_PNPM_TYPESCRIPT_FILES = {
+    name: text for name, text in _TYPESCRIPT_FILES.items() if name != "package-lock.json"
+}
+_PNPM_TYPESCRIPT_FILES["pnpm-lock.yaml"] = _PNPM_LOCK
+
+
+_LINT_STAGED_VERSION = "16.1.2"
+# The one line the workspace's own commit hook prints.
+LINT_STAGED_MARKER = f"lint-staged {_LINT_STAGED_VERSION} checked the staged files"
+_LINT_STAGED_FILES = {
+    "package.json": (
+        '{\n  "name": "synthetic-app",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "lint-staged": {\n    "*.ts": "eslint --fix"\n  },\n'
+        f'  "devDependencies": {{\n    "lint-staged": "{_LINT_STAGED_VERSION}"\n  }}\n}}\n'
+    ),
+    "package-lock.json": (
+        '{\n  "name": "synthetic-app",\n  "version": "0.0.0",\n  "lockfileVersion": 3,\n'
+        '  "requires": true,\n  "packages": {\n    "": {\n      "name": "synthetic-app",\n'
+        '      "version": "0.0.0",\n      "devDependencies": {\n'
+        f'        "lint-staged": "{_LINT_STAGED_VERSION}"\n      }}\n    }},\n'
+        '    "node_modules/lint-staged": {\n'
+        f'      "version": "{_LINT_STAGED_VERSION}",\n      "dev": true,\n'
+        '      "bin": {\n        "lint-staged": "bin/lint-staged.js"\n      }\n    }\n  }\n}\n'
+    ),
+    "src/settings.ts": "export const settings = { retries: 3 };\n",
+    "node_modules/lint-staged/package.json": (
+        f'{{"name": "lint-staged", "version": "{_LINT_STAGED_VERSION}", "bin": '
+        '{"lint-staged": "bin/lint-staged.js"}}\n'
+    ),
+    "node_modules/lint-staged/bin/lint-staged.js": (
+        f"#!/usr/bin/env node\nconsole.log('{LINT_STAGED_MARKER}');\n"
+    ),
+}
+
+
 class _Install(NamedTuple):
     """One runner's install: the package npm links, its files and its own line."""
 
     name: str
     files: dict[str, str]
     marker: str
+    # The package the executable ships inside, when npm's name for it differs
+    # from the name it links into `node_modules/.bin`.
+    package: str | None = None
+    # The executable's path inside that package, when it is not `bin/<name>.js`.
+    entry: str | None = None
+
+    @property
+    def entry_path(self) -> Path:
+        """The installed executable, relative to the workspace root."""
+        package = self.package or self.name
+        return Path("node_modules") / package / (self.entry or f"bin/{self.name}.js")
 
 
 _JEST_INSTALL = _Install("jest", _FILES, RUNNER_MARKER)
@@ -204,6 +322,21 @@ _INSTALLS = {
     WORKSPACE_SCRIPT_PASSED_OPTION_CASE: _Install("eslint", _ESLINT_FILES, ESLINT_MARKER),
     WORKSPACE_QUIET_SCRIPT_RUN_CASE: _Install("eslint", _QUIET_LINT_FILES, QUIET_LINT_MARKER),
     WORKSPACE_SCRIPT_RUN_ALIAS_CASE: _Install("eslint", _ALIAS_LINT_FILES, ALIAS_LINT_MARKER),
+    WORKSPACE_TSC_CASE: _Install(
+        "tsc",
+        _TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_LINT_STAGED_CASE: _Install("lint-staged", _LINT_STAGED_FILES, LINT_STAGED_MARKER),
+    WORKSPACE_PNPM_TSC_CASE: _Install(
+        "tsc",
+        _PNPM_TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
 }
 
 
@@ -221,7 +354,7 @@ def add_workspace_test_runner(workspace: Path, scenario_id: str | None) -> None:
         target = workspace / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8", newline="\n")
-    entry = Path(f"node_modules/{installed.name}/bin/{installed.name}.js")
+    entry = installed.entry_path
     (workspace / entry).chmod(0o755)
     link = workspace / "node_modules/.bin"
     link.mkdir(parents=True, exist_ok=True)

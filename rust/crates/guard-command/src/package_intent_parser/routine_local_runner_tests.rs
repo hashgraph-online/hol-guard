@@ -8,6 +8,9 @@ use tempfile::TempDir;
 
 use super::*;
 
+#[path = "routine_local_runner_lockfile_tests.rs"]
+mod lockfile_tests;
+
 const INSTALLED_VERSION: &str = "9.1.0";
 const DECLARED_VERSION: &str = "^9.0.0";
 
@@ -112,42 +115,108 @@ fn a_runner_bound_to_local_project_state_is_routine() {
     assert!(routine_local_runner(&intent(dir.path())));
 }
 
+/// A workspace that installs `name` the way its registry package does: the
+/// manifest, the installed tree and the lockfile all name the package, which
+/// is the executable's own name for every runner except `tsc`.
+fn runner_workspace(root: &Path, name: &str, package: &str) {
+    write(
+        &root.join("package.json"),
+        &format!(r#"{{"dependencies": {{"{package}": "{DECLARED_VERSION}"}}}}"#),
+    );
+    write(
+        &root.join(format!("node_modules/{package}/package.json")),
+        &format!(r#"{{"name": "{package}", "version": "{INSTALLED_VERSION}"}}"#),
+    );
+    write(
+        &root.join(format!("node_modules/{package}/bin/{name}")),
+        "\n",
+    );
+    write(
+        &root.join("package-lock.json"),
+        &format!(
+            r#"{{"packages": {{"node_modules/{package}": {{"version": "{INSTALLED_VERSION}"}}}}}}"#
+        ),
+    );
+}
+
+/// The intent for `npx <name>` in a workspace `runner_workspace` built.
+fn runner_intent(root: &Path, name: &str, package: &str) -> PackageIntent {
+    let mut value = intent(root);
+    value.targets[0].raw_spec = name.to_owned();
+    value.targets[0].package_name = Some(name.to_owned());
+    let execution = &mut value.local_executions[0];
+    execution.package_name = Some(name.to_owned());
+    execution.executable_name = Some(name.to_owned());
+    execution.local_executable = Some(evidence(
+        &root.join(format!("node_modules/{package}/bin/{name}")),
+    ));
+    value
+}
+
 #[test]
 fn every_routine_runner_name_qualifies_and_no_other_does() {
-    for name in ["eslint", "jest", "mocha", "tsc", "tsx", "vitest"] {
+    for name in ["eslint", "jest", "lint-staged", "mocha", "tsx", "vitest"] {
         let dir = TempDir::new().unwrap();
         let root = dir.path();
-        write(
-            &root.join("package.json"),
-            &format!(r#"{{"dependencies": {{"{name}": "{DECLARED_VERSION}"}}}}"#),
-        );
-        write(
-            &root.join(format!("node_modules/{name}/package.json")),
-            &format!(r#"{{"name": "{name}", "version": "{INSTALLED_VERSION}"}}"#),
-        );
-        write(&root.join(format!("node_modules/{name}/bin/run.js")), "\n");
-        write(
-            &root.join("package-lock.json"),
-            &format!(
-                r#"{{"packages": {{"node_modules/{name}": {{"version": "{INSTALLED_VERSION}"}}}}}}"#
-            ),
-        );
+        runner_workspace(root, name, name);
 
-        let mut value = intent(root);
-        value.targets[0].raw_spec = name.to_owned();
-        value.targets[0].package_name = Some(name.to_owned());
-        let execution = &mut value.local_executions[0];
-        execution.package_name = Some(name.to_owned());
-        execution.executable_name = Some(name.to_owned());
-        execution.local_executable = Some(evidence(
-            &root.join(format!("node_modules/{name}/bin/run.js")),
-        ));
+        let mut value = runner_intent(root, name, name);
         assert!(routine_local_runner(&value), "{name}");
 
         value.targets[0].raw_spec = "prettier".to_owned();
         value.local_executions[0].package_name = Some("prettier".to_owned());
         assert!(!routine_local_runner(&value), "{name}");
     }
+}
+
+/// `lint-staged` is the commit hook a project runs over its staged files, and
+/// it is pinned in the same manifest as the linter it drives. Leaving it out
+/// of the runner list sent every `npx lint-staged` to a package review the
+/// project had already answered by installing and pinning the version.
+#[test]
+fn lint_staged_is_bound_to_the_project_that_pins_it() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "lint-staged", "lint-staged");
+    assert!(routine_local_runner(&runner_intent(
+        root,
+        "lint-staged",
+        "lint-staged"
+    )));
+}
+
+/// `tsc` is published inside `typescript`, so npm installs it at
+/// `node_modules/typescript` and the lockfile pins it under that name. A
+/// verdict that looked for `node_modules/tsc` found nothing and sent every
+/// `npx tsc -p tsconfig.json` to a package review it never needed.
+#[test]
+fn tsc_is_bound_through_its_typescript_package() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "tsc", "typescript");
+    assert!(routine_local_runner(&runner_intent(
+        root,
+        "tsc",
+        "typescript"
+    )));
+}
+
+/// The alias does not loosen the evidence: a `typescript` the lockfile pins at
+/// another version is still not the runner the project declared.
+#[test]
+fn a_typescript_lockfile_that_contradicts_the_install_is_not_routine() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    runner_workspace(root, "tsc", "typescript");
+    write(
+        &root.join("package-lock.json"),
+        r#"{"packages": {"node_modules/typescript": {"version": "4.0.0"}}}"#,
+    );
+    assert!(!routine_local_runner(&runner_intent(
+        root,
+        "tsc",
+        "typescript"
+    )));
 }
 
 #[test]
@@ -335,102 +404,6 @@ fn the_declared_pin_must_name_the_installed_package() {
 }
 
 #[test]
-fn the_installed_manifest_must_identify_itself() {
-    let dir = workspace();
-    let root = dir.path();
-
-    write(
-        &root.join("node_modules/eslint/package.json"),
-        r#"{"name": "eslint-fork", "version": "9.1.0"}"#,
-    );
-    assert!(!routine_local_runner(&intent(root)));
-
-    write(
-        &root.join("node_modules/eslint/package.json"),
-        r#"{"name": "eslint"}"#,
-    );
-    assert!(!routine_local_runner(&intent(root)));
-}
-
-#[test]
-fn every_lockfile_must_agree_with_the_installed_version() {
-    let dir = workspace();
-    let root = dir.path();
-
-    write(
-        &root.join("package-lock.json"),
-        r#"{"packages": {"node_modules/eslint": {"version": "9.0.0"}}}"#,
-    );
-    assert!(!routine_local_runner(&intent(root)));
-
-    // Two lockfiles that disagree leave no single locked version.
-    write(
-        &root.join("package-lock.json"),
-        &format!(
-            r#"{{"packages": {{"node_modules/eslint": {{"version": "{INSTALLED_VERSION}"}}}}}}"#
-        ),
-    );
-    write(
-        &root.join("npm-shrinkwrap.json"),
-        r#"{"packages": {"node_modules/eslint": {"version": "9.0.0"}}}"#,
-    );
-    let mut two = intent(root);
-    two.local_executions[0]
-        .lockfiles
-        .push(evidence(&root.join("npm-shrinkwrap.json")));
-    assert!(!routine_local_runner(&two));
-
-    // A lockfile that names nothing at all leaves the version unlocked.
-    write(&root.join("package-lock.json"), r#"{"packages": {}}"#);
-    assert!(!routine_local_runner(&intent(root)));
-
-    // A lockfile Guard cannot read fails closed even when another agrees.
-    write(&root.join("package-lock.json"), "{ not json");
-    assert!(!routine_local_runner(&intent(root)));
-}
-
-#[test]
-fn a_bun_lockfile_is_read_as_jsonc() {
-    let dir = workspace();
-    let root = dir.path();
-    fs::remove_file(root.join("package-lock.json")).unwrap();
-    write(
-        &root.join("bun.lock"),
-        &format!(
-            "{{\n  // bun writes comments into its text lockfile\n  \"packages\": {{\n    \"eslint\": [\"eslint@{INSTALLED_VERSION}\", {{}}, \"sha512-x\"]\n  }}\n}}\n"
-        ),
-    );
-
-    let mut value = intent(root);
-    value.local_executions[0].lockfiles = vec![evidence(&root.join("bun.lock"))];
-    assert!(routine_local_runner(&value));
-
-    write(
-        &root.join("bun.lock"),
-        "{\n  \"packages\": {\n    \"eslint\": [\"eslint@9.0.0\", {}, \"sha512-x\"]\n  }\n}\n",
-    );
-    assert!(!routine_local_runner(&value));
-}
-
-#[test]
-fn the_installed_version_must_satisfy_the_declared_specifier() {
-    let dir = workspace();
-    let root = dir.path();
-    write(
-        &root.join("package.json"),
-        r#"{"devDependencies": {"eslint": "~9.0.0"}}"#,
-    );
-    write(
-        &root.join("node_modules/eslint/package.json"),
-        &format!(r#"{{"name": "eslint", "version": "{INSTALLED_VERSION}"}}"#),
-    );
-
-    let mut value = intent(root);
-    value.local_executions[0].declared_version = Some("~9.0.0".to_owned());
-    assert!(!routine_local_runner(&value));
-}
-
-#[test]
 fn a_file_past_the_read_limit_gives_no_text() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("package-lock.json");
@@ -441,70 +414,4 @@ fn a_file_past_the_read_limit_gives_no_text() {
     assert!(
         super::routine_local_runner::read_bounded(&dir.path().join("missing"), length).is_none()
     );
-}
-
-#[test]
-fn a_lockfile_that_omits_the_runner_binds_nothing() {
-    let dir = workspace();
-    let root = dir.path();
-
-    // The second lockfile parses and names other packages, but never this
-    // runner. The first one must not answer for it.
-    write(
-        &root.join("npm-shrinkwrap.json"),
-        r#"{"packages": {"node_modules/other": {"version": "1.0.0"}}}"#,
-    );
-    let mut value = intent(root);
-    value.local_executions[0]
-        .lockfiles
-        .push(evidence(&root.join("npm-shrinkwrap.json")));
-    assert!(!routine_local_runner(&value));
-}
-
-#[test]
-fn a_lock_entry_outside_the_registry_proves_nothing() {
-    let dir = workspace();
-    let root = dir.path();
-
-    // A linked workspace package is whatever that directory holds today.
-    write(
-        &root.join("package-lock.json"),
-        &format!(
-            r#"{{"packages": {{"node_modules/eslint": {{"version": "{INSTALLED_VERSION}", "link": true}}}}}}"#
-        ),
-    );
-    assert!(!routine_local_runner(&intent(root)));
-
-    // So is a checkout resolved from a git remote.
-    write(
-        &root.join("package-lock.json"),
-        &format!(
-            r#"{{"packages": {{"node_modules/eslint": {{"version": "{INSTALLED_VERSION}", "resolved": "git+ssh://git@example.test/eslint.git#abc"}}}}}}"#
-        ),
-    );
-    assert!(!routine_local_runner(&intent(root)));
-
-    // A registry tarball is the shape the declared pin actually describes.
-    write(
-        &root.join("package-lock.json"),
-        &format!(
-            r#"{{"packages": {{"node_modules/eslint": {{"version": "{INSTALLED_VERSION}", "resolved": "https://registry.example.test/eslint.tgz"}}}}}}"#
-        ),
-    );
-    assert!(routine_local_runner(&intent(root)));
-}
-
-#[test]
-fn a_bun_entry_naming_a_checkout_is_not_a_release() {
-    let dir = workspace();
-    let root = dir.path();
-    fs::remove_file(root.join("package-lock.json")).unwrap();
-    write(
-        &root.join("bun.lock"),
-        "{\"packages\": {\"eslint\": [\"eslint@github:example/eslint#abc\", {}, \"\"]}}",
-    );
-
-    let mut value = intent(root);
-    value.local_executions[0].lockfiles = vec![evidence(&root.join("bun.lock"))];
-    assert!(!routine_local_runner(&value));
 }

@@ -442,6 +442,11 @@ def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store
         return
     receipt_id = _optional_string(receipt.get("receipt_id"))
     approval_request_id = _optional_string(response_payload.get("primary_approval_request_id"))
+    queued_ids = response_payload.get("approval_request_ids")
+    if approval_request_id is None and isinstance(queued_ids, list) and len(queued_ids) == 1:
+        # This block queued exactly one request, so the receipt binds to it
+        # even when the display link could not be resolved.
+        approval_request_id = _optional_string(queued_ids[0])
     if receipt_id is None or approval_request_id is None:
         return
     receipt["approval_source"] = "approval-center"

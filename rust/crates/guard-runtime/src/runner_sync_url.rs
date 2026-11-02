@@ -20,15 +20,15 @@ const USES_NETLOC: [&str; 25] = [
     "git+ssh", "ws", "wss",
 ];
 
-struct Split {
-    scheme: String,
-    netloc: String,
+pub(crate) struct Split {
+    pub(crate) scheme: String,
+    pub(crate) netloc: String,
     path: String,
     query: String,
     fragment: String,
 }
 
-fn urlsplit(raw: &str) -> Split {
+pub(crate) fn urlsplit(raw: &str) -> Split {
     let trimmed = raw.trim_start_matches(|c: char| c <= ' ');
     let cleaned: String = trimmed
         .chars()
